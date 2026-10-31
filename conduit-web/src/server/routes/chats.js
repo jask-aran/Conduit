@@ -64,6 +64,15 @@ export function registerChatRoutes(app, {
     return child;
   };
 
+  // Work submitted to a conversation from the server (a background run's report to the agent's home thread) is
+  // followed by its chat, as `reattach` does at startup, so it reaches the chat's log and anyone who opens it.
+  if (durable) durable.runtime.wakeChat = (conversationId) => void (async () => {
+    const harness = await durable.runtime.open();
+    const chatId = (await harness.snapshot(ConduitIds, conversationId, durable.context))?.chatId;
+    if (!chatId || backends.getByChatId(chatId) || !registry.metadata(chatId)) return;
+    await launchLiveSession({ chatId });
+  })().catch((error) => { if (error?.code !== "live_process_limit") console.warn("[conduit-runtime] could not follow", conversationId, error?.message || error); });
+
   // Param guards also cover upload and draft routes registered before these routes.
   const childWrite = (request, response, next, id) => {
     if (/^\/v0\/(?:chats|sessions|runs)\//.test(request.originalUrl)
@@ -458,6 +467,13 @@ export function registerChatRoutes(app, {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
       lifecycle.assertAvailable(context.chat.id, context.project.id);
+      // How its transcript draws work between replies: fold or show, or null for its default. Not a change to the chat.
+      if (request.body && Object.hasOwn(request.body, "narration")) {
+        const narration = request.body.narration;
+        if (narration !== null && narration !== "fold" && narration !== "show") return response.status(400).json({ error: "narration is fold, show or null" });
+        await registry.update(context.chat.id, { narration, updatedAt: context.chat.updatedAt });
+        return response.json(chatView(registry.metadata(context.chat.id)));
+      }
       if (request.body?.profileId && context.chat.lastUserMessageAt) {
         return response.status(409).json({
           error: "backend_locked",

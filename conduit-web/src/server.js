@@ -62,6 +62,14 @@ import { registerDraftRoutes } from "./server/routes/drafts.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
+import { registerAgentRoutes } from "./server/routes/agent.js";
+import { PersistentAgent } from "./agent/agent.js";
+import { createChatHost } from "./agent/chat-host.js";
+import { startEvents } from "./agent/events.js";
+import { seedSchedules } from "./agent/schedule.js";
+import { agentNotifier } from "./agent/notify.js";
+import { PushService } from "./push/push-service.js";
+import { registerPushRoutes } from "./server/routes/push.js";
 import { createHostUi } from "./server/host-ui.js";
 import { registerHarnessRoutes } from "./server/routes/harnesses.js";
 import { createHarnessModelCatalogue } from "./harnesses/model-catalogue.js";
@@ -196,6 +204,7 @@ const concurrency = new ServerConcurrency();
 // Cloudflare tunnel) takes them on their pairing key alone.
 // The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
 const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
+serverIdentity.names = hubLanNames;
 const networkLanNames = lifetime.own("LAN names", lanNamesService({
   dataRoot: config.dataRoot,
   hubAddress: () => directAddresses(os.networkInterfaces()).find((item) => item.reach === "private")?.address || null,
@@ -490,15 +499,18 @@ app.get("/v0/downloads", async (_request, response) => {
     const names = (await fs.readdir(desktopUpdateDir).catch(() => [])).filter((name) => name.endsWith(suffix));
     const dated = await Promise.all(names.map(async (name) => ({ name, at: (await fs.stat(path.join(desktopUpdateDir, name))).mtimeMs })));
     const found = dated.sort((left, right) => right.at - left.at)[0];
-    return found ? `/desktop-updates/${encodeURIComponent(found.name)}` : null;
+    return found ? { url: `/desktop-updates/${encodeURIComponent(found.name)}`, name: found.name } : null;
   };
   if (!downloadsListed || Date.now() - downloadsListed.at > 10_000) {
     const listed = { at: Date.now(), urls: Promise.all([newest("-setup.exe"), newest(".apk")]) };
     listed.urls.catch(() => { if (downloadsListed === listed) downloadsListed = null; });
     downloadsListed = listed;
   }
-  const [windowsUrl, apkUrl] = await downloadsListed.urls;
-  response.set("Cache-Control", "no-store").json({ windowsUrl, apkUrl });
+  const [windows, apk] = await downloadsListed.urls;
+  // A dev APK is named for the version it was stamped with (scripts/build-android-dev.sh): the dev app's updater
+  // compares that with its own.
+  const apkVersion = apk?.name.match(/^Conduit Dev_(.+)\.apk$/)?.[1] || null;
+  response.set("Cache-Control", "no-store").json({ windowsUrl: windows?.url || null, apkUrl: apk?.url || null, apkVersion });
 });
 
 // The interface as one download, for an installed client's live update. Ahead
@@ -685,6 +697,28 @@ registerRunRoutes(app, {
   submitPrompt: (...args) => liveSessionStream.submitPrompt(...args),
   stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
 });
+// Push to the person's devices (Web Push: UnifiedPush on Android, push subscriptions in browsers). The hub's own
+// key pair signs every message, so the file is the hub's alone.
+const push = new PushService({ file: path.join(config.dataRoot, "push.json"),
+  subject: process.env.CONDUIT_PUSH_SUBJECT || "mailto:conduit@localhost" });
+await push.load();
+// The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
+// clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
+const durableAdapter = backends.adapters.get("conduit-runtime") || null;
+const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
+registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
+if (persistentAgent) {
+  persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
+    submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
+  persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
+  durableAdapter.runtime.notify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
+  registerAgentRoutes(app, { agent: persistentAgent, backends });
+  const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
+  lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
+  lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());
+  void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
+    .catch((error) => console.error("[agent] could not load", error));
+}
 registerSessionRoutes(app, {
   attachments,
   backends,

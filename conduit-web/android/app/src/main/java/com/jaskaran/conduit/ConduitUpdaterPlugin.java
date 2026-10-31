@@ -45,6 +45,30 @@ import java.util.zip.ZipInputStream;
 public class ConduitUpdaterPlugin extends Plugin {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    /** Set by cancel(): the download under way stops at its next read, and the connection it reads from is closed. */
+    private volatile boolean cancelled = false;
+    private volatile HttpURLConnection reading = null;
+
+    /** Stop the download under way (an APK or an interface); the call that started it rejects with "Cancelled". */
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        cancelled = true;
+        HttpURLConnection connection = reading;
+        if (connection != null) new Thread(connection::disconnect).start();
+        call.resolve(new JSObject());
+    }
+
+    private void checkCancelled() {
+        if (cancelled) throw new IllegalStateException("Cancelled");
+    }
+
+    private void report(String event, String phase, long downloaded, long total) {
+        JSObject progress = new JSObject();
+        progress.put("phase", phase);
+        progress.put("downloaded", downloaded);
+        progress.put("total", Math.max(total, 0));
+        notifyListeners(event, progress);
+    }
 
     private File directory() {
         File dir = new File(getContext().getCacheDir(), "updates");
@@ -75,11 +99,16 @@ public class ConduitUpdaterPlugin extends Plugin {
             call.resolve(ready(false));
             return;
         }
+        cancelled = false;
         worker.execute(() -> {
             File part = new File(directory(), target.getName() + ".part");
             HttpURLConnection connection = null;
             try {
+                checkCancelled();
                 connection = (HttpURLConnection) new URL(url).openConnection();
+                reading = connection;
+                // A dev APK comes from the paired hub, which may answer with its own certificate.
+                if (connection instanceof javax.net.ssl.HttpsURLConnection) ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
                 connection.setInstanceFollowRedirects(true);
                 connection.setConnectTimeout(15_000);
                 connection.setReadTimeout(30_000);
@@ -90,6 +119,7 @@ public class ConduitUpdaterPlugin extends Plugin {
                 try (InputStream in = connection.getInputStream(); OutputStream out = new FileOutputStream(part)) {
                     byte[] buffer = new byte[64 * 1024];
                     for (int read; (read = in.read(buffer)) > 0; ) {
+                        checkCancelled();
                         out.write(buffer, 0, read);
                         downloaded += read;
                         if (downloaded - lastReport >= 512 * 1024) {
@@ -108,8 +138,9 @@ public class ConduitUpdaterPlugin extends Plugin {
                 call.resolve(ready(true));
             } catch (Exception error) {
                 part.delete();
-                call.reject(error.getMessage() == null ? "Download failed" : error.getMessage());
+                call.reject(cancelled ? "Cancelled" : error.getMessage() == null ? "Download failed" : error.getMessage());
             } finally {
+                reading = null;
                 if (connection != null) connection.disconnect();
             }
         });
@@ -147,11 +178,12 @@ public class ConduitUpdaterPlugin extends Plugin {
     //
     // The app launches from the interface on the device; this only swaps in a
     // newer one the server offers, after it is downloaded and unpacked whole.
-    // A swapped-in interface has to say it started (confirmBundle) before the
-    // app is next launched, or MainActivity puts the bundled one back.
+    // A swapped-in interface has to say it started (confirmBundle) within two
+    // launches, or MainActivity puts the bundled one back.
 
     static final String BUNDLE_PREFS = "ConduitBundle";
     static final String PENDING = "pending";
+    static final String LAUNCHES = "pendingLaunches";
 
     private File bundles() {
         File dir = new File(getContext().getFilesDir(), "bundles");
@@ -174,11 +206,12 @@ public class ConduitUpdaterPlugin extends Plugin {
         return hex.substring(0, 16);
     }
 
-    private static HttpURLConnection get(String url) throws Exception {
+    private HttpURLConnection get(String url) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         if (connection instanceof javax.net.ssl.HttpsURLConnection) ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
         connection.setConnectTimeout(10_000);
         connection.setReadTimeout(30_000);
+        reading = connection;
         if (connection.getResponseCode() != 200) throw new IllegalStateException("HTTP " + connection.getResponseCode() + " for " + url);
         return connection;
     }
@@ -191,9 +224,12 @@ public class ConduitUpdaterPlugin extends Plugin {
             call.reject("A server origin is required");
             return;
         }
+        cancelled = false;
         worker.execute(() -> {
             File part = null;
             try {
+                checkCancelled();
+                report("bundleProgress", "checking", 0, 0);
                 String manifest;
                 HttpURLConnection connection = get(origin + "/client-bundle/manifest.json");
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
@@ -214,7 +250,21 @@ public class ConduitUpdaterPlugin extends Plugin {
                     part.mkdirs();
                     String root = part.getCanonicalPath() + File.separator;
                     connection = get(origin + "/client-bundle/" + build + ".zip");
-                    try (ZipInputStream zip = new ZipInputStream(connection.getInputStream())) {
+                    long total = connection.getContentLengthLong();
+                    report("bundleProgress", "downloading", 0, total);
+                    long[] counted = { 0, 0 };
+                    InputStream counting = new java.io.FilterInputStream(connection.getInputStream()) {
+                        @Override public int read(byte[] b, int off, int len) throws java.io.IOException {
+                            if (cancelled) throw new java.io.IOException("Cancelled");
+                            int read = super.read(b, off, len);
+                            if (read > 0) {
+                                counted[0] += read;
+                                if (counted[0] - counted[1] >= 128 * 1024) { counted[1] = counted[0]; report("bundleProgress", "downloading", counted[0], total); }
+                            }
+                            return read;
+                        }
+                    };
+                    try (ZipInputStream zip = new ZipInputStream(counting)) {
                         byte[] buffer = new byte[64 * 1024];
                         for (ZipEntry entry; (entry = zip.getNextEntry()) != null; ) {
                             File out = new File(part, entry.getName());
@@ -239,7 +289,9 @@ public class ConduitUpdaterPlugin extends Plugin {
                 call.resolve(result);
             } catch (Exception error) {
                 if (part != null) deleteTree(part);
-                call.reject(error.getMessage() == null ? "Live update failed" : error.getMessage());
+                call.reject(cancelled ? "Cancelled" : error.getMessage() == null ? "Live update failed" : error.getMessage());
+            } finally {
+                reading = null;
             }
         });
     }
@@ -254,7 +306,7 @@ public class ConduitUpdaterPlugin extends Plugin {
             return;
         }
         String path = target.getAbsolutePath();
-        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().putString(PENDING, path).commit();
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().putString(PENDING, path).remove(LAUNCHES).commit();
         getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, path).commit();
         call.resolve(new JSObject());
@@ -264,17 +316,23 @@ public class ConduitUpdaterPlugin extends Plugin {
     /** The interface started: keep it for the next launch. */
     @PluginMethod
     public void confirmBundle(PluginCall call) {
-        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).commit();
+        getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).remove(LAUNCHES).commit();
         JSObject result = new JSObject();
         try { result.put("build", currentBuild()); } catch (Exception ignored) { }
         call.resolve(result);
     }
 
-    /** Called before the bridge exists: an interface that never confirmed is dropped. */
+    /**
+     * Called before the bridge exists: an interface that started twice without confirming is dropped. One launch is
+     * not enough to judge it: one swapped in while the app was in the background, and the app killed there before the
+     * page ran, never had the chance, and dropping it put the app back on the interface its APK was built with.
+     */
     static void revertUnconfirmed(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE);
         if (prefs.getString(PENDING, null) == null) return;
-        prefs.edit().remove(PENDING).commit();
+        int launches = prefs.getInt(LAUNCHES, 0) + 1;
+        if (launches < 2) { prefs.edit().putInt(LAUNCHES, launches).commit(); return; }
+        prefs.edit().remove(PENDING).remove(LAUNCHES).commit();
         context.getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE)
             .edit().remove(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH).commit();
     }

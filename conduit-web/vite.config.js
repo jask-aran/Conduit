@@ -117,6 +117,8 @@ export default defineConfig(({ mode }) => {
           // demand -- an old page left running past activation would 404 on
           // the next one it opened.
           skipWaiting: false,
+          // Push: shows what the hub sends and opens its chat on a tap (public/push-sw.js).
+          importScripts: ["push-sw.js"],
           clientsClaim: true,
           globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
           // The file icons are 1,250 files of which a file list shows a few;

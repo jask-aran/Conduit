@@ -6,6 +6,7 @@ import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
+import { AgentExtension } from "../agent/extension.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -17,6 +18,7 @@ import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
+import { renderVars } from "../agent/routine-files.js";
 
 // What the web tools are for and how to use them; a template that asks for
 // them also brings the web-research skill.
@@ -126,12 +128,27 @@ export const ConduitWorkspace = defineDoc({
 /** A prompt as Conduit placed it: the model sees `content`, the transcript keeps the browser's id. */
 export const USER_ENTRY = "conduit.user";
 
+/**
+ * A request's output limit is pi-ai's default, the model's catalogue `maxTokens`, unless asked: OpenRouter lists 943,718
+ * for its 1M-context models and reserves credit for all of it, so a request failed (402) with a few dollars left. A
+ * turn never writes near this many; a model whose own limit is lower keeps it.
+ */
+const OUTPUT_CAP = 64_000;
+const cappedOutput = (models) => new Proxy(models, {
+  get(target, key) {
+    if (key !== "streamSimple") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
+    return (model, context, options = {}) => target.streamSimple(model, context,
+      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP) });
+  },
+});
+
 export class DurableRuntime {
   constructor({ dataRoot, piAgentDir, nodeHub = null, templates = [], promptStore = null }) {
     this.nodeHub = nodeHub;
     // The profiles (Assistant, Coding, Runtime) this agent runs: Conduit's templates.
     this.templates = templates;
     this.promptStore = promptStore;
+    this.dataRoot = dataRoot;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
     this.context = BACKGROUND_CONTEXT;
@@ -240,11 +257,18 @@ export class DurableRuntime {
       install(Handoff);
       const web = await this.webTools();
       if (web) install(web);
-      install(createCodemodeExtension({ sandbox: new CodemodeSandbox() }));
+      install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
+        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }] }));
+      this.refreshConnectors = () => {
+        const tools = this.agent?.connectors.tools() || [];
+        install(defineExtension({ name: "connectors", tools }));
+        install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
+      };
+      this.refreshConnectors();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: this.models,
+        models: cappedOutput(this.models),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
@@ -387,19 +411,24 @@ export class DurableRuntime {
     // A conversation with no home device picks one per call: the same tools, placed.
     // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
     const delegates = roaming || template.tools.includes("subagent");
+    const isAgent = template.internal && template.id === "agent";
     const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : [])].map((name) => this.extensions.get(name)).filter(Boolean);
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(isAgent ? ["codemode", "connectors", "agent"] : [])]
+      .map((name) => this.extensions.get(name)).filter(Boolean);
     const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
-      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")));
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (isAgent && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
-    const prompt = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
+    const raw = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
+    // The persistent agent's prompt names the person and itself ({{person.name}}, USER.md's front matter).
+    const prompt = isAgent && this.agentVars ? renderVars(raw, await this.agentVars().catch(() => ({}))) : raw;
     const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
     return {
       extensions, tools,
-      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name)) : null,
+      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
+        : isAgent ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
       instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
     };
   }

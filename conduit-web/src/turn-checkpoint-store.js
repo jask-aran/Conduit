@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { presentableDiff } from "@codemirror/merge";
 import { workspaceHost } from "./workspace-inspector.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -47,6 +46,43 @@ const digestOf = (checkpoint) => {
   }
   return hash.digest("hex");
 };
+
+
+/**
+ * Lines added and removed between two texts, as `git diff --numstat` counts them: the shortest edit over lines (Myers),
+ * after the lines both share at the start and end. Past MAX_EDIT edits the rest is counted as replaced, a bound on the
+ * work for two texts that share little.
+ */
+const MAX_EDIT = 4000;
+function lineChanges(before, after) {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) { endA -= 1; endB -= 1; }
+  const n = endA - start;
+  const m = endB - start;
+  if (!n || !m) return { added: m, removed: n };
+  const ids = new Map();
+  const id = (line) => { let value = ids.get(line); if (value === undefined) { value = ids.size; ids.set(line, value); } return value; };
+  const x = Int32Array.from({ length: n }, (_, index) => id(a[start + index]));
+  const y = Int32Array.from({ length: m }, (_, index) => id(b[start + index]));
+  const max = Math.min(n + m, MAX_EDIT);
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  for (let d = 0; d <= max; d += 1) {
+    for (let k = -d; k <= d; k += 2) {
+      let i = k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1;
+      let j = i - k;
+      while (i < n && j < m && x[i] === y[j]) { i += 1; j += 1; }
+      v[offset + k] = i;
+      if (i >= n && j >= m) return { added: (d + m - n) / 2, removed: (d - m + n) / 2 };
+    }
+  }
+  return { added: m, removed: n };
+}
 
 export class TurnCheckpointStore {
   constructor(root) {
@@ -310,17 +346,20 @@ export class TurnCheckpointStore {
     let removed = 0;
     let preferredPath = null;
     for (const relativePath of paths) {
+      // A turn of an old chat is compared with the workspace as it is now, which can be weeks of other work: every
+      // file, so the loop is handed back between them, or the hub serves nothing until it is done (84 s once).
+      await new Promise((resolve) => setImmediate(resolve));
       const comparison = await this.#compare(workspace, checkpoint, relativePath, "turn", targetCheckpoint);
       if (comparison.kind !== "text") {
         if (comparison.reason !== "unchanged") return null;
         continue;
       }
       preferredPath ??= relativePath;
-      const lineNumber = (text, offset) => text.slice(0, offset).split("\n").length;
-      for (const change of presentableDiff(comparison.original, comparison.modified)) {
-        added += change.toB <= change.fromB ? 0 : lineNumber(comparison.modified, change.toB - 1) - lineNumber(comparison.modified, change.fromB) + 1;
-        removed += change.toA <= change.fromA ? 0 : lineNumber(comparison.original, change.toA - 1) - lineNumber(comparison.original, change.fromA) + 1;
-      }
+      // Counted by lines, as git counts them: the editor's character diff (presentableDiff) took half a minute on a
+      // 50 KB file weeks apart, holding the hub the whole time.
+      const counted = lineChanges(comparison.original, comparison.modified);
+      added += counted.added;
+      removed += counted.removed;
     }
     return added || removed ? { added, removed, preferredPath } : null;
   }

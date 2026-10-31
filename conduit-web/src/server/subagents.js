@@ -1,5 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc } from "../agent/agent-doc.js";
+import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
 const SubagentRoster = defineDoc({
   kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -18,6 +20,21 @@ export const subagentTitle = (task) => String(task || "").trim().split(/\r?\n/)[
 const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.values(state?.tools || {})]
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
 const textResult = (text) => ({ output: [{ type: "text", text }] });
+/**
+ * How much a run's report matters, from its answer's first word (templates/agent/SYSTEM.md): NOTHING (or OpenClaw's
+ * HEARTBEAT_OK) is none, then FYI, ATTENTION and URGENT; an answer that says none of them is ATTENTION.
+ */
+export const reportLevel = (answer) => {
+  const word = String(answer || "").trim().match(/^\W*([A-Z_]+)/)?.[1] || "";
+  return word === "NOTHING" || word === "HEARTBEAT_OK" ? "none" : word === "FYI" ? "fyi" : word === "URGENT" ? "urgent" : "attention";
+};
+/** A gated run's level: how it ended by tool (quiet, failed), or else its answer's first word. */
+const runLevel = (report, end) => end?.outcome === "quiet" ? "none"
+  : end?.outcome === "failed" || report.status === "failed" ? "failed" : reportLevel(report.answer);
+const LEVELS = ["none", "fyi", "attention", "urgent"];
+/** The least a report must matter to reach the person, by their interruption setting. */
+const THRESHOLD = { quiet: "urgent", normal: "attention", chatty: "fyi" };
+export const reaches = (level, dial = "normal") => LEVELS.indexOf(level === "failed" ? "attention" : level) >= LEVELS.indexOf(THRESHOLD[dial] || "attention");
 const aborted = async (task, api, context) => {
   await api.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context);
 };
@@ -190,13 +207,74 @@ export function Subagents(runtime) {
           if (!stopped && item.number === number) { changed = item.status !== report.status; item.status = report.status; item.endedAt = new Date().toISOString(); }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
+        // The agent's runs: what they spent counts toward its day, and what they found goes to its inbox (inbox.js).
+        const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
+        const level = task.input.gate ? runLevel(report, end) : null;
+        if (task.input.gate) {
+          const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
+          const day = await api.memo("day", runtime.agentDay?.() || new Date().toISOString().slice(0, 10), context);
+          await api.commit(async (tx) => {
+            const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+            if (item.counted?.includes(number)) return;
+            item.counted = [...(item.counted || []), number];
+            item.level = level;
+            const doc = await tx.doc(AgentDoc);
+            doc.spend[day] = (doc.spend[day] || 0) + spent;
+          }, context);
+        }
+        // Told at once: what was asked for (a brief, a task the person started, the heartbeat's decision), what is
+        // urgent, and a run that left something to approve, whose asks show under its report. The rest waits in the
+        // inbox for the heartbeat, or for the person to talk to jbot first.
+        const kind = task.input.origin?.kind;
+        // Where its report goes: a routine says (output jbot, inbox or both); before routines, by kind.
+        const output = task.input.origin?.output;
+        const asked = (output ? output !== "inbox" : ["brief", "manual", "heartbeat"].includes(kind)) && level !== "none";
+        const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
+          .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
+        const heard = !task.input.gate || (level !== "none" && (asked || waiting > 0 || level === "urgent"));
+        // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
+        // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
+        if (task.input.gate && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
+          const at = await api.memo("entryAt", new Date().toISOString(), context);
+          await api.commit(async (tx) => {
+            appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
+              headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
+              status: "unhandled" }, Date.parse(at));
+          }, context);
+        }
+        // A heartbeat that told no one leaves a quiet line in the home thread of what it did (no turn, display only).
+        if (task.input.gate && kind === "heartbeat" && !heard) {
+          const snapshot = await api.snapshot(AgentDoc, context);
+          const counts = await api.memo("beat", {
+            handled: Object.values(snapshot?.inbox || {}).filter((item) => String(item.handledBy) === String(child)).length,
+            set: Object.values(snapshot?.schedules || {}).filter((item) => String(item.by) === String(child)).length,
+            at: new Date().toISOString(),
+          }, context);
+          if (counts.handled || counts.set) await api.commit(async (tx) => {
+            const doc = await tx.doc(AgentDoc);
+            if (doc.beatLine === child) return;
+            doc.beatLine = child;
+            await tx.appendEntry(api.conversationId, { kind: "conduit.agent-beat", data: { messageId: `beat:${child}`, subagentId: id,
+              conversationId: child, handled: counts.handled, set: counts.set, timestamp: counts.at } });
+          }, context);
+        }
         const parent = await runtime.harness.conversation(api.conversationId, context);
-        if (!stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
+        if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
           const handle = await api.conversation(api.conversationId, context);
+          // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
+          // acknowledged it ("Noted. …") instead of choosing. The person sees the report's line, not this text.
+          const content = task.input.gate ? `${report.answer}\n\n---\nThat was your ${title} run's report. Decide as in "When a run reports": `
+            + (kind === "brief" || kind === "morning-brief" ? "this is the morning brief, so write the person the day's brief, then notify."
+              : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, say in one short line what came in, without notifying. Never just acknowledge it.")
+            : report.answer;
           await handle.submit({ type: "input", whenBusy: "followUp", requestId,
-            content: report.answer, entry: { kind: "conduit.subagent-report",
-              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId } } }, context);
+            content, entry: { kind: "conduit.subagent-report",
+              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId,
+                ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
+          // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
+          runtime.wakeChat?.(api.conversationId);
+          // The person's devices hear of it only if jbot decides they should (its `notify`); approvals push on their own.
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
       } catch (error) {
@@ -241,12 +319,16 @@ export function Subagents(runtime) {
         return textResult(Object.entries(roster?.children || {}).map(([key, item]) => `${key}: ${item.status}: ${item.title}`).join("\n") || "No background subagents.");
       }
       if ((action === "spawn" || action === "message") && typeof task !== "string") throw new Error("subagent requires task for spawn or message.");
+      // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
+      const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
+        ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || "", context);
       if (action === "spawn" && !background) {
         const child = await api.commit(async (tx) => {
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];
           if (existing !== undefined) return existing.id;
           const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
           await stripTools(tx, created.id);
+          if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
           return created.id;
         }, context);
         const title = subagentTitle(task);
@@ -281,6 +363,7 @@ export function Subagents(runtime) {
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
           await stripTools(tx, child.id);
+          if (runPrompt) await configure(tx, child.id, { instructions: runPrompt });
           roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0,
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }
@@ -318,6 +401,35 @@ export function Subagents(runtime) {
       return textResult(`${action === "spawn" ? "Started" : "Messaged"} subagent ${item.id}: ${item.title}`);
     },
   });
+  /**
+   * Start a background subagent from outside a tool call: the persistent agent's runs (a schedule, an event, a
+   * webhook). In the caller's commit on the parent conversation (`tx.createTask()` defaults to it); `key` makes it
+   * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
+   * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
+   */
+  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp", model = null, thinkingLevel = null, instructions = null }) => {
+    const roster = await tx.doc(SubagentRoster, conversationId);
+    const existing = Object.values(roster.children).find((value) => value.spawn === key);
+    if (existing) return JSON.parse(JSON.stringify(existing));
+    const id = `sa-${roster.next++}`;
+    const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
+    const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
+    const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
+    await stripTools(tx, child.id);
+    // Its own system prompt (RUN.md and its routine), in place of the parent's it would otherwise inherit.
+    if (instructions) await configure(tx, child.id, { instructions });
+    // A run may use its own model and effort (the agent's `work` settings); otherwise it has its thread's.
+    if (model) {
+      const slash = model.indexOf("/");
+      await configure(tx, child.id, { model: { provider: model.slice(0, slash), modelId: model.slice(slash + 1) }, ...(thinkingLevel ? { thinkingLevel } : {}) });
+    }
+    const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
+      gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
+    roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
+      status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
+      ...(origin ? { origin } : {}) };
+    return JSON.parse(JSON.stringify(roster.children[id]));
+  };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });
   return extension;
 }

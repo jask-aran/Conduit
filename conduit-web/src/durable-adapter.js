@@ -1,4 +1,5 @@
 import { remoteNode } from "./place.js";
+import { connectorSubject } from "./agent/connector-services.js";
 import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
@@ -71,6 +72,7 @@ const TOOL_KINDS = {
 const subjectOf = (name, args = {}) => toolSubject(
   name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
     : name === "codemode" ? null
+    : name.startsWith("mcp__") ? connectorSubject(name, args)
     : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query
       : name === "fetch_content" ? args.urls || args.url
@@ -103,7 +105,8 @@ function codemodeResult(name, details) {
   if (name !== "codemode" || !Array.isArray(details?.calls)) return {};
   const calls = details.calls.map((call) => {
     let input = call.args;
-    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = null; }
+    // A preview cut short does not parse: what it shows is kept for what can be read off it (a connector's paths).
+    if (typeof input === "string") try { input = JSON.parse(input); } catch { input = { preview: input }; }
     return { name: call.name, input, isError: call.status === "error", durationMs: call.durationMs };
   });
   return { calls: settledCalls(calls, SCRIPT_TOOLS), subject: callsSubject(calls) };
@@ -148,10 +151,29 @@ const failure = (message, code = "backend_unavailable", status = 409) => Object.
 const textOf = (content) => (Array.isArray(content) ? content : [])
   .filter((part) => part?.type === "text").map((part) => part.text || "").join("");
 
-/** An assistant message's blocks, in Conduit's names. */
+/**
+ * What a provider said its text was, where it says (pi-ai's `TextSignatureV1`: OpenAI Responses labels each message
+ * `commentary` or `final_answer`); null where the stream carries no label (DESIGN.md, Transcript › Turns).
+ */
+function textPhase(part) {
+  if (!part?.textSignature?.startsWith("{")) return null;
+  try {
+    const signature = JSON.parse(part.textSignature);
+    return signature?.v === 1 && (signature.phase === "commentary" || signature.phase === "final_answer") ? signature.phase : null;
+  } catch { return null; }
+}
+
+/**
+ * An assistant message's blocks, in Conduit's names. Text keeps the phase its provider gave it (`commentary`,
+ * `final_answer`) for the renderer to place; an empty text part (Gemini sends one after each tool call) is nothing.
+ */
 function blocksOf(message) {
   return (message?.content || []).flatMap((part, contentIndex) => {
-    if (part.type === "text") return [{ kind: "text", contentIndex, text: part.text || "" }];
+    if (part.type === "text") {
+      if (!part.text) return [];
+      const phase = textPhase(part);
+      return [{ kind: "text", contentIndex, text: part.text, ...(phase ? { phase } : {}) }];
+    }
     if (part.type === "thinking") return [{ kind: "thinking", contentIndex, text: part.thinking || "", redacted: Boolean(part.redacted) }];
     if (part.type === "toolCall") return [{ kind: "tool_call", contentIndex, toolCallId: part.id, name: part.name, input: part.arguments || {} }];
     return [];
@@ -179,6 +201,18 @@ function assistantClose(message, messageId, generationId = null) {
  * answer the process died before naming is called after its entry. A prompt
  * is settled by what came after it: answered, cut off by a stop, or failed.
  */
+/** A heartbeat's quiet line (subagents.js): what it did when it told no one, opening its run. */
+export const beatLine = (data = {}) => ["Heartbeat",
+  data.handled ? `${data.handled} handled` : null,
+  data.set ? `${data.set} check-back${data.set === 1 ? "" : "s"} set` : null].filter(Boolean).join(" · ");
+const beatOps = (entry) => {
+  const data = entry.data || {};
+  const id = data.messageId || `b${entry.conversationId}-${entry.id}`;
+  return [messageOpen({ id, role: "user", origin: "harness", content: beatLine(data),
+    agent: { id: data.subagentId, conversationId: data.conversationId ?? null }, ...(data.timestamp ? { timestamp: data.timestamp } : {}) }),
+  turnSettle({ promptId: id, outcome: "complete" })];
+};
+
 export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
   const calls = new Map();
@@ -204,6 +238,9 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         ...(entry.kind === "conduit.subagent-report" ? { origin: "harness", agent: { id: data.subagentId, conversationId: data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null } } : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
+    } else if (entry.kind === "conduit.agent-beat") {
+      // Its own settled line: not a prompt, so a turn around it goes on as it was.
+      ops.push(...beatOps(entry));
     } else if (entry.kind === "pi.assistant") {
       const message = entry.model?.[0];
       if (!message) continue;
@@ -639,7 +676,8 @@ export class DurableAdapter extends EventEmitter {
         await this.placed(record, event.entry);
         break;
       case "message_start":
-        if (event.message?.role === "assistant") this.openAnswer(record);
+        // The message can start with its first words already in it: they go out as the rest of it will.
+        if (event.message?.role === "assistant") { this.openAnswer(record); this.paint(record, [{ type: "message", message: event.message }]); }
         break;
       case "message_update":
         this.paint(record, event.changes);
@@ -681,6 +719,7 @@ export class DurableAdapter extends EventEmitter {
 
   /** A prompt entering the transcript mid-run is a steer or a follow-up the run took. */
   async placed(record, entry) {
+    if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
       // Reports have no browser prompt; open their short harness line at placement.
@@ -753,13 +792,38 @@ export class DurableAdapter extends EventEmitter {
     const turn = record.turn;
     if (!turn) return;
     const messageId = turn.messageId || this.openAnswer(record);
-    for (const change of changes) {
-      const blockKind = change.type.startsWith("thinking") ? "thinking" : change.type.startsWith("toolcall") ? "tool_call" : "text";
-      const delta = change.type.endsWith("_delta") ? change.delta
-        : change.type.endsWith("_start") ? (change.block?.text || change.block?.thinking || "") : "";
-      if (!delta) continue;
+    // How much of each block's text has gone out: pi-durable sends a block whole (`block`, or the whole `message`)
+    // when a field of it is set rather than appended -- the first words, or a signature at its end -- and only what
+    // follows what was sent is new. Dropping those lost a text's first words until the turn settled.
+    const sent = turn.sent?.messageId === messageId ? turn.sent.lengths : (turn.sent = { messageId, lengths: new Map() }).lengths;
+    const send = (contentIndex, blockKind, delta) => {
+      if (!delta) return;
+      sent.set(contentIndex, (sent.get(contentIndex) ?? 0) + delta.length);
       this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
-        seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta });
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind, delta });
+    };
+    const whole = (contentIndex, block) => {
+      if (block?.type !== "text" && block?.type !== "thinking") return;
+      const text = block.type === "text" ? block.text || "" : block.thinking || "";
+      send(contentIndex, block.type, text.slice(sent.get(contentIndex) ?? 0));
+    };
+    for (const change of changes) {
+      if (change.type === "message") { (change.message?.content || []).forEach((block, index) => whole(index, block)); continue; }
+      // A call is named as soon as it starts, so its trace says what it is doing rather than "Calling a tool".
+      if (change.type === "toolcall_start" && change.block?.name) {
+        this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta", seq: ++record.generationSeq,
+          messageId, contentIndex: change.contentIndex, blockKind: "tool_call", delta: "", name: change.block.name,
+          toolKind: toolKind(TOOL_KINDS, change.block.name), ...(change.block.id ? { toolCallId: change.block.id } : {}) });
+        continue;
+      }
+      if (change.type === "block" || change.type.endsWith("_start")) { whole(change.contentIndex, change.block); continue; }
+      const blockKind = change.type.startsWith("thinking") ? "thinking" : change.type.startsWith("toolcall") ? "tool_call" : "text";
+      if (blockKind === "tool_call") {
+        if (change.delta) this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
+          seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta: change.delta });
+        continue;
+      }
+      send(change.contentIndex, blockKind, change.delta);
     }
   }
 
@@ -1266,7 +1330,12 @@ export class DurableAdapter extends EventEmitter {
       agent.chatId = child?.id || null;
       const ledger = await harness.snapshot(UsageDoc, agent.conversationId, this.context);
       const spent = [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})];
+      // Its context at the end (its last request: what it held), as any chat's context pane says; a sum over its
+      // requests counts the cached prefix again each time.
+      const last = (await (await harness.conversation(agent.conversationId, this.context))?.entries({ order: "descending" }, 8, undefined, this.context))
+        ?.items.find((entry) => entry.kind === "pi.assistant" && entry.model?.[0]?.usage)?.model[0].usage;
       agent.usage = { tokens: spent.reduce((sum, usage) => sum + (Number(usage.totalTokens) || 0), 0),
+        context: last ? (last.input || 0) + (last.cacheRead || 0) + (last.cacheWrite || 0) + (last.output || 0) : null,
         cost: spent.reduce((sum, usage) => sum + (Number(usage.cost?.total) || 0), 0) };
       agent.activity = agent.status === "running" ? this.runtime.subagentActivity?.get(agent.conversationId) || null : null;
     }
