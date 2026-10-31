@@ -999,10 +999,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       (next) => setViewportScrollTop(next, false),
     );
     transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
-    // When the reader last did something that scrolls: a wheel (a trackpad's momentum keeps sending them), a key, a
-    // scrollbar drag, a touch and the fling after it. Only a move up inside that is theirs.
+    // When the reader last did something that can move the view: a wheel (a trackpad's momentum keeps sending them),
+    // any key, a touch and the fling after it, a press held in the chat (a scrollbar drag, a text selection dragged
+    // past the edge, middle-click scrolling), focus moving in it, and Find from when it opens until the page has focus
+    // again (its jumps happen in the browser's own bar, which the page never hears). A move up inside that is theirs.
     let readerUntil = 0;
+    let finding = false;
+    // Whether the chat laid out again since the last scroll: a move up the page made itself follows a layout change.
+    let laidOut = false;
     const reading = (ms: number) => { readerUntil = Math.max(readerUntil, performance.now() + ms); };
+    const byReader = () => finding || performance.now() <= readerUntil;
     const claimUserScroll = () => {
       if (empty()) return;
       if (!rendererUsesTypewriter()) return;
@@ -1057,7 +1063,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // A move up with no reader behind it is the page, not them: the browser keeping a block in place as one above it
       // shrank (a trace settling, markdown laying out). It used to read as the reader leaving, and the tail let go
       // mid-turn. Following, the tail just carries on to the bottom.
-      if (decision.direction === "up" && following() && performance.now() > readerUntil) {
+      const relaid = laidOut;
+      laidOut = false;
+      if (decision.direction === "up" && following() && relaid && !byReader()) {
         if (rendererUsesTypewriter()) requestTypewriterTailFollow();
         else scrollBottom();
         loadEarlier();
@@ -1081,14 +1089,25 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     const onTouchEnd = () => { if (!touching) return; touching = false; readerUntil = performance.now() + 2000; };
     let dragging = false;
     const onPointerDown = (event: PointerEvent) => {
+      finding = false;
+      dragging = true;
+      reading(60_000);
       // A scrollbar drag lands on the viewport itself, outside any content box.
-      if (event.target === viewport) { dragging = true; reading(60_000); claimUserScroll(); }
+      if (event.target === viewport) claimUserScroll();
     };
     const onPointerUp = () => { if (!dragging) return; dragging = false; readerUntil = performance.now() + 300; };
     const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (SCROLL_KEYS.has(event.key)) { reading(800); claimUserScroll(); }
+      // Find is the page's wherever it is pressed; any other key only from the chat itself (or nothing focused), not
+      // from typing in the composer -- an arrow key there moves the caret, not the view.
+      if ((event.key === "f" || event.key === "g") && (event.ctrlKey || event.metaKey) || event.key === "F3") { finding = true; return; }
+      const target = event.target as Node | null;
+      if (target !== document.body && !(target && viewport.contains(target))) return;
+      reading(800);
+      if (SCROLL_KEYS.has(event.key)) claimUserScroll();
     };
+    const onFocusIn = () => reading(500);
+    const onPageFocus = () => { finding = false; };
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", onWheel, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -1098,8 +1117,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("wheel", cancelLatestGlide, { passive: true });
     viewport.addEventListener("touchstart", cancelLatestGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
-    viewport.addEventListener("keydown", onKeyDown, { passive: true });
+    window.addEventListener("keydown", onKeyDown, { passive: true, capture: true });
+    viewport.addEventListener("focusin", onFocusIn, { passive: true });
+    window.addEventListener("focus", onPageFocus);
     const resizeObserver = new ResizeObserver(() => {
+      laidOut = true;
       if (!following()) return;
       // Hiding and showing blocks resizes the thread. Chasing the tail on those
       // is a feedback loop: the scroll write changes what is in the overscan
@@ -1125,7 +1147,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       window.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener("pointerup", onPointerUp);
       viewport.removeEventListener("pointerdown", onPointerDown);
-      viewport.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      viewport.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("focus", onPageFocus);
       composerResizeObserver.disconnect();
       composerStack?.removeEventListener("transitionend", composerLanded);
       window.removeEventListener("resize", scheduleLatestButtonAnchor);

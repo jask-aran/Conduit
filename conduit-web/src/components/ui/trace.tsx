@@ -41,20 +41,23 @@ export const Trail = (props: { nested?: "group" | "calls"; children: JSX.Element
 const NOT_KEPT = "Not kept";
 export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier";
 /**
- * A step: its kind's icon (a spinner while running), a verb, its subject in muted mono, flags, its duration at the
- * end. summary: a line of text instead of verb and subject (thinking, narration). note: not a step, nothing to open
+ * A step: its kind's icon (a spinner while running), a verb, its subject, what qualifies it (aside: `on example.com`,
+ * `in src/client`, `and 2 more`, quieter), then at the end flags, an edit's lines added and removed (changes) and its
+ * duration. face: the subject's -- `code` (a command, a file) in mono, `text` (a query, a page) at the line's own face. summary: a line of text instead of verb and subject (thinking, narration). note: not a step, nothing to open
  * (reasoning the provider kept). discarded: text a stop threw away, struck, flagged Not kept. flags: words beside the
  * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps;
  * opens: they are drawn only once it has opened (foldBody).
  */
-export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
+export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; face?: "code" | "text"; aside?: string; changes?: { added: number; removed: number }; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
   const fold = foldBody(props), body = fold.body;
   const opens = () => fold.opens() && !props.note;
   const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
   const row = () => <>
     <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><Spinner /></Show></span>
-    <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><code class="ui-step-subject">{props.subject}</code></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
-    <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag" title={flag === NOT_KEPT ? "Interrupted — the agent has no record of this" : undefined}>{flag}</span>}</For><Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
+    <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><span class="ui-step-subject" data-face={props.face ?? "code"}>{props.subject}</span></Show><Show when={props.aside}><span class="ui-step-aside">{props.aside}</span></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
+    <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag" title={flag === NOT_KEPT ? "Interrupted — the agent has no record of this" : undefined}>{flag}</span>}</For>
+      <Show when={props.changes}>{(changes) => <span class="ui-step-changes"><Show when={changes().added}><span data-change="added">+{changes().added}</span></Show><Show when={changes().removed}><span data-change="removed">{"\u2212"}{changes().removed}</span></Show></span>}</Show>
+      <Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
   </>;
   return <li class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
@@ -62,6 +65,13 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
       <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>
     </Show>
   </li>;
+}
+/** What an edit opens to: its changed lines, removed then added, each marked in its colour; `…` between changes. */
+export function StepDiff(props: { lines: { sign: "+" | "-" | "\u2026"; text: string }[]; hidden?: number }) {
+  return <div class="ui-step-diff" role="group" aria-label="Changes">
+    <For each={props.lines}>{(line) => <div class="ui-step-diff-line" data-sign={line.sign === "+" ? "added" : line.sign === "-" ? "removed" : "gap"}><span aria-hidden="true">{line.sign === "-" ? "\u2212" : line.sign}</span><span>{line.text || "\u00a0"}</span></div>}</For>
+    <Show when={props.hidden}><div class="ui-step-diff-line" data-sign="gap"><span aria-hidden="true">{"\u2026"}</span><span>{props.hidden} more changed lines</span></div></Show>
+  </div>;
 }
 /** What a tool step opens to: its output in mono, scrolling; cut to a preview, `hidden` characters behind Show full output. */
 export function StepOutput(props: { text: string; hidden?: number; full?: boolean; onToggleFull?: () => void }) {

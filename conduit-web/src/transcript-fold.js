@@ -141,6 +141,7 @@ export function applyToolOp(tools, event) {
     const incoming = {
       toolCallId: event.toolCallId, name: event.name || "tool", kind: event.kind || "other",
       ...(event.subject ? { subject: event.subject } : {}), input: event.input,
+      ...(event.facts ? { facts: event.facts } : {}),
       ...(event.agent ? { agent: event.agent } : {}),
       done: false, isError: false, timestamp: event.timestamp || new Date().toISOString(),
       seq: held >= 0 ? tools[held].seq : tools.length,

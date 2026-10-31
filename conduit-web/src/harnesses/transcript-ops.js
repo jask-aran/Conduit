@@ -76,6 +76,37 @@ const pageOf = (value) => {
     return { host: url.hostname.replace(/^www\d*\./, ""), path: url.pathname === "/" ? "" : url.pathname };
   } catch { return null; }
 };
+/**
+ * A step's line, said better than its subject can: `subject` the one thing it acted on (a search's first query, a
+ * file's name), `aside` what qualifies it (`on example.com`, `and 2 more`, `in src/client`, `lines 120-180`), and an
+ * edit's lines added and removed with its changes (`diff`, -/+ lines, capped). Every field optional; a step without
+ * them is drawn from its subject alone. Built by an adapter from its harness's own input shapes.
+ */
+export const DIFF_LINES = 160;
+/** An edit's changed lines, old text to new: the lines either side they share are not changes. */
+export function lineChanges(before = "", after = "") {
+  const old = before ? before.split("\n") : [], next = after ? after.split("\n") : [];
+  if (old.at(-1) === "" && next.at(-1) === "") { old.pop(); next.pop(); }
+  let head = 0;
+  while (head < old.length && head < next.length && old[head] === next[head]) head += 1;
+  let tail = 0;
+  while (tail < old.length - head && tail < next.length - head && old[old.length - 1 - tail] === next[next.length - 1 - tail]) tail += 1;
+  const a = old.slice(head, old.length - tail), b = next.slice(head, next.length - tail);
+  // The middle by its longest run in common, so a line kept between two changes is not counted twice; past a few
+  // hundred lines a side, the whole middle (an edit that large is a rewrite).
+  if (!a.length || !b.length || a.length * b.length > 160_000) return { removed: a, added: b, lines: [...a.map((text) => ({ sign: "-", text })), ...b.map((text) => ({ sign: "+", text }))] };
+  const table = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i -= 1) for (let j = b.length - 1; j >= 0; j -= 1)
+    table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  const removed = [], added = [], lines = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { i += 1; j += 1; continue; }
+    if (i < a.length && (j >= b.length || table[i + 1][j] >= table[i][j + 1])) { removed.push(a[i]); lines.push({ sign: "-", text: a[i] }); i += 1; }
+    else { added.push(b[j]); lines.push({ sign: "+", text: b[j] }); j += 1; }
+  }
+  return { removed, added, lines };
+}
 export const toolSubject = (value) => {
   const list = (Array.isArray(value) ? value : [value]).filter((item) => typeof item === "string" && item.trim());
   if (!list.length) return null;
@@ -231,13 +262,14 @@ export const messageDrop = ({ messageId, inclusive = false, keep = false, genera
  * a replay restores them with it.
  */
 export const toolOpen = ({ toolCallId, name, kind = "other", subject = null, input, messageId = null, generationId = null,
-  timestamp = new Date().toISOString(), agent = null }) =>
+  timestamp = new Date().toISOString(), agent = null, facts = null }) =>
   assertTranscriptOp({
     // When it started and, on the close, when it finished -- stamped as they
     // happen, so a replay says how long a step took rather than when the
     // replay ran.
     type: "transcript_op", op: "tool.open", toolCallId, name: name || "tool", kind, input, timestamp,
     ...(subject ? { subject } : {}),
+    ...(facts ? { facts } : {}),
     ...(agent ? { agent } : {}),
     ...(messageId ? { messageId } : {}),
     ...(generationId ? { generationId } : {}),

@@ -406,7 +406,7 @@ export function buildLiveToolSegment(
     kind: "tool",
     id: `tool:${toolCallId}`,
     tool: buildLiveToolItem(toolCallId, execution, { name: block.name, kind: block.toolKind, subject: held?.agent ? held.subject : block.subject, input: block.input,
-      calls: held?.calls, agent: held?.agent }),
+      calls: held?.calls, agent: held?.agent, facts: held?.facts }),
   };
 }
 
@@ -432,12 +432,13 @@ function buildLiveErrorSegment(
 export function buildLiveToolItem(
   toolCallId: string,
   execution: ActiveGenerationView["toolExecutions"][string] = {},
-  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown; calls?: ToolItem["calls"]; agent?: ToolItem["agent"] } = {},
+  fallback: { name?: string; kind?: ToolKind; subject?: string; input?: unknown; calls?: ToolItem["calls"]; agent?: ToolItem["agent"]; facts?: ToolItem["facts"] } = {},
 ): ToolItem {
   return {
     // A script's calls and a subagent's reference are stated as transcript ops, not generation events.
     ...(fallback.calls ? { calls: fallback.calls } : {}),
     ...(fallback.agent ? { agent: fallback.agent } : {}),
+    ...(fallback.facts ? { facts: fallback.facts } : {}),
     toolCallId,
     name: execution.name || fallback.name || "tool",
     kind: execution.kind || fallback.kind || "other",

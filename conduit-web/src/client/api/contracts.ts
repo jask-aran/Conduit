@@ -395,12 +395,22 @@ export interface ToolCallStep {
   durationMs?: number;
 }
 
+export interface ToolFacts {
+  subject?: string;
+  aside?: string;
+  added?: number;
+  removed?: number;
+  diff?: { sign: "+" | "-" | "…"; text: string }[];
+}
+
 export interface ToolItem {
   toolCallId: string;
   name?: string;
   kind?: ToolKind;
   /** What it acted on, in one line, as the adapter states it. */
   subject?: string;
+  /** Its line said better than the subject can, when the adapter knows (transcript-ops `toolOpen` facts). */
+  facts?: ToolFacts;
   /** The tools a script step called, in order. */
   calls?: ToolCallStep[];
   /** A subagent's spawn: the agent it handed the task to. */

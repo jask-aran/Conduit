@@ -11,7 +11,7 @@ import { UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
 import { backgroundSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
+import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
@@ -80,6 +80,59 @@ const subjectOf = (name, args = {}) => toolSubject(
       : name === "fetch_content" ? args.urls || args.url
         : name === "source_check" ? args.claim || args.query
           : args.path);
+/** A Pi tool's line said better than its subject (transcript-ops, ToolFacts): from Pi's own input shapes. */
+const hostOf = (url) => { try { const { hostname, pathname } = new URL(url); return { host: hostname.replace(/^www\d*\./, ""), path: pathname.replace(/\/$/, "") }; } catch { return null; } };
+const more = (count) => count > 0 ? `and ${count} more` : "";
+const where = (path) => { const parts = String(path || "").split("/").filter(Boolean); return { name: parts.at(-1) || path, dir: parts.slice(-3, -1).join("/") }; };
+function factsOf(name, args = {}) {
+  if (name === "web_search" || name === "source_check") {
+    const queries = (Array.isArray(args.queries) ? args.queries : [args.query]).filter((item) => typeof item === "string" && item.trim());
+    const first = String(name === "source_check" ? args.claim || queries[0] || "" : queries[0] || "");
+    if (!first) return null;
+    // `site:` is how a search is narrowed, not what it looks for: said as where it looked.
+    const site = /(?:^|\s)site:(\S+)/.exec(first)?.[1];
+    const subject = first.replace(/(?:^|\s)site:\S+/g, " ").replace(/\s+/g, " ").trim();
+    const aside = [site ? `on ${hostOf(`https://${site}`)?.host || site}` : "", name === "source_check" ? `${queries.length} ${queries.length === 1 ? "search" : "searches"}` : more(queries.length - 1)].filter(Boolean).join(" · ");
+    return { subject: subject || first, ...(aside ? { aside } : {}) };
+  }
+  if (name === "fetch_content") {
+    const urls = (Array.isArray(args.urls) ? args.urls : [args.url]).filter(Boolean);
+    const pages = urls.map(hostOf).filter(Boolean);
+    if (!pages.length) return null;
+    if (pages.length === 1) return { subject: pages[0].host, ...(pages[0].path ? { aside: pages[0].path } : {}) };
+    const hosts = [...new Set(pages.map((page) => page.host))];
+    return { subject: `${pages.length} pages`, aside: `${hosts.slice(0, 2).join(", ")}${hosts.length > 2 ? ` +${hosts.length - 2}` : ""}` };
+  }
+  if (name === "get_search_content") {
+    const terms = (Array.isArray(args.findText) ? args.findText : [args.findText]).filter(Boolean);
+    return { subject: "saved results", ...(terms.length ? { aside: `for ${terms.slice(0, 3).join(", ")}${terms.length > 3 ? ` +${terms.length - 3}` : ""}` } : {}) };
+  }
+  if (name === "bash" && typeof args.command === "string") {
+    // `cd somewhere && ` says where, not what: the command is the rest.
+    const lines = args.command.trim().split("\n");
+    const subject = lines[0].replace(/^cd\s+\S+\s*&&\s*/, "");
+    return { subject, ...(lines.length > 1 ? { aside: `+${lines.length - 1} ${lines.length === 2 ? "line" : "lines"}` } : {}) };
+  }
+  if ((name === "read" || name === "edit" || name === "write") && args.path) {
+    const { name: file, dir } = where(args.path);
+    const lines = name === "read" && (args.offset || args.limit)
+      ? `lines ${args.offset || 1}${args.limit ? `\u2013${(args.offset || 1) + args.limit - 1}` : "+"}` : "";
+    const facts = { subject: file, ...(dir || lines ? { aside: [dir ? `in ${dir}` : "", lines].filter(Boolean).join(" · ") } : {}) };
+    if (name === "read") return facts;
+    const edits = name === "write" ? [{ oldText: "", newText: String(args.content ?? "") }]
+      : Array.isArray(args.edits) ? args.edits : [{ oldText: args.oldText ?? args.old_string, newText: args.newText ?? args.new_string }];
+    const diff = [];
+    let added = 0, removed = 0;
+    for (const change of edits) {
+      const { removed: gone, added: come, lines } = lineChanges(String(change?.oldText ?? ""), String(change?.newText ?? ""));
+      added += come.length; removed += gone.length;
+      if (diff.length && lines.length) diff.push({ sign: "\u2026", text: "" });
+      diff.push(...lines);
+    }
+    return { ...facts, added, removed, ...(diff.length ? { diff: diff.slice(0, DIFF_LINES) } : {}) };
+  }
+  return null;
+}
 // Every subagent action is an agent step; only a spawn names the agent it made (its id once it runs in the background,
 // its conversation once it has one), which the browser pins under the turn. Listing or messaging agents does not.
 const agentFields = (name, input, details = {}) => name === "subagent" ? {
@@ -280,7 +333,7 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         calls.set(block.toolCallId, block);
         ops.push(toolOpen({ toolCallId: block.toolCallId, name: block.name, kind: toolKind(TOOL_KINDS, block.name),
           timestamp: started.get(block.toolCallId) || (message.timestamp ? new Date(message.timestamp).toISOString() : undefined),
-          subject: subjectOf(block.name, block.input), ...agentFields(block.name, block.input, details.get(block.toolCallId)), input: block.input, messageId }));
+          subject: subjectOf(block.name, block.input), facts: factsOf(block.name, block.input), ...agentFields(block.name, block.input, details.get(block.toolCallId)), input: block.input, messageId }));
       }
       last = message;
     } else if (entry.kind === "pi.tool-result") {
@@ -889,7 +942,7 @@ export class DurableAdapter extends EventEmitter {
     const scriptCalls = event.toolName === "codemode" ? createScriptCalls(SCRIPT_TOOLS) : null;
     turn.tools.set(event.toolCallId, { ...known, details, timestamp: new Date().toISOString(), opened: true, output: "", ...(scriptCalls ? { scriptCalls } : {}) });
     // A spawn opens at once, its agent's conversation stated again when the child has one (toolProgress).
-    this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, ...agentFields(event.toolName, event.args, details || {}), input: event.args,
+    this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, facts: factsOf(event.toolName, event.args), ...agentFields(event.toolName, event.args, details || {}), input: event.args,
       messageId: known.messageId, generationId: turn.generationId }));
     const plan = scriptCalls?.open(event.toolCallId, event.args?.code);
     if (plan) this.publish(record, toolCalls({ toolCallId: event.toolCallId, calls: plan, generationId: turn.generationId }));

@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { elapsed, KIND_ICONS, stepDuration, toolName, ToolStep, VERBS } from "./tool-card";
+import { elapsed, KIND_ICONS, stepDuration, stepText, toolName, ToolStep, VERBS } from "./tool-card";
 import { Orb, ServiceIcon, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
@@ -212,6 +212,7 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
    end, since the file is the part worth reading. */
 function toolLine(tool: ToolItem): string {
+  if (tool.facts?.subject) return stepText(tool);
   const subject = tool.subject || "";
   if (tool.kind === "search") return `\u201c${subject}\u201d`;
   return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
@@ -418,24 +419,28 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const sources = () => sourcesText(lines());
   // Narrated, a run of work between texts is its trail's own lines -- each step its icon, verb, subject and time, as
   // the Folded disclosure lists them -- with no header over them: the text either side says why (DESIGN.md, Turns).
-  if (props.narrated && !props.gathering) {
-    const shown = untrack(() => trail().length);
-    return <>
+  // Narrated, a run of work between texts with one step (and the thinking around it) is its own lines; several fold under one header,
+  // worded as Folded's: live, what it is doing; settled, what it did ("9 edits, 7 searches · 2m 23s"), never Done --
+  // that is how a whole turn ended. The orb is the row's (TraceOrb), not the header's. (DESIGN.md, Turns.)
+  const narrated = () => Boolean(props.narrated) && !props.gathering;
+  const single = () => narrated() && trail().filter((item) => item.type !== "text" && item.type !== "hidden").length <= 1;
+  const settledRun = () => narrated() && !props.trace.active && !unfinished();
+  const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+  return <Show when={!single()} fallback={<>
       <TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />
-      <Trail><Index each={trail()}>{(item, index) =>
-        <TrailLine item={item()} arriving={index >= shown} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
-    </>;
-  }
-  return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
-      work={preview().work || undefined}
-      latest={looked() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
+      <Trail><Index each={trail()}>{(item) =>
+        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+    </>}>
+    <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
+      work={settledRun() ? undefined : preview().work || undefined}
+      latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
-    </Trace></Show>;
+    </Trace></Show></Show>;
 }
 
 /** A Narrated run of work's orb, beside its first line while it is the turn's live row: what it is doing now. */
