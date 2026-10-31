@@ -73,6 +73,7 @@ const subjectOf = (name, args = {}) => toolSubject(
   name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
     : name === "codemode" ? null
     : name === "notify" ? args.title
+    : name === "get_search_content" ? "saved search results"
     : name.startsWith("mcp__") ? connectorSubject(name, args)
     : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query

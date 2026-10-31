@@ -28,9 +28,9 @@ export const foldedScene = () => <Transcript>{ask()}
 </Transcript>;
 export const narratedScene = () => <Transcript>{ask()}
   <TranscriptRow flow="exchange"><Turn><Answer html={"<p>I'll read the store first.</p>"} /></Turn></TranscriptRow>
-  <TranscriptRow flow="step"><Turn><TraceHeader status="Done" time="1.2s" work="Read conduit-web/src/client/state/timeline-store.ts" opens /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn><TraceHeader step status="Read" work="conduit-web/src/client/state/timeline-store.ts" time="1.2s" opens /></Turn></TranscriptRow>
   <TranscriptRow flow="step"><Turn><Answer html={"<p>Now where the transcript calls it.</p>"} /></Turn></TranscriptRow>
-  <TranscriptRow flow="step"><Turn><TraceHeader status="Done" time="2.8s" work="Ran rg -n 'createTimelineStore'" opens /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn><TraceHeader step status="Ran" work="rg -n 'createTimelineStore'" time="2.8s" opens /></Turn></TranscriptRow>
   <TranscriptRow flow="step"><Turn orb={orb(true)}><Answer html={finalAnswer} />{foot()}</Turn></TranscriptRow>
   <TranscriptRow flow="turn"><Message time="14:26">and where is it made?</Message></TranscriptRow>
 </Transcript>;
@@ -82,6 +82,7 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     row("live", "a turn running: what it is doing, ticking; Row role · status strong · time tabular", () => <Read class="g-read"><TraceHeader orb={liveOrb()} status="Reading" time="12s" work="3 reads" latest="Reading src/client/chat/transcript.tsx" opens /></Read>, { phone: true, code: "<TraceHeader status time work latest opens>" }),
     row("done", "settled; the orb turns slowly", () => <Read class="g-read"><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" latest="Edited lorem_ipsum.txt" opens /></Read>, { phone: true }),
     row("interrupted", "stopped by the reader; the orb sputters in --destructive", () => <Read class="g-read"><TraceHeader orb={orb(false)} status="Interrupted" time="41s" work="2 commands" opens /></Read>, { phone: true }),
+    row("step", "one step of a Narrated turn, settled: its verb and what it acted on, then its time -- not Done, which is how a whole turn ended", () => <Read class="g-read"><TraceHeader step orb={orb(true)} status="Searched" work={"\u201cgassho house stays Shirakawa-go\u201d and 2 more"} time="20.9s" opens /></Read>, { phone: true, code: "<TraceHeader step status work time>" }),
     row("no trail", "no thinking or tools: the first line alone, nothing to open; not a button you can press", () => <Read class="g-read"><TraceHeader orb={orb(true)} status="Done" time="3s" /></Read>, { phone: true, code: "<TraceHeader> without opens" }),
     row("disclosure", "anything that folds: a header, one turning chevron, a body (the caller animates it); Row role, muted · chevron icon-sm, turns 180°", () => <Read class="g-read"><DisclosureDemo /></Read>, { phone: true, code: "<Disclosure header open onToggle>" }),
     row("trail", "the opened trace: a light line a step; Row role · subject code face, muted · failed in --destructive", () => <Read class="g-read">{<><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" opens open /><Trail><Step icon={<Icons.FileText />} verb="Read" subject="src/main.tsx" time="0.4s" /><Step icon={<Icons.Edit />} verb="Edited" subject="lorem_ipsum.txt" time="1.2s" /><Step icon={<Icons.Terminal />} verb="Ran" subject="npm test" time="14s" state="failed" /><Step verb="Running" subject="npm run build" state="running" /></Trail></>}</Read>, { phone: true, code: "<Trail><Step icon verb subject time state>" }),

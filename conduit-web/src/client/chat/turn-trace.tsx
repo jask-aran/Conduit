@@ -264,6 +264,14 @@ function doneLine(trace: TurnTraceData): string {
   }
   return lines.join(", ");
 }
+/* A settled step said as itself: its first verb leads ("Searched"), and what it acted on follows, the verb not repeated
+   for the lines after that share it ("Fetched 6 pages, get_search_content"). */
+function stepOf(line: string): { verb: string; rest: string } {
+  const [first = "", ...others] = line.split(", ");
+  const verb = first.split(" ")[0] || "";
+  const rest = [first.slice(verb.length).trim(), ...others.map((part) => part.startsWith(`${verb} `) ? part.slice(verb.length + 1) : part)].filter(Boolean);
+  return { verb, rest: rest.join(", ") };
+}
 const plainText = (text: string) => text.replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
 function previewOf(trace: TurnTraceData, writing: boolean, narrated = false): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
   let latest: Detail | null = null;
@@ -443,8 +451,9 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const lines = createMemo(() => looked() ? sourceLines(props.trace.segments) : []);
   const sources = () => sourcesText(lines());
   return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : thoughtOnly() ? "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
-      work={oneLine() ? did() || (thoughtOnly() ? plainText(preview().detail?.text ?? "") : preview().work) || undefined : preview().work || undefined}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : thoughtOnly() ? "Thought" : did() ? stepOf(did()).verb : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
+      step={Boolean(did()) && !looked()}
+      work={oneLine() ? (did() ? stepOf(did()).rest : thoughtOnly() ? plainText(preview().detail?.text ?? "") : preview().work) || undefined : preview().work || undefined}
       latest={looked() || oneLine() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
