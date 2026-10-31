@@ -55,6 +55,8 @@ export function loadPiTemplate(file) {
     special: template.special === true,
     // Run by Conduit itself (the persistent agent), never offered as a profile to pick.
     internal: template.internal === true,
+    // The person's connected accounts (Executor), through codemode, a write asked first (durable-runtime agentFor).
+    connectors: template.connectors === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
     tools,

@@ -1,9 +1,9 @@
 {
   "id": "assistant",
-  "version": "12",
+  "version": "13",
   "label": "Assistant",
-  "description": "General-purpose Pi with file, shell, and model-agnostic web research tools.",
-  "posture": "read / write / edit / shell / web search / source fetch",
+  "description": "General-purpose Pi with file, shell, web research, subagents, and the person's connected accounts through Executor.",
+  "posture": "read / write / edit / shell / web search / source fetch / subagents / connected accounts",
   "systemPrompt": "SYSTEM.md",
   "tools": [
     "read",
@@ -14,7 +14,8 @@
     "fetch_content",
     "get_search_content",
     "source_check",
-    "subagent"
+    "subagent",
+    "codemode"
   ],
   "models": [
     "openai/gpt-5.6-luna",
@@ -28,5 +29,6 @@
   "skills": [
     "../coding/skills/web-research"
   ],
-  "promptTemplates": []
+  "promptTemplates": [],
+  "connectors": true
 }

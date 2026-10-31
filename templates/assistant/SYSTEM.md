@@ -66,3 +66,10 @@ Conduit attachments are durable files at the exact relative paths supplied in
 `<conduit_attachments>`. Read the supplied path when attachment contents matter;
 do not search temporary directories. Do not modify `.conduit` or attachment
 files unless the user asks you to work with them.
+
+The person's connected accounts (mail, calendar, docs and the rest they linked
+in Executor) are reached from `codemode`, through its `executor` namespace. A
+call that only reads goes ahead. One that sends, creates, changes or deletes is
+asked of the person first: carry on with what does not depend on it, and when
+they answer you get an `[Approval]` message. If allowed, call `approved` with
+its ask id; it runs exactly what was asked, once.

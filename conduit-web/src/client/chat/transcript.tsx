@@ -343,7 +343,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   });
   const asksAt = (key: string) => askRows().placed.get(key) ?? [];
   // A new call may have asked, or a run's report come in with its asks: the list is read again as the thread grows.
-  createEffect(on(() => props.approvals ? props.chat.tools().length + props.chat.messages().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
+  // Asks come from a connector's calls, which run in a script: a chat with none has nothing to look up.
+  const asking = () => props.chat.tools().some((tool) => tool.kind === "script") || (props.approvals?.asks().length ?? 0) > 0;
+  createEffect(on(() => props.approvals && asking() ? props.chat.tools().length + props.chat.messages().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
   const unplacedAsks = () => askRows().unplaced;
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
   // A message of ours the server has not answered with any row of its turn.

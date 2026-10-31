@@ -289,7 +289,7 @@ async function approve(runtime, api, name, args, context, thread) {
   if (outcome.allowed) return null;
   const { ask } = outcome;
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
-  if (outcome.created && !thread.run) runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
+  if (outcome.created && !thread.run && !thread.chat) runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
   return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
 }
@@ -298,13 +298,18 @@ async function approve(runtime, api, name, args, context, thread) {
  * `approved`: runs the call an allowed ask holds, once, in the thread it belongs to. The person's answer arrives as a
  * message naming the ask; the call itself (made by this thread earlier, or by a run) is the hub's copy, not retyped.
  */
-export function ApprovedTool(runtime, tools) {
+/** The tool an approved call names, as installed (unwrapped): looked up when it runs, since connectors are reinstalled. */
+const installedTool = (runtime, name) => name === "approved" ? null
+  // A placed tool asked about is one given a device: the device tools' own, before the plain coding tools of that name.
+  : [...(runtime.extensions?.values() || [])].sort((a, b) => (b.name === "device-tools") - (a.name === "device-tools"))
+    .flatMap((extension) => extension.tools || []).find((tool) => tool.name === name) || null;
+export function ApprovedTool(runtime) {
   return defineTool({
     name: "approved",
     description: "Run an approved call: the one an [Approval] Allowed message names, by its ask id. It runs exactly as asked, once.",
     parameters: Type.Object({ ask: Type.String({ description: "The ask id, e.g. a-3" }) }),
     execute: async (args, api, context) => {
-      const described = await runtime.agent.describe(api.conversationId);
+      const described = await runtime.agent.threadOf(api.conversationId);
       const chatId = described?.role === "run" ? null : described?.chatId;
       const outcome = await api.commit(async (tx) => {
         const ask = (await tx.doc(AgentDoc)).asks?.[args.ask];
@@ -316,26 +321,37 @@ export function ApprovedTool(runtime, tools) {
       }, context);
       if (outcome.error) return result(outcome.error, args.ask, true);
       if (outcome.interrupted) return result(`This approved call was interrupted; it may already have run. Check its effects before anything else (ask ${outcome.ask.id}).`, outcome.ask.id, true);
-      const target = tools.find((tool) => tool.name === outcome.ask.tool);
+      const target = installedTool(runtime, outcome.ask.tool);
       if (!target || !outcome.ask.args) return result(`Ask ${outcome.ask.id}'s tool is not available now.`, outcome.ask.id, true);
       return target.execute(outcome.ask.args, api, context);
     },
   });
 }
 
-/** The wraps the agent extension applies to its threads' tools, built against the installed tools. */
+/**
+ * The wraps the agent extension applies to its threads' tools, built against the installed tools: approvals for what
+ * leaves its folder, its own tools' private reads, and its local shell and files confined to its folder. A connector's
+ * tools are guarded by the connectors extension instead (connectorWraps), wherever a chat selects them.
+ */
 export function policyWraps(runtime, tools) {
+  return guard(runtime, tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name]), true);
+}
+/** A connector's tools in any chat that selects them (the agent's threads, the Assistant): a write asks first. */
+export function connectorWraps(runtime, tools) {
+  return guard(runtime, tools.filter((tool) => tool.name.startsWith("mcp__") && !tool.connectorReadOnly), false);
+}
+function guard(runtime, tools, confine) {
   let helper;
-  return tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name] || (tool.name.startsWith("mcp__") && !tool.connectorReadOnly)).map((target) =>
+  return tools.map((target) =>
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
-      if (routineFile(runtime.agent.folder, tool.name, args)) {
+      if (confine && routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
       }
       if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
-        const described = await runtime.agent.describe(api.conversationId);
+        const described = await runtime.agent.threadOf(api.conversationId);
         const run = described?.role === "run";
         const home = run ? await runtime.agent.home() : null;
-        const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run };
+        const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run, chat: described?.role === "chat" };
         if (!thread.chatId) throw new Error("Agent thread not found");
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.
         const asked = !run && runtime.agent.settings().youAsk !== false && editOnly(tool.name, args)
@@ -345,7 +361,7 @@ export function policyWraps(runtime, tools) {
           if (waiting) return waiting;
         }
       }
-      const local = PLACED.includes(tool.name) && !args?.device;
+      const local = confine && PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
       const result = await tool.execute(args, local ? { ...api, env } : api, context);
       if (privateRead(tool.name, args) && !result?.isError) {

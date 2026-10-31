@@ -290,6 +290,14 @@ export class PersistentAgent {
    * Who a conversation is to the agent: its `home` thread, a `side` thread, a
    * `run` it was woken into (a child of the home thread), or `null`.
    */
+  /** Whose a conversation is, for an approval: the agent's (describe), or else any chat's (`role: "chat"`). */
+  async threadOf(conversationId) {
+    const described = await this.describe(conversationId);
+    if (described) return described;
+    const chat = this.registry.list({ includeHidden: true }).find((item) => String(item.backend?.opaqueSession) === String(conversationId));
+    return chat ? { role: "chat", chatId: chat.id } : null;
+  }
+
   async describe(conversationId) {
     const harness = await this.runtime.open();
     const state = await this.state();

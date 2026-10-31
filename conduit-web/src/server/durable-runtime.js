@@ -7,6 +7,7 @@ import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { AgentExtension } from "../agent/extension.js";
+import { ApprovedTool, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -261,7 +262,8 @@ export class DurableRuntime {
         instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }] }));
       this.refreshConnectors = () => {
         const tools = this.agent?.connectors.tools() || [];
-        install(defineExtension({ name: "connectors", tools }));
+        // A connector's tools ask before they write, and `approved` runs what was allowed, in whichever chat selects them.
+        install(defineExtension({ name: "connectors", tools: [...tools, ApprovedTool(this)], wraps: connectorWraps(this, tools) }));
         install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
       };
       this.refreshConnectors();
@@ -412,13 +414,17 @@ export class DurableRuntime {
     // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
     const delegates = roaming || template.tools.includes("subagent");
     const isAgent = template.internal && template.id === "agent";
+    // The person's connected accounts (Executor), reached from codemode, each write asked first: the agent's threads,
+    // and a template that asks for them (`"connectors": true`, the Assistant).
+    const connects = isAgent || template.connectors === true;
     const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(isAgent ? ["codemode", "connectors", "agent"] : [])]
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(connects ? ["codemode", "connectors"] : []), ...(isAgent ? ["agent"] : [])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : [])]);
+    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
+      ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
-      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (isAgent && tool.name.startsWith("mcp__")));
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     const raw = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
@@ -428,7 +434,7 @@ export class DurableRuntime {
     return {
       extensions, tools,
       modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
-        : isAgent ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
+        : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
       instructions: [prompt.trim(), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
     };
   }

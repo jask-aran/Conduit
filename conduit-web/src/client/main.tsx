@@ -1078,7 +1078,8 @@ function App() {
    */
   // jbot's threads keep the one profile it is made with: no profile to choose.
   // A jbot thread's approvals: the agent's asks for it, answered here (POST /v0/agent/asks/:id).
-  const approvalsFor = (chatId: string | null) => chatId && agentThread(chatId) ? {
+  // Any chat's: a profile with connectors (the Assistant) asks before a write as jbot's threads do.
+  const approvalsFor = (chatId: string | null) => chatId ? {
     asks: () => (agentView()?.asks ?? []).filter((ask) => ask.chatId === chatId),
     answer: async (id: string, choice: "allow" | "always" | "deny") => {
       try { await api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }); }
