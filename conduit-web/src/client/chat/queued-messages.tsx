@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createSignal, createEffect, For, Show } from "solid-js";
-import { Button, Line, Lines, Rider, RiderActions, RiderTitle } from "@/components/ui";
+import { Button, Line, Lines, Rider, RiderActions, RiderMark } from "@/components/ui";
 
 import type { Message } from "../api/contracts";
 import { createLeaving, riderMotion, type CardExit } from "./composer-cards";
@@ -36,7 +36,7 @@ export function QueuedMessages(props: {
 
   return <Show when={shown.value().length}>
     <Rider label="Messages waiting for the agent" motion={riderMotion(shown.leaving())}>
-      <RiderTitle title={hint()}>{props.busy ? "Steering" : "Queued"}</RiderTitle>
+      <RiderMark icon={props.busy ? <Icons.Steer /> : <Icons.Queued />} label={props.busy ? "Steering" : "Queued"} title={`${props.busy ? "Steering" : "Queued"}: ${hint()}`} />
       <Lines><For each={shown.value()}>{(text) => <Line text={text} />}</For></Lines>
       <RiderActions>
         <Show when={props.busy && props.canInterrupt}>

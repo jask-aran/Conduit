@@ -12,6 +12,7 @@ import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
 import { directAddresses, keySecret } from "./direct.js";
 import { serveDirect } from "./node-direct.js";
+import { attestedLeaf } from "./find-hub.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 
@@ -63,7 +64,10 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   direct = false, certificate = null,
   // The hub's identity `{ id, key }` as it last said it, and where to keep what it says (its routes, its identity);
   // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
-  hub = null, onRoutes = null, findHub = null }) {
+  hub = null, onRoutes = null, findHub = null, attest = attestedLeaf,
+  // Whether the way main is reached is one nobody else can read: https, or this machine. A relayed environment's is
+  // its relay's, which this side cannot see: the relay says, and is trusted to (decision 25).
+  confidential = (url) => url.protocol === "wss:" || (url.protocol === "ws:" && /^(127\.|localhost$|\[::1\]$)/.test(url.hostname)) }) {
   // Every way main can be reached, best first (the address it was paired by, then those it has told this node of):
   // a failed attempt tries the next; the one that worked is tried first again after a drop, and a whole round failing
   // looks for the hub by its advertisement before backing off (it may have moved to another address).
@@ -83,6 +87,50 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   const processes = new NodeProcesses({ shellEnv, scope: mainUrl });
   // Writes and commands by action id: they outlive a socket, and are never done twice.
   const receipts = new Receipts();
+  // The key direct grants are checked with, made afresh by each run (so a grant from before a restart is nothing) and
+  // given to main only over a confidential link: the pairing key may have crossed a LAN in plain HTTP, and what it
+  // could sign would then be anyone's. Without it reads use the pairing key's hash as v0.8.7 did, and no terminal is
+  // attached here directly.
+  const grantKey = crypto.randomBytes(32).toString("base64url");
+  let granting = false;
+  // Who is typing into each terminal: main, for a client of its own, or a client attached here directly
+  // (node-direct.js). One at a time, as main keeps it among its own clients; a newcomer takes over only when asked.
+  // Main's hold is per terminal, not per socket: its clients outlive a dropped connection, and follow again after.
+  const HUB = "hub";
+  const holders = new Map();
+  // The connection to main now open: how to tell it something, and what it follows on it.
+  let link = null;
+  const takeFromHub = (procId) => {
+    link?.following.get(procId)?.();
+    link?.following.delete(procId);
+    link?.send({ type: "proc", proc: procId, kind: "taken" });
+  };
+  // A terminal that ends while main does not follow it (a client has it directly, or none has it open) is still said.
+  processes.onExit = (view) => {
+    if (!view.pty || !link || link.following.has(view.id)) return;
+    link.send({ type: "proc", proc: view.id, kind: "exit", code: view.exit?.code ?? null, signal: view.exit?.signal ?? null, end: view.end });
+  };
+  const directShells = {
+    /** A client attaching here directly, by the hub's grant: `sink` gets the output, the exit, or being taken over. */
+    attach(procId, { takeover = false, cols = 80, rows = 24 } = {}, sink) {
+      const view = processes.get(procId);
+      if (!view?.pty || view.exit) return { error: "pty_not_running", message: "Terminal is no longer running" };
+      const held = holders.get(procId);
+      if (held && !takeover) return { error: "pty_in_use", message: "Terminal is attached in another Conduit client" };
+      let attached = null;
+      const holder = { take: () => { release(); sink({ kind: "taken" }); } };
+      const release = () => {
+        attached?.detach();
+        attached = null;
+        if (holders.get(procId) === holder) holders.delete(procId);
+      };
+      if (held === HUB) takeFromHub(procId); else held?.take();
+      holders.set(procId, holder);
+      attached = processes.attach(procId, 0, sink);
+      processes.resize(procId, cols, rows);
+      return { write: (bytes) => processes.write(procId, bytes), resize: (nextCols, nextRows) => processes.resize(procId, nextCols, nextRows), detach: release };
+    },
+  };
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
   const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
   let socket = null;
@@ -94,7 +142,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     toldDirect = JSON.stringify(directInfo());
     socket.send(JSON.stringify({ type: "direct", direct: JSON.parse(toldDirect) }));
   };
-  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
+  const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: "sealed", reads: "sealed",
+    ...(granting ? { grantKey } : {}), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
   let stopped = false;
   let timer = null;
@@ -155,10 +204,22 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     return env[method](...decoded, context);
   }
 
+  // A plain-HTTP way to the hub at an address is tried over TLS first, pinned to the certificate the hub's identity
+  // attests (find-hub.js): its port answers both, and a link nobody else reads carries this run's grant key, so direct
+  // reads and terminals work on a LAN with no name or certificate of the user's. Plain still where the hub does not
+  // answer so, or this node has not learnt who it is yet (the first run after pairing).
   const connect = () => {
-    const { url: via, ca } = ways[way % ways.length];
+    const chosen = ways[way % ways.length];
+    const plain = new URL(chosen.url);
+    if (!attest || chosen.ca || !pinned || plain.protocol !== "http:" || !net.isIP(plain.hostname) || /^127\./.test(plain.hostname)) return dialWay(chosen);
+    void attest(plain.hostname, Number(plain.port) || 80, pinned, 2000).catch(() => null).then((ca) => {
+      if (!stopped) dialWay(ca ? { url: `https://${plain.host}`, ca } : chosen);
+    });
+  };
+  const dialWay = ({ url: via, ca }) => {
     const url = new URL("/v0/nodes/connect", via);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+
     const ws = dial(url, { key, ca });
     socket = ws;
     const calls = new Map();
@@ -170,6 +231,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     // Byte streams main opened to endpoints here (remote-tunnel.js): tunnel id -> socket.
     const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
+    const here = { send, following };
     const relayFor = (env) => relays.find((relay) => relay.env === env);
 
     let opened = false;
@@ -189,6 +251,10 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       beat.unref?.();
       attempt = 0;
       tried = 0;
+      // Main follows again what its clients still hold; a main that started over holds nothing.
+      link = here;
+      granting = confidential(url, ws);
+      for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
         harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
@@ -208,7 +274,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       // What main offers (decision 30): environments are carried only where it relays them.
       if (message.type === "welcome") {
         const features = Array.isArray(message.features) ? message.features : [];
-        if (features.includes("relay")) for (const relay of relays) relay.attach(send);
+        if (features.includes("relay")) for (const relay of relays) relay.attach(send, { confidential: granting });
         else if (relays.length) log.warn?.(`[conduit-node] ${mainUrl} does not relay; ${relays.map((relay) => relay.env).join(", ")} not carried`);
         return;
       }
@@ -348,15 +414,34 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
           return { ok: true, value: processes.spawn({ ...spec, cwd: home }) };
         }
         const [procId, ...rest] = args;
+        // Main's client is typing into this terminal from now: refused while a client here holds it, unless taking over.
+        if (method === "claim") {
+          const held = holders.get(procId);
+          if (held && held !== HUB) {
+            if (!rest[0]) return err(new ExecutionError("pty_in_use", "Terminal is attached in another Conduit client"));
+            held.take();
+          }
+          holders.set(procId, HUB);
+          return { ok: true, value: null };
+        }
         if (method === "attach") {
           following.get(procId)?.();
+          // A client here took it while main was away: main is told, not followed.
+          const held = holders.get(procId);
+          if (held && held !== HUB) return { ok: true, value: { ...processes.get(procId), taken: true } };
           const attached = processes.attach(procId, Number(rest[0]) || 0, (event) => send({ type: "proc", proc: procId,
             ...(event.kind === "data" ? { kind: "data", stream: event.stream, offset: event.offset, data: event.bytes.toString("base64") } : event) }));
           following.set(procId, attached.detach);
+          if (attached.pty && !held) holders.set(procId, HUB);
           const { detach, ...view } = attached;
           return { ok: true, value: view };
         }
-        if (method === "detach") { following.get(procId)?.(); following.delete(procId); return { ok: true, value: null }; }
+        if (method === "detach") {
+          following.get(procId)?.();
+          following.delete(procId);
+          if (holders.get(procId) === HUB) holders.delete(procId);
+          return { ok: true, value: null };
+        }
         if (method === "write") { processes.write(procId, rest[0] instanceof Uint8Array ? Buffer.from(rest[0]) : Buffer.from(String(rest[0] ?? ""))); return { ok: true, value: null }; }
         if (method === "closeInput") { processes.closeInput(procId); return { ok: true, value: null }; }
         if (method === "resize") { processes.resize(procId, Number(rest[0]) || 80, Number(rest[1]) || 24); return { ok: true, value: null }; }
@@ -445,7 +530,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
 
   // Listening first, so the first hello can say where.
   if (direct) {
-    served = serveDirect({ secret: keySecret(key), call: envCall, log, certificate });
+    const legacy = keySecret(key);
+    served = serveDirect({ secret: () => (granting ? grantKey : legacy), runSecret: () => (granting ? grantKey : null),
+      call: envCall, log, certificate, shells: directShells });
     void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
     // The https route comes when a certificate does: told to main then, and in every hello after.
     served.onSecureChange(tellDirect);

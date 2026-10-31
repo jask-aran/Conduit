@@ -18,6 +18,14 @@ function AdapterSelect() {
     <option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option>
   </Select><Select bare aria-label="Code blocks" value="fold"><option value="fold">Fold long blocks</option><option value="never">Never fold</option></Select></div>;
 }
+/** A long list: its choices under a search. */
+function SearchSelect() {
+  const [provider, setProvider] = createSignal("");
+  const providers = ["Amazon Bedrock", "Anthropic", "Azure", "Cerebras", "DeepSeek", "Fireworks", "Groq", "Mistral", "OpenAI", "OpenRouter", "Together", "xAI"];
+  return <SettingLine label="Add an account"><Select search="Search providers" aria-label="Add an account" value={provider()} onChange={(event) => setProvider(event.currentTarget.value)}>
+    <option value="">Choose a provider</option>{providers.map((name) => <option value={name}>{name}</option>)}
+  </Select></SettingLine>;
+}
 export const selectPage: Page = {
   title: "Select",
   summary: "one choice from a list: the adapter Select (components/menus.tsx) keeps a native select as the value's owner and draws the library's SelectTrigger opening a Menu of its options. It reads the surface's --tint and --well values.",
@@ -37,6 +45,7 @@ export const selectPage: Page = {
     row("Select", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
     row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />, { source: "components/menus.tsx Select" }),
     row("choose provider", "Open choices and change the value", () => <ProviderSelect />, { code: "Field > SelectTrigger + Menu" }),
+    row("long list", "Its choices under a search; a valueless option is the prompt", () => <SearchSelect />, { code: `<Select search="Search providers">` }),
     row("disabled", "Provider unavailable while connecting", () => <SelectTrigger aria-label="Provider" value="OpenAI" disabled />, { code: "<SelectTrigger disabled>" }),
     row("disabled bare", "Locked setting without a field border", () => <SettingLine label="Provider"><SelectTrigger bare disabled aria-label="Provider" value="OpenAI" /></SettingLine>, { code: "SettingLine > SelectTrigger bare disabled" }),
     row("long value", "Model name exceeds a short label", () => <SelectTrigger aria-label="Model" value="OpenAI / GPT-5.2 Codex / workspace review with extended context" />, { code: "<SelectTrigger value>" }),

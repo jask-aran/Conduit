@@ -266,9 +266,12 @@ export function SearchList<T>(props: {
  * A select drawn by the library: SelectTrigger opening a Menu of its choices. The native select stays
  * the value's owner -- its options, value, ref and change event work as a form's do -- but is hidden;
  * its id, name and title go to the trigger, so a label's `for` reaches what can be pressed.
+ * search: a long list's choices open under a search instead (SearchList), its text the field's placeholder;
+ * an option with no value (a prompt such as "Choose a provider") is the trigger's text, not a choice.
  */
-export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean }) {
-  const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare"]);
+export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean; search?: string }) {
+  const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare", "search"]);
+  const [searching, setSearching] = createSignal(false);
   let select!: HTMLSelectElement;
   const [value, setValue] = createSignal("");
   const [label, setLabel] = createSignal("");
@@ -298,14 +301,23 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
     read();
   };
   return <>
-    <DropdownMenu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
+    <Show when={local.search} fallback={<DropdownMenu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
       <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
       <MenuContent>
         <KMenu.RadioGroup value={value()} onChange={choose}>
           <For each={options()}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>{option.label}</MenuRadioItem>}</For>
         </KMenu.RadioGroup>
       </MenuContent>
-    </DropdownMenu>
+    </DropdownMenu>}>
+      <Popover open={searching()} onOpenChange={(open) => { if (open) read(); setSearching(open); }}>
+        <PopoverTrigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
+        <PopoverContent aria-label={local["aria-label"]}>
+          <SearchList items={options().filter((option) => option.value && !option.disabled)} placeholder={local.search!}
+            matches={(option, needle) => option.label.toLowerCase().includes(needle)} isCurrent={(option) => option.value === value()}
+            onChoose={(option) => { setSearching(false); choose(option.value); }} row={(option) => ({ label: option.label })} />
+        </PopoverContent>
+      </Popover>
+    </Show>
     <select {...rest} hidden disabled={local.disabled} ref={(element) => { select = element; (local.ref as ((element: HTMLSelectElement) => void) | undefined)?.(element); }}>{local.children}</select>
   </>;
 }

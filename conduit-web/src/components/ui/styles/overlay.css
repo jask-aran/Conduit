@@ -129,7 +129,9 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
-.ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); font-size: var(--text-row); line-height: var(--leading-text); }
+/* Source text (a prompt): in the code face, so its own line breaks read as meant, and a measure tall at most, scrolling
+   inside itself rather than making the page as long as the text. */
+.ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 .ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 /* The title gives way (an ellipsis) before the status or the close does: neither wraps. */

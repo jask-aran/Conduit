@@ -71,6 +71,9 @@ import { registerProjectRoutes } from "./server/routes/projects.js";
 import { hubRoutes, registerNodeRoutes } from "./server/routes/nodes.js";
 import { NodeHub } from "./nodes/node-hub.js";
 import { lanNames } from "./nodes/lan-names.js";
+import { directAddresses } from "./nodes/direct.js";
+import { lanNamesService } from "./network/lan-names-service.js";
+import { registerNetworkRoutes } from "./server/routes/network.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
@@ -193,11 +196,22 @@ const concurrency = new ServerConcurrency();
 // Cloudflare tunnel) takes them on their pairing key alone.
 // The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
 const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
-const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNames(),
+const networkLanNames = lifetime.own("LAN names", lanNamesService({
+  dataRoot: config.dataRoot,
+  hubAddress: () => directAddresses(os.networkInterfaces()).find((item) => item.reach === "private")?.address || null,
+  onCertificates: async () => {
+    await loadLanTls();
+    lanNamesForNodes.reload();
+    await nodeHub.reofferLanNames();
+  },
+}), (owned) => owned.stop());
+const lanNamesForNodes = lanNames({ provider: () => networkLanNames.provider() });
+const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNamesForNodes,
   identity: { id: serverIdentity.id, key: serverIdentity.publicKeyValue() },
   routes: () => hubRoutes({ config, lanNames: hubLanNames }),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
+nodeHub.on("procExit", (event) => terminals.deviceProcessExited(event));
 // Everything a harness manifest needs to probe and build itself. Backends are
 // no longer named here: they come from MANIFESTS, and detection runs in
 // parallel so four three-second timeouts cost three seconds, not twelve.
@@ -608,6 +622,7 @@ registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });
 
 registerNodeRoutes(app, { nodeHub, config, lanNameMatches: (name) => lanNameMatches(name), lanNames: hubLanNames });
+registerNetworkRoutes(app, { lanNames: networkLanNames });
 registerProjectRoutes(app, {
   nodeHub,
   backends,
@@ -736,7 +751,6 @@ app.get("*", (request, response, next) => {
   response.sendFile(path.join(dist, "index.html"));
 });
 app.use((error, _request, response, _next) => {
-  console.error(error);
   let status = error.status || 500;
   if (["reserved_project", "workspace_already_linked", "clone_target_reserved", "clone_reservation_lost", "workspace_cloning"].includes(error.code)) status = 409;
   if (error.code === "workspace_identity_changed") status = 409;
@@ -794,6 +808,10 @@ app.use((error, _request, response, _next) => {
       "model_profile_search_config_invalid",
     ].includes(error.code)
     || error.message?.includes("Project names")) status = 400;
+  // A stack for what went wrong here; an answer the request was meant to get (not text, not found, its device
+  // away) is the client's to show, and only a line here.
+  if (status >= 500 && error.code !== "device_offline") console.error(error);
+  else console.warn(`[conduit] ${status} ${error.code || "error"}: ${error.message}`);
   response.status(status).json({
     error: error.code || "runtime_error",
     message: error.message,
@@ -965,6 +983,7 @@ async function loadLanTls() {
   }
 }
 await loadLanTls();
+networkLanNames.start();
 const lanNameMatches = (servername) => {
   const name = String(servername || "").toLowerCase();
   const parent = name.split(".").slice(1).join(".");

@@ -13,7 +13,7 @@ const MAX_KEY_LENGTH = 16 * 1024;
  * web-search.json directly.
  */
 export const SEARCH_PROVIDERS = [
-  { id: "openai", label: "OpenAI", configKey: "openaiApiKey", environmentKey: "OPENAI_API_KEY", signIn: "openai-codex",
+  { id: "openai", label: "OpenAI", configKey: "openaiApiKey", environmentKey: "OPENAI_API_KEY", signIn: ["openai", "openai-codex"],
     description: "Hosted web search on the hub's ChatGPT sign-in, or an API key.", docsUrl: "https://platform.openai.com/api-keys" },
   { id: "exa", label: "Exa", configKey: "exaApiKey", environmentKey: "EXA_API_KEY", keyless: true,
     description: "Neural search; works without a key through Exa's public MCP.", docsUrl: "https://dashboard.exa.ai/" },
@@ -40,10 +40,18 @@ export const SEARCH_PROVIDERS = [
 export const SEARCH_TOOLS = ["webSearch", "fetchContent", "sourceCheck", "getSearchContent"];
 // What fetching can do beyond a page, each its own config section's `enabled`.
 const FETCHING = { github: ["githubClone"], video: ["youtube", "video"], pdf: ["pdf"] };
-// A route that falls back takes every kind of failure; one that does not
-// keeps pi-web-access's own default kinds (the list must not be empty).
-const FALLBACK_ALL = ["transient", "quota", "network", "invalid-response", "unsupported"];
+// A route that falls back takes every kind of failure, and an answer with no
+// results or none from the domains asked for (pi-web-access 0.45: if every
+// provider answers that way, the first answer is kept); one that does not keeps
+// pi-web-access's own default kinds (the list must not be empty).
+const FALLBACK_ALL = ["transient", "quota", "network", "invalid-response", "unsupported", "empty", "domain-miss"];
 const FALLBACK_DEFAULT = ["transient", "quota", "network"];
+// Answers judged off-topic go on down the route too, by this classifier on Pi's Cloudflare Workers AI sign-in.
+const OFF_TOPIC_MODEL = "cloudflare-workers-ai/@cf/cloudflare/clef";
+// A routed search's whole time, across every provider it tries (searchRouting.timeoutMs).
+const MAX_ROUTE_TIMEOUT_MS = 600_000;
+// fetch_content's modes when web-search.json names none; "extract" is added to them (it is never the default).
+const FETCH_MODES = ["readable", "raw", "answer"];
 
 const SEARCH_DEFAULTS = {
   workflow: "none",
@@ -136,22 +144,33 @@ export class SearchSettingsStore {
     return readJson(this.filePath);
   }
 
-  /** Which providers have a sign-in on the hub (pi's auth.json, beside this file). */
+  /** Whether Pi can call Cloudflare Workers AI (extract mode, the off-topic check): its sign-in, or the server's key and account. */
+  async cloudflareReady() {
+    const set = (name) => typeof this.environment[name] === "string" && this.environment[name].trim().length > 0;
+    const stored = (await this.auth())["cloudflare-workers-ai"];
+    return Boolean(stored?.key || set("CLOUDFLARE_API_KEY")) && Boolean(stored?.env?.CLOUDFLARE_ACCOUNT_ID || set("CLOUDFLARE_ACCOUNT_ID"));
+  }
+
+  /** Pi's sign-ins on the hub (its auth.json, beside this file). */
+  async auth() {
+    try { return JSON.parse(await fs.readFile(path.join(path.dirname(this.filePath), "auth.json"), "utf8")) || {}; }
+    catch { return {}; }
+  }
+
+  /** Which providers have a sign-in on the hub. */
   async signedIn() {
-    try {
-      const auth = JSON.parse(await fs.readFile(path.join(path.dirname(this.filePath), "auth.json"), "utf8"));
-      return new Set(Object.keys(auth || {}));
-    } catch { return new Set(); }
+    return new Set(Object.keys(await this.auth()));
   }
 
   async publicView() {
     const config = await this.read();
-    const signedIn = await this.signedIn();
+    const auth = await this.auth();
     const providers = SEARCH_PROVIDERS.map((provider) => {
       const stored = Boolean(configuredValue(config, provider));
       const environment = typeof this.environment[provider.environmentKey] === "string"
         && this.environment[provider.environmentKey].trim().length > 0;
-      const signIn = Boolean(provider.signIn && signedIn.has(provider.signIn));
+      // A sign-in, not a key, under one of the providers it searches through (pi-web-access's openaiSearchProviders).
+      const signIn = (provider.signIn || []).some((id) => auth[id]?.type === "oauth");
       return {
         id: provider.id,
         label: provider.label,
@@ -176,12 +195,19 @@ export class SearchSettingsStore {
       // and whether the rest of the route catches its failures.
       route: {
         first: typeof config.provider === "string" ? config.provider : order[0] || "auto",
-        fallback: !config.provider && order.length > 1,
+        // Falling back is the route's failure kinds, not its length: one provider can search now, more may come.
+        fallback: !config.provider && Array.isArray(routing?.fallbackOn) && routing.fallbackOn.includes("unsupported"),
         useCurrentModel: routing?.useCurrentModel === true,
+        timeoutMs: Number.isInteger(routing?.timeoutMs) ? routing.timeoutMs : null,
+        // The choice is kept (its classifier named) while fallback is off; it only runs while fallback is on.
+        offTopic: typeof routing?.offTopicModel === "string",
       },
       tools: Object.fromEntries(SEARCH_TOOLS.map((key) => [key, enabled(key)])),
-      fetching: Object.fromEntries(Object.entries(FETCHING)
-        .map(([key, sections]) => [key, sections.every((section) => config[section]?.enabled !== false)])),
+      fetching: {
+        ...Object.fromEntries(Object.entries(FETCHING).map(([key, sections]) => [key, sections.every((section) => config[section]?.enabled !== false)])),
+        extract: Array.isArray(config.fetch?.allowedModes) && config.fetch.allowedModes.includes("extract"),
+      },
+      cloudflare: await this.cloudflareReady(),
       providers,
     };
   }
@@ -197,16 +223,25 @@ export class SearchSettingsStore {
       const first = String(input.route.first ?? view.route.first);
       const fallback = typeof input.route.fallback === "boolean" ? input.route.fallback : view.route.fallback;
       const useCurrentModel = typeof input.route.useCurrentModel === "boolean" ? input.route.useCurrentModel : view.route.useCurrentModel;
+      const timeoutMs = input.route.timeoutMs === undefined ? view.route.timeoutMs : input.route.timeoutMs;
+      if (timeoutMs !== null && !(Number.isInteger(timeoutMs) && timeoutMs >= 1 && timeoutMs <= MAX_ROUTE_TIMEOUT_MS)) {
+        throw storeError("search_setting_invalid", `A search time limit is 1 to ${MAX_ROUTE_TIMEOUT_MS} milliseconds`);
+      }
+      const offTopic = typeof input.route.offTopic === "boolean" ? input.route.offTopic : view.route.offTopic;
       delete config.provider;
       delete config.searchProvider;
       if (first === "auto") delete config.searchRouting;
       else {
         if (!SEARCH_PROVIDERS.some((provider) => provider.id === first)) throw storeError("search_provider_unknown", `Unknown search provider: ${first}`);
         const rest = view.providers.filter((provider) => provider.ready && provider.id !== first).map((provider) => provider.id);
+        // pi-web-access needs the route named to judge answers or time it; Conduit names every provider that can
+        // search now, in its automatic order, and names them again whenever a key comes or goes (reroute).
         config.searchRouting = {
           providers: fallback ? [first, ...rest] : [first],
-          fallbackOn: fallback ? FALLBACK_ALL : FALLBACK_DEFAULT,
+          fallbackOn: fallback ? [...FALLBACK_ALL, ...(offTopic ? ["off-topic"] : [])] : FALLBACK_DEFAULT,
+          ...(offTopic ? { offTopicModel: OFF_TOPIC_MODEL } : {}),
           ...(useCurrentModel ? { useCurrentModel: true } : {}),
+          ...(timeoutMs !== null ? { timeoutMs } : {}),
         };
       }
     }
@@ -218,6 +253,13 @@ export class SearchSettingsStore {
     }
     if (isObject(input.fetching)) {
       for (const [key, on] of Object.entries(input.fetching)) {
+        if (key === "extract" && typeof on === "boolean") {
+          // Typed values read off a page (fetch_content mode "extract"): one of the modes the tool takes, never its default.
+          const fetch = isObject(config.fetch) ? config.fetch : {};
+          const modes = (Array.isArray(fetch.allowedModes) ? fetch.allowedModes : FETCH_MODES).filter((mode) => mode !== "extract");
+          config.fetch = { ...fetch, allowedModes: on ? [...modes, "extract"] : modes };
+          continue;
+        }
         if (!FETCHING[key] || typeof on !== "boolean") throw storeError("search_setting_invalid", `Unknown fetching setting: ${key}`);
         for (const section of FETCHING[key]) config[section] = { ...(isObject(config[section]) ? config[section] : {}), enabled: on };
       }
@@ -232,7 +274,13 @@ export class SearchSettingsStore {
     const config = await this.read();
     config[provider.configKey] = literalCredential(key);
     await writeJson(this.filePath, config);
-    return this.publicView();
+    return this.reroute();
+  }
+
+  /** A provider that can search now joins a falling-back route (one that cannot, leaves it), its choices kept. */
+  async reroute() {
+    const config = await this.read();
+    return isObject(config.searchRouting) && !config.provider ? this.update({ route: {} }) : this.publicView();
   }
 
   async removeProvider(id) {
@@ -241,6 +289,6 @@ export class SearchSettingsStore {
     const removed = Object.hasOwn(config, provider.configKey);
     delete config[provider.configKey];
     if (removed) await writeJson(this.filePath, config);
-    return { removed, settings: await this.publicView() };
+    return { removed, settings: await this.reroute() };
   }
 }

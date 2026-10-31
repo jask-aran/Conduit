@@ -11,6 +11,7 @@ import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { TraceStarting, TurnTrace } from "./turn-trace";
+import { openAgentChat } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
@@ -1035,7 +1036,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item"><Turn><TurnTrace since={arrive} trace={item.value} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.value.active}>
@@ -1084,7 +1085,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           // later update must not shift it.
           const arrive = untrack(() => user() ? arrival(message()) : undefined);
           if (user() && message().origin === "harness") {
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt>{message().content}</HarnessPrompt></TranscriptRow>;
+            // A subagent's report opens its transcript, once the chat's agents say which chat that is.
+            const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined}>{message().content}</HarnessPrompt></TranscriptRow>;
           }
           // Copied: Copy turns to a check, and the answer takes the copied wash, for a moment.
           const [copied, setCopied] = createSignal(false);

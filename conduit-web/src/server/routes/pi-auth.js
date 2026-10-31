@@ -14,11 +14,13 @@ function noStore(response) {
 }
 
 export function registerPiAuthRoutes(app, { piAuth }) {
-  app.get("/v0/pi-auth", (request, response, next) => {
+  app.get("/v0/pi-auth", async (request, response, next) => {
     try {
       piAuthOwner(request);
       noStore(response);
-      response.json({ installationId: "conduit-pinned", providers: piAuth.providers() });
+      const kinds = await piAuth.storedKinds();
+      const providers = piAuth.providers().map((provider) => provider.auth.source === "stored" ? { ...provider, auth: { ...provider.auth, kind: kinds[provider.id] || null } } : provider);
+      response.json({ installationId: "conduit-pinned", providers });
     } catch (error) { next(error); }
   });
 
@@ -55,7 +57,7 @@ export function registerPiAuthRoutes(app, { piAuth }) {
   app.put("/v0/pi-auth/api-key", async (request, response, next) => {
     try {
       piAuthOwner(request);
-      await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key);
+      await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key, request.body?.env);
       noStore(response);
       response.status(204).end();
     } catch (error) { next(error); }

@@ -224,7 +224,8 @@ export async function startConduitHarness({ env = {} } = {}) {
       const listening = output.match(/listening on (http:\/\/\S+)/);
       if (listening) origin = listening[1];
       return Boolean(origin);
-    }, "Conduit server did not report a port");
+      // A server starts in well under a second alone; beside the rest of the suite it can take several.
+    }, "Conduit server did not report a port", { attempts: 600 });
     await waitFor(async () => {
       if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
       try {
