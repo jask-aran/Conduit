@@ -157,12 +157,13 @@ export function AgentPage(props: {
     }
     return [...counts].sort((a, b) => b[1] - a[1]).map(([noun, count]) => `${count} ${count === 1 || noun.endsWith("s") ? noun : `${noun}s`}`).join(" · ");
   };
-  const waiting = () => inbox().filter((entry) => entry.status === "unhandled");
-  const handled = () => inbox().filter((entry) => entry.status === "handled");
   const inboxGroup = () => <SplitGroup id="agent-inbox" label="Inbox" count={unhandled() || null}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
-      <Show when={waiting().length}><SplitRow lead={<Icons.Inbox />} primary={tally(waiting())} context="For the next heartbeat" /></Show>
-      <Show when={handled().length}><SplitRow lead={<Icons.Check />} primary={tally(handled())} context="Handled this week" /></Show>
+      {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
+      <For each={inbox()}>{(entry) =>
+        <SplitRow lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} primary={tally([entry])}
+          context={entry.status === "handled" ? `${entry.title} · handled` : `${entry.title} · for the next heartbeat`} trailing={age(entry.at, now())} />}
+      </For>
     </Show>
   </SplitGroup>;
 
