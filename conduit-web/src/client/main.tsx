@@ -3,6 +3,7 @@ import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
+import { defaultNarration } from "./preferences/transcript-mode";
 import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
@@ -1086,11 +1087,11 @@ function App() {
     },
     refresh: () => void refreshAgent(),
   } : undefined;
-  /** A chat's transcript mode (DESIGN.md, Transcript › Turns): what it was set to, else Narrated. */
-  const narrationOf = (id: string | null | undefined): Narration => {
-    const set = id ? catalogue.projects().flatMap((project) => project.sessions).find((chat) => chat.id === id)?.narration : null;
-    return set || "show";
-  };
+  /** A chat's transcript mode (DESIGN.md, Transcript › Turns): what it was set to, else this device's default
+   *  (Settings › Appearance). */
+  const narrationSet = (id: string | null | undefined) =>
+    id ? catalogue.projects().flatMap((project) => project.sessions).find((chat) => chat.id === id)?.narration ?? null : null;
+  const narrationOf = (id: string | null | undefined): Narration => narrationSet(id) || defaultNarration(agentThread(id) ? "agent" : "chat");
   const setNarration = (id: string, narration: Narration) => {
     catalogue.patchChat(id, { narration });
     void api(`/v0/chats/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ narration }) }).catch(showError);
@@ -5462,6 +5463,8 @@ function App() {
   };
   // What a chat's and a place's menu do on the dashboards; the sidebar binds the same menus to its own dialogs.
   const itemMenus: ItemActions = {
+    narration: (chat) => narrationOf(chat.id),
+    setNarration: (chat, value) => setNarration(chat.id, value),
     places: () => catalogue.projects(),
     renameChat: (chat, project) => runSidebar("rename-chat", { chat, project }),
     moveChat: (chat, from, to) => void moveChat(chat, from, to),
@@ -5574,7 +5577,7 @@ function App() {
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) await openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
-      onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
+      onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks} narrationOf={narrationOf} onSetNarration={(chat, value) => setNarration(chat.id, value)}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
       onStopProcess={(target) => stopChatProcess(target.id)}
       onOpenTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}

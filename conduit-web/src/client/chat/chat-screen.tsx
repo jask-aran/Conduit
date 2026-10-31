@@ -9,6 +9,7 @@ import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule } 
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { Narration } from "../turn-rows";
+import { NARRATION_OPTIONS } from "../preferences/transcript-mode";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace } from "./place-picker";
@@ -106,8 +107,7 @@ export function ChatHeader(props: {
             <Rule />
             <MenuSection title="Work between replies">
               <MenuRadioGroup value={narration().value} onChange={(value) => narration().onChange(value as Narration)}>
-                <MenuRadioItem value="fold" title="What it says while it works folds into the turn's trace, with its tool calls; the answer stands alone.">Folded</MenuRadioItem>
-                <MenuRadioItem value="show" title="What it says while it works stands in the transcript, its tool calls folded between.">Narrated</MenuRadioItem>
+                <For each={NARRATION_OPTIONS}>{(option) => <MenuRadioItem value={option.value} title={option.description}>{option.label}</MenuRadioItem>}</For>
               </MenuRadioGroup>
             </MenuSection>
           </>}</Show>

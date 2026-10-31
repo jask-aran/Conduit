@@ -8,6 +8,7 @@ import {
   SunriseIcon,
   BotIcon,
   CornerDownRightIcon,
+  ListCollapseIcon,
   ListEndIcon,
   ArrowDownIcon,
   ArrowLeftIcon,
@@ -276,6 +277,8 @@ export const Warning = TriangleAlertIcon;
 export const Workspace = PanelRightIcon;
 /** Toggle line wrapping. */
 export const WrapText = WrapTextIcon;
+/** How a transcript draws the work between replies: Narrated or Folded. */
+export const Narration = ListCollapseIcon;
 /** A tool without a more specific kind. */
 export const Tool = WrenchIcon;
 /** A file-writing tool. */

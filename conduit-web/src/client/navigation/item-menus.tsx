@@ -7,6 +7,8 @@ import { isWorkspace, PlaceGlyph } from "../chat/place-picker";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { isMobileLayout } from "./mobile-layout";
 import { isConduitManagedProject } from "./sidebar-preferences";
+import { NARRATION_OPTIONS } from "../preferences/transcript-mode";
+import type { Narration } from "../turn-rows";
 
 /*
  * The menus a chat and a place (a project or a workspace) open, wherever their rows are (the sidebar, the
@@ -32,6 +34,19 @@ export function MoveTo(props: { label: string; places: Project[]; current?: stri
   </MenuSub>;
 }
 
+/** How the chat's transcript draws the work between its replies (DESIGN Transcript › Turns): Narrated or Folded,
+ *  the current one checked. */
+export function NarrationChoice(props: { value: Narration; onChange: (value: Narration) => void }) {
+  return <MenuSub phone={isMobileLayout()}>
+    <MenuSubTrigger icon={<Icons.Narration />}>Work between replies</MenuSubTrigger>
+    <MenuSubContent><MenuSection title="Work between replies">
+      <MenuRadioGroup value={props.value} onChange={(value) => props.onChange(value as Narration)}>
+        <For each={NARRATION_OPTIONS}>{(option) => <MenuRadioItem value={option.value} title={option.description}>{option.label}</MenuRadioItem>}</For>
+      </MenuRadioGroup>
+    </MenuSection></MenuSubContent>
+  </MenuSub>;
+}
+
 /** Pin to the sidebar, or unpin. */
 const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
   <MenuRow icon={props.pinned ? <Icons.PinOff /> : <Icons.Pin />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
@@ -41,6 +56,7 @@ export function ChatMenuItems(props: {
   project: Project; places: Project[];
   onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: () => void; onOpenTerminal: () => void;
   onStop?: () => void; pin?: { pinned: boolean; onToggle: () => void }; onDelete: () => void;
+  narration?: { value: Narration; onChange: (value: Narration) => void };
 }) {
   return <>
     <MenuSection>
@@ -51,6 +67,7 @@ export function ChatMenuItems(props: {
       <MenuRow icon={<Icons.Terminal />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
       <Show when={props.onStop}><MenuRow icon={<Icons.Stop />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
+      <Show when={props.narration}>{(narration) => <NarrationChoice value={narration().value} onChange={narration().onChange} />}</Show>
     </MenuSection>
     <MenuSection>
       <MenuRow destructive icon={<Icons.Delete />} onSelect={props.onDelete}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
@@ -98,6 +115,9 @@ export type ItemActions = {
   pinned: (type: "chat" | "project", id: string) => boolean;
   togglePin: (type: "chat" | "project", id: string) => void;
   deleteChat: (chat: ChatSummary, project: Project) => void;
+  /** The chat's transcript mode, and setting it. */
+  narration: (chat: ChatSummary) => Narration;
+  setNarration: (chat: ChatSummary, value: Narration) => void;
   newChat: (project: Project) => void;
   openMaximized: (project: Project) => void;
   renamePlace: (project: Project) => void;
@@ -115,6 +135,7 @@ export const ChatMenuFor = (props: { chat: ChatSummary; project: Project; action
   onOpenTerminal={() => props.actions.openTerminal(props.chat, props.project)}
   onStop={props.actions.running(props.chat) ? () => props.actions.stop(props.chat) : undefined}
   pin={isConduitManagedProject(props.project) ? { pinned: props.actions.pinned("chat", props.chat.id), onToggle: () => props.actions.togglePin("chat", props.chat.id) } : undefined}
+  narration={{ value: props.actions.narration(props.chat), onChange: (value) => props.actions.setNarration(props.chat, value) }}
   onDelete={() => props.actions.deleteChat(props.chat, props.project)} />;
 
 export const PlaceMenuFor = (props: { project: Project; actions: ItemActions }) => <PlaceMenuItems project={props.project} places={props.actions.places()}

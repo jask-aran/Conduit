@@ -21,6 +21,8 @@ import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { defaultNarration, NARRATION_OPTIONS, saveDefaultNarration } from "../preferences/transcript-mode";
+import type { Narration } from "../turn-rows";
 import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
@@ -1307,6 +1309,16 @@ export function Settings(props: {
                       <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
+                  <SettingLine label="Chats show their work" title={`What a chat says while it works, when its own menu has not set it. ${NARRATION_OPTIONS.find((option) => option.value === defaultNarration("chat"))?.description}`}>
+                    <Select id="transcript-mode" aria-label="Chats show their work" value={defaultNarration("chat")} onChange={(event) => saveDefaultNarration("chat", event.currentTarget.value as Narration)}>
+                      <For each={NARRATION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <Show when={agentView()?.enabled}><SettingLine label={`${agentView()?.settings?.name || "The agent"}'s threads`} title={`The same, for its threads. ${NARRATION_OPTIONS.find((option) => option.value === defaultNarration("agent"))?.description}`}>
+                    <Select id="transcript-mode-agent" aria-label={`${agentView()?.settings?.name || "The agent"}'s threads`} value={defaultNarration("agent")} onChange={(event) => saveDefaultNarration("agent", event.currentTarget.value as Narration)}>
+                      <For each={NARRATION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine></Show>
                   <SettingLine label="Transcript width">
                     <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
