@@ -1,3 +1,4 @@
+import type { ApprovalLine } from "@/components/ui";
 export type RuntimeKind = "conduit_profile" | "codex";
 /** The capability flags that are a plain yes or no, so UI can be gated on one. */
 export type BooleanCapability = {
@@ -55,6 +56,8 @@ export interface RuntimeIdentity {
 
 export interface ChatSummary {
   id: string;
+  /** How its transcript draws work between replies, when set for it; else its default (chats fold, jbot shows). */
+  narration?: "fold" | "show" | null;
   projectId: string;
   status: ChatStatus;
   title: string;
@@ -291,7 +294,8 @@ export interface AgentSummary {
   endedAt: string | null;
   /** What it is doing now, while it runs. */
   activity: string | null;
-  usage: { tokens: number; cost: number };
+  /** `context`: what its last request held, as a chat's context pane says; `tokens`: summed over its requests. */
+  usage: { tokens: number; context?: number | null; cost: number };
 }
 
 export interface Message {
@@ -583,6 +587,8 @@ export interface Question {
   required: boolean;
   options: QuestionOption[];
   freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean; initial?: string };
+  /** An approval: drawn as one (ApprovalSummary) in the prompt's place. */
+  approval?: { title: string; service?: string | null; lines?: ApprovalLine[] };
 }
 
 export interface QuestionOption {

@@ -50,8 +50,26 @@
 .ui-dash-notice { grid-area: notice; margin-bottom: var(--space-xl); }
 .ui-dash-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
 .ui-dash-composer { --composer-width: 100%; }
+/* A page's own thread over its composer: it takes the column's room before the list does, and scrolls on its own. */
+.ui-dash-conversation { display: flex; min-height: 0; flex: 2 1 0; flex-direction: column; margin-bottom: var(--space-md); }
+.ui-dash-conversation-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-md) var(--space-2xs); scrollbar-width: var(--native-scrollbar-width);
+  mask-image: linear-gradient(transparent, #000 var(--space-xl)); }
+.ui-dash-conversation-scroll > * + * { margin-top: var(--space-lg); }
+/* A transcript here has no header over it and its composer under it, not over it: nothing to clear at either end. */
+/* No mask over one: a masked box round a scroller that composites on its own flickers as the page animates behind it. */
+.ui-dash-conversation-scroll[data-scrolls] { --header-height: 0px; --transcript-composer-inset: var(--space-md); display: flex; overflow: hidden; flex-direction: column; padding: 0; mask-image: none; }
+.ui-dash-conversation-scroll[data-scrolls] > * { min-height: 0; flex: 1; }
+.ui-dash-conversation-open { display: inline-flex; align-self: flex-end; align-items: center; gap: var(--space-2xs); border: 0; background: none; padding: var(--space-2xs) 0;
+  color: var(--muted-foreground); font: inherit; font-size: var(--text-row); cursor: pointer; }
+.ui-dash-conversation-open:hover { color: var(--foreground); }
+.ui-dash-conversation-open svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
 .ui-dash-main > .ui-dash-group { min-height: 0; flex: 1; margin-top: var(--space-xl); }
 .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+/* Stacked: the left column's groups at their own size, ruled apart as the aside's are, the column scrolling. */
+.ui-dash[data-stacked] .ui-dash-main { overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group { flex: none; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group + .ui-dash-group { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 .ui-dash-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .ui-dash-aside > .ui-dash-group + .ui-dash-group { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 
@@ -166,6 +184,7 @@
 .ui-dash[data-one-column] .ui-dash-notice { order: 1; }
 .ui-dash[data-one-column] :is(.ui-dash-main, .ui-dash-aside) { display: contents; }
 .ui-dash[data-one-column] .ui-dash-composer { order: 2; }
+.ui-dash[data-one-column] .ui-dash-conversation { order: 1; flex: none; max-block-size: 60dvh; }
 .ui-dash[data-one-column] .ui-dash-group { min-height: auto; flex: none; margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 .ui-dash[data-one-column] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
 .ui-dash[data-one-column] .ui-dash-group[data-order="first"] { order: 3; }

@@ -11,6 +11,8 @@ export { Expand } from "./expand";
 export { haptic, type Haptic } from "./haptics";
 // In the stylesheets' cascade order (styles/index.ts), so a family reads the same in code, CSS and the gallery.
 export * from "./controls";
+export * from "./service-icons";
+export * from "./approval";
 export * from "./frost";
 export * from "./popover";
 export * from "./reading";
@@ -40,6 +42,7 @@ export * from "./chat";
 export * from "./code";
 export * from "./trace";
 export * from "./agents";
+export * from "./assistant";
 export * from "./connection";
 export * from "./browser";
 export * from "./palettes";

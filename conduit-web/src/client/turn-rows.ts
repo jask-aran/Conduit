@@ -99,11 +99,32 @@ export type TurnRow =
   // per assistant row, which is quadratic in a long chat.
   // `traced` is whether a trace above this answer already speaks for its turn,
   // so a stopped turn says "Interrupted" once, on whichever row comes first.
-  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean }
+  // `orb`: the one row of a turn that can carry its orb -- while it runs the row where it is working, settled its last
+  // answer -- and how the turn is. The transcript draws only the latest turn's (the orb follows generation).
+  | { key: string; type: "message"; value: Message; live?: boolean; streamVersion?: number; displayKey?: string; precedingUserId?: string; traced?: boolean; orb?: TurnOrbState }
   // `timestamp` is the turn's last reply's, for a trace with no answer row to carry it.
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string }
+  // `continues`: a narrated turn's work after its first row, drawn close to what came before it.
+  // `afterAnswer`: a narrated turn's work after its last answer (a notify after the brief): the answer carries the
+  // turn's foot, so this row has none.
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
+
+export type TurnOrbState = "live" | "settled" | "failed";
+/** Gives a turn's orb to one row: the last row while it runs, else its last answer (its last trace
+ *  when it has none). */
+function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
+  const own = (row: TurnRow) => row.type === "trace" || (row.type === "message" && row.value.role !== "user");
+  const index = state === "live" ? rows.findLastIndex(own)
+    : rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") >= 0
+      ? rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") : rows.findLastIndex(own);
+  const row = rows[index];
+  if (row && row.type !== "pending") rows[index] = { ...row, orb: state };
+  const first = rows.findIndex(own);
+  const answered = state !== "live" && row?.type === "message" ? index : -1;
+  return rows.map((item, at) => item.type === "trace" && at > first
+    ? { ...item, continues: true, ...(answered >= 0 && at > answered ? { afterAnswer: true } : {}) } : item);
+}
 
 interface PersistedTurn {
   userMessage: Message | null;
@@ -132,6 +153,19 @@ const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
 const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string) =>
   `answer:${owner ? owner.id : fallback}:${answerIndex}`;
 const active = (generation: ActiveGenerationView) => !["stopped", "complete", "failed"].includes(generation.status);
+
+/**
+ * How a turn is laid out (DESIGN.md, Transcript › Turns): one walk over its messages, one policy for what it says
+ * between tool calls. `fold` (chats, the default): that text is the turn's working-out, so it goes into the turn's one
+ * trace and its answers stand below it. `show` (the persistent agent's threads): that text is said to the person, so
+ * each message's text stands where it was written and the work between texts is a trace of its own: work, text,
+ * work, text. Which text is interim is one rule for both (`textBlockClassifications`: a message that calls a tool, or
+ * stopped to call one, is working). Keys follow one rule in the live and settled paths so a turn settles in place: its
+ * trace rows are `trace:<owner>` then `trace:<owner>:<n>`, its answers `answer:<owner>:<n>`.
+ */
+export type Narration = "fold" | "show";
+export type TurnLayout = { narration?: Narration };
+const traceGroupKey = (base: string, group: number) => group === 0 ? `trace:${base}` : `trace:${base}:${group}`;
 
 export type LiveBlockLocation =
   | { kind: "trace"; rowKey: string; segmentIndex: number }
@@ -237,58 +271,60 @@ const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
   return index < 0 ? null : messages[index]!;
 };
 
+/**
+ * What a message says to the person, block by block: under `show` all its text (a backend's own narration too), under
+ * `fold` only text the rule calls an answer.
+ */
+const says = (block: { kind: string; identity: string }, classifications: Record<string, "interim" | "answer">, show: boolean) =>
+  show ? block.kind === "text" || block.kind === "narration" : block.kind === "text" && classifications[block.identity] === "answer";
+
+/** Where each block of a live turn is drawn: `liveRows`' walk, without building rows. */
 export function buildLiveProjectionIndex(
   wholeGeneration: ActiveGenerationView,
   messages: Message[],
+  layout: TurnLayout = {},
 ): LiveProjectionIndex {
+  const show = layout.narration === "show";
   const generation = currentSegment(wholeGeneration, messages);
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
-  const ownerIndex = liveOwnerIndex(messages, generation);
-  const owner = ownerIndex < 0 ? null : messages[ownerIndex]!;
-  const traceRowKey = `trace:${owner ? owner.id : `live:${generation.id}`}`;
+  const owner = liveOwner(messages, generation);
+  const base = owner ? owner.id : `live:${generation.id}`;
   const blockLocations = new Map<string, LiveBlockLocation>();
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
   const answerBlockIdentities = new Map<string, Set<string>>();
   const answerRowKeys = new Map<string, string>();
   let firstAnswerAssistantId: string | null = null;
-  let answerIndex = 0;
+  let group = 0;
+  let answers = 0;
   let segmentIndex = 0;
-
   for (const assistant of generation.assistantMessages) {
-    const answerBlocks = new Set<string>();
-    for (const block of assistant.blocks) {
-      if (block.kind === "thinking" || block.kind === "narration"
-        || (block.kind === "text" && classifications[block.identity] === "interim")) {
-        blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
-        segmentIndex += 1;
-      } else if (block.kind === "tool_call") {
-        blockLocations.set(block.identity, { kind: "trace", rowKey: traceRowKey, segmentIndex });
-        const toolCallId = block.toolCallId || block.identity;
-        toolLocations.set(toolCallId, { rowKey: traceRowKey, segmentIndex });
-        segmentIndex += 1;
-      } else if (block.kind === "text") {
-        answerBlocks.add(block.identity);
-      }
-    }
-    if (assistant.stopReason === "error") segmentIndex += 1;
-    if (answerBlocks.size) {
-      const rowKey = answerDisplayKey(owner, answerIndex, `live:${generation.id}`);
+    const said = assistant.blocks.filter((block) => says(block, classifications, show));
+    let answered = false;
+    const answer = () => {
+      if (answered || !said.length) return;
+      answered = true;
+      const rowKey = answerDisplayKey(owner, answers, `live:${generation.id}`);
       answerRowKeys.set(assistant.id, rowKey);
       if (!firstAnswerAssistantId) firstAnswerAssistantId = assistant.id;
-      for (const identity of answerBlocks) blockLocations.set(identity, { kind: "answer", rowKey, assistantId: assistant.id });
-      answerBlockIdentities.set(assistant.id, answerBlocks);
-      answerIndex += 1;
+      answerBlockIdentities.set(assistant.id, new Set(said.map((block) => block.identity)));
+      for (const block of said) blockLocations.set(block.identity, { kind: "answer", rowKey, assistantId: assistant.id });
+      answers += 1;
+      // Said to the person, it closes the trace before it: the work after it is the next one.
+      if (show) { group += 1; segmentIndex = 0; }
+    };
+    for (const block of assistant.blocks) {
+      if (said.includes(block)) { if (show) answer(); continue; }
+      const rowKey = traceGroupKey(base, group);
+      blockLocations.set(block.identity, { kind: "trace", rowKey, segmentIndex });
+      if (block.kind === "tool_call") toolLocations.set(block.toolCallId || block.identity, { rowKey, segmentIndex });
+      segmentIndex += 1;
     }
+    // A failed request the turn moved past is a step of its trace (folded, the turn's own failure counts one too).
+    if (assistant.stopReason === "error" && (!show || generation.assistantMessages.at(-1) !== assistant)) segmentIndex += 1;
+    answer();
   }
-  return {
-    generationId: generation.id,
-    traceRowKey: segmentIndex ? traceRowKey : null,
-    blockLocations,
-    toolLocations,
-    answerBlockIdentities,
-    answerRowKeys,
-    firstAnswerAssistantId,
-  };
+  return { generationId: generation.id, traceRowKey: segmentIndex ? traceGroupKey(base, group) : null, blockLocations, toolLocations,
+    answerBlockIdentities, answerRowKeys, firstAnswerAssistantId };
 }
 
 export function buildLiveAnswerRow(
@@ -408,85 +444,106 @@ export function buildLiveToolItem(
  * shape after it had settled.
  */
 
+// A trace's time from the start of the message after it: reasoning in the message that then speaks has no end of its
+// own, and its few milliseconds are not how long it thought -- so it says no time.
+const spanTime = (startedAt?: string | null, endedAt?: string | null) =>
+  startedAt && endedAt && Date.parse(endedAt) - Date.parse(startedAt) < 1000 ? {} : turnTime(startedAt, endedAt);
+// Narrated, a trace is timed by its own work, the same live and settled: from its first tool's start (else what it
+// followed) to its last tool's end (else the message after it). Live, it counts from that start; settled reasoning
+// alone has none.
+const workTime = (segments: TraceSegment[], since: string | null | undefined, end: string | null | undefined, live: boolean) => {
+  const tools = segments.flatMap((segment) => segment.kind === "tool" ? [segment.tool] : []);
+  const start = tools[0]?.timestamp || since;
+  if (live) return turnTime(start, undefined);
+  // Reasoning alone ends in the message that then speaks, whose start is all a settled turn knows: no time to give.
+  if (!tools.length) return {};
+  const ends = tools.map((tool) => tool.completedAt);
+  const finished = ends.length && ends.every(Boolean) ? (ends as string[]).sort().at(-1) : undefined;
+  return spanTime(start, finished || end);
+};
 const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
   ...(startedAt ? { startedAt } : {}),
   ...(endedAt ? { endedAt } : {}),
 });
 
-function liveRows(generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[]): TurnRow[] {
+/** A live turn's rows (`TurnLayout`): its trace or traces, its answers, or where its answer will be. */
+function liveRows(generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[], show: boolean): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
-  const segments: TraceSegment[] = [];
-  const answers: TurnRow[] = [];
-  let answerIndex = 0;
-  for (const assistant of generation.assistantMessages) {
-    const answer = assistant.blocks
-      .filter((block) => block.kind === "text" && classifications[block.identity] === "answer")
-      .map((block) => block.text || "")
-      .join("\n");
-    for (const block of assistant.blocks) {
-      if (block.kind === "thinking") {
-        segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming",
-          ...(block.redacted && !block.text ? { hidden: true } : {}) });
-      } else if (block.kind === "narration") {
-        segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
-      } else if (block.kind === "text" && classifications[block.identity] === "interim") {
-        segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
-      } else if (block.kind === "tool_call") {
-        segments.push(buildLiveToolSegment(generation, block, tools));
-      }
-    }
-    const terminalError = generation.status === "failed"
-      && assistant.stopReason === "error"
-      && generation.assistantMessages.at(-1) === assistant;
-    // Only an error the turn moved past belongs in the trace, which is what the
-    // persisted path means by `assistant !== finalAssistant`. The last message
-    // is either the turn's own failure, and renders as the answer row below, or
-    // one backend is still retrying - and a retry in flight is not a failed request.
-    if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) {
-      segments.push(buildLiveErrorSegment(assistant));
-    }
-    if (answer || terminalError) {
-      const content = generation.continuation && answers.length === 0
-        ? mergeContinuation(generation.continuationBase || "", answer)
-        : answer;
-      answers.push({
-        key: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
-        displayKey: answerDisplayKey(owner, answerIndex, `live:${generation.id}`),
-        type: "message",
-        traced: true,
-        live: active(generation),
-        streamVersion: generation.lastSeq,
-        precedingUserId: owner?.id,
-        value: liveAnswerMessage(generation, assistant, content, terminalError),
-      });
-      answerIndex += 1;
-    }
-  }
+  const base = owner ? owner.id : `live:${generation.id}`;
+  const running = active(generation);
   const rows: TurnRow[] = [];
-  // Every turn that has shown anything has its trace: one with no thinking
-  // and no tools is its header alone -- the orb, what it is doing, the time.
-  // One stopped or failed before it showed anything is that header too, as
-  // the saved turn is (endedEarly): without a row the thread still ended at
-  // the prompt, and its starting header stayed up, counting, until a reload.
-  const endedEarly = generation.status === "stopped" || generation.status === "failed";
-  if (segments.length || answers.length || endedEarly) {
-    const running = active(generation);
+  // Folded, the answers wait below the turn's one trace.
+  const answers: TurnRow[] = [];
+  let segments: TraceSegment[] = [];
+  let group = 0;
+  let count = 0;
+  // Narrated, each trace is timed from what was said before it to what it led to, not the turn's whole time.
+  let since = owner?.timestamp;
+  const trace = (last: boolean, answerless = last, end?: string) => {
     const latestTool = segments.findLast((segment) => segment.kind === "tool");
     const executingTool = running && latestTool?.kind === "tool" && latestTool.tool.done === false;
-    const status = generation.status === "stopped" ? "interrupted"
-      : generation.status === "failed" ? "failed"
-      : generation.status === "complete" ? "complete"
-      : executingTool ? "executing_tool" : "thinking";
-    rows.push({ key: `trace:${owner ? owner.id : `live:${generation.id}`}`, type: "trace", value: { active: running, status, segments, ...turnTime(owner?.timestamp, running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp) }, precedingUserId: owner?.id, answerless: answers.length === 0, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
+    const status = !last ? "complete" : generation.status === "stopped" ? "interrupted" : generation.status === "failed" ? "failed"
+      : generation.status === "complete" ? "complete" : executingTool ? "executing_tool" : "thinking";
+    rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: last && running, status, segments,
+      ...(show ? workTime(segments, since, end || (last && !running ? owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp : undefined), last && running)
+        : turnTime(owner?.timestamp, last && running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp)) },
+      precedingUserId: owner?.id, answerless, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
+  };
+  for (const assistant of generation.assistantMessages) {
+    const said = assistant.blocks.filter((block) => says(block, classifications, show));
+    const text = said.map((block) => block.text || "").join("\n");
+    const terminalError = generation.status === "failed" && assistant.stopReason === "error" && generation.assistantMessages.at(-1) === assistant;
+    let answered = false;
+    const answer = () => {
+      if (answered || !(text || terminalError)) return;
+      answered = true;
+      const content = generation.continuation && count === 0 ? mergeContinuation(generation.continuationBase || "", text) : text;
+      const key = answerDisplayKey(owner, count, `live:${generation.id}`);
+      const row = (traced: boolean): TurnRow => ({ key, displayKey: key, type: "message", traced, live: running,
+        streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError) });
+      count += 1;
+      if (!show) { answers.push(row(true)); return; }
+      // Only work is a trace: text said first stands alone, an empty header over it said nothing.
+      if (segments.length) trace(false, false, assistant.timestamp ?? undefined);
+      rows.push(row(rows.some((item) => item.type === "trace")));
+      group += 1; segments = []; since = assistant.timestamp ?? undefined;
+    };
+    for (const block of assistant.blocks) {
+      if (said.includes(block)) { if (show) answer(); }
+      else if (block.kind === "thinking") {
+        segments.push({ kind: "thinking", id: block.identity, text: block.text || "", live: block.status === "streaming",
+          ...(block.redacted && !block.text ? { hidden: true } : {}) });
+      } else if (block.kind === "tool_call") segments.push(buildLiveToolSegment(generation, block, tools));
+      // What it says as it works, folded: a backend's narration, or text the rule calls interim.
+      else segments.push({ kind: "narration", id: block.identity, text: block.text || "", live: block.status === "streaming" });
+    }
+    // Only an error the turn moved past belongs in a trace: the last message is either the turn's own failure, drawn as
+    // its answer, or one backend is still retrying -- and a retry in flight is not a failed request.
+    if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) segments.push(buildLiveErrorSegment(assistant));
+    answer();
   }
-  rows.push(...answers);
-  // Held only until something of the turn shows: its trace, once it has one,
-  // is what says it is working.
-  if (!answers.length && !segments.length && active(generation) && generation.status !== "stopping") {
+  // Every turn that has shown anything has its trace: one with no thinking and no tools is its header alone -- the orb,
+  // what it is doing, the time. One stopped or failed before it showed anything is that header too, as the saved turn is.
+  const endedEarly = generation.status === "stopped" || generation.status === "failed";
+  if (!show) {
+    if (segments.length || answers.length || endedEarly) trace(true, answers.length === 0);
+    rows.push(...answers);
+  } else if (segments.length || (endedEarly && !rows.length)) trace(true);
+  else {
+    // Talking with nothing after: the turn's last trace still says what it is doing, and how it ended.
+    const index = rows.findLastIndex((row) => row.type === "trace");
+    const last = rows[index];
+    // While it talks the text is where it works: the trace before it stays settled, not "Writing".
+    if (last?.type === "trace" && endedEarly) {
+      rows[index] = { ...last, value: { ...last.value, status: generation.status === "stopped" ? "interrupted" : "failed" } };
+    }
+  }
+  // Held only until something of the turn shows: its trace, once it has one, is what says it is working.
+  if (!rows.length && running && generation.status !== "stopping") {
     rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id,
       ...(owner?.timestamp ? { startedAt: owner.timestamp } : {}) });
   }
-  return rows;
+  return placeTurnOrb(rows, running ? "live" : endedEarly ? "failed" : "settled");
 }
 
 /** Overlay one live turn onto an already projected persisted transcript. */
@@ -495,12 +552,15 @@ export function projectLiveTurn(
   messages: Message[],
   wholeGeneration: ActiveGenerationView,
   tools: ToolItem[] = [],
+  layout: TurnLayout = {},
 ): TurnRow[] {
   const generation = currentSegment(wholeGeneration, messages);
   const owner = liveOwner(messages, generation);
-  if (!owner) return [...persistedRows, ...liveRows(generation, null, tools)];
+  const show = layout.narration === "show";
+  const live = (generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[]) => liveRows(generation, owner, tools, show);
+  if (!owner) return [...persistedRows, ...live(generation, null, tools)];
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);
-  if (ownerRow < 0) return [...persistedRows, ...liveRows(generation, owner, tools)];
+  if (ownerRow < 0) return [...persistedRows, ...live(generation, owner, tools)];
   let nextTurn = ownerRow + 1;
   while (nextTurn < persistedRows.length) {
     const row = persistedRows[nextTurn]!;
@@ -509,7 +569,7 @@ export function projectLiveTurn(
   }
   return [
     ...persistedRows.slice(0, ownerRow + 1),
-    ...liveRows(generation, owner, tools),
+    ...live(generation, owner, tools),
     ...persistedRows.slice(nextTurn),
   ];
 }
@@ -526,82 +586,91 @@ function sameSources(
     && left.sourceTools.every((tool, index) => tool === sourceTools[index]);
 }
 
-function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolItem>): TurnRow[] {
+/** A settled turn's rows (`TurnLayout`), from what each message stated. */
+function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolItem>, show: boolean): TurnRow[] {
   const rows: TurnRow[] = [];
-  if (turn.userMessage) {
-    rows.push({ key: `message:${turn.userMessage.id}`, type: "message", value: turn.userMessage });
-  }
+  const owner = turn.userMessage;
+  if (owner) rows.push({ key: `message:${owner.id}`, type: "message", value: owner });
   if (!turn.assistants.length) return rows;
-  const segments: TraceSegment[] = [];
-  const claimed = new Set<string>();
+  const base = owner ? owner.id : turn.assistants[0]!.id;
   const finalAssistant = turn.assistants.at(-1) || null;
-  // A message says what it is, and is taken at its word. One the harness is
-  // not carrying forward (`discarded`) is not an answer: it is the trace's
-  // last, struck-through step, so a stopped turn is one row.
-  const answerAssistants = turn.assistants.filter((assistant) => {
-    if (assistant.stopReason === "error" && assistant !== finalAssistant) return false;
-    if (assistant.discarded === true) return false;
-    return !statedInterim(assistant);
-  });
+  const outcome = owner?.outcome;
+  const claimed = new Set<string>();
+  let segments: TraceSegment[] = [];
+  let group = 0;
+  let answers = 0;
+  let traced = false;
+  // Folded: the messages that answer, under the turn's one trace.
+  const answering: Message[] = [];
+  let since = owner?.timestamp;
+  const trace = (last: boolean, answerless = last, end?: string) => {
+    traced = true;
+    rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: false, status: last ? outcome || "complete" : "complete", segments,
+      ...(show ? workTime(segments, since, end || owner?.timing?.endedAt || finalAssistant?.timestamp, false)
+        : turnTime(owner?.timestamp, owner?.timing?.endedAt || finalAssistant?.timestamp)) }, precedingUserId: owner?.id, answerless,
+      timestamp: finalAssistant?.timestamp || undefined,
+      // Held to the contract where it always was: a turn with steps must say how it ended.
+      ...(last && owner && !outcome && segments.length > 0 ? { unstated: true } : {}) });
+  };
   for (const assistant of turn.assistants) {
     const discarded = assistant.discarded === true;
+    const failed = assistant.stopReason === "error";
     const thinking = thinkingOf(assistant);
     if (thinking) segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: thinking, ...(discarded ? { discarded } : {}) });
     else if ((assistant.blocks || []).some((block) => block.kind === "thinking" && block.redacted)) {
       segments.push({ kind: "thinking", id: `thinking:${assistant.id}`, text: "", hidden: true });
     }
-    if (!answerAssistants.includes(assistant) && String(assistant.content || "").trim()) {
+    const text = String(assistant.content || "").trim();
+    // A message says what it is, and is taken at its word. One the harness is not carrying forward (`discarded`) is
+    // not an answer: it is a trace's struck-through step, so a stopped turn is one row. Folded, a message that said it
+    // was working is not one either.
+    const speaks = show ? !(discarded && text) && ((Boolean(text) && !(failed && assistant !== finalAssistant)) || (failed && assistant === finalAssistant))
+      : !discarded && !(failed && assistant !== finalAssistant) && !statedInterim(assistant);
+    if (!speaks && text && (!show || discarded)) {
       segments.push({ kind: "narration", id: `narration:${assistant.id}`, text: String(assistant.content), ...(discarded ? { discarded } : {}) });
+    } else if (speaks && !show) answering.push(assistant);
+    else if (speaks) {
+      if (segments.length) trace(false, false, assistant.timestamp);
+      const key = answerDisplayKey(owner, answers, `message:${assistant.id}`);
+      rows.push({ key, displayKey: key, type: "message", value: assistant, precedingUserId: owner?.id, traced });
+      answers += 1; group += 1; segments = []; since = assistant.timestamp ?? since;
     }
     for (const id of toolCallIdsOf(assistant)) {
       const tool = toolById.get(id);
       if (tool && !claimed.has(id)) { claimed.add(id); segments.push({ kind: "tool", id: `tool:${id}`, tool }); }
     }
-    if (assistant.stopReason === "error" && assistant !== finalAssistant) {
-      segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
-    }
+    if (failed && assistant !== finalAssistant) segments.push({ kind: "error", id: `error:${assistant.id}`, message: assistant });
   }
-  const answer = answerAssistants.at(-1) || null;
-  const answerText = answerAssistants.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
-  // Every turn that answered has its trace: one with no thinking and no tools
-  // is its header alone -- the orb, how it ended, the time -- and one stopped
-  // before it wrote anything is that header with nothing under it, so the
-  // header is what says so and what Regenerate hangs off. A turn that finished
-  // having written nothing leaves no row.
-  const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
-  const outcome = turn.userMessage?.outcome;
   const endedEarly = outcome === "interrupted" || outcome === "failed" || Boolean(finalAssistant?.stopped);
-  if (segments.length > 0 || hasAnswerRow || endedEarly) {
-    rows.push({
-      key: `trace:${turn.userMessage ? turn.userMessage.id : turn.assistants[0]!.id}`,
-      type: "trace",
-      value: { active: false, status: outcome || "complete", segments, ...turnTime(turn.userMessage?.timestamp, turn.userMessage?.timing?.endedAt || finalAssistant?.timestamp) },
-      precedingUserId: turn.userMessage?.id,
-      answerless: !hasAnswerRow,
-      timestamp: finalAssistant?.timestamp || undefined,
-      // Held to the contract where it always was: a turn with steps must say
-      // how it ended.
-      ...(turn.userMessage && !outcome && segments.length > 0 ? { unstated: true } : {}),
-    });
+  if (!show) {
+    // Every turn that answered has its trace: one with no thinking and no tools is its header alone -- the orb, how it
+    // ended, the time -- and one stopped before it wrote anything is that header with nothing under it, so the header
+    // is what says so and what Regenerate hangs off. A turn that finished having written nothing leaves no row.
+    const answer = answering.at(-1) || null;
+    const answerText = answering.map((assistant) => String(assistant.content || "").trim()).filter(Boolean).join("\n\n");
+    const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
+    if (segments.length > 0 || hasAnswerRow || endedEarly) trace(true, !hasAnswerRow);
+    if (hasAnswerRow && answer) {
+      const displayKey = answerDisplayKey(owner, 0, `message:${answer.id}`);
+      rows.push({ key: displayKey, displayKey, type: "message", value: answering.length === 1 ? answer : { ...answer, content: answerText },
+        precedingUserId: owner?.id, traced: true });
+    }
+    return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
   }
-  if (hasAnswerRow && answer) {
-    const displayKey = answerDisplayKey(turn.userMessage, 0, `message:${answer.id}`);
-    rows.push({
-      key: displayKey,
-      displayKey,
-      type: "message",
-      value: answerAssistants.length === 1 ? answer : { ...answer, content: answerText },
-      precedingUserId: turn.userMessage?.id,
-      traced: true,
-    });
+  if (segments.length || (endedEarly && !answers)) trace(true);
+  else if (outcome && outcome !== "complete") {
+    const index = rows.findLastIndex((row) => row.type === "trace");
+    const last = rows[index];
+    if (last?.type === "trace") rows[index] = { ...last, value: { ...last.value, status: outcome } };
   }
-  return rows;
+  return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
 }
 
 export function projectPersistedTurns(
   messages: Message[],
   tools: ToolItem[],
   previous: PersistedTurnProjection[] = [],
+  layout: TurnLayout = {},
 ): { rows: TurnRow[]; turns: PersistedTurnProjection[] } {
   // Prompts first, so an answer can be given to the prompt it names whether or
   // not that prompt has been reached yet. Assigning as we go made grouping
@@ -651,7 +720,7 @@ export function projectPersistedTurns(
       userMessage: turn.userMessage,
       assistants: turn.assistants,
       sourceTools,
-      rows: persistedRowsForTurn(turn, toolById),
+      rows: persistedRowsForTurn(turn, toolById, layout.narration === "show"),
     };
   });
   return { rows: projected.flatMap((turn) => turn.rows), turns: projected };
@@ -666,8 +735,8 @@ export function buildTurnRows(
   tools: ToolItem[],
   opts: {
     activeGeneration?: ActiveGenerationView | null;
-  } = {},
+  } & TurnLayout = {},
 ): TurnRow[] {
-  const persisted = projectPersistedTurns(messages, tools).rows;
-  return opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools) : persisted;
+  const persisted = projectPersistedTurns(messages, tools, [], opts).rows;
+  return opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted;
 }

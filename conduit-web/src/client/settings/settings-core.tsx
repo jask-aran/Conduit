@@ -6,6 +6,9 @@ import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
+import { createAgentSettings } from "./agent-settings";
+import { ConnectorsGroup } from "./connectors-settings";
+import { agentView } from "../state/agent";
 import { toast } from "@/components/notifications";
 import { api, readShared } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
@@ -52,7 +55,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
 ] as const;
@@ -65,11 +68,12 @@ const sectionLabels: Record<Section, string> = {
   prompts: "Prompts",
   runtime: "Runtime",
   devices: "Devices",
+  agent: "Agent",
   workspaces: "Workspace profile",
   voice: "Voice",
   search: "Web search",
 };
-const label = (section: Section) => sectionLabels[section];
+const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
 interface RuntimeSettings {
   maxLiveProcesses: number;
   maxGeneratingProcesses: number;
@@ -1191,6 +1195,7 @@ export function Settings(props: {
   // Each section saved as it is edited, and how its header says so. Leaving
   // the section or closing Settings sends what is waiting rather than
   // dropping it; a failure nobody is looking at any more is said in a toast.
+  const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector });
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
     runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
     prompts: { label: "Prompt", saves: [promptAutosave] },
@@ -1199,6 +1204,7 @@ export function Settings(props: {
     search: { label: "Web search", saves: [searchAutosave] },
     ui: { label: "Appearance", saves: [uiPreferenceSaves] },
     shortcuts: { label: "Shortcuts", saves: [uiPreferenceSaves] },
+    agent: { label: "Agent settings", saves: [agentSettings.autosave] },
   };
   for (const [id, entry] of Object.entries(autosaved) as Array<[Section, NonNullable<(typeof autosaved)[Section]>]>) {
     createEffect(on(() => props.open && section() === id, (showing, wasShowing) => {
@@ -1236,7 +1242,7 @@ export function Settings(props: {
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
         <For each={sectionGroups}>{(group) => <NavGroup label={group.label}>
           <For each={group.sections}>{(item) => <NavRow role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            icon={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.label}</NavRow>}</For>
+            icon={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</NavRow>}</For>
         </NavGroup>}</For>
       </OverlayRail>
     </Show>
@@ -1355,6 +1361,7 @@ export function Settings(props: {
               </SettingGroup>
             </>
           </Show>
+          <Show when={section() === "agent"}><agentSettings.Page /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
@@ -1641,6 +1648,7 @@ export function Settings(props: {
                 </Show>
               </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </SettingGroup>
+            <ConnectorsGroup />
           </></Show>
       </OverlayPage>
     </Show>
