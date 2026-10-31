@@ -255,7 +255,8 @@ const seeding = new WeakMap();
  */
 async function feedsToRoutines(agent, harness, conversation) {
   const state = await agent.state();
-  for (const item of Object.values(state.schedules)) {
+  // Once: a feed added since (the feed tool, Settings) stays a feed.
+  for (const item of state.feedsMigrated ? [] : Object.values(state.schedules)) {
     if (!item.feed || item.feed.source.kind === "run" || item.cancelling) continue;
     const name = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || item.id;
     if (!/^[a-z]/.test(name) || await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
@@ -275,6 +276,7 @@ async function feedsToRoutines(agent, harness, conversation) {
       delete doc.schedules[item.id];
     }, agent.context);
   }
+  if (!state.feedsMigrated) await conversation.commit(async (tx) => { (await tx.doc(AgentDoc)).feedsMigrated = true; }, agent.context);
   if (state.heartbeatSeenAt && !state.cursors?.heartbeat) await conversation.commit(async (tx) => {
     const doc = await tx.doc(AgentDoc);
     doc.cursors ||= {};

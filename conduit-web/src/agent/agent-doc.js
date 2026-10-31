@@ -15,6 +15,7 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `rules`: id → saved outward approval (policy.js).
  * - `inbox`: id → what a run reported, waiting for the heartbeat or the person (inbox.js); `heartbeatSeenAt` the
  *   newest entry a beat has looked at, `heartbeatSweptAt` its last pass over HEARTBEAT.md (schedule.js).
+ * - `feedsMigrated`: true once the feeds from before routines became routine files (schedule.js).
  * - `next`: the counter every part numbers its ids from (`sc-3`, `w-4`, `p-5`).
  */
 export const AgentDoc = defineDoc({
