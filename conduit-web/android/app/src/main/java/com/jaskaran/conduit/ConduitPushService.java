@@ -88,6 +88,8 @@ public class ConduitPushService extends PushService {
             JSONObject answer = payload.optJSONObject("answer");
             if (answer != null && answer.optString("token").matches("[A-Za-z0-9_-]{43}")) {
                 for (String choice : new String[] { "allow", "always", "deny" }) {
+                    // An ask with no reusable rule has no Always.
+                    if (!answer.has(choice)) continue;
                     Intent action = new Intent(this, ConduitPushAnswerReceiver.class)
                         .setData(new Uri.Builder().scheme("conduit-answer").appendPath(notificationTag).appendPath(choice).build())
                         .putExtra("instance", instance).putExtra("token", answer.optString("token"))

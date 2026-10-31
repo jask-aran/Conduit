@@ -10,8 +10,9 @@ export function mintAnswerToken(askId) {
   return token;
 }
 
-export function takeAnswerToken(token) {
+export function answerToken(token) {
   const entry = tokens.get(token);
-  tokens.delete(token);
   return entry && entry.expiresAt > Date.now() ? entry : null;
 }
+
+export function spendAnswerToken(token) { tokens.delete(token); }

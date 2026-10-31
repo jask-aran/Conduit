@@ -11,9 +11,9 @@ const line = (text, max) => {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 
-/** `runtime.notify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
+/** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId }) {
-  return ({ kind, conversationId, title, text, level, key, waiting = 0 }) => void (async () => {
+  return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0 }) => void (async () => {
     if (!agent.enabled()) return;
     const thread = await agent.describe(conversationId);
     if (!thread?.chatId || thread.role === "run") return;
@@ -35,7 +35,7 @@ export function agentNotifier({ agent, push, hubId }) {
       path: `/chat/${thread.chatId}`,
       tag,
       hub: hubId(),
-      ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", always: "Always", deny: "Don't" } } : {}),
+      ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });
   })().catch((error) => console.warn("[agent] push:", error?.message || error));

@@ -711,7 +711,7 @@ if (persistentAgent) {
   persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
-  durableAdapter.runtime.notify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
+  durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
   registerAgentRoutes(app, { agent: persistentAgent, backends });
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());

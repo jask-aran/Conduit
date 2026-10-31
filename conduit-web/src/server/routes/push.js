@@ -1,4 +1,4 @@
-import { takeAnswerToken } from "../../agent/answer-tokens.js";
+import { answerToken, spendAnswerToken } from "../../agent/answer-tokens.js";
 import { decide } from "../../agent/asks.js";
 
 /**
@@ -14,12 +14,14 @@ export function registerPushRoutes(app, { push, hubId, agent }) {
     try {
       const { choice } = request.body || {};
       if (choice !== "allow" && choice !== "always" && choice !== "deny") return response.status(400).end();
-      const entry = takeAnswerToken(request.params.token);
-      if (!entry) return response.status(404).end();
-      if (!agent) return response.status(404).end();
-      await decide(agent, entry.askId, choice);
+      const entry = answerToken(request.params.token);
+      if (!entry || !agent) return response.status(404).end();
+      // A choice the ask cannot take (Always with no rule) leaves the token, so its other answers still work.
+      try { await decide(agent, entry.askId, choice); }
+      catch (error) { if (error.status !== 400) spendAnswerToken(request.params.token); throw error; }
+      spendAnswerToken(request.params.token);
       return response.status(204).end();
-    } catch (error) { if (error.status === 404 || error.status === 409) return response.status(error.status).end(); next(error); }
+    } catch (error) { if ([400, 404, 409].includes(error.status)) return response.status(error.status).end(); next(error); }
   });
 
   app.get("/v0/push", (request, response, next) => {
