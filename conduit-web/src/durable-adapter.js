@@ -188,8 +188,13 @@ const stopReasonOf = (message) => (STOP_REASONS.has(message?.stopReason) ? messa
 
 function assistantClose(message, messageId, generationId = null) {
   const stopReason = stopReasonOf(message);
-  return messageClose({ messageId, stopReason, interim: stopReason === "toolUse", generationId,
-    blocks: blocksOf(message), keepsPartial: DURABLE_CAPABILITIES.interruptKeepsPartial,
+  const blocks = blocksOf(message);
+  // Commentary or final answer, as the provider labelled its text; a message whose text says neither is commentary
+  // when it stopped to call a tool.
+  const texts = blocks.filter((block) => block.kind === "text");
+  const labelled = texts.length > 0 && texts.every((block) => block.phase);
+  return messageClose({ messageId, stopReason, interim: labelled ? !texts.some((block) => block.phase === "final_answer") : stopReason === "toolUse", generationId,
+    blocks, keepsPartial: DURABLE_CAPABILITIES.interruptKeepsPartial,
     provider: message.provider || null, model: message.model || null,
     timestamp: message.timestamp ? new Date(message.timestamp).toISOString() : null,
     errorMessage: message.errorMessage || null });
@@ -812,14 +817,25 @@ export class DurableAdapter extends EventEmitter {
     // How much of each block's text has gone out: pi-durable sends a block whole (`block`, or the whole `message`)
     // when a field of it is set rather than appended -- the first words, or a signature at its end -- and only what
     // follows what was sent is new. Dropping those lost a text's first words until the turn settled.
-    const sent = turn.sent?.messageId === messageId ? turn.sent.lengths : (turn.sent = { messageId, lengths: new Map() }).lengths;
+    if (turn.sent?.messageId !== messageId) turn.sent = { messageId, lengths: new Map(), phases: new Map() };
+    const { lengths: sent, phases } = turn.sent;
     const send = (contentIndex, blockKind, delta) => {
       if (!delta) return;
       sent.set(contentIndex, (sent.get(contentIndex) ?? 0) + delta.length);
       this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
         seq: ++record.generationSeq, messageId, contentIndex, blockKind, delta });
     };
+    // A text's label -- commentary or final answer -- said once, as soon as its block has it (OpenAI Responses: when
+    // the message opens), and before its first word: the transcript places the text by it rather than guessing.
+    const label = (contentIndex, block) => {
+      const phase = block?.type === "text" ? textPhase(block) : null;
+      if (!phase || phases.get(contentIndex) === phase) return;
+      phases.set(contentIndex, phase);
+      this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
+        seq: ++record.generationSeq, messageId, contentIndex, blockKind: "text", delta: "", textPhase: phase });
+    };
     const whole = (contentIndex, block) => {
+      label(contentIndex, block);
       if (block?.type !== "text" && block?.type !== "thinking") return;
       const text = block.type === "text" ? block.text || "" : block.thinking || "";
       send(contentIndex, block.type, text.slice(sent.get(contentIndex) ?? 0));

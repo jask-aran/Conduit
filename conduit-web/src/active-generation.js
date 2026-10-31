@@ -138,6 +138,8 @@ export function reduceActiveGeneration(current, event) {
         ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
         ...(event.subject ? { subject: event.subject } : {}),
         ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
+        // Commentary or final answer, as its provider labelled it (DESIGN.md, Turns).
+        ...(event.textPhase ? { phase: event.textPhase } : {}),
       });
       if (event.blockKind === "tool_call") block.inputText = `${existing?.inputText || ""}${event.delta}`;
       else block.text = `${existing?.text || ""}${event.delta}`;
@@ -238,9 +240,10 @@ export function reduceGenerationEvents(events, initial = null) {
 }
 
 /**
- * Which of a turn's text is an answer, and which is it talking as it works.
+ * Which of a turn's text is its final answer, and which is commentary (it talking as it works).
  *
- * Decided per message, from that message alone: its text is narration when the
+ * A text its provider labelled says which from its first word (`phase`: OpenAI Responses). Otherwise it is decided
+ * per message, from that message alone: its text is commentary when the
  * message is itself a step towards an answer -- it called a tool, or stopped to
  * call one -- and an answer otherwise.
  *
@@ -258,7 +261,9 @@ export function textBlockClassifications(state) {
     const interim = message.stopReason === "toolUse"
       || (message.blocks || []).some((block) => block.kind === "tool_call");
     for (const block of message.blocks || []) {
-      if (block.kind === "text") result[block.identity] = interim ? "interim" : "answer";
+      if (block.kind !== "text") continue;
+      result[block.identity] = block.phase === "commentary" ? "interim" : block.phase === "final_answer" ? "answer"
+        : interim ? "interim" : "answer";
     }
   }
   return result;

@@ -91,7 +91,8 @@ export function deliveryKey(event) {
 export const isPaint = (event) => event?.type === "assistant_content" || event?.type === "tool_activity";
 
 export function mergeDelivery(previous, next) {
-  if (next.type === "assistant_content") return { ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
+  // What an earlier delta said beside its text -- a call's name, a text's label -- stays: only the text is joined.
+  if (next.type === "assistant_content") return { ...previous, ...next, delta: `${previous.delta || ""}${next.delta || ""}` };
   return next;
 }
 
