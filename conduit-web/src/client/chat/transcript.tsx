@@ -10,7 +10,7 @@ import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
-import { AnswerOrb, TraceStarting, TurnTrace } from "./turn-trace";
+import { AnswerOrb, TraceOrb, TraceStarting, TurnTrace } from "./turn-trace";
 import { openAgentChat } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import type { Narration, TurnRow } from "../turn-rows";
@@ -35,6 +35,7 @@ import {
   advanceTailFollow,
   createTailFollowState,
   decideTailScroll,
+  TAIL_REJOIN_PX,
   rebaseTailFollowState,
   HISTORY_LOAD_TOP_PX,
   TAIL_NEAR_LATEST_PX,
@@ -998,12 +999,25 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       (next) => setViewportScrollTop(next, false),
     );
     transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
+    // When the reader last did something that scrolls: a wheel (a trackpad's momentum keeps sending them), a key, a
+    // scrollbar drag, a touch and the fling after it. Only a move up inside that is theirs.
+    let readerUntil = 0;
+    const reading = (ms: number) => { readerUntil = Math.max(readerUntil, performance.now() + ms); };
     const claimUserScroll = () => {
       if (empty()) return;
       if (!rendererUsesTypewriter()) return;
       programmaticScrollTop = null;
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
+    };
+    const onWheel = (event: WheelEvent) => {
+      reading(300);
+      claimUserScroll();
+      // Wheeling down at the bottom moves nothing, so no scroll event would hand the tail back: hand it back here.
+      if (event.deltaY > 0 && viewportMaxScrollTop() - viewport.scrollTop <= TAIL_REJOIN_PX) {
+        setFollowing(true);
+        scheduleTypewriterTailRejoin();
+      }
     };
     const onScroll = () => {
       const maxScrollTop = viewportMaxScrollTop();
@@ -1040,6 +1054,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       // two ways a user produces one -- scrollbar drags, PageUp/Home, and
       // trackpad momentum arriving after wheel-end land here instead, and used
       // to leave the spring believing it still owned the viewport.
+      // A move up with no reader behind it is the page, not them: the browser keeping a block in place as one above it
+      // shrank (a trace settling, markdown laying out). It used to read as the reader leaving, and the tail let go
+      // mid-turn. Following, the tail just carries on to the bottom.
+      if (decision.direction === "up" && following() && performance.now() > readerUntil) {
+        if (rendererUsesTypewriter()) requestTypewriterTailFollow();
+        else scrollBottom();
+        loadEarlier();
+        return;
+      }
       if (decision.direction === "up") {
         cancelTypewriterTailRejoin();
         if (!wasProgrammatic) claimUserScroll();
@@ -1052,18 +1075,26 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       if (rendererUsesTypewriter() && decision.rejoin) scheduleTypewriterTailRejoin();
       loadEarlier();
     };
-    const onTouchStart = () => claimUserScroll();
+    let touching = false;
+    const onTouchStart = () => { touching = true; reading(60_000); claimUserScroll(); };
+    // A fling carries on after the finger lifts.
+    const onTouchEnd = () => { if (!touching) return; touching = false; readerUntil = performance.now() + 2000; };
+    let dragging = false;
     const onPointerDown = (event: PointerEvent) => {
       // A scrollbar drag lands on the viewport itself, outside any content box.
-      if (event.target === viewport) claimUserScroll();
+      if (event.target === viewport) { dragging = true; reading(60_000); claimUserScroll(); }
     };
+    const onPointerUp = () => { if (!dragging) return; dragging = false; readerUntil = performance.now() + 300; };
     const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (SCROLL_KEYS.has(event.key)) claimUserScroll();
+      if (SCROLL_KEYS.has(event.key)) { reading(800); claimUserScroll(); }
     };
     viewport.addEventListener("scroll", onScroll, { passive: true });
-    viewport.addEventListener("wheel", claimUserScroll, { passive: true });
+    viewport.addEventListener("wheel", onWheel, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
     viewport.addEventListener("wheel", cancelLatestGlide, { passive: true });
     viewport.addEventListener("touchstart", cancelLatestGlide, { passive: true });
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
@@ -1088,8 +1119,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       layoutEpoch += 1;
       resizeObserver.disconnect();
       viewport.removeEventListener("scroll", onScroll);
-      viewport.removeEventListener("wheel", claimUserScroll);
+      viewport.removeEventListener("wheel", onWheel);
       viewport.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+      window.removeEventListener("pointerup", onPointerUp);
       viewport.removeEventListener("pointerdown", onPointerDown);
       viewport.removeEventListener("keydown", onKeyDown);
       composerResizeObserver.disconnect();
@@ -1139,7 +1173,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} orb={item.key === latestOrb()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn orb={narrated() && item.key === latestOrb() ? <TraceOrb trace={item.value} writing={item.answerless === false} /> : undefined}><TurnTrace since={arrive} trace={item.value} orb={narrated() ? item.key === latestOrb() : true} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1215,7 +1249,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
-            <Show when={user()} fallback={<Turn orb={item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
+            <Show when={user()} fallback={<Turn orb={narrated() && item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>

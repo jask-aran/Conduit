@@ -242,6 +242,10 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
   const calls = new Map();
   const details = new Map(entries.filter((entry) => entry.kind === "pi.tool-result")
     .map((entry) => [entry.model?.[0]?.toolCallId, entry.model?.[0]?.details]));
+  // When each call started, from its result (its end, less how long it ran): a call reopened from the record is
+  // stamped with when it ran, not when it was read back, or every saved step would say no time.
+  const started = new Map(entries.filter((entry) => entry.kind === "pi.tool-result" && entry.model?.[0]?.timestamp)
+    .map((entry) => { const result = entry.model[0]; return [result.toolCallId, new Date(result.timestamp - (result.durationMs || 0)).toISOString()]; }));
   for (const slot of runningTools) if (slot.details && !details.get(slot.callId)) details.set(slot.callId, slot.details);
   const children = new Map([...details.values()].filter((detail) => detail?.subagentId).map((detail) => [detail.subagentId, detail]));
   let prompt = null;
@@ -275,6 +279,7 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         if (block.kind !== "tool_call") continue;
         calls.set(block.toolCallId, block);
         ops.push(toolOpen({ toolCallId: block.toolCallId, name: block.name, kind: toolKind(TOOL_KINDS, block.name),
+          timestamp: started.get(block.toolCallId) || (message.timestamp ? new Date(message.timestamp).toISOString() : undefined),
           subject: subjectOf(block.name, block.input), ...agentFields(block.name, block.input, details.get(block.toolCallId)), input: block.input, messageId }));
       }
       last = message;
