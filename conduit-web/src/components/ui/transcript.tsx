@@ -107,10 +107,8 @@ export const Welcome = (props: { title: string }) => <div class="ui-welcome"><h1
 
 /** A turn of the agent's: its trace and answer. orb: one hung in the gutter at its left (TurnOrb's place), for a thread
  *  whose turn speaks more than once and keeps its one orb by the row that matters. */
-/** follows: the orb is where the text is being written (its last line) rather than at its first; a phone keeps it at
- *  the first, having no gutter for it to move down. */
-export const Turn = (props: { orb?: JSX.Element; follows?: boolean; children: JSX.Element }) =>
-  <article class="ui-turn" data-follows={props.follows ? "" : undefined}><Show when={props.orb}><span class="ui-turn-orb" aria-hidden="true">{props.orb}</span></Show>{props.children}</article>;
+export const Turn = (props: { orb?: JSX.Element; children: JSX.Element }) =>
+  <article class="ui-turn"><Show when={props.orb}><span class="ui-turn-orb" aria-hidden="true">{props.orb}</span></Show>{props.children}</article>;
 /**
  * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,
  * references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and

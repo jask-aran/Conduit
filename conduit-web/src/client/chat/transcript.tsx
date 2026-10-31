@@ -1170,7 +1170,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
-            <Show when={user()} fallback={<Turn orb={item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined} follows={narrated() && item.orb === "live"}>
+            <Show when={user()} fallback={<Turn orb={item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
