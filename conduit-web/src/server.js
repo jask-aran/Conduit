@@ -601,6 +601,8 @@ for (const adapter of backends.instances()) {
       .catch((cause) => console.error("Could not apply backend chat name", cause));
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
+  // A turn starting or ending, on any harness: every other page, pane and device watching the chat joins or lets go.
+  if (adapter.sessions) adapter.sessions.onTurn = (record) => publishProcessChange(adapter.view(record), record, "turn");
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerRuntimeRoutes(app, {

@@ -3295,6 +3295,18 @@ function App() {
   const [paneModes, setPaneModes] = createSignal<Record<string, { chatId: string; narration: Narration }>>({});
   const paneNarration = (slot: number) => { const mode = paneModes()[String(slot)]; return mode && mode.chatId === slotChatId(slot) ? mode.narration : undefined; };
   const setPaneNarration = (slot: number, chatId: string, narration: Narration) => setPaneModes((current) => ({ ...current, [String(slot)]: { chatId, narration } }));
+  /*
+   * Such a pane reads the session of the pane it copies, not one of its own: one stream and one transcript, drawn its
+   * own way, so the two stay in lockstep (and the chat has one socket, not two). Only this A/B shows one chat in two
+   * panes; normal use never does.
+   */
+  const mirrorOf = (slot: number): ChatSession | null => {
+    const id = slotChatId(slot);
+    if (!id || !paneNarration(slot)) return null;
+    if (mainChatId() === id) return session;
+    const other = shownSlots().find((candidate) => candidate !== slot && slotChatId(candidate) === id && !paneNarration(candidate));
+    return other !== undefined ? paneSlot(other).session : null;
+  };
   const openChatBeside = async (target: ChatSummary, project: Project, narration?: Narration) => {
     if (isMobileLayout()) return void openChat(target, project);
     if (!narration && target.id === mainChatId()) return;
@@ -3418,7 +3430,7 @@ function App() {
       const thread = paneThreads.get(slot);
       if (thread && id !== thread) { paneThreads.delete(slot); void api(`/v0/sessions/${encodeURIComponent(thread)}`, { method: "DELETE" }).catch(() => {}); }
     }));
-    createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects(), hiddenChats()] as const, ([id, loaded, projects, hidden]) => {
+    createEffect(on(() => [slotChatId(slot), catalogue.loaded(), catalogue.projects(), hiddenChats(), mirrorOf(slot)] as const, ([id, loaded, projects, hidden, mirror]) => {
       if (!id) {
         if (!untrack(() => slotPage(slot)) && untrack(side.selectedId)) side.close();
         return;
@@ -3436,6 +3448,8 @@ function App() {
         });
         return;
       }
+      // A copy of another pane reads that pane's session: its own lets the chat go.
+      if (mirror) { if (untrack(side.selectedId)) side.close(); return; }
       if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
     }));
     /*
@@ -4356,12 +4370,16 @@ function App() {
                 after that it switches in place, as pane A does -- the surface
                 stays (and keeps focus), its transcript withheld while a live
                 chat opens rather than showing an empty chat's welcome. */}
-            <Show when={side.chat.loadedId()} fallback={<PaneEmpty role="status">Loading chat…</PaneEmpty>}>
+            <Show when={mirrorOf(slot)} keyed fallback={<Show when={side.chat.loadedId()} fallback={<PaneEmpty role="status">Loading chat…</PaneEmpty>}>
             <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project}
               narration={paneNarration(slot)} onNarration={(value) => { const id = slotChatId(slot); if (id) setPaneNarration(slot, id, value); }} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
+            </Show>}>{(source) =>
+              <ChatSurface session={source} opening={source.chat.presentation().kind !== "ready"} project={catalogue.projects().find((project) => project.sessions.some((chat) => chat.id === slotChatId(slot)))}
+                narration={paneNarration(slot)} onNarration={(value) => { const id = slotChatId(slot); if (id) setPaneNarration(slot, id, value); }} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(source)} modelSelector
+                onShare={() => void shareChat(source.chat.loadedId())} tabActions={paneTabActions(slot)} />}
             </Show>
           </SheetFill>
         </Show>

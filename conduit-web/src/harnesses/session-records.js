@@ -1,4 +1,4 @@
-import { isLoggedEvent } from "../server/chat-log.js";
+import { isLoggedEvent, LOGGED_STATUS_PHASES } from "../server/chat-log.js";
 import { SessionScope } from "../server/session-scope.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 
@@ -28,6 +28,9 @@ export class SessionRecords {
     this.backend = backend;
     this.extras = extras;
     this.onPublish = onPublish;
+    // A turn starting, stopping or settling, for the server to say to every client (the runtime stream): a page that
+    // did not send it learns the chat is working, and joins its stream, from this alone.
+    this.onTurn = null;
     this.records = new Map();
     this.byChatId = new Map();
   }
@@ -202,6 +205,7 @@ export class SessionRecords {
     this.remember(record, stamped);
     this.onPublish?.(record, stamped);
     for (const socket of record.clients) this.delivery.send(socket, stamped);
+    if (event?.type === "status" && LOGGED_STATUS_PHASES.has(event.phase)) this.onTurn?.(record, stamped);
     // Timed here, where every harness's events pass (server/turn-timings.js);
     // a turn that has just ended is stated after its ending.
     const timed = this.logs?.timings?.observe(record, stamped);
