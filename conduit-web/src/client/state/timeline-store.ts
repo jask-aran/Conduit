@@ -64,6 +64,11 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         ? prior : row;
     }
     if (row.type === "pending") return prior;
+    if (row.type === "sent" && prior.type === "sent") {
+      const left = prior.value;
+      const right = row.value;
+      return left.done === right.done && left.isError === right.isError && left.input === right.input && left.completedAt === right.completedAt ? prior : row;
+    }
     return row;
   });
 }

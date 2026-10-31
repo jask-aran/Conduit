@@ -76,6 +76,9 @@ export function applyTranscriptOp(messages, event) {
         ...(incoming.origin === "harness" ? { origin: "harness" } : {}),
         // A subagent's report: the agent it is from, whose transcript it opens.
         ...(incoming.agent ? { agent: incoming.agent } : {}),
+        // Who sent it (a run, by name), and what Conduit added to it for the agent: drawn apart, both shown.
+        ...(incoming.sender ? { sender: incoming.sender } : {}),
+        ...(incoming.appended ? { appended: incoming.appended } : {}),
       },
     event.after ?? null);
   }

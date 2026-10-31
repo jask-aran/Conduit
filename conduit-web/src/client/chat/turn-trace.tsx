@@ -27,6 +27,7 @@ type RowProps = {
    steps under it a click below, like any other line of the trail. */
 const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   command: (count) => `Ran ${count} commands`,
+  message: (count) => `Sent ${count} notifications`,
   read: (count) => `Read ${count} files`,
   edit: (count) => `Made ${count} edits`,
   search: (count) => `Ran ${count} searches`,
@@ -146,6 +147,7 @@ function summaryOf(text: string): string {
    is; the browser only counts them. */
 const KIND_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"],
+  message: ["notification", "notifications"],
   read: ["read", "reads"],
   edit: ["edit", "edits"],
   search: ["search", "searches"],
@@ -172,7 +174,7 @@ function workOf(tools: ToolItem[]): string {
 
 /* What a running tool of each kind is doing. */
 const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
-  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools", agent: "Delegating",
+  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools", agent: "Delegating", message: "Notifying",
 };
 
 /* One verb for what it is doing, or how it ended -- always there, so a clean
@@ -188,7 +190,7 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
 type Mark = { orb: OrbState; frame?: ModeFrame };
 const KIND_ORBS: Record<ToolKind, Mark> = {
   command: { orb: "solving" }, read: { orb: "weaving" }, edit: { orb: "working", frame: ORBITS_TRAILED },
-  search: { orb: "searching" }, fetch: { orb: "searching" }, script: { orb: "solving" }, agent: { orb: "weaving" }, other: { orb: "solving" },
+  search: { orb: "searching" }, fetch: { orb: "searching" }, script: { orb: "solving" }, agent: { orb: "weaving" }, message: { orb: "weaving" }, other: { orb: "solving" },
 };
 
 function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string } {

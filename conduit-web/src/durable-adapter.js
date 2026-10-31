@@ -67,11 +67,12 @@ const STOPPED_NOTE = "The user stopped your previous response before it finished
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
   web_search: "search", source_check: "search", fetch_content: "fetch", get_search_content: "fetch",
-  codemode: "script", subagent: "agent",
+  codemode: "script", subagent: "agent", notify: "message",
 };
 const subjectOf = (name, args = {}) => toolSubject(
   name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
     : name === "codemode" ? null
+    : name === "notify" ? args.title
     : name.startsWith("mcp__") ? connectorSubject(name, args)
     : name === "bash" ? args.command
     : name === "web_search" ? args.queries || args.query
@@ -205,6 +206,23 @@ function assistantClose(message, messageId, generationId = null) {
 export const beatLine = (data = {}) => ["Heartbeat",
   data.handled ? `${data.handled} handled` : null,
   data.set ? `${data.set} check-back${data.set === 1 ? "" : "s"} set` : null].filter(Boolean).join(" · ");
+// A run's report, as the agent was given it: the report, what Conduit added to it for the agent (the decision it asks
+// for, stated apart since 0.8.9; split at its rule before), and who sent it.
+const APPENDED_RULE = "\n\n---\n";
+const reportMessage = (entry, child) => {
+  const data = entry.data || {};
+  const given = entry.model?.[0]?.content;
+  const text = typeof given === "string" ? given : textOf(given);
+  const cut = data.appended && text.endsWith(data.appended) ? text.length - data.appended.length
+    : text.lastIndexOf(`${APPENDED_RULE}That was your `);
+  const content = cut >= 0 ? text.slice(0, cut).replace(/\n*-{3}\n*$/, "").trimEnd() : text;
+  return { role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
+    content: content || `${data.subagentId} ${data.status}: ${data.title}`,
+    ...(cut >= 0 ? { appended: text.slice(cut).replace(/^\s*-{3}\s*/, "") } : {}),
+    ...(entry.model?.[0]?.timestamp ? { timestamp: new Date(entry.model[0].timestamp).toISOString() } : {}),
+    sender: { name: data.title || data.subagentId, ...(data.origin?.kind ? { routine: data.origin.kind } : {}), ...(data.status ? { status: data.status } : {}) } };
+};
+
 const beatOps = (entry) => {
   const data = entry.data || {};
   const id = data.messageId || `b${entry.conversationId}-${entry.id}`;
@@ -234,8 +252,8 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
       const data = entry.data || {};
       prompt = data.messageId || `u${entry.conversationId}-${entry.id}`;
       last = null;
-      ops.push(messageOpen({ id: prompt, role: "user", content: entry.kind === "conduit.subagent-report" ? `${data.subagentId} ${data.status}: ${data.title}` : data.text || textOf(entry.model?.[0]?.content),
-        ...(entry.kind === "conduit.subagent-report" ? { origin: "harness", agent: { id: data.subagentId, conversationId: data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null } } : {}),
+      ops.push(messageOpen({ id: prompt, role: "user", content: data.text || textOf(entry.model?.[0]?.content),
+        ...(entry.kind === "conduit.subagent-report" ? reportMessage(entry, data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null) : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "conduit.agent-beat") {
@@ -722,11 +740,10 @@ export class DurableAdapter extends EventEmitter {
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
-      // Reports have no browser prompt; open their short harness line at placement.
+      // Reports have no browser prompt; open them at placement, as the agent was given them.
       const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
       const child = data.conversationId ?? (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === data.subagentId)?.child ?? null;
-      this.publish(record, messageOpen({ id, role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
-        content: `${data.subagentId} ${data.status}: ${data.title}` }));
+      this.publish(record, messageOpen({ id, ...reportMessage(entry, child) }));
       return;
     }
     if (entry?.kind === USER_ENTRY) {

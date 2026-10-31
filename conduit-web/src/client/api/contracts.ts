@@ -279,7 +279,8 @@ export interface TurnTiming {
   tools: Array<{ name: string; kind: string; startedAt: string; endedAt: string | null; ms: number | null; failed?: boolean; cancelled?: boolean }>;
 }
 /** What a tool did, stated by the harness adapter from its own tool names. */
-export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "other";
+/** `message`: the agent sending the person something outside the thread (a notification), drawn as what it sent. */
+export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
 /** The subagent a spawn or a report is about: its background id (sa-3; none for a turn's own) and its conversation. */
 export interface AgentRef { id: string | null; conversationId: number | string | null }
 /** One of a chat's subagents (GET /v0/chats/:chatId/agents): chatId is its transcript, a chat of its own. */
@@ -362,6 +363,10 @@ export interface Message {
    * notice, not as the user's bubble.
    */
   origin?: "harness";
+  /** A run reporting back: who sent it (its title, the routine it ran for, how it ended). */
+  sender?: { name: string; routine?: string; status?: string };
+  /** What Conduit added to a prompt it delivered for the agent (the decision it asks for): shown apart, never hidden. */
+  appended?: string;
   attachments?: Attachment[];
   order?: number;
 }

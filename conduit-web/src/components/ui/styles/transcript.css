@@ -15,7 +15,7 @@
    what either is. Drawn row by row the row says so (TranscriptRow `flow`); composed of parts, the parts do: a reply
    under its message, a message after a reply, the next part of one reply. A part with no relation (the first) has none. */
 .ui-transcript > :not(.ui-transcript-row) + :not(.ui-transcript-row) { margin-top: var(--flow-turn); }
-.ui-transcript > .ui-message + :is(.ui-turn, .ui-harness-prompt), .ui-transcript-row[data-flow="exchange"] { margin-top: var(--flow-exchange); }
+.ui-transcript > .ui-message + :is(.ui-turn, .ui-harness-prompt, .ui-envelope), .ui-transcript-row[data-flow="exchange"] { margin-top: var(--flow-exchange); }
 .ui-transcript > .ui-turn + .ui-turn, .ui-transcript-row[data-flow="step"] { margin-top: var(--flow-step); }
 .ui-transcript-row[data-flow="turn"] { margin-top: var(--flow-turn); }
 .ui-transcript-row[data-flow="attached"] { margin-top: var(--flow-attached); }
@@ -28,6 +28,29 @@
 .ui-failure pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
 /* The harness's own prompt (a subagent's report): a muted Row line on the agent's side, at the left, the icon-sm
    before it. */
+/* Messages in and out (Envelope): a header of who and when, the text on a rule hung from the mark. */
+.ui-envelope { display: grid; gap: var(--flow-attached); min-width: 0; }
+.ui-envelope-head { display: flex; align-items: center; gap: var(--row-gap); min-width: 0; color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-envelope-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-envelope-head > b { flex: none; color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-envelope-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-envelope-head > time { flex: none; margin-left: auto; font-size: var(--text-caption); }
+.ui-envelope-open { display: inline-flex; flex: none; align-items: center; margin-left: auto; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-xs); color: inherit; font: inherit; cursor: pointer; }
+.ui-envelope-head > time + .ui-envelope-open { margin-left: 0; }
+.ui-envelope-open > svg { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-envelope-open:focus-visible { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-envelope-open:hover { background: var(--tint); color: var(--foreground); } }
+.ui-envelope-rule { display: grid; justify-items: start; gap: var(--flow-attached); margin-left: calc((var(--icon-sm) - var(--hairline)) / 2); border-left: var(--hairline) solid var(--border); padding-left: calc(var(--icon-sm) / 2 - var(--hairline) / 2 + var(--row-gap)); }
+.ui-envelope-text { justify-self: stretch; min-width: 0; }
+.ui-envelope[data-direction="in"] .ui-envelope-text { --foreground: var(--muted-foreground); color: var(--muted-foreground); }
+.ui-envelope-text[data-folded] { max-height: calc(var(--envelope-fold) * var(--text-body) * var(--leading-reading)); overflow: hidden; }
+.ui-envelope-text[data-folded]:not([data-fits]) { mask-image: linear-gradient(to bottom, #000 calc(100% - 2lh), transparent); }
+.ui-envelope-more { border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
+@media (hover: hover) { .ui-envelope-more:is(:hover, :focus-visible) { color: var(--foreground); } }
+.ui-envelope-more:focus-visible { outline: none; color: var(--foreground); }
+.ui-envelope-added { justify-self: stretch; display: grid; gap: var(--flow-line); margin-top: var(--flow-attached); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
+.ui-envelope-added > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-envelope-added > span { font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */

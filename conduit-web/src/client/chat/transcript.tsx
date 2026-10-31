@@ -4,7 +4,7 @@ import { unitPx } from "@/components/ui/layout";
 import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
-import type { BooleanCapability, Message } from "../api/contracts";
+import type { BooleanCapability, Message, ToolItem } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
@@ -48,7 +48,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
+import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -134,6 +134,30 @@ const focusComposerSoon = () => requestAnimationFrame(() => document.querySelect
 /** An approval as the thread draws it (GET /v0/agent `asks`). */
 export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; title: string; service: string | null; lines: ApprovalLine[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
+// How long a message in or out reads before it folds ("Show all"): a heartbeat's report is often a page.
+const ENVELOPE_FOLD = 8;
+const approvalMeta = (text: string) => {
+  const body = text.slice(APPROVAL_NOTE.length);
+  const ask = /\(ask ([^)]+)\)/.exec(body)?.[1];
+  return [body.startsWith("Allowed") ? "an approval allowed" : body.startsWith("Not allowed") ? "an approval declined" : "an approval", ask].filter(Boolean).join(" · ");
+};
+// A run's mark: its routine's (DESIGN Assistant, ClockRow), else an agent's.
+const senderIcon = (routine?: string) => routine === "heartbeat" ? <Icons.Heartbeat aria-hidden="true" />
+  : routine === "brief" || routine === "morning-brief" ? <Icons.Brief aria-hidden="true" />
+    : routine === "feed" ? <Icons.Feed aria-hidden="true" /> : <Icons.Agent aria-hidden="true" />;
+/** Text in a message in or out: the answer's Markdown, settled (it arrives whole). */
+function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
+  return <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{props.text}</ChatMarkdown></Suspense></Answer>;
+}
+/** What the turn sent the person (a `message` tool): a notification as it reached their devices. */
+function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
+  const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown };
+  const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent" : "to your devices";
+  return <Outbound icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta={[state(), input().urgent === true && "urgent"].filter(Boolean).join(" · ")}
+    time={clock(props.tool.completedAt || props.tool.timestamp)} dateTime={props.tool.completedAt || props.tool.timestamp} title={props.tool.timestamp ? fullDateTime(props.tool.timestamp) : undefined}>
+    <ChatText renderer={props.renderer} text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
+  </Outbound>;
+}
 /* Waits for how long, as the card's meta: "23 h", "40 min". */
 const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: ApprovalChoice) => Promise<void> }) {
@@ -1126,6 +1150,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 </MessageFoot>
               </Show></Turn></TranscriptRow>;
           }
+          if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} renderer={markdownRenderer()} /></TranscriptRow>;
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
@@ -1167,7 +1192,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{narrated() ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
+            const open = () => child() ? () => openAgentChat(child()!) : undefined;
+            // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
+              <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
+                <Inbound icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
+                  meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
+                  title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
+                  appended={message().appended}>
+                  <ChatText renderer={markdownRenderer()} text={message().content || ""} />
+                </Inbound>
+              </Show>
               <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
                 <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
               </Show></TranscriptRow>;
@@ -1203,13 +1238,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             </Turn>}>
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
                   bubble. Read as the text arrives: a row is built before its message has any. */}
-              <Show when={narrated() && (message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
+              <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 </>} />}>
-                <HarnessPrompt>{(message().content || "").slice(APPROVAL_NOTE.length).replace(/ \(ask [^)]+\)\..*$/, "")}</HarnessPrompt>
+                <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta={approvalMeta(message().content || "")} time={clock(message().timestamp)}
+                  dateTime={message().timestamp || undefined} title={message().timestamp ? fullDateTime(message().timestamp) : undefined}>
+                  <ChatText renderer={markdownRenderer()} text={(message().content || "").slice(APPROVAL_NOTE.length)} />
+                </Inbound>
               </Show>
             </Show>
           </TranscriptRow>;

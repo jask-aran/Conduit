@@ -108,7 +108,27 @@ export type TurnRow =
   // turn's foot, so this row has none.
   | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
-  | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string };
+  | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string }
+  // What the turn sent the person outside the thread (a `message` tool: a notification), as it was sent.
+  | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string };
+
+/** A message the turn sent the person is not work: it leaves the trace it was called in and stands as its own row,
+ *  after that trace (Narrated) or under the turn (Folded). A trace that held only that is not drawn, unless live. */
+function splitSent(rows: TurnRow[], show: boolean): TurnRow[] {
+  const sent: TurnRow[] = [];
+  const out = rows.flatMap((row): TurnRow[] => {
+    if (row.type !== "trace") return [row];
+    const messages = row.value.segments.flatMap((segment) => segment.kind === "tool" && segment.tool.kind === "message" ? [segment.tool] : []);
+    if (!messages.length) return [row];
+    const segments = row.value.segments.filter((segment) => !(segment.kind === "tool" && segment.tool.kind === "message"));
+    const own = messages.map((tool): TurnRow => ({ key: `sent:${tool.toolCallId}`, type: "sent", value: tool, precedingUserId: row.precedingUserId }));
+    const kept = segments.length || row.value.active ? [{ ...row, value: { ...row.value, segments } }] : [];
+    if (show) return [...kept, ...own];
+    sent.push(...own);
+    return kept;
+  });
+  return [...out, ...sent];
+}
 
 export type TurnOrbState = "live" | "settled" | "failed";
 /** Gives a turn's orb to one row: the last row while it runs, else its last answer (its last trace
@@ -119,7 +139,7 @@ function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
     : rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") >= 0
       ? rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") : rows.findLastIndex(own);
   const row = rows[index];
-  if (row && row.type !== "pending") rows[index] = { ...row, orb: state };
+  if (row && (row.type === "trace" || row.type === "message")) rows[index] = { ...row, orb: state };
   const first = rows.findIndex(own);
   const answered = state !== "live" && row?.type === "message" ? index : -1;
   return rows.map((item, at) => item.type === "trace" && at > first
@@ -543,7 +563,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     rows.push({ key: `pending:${owner ? owner.id : generation.id}`, type: "pending", value: null, precedingUserId: owner?.id,
       ...(owner?.timestamp ? { startedAt: owner.timestamp } : {}) });
   }
-  return placeTurnOrb(rows, running ? "live" : endedEarly ? "failed" : "settled");
+  return placeTurnOrb(splitSent(rows, show), running ? "live" : endedEarly ? "failed" : "settled");
 }
 
 /** Overlay one live turn onto an already projected persisted transcript. */
@@ -655,7 +675,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
       rows.push({ key: displayKey, displayKey, type: "message", value: answering.length === 1 ? answer : { ...answer, content: answerText },
         precedingUserId: owner?.id, traced: true });
     }
-    return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
+    return placeTurnOrb(splitSent(rows, show), endedEarly ? "failed" : "settled");
   }
   if (segments.length || (endedEarly && !answers)) trace(true);
   else if (outcome && outcome !== "complete") {
@@ -663,7 +683,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
     const last = rows[index];
     if (last?.type === "trace") rows[index] = { ...last, value: { ...last.value, status: outcome } };
   }
-  return placeTurnOrb(rows, endedEarly ? "failed" : "settled");
+  return placeTurnOrb(splitSent(rows, show), endedEarly ? "failed" : "settled");
 }
 
 export function projectPersistedTurns(

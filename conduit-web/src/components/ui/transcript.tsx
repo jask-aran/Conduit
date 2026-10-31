@@ -64,13 +64,55 @@ export function Failure(props: { time?: string; dateTime?: string; facts?: strin
     <Show when={props.facts?.length}><div class="ui-failure-facts"><For each={props.facts}>{(fact) => <span>{fact}</span>}</For></div></Show>
     <pre>{props.message}</pre></div>;
 }
-/** A prompt the harness sent on its own (a background task finishing): one muted line at the right, a bell before
- *  it (or its own icon: a heartbeat's quiet line), no bubble and no actions. */
+/** A prompt the harness sent on its own with nothing more to read (a background task finishing): one muted line, a bell
+ *  before it (or its own icon: a heartbeat's quiet line), no bubble and no actions. A message with a body is Inbound. */
 export const HarnessPrompt = (props: { onOpen?: () => void; icon?: JSX.Element; children: JSX.Element }) => <p class="ui-harness-prompt">
   <Show when={props.onOpen} fallback={<>{props.icon ?? <Icons.Notification aria-hidden="true" />}<span>{props.children}</span></>}>
     <button type="button" class="ui-harness-prompt-open" onClick={() => props.onOpen?.()}>{props.icon ?? <Icons.Agent aria-hidden="true" />}<span>{props.children}</span><Icons.ChevronRight aria-hidden="true" /></button>
   </Show>
 </p>;
+/**
+ * A message that crosses the thread's edge, drawn as it crossed (DESIGN Transcript, Messages in and out). Inbound: a
+ * prompt the person did not write -- a run reporting back, Conduit saying how an approval went -- exactly as the agent
+ * was given it. Outbound: what the agent sent the person outside the thread (a notification). Both at the left: a
+ * header of who and when (its mark, its name, what it was in `meta`, the time; Open at the right when it has a
+ * transcript), then the text on a hairline rule hung from the mark, folding past `fold` lines. What Conduit added to it
+ * for the agent (`appended`) sits apart under the text, labelled, quieter -- shown, never hidden.
+ */
+function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: string; meta?: string; time?: string; dateTime?: string; title?: string;
+  onOpen?: () => void; openLabel?: string; fold?: number; appended?: string; children?: JSX.Element }) {
+  let text!: HTMLDivElement;
+  const [open, setOpen] = createSignal(false);
+  // Held to its fold until opened; whether it runs past it is measured against the fold itself, again whenever the
+  // text grows (its Markdown arrives after the first paint) or the column changes width.
+  const [fits, setFits] = createSignal(true);
+  const folded = () => Boolean(props.fold) && !open();
+  const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
+  onMount(() => {
+    if (!props.fold) return;
+    const resized = new ResizeObserver(measure);
+    resized.observe(text);
+    if (text.firstElementChild) resized.observe(text.firstElementChild);
+    onCleanup(() => resized.disconnect());
+  });
+  return <section class="ui-envelope" data-direction={props.direction}>
+    <header class="ui-envelope-head">{props.icon}<b>{props.from}</b>
+      <Show when={props.meta}><span class="ui-envelope-meta">{props.meta}</span></Show>
+      <Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
+      <Show when={props.onOpen}><button type="button" class="ui-envelope-open" onClick={() => props.onOpen?.()}>{props.openLabel ?? "Open"}<Icons.ChevronRight aria-hidden="true" /></button></Show>
+    </header>
+    <div class="ui-envelope-rule">
+      <div ref={text} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
+      <Show when={props.fold && !fits()}><button type="button" class="ui-envelope-more" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Show less" : "Show all"}</button></Show>
+      <Show when={props.appended}><div class="ui-envelope-added"><span>Conduit added</span><p>{props.appended}</p></div></Show>
+    </div>
+  </section>;
+}
+/** A prompt the person did not write, as the agent was given it (Envelope): a run's report under its routine's mark and
+ *  name, `meta` its id and how it ended; Conduit on an approval. */
+export const Inbound = (props: Omit<Parameters<typeof Envelope>[0], "direction">) => <Envelope direction="in" {...props} />;
+/** What the agent sent the person outside the thread, as it was sent (Envelope): a notification's title and line. */
+export const Outbound = (props: Omit<Parameters<typeof Envelope>[0], "direction" | "appended">) => <Envelope direction="out" {...props} />;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
