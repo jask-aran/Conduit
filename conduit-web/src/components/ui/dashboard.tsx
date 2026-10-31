@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 
 
@@ -19,12 +19,16 @@ export function Dashboard(props: {
   /** A phone, or a pane too narrow for two columns. */
   compact?: boolean;
   oneColumn?: boolean;
+  /** The left column holds several groups at their own size, scrolling together, instead of one list filling it. */
+  stacked?: boolean;
   ref?: (element: HTMLElement) => void;
   /** A DashHeader. */
   head: JSX.Element;
   /** QuickActions, at the title's right. */
   actions?: JSX.Element;
   notice?: JSX.Element;
+  /** A conversation over the composer (DashConversation): its latest messages, the page's own thread. */
+  conversation?: JSX.Element;
   /** The composer in the left column, over the list; a phone docks it at the foot instead (dock). */
   composer?: JSX.Element;
   list?: JSX.Element;
@@ -32,17 +36,41 @@ export function Dashboard(props: {
   /** After the body: a phone's composer at the foot. */
   dock?: JSX.Element;
 }) {
-  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
       <header class="ui-dash-head">{props.head}{props.actions}</header>
       <Show when={props.notice}><div class="ui-dash-notice">{props.notice}</div></Show>
       <div class="ui-dash-main">
+        {props.conversation}
         <Show when={props.composer}><div class="ui-dash-composer">{props.composer}</div></Show>
         {props.list}
       </div>
       <div class="ui-dash-aside">{props.aside}</div>
     </div>
     {props.dock}
+  </section>;
+}
+
+/**
+ * DashConversation: a page's own thread in an inset over its composer, held at the newest while you are there; open:
+ * the whole thread, at its foot. children: its messages, scrolled here; or (scrolls) a transcript that scrolls itself.
+ */
+export function DashConversation(props: { label: string; open?: { label: string; onOpen: () => void }; scrolls?: boolean; children: JSX.Element }) {
+  let scroller!: HTMLDivElement;
+  let pinned = true;
+  onMount(() => {
+    if (props.scrolls) return;
+    const follow = () => { if (pinned) scroller.scrollTop = scroller.scrollHeight; };
+    const sizes = new ResizeObserver(follow);
+    const watch = () => { sizes.disconnect(); sizes.observe(scroller); for (const child of scroller.children) sizes.observe(child); follow(); };
+    const tree = new MutationObserver(watch);
+    tree.observe(scroller, { childList: true, subtree: true, characterData: true });
+    watch();
+    onCleanup(() => { sizes.disconnect(); tree.disconnect(); });
+  });
+  return <section class="ui-dash-conversation" aria-label={props.label}>
+    <div ref={scroller} class="ui-dash-conversation-scroll" data-scrolls={props.scrolls ? "" : undefined} role={props.scrolls ? undefined : "log"} onScroll={() => { pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 8; }}>{props.children}</div>
+    <Show when={props.open}>{(open) => <button type="button" class="ui-dash-conversation-open" onClick={() => open().onOpen()}>{open().label}<Icons.ChevronRight /></button>}</Show>
   </section>;
 }
 

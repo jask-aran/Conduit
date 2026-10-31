@@ -21,11 +21,12 @@
 .ui-failure-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-failure-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-failure pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
-/* The harness's own prompt: a muted Row line at the right, the bell an icon-sm before it. */
-.ui-harness-prompt { display: flex; justify-content: flex-end; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
+/* The harness's own prompt (a subagent's report): a muted Row line on the agent's side, at the left, the icon-sm
+   before it. */
+.ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */
-.ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-right: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
+.ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-harness-prompt-open > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-harness-prompt-open > svg:last-child { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-harness-prompt-open:focus-visible { outline: none; background: var(--tint); }
@@ -38,7 +39,24 @@
 @media (hover: hover) { .ui-changes:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-changes [data-change="added"] { color: var(--status-success); }
 .ui-changes [data-change="removed"] { color: var(--destructive); }
-.ui-turn { display: grid; min-width: 0; gap: var(--space-md); }
+/* A turn's orb hangs in the gutter left of the column (the trace's, or TurnOrb's). Where the column has no gutter to
+   hang it in (a phone), the turn steps in by what is missing: --turn-step, from the room either side of the column in
+   its container. */
+.ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
+  position: relative; display: grid; min-width: 0; gap: var(--space-md); padding-inline-start: var(--turn-step); }
+.ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
+.ui-turn-orb > * { width: 100%; height: 100%; }
+/* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
+   keeps the full column, a trace's orb sits in its own row beside its status (trace.css), and a turn whose orb is its
+   own (an answer that ends a turn) takes a smaller orb at its first line. */
+@media (--conduit-phone-layout) {
+  .ui-turn:not([data-density="desktop"] *) { --turn-step: 0px; }
+  .ui-turn:not([data-density="desktop"] *):has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
+  .ui-turn:not([data-density="desktop"] *) > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
+}
+[data-density="phone"] .ui-turn { --turn-step: 0px; }
+[data-density="phone"] .ui-turn:has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
+[data-density="phone"] .ui-turn > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
 .ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--space-xs); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }

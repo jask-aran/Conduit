@@ -18,6 +18,7 @@ import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
+import { createPushControl } from "../platform/push.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
@@ -63,6 +64,9 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   onOpenTerminal: (node: { id: string; local?: boolean }) => void;
   onOpenWorkspace: (project: Project) => void }) {
   const health = createServerHealth();
+  // Notifications on this device from the hub it is using (Web Push; UnifiedPush on Android).
+  const notifications = createPushControl();
+  onMount(() => void notifications.refresh());
   const [inspected, setInspected] = createSignal(activeOrigin() || "");
   const entry = () => servers().find((item) => item.origin === inspected()) ?? null;
   const active = () => inspected() === activeOrigin();
@@ -181,6 +185,14 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
               <Switch id="device-share-shell" label="New folders run commands" disabled={companion!.busy()} checked={grants().shell} onChange={(on) => void companion!.grant({ ...grants(), shell: on })} />
             </SettingLine>
           </Show>
+          <Show when={notifications.way}>
+            <SettingLine label="Notifications" title={notifications.way === "android"
+              ? "The agent's reports and approvals reach this phone, even with the app closed."
+              : "The agent's reports and approvals reach this browser, even with the page closed."}>
+              <Switch id="device-notifications" label="Notifications" disabled={notifications.busy()} checked={notifications.on()}
+                onChange={(on) => void (on ? notifications.enable(device.name) : notifications.disable())} />
+            </SettingLine>
+          </Show>
         </SettingColumn>
         <SettingColumn title="Workspaces">
           <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<SettingNote>None mounted</SettingNote>}>
@@ -190,6 +202,11 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       </SettingColumns>
       {/* What can be done here, under both: a terminal on each client that has one, mounting a folder of this app's. */}
       <SettingActions>
+        <Show when={notifications.on()}>
+          <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.test()}><Icons.Notification /> Send a test</Button>
+        </Show>
+        <For each={notifications.problem()?.distributors ?? []}>{(distributor) =>
+          <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.choose(distributor.id, device.name)}>Use {distributor.label}</Button>}</For>
         <For each={nodes().filter((node) => node.online && (node.local || node.terminal))}>{(node) =>
           <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(node)}><Icons.Terminal /> {nodes().length > 1 ? `Terminal on ${node.name}` : "Terminal"}</Button>}</For>
         <Show when={companion}>
@@ -232,6 +249,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       <SettingTitle label="This device's name" value={device().name} editable={device().paired} onChange={(name) => rename(device(), name)} />
       {here(device())}
       <Show when={companion?.error()}><SettingNote tone="error">{companion!.error()}</SettingNote></Show>
+      <Show when={notifications.problem()}>{(problem) => <SettingNote tone={problem().distributors ? "quiet" : "error"}>{problem().text}</SettingNote>}</Show>
     </SettingGroup>}</Show>
 
     <SettingGroup title="Server">

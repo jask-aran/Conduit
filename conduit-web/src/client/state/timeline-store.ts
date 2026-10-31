@@ -6,6 +6,7 @@ import type {
   ActiveGenerationView,
   LiveGenerationChange,
   LiveProjectionIndex,
+  Narration,
   PersistedTurnProjection,
   TraceSegment,
   TurnRow,
@@ -44,6 +45,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         && prior.streamVersion === row.streamVersion
         && prior.displayKey === row.displayKey
         && prior.precedingUserId === row.precedingUserId
+        && prior.orb === row.orb
         ? prior : row;
     }
     if (row.type === "trace" && prior.type === "trace") {
@@ -51,6 +53,8 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
       const right = row.value;
       return left.active === right.active
         && prior.answerless === row.answerless
+        && prior.orb === row.orb
+        && prior.continues === row.continues
         && prior.timestamp === row.timestamp
         && left.status === right.status
         && left.startedAt === right.startedAt
@@ -85,6 +89,9 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
+  /** What the chat does with text said between tool calls (turn-rows.ts `TurnLayout`): chats fold it, the persistent
+   *  agent's threads show it. */
+  narration: Accessor<Narration> = () => "fold",
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
   /*
@@ -202,9 +209,13 @@ export function createTimelineStore(
     return location.rowKey;
   };
 
+  let laidOutNarration: Narration = "fold";
   createEffect(() => {
     const inputMessages = messages();
     const inputTools = tools();
+    const layout = { narration: narration() };
+    // A chat changing layout is laid out again whole.
+    if (layout.narration !== laidOutNarration) { laidOutNarration = layout.narration; persistedTurns = []; persistedMessages = null; }
     const inputGeneration = activeGeneration();
     const change = activeGenerationChange();
     const canNarrow = Boolean(inputGeneration && change && change.generationId === inputGeneration.id
@@ -225,7 +236,7 @@ export function createTimelineStore(
       || settledPrefixChanged(persistedMessages, inputMessages)
     );
     if (mustRefreshPersisted) {
-      const projection = projectPersistedTurns(inputMessages, inputTools, persistedTurns);
+      const projection = projectPersistedTurns(inputMessages, inputTools, persistedTurns, layout);
       persistedRows = projection.rows;
       persistedTurns = projection.turns;
       persistedMessages = inputMessages;
@@ -234,14 +245,14 @@ export function createTimelineStore(
     // A turn that ended without saying how is stated by the server, so every
     // finished turn arrives here with its outcome.
     const projected = stableProjection(previousProjectedRows, inputGeneration
-      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools)
+      ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools, layout)
       : persistedRows);
     setRows(reconcile(owned(projected), { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;
     previousTools = inputTools;
     rowIndexes = new Map(projected.map((row, index) => [row.key, index]));
-    liveIndex = inputGeneration ? buildLiveProjectionIndex(inputGeneration, inputMessages) : null;
+    liveIndex = inputGeneration ? buildLiveProjectionIndex(inputGeneration, inputMessages, layout) : null;
   });
   return rows;
 }

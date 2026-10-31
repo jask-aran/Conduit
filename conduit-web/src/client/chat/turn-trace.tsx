@@ -1,11 +1,11 @@
 import { Icons } from "@/components/ui";
-import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspense, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, Suspense, Switch } from "solid-js";
 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { elapsed, KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
-import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
+import { elapsed, KIND_ICONS, stepDuration, toolName, ToolStep, VERBS } from "./tool-card";
+import { Orb, ServiceIcon, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
@@ -204,7 +204,7 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
   const kind = tool.kind || "other";
-  return { verb: kind === "other" ? `Using ${tool.name || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
+  return { verb: kind === "other" ? `Using ${toolName(tool.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
 }
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
@@ -233,16 +233,37 @@ function stepLine(tool: ToolItem, live: boolean): string {
     const kind = call.kind || "other";
     const verb = VERBS[kind][call.done === false ? 0 : 1];
     const line = toolLine({ toolCallId: "", kind, subject: call.subject });
-    return kind === "other" ? [verb, call.name, line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
+    return kind === "other" ? [verb, toolName(call.name), line].filter(Boolean).join(" ") : `${verb} ${line || call.name}`.trim();
   }
   const subject = toolLine(tool);
   if (live && !tool.done) return subject;
   const kind = tool.kind || "other";
   const verb = VERBS[kind][1];
-  if (kind === "other") return [verb, tool.name, subject].filter(Boolean).join(" ");
+  if (kind === "other") return [verb, toolName(tool.name), subject].filter(Boolean).join(" ");
   return `${verb} ${subject || tool.name || ""}`.trim();
 }
-function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
+/* Narrated, a settled piece of work is one line saying what it did -- the text either side says why -- so a script is
+   what it called ("Listed conduit-web/src/client/state, Searched “createTimelineStore”"), not "Scripted tools". */
+function scriptLine(tool: ToolItem): string {
+  const calls = (tool.calls || []).filter((call) => !call.planned && !call.earlier);
+  const lines = calls.map((call) => {
+    const kind = call.kind || "other";
+    const line = toolLine({ toolCallId: "", kind, subject: call.subject });
+    return kind === "other" ? [VERBS.other[1], toolName(call.name), line].filter(Boolean).join(" ") : `${VERBS[kind][1]} ${line || call.name}`.trim();
+  });
+  return [...new Set(lines)].join(", ") || "Ran a script";
+}
+function doneLine(trace: TurnTraceData): string {
+  const lines: string[] = [];
+  for (const segment of trace.segments) {
+    if (segment.kind !== "tool" || unnamed(segment.tool) || spawned(segment.tool)) continue;
+    const line = segment.tool.kind === "script" ? scriptLine(segment.tool) : stepLine(segment.tool, false);
+    if (line && !lines.includes(line)) lines.push(line);
+  }
+  return lines.join(", ");
+}
+const plainText = (text: string) => text.replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
+function previewOf(trace: TurnTraceData, writing: boolean, narrated = false): { status: ReturnType<typeof statusOf>; work: string; detail: Detail | null } {
   let latest: Detail | null = null;
   let thought: Detail | null = null;
   const tools: ToolItem[] = [];
@@ -254,7 +275,10 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
     let detail: Detail | null = null;
     if (segment.kind === "tool") {
       // A spawn says itself in its pinned row, under this line.
-      const line = unnamed(segment.tool) || spawned(segment.tool) ? "" : stepLine(segment.tool, trace.active);
+      const tool = segment.tool;
+      const line = unnamed(tool) || spawned(tool) ? ""
+        : narrated && tool.kind === "script" ? tool.done ? scriptLine(tool) : stepLine(tool, trace.active) || "Writing a script"
+        : stepLine(tool, trace.active);
       if (line) latest ??= { text: line, markdown: false };
       continue;
     }
@@ -330,11 +354,74 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
     }}</Match>
   </Switch>;
 }
+/* What a settled piece of the persistent agent's work looked at, for its "Looked at" line: a file by its name, a
+   search by its query, a page by its site, its own tools by what they are about. A script's calls count as its own. */
+const OWN_SOURCES: Record<string, string> = { memory: "its memory", chats: "your chats", schedule: "its schedules", watch: "its watches" };
+/** What one step looked at: a file by its name, a search by its query, a page by its site, its own tools by what they
+ *  are about, a connector's call by each service it reached (the hub names them); none for a connector's own tools. */
+function sourcesOfTool(tool: ToolItem): string[] {
+  const subject = tool.subject || "";
+  if (OWN_SOURCES[tool.name || ""]) return [OWN_SOURCES[tool.name || ""]!];
+  if (/^mcp__/.test(tool.name || "")) return subject ? subject.split(", ") : [];
+  if (tool.kind === "search") return [`\u201c${subject}\u201d`];
+  if (tool.kind === "fetch") { try { return [new URL(subject).hostname.replace(/^www\./, "")]; } catch { return subject ? [subject] : []; } }
+  if (tool.kind === "read" || tool.kind === "edit") return [subject.split("/").filter(Boolean).at(-1) || subject];
+  const name = subject || toolName(tool.name) || "";
+  return name ? [name] : [];
+}
+/** A settled piece of work by what it looked at: one line a source, with the steps that reached it; a script's calls
+ *  count as its own. A piece that only used a connector's own tools is that connector. */
+type SourceLine = { source: string; kind: ToolKind; service?: boolean; steps: ToolItem[] };
+function sourceLines(segments: TraceSegment[]): SourceLine[] {
+  const lines = new Map<string, SourceLine>();
+  let connector = "";
+  for (const segment of segments) {
+    if (segment.kind !== "tool" || spawned(segment.tool)) continue;
+    const step = segment.tool;
+    const calls = step.kind === "script" ? (step.calls || []).filter((call) => !call.planned && !call.earlier)
+      .map((call) => ({ toolCallId: "", name: call.name, kind: call.kind, subject: call.subject }) as ToolItem) : [step];
+    for (const tool of calls) {
+      if (/^mcp__/.test(tool.name || "")) connector ||= (toolName(tool.name) || "").split(" ")[0]!;
+      for (const source of sourcesOfTool(tool)) {
+        const service = /^mcp__/.test(tool.name || "");
+        const line = lines.get(source) ?? { source, kind: service ? "fetch" : tool.kind || "other", service, steps: [] };
+        // A step's sources come together: the last one pushed is the only one it could repeat.
+        if (line.steps.at(-1) !== step) line.steps.push(step);
+        lines.set(source, line);
+      }
+    }
+  }
+  if (!lines.size && connector) {
+    const steps = segments.flatMap((segment) => segment.kind === "tool" ? [segment.tool] : []);
+    lines.set(connector, { source: connector, kind: "fetch", steps });
+  }
+  return [...lines.values()];
+}
+const sourcesText = (lines: SourceLine[]) => {
+  const all = lines.map((line) => line.source);
+  return all.length > 4 ? `${all.slice(0, 4).join(", ")} +${all.length - 4}` : all.join(", ");
+};
+/* A settled piece's line for one source: what it looked at, opening to the steps that reached it. */
+function SourceStep(props: RowProps & { line: SourceLine }) {
+  const fold = useFold(() => `source:${props.line.source}:${props.line.steps[0]?.toolCallId || ""}`, props);
+  const kindIcon = <Dynamic component={KIND_ICONS[props.line.kind] || KIND_ICONS.other} />;
+  return <Step icon={props.line.service ? <ServiceIcon service={props.line.source} fallback={kindIcon} /> : kindIcon} verb={props.line.source} opens open={fold.open()} onToggle={fold.toggle}>
+    <Trail nested="group"><Index each={props.line.steps}>{(tool) => { const inner = useFold(() => tool().toolCallId, props);
+      return <ToolStep tool={tool()} settled={props.settled} open={inner.open()} onToggle={inner.toggle} />; }}</Index></Trail>
+  </Step>;
+}
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
 /** agents: the chat's (its background ones' state); onStopAgent: stops a background one. */
-export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
-  const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
+/** gathering: a piece of the persistent agent's work between the things it says (turn-rows.ts TurnLayout). Live it is
+ *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
+ *  repeated; a settled piece with no work draws nothing. */
+export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
+  /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
+  orb?: boolean;
+  /** A Narrated turn's work between texts: settled, one line of what it did (or what it thought, with no tools). */
+  narrated?: boolean }) {
+  const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing), Boolean(props.narrated)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
@@ -347,13 +434,29 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
-  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
+  const looked = () => props.gathering && !props.trace.active && !unfinished();
+  const oneLine = () => Boolean(props.narrated) && !props.trace.active && !unfinished();
+  const did = createMemo(() => oneLine() ? doneLine(props.trace) : "");
+  const thoughtOnly = () => oneLine() && !did() && !props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error");
+  const lines = createMemo(() => looked() ? sourceLines(props.trace.segments) : []);
+  const sources = () => sourcesText(lines());
+  return <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : thoughtOnly() ? "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
+      work={oneLine() ? did() || (thoughtOnly() ? plainText(preview().detail?.text ?? "") : preview().work) || undefined : preview().work || undefined}
+      latest={looked() || oneLine() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
-      {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
+      {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+      : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
-    </Trace>;
+    </Trace></Show>;
+}
+
+/** A narrated turn's orb by its answer (TurnLayout `show`): writing while it streams, the settled
+ *  sphere once done, sputtering when the turn did not finish. */
+export function AnswerOrb(props: { state: "live" | "settled" | "failed" }) {
+  return <Orb state={props.state === "live" ? "composing" : "working"} frame={props.state === "live" ? undefined : props.state === "failed" ? SPUTTERING_SPHERE : PLAIN_SPHERE}
+    tint={props.state === "failed" ? "var(--destructive)" : undefined} rate={props.state === "live" ? undefined : settledOrbRate(props.state === "failed")} />;
 }
 
 /* A turn before anything of it has shown: the header it will become, its orb

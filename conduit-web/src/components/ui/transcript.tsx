@@ -54,6 +54,7 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
  */
 /** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. copied: it
  *  was just copied, and takes the copied wash. A Markdown renderer marks what it draws into it with ANSWER_MARKDOWN. */
+/** What a turn says: its answer, and under Narrated what it says on the way there, drawn alike (DESIGN.md, Turns). */
 export const Answer = (props: { html?: string; copied?: boolean; children?: JSX.Element }) =>
   <Show when={props.html !== undefined} fallback={<div class="ui-answer" data-copied={props.copied ? "" : undefined}>{props.children}</div>}><div class="ui-answer" data-copied={props.copied ? "" : undefined} innerHTML={props.html} /></Show>;
 /** A request that failed: Request failed and when, its facts (model, provider, profile), then what the provider
@@ -64,10 +65,10 @@ export function Failure(props: { time?: string; dateTime?: string; facts?: strin
     <pre>{props.message}</pre></div>;
 }
 /** A prompt the harness sent on its own (a background task finishing): one muted line at the right, a bell before
- *  it, no bubble and no actions. */
-export const HarnessPrompt = (props: { onOpen?: () => void; children: JSX.Element }) => <p class="ui-harness-prompt">
-  <Show when={props.onOpen} fallback={<><Icons.Notification aria-hidden="true" /><span>{props.children}</span></>}>
-    <button type="button" class="ui-harness-prompt-open" onClick={() => props.onOpen?.()}><Icons.Agent aria-hidden="true" /><span>{props.children}</span><Icons.ChevronRight aria-hidden="true" /></button>
+ *  it (or its own icon: a heartbeat's quiet line), no bubble and no actions. */
+export const HarnessPrompt = (props: { onOpen?: () => void; icon?: JSX.Element; children: JSX.Element }) => <p class="ui-harness-prompt">
+  <Show when={props.onOpen} fallback={<>{props.icon ?? <Icons.Notification aria-hidden="true" />}<span>{props.children}</span></>}>
+    <button type="button" class="ui-harness-prompt-open" onClick={() => props.onOpen?.()}>{props.icon ?? <Icons.Agent aria-hidden="true" />}<span>{props.children}</span><Icons.ChevronRight aria-hidden="true" /></button>
   </Show>
 </p>;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
@@ -104,7 +105,10 @@ export const StopLine = (props: { detail: string }) =>
 /** An empty chat's greeting: centred in what holds it, above the room its host keeps for the composer (--welcome-room). */
 export const Welcome = (props: { title: string }) => <div class="ui-welcome"><h1>{props.title}</h1></div>;
 
-export const Turn = (props: { children: JSX.Element }) => <article class="ui-turn">{props.children}</article>;
+/** A turn of the agent's: its trace and answer. orb: one hung in the gutter at its left (TurnOrb's place), for a thread
+ *  whose turn speaks more than once and keeps its one orb by the row that matters. */
+export const Turn = (props: { orb?: JSX.Element; children: JSX.Element }) =>
+  <article class="ui-turn"><Show when={props.orb}><span class="ui-turn-orb" aria-hidden="true">{props.orb}</span></Show>{props.children}</article>;
 /**
  * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,
  * references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and

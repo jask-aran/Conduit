@@ -1,5 +1,11 @@
 import {
   ActivityIcon,
+  AlarmClockIcon,
+  HeartPulseIcon,
+  InboxIcon,
+  MoonIcon,
+  RssIcon,
+  SunriseIcon,
   BotIcon,
   CornerDownRightIcon,
   ListEndIcon,
@@ -91,6 +97,18 @@ import {
    here; one a single file uses may stay its own import. Named exports, so a bundle takes only the glyphs it uses. */
 /** Runtime activity and status. */
 export const Runtime = ActivityIcon;
+/** An agent's heartbeat: its tick, and the quiet line a beat leaves. */
+export const Heartbeat = HeartPulseIcon;
+/** A morning brief. */
+export const Brief = SunriseIcon;
+/** A feed: what an agent reads from on a clock. */
+export const Feed = RssIcon;
+/** A check-back or other timed task. */
+export const Clock = AlarmClockIcon;
+/** An agent's inbox: what its runs reported. */
+export const Inbox = InboxIcon;
+/** Quiet hours. */
+export const Quiet = MoonIcon;
 /** Add an item or open creation options. */
 export const Add = PlusIcon;
 /** Download, move downward or reach recent content. */

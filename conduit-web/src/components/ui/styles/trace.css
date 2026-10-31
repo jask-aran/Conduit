@@ -1,22 +1,42 @@
-/* The trace header: the orb, Status · time · work, a chevron when there is a trail; the latest line under it. */
-.ui-trace { display: grid; width: 100%; grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
+/* The trace header: Status · time · work, a chevron when there is a trail, the latest line under it, in the column
+   with the answer; its orb hangs in the gutter at the column's left (a .ui-turn steps in where there is none). */
+.ui-trace { position: relative; display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
 .ui-trace:not(:disabled) { cursor: pointer; }
-.ui-trace-orb { display: grid; width: var(--icon-xl); height: var(--icon-xl); grid-area: 1 / 1 / 3; align-self: center; }
+.ui-trace-orb { position: absolute; top: 50%; right: calc(100% + var(--row-gap)); display: grid; width: var(--icon-xl); height: var(--icon-xl); translate: 0 -50%; }
+.ui-trace-orb:empty { display: none; }
 .ui-trace-orb > * { width: 100%; height: 100%; }
-.ui-trace-line { min-width: 0; grid-area: 1 / 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-trace-line { min-width: 0; grid-area: 1 / 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-trace-line > :is(b, .ui-trace-status) { color: var(--foreground); font-weight: var(--weight-strong); }
 /* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
 .ui-trace-preview { display: contents; }
 .ui-trace-time { font-variant-numeric: tabular-nums; }
-.ui-trace > .ui-disclosure-chevron { grid-area: 1 / 3; }
+.ui-trace > .ui-disclosure-chevron { grid-area: 1 / 2; opacity: 0; transition: opacity var(--duration-quick) var(--ease-arrive); }
+/* The chevron shows where it is wanted: under the pointer, in focus, or open. */
+.ui-trace:is(:focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
+@media (hover: hover) { .ui-trace:not(:disabled):hover > .ui-disclosure-chevron { opacity: 1; } }
+/* A piece of work between what a turn says (quiet): its status at the line's own weight and colour. */
+.ui-trace[data-quiet] .ui-trace-line > b { color: inherit; font-weight: inherit; }
 
-.ui-trace-latest { min-width: 0; grid-area: 2 / 2 / 3 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-trace-latest { min-width: 0; grid-area: 2 / 1 / 3 / 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* No gutter (a phone, transcript.css): the orb is the header's first column, beside its status and latest line. */
+@media (--conduit-phone-layout) {
+  .ui-trace[data-orb]:not([data-density="desktop"] *) { grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) > .ui-trace-orb { position: static; grid-area: 1 / 1 / 3 / 2; translate: none; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) .ui-trace-line { grid-area: 1 / 2; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) > .ui-disclosure-chevron { grid-area: 1 / 3; }
+  .ui-trace[data-orb]:not([data-density="desktop"] *) .ui-trace-latest { grid-area: 2 / 2 / 3 / 4; }
+}
+[data-density="phone"] .ui-trace[data-orb] { grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto; }
+[data-density="phone"] .ui-trace[data-orb] > .ui-trace-orb { position: static; grid-area: 1 / 1 / 3 / 2; translate: none; }
+[data-density="phone"] .ui-trace[data-orb] .ui-trace-line { grid-area: 1 / 2; }
+[data-density="phone"] .ui-trace[data-orb] > .ui-disclosure-chevron { grid-area: 1 / 3; }
+[data-density="phone"] .ui-trace[data-orb] .ui-trace-latest { grid-area: 2 / 2 / 3 / 4; }
 
 /* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. A step's
    row washes on the cursor and opens in place (a Disclosure: its body unfolds gentle, folds quick); what it opens
    to sits under its verb. */
 .ui-trace-fold { gap: var(--space-2xs); }
-.ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0 0 0 calc(var(--icon-xl) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
+.ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
 .ui-step-item { gap: 0; }
 .ui-step { display: flex; width: calc(100% + var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
 button.ui-step { cursor: pointer; }

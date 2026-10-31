@@ -2,6 +2,7 @@
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
+import type { Narration } from "./turn-rows";
 import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
@@ -18,7 +19,8 @@ import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts"
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
-import { liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { startPush } from "./platform/push.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";
@@ -109,6 +111,7 @@ import { harnessLabelFor } from "./harness-brand";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
+import { agentView, refreshAgent } from "./state/agent";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
@@ -173,7 +176,7 @@ export type UpdateState =
   | { kind: "current" }
   | { kind: "updated" }
   | { kind: "ready" }
-  | { kind: "working"; label: string };
+  | { kind: "working"; label: string; onCancel?: () => void };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
@@ -181,6 +184,7 @@ const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
+const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
 const ProjectDashboard = lazy(() => import("./project/dashboard"));
 const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
@@ -744,15 +748,19 @@ function App() {
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
-  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer">(
-    initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
+  // jbot's page; /agent was its first path and still lands there.
+  const initialAgentRoute = location.pathname === "/jbot" || location.pathname === "/agent";
+  const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer" | "agent">(
+    initialAgentRoute ? "agent" : initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
   const [computerHarness, setComputerHarness] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/harness\/([^/]+)/)?.[1] || ""));
   // A client environment's page (Work, under its machine), in place of the hub's: its node id.
   const [computerEnvironment, setComputerEnvironment] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/environment\/([^/]+)/)?.[1] || ""));
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
+  // jbot's page works in its folder: the dock's tools and the panes beside it are its workspace's.
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
+    : routeKind() === "agent" ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
     : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
@@ -814,7 +822,7 @@ function App() {
       // Only a transcript renders in passes. A dashboard or project page is
       // laid out in one, and three still frames on a phone still busy with
       // the rest of the open were close to half a second of nothing.
-      const settled = () => ["dashboard", "project"].includes(routeKind()) && shownSlots().length <= 1
+      const settled = () => ["dashboard", "project", "agent"].includes(routeKind()) && shownSlots().length <= 1
         ? new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
         : waitForStill();
       if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(settled).then(arrive);
@@ -909,31 +917,59 @@ function App() {
     // waits for Wi-Fi, which can be hours, and a spinner that long is a lie.
     if (quiet) quietCheck = true;
     else setPwaUpdating(true);
+    // A step that never answers would leave the spinner up for good: each gets half a minute (a download, half a
+    // minute without progress), then the check gives up and says where it stopped.
+    let step = "updating the interface";
+    let timer = 0;
+    let stalled = (): Promise<never> => new Promise(() => {});
+    const touch = () => { if (quiet) return; clearTimeout(timer); timer = window.setTimeout(giveUp, 30_000); };
+    let giveUp = () => {};
+    let cancelled = false;
+    if (!quiet) stalled = () => new Promise<never>((_, reject) => { giveUp = () => reject(new Error(`The update check stopped while ${step}.`)); touch(); });
+    const bounded = <T,>(work: Promise<T>) => Promise.race([work, stalled()]);
     try {
       // A development Android client takes the connected server's interface:
       // a few MB from a server it is already talking to, then a reload.
+      // Each step says what it is doing, and a download can be stopped: one over a slow route sat on "Updating" with
+      // no way out.
+      const cancel = () => { cancelled = true; void cancelUpdateDownload(); giveUp(); };
+      const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
       if (!quiet) {
-        const live = liveUpdateNow();
+        setUpdateState({ kind: "working", label: "Checking for a new interface…", onCancel: cancel });
+        const live = liveUpdateNow((progress) => {
+          touch();
+          if (progress.phase === "checking") return;
+          step = "downloading the new interface";
+          const share = progress.total ? ` ${Math.round((progress.downloaded / progress.total) * 100)}% of ${megabytes(progress.total)}` : ` ${megabytes(progress.downloaded)}`;
+          setUpdateState({ kind: "working", label: `Downloading the new interface…${share}`, onCancel: cancel });
+        });
         if (live) {
-          setUpdateState({ kind: "working", label: "Updating Conduit…" });
-          const outcome = await live;
-          if (outcome === "current") sayUpToDate();
-          else if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); }
-          return;
+          const outcome = await bounded(live);
+          if (outcome === "cancelled") { setUpdateState({ kind: "idle" }); return; }
+          if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); return; }
+          // Applied: the page reloads from the new interface, which ends this check. One that does not reload is stuck.
+          if (outcome === "applying") { step = "reloading the new interface"; setUpdateState({ kind: "working", label: "Opening the new interface…" }); await bounded(new Promise(() => {})); }
+          // The interface is current; a native change comes as a new APK, which this server may also have published.
+          setUpdateState({ kind: "checking" });
         }
       }
       // The answer is in the sidebar row; a newer version downloads there with
       // its progress, and the row offers it once it is ready.
-      const result = await shell.prepareUpdate((progress) => {
+      step = "looking for a newer app";
+      if (!quiet) setUpdateState({ kind: "working", label: "Looking for a newer app…", onCancel: cancel });
+      const result = await bounded(shell.prepareUpdate((progress) => {
         if (quiet) return;
+        step = `downloading ${progress.version}`;
+        touch();
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%` });
-      }, quiet);
+        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%`, onCancel: cancel });
+      }, quiet));
       if (result.kind === "ready") setUpdateState({ kind: "ready" });
       else if (!quiet) sayUpToDate();
     } catch (error) {
-      if (!quiet) { setUpdateState({ kind: "idle" }); showError(error); }
+      if (!quiet) { setUpdateState({ kind: "idle" }); if (!cancelled) showError(error); }
     } finally {
+      clearTimeout(timer);
       if (quiet) quietCheck = false;
     }
   };
@@ -986,6 +1022,8 @@ function App() {
     if (runtime.connectivity() !== "online") return;
     if (hasConnected) void checkForPwaUpdate().catch(() => {});
     hasConnected = true;
+    // Asked while the app was still connecting, it failed and the sidebar lost jbot's row until the next poll.
+    void refreshAgent();
   });
   // The composer takes the server as there until a connection has failed.
   // The first open is shown before the stream's first frame, and saying
@@ -1037,6 +1075,27 @@ function App() {
    * Conduit runtime, whose tools reach the device, and what the device runs itself). Conduit's own profiles name no
    * harness of their own.
    */
+  // jbot's threads keep the one profile it is made with: no profile to choose.
+  // A jbot thread's approvals: the agent's asks for it, answered here (POST /v0/agent/asks/:id).
+  const approvalsFor = (chatId: string | null) => chatId && agentThread(chatId) ? {
+    asks: () => (agentView()?.asks ?? []).filter((ask) => ask.chatId === chatId),
+    answer: async (id: string, choice: "allow" | "always" | "deny") => {
+      try { await api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }); }
+      catch (error) { showError(error); }
+      await refreshAgent();
+    },
+    refresh: () => void refreshAgent(),
+  } : undefined;
+  /** A chat's transcript mode (DESIGN.md, Transcript › Turns): what it was set to, else Narrated. */
+  const narrationOf = (id: string | null | undefined): Narration => {
+    const set = id ? catalogue.projects().flatMap((project) => project.sessions).find((chat) => chat.id === id)?.narration : null;
+    return set || "show";
+  };
+  const setNarration = (id: string, narration: Narration) => {
+    catalogue.patchChat(id, { narration });
+    void api(`/v0/chats/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ narration }) }).catch(showError);
+  };
+  const agentThread = (id: string | null | undefined) => { const view = agentView(); return Boolean(id && (view?.home?.chatId === id || view?.sides?.some((side) => side.chatId === id))); };
   const profilesAt = (project?: Project | null) => {
     const allowed = project?.capabilities && !project.capabilities.device.local ? project.capabilities.harnesses : null;
     return allowed ? profiles().filter((profile) => allowed.includes(profile.implementation || "conduit-runtime")) : profiles();
@@ -1398,7 +1457,7 @@ function App() {
     if (!project) return null;
     const requestEpoch = ++newChatRequestEpoch;
     const replacedDraftId = currentDraftId();
-    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer";
+    const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer" || routeKind() === "agent";
     const profileId = launch.templateId || projectProfile(project);
     discardDraftImmediately(replacedDraftId);
     chat.reset(profileId);
@@ -1510,6 +1569,18 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/");
     else if (historyMode === "replace") history.replaceState({}, "", "/");
+  };
+
+  const openAgent = async (historyMode: "push" | "none" = "push") => {
+    if (!(await leaveHarnessThread())) return;
+    leaveChat(historyMode === "none");
+    chat.reset();
+    setMobileSidebarOpen(false);
+    setWorkspaceViewRequest(null);
+    setRouteKind("agent");
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+    if (historyMode === "push") history.pushState({}, "", "/jbot");
   };
 
   let computerRequest = 0;
@@ -2418,7 +2489,7 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
-  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
+  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : routeKind() === "agent" ? Boolean(workspacePanelScope()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
   /*
    * The panes beside pane A (docs/design/panes-and-rail.md, 6b): up to two,
    * B and C, each a slot with its own view, session and host, shown left to
@@ -3228,6 +3299,17 @@ function App() {
       await openChatBeside(summary, project);
     } catch (error) { showError(error); }
   };
+  const agentChat = async (id: string) => {
+    const cached = hiddenChats().get(id);
+    if (cached) return cached;
+    const summary = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(id)}`);
+    const project = catalogue.projects().find((item) => item.id === summary.projectId)
+      || (await catalogue.refresh()).find((item) => item.id === summary.projectId);
+    if (!project) throw new Error("Agent chat project not found");
+    const found = { chat: summary, project };
+    setHiddenChats((current) => new Map(current).set(id, found));
+    return found;
+  };
   const openSubagentFromEvent = (event: Event) => { const chatId = (event as CustomEvent<{ chatId?: string }>).detail?.chatId; if (chatId) void openSubagentChat(chatId); };
   window.addEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent);
   onCleanup(() => window.removeEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent));
@@ -3306,6 +3388,7 @@ function App() {
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
   const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
+  const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
   const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);
@@ -3346,7 +3429,7 @@ function App() {
      */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
       // A page giving way to a chat: the chat is already opening in the session, so the draft goes without closing it.
-      if (!page || page === "computer" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
+      if (!page || page === "computer" || page === "agent" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
       if (!loaded || loading || !shown) return;
       const project = untrack(() => slotPageProject(slot));
       if (!project) return void setSlotView(slot, null);
@@ -3383,7 +3466,7 @@ function App() {
     await setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = async (page: "dashboard" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
+  const openPageBeside = async (page: "dashboard" | "agent" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   /*
@@ -3443,6 +3526,7 @@ function App() {
   function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
+    if (routeKind() === "agent") return "page:agent";
     if (routeKind() === "computer" && computerEnvironment() && !computerHarness()) return `page:environment:${encodeURIComponent(computerEnvironment())}`;
     if (routeKind() === "computer" && !computerHarness()) return "page:computer";
     if (routeKind() === "computer" && !harnessThread()) return `page:harness:${encodeURIComponent(computerHarness())}`;
@@ -3451,6 +3535,7 @@ function App() {
   };
   const openInPaneA = async (view: SplitView) => {
     if (view === "page:dashboard") return await openDashboard();
+    if (view === "page:agent") return await openAgent();
     if (view === "page:computer") return await openComputer();
     if (view.startsWith("page:environment:")) return await openEnvironment(decodeURIComponent(view.slice("page:environment:".length)));
     if (view.startsWith("page:harness:")) return await openComputerHarness(decodeURIComponent(view.slice("page:harness:".length)));
@@ -3459,6 +3544,8 @@ function App() {
       return project ? (await openProject(project)) : undefined;
     }
     const id = view.slice("chat:".length);
+    const hidden = hiddenChats().get(id);
+    if (hidden) return await openChat(hidden.chat, hidden.project);
     for (const project of catalogue.projects()) {
       const found = project.sessions.find((item) => item.id === id);
       if (found) return await openChat(found, project);
@@ -3624,6 +3711,7 @@ function App() {
       return found?.title || "New chat";
     }
     if (view === "page:dashboard") return "Conduit Dashboard";
+    if (view === "page:agent") return agentView()?.settings?.name || "Agent";
     if (view === "page:computer") return activeServer()?.name || "Hub";
     if (view.startsWith("page:environment:")) { const state = deviceStates().get(decodeURIComponent(view.slice("page:environment:".length))); return state ? deviceLabel(state) : "Environment"; }
     if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
@@ -4228,10 +4316,13 @@ function App() {
         <Show when={page()?.startsWith("harness:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderPaneHarness(pane, decodeURIComponent(page()!.slice("harness:".length)))}</SheetFill>
         </Show>
+        <Show when={page() === "agent"}>
+          <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{attachInput()}{renderAgent(slot)}</SheetFill>
+        </Show>
         <Show when={page()?.startsWith("environment:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderEnvironment(decodeURIComponent(page()!.slice("environment:".length)), slot)}</SheetFill>
         </Show>
-        <Show when={page() && page() !== "computer" && !page()!.startsWith("harness:") && !page()!.startsWith("environment:")}>
+        <Show when={page() && page() !== "computer" && page() !== "agent" && !page()!.startsWith("harness:") && !page()!.startsWith("environment:")}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
             {attachInput()}
             <Show when={page() === "dashboard"} fallback={<Show when={slotPageProject(slot)}>{(project) =>
@@ -5137,6 +5228,11 @@ function App() {
           await openDashboard("none");
           return;
         }
+        if (location.pathname === "/jbot" || location.pathname === "/agent") {
+          if (location.pathname === "/agent") history.replaceState(history.state, "", "/jbot");
+          await openAgent("none");
+          return;
+        }
         if (location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/")) {
           await openComputerRoute();
           return;
@@ -5158,8 +5254,11 @@ function App() {
         let owner = catalogue.projects().find((project) => project.sessions.some((item) => item.id === chatId));
         if (!owner) owner = (await catalogue.refresh()).find((project) => project.sessions.some((item) => item.id === chatId));
         const target = owner?.sessions.find((item) => item.id === chatId);
-        if (!owner || !target) throw new Error("Chat not found");
-        await chat.select(target, owner, {
+        const hidden = !owner || !target ? await agentChat(chatId) : null;
+        if (hidden) { owner = hidden.project; }
+        const resolvedTarget = target || hidden?.chat;
+        if (!owner || !resolvedTarget) throw new Error("Chat not found");
+        await chat.select(resolvedTarget, owner, {
           history: "none",
           onCommit: () => {
             setRouteKind("chat");
@@ -5234,6 +5333,9 @@ function App() {
         catalogue.selectProject(project);
         setRouteKind("project");
         setRouteBootstrap("ready");
+      } else if (initialAgentRoute) {
+        setRouteKind("agent");
+        setRouteBootstrap("ready");
       } else if (initialComputerRoute) {
         await openComputerRoute();
       } else if (initialTerminalRoute) {
@@ -5305,7 +5407,7 @@ function App() {
       models={current.models}
       permissions={current.capability("permissionModes") ? current.permissions : undefined}
       serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined}
-      profiles={profilesAt(props.place?.current ?? props.workspace)}
+      profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current ?? props.workspace)}
       activeProfile={current.activeProfile()}
      
       serverOnline={serverReachable()}
@@ -5319,6 +5421,29 @@ function App() {
       onStatusChange={current.setComposerStatus}
       onSendDraft={props.onSendDraft}
     />;
+  };
+  const renderAgent = (slot: number | "main") => {
+    const current = slot === "main" ? session : paneSlot(slot).session;
+    onMount(() => { void refreshAgent(); });
+    // The page shows none of the thread: it is a tap away (Open thread).
+    const openThread = () => {
+      const id = agentView()?.home?.chatId;
+      if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
+    };
+    return <AgentPage
+      header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
+      onOpenThread={agentView()?.home?.chatId ? openThread : undefined}
+      onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
+      onOpenSettings={() => openSettings("agent")}
+      onOpenChat={(id, event) => {
+        const beside = Boolean(event?.altKey);
+        const tab = Boolean(event && (event.ctrlKey || event.metaKey));
+        void agentChat(id).then(async (target) => {
+          if (beside) await openChatBeside(target.chat, target.project);
+          else if (tab && !isMobileLayout() && await openChatAsTab(target.chat, target.project)) return;
+          else await openChatFromPage(target.chat, target.project);
+        }).catch(showError);
+      }} />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
     if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);
@@ -5425,11 +5550,12 @@ function App() {
     const subagent = () => surfaceChat.status() === "subagent";
     const parent = () => subagentParent(surfaceChat.loadedId());
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs}
+        narration={surfaceChat.loadedId() && surfaceChat.status() !== "draft" ? { value: narrationOf(surfaceChat.loadedId()), onChange: (value) => setNarration(surfaceChat.loadedId()!, value) } : undefined} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} />}
-        composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration={narrationOf(surfaceChat.loadedId())} approvals={approvalsFor(surfaceChat.loadedId())} />}
+        composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };
 
@@ -5441,7 +5567,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
@@ -5475,6 +5601,7 @@ function App() {
       onOpenEnvironment={async (id) => { if (altActivation()) await openPageBeside(`environment:${encodeURIComponent(id)}`); else void openEnvironmentHere(id); }}
       environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneAOverride() ? undefined : computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
+      onOpenAgent={async () => { if (altActivation()) await openPageBeside("agent"); else void openAgentHere(); }}
       onOpenDashboard={async () => { if (altActivation()) await openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
@@ -5491,7 +5618,7 @@ function App() {
       }} />
     } /></Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
@@ -5499,7 +5626,7 @@ function App() {
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <PaneEmpty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
-        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : "Loading chat…"}</PaneEmpty>}>
+        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : routeKind() === "agent" ? "Loading…" : "Loading chat…"}</PaneEmpty>}>
         <Show when={routeKind() === "dashboard"}>
           <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {
@@ -5519,6 +5646,7 @@ function App() {
               await sendFromDashboard();
             }} />
         </Show>
+        <Show when={routeKind() === "agent"}>{renderAgent("main")}</Show>
         <Show when={routeKind() === "computer"}>
           <Show when={harnessThread()} fallback={<Show when={computerHarness()} fallback={<Show when={computerEnvironment()} fallback={<>
             <ChatHeader title={activeServer()?.name || "Hub"} tabActions={paneTabActions("main")} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
@@ -5554,12 +5682,12 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} narration={narrationOf(chat.loadedId())} approvals={approvalsFor(chat.loadedId())} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
         </Show>
-        <Show when={routeKind() !== "dashboard" && routeKind() !== "computer"}>
+        <Show when={routeKind() !== "dashboard" && routeKind() !== "computer" && routeKind() !== "agent"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
           <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
@@ -5642,6 +5770,7 @@ window.addEventListener("vite:preloadError", (event) => {
 // A development Android client takes the interface its server serves, in
 // the background (platform/live-update.ts).
 void startLiveUpdate(() => { const path = activePath(); return path ? dialOrigin(path) : null; }).catch(() => {});
+void startPush().catch(() => {});
 
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
   {nativeApp ? <NativeRoot /> : <App />}

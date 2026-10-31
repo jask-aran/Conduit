@@ -23,6 +23,8 @@ const asQuestion = (request: HostUiRequest): HostUiRequest => {
     multiSelect: false, secret: false, required: true,
     options: labels.map((label, index) => ({ id: String(index), label, description: "" })),
     freeform: typed ? { placeholder: request.placeholder, multiline: request.kind === "editor", initial: request.prefill } : false,
+    // A harness asking to go ahead reads as any approval does.
+    ...(request.kind === "confirm" ? { approval: { title: request.title || request.message || "Allow this?", lines: request.title && request.message ? [request.message] : [] } } : {}),
   }] };
 };
 

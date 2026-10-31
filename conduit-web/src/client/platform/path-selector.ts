@@ -4,7 +4,8 @@ import { proveServer } from "./server-proof.ts";
 import { activePath, activeServer, clearActivePath, dialOrigin, pathIsPinned, pathsOf, setActivePath, type ServerEntry, type ServerPath } from "./servers.ts";
 
 /*
- * Which route to take, decided rather than raced.
+ * Which route to take, decided rather than raced -- once connected. Starting and waking race (`rush`), since then the
+ * question is whether the route is there at all.
  *
  * The obvious design is to time every address and use the fastest. It is also
  * the wrong one: two routes a few milliseconds apart would trade places on
@@ -108,6 +109,37 @@ export function startPathSelection(deps: PathSelectorDeps) {
   const probeAll = (paths: ServerPath[], entry: ServerEntry) =>
     Promise.all(paths.map((path) => usable(path, entry)));
 
+  /**
+   * Starting, waking or changing network: the route in use may be gone, and waiting out two failed checks twenty
+   * seconds apart left a phone that had left home on its LAN address for half a minute. Every route is asked at once
+   * and the first to prove itself is taken; the one in use is kept if it answers first, or if moving would interrupt
+   * something and it answers at all. A nearer route that answers later is taken by the passes after.
+   */
+  const rush = async () => {
+    if (running) return;
+    const entry = activeServer();
+    if (!entry?.id || !entry.publicKey || pathIsPinned()) return;
+    running = true;
+    try {
+      const routes = pathsOf(entry);
+      const current = activePath();
+      const asked = routes.map((path) => usable(path, entry).then((ok) => ok ? path : Promise.reject()));
+      const first = await Promise.any(asked).catch(() => null);
+      if (!first) { setSearching(true); return; }
+      if (first.origin !== current && current && deps.busy()) {
+        const index = routes.findIndex((path) => path.origin === current);
+        if (index >= 0 && await asked[index]!.then(() => true, () => false)) return;
+      }
+      agree.clear();
+      setSearching(false);
+      if (first.origin === current) return;
+      if (first.origin === entry.origin) clearActivePath();
+      else setActivePath(first.origin);
+    } finally {
+      running = false;
+    }
+  };
+
   const pass = async () => {
     if (running) return;
     const entry = activeServer();
@@ -178,7 +210,7 @@ export function startPathSelection(deps: PathSelectorDeps) {
     timer = setInterval(() => void pass(), searching() ? SEARCHING_INTERVAL_MS : IDLE_INTERVAL_MS);
   });
 
-  const wake = () => { if (document.visibilityState === "visible") void pass(); };
+  const wake = () => { if (document.visibilityState === "visible") void rush(); };
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("online", wake);
@@ -186,7 +218,7 @@ export function startPathSelection(deps: PathSelectorDeps) {
   // Waking up and coming back onto a network are exactly when the answer is
   // most likely to have changed, and the moment a twenty-second timer is
   // least likely to catch.
-  void pass();
+  void rush();
 
   onCleanup(() => {
     clearInterval(timer);

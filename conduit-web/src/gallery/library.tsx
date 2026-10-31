@@ -32,11 +32,13 @@ import { networkPage } from "./pages/network";
 import { leaderPage } from "./pages/leader";
 import { desktopComposerPage } from "./pages/desktop-composer";
 import { riderPage } from "./pages/rider";
+import { approvalPage } from "./pages/approval";
 import { pillPage } from "./pages/pill";
 import { phoneComposerPage } from "./pages/phone-composer";
 import { voicePage } from "./pages/voice";
 import { tracePage } from "./pages/trace";
 import { agentsPage } from "./pages/agents";
+import { assistantPage } from "./pages/assistant";
 import { codeBlockPage } from "./pages/code-block";
 import { transcriptPage } from "./pages/transcript";
 import { type Page } from "./model";
@@ -76,11 +78,13 @@ const piecePages: Page[] = [
   leaderPage,
   desktopComposerPage,
   riderPage,
+  approvalPage,
   pillPage,
   phoneComposerPage,
   voicePage,
   tracePage,
   agentsPage,
+  assistantPage,
   codeBlockPage,
   transcriptPage,
 ];

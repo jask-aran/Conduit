@@ -298,8 +298,38 @@ export const servers = serverList;
  * deliberate -- the reconnect is the part that can fail ugly, and it is worth
  * having working before anything starts choosing paths automatically.
  */
-const [pathOverride, setPathOverride] = createSignal<string | null>(null);
-const [pathEpoch, bumpPathEpoch] = createSignal(0);
+/*
+ * The route last taken to each server, so a start begins where the last one left off instead of at the address the
+ * server was added by: a phone that left home began every launch on the LAN address and waited out its failures.
+ * Selection still proves it before trusting it (path-selector.ts), and moves on at once if it is gone.
+ */
+export const LAST_PATH_STORAGE_KEY = "conduit.servers.last-path";
+function lastPaths(): Record<string, string> {
+  try { return JSON.parse(store?.getItem(LAST_PATH_STORAGE_KEY) || "{}") || {}; } catch { return {}; }
+}
+function rememberPath(server: string | null, path: string | null) {
+  if (!server) return;
+  const all = lastPaths();
+  if (path && path !== server) all[server] = path; else delete all[server];
+  try { store?.setItem(LAST_PATH_STORAGE_KEY, JSON.stringify(all)); } catch {}
+}
+function restoredPath(server: string | null, list = serverList()): string | null {
+  const entry = list.find((item) => item.origin === server);
+  const saved = server ? lastPaths()[server] : undefined;
+  return entry && saved && pathsOf(entry).some((path) => path.origin === saved) ? saved : null;
+}
+const [pathOverride, setPathOverride] = createSignal<string | null>(restoredPath(active()));
+const [pathEpoch, bumpEpoch] = createSignal(0);
+const pathMoves = new Set<() => void>();
+const bumpPathEpoch = (step: (value: number) => number) => {
+  bumpEpoch(step);
+  for (const handler of [...pathMoves]) handler();
+};
+/** Each time the path changes, outside any owner: a request still waiting on the old route gives up on it. */
+export function whenPathMoves(handler: () => void) {
+  pathMoves.add(handler);
+  return () => { pathMoves.delete(handler); };
+}
 /**
  * Whether a person chose this route.
  *
@@ -339,6 +369,7 @@ export function setActivePath(origin: string, { manual = false } = {}) {
   if (manual) setPinned(true);
   if (activePath() === next) return;
   setPathOverride(next);
+  rememberPath(active(), next);
   bumpPathEpoch((value) => value + 1);
 }
 
@@ -368,6 +399,7 @@ export function clearActivePath({ manual = false } = {}) {
   setPinned(manual);
   if (pathOverride() === null) return;
   setPathOverride(null);
+  rememberPath(active(), null);
   bumpPathEpoch((value) => value + 1);
 }
 
@@ -398,7 +430,7 @@ export function dialOrigin(origin: string, entry: ServerEntry | null = activeSer
 function persist(list: ServerEntry[], nextActive: string | null) {
   // A path belongs to the server it reaches, so changing server drops it
   // rather than carrying an address that now names somewhere else.
-  if (nextActive !== active()) { setPathOverride(null); setPinned(false); }
+  if (nextActive !== active()) { setPathOverride(restoredPath(nextActive, list)); setPinned(false); }
   setServerList(list);
   writeServers(store, list);
   setActive(nextActive);

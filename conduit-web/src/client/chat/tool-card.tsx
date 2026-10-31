@@ -11,8 +11,10 @@ const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"
 /* What the adapter says a tool acted on, a long one kept from its end, where
    the file or the last word is. The browser does not guess one from a tool's
    input: every harness spells its inputs its own way. */
+/** A connector's tool by its service: `mcp__executor__call` reads "Executor call", in a name or anywhere in a subject. */
+export const toolName = (name?: string) => name?.replace(/mcp__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__([\w.-]+)/g, (_, service: string, tool: string) => `${service[0]!.toUpperCase()}${service.slice(1)} ${tool}`);
 function summary(tool: ToolItem) {
-  const subject = tool.subject || "";
+  const subject = toolName(tool.subject) || "";
   return subject.length > 90 ? `…${subject.slice(-89)}` : subject;
 }
 
@@ -60,7 +62,7 @@ export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boole
     return commandTools.has(String(props.tool.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
   const kind = () => props.tool.kind || "other";
-  const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${props.tool.name || "a tool"}` : ""}`;
+  const verb = () => `${VERBS[kind()][status() === "running" ? 0 : 1]}${kind() === "other" ? ` ${toolName(props.tool.name) || "a tool"}` : ""}`;
   const subject = () => summary(props.tool) || (kind() === "other" || kind() === "script" ? "" : props.tool.name || "");
   return <Step label={`${props.tool.name || "Tool"} ${status()}`} icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} time={stepDuration(props.tool.timestamp, props.tool.completedAt) || undefined}
     state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} opens open={props.open} motion={props.motion}
@@ -69,8 +71,8 @@ export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boole
       <Show when={props.tool.calls?.length}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
         const callKind = () => call().kind in KIND_ICONS ? call().kind : "other";
         const running = () => call().done === false;
-        return <Step icon={<Dynamic component={KIND_ICONS[callKind()]} />} verb={call().earlier ? `${call().earlier} earlier ${call().earlier === 1 ? "call" : "calls"}` : `${VERBS[callKind()][running() || call().planned ? 0 : 1]}${callKind() === "other" ? ` ${call().name}` : ""}`}
-          subject={call().earlier ? undefined : call().subject} state={call().earlier ? "earlier" : call().planned ? "planned" : running() ? "running" : call().isError ? "failed" : undefined}
+        return <Step icon={<Dynamic component={KIND_ICONS[callKind()]} />} verb={call().earlier ? `${call().earlier} earlier ${call().earlier === 1 ? "call" : "calls"}` : `${VERBS[callKind()][running() || call().planned ? 0 : 1]}${callKind() === "other" ? ` ${toolName(call().name)}` : ""}`}
+          subject={call().earlier ? undefined : toolName(call().subject)} state={call().earlier ? "earlier" : call().planned ? "planned" : running() ? "running" : call().isError ? "failed" : undefined}
           flags={call().repeats ? ["repeats"] : undefined} time={call().durationMs != null ? stepDuration("1970-01-01T00:00:00.000Z", new Date(call().durationMs!).toISOString()) : undefined} />;
       }}</Index></Trail></Show>
       <Show when={preview()}><StepOutput text={preview()} hidden={output().length > MAX_PREVIEW ? output().length - MAX_PREVIEW : undefined} full={full()} onToggleFull={() => setFull(!full())} /></Show>

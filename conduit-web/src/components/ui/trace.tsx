@@ -6,12 +6,13 @@ import { type Motion, motionOf, sinceOf } from "./shared";
 import { Failure, foldBody } from "./transcript";
 
 /**
+ * quiet: a piece of work between what a turn says, not the turn's summary: its status at the line's weight.
  * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
  * Markdown). opens: a trail to open. live: the latest line's room is held while the turn runs, so the first step to
  * arrive moves nothing below.
  */
-export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; opens?: boolean; open?: boolean; onToggle?: () => void }) {
-  return <button type="button" class="ui-trace" data-tone={props.tone} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
+export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; quiet?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void }) {
+  return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
     <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
     <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron" /></Show>
@@ -26,7 +27,7 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
  * pinned: what the fold never hides, between the head and the trail (a turn's subagents, AgentRows).
  */
 export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; children?: JSX.Element }) {
-  const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "open", "onToggle"]);
+  const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "quiet", "open", "onToggle"]);
   const { body, opens } = foldBody({ get opens() { return local.opens; }, get open() { return head.open; }, get children() { return local.children; } });
   return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
