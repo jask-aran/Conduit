@@ -1,9 +1,9 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
-import { HarnessMark } from "@/components/ui";
+import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
-import { defaultNarration } from "./preferences/transcript-mode";
+import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
 import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
@@ -2641,15 +2641,16 @@ function App() {
    * opened beside from a list leaves it where it was, so opening several
    * beside in a row lands each in the same place.
    */
-  const openBeside = async (view: SplitView, focus = true) => {
+  // `again`: a view already shown opens once more in its own pane (a chat read two ways); the pane is returned.
+  const openBeside = async (view: SplitView, focus = true, again = false): Promise<number | void> => {
     const shown = shownSlots();
-    const showing = shown.find((slot) => slotView(slot) === view);
+    const showing = again ? undefined : shown.find((slot) => slotView(slot) === view);
     if (showing !== undefined) return focusPane(showing);
     const from = paneOf(document.activeElement);
     const pane = from ?? keyboardPane();
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
     if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
-    if (switchToTab(view)) return;
+    if (!again && switchToTab(view)) return;
     // A chat with no room for another pane joins the focused pane of chats as a kept tab (6c).
     if (view.startsWith("chat:") && panesShown().includes(pane) && activeChatOf(pane) && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) {
       keepNext.add(String(pane));
@@ -2666,6 +2667,7 @@ function App() {
     if (panelOpen() && dockTool() === view) closePanel();
     if (from !== null && from !== "main" && displaced !== view && isPanelTab(displaced)) await openWorkspaceView(displaced);
     if (focus) focusPane(slot);
+    return slot;
   };
   const moveToDock = async (view: SplitView) => {
     const slot = slotOrder().find((candidate) => slotView(candidate) === view);
@@ -3284,11 +3286,24 @@ function App() {
   window.addEventListener("blur", noteFrameFocus);
   onCleanup(() => { document.removeEventListener("focusin", noteKeyboardSide); document.removeEventListener("pointerdown", notePanePress, true); window.removeEventListener("blur", noteFrameFocus); });
   const mainChatId = () => routeKind() === "chat" && !paneAOverride() ? catalogue.selectedId() : null;
-  const openChatBeside = async (target: ChatSummary, project: Project) => {
+  /*
+   * A pane drawing its chat the other way from the chat's own choice: set by opening the chat again beside with a
+   * narration (to read one turn Folded and Narrated side by side), held while that pane shows that chat, and changed
+   * from that pane's own header menu. The chat's choice, and every other pane, are untouched.
+   */
+  let openingAgain: string | null = null;
+  const [paneModes, setPaneModes] = createSignal<Record<string, { chatId: string; narration: Narration }>>({});
+  const paneNarration = (slot: number) => { const mode = paneModes()[String(slot)]; return mode && mode.chatId === slotChatId(slot) ? mode.narration : undefined; };
+  const setPaneNarration = (slot: number, chatId: string, narration: Narration) => setPaneModes((current) => ({ ...current, [String(slot)]: { chatId, narration } }));
+  const openChatBeside = async (target: ChatSummary, project: Project, narration?: Narration) => {
     if (isMobileLayout()) return void openChat(target, project);
-    if (target.id === mainChatId()) return;
+    if (!narration && target.id === mainChatId()) return;
     markChatRead(catalogue, target);
-    await openBeside(`chat:${target.id}`, false);
+    openingAgain = narration ? target.id : null;
+    try {
+      const slot = await openBeside(`chat:${target.id}`, false, Boolean(narration));
+      if (narration && typeof slot === "number") setPaneNarration(slot, target.id, narration);
+    } finally { openingAgain = null; }
   };
   // A subagent's transcript, beside the chat that handed it its task (on a phone, in its place).
   const openSubagentChat = async (chatId: string) => {
@@ -3469,7 +3484,8 @@ function App() {
   };
   const openPageBeside = async (page: "dashboard" | "agent" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
   // The same chat in two panes is one chat: pane A taking it closes the other.
-  createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
+  // A pane showing the main pane's chat closes -- unless it is that chat drawn the other way (paneModes), on purpose.
+  createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id && id !== openingAgain && !paneNarration(slot)) setSlotView(slot, null); });
   /*
    * The pane with the keyboard, and its chat: what the palette, the leader's
    * chat commands, the model selector and the dock act on, as if each pane
@@ -4341,7 +4357,8 @@ function App() {
                 stays (and keeps focus), its transcript withheld while a live
                 chat opens rather than showing an empty chat's welcome. */}
             <Show when={side.chat.loadedId()} fallback={<PaneEmpty role="status">Loading chat…</PaneEmpty>}>
-            <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+            <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project}
+              narration={paneNarration(slot)} onNarration={(value) => { const id = slotChatId(slot); if (id) setPaneNarration(slot, id, value); }} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
@@ -5469,7 +5486,7 @@ function App() {
     renameChat: (chat, project) => runSidebar("rename-chat", { chat, project }),
     moveChat: (chat, from, to) => void moveChat(chat, from, to),
     copyChat: (chat) => runSidebar("copy-chat", { chat }),
-    get openBeside() { return isMobileLayout() ? undefined : (chat: ChatSummary, project: Project) => void openChatBeside(chat, project); },
+    get openBeside() { return isMobileLayout() ? undefined : (chat: ChatSummary, project: Project, narration?: Narration) => void openChatBeside(chat, project, narration); },
     openTerminal: async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); },
     running: (chat) => !!runtime.getProcess(chat.id)?.id,
     stop: (chat) => void stopChatProcess(chat.id),
@@ -5546,18 +5563,24 @@ function App() {
     place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
     stackRef?: (element: HTMLDivElement) => void;
+    /** This pane's own way of drawing the chat (paneModes), over the chat's; onNarration changes it. */
+    narration?: Narration;
+    onNarration?: (value: Narration) => void;
   }) => {
     const current = props.session;
     const surfaceChat = current.chat;
+    const mode = () => props.narration ?? narrationOf(surfaceChat.loadedId());
     // A subagent's transcript is read: it says whose it is, and has no composer.
     const subagent = () => surfaceChat.status() === "subagent";
     const parent = () => subagentParent(surfaceChat.loadedId());
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs}
-        narration={surfaceChat.loadedId() && surfaceChat.status() !== "draft" ? { value: narrationOf(surfaceChat.loadedId()), onChange: (value) => setNarration(surfaceChat.loadedId()!, value) } : undefined} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<><Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>
+        {/* Drawn its own way in this pane only: said, so two panes of one chat are told apart. */}
+        <Show when={props.narration}>{(narration) => <HeaderNote label={NARRATION_OPTIONS.find((option) => option.value === narration())!.label} title="This pane only: the chat's own choice is unchanged" />}</Show></>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs}
+        narration={surfaceChat.loadedId() && surfaceChat.status() !== "draft" ? { value: mode(), onChange: (value) => props.narration && props.onNarration ? props.onNarration(value) : setNarration(surfaceChat.loadedId()!, value) } : undefined} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration={narrationOf(surfaceChat.loadedId())} approvals={approvalsFor(surfaceChat.loadedId())} />}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration={mode()} approvals={approvalsFor(surfaceChat.loadedId())} />}
         composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };

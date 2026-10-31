@@ -47,6 +47,8 @@ export function NarrationChoice(props: { value: Narration; onChange: (value: Nar
   </MenuSub>;
 }
 
+const otherNarration = (value: Narration): Narration => value === "show" ? "fold" : "show";
+
 /** Pin to the sidebar, or unpin. */
 const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
   <MenuRow icon={props.pinned ? <Icons.PinOff /> : <Icons.Pin />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
@@ -54,7 +56,7 @@ const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
 /** A chat's menu. pin: absent where a chat cannot be pinned; openBeside, stop: absent where they do not apply. */
 export function ChatMenuItems(props: {
   project: Project; places: Project[];
-  onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: () => void; onOpenTerminal: () => void;
+  onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: (narration?: Narration) => void; onOpenTerminal: () => void;
   onStop?: () => void; pin?: { pinned: boolean; onToggle: () => void }; onDelete: () => void;
   narration?: { value: Narration; onChange: (value: Narration) => void };
 }) {
@@ -64,6 +66,9 @@ export function ChatMenuItems(props: {
       <MoveTo label="Move to folder…" places={props.places} current={props.project.id} onMove={props.onMove} />
       <MenuRow icon={<Icons.Copy />} onSelect={props.onCopy}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
       <Show when={props.onOpenBeside}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpenBeside?.()}>Open beside</MenuRow></Show>
+      {/* The same chat again beside, drawn the other way, in that pane only: to read one turn both ways at once. */}
+      <Show when={props.onOpenBeside && props.narration}>{(narration) => <MenuRow icon={<Icons.Narration />} onSelect={() => props.onOpenBeside?.(otherNarration(narration().value))}>
+        Open beside, {NARRATION_OPTIONS.find((option) => option.value === otherNarration(narration().value))!.label}</MenuRow>}</Show>
       <MenuRow icon={<Icons.Terminal />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
       <Show when={props.onStop}><MenuRow icon={<Icons.Stop />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
@@ -108,7 +113,8 @@ export type ItemActions = {
   renameChat: (chat: ChatSummary, project: Project) => void;
   moveChat: (chat: ChatSummary, from: Project, to: Project) => void;
   copyChat: (chat: ChatSummary) => void;
-  openBeside?: (chat: ChatSummary, project: Project) => void;
+  /** Beside; given a narration, the same chat again beside drawn that way (in that pane only). */
+  openBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
   openTerminal: (chat: ChatSummary, project: Project) => void;
   running: (chat: ChatSummary) => boolean;
   stop: (chat: ChatSummary) => void;
@@ -131,7 +137,7 @@ export const ChatMenuFor = (props: { chat: ChatSummary; project: Project; action
   onRename={() => props.actions.renameChat(props.chat, props.project)}
   onMove={(to) => props.actions.moveChat(props.chat, props.project, to)}
   onCopy={() => props.actions.copyChat(props.chat)}
-  onOpenBeside={props.actions.openBeside ? () => props.actions.openBeside?.(props.chat, props.project) : undefined}
+  onOpenBeside={props.actions.openBeside ? (narration) => props.actions.openBeside?.(props.chat, props.project, narration) : undefined}
   onOpenTerminal={() => props.actions.openTerminal(props.chat, props.project)}
   onStop={props.actions.running(props.chat) ? () => props.actions.stop(props.chat) : undefined}
   pin={isConduitManagedProject(props.project) ? { pinned: props.actions.pinned("chat", props.chat.id), onToggle: () => props.actions.togglePin("chat", props.chat.id) } : undefined}

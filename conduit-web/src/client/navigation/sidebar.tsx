@@ -122,7 +122,7 @@ export function Sidebar(props: {
   focusedId?: string | null;
   openIds?: string[];
   /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
-  onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
+  onOpenChatBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
   navigatingId?: string | null;
   dashboard: boolean;
   agent: boolean;
@@ -912,7 +912,7 @@ export function Sidebar(props: {
         onRename={() => requestRenameChat(menuProps.chat, menuProps.project)}
         onMove={(target) => void props.onMoveChat(menuProps.chat, menuProps.project, target)}
         onCopy={() => void props.onCopyTranscript(menuProps.chat)}
-        onOpenBeside={props.onOpenChatBeside ? () => props.onOpenChatBeside?.(menuProps.chat, menuProps.project) : undefined}
+        onOpenBeside={props.onOpenChatBeside ? (narration) => props.onOpenChatBeside?.(menuProps.chat, menuProps.project, narration) : undefined}
         onOpenTerminal={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}
         onStop={processFor(menuProps.chat)?.id ? () => void props.onStopProcess(menuProps.chat) : undefined}
         pin={isConduitManagedProject(menuProps.project) ? { pinned: isPinned("chat", menuProps.chat.id), onToggle: () => void togglePin("chat", menuProps.chat.id) } : undefined}

@@ -46,6 +46,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         && prior.displayKey === row.displayKey
         && prior.precedingUserId === row.precedingUserId
         && prior.orb === row.orb
+        && prior.traced === row.traced
         ? prior : row;
     }
     if (row.type === "trace" && prior.type === "trace") {
@@ -55,6 +56,8 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         && prior.answerless === row.answerless
         && prior.orb === row.orb
         && prior.continues === row.continues
+        && prior.afterAnswer === row.afterAnswer
+        && prior.unstated === row.unstated
         && prior.timestamp === row.timestamp
         && left.status === right.status
         && left.startedAt === right.startedAt
@@ -220,10 +223,12 @@ export function createTimelineStore(
     const inputTools = tools();
     const layout = { narration: narration() };
     // A chat changing layout is laid out again whole.
-    if (layout.narration !== laidOutNarration) { laidOutNarration = layout.narration; persistedTurns = []; persistedMessages = null; }
+    const relaid = layout.narration !== laidOutNarration;
+    if (relaid) { laidOutNarration = layout.narration; persistedTurns = []; persistedMessages = null; }
     const inputGeneration = activeGeneration();
     const change = activeGenerationChange();
-    const canNarrow = Boolean(inputGeneration && change && change.generationId === inputGeneration.id
+    // A change of layout mid-turn is never a narrow update: the live rows were laid out the other way.
+    const canNarrow = !relaid && Boolean(inputGeneration && change && change.generationId === inputGeneration.id
       && previousMessages === inputMessages && previousTools === inputTools);
     const changedRowKeys = canNarrow && inputGeneration && change
       ? change.scope === "block"
