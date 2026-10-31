@@ -16,6 +16,25 @@ export const turnScene = () => <div class="g-card-scene"><Transcript><Turn>
   <MessageFoot time="22:16">{copyRetry()}</MessageFoot>
 </Turn></Transcript></div>;
 
+/* One exchange both ways (DESIGN Transcript › Turns, Rhythm): Folded keeps the working-out in one trace, Narrated lets
+   what it said stand between one-line pieces of work. */
+const ask = () => <TranscriptRow><Message time="14:24">what is the timeline store for?</Message></TranscriptRow>;
+const foot = () => <MessageFoot time="14:25">{copyRetry()}</MessageFoot>;
+const finalAnswer = "<p>It turns a chat's messages and the turn being written into the rows the transcript draws, keeping unchanged rows so only what changed is drawn again.</p>";
+export const foldedScene = () => <Transcript>{ask()}
+  <TranscriptRow flow="exchange"><Turn><TraceHeader status="Done" time="12.4s" work="2 reads, 1 command" latest="Read conduit-web/src/client/chat/transcript.tsx" opens /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn orb={orb(true)}><Answer html={finalAnswer} />{foot()}</Turn></TranscriptRow>
+  <TranscriptRow flow="turn"><Message time="14:26">and where is it made?</Message></TranscriptRow>
+</Transcript>;
+export const narratedScene = () => <Transcript>{ask()}
+  <TranscriptRow flow="exchange"><Turn><Answer html={"<p>I'll read the store first.</p>"} /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn><TraceHeader status="Done" time="1.2s" work="Read conduit-web/src/client/state/timeline-store.ts" opens /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn><Answer html={"<p>Now where the transcript calls it.</p>"} /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn><TraceHeader status="Done" time="2.8s" work="Ran rg -n 'createTimelineStore'" opens /></Turn></TranscriptRow>
+  <TranscriptRow flow="step"><Turn orb={orb(true)}><Answer html={finalAnswer} />{foot()}</Turn></TranscriptRow>
+  <TranscriptRow flow="turn"><Message time="14:26">and where is it made?</Message></TranscriptRow>
+</Transcript>;
+
 export function DisclosureDemo() {
   const [open, setOpen] = createSignal(true);
   return <Disclosure header={<span>The second paragraph has four sentences</span>} open={open()} onToggle={() => setOpen(!open())}><Answer html={"<p>Keep the first two; they carry the point.</p>"} /></Disclosure>;
@@ -41,11 +60,12 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
 </Transcript>`,
   anatomy: { phone: true, spacing: [".ui-turn", ".ui-answer"], scene: turnScene, parts: [{ selector: ".ui-trace", name: "the trace header", does: "the orb, Status · time · work (the Row role), the latest line muted", from: (el) => typeOf(el.querySelector(".ui-trace-line")!) },
     { selector: ".ui-answer", name: "the answer", does: "the Body role at 1.66, no bubble", from: (el) => `${typeOf(el)} · ${px(getComputedStyle(el).lineHeight)}` },
-    { selector: ".ui-answer > ul", name: "one gap between blocks", does: "--answer-gap (0.75 units)", from: (el) => px(getComputedStyle(el).marginTop) },
+    { selector: ".ui-answer > ul", name: "one gap between blocks", does: "--answer-gap: --flow-block (0.75 units)", from: (el) => px(getComputedStyle(el).marginTop) },
     { selector: ".ui-answer code", name: "inline code", does: "the code face on the tint", from: (el) => typeOf(el) },
     { selector: ".ui-answer blockquote", name: "a quote", does: "a --tint line, muted", from: (el) => fg(el) },
     { selector: ".ui-message-foot", name: "the foot", does: "the time first (caption, tabular), then icon-xs buttons", from: (el) => typeOf(el) },
-    { selector: ".ui-turn", name: "a turn's parts", does: "half a unit apart", from: (el) => px(getComputedStyle(el).rowGap) }] },
+    { selector: ".ui-turn > .ui-answer", name: "the answer under its trace", does: "a step: --flow-step (1 unit)", from: (el) => `${Number((el.getBoundingClientRect().top - (el.previousElementSibling?.getBoundingClientRect().bottom ?? el.getBoundingClientRect().top)).toFixed(1))}px` },
+    { selector: ".ui-turn", name: "what belongs to a part", does: "attached: --flow-attached (0.375 units), the foot under its answer", from: (el) => px(getComputedStyle(el).rowGap) }] },
   examples: [
     row("a word", "never narrower than tall; min-width one line · --radius-message", () => <Read class="g-read"><Transcript><Message time="00:08">hi</Message></Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<Message time>" }),
     row("a line", "a third of a line above and below; padding md · lg (the composer's text inset)", () => <Read class="g-read"><Transcript><Message time="00:08">use the question tool to ask me about dogs</Message></Transcript></Read>, { surfaces: ["ground"], phone: true }),
@@ -71,7 +91,10 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     row("foot · changes", "a turn that changed files: its counts open them in Agent changes; data face, caption · added --status-success, removed --destructive", () => <Read class="g-read"><MessageFoot time="22:16">{copyRetry()}<Changes added={42} removed={7} label="Open the turn's changes" /></MessageFoot></Read>, { phone: true, code: "<Changes added removed onOpen>" }),
     row("failed", "a request that failed, in the answer's place (in a trail it is a TraceError); head --destructive · facts data face, caption · the message in a code box", () => <Read class="g-read"><Failure time="22:16" facts={["Model: gpt-5", "Provider: openai", "Profile: Assistant"]} message={"429 Too Many Requests: rate limit reached for requests"} /></Read>, { surfaces: ["ground"], phone: true, code: "<Failure time facts message>" }),
     row("harness prompt", "a prompt the harness sent on its own: a muted line, no bubble, no actions; Row size, muted · bell icon-sm", () => <Read class="g-read"><Transcript><HarnessPrompt>Background task finished: npm run build</HarnessPrompt></Transcript></Read>, { phone: true, code: "<HarnessPrompt>" }),
-    row("rows", "a long chat drawn row by row: a turn's answer row goes on under its trace row; message gap 3xl · a turn's row md under the row above", () => <Read class="g-read"><Transcript><TranscriptRow><LoadingEarlier /></TranscriptRow><TranscriptRow><Message time="22:14">make it shorter</Message></TranscriptRow><TranscriptRow><TraceHeader orb={orb(true)} status="Done" time="9s" /></TranscriptRow><TranscriptRow turn><Answer html={"<p>Done: two paragraphs, half the length.</p>"} /></TranscriptRow></Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<TranscriptRow turn> · <LoadingEarlier>" }),
+    row("rows", "a long chat drawn row by row: each row says how it relates to the row above (flow), which sets the room between them; none for the first", () => <Read class="g-read"><Transcript><TranscriptRow><LoadingEarlier /></TranscriptRow><TranscriptRow><Message time="22:14">make it shorter</Message></TranscriptRow><TranscriptRow flow="exchange"><Turn><TraceHeader status="Done" time="9s" work="1 edit" /></Turn></TranscriptRow><TranscriptRow flow="step"><Turn orb={orb(true)}><Answer html={"<p>Done: two paragraphs, half the length.</p>"} /><MessageFoot time="22:15">{copyRetry()}</MessageFoot></Turn></TranscriptRow><TranscriptRow flow="turn"><Message time="22:16">thanks</Message></TranscriptRow></Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<TranscriptRow flow=\"exchange\" | \"step\" | \"attached\" | \"turn\"> · <LoadingEarlier>" }),
+    row("rhythm", "the room above a part, by how it relates to the part above: exchange (a reply under its message) 1.25 · step (the next part of one reply) 1 · attached (a foot, an approval) 0.375 · turn (the next exchange) 2 units; each a step looser than the last, so a change of kind never reads as a paragraph; --flow-*", () => <Read class="g-read g-flow-scene">{narratedScene()}</Read>, { surfaces: ["ground"], phone: true, code: "--flow-line · --flow-attached · --flow-block · --flow-step · --flow-exchange · --flow-turn" }),
+    row("folded", "a turn's working-out in its one trace, the answer alone under it: a step; the orb on the latest turn only (here, settled, by its answer)", () => <Read class="g-read">{foldedScene()}</Read>, { surfaces: ["ground"], phone: true, code: "narration: \"fold\"" }),
+    row("narrated", "what it says as it works stands, each run of tools between one line (Done · time · what it did), each a step; the orb by the last answer", () => <Read class="g-read">{narratedScene()}</Read>, { surfaces: ["ground"], phone: true, code: "narration: \"show\"" }),
     row("Welcome", "chat/transcript.tsx · an empty chat's greeting, centred above the room its host keeps for the composer (--welcome-room)", () => <div class="g-transcript-stage"><Welcome title="How can I help you today?" /></div>, { source: "chat/transcript.tsx · an empty chat's greeting, centred above the room its host keeps for the composer (--welcome-room)", surfaces: ["ground"] }),
     row("Transcript", "Transcript > Message · Turn", () => <div class="g-transcript-stage">{conversation()}</div>, { surfaces: ["ground"] }),
     row("Transcript", "Transcript > Message · Turn", () => <div class="g-transcript-stage" data-phone>{conversation()}</div>, { surfaces: ["ground"], phone: "only" })
@@ -82,7 +105,14 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     row("the foot", "fades in when the answer is done; --duration-gentle · --ease-arrive", () => <Read class="g-read"><Replay>{(m) => <MessageFoot time="22:19" motion={m()}>{copyRetry()}</MessageFoot>}</Replay></Read>, { phone: true, code: "<MessageFoot motion>" }),
     row("a disclosure", "unfolds in height; folds away quicker; in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave", () => <Read class="g-read"><DisclosureDemo /></Read>, { phone: true, code: "<Disclosure open onToggle>" })
   ],
-  tokens: [{ title: "What it reads", tokens: [
+  tokens: [{ title: "Rhythm: the room between parts, by how they relate (Space › Flow)", tokens: [
+    token("--flow-line", "lines of one block: list items"),
+    token("--flow-attached", "what belongs to the part above: a foot, an approval, a bubble's foot"),
+    token("--flow-block", "blocks of one text: paragraphs, headings, tables (--answer-gap)"),
+    token("--flow-step", "the next part of one reply: text to a trace, a trace to text"),
+    token("--flow-exchange", "a reply under the message it answers"),
+    token("--flow-turn", "one exchange to the next: a reply to the next message"),
+  ] }, { title: "What it reads", tokens: [
     token("--muted-foreground", "secondary text"),
     token("--space-xs", "small gaps"),
     token("--foreground", "text and icons"),

@@ -227,6 +227,27 @@ One model for every surface, so no surface grows keys of its own.
 
 A "sizzle" -- text that shifts and settles -- is a broken rule: find the structure that changes geometry, not a delay that hides it. docs/TESTING.md has the probes.
 
+## Rhythm
+
+The room above a part is set by how it relates to the part above it, never by what either is. Six relations, each a
+`--flow-*` token (Space › Flow), each a step looser than the last, so a change of kind never reads as a paragraph:
+
+| Token | Relation | Example | Units |
+|---|---|---|---|
+| `--flow-line` | lines of one block | list items | 0.125 |
+| `--flow-attached` | belongs to the part above | a foot under its answer or bubble, an approval under its trace | 0.375 |
+| `--flow-block` | blocks of one text | paragraphs, headings, tables (`--answer-gap`) | 0.75 |
+| `--flow-step` | the next part of one reply | text to a trace, a trace to text, the answer under its trace | 1 |
+| `--flow-exchange` | a reply under its message | the first row of a reply | 1.25 |
+| `--flow-turn` | one exchange to the next | a reply's foot to the next message | 2 |
+
+- Parts carry no outer margin; the transcript gives the room. Drawn row by row, each row says its relation
+  (`TranscriptRow flow`, worked out from the row above: a message -- the person's or one the harness sent -- is a
+  `turn`, the row after one an `exchange`, anything else in a reply a `step`). Composed of parts, the parts do.
+- Folded and Narrated share it: Folded's answer is a step under its trace; Narrated's every change between text and
+  work is a step.
+- The tokens are in the unit, so they follow `--scale-transcript`; phone and desktop are the same rhythm.
+
 ## Turns: segments, narration and the frontier
 
 One model draws every turn, a chat's and jbot's alike; they differ in one policy, not in renderer.

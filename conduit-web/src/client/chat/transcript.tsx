@@ -13,7 +13,7 @@ import { parseReviewComments } from "./review-comments";
 import { AnswerOrb, TraceStarting, TurnTrace } from "./turn-trace";
 import { openAgentChat } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
-import type { Narration } from "../turn-rows";
+import type { Narration, TurnRow } from "../turn-rows";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -48,7 +48,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, Turn } from "@/components/ui";
+import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, LoadingEarlier, Message as LibraryMessage, MessageFoot, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -266,6 +266,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     () => props.narration || "fold",
   );
   // Declared before the memo below, which runs as it is made.
+  // Rhythm (DESIGN Transcript › Rhythm): how a row relates to the row above it. A message -- the person's, or one the
+  // harness sent on its own -- starts an exchange; the first row of the reply to it is the exchange's; anything after
+  // that is the next step of the same reply.
+  const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user";
+  const flowAt = (index: number): TranscriptFlow | undefined => {
+    if (index <= 0) return undefined;
+    if (fromPerson(timeline[index])) return "turn";
+    return fromPerson(timeline[index - 1]) ? "exchange" : "step";
+  };
   // The orb follows generation: only the latest turn shows it, on the row where it is working or its last answer.
   const latestOrb = createMemo(() => {
     for (let index = timeline.length - 1; index >= 0; index -= 1) {
@@ -1099,13 +1108,14 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content">
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
-        <For each={timeline}>{(item) => {
+        <For each={timeline}>{(item, index) => {
+          const flow = () => flowAt(index());
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" turn={narrated() && item.continues}><Turn><TurnTrace since={arrive} trace={item.value} orb={item.key === latestOrb()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} orb={item.key === latestOrb()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1120,7 +1130,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <TranscriptRow data-slot="message-scroller-item"><Turn><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
+            return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><Turn><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1157,7 +1167,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (user() && message().origin === "harness") {
             // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{narrated() ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}><HarnessPrompt onOpen={child() ? () => openAgentChat(child()!) : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{narrated() ? (message().content || "").replace(/^sa-\d+ finished: /, "") : message().content}</HarnessPrompt>
               <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
                 <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
               </Show></TranscriptRow>;
@@ -1169,7 +1179,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setCopied(true);
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
-          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} turn={!user() && item.traced}>
+          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
             <Show when={user()} fallback={<Turn orb={item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
@@ -1204,11 +1214,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             </Show>
           </TranscriptRow>;
         }}</For>
-        <Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>
+        <Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item" flow="step"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" flow="exchange"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
         </LibraryTranscript>
   </ChatScroller>;
 }

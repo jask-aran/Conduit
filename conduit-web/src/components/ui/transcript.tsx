@@ -128,11 +128,15 @@ export function Transcript(props: JSX.HTMLAttributes<HTMLDivElement>) {
 }
 /** At a Transcript's top while earlier messages load: a spinner, centred. */
 export const LoadingEarlier = () => <div class="ui-loading-earlier" role="status" aria-label="Loading earlier messages"><Spinner /></div>;
-/** A row of a Transcript drawn row by row: a message, or a turn's head or answer. turn: it goes on with the turn in
- *  the row above (its answer, under its trace), a turn's gap from it rather than a message's. */
-export function TranscriptRow(props: JSX.HTMLAttributes<HTMLDivElement> & { turn?: boolean }) {
-  const [local, rest] = splitProps(props, ["turn", "children"]);
-  return <div {...rest} class="ui-transcript-row" data-turn={local.turn ? "" : undefined}>{local.children}</div>;
+/** How a row relates to the row above it, which sets the room between them (--flow-*, DESIGN Transcript › Rhythm):
+ *  attached (belongs to it), step (the next part of one reply), exchange (the reply to a message), turn (the next
+ *  exchange). */
+export type TranscriptFlow = "attached" | "step" | "exchange" | "turn";
+/** A row of a Transcript drawn row by row: a message, or a turn's trace or answer. flow: how it relates to the row
+ *  above (none for the first). */
+export function TranscriptRow(props: JSX.HTMLAttributes<HTMLDivElement> & { flow?: TranscriptFlow }) {
+  const [local, rest] = splitProps(props, ["flow", "children"]);
+  return <div {...rest} class="ui-transcript-row" data-flow={local.flow}>{local.children}</div>;
 }
 
 /** What is read: the transcript's scale and type for whatever it holds (a turn, a trace, a sample). */

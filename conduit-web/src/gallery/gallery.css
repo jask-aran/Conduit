@@ -348,3 +348,11 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 /* Shell page: the window row at a fraction of its height, on the frame. */
 .g-shell { display: flex; width: 100%; overflow: hidden; border-radius: 10px; background: var(--frame); }
 .g-aside { width: 360px; max-width: 100%; }
+
+/* Transcript › rhythm: each row's room above it drawn as a band, labelled with its relation. */
+.g-flow-scene .ui-transcript-row[data-flow] { position: relative; }
+.g-flow-scene .ui-transcript-row[data-flow]::before { position: absolute; right: 0; bottom: 100%; left: 0; display: flex; align-items: center; justify-content: flex-end; border-block: var(--hairline) dashed var(--tint); background: color-mix(in oklab, var(--tint) 35%, transparent); color: var(--muted-foreground); content: attr(data-flow); font: var(--text-caption)/1 var(--font-data); pointer-events: none; }
+.g-flow-scene .ui-transcript-row[data-flow="attached"]::before { height: var(--flow-attached); }
+.g-flow-scene .ui-transcript-row[data-flow="step"]::before { height: var(--flow-step); }
+.g-flow-scene .ui-transcript-row[data-flow="exchange"]::before { height: var(--flow-exchange); }
+.g-flow-scene .ui-transcript-row[data-flow="turn"]::before { height: var(--flow-turn); }

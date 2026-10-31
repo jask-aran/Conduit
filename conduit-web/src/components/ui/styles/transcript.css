@@ -7,13 +7,18 @@
 .ui-bubble-more { display: block; margin-top: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
 .ui-bubble-more:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); } }
-/* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width;
-   messages a step and a half apart; a turn's parts half a unit. */
-.ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; gap: var(--space-3xl); margin-inline: auto; }
-/* A row that goes on with the turn above it sits a turn's gap under it. */
+/* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width. */
+.ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; margin-inline: auto; }
 .ui-transcript-row { min-width: 0; }
 .ui-loading-earlier { display: flex; justify-content: center; }
-.ui-transcript-row[data-turn] { margin-top: calc(var(--space-md) - var(--space-3xl)); }
+/* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
+   what either is. Drawn row by row the row says so (TranscriptRow `flow`); composed of parts, the parts do: a reply
+   under its message, a message after a reply, the next part of one reply. A part with no relation (the first) has none. */
+.ui-transcript > :not(.ui-transcript-row) + :not(.ui-transcript-row) { margin-top: var(--flow-turn); }
+.ui-transcript > .ui-message + :is(.ui-turn, .ui-harness-prompt), .ui-transcript-row[data-flow="exchange"] { margin-top: var(--flow-exchange); }
+.ui-transcript > .ui-turn + .ui-turn, .ui-transcript-row[data-flow="step"] { margin-top: var(--flow-step); }
+.ui-transcript-row[data-flow="turn"] { margin-top: var(--flow-turn); }
+.ui-transcript-row[data-flow="attached"] { margin-top: var(--flow-attached); }
 /* A failed request: its head in destructive, its facts in the data face, what the provider said in a code box. */
 .ui-failure { display: grid; gap: var(--space-xs); font-size: var(--text-row); }
 .ui-failure-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
@@ -43,7 +48,9 @@
    hang it in (a phone), the turn steps in by what is missing: --turn-step, from the room either side of the column in
    its container. */
 .ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
-  position: relative; display: grid; min-width: 0; gap: var(--space-md); padding-inline-start: var(--turn-step); }
+  position: relative; display: grid; min-width: 0; gap: var(--flow-attached); padding-inline-start: var(--turn-step); }
+/* A turn composed whole (trace, answer, foot): its answer is a step under its trace, as its own row would be. */
+.ui-turn > :is(.ui-trace, .ui-trace-fold) + .ui-answer { margin-top: calc(var(--flow-step) - var(--flow-attached)); }
 .ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
 .ui-turn-orb > * { width: 100%; height: 100%; }
 /* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
@@ -57,7 +64,7 @@
 [data-density="phone"] .ui-turn { --turn-step: 0px; }
 [data-density="phone"] .ui-turn:has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
 [data-density="phone"] .ui-turn > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
-.ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--space-xs); }
+.ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--flow-attached); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
 /* An answer's foot fades in once the answer is done; a sent message fades in where it lands. */
@@ -73,7 +80,7 @@
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
 .ui-message-foot .ui-button[data-size^="icon"] svg { width: var(--icon-sm); height: var(--icon-sm); }
 /* The answer: no bubble, the Body role, one gap between blocks and none outside the first and last. */
-.ui-answer { --answer-gap: var(--space-lg); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-reading); overflow-wrap: anywhere; }
+.ui-answer { --answer-gap: var(--flow-block); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-reading); overflow-wrap: anywhere; }
 .ui-answer :where(p, ul, ol, blockquote, pre, table, hr, figure, h1, h2, h3, h4) { margin: 0; }
 /* A renderer's own wrappers (ANSWER_MARKDOWN.flow) hold the answer's blocks and space them as the Answer does. */
 .ui-answer-flow { display: block; min-width: 0; }
@@ -86,7 +93,7 @@
 .ui-answer ul { list-style: disc; }
 .ui-answer ol { list-style: decimal; }
 .ui-answer li::marker { color: var(--muted-foreground); }
-.ui-answer li + li { margin-top: var(--space-2xs); }
+.ui-answer li + li { margin-top: var(--flow-line); }
 .ui-answer blockquote { border-left: var(--hairline) solid var(--tint); padding-left: var(--space-lg); color: var(--muted-foreground); }
 .ui-answer :not(pre, .ui-code-line) > code { border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); font: 0.9em var(--font-code); }
 .ui-answer :is(a, .ui-answer-link) { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentColor, transparent var(--tone-faint)); text-underline-offset: var(--space-2xs); }
