@@ -225,6 +225,7 @@ export class ChatStore {
         // newer than the watermark either way, so they come back unread.
         lastReadAt: item.lastReadAt
           || (item.unread ? null : item.lastAssistantCompletedAt || null),
+        ...(item.narration === "fold" || item.narration === "show" ? { narration: item.narration } : {}),
       };
       let hasAttachments = false;
       try {
