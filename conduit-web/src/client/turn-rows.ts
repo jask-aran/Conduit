@@ -448,6 +448,19 @@ export function buildLiveToolItem(
 // own, and its few milliseconds are not how long it thought -- so it says no time.
 const spanTime = (startedAt?: string | null, endedAt?: string | null) =>
   startedAt && endedAt && Date.parse(endedAt) - Date.parse(startedAt) < 1000 ? {} : turnTime(startedAt, endedAt);
+// Narrated, a trace is timed by its own work, the same live and settled: from its first tool's start (else what it
+// followed) to its last tool's end (else the message after it). Live, it counts from that start; settled reasoning
+// alone has none.
+const workTime = (segments: TraceSegment[], since: string | null | undefined, end: string | null | undefined, live: boolean) => {
+  const tools = segments.flatMap((segment) => segment.kind === "tool" ? [segment.tool] : []);
+  const start = tools[0]?.timestamp || since;
+  if (live) return turnTime(start, undefined);
+  // Reasoning alone ends in the message that then speaks, whose start is all a settled turn knows: no time to give.
+  if (!tools.length) return {};
+  const ends = tools.map((tool) => tool.completedAt);
+  const finished = ends.length && ends.every(Boolean) ? (ends as string[]).sort().at(-1) : undefined;
+  return spanTime(start, finished || end);
+};
 const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
   ...(startedAt ? { startedAt } : {}),
   ...(endedAt ? { endedAt } : {}),
@@ -472,7 +485,8 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     const status = !last ? "complete" : generation.status === "stopped" ? "interrupted" : generation.status === "failed" ? "failed"
       : generation.status === "complete" ? "complete" : executingTool ? "executing_tool" : "thinking";
     rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: last && running, status, segments,
-      ...(show && end ? spanTime(since, end) : turnTime(show ? since : owner?.timestamp, last && running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp)) },
+      ...(show ? workTime(segments, since, end || (last && !running ? owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp : undefined), last && running)
+        : turnTime(owner?.timestamp, last && running ? undefined : owner?.timing?.endedAt || generation.assistantMessages.at(-1)?.timestamp)) },
       precedingUserId: owner?.id, answerless, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   };
   for (const assistant of generation.assistantMessages) {
@@ -492,7 +506,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
       // Only work is a trace: text said first stands alone, an empty header over it said nothing.
       if (segments.length) trace(false, false, assistant.timestamp ?? undefined);
       rows.push(row(rows.some((item) => item.type === "trace")));
-      group += 1; segments = []; since = assistant.timestamp ?? since;
+      group += 1; segments = []; since = assistant.timestamp ?? undefined;
     };
     for (const block of assistant.blocks) {
       if (said.includes(block)) { if (show) answer(); }
@@ -519,9 +533,9 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     // Talking with nothing after: the turn's last trace still says what it is doing, and how it ended.
     const index = rows.findLastIndex((row) => row.type === "trace");
     const last = rows[index];
-    if (last?.type === "trace" && (running || endedEarly)) {
-      const status = generation.status === "stopped" ? "interrupted" : generation.status === "failed" ? "failed" : "thinking";
-      rows[index] = { ...last, value: { ...last.value, active: running, status, ...(running ? { endedAt: undefined } : {}) } };
+    // While it talks the text is where it works: the trace before it stays settled, not "Writing".
+    if (last?.type === "trace" && endedEarly) {
+      rows[index] = { ...last, value: { ...last.value, status: generation.status === "stopped" ? "interrupted" : "failed" } };
     }
   }
   // Held only until something of the turn shows: its trace, once it has one, is what says it is working.
@@ -592,7 +606,8 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
   const trace = (last: boolean, answerless = last, end?: string) => {
     traced = true;
     rows.push({ key: traceGroupKey(base, group), type: "trace", value: { active: false, status: last ? outcome || "complete" : "complete", segments,
-      ...(show && end ? spanTime(since, end) : turnTime(show ? since : owner?.timestamp, owner?.timing?.endedAt || finalAssistant?.timestamp)) }, precedingUserId: owner?.id, answerless,
+      ...(show ? workTime(segments, since, end || owner?.timing?.endedAt || finalAssistant?.timestamp, false)
+        : turnTime(owner?.timestamp, owner?.timing?.endedAt || finalAssistant?.timestamp)) }, precedingUserId: owner?.id, answerless,
       timestamp: finalAssistant?.timestamp || undefined,
       // Held to the contract where it always was: a turn with steps must say how it ended.
       ...(last && owner && !outcome && segments.length > 0 ? { unstated: true } : {}) });

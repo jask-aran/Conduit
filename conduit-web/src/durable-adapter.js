@@ -809,6 +809,13 @@ export class DurableAdapter extends EventEmitter {
     };
     for (const change of changes) {
       if (change.type === "message") { (change.message?.content || []).forEach((block, index) => whole(index, block)); continue; }
+      // A call is named as soon as it starts, so its trace says what it is doing rather than "Calling a tool".
+      if (change.type === "toolcall_start" && change.block?.name) {
+        this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta", seq: ++record.generationSeq,
+          messageId, contentIndex: change.contentIndex, blockKind: "tool_call", delta: "", name: change.block.name,
+          toolKind: toolKind(TOOL_KINDS, change.block.name), ...(change.block.id ? { toolCallId: change.block.id } : {}) });
+        continue;
+      }
       if (change.type === "block" || change.type.endsWith("_start")) { whole(change.contentIndex, change.block); continue; }
       const blockKind = change.type.startsWith("thinking") ? "thinking" : change.type.startsWith("toolcall") ? "tool_call" : "text";
       if (blockKind === "tool_call") {
