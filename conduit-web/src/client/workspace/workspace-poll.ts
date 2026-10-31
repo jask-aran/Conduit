@@ -10,6 +10,8 @@ const FILE_POLL_INTERVAL_MS = 1_500;
 // While the server's watch tells each change as it happens (runtime.ts,
 // `conduit:workspace-changed`), asking is only the fallback for a lost stream.
 const TOLD_POLL_INTERVAL_MS = 10_000;
+// A device away is waited for (conduit:device-online), and asked about this often meanwhile.
+const DEVICE_AWAY_POLL_MS = 30_000;
 
 /**
  * Asks the server what changed in the project while a view that shows it is
@@ -17,7 +19,8 @@ const TOLD_POLL_INTERVAL_MS = 10_000;
  * touched, and Git status while it is on screen. Asks at once when the server
  * says the project changed, and otherwise every 1.5 s, or every 10 s while the
  * server tells changes itself. Failures back off, and two in a row mark the
- * views "Not updating" until a retry.
+ * views "Not updating" until a retry. A workspace whose device is away is not
+ * asked again until a device comes back (or half a minute).
  */
 export function createWorkspacePoll(options: {
   projectId: Accessor<string>;
@@ -54,6 +57,7 @@ export function createWorkspacePoll(options: {
   let askAgain = false;
   let told = false;
   let failures = 0;
+  let deviceAway = false;
   let versionProjectId = "";
   let version: number | null = null;
   const refreshChanged = async (changedPaths: string[] | null, projectId: string) => {
@@ -92,13 +96,15 @@ export function createWorkspacePoll(options: {
         await refreshChanged(payload.changedPaths, projectId);
       }
       failures = 0;
+      deviceAway = false;
       setStale(false);
       return true;
     } catch (cause) {
       if (options.projectId() === projectId && !wasAborted(cause)) {
         failures += 1;
-        if (failures >= 2) setStale(true);
-        console.warn("workspace poll failed", cause);
+        deviceAway = (cause as { error?: string } | null)?.error === "device_offline";
+        if (failures >= 2 || deviceAway) setStale(true);
+        if (!deviceAway) console.warn("workspace poll failed", cause);
         return false;
       }
       return true;
@@ -126,20 +132,23 @@ export function createWorkspacePoll(options: {
           askAgain = false;
           return schedule(0);
         }
-        schedule(success ? (told ? TOLD_POLL_INTERVAL_MS : FILE_POLL_INTERVAL_MS) : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** failures));
+        schedule(success ? (told ? TOLD_POLL_INTERVAL_MS : FILE_POLL_INTERVAL_MS) : deviceAway ? DEVICE_AWAY_POLL_MS : Math.min(30_000, FILE_POLL_INTERVAL_MS * 2 ** failures));
       }, delay);
     };
+    const onDeviceOnline = () => { if (deviceAway && !polling) schedule(0); };
     const onChanged = (event: Event) => {
       if (!(event as CustomEvent<string[]>).detail?.includes(projectId)) return;
       if (polling) askAgain = true;
       else schedule(0);
     };
     window.addEventListener("conduit:workspace-changed", onChanged);
+    window.addEventListener("conduit:device-online", onDeviceOnline);
     schedule(0);
     onCleanup(() => {
       cancelled = true;
       window.clearTimeout(timer);
       window.removeEventListener("conduit:workspace-changed", onChanged);
+      window.removeEventListener("conduit:device-online", onDeviceOnline);
     });
   });
 

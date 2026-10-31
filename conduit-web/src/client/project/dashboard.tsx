@@ -146,6 +146,9 @@ export function ProjectDashboard(props: {
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
+  // A folder on another device: its harnesses' own threads are that device's to find (per-device harnesses are
+  // not built), so "Not in Conduit" is left out rather than shown empty.
+  const onDevice = () => props.project.capabilities?.device.local === false;
   const cloning = createMemo(() => props.project.state === "cloning" && Boolean(props.project.cloneOperationId));
 
   const activeAppearance = createMemo(() => {
@@ -223,7 +226,7 @@ export function ProjectDashboard(props: {
   createEffect(() => {
     const path = props.project.workingRoot;
     refreshVersion();
-    if (!isWorkspace() || cloning() || !path) { setOutsideThreads([]); setOutsideLoading(false); return; }
+    if (!isWorkspace() || onDevice() || cloning() || !path) { setOutsideThreads([]); setOutsideLoading(false); return; }
     let disposed = false;
     setOutsideLoading(true);
     void loadOutsideThreads(path).then((found) => {
@@ -333,7 +336,7 @@ export function ProjectDashboard(props: {
     removed: sum.removed + (file.removed ?? 0),
   }), { added: 0, removed: 0 }));
   const workingRoot = () => payload()?.identity.workingRoot || props.project.workingRoot || "";
-  const showOutside = () => isWorkspace() && threadSide() === "outside";
+  const showOutside = () => isWorkspace() && !onDevice() && threadSide() === "outside";
 
   const manageItems = () => <>
       <MenuSection>
@@ -376,7 +379,7 @@ export function ProjectDashboard(props: {
         { value: "all", label: "All", count: showOutside() ? filteredOutside().length : activeChatCount() },
         { value: "unread", label: "Unread", count: showOutside() ? 0 : props.project.sessions.filter((chat) => chat.status === "active" && chat.unread).length },
       ]} />
-      <Show when={isWorkspace()}>
+      <Show when={isWorkspace() && !onDevice()}>
         <Segmented arrows label="Threads" value={threadSide()} onChange={(value) => { saveThreadSide(value as ThreadSide); setLimit(CHAT_PAGE); }} options={[
           { value: "chats", label: "Conduit chats", count: activeChatCount() },
           { value: "outside", label: "Not in Conduit", count: outsideLoading() ? undefined : outsideThreads().length },
@@ -433,8 +436,10 @@ export function ProjectDashboard(props: {
   </SplitGroup>;
 
   const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<GroupAction onClick={() => props.onOpenView("files")}>Browse</GroupAction>}>
-    <Show when={payload()?.recentFiles.length} fallback={<SplitEmpty>{payload() ? "No files yet." : "Loading…"}</SplitEmpty>}>
-      <For each={payload()!.recentFiles}>{(file) =>
+    <Show when={payload()?.recentFiles?.length} fallback={<SplitEmpty>{!payload() ? "Loading…"
+      : awayDevice(props.project) ? `${props.project.capabilities?.device.name || "Its device"} is offline.`
+      : payload()!.recentFiles ? "No files yet." : "The folder could not be read."}</SplitEmpty>}>
+      <For each={payload()!.recentFiles!}>{(file) =>
         <SplitRow element="button" title={file.name} draggable={props.fileView ? "true" : undefined} data-doc-view={props.fileView?.(file.name)} onClick={() => props.onOpenFile ? props.onOpenFile(file.name) : props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
       </For>
     </Show>

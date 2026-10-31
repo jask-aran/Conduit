@@ -44,7 +44,8 @@ export interface ServiceLevelState {
 export interface HarnessManifestView extends ChatCapabilities {
   serviceLevels?: ServiceLevel[];
 }
-export type ChatStatus = "draft" | "active";
+/** subagent: a subagent's transcript, read-only and kept out of the lists (backend.parentChatId names its chat). */
+export type ChatStatus = "draft" | "active" | "subagent";
 
 export interface RuntimeIdentity {
   kind: RuntimeKind;
@@ -62,7 +63,7 @@ export interface ChatSummary {
   templateId?: string;
   runtime?: RuntimeIdentity;
   profileId?: string | null;
-  backend?: { protocol: string; implementation: string; installationId: string; serviceLevel?: string };
+  backend?: { protocol: string; implementation: string; installationId: string; serviceLevel?: string; parentChatId?: string; subagentId?: string };
   createdAt?: string;
   updatedAt?: string;
   lastUserMessageAt?: string | null;
@@ -152,7 +153,8 @@ export interface ProjectDashboardPayload {
   /** Changed files against HEAD, with line counts where Git gives them. */
   changes: Array<{ path: string; status: string; added: number | null; removed: number | null }>;
   /** Top-level files, newest first; empty for a Git repository. */
-  recentFiles: Array<{ name: string; modifiedAt: string }>;
+  /** Null when the folder could not be read (its device away), not empty. */
+  recentFiles: Array<{ name: string; modifiedAt: string }> | null;
   recentChats: DashboardChat[];
 }
 
@@ -274,10 +276,28 @@ export interface TurnTiming {
   tools: Array<{ name: string; kind: string; startedAt: string; endedAt: string | null; ms: number | null; failed?: boolean; cancelled?: boolean }>;
 }
 /** What a tool did, stated by the harness adapter from its own tool names. */
-export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
+export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "other";
+/** The subagent a spawn or a report is about: its background id (sa-3; none for a turn's own) and its conversation. */
+export interface AgentRef { id: string | null; conversationId: number | string | null }
+/** One of a chat's subagents (GET /v0/chats/:chatId/agents): chatId is its transcript, a chat of its own. */
+export interface AgentSummary {
+  id: string | null;
+  conversationId: number;
+  chatId: string | null;
+  title: string;
+  mode: "foreground" | "background";
+  status: "running" | "finished" | "failed" | "stopped";
+  startedAt: string | null;
+  endedAt: string | null;
+  /** What it is doing now, while it runs. */
+  activity: string | null;
+  usage: { tokens: number; cost: number };
+}
 
 export interface Message {
   id: string;
+  /** A subagent's report: the agent it is from. */
+  agent?: AgentRef;
   /** The live generation this message was frozen out of, until a sync names it. */
   generationId?: string | null;
   role: "user" | "assistant" | "system" | "tool";
@@ -374,6 +394,8 @@ export interface ToolItem {
   subject?: string;
   /** The tools a script step called, in order. */
   calls?: ToolCallStep[];
+  /** A subagent's spawn: the agent it handed the task to. */
+  agent?: AgentRef;
   input?: unknown;
   output?: unknown;
   outputSize?: number;

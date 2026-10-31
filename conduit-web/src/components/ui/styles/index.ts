@@ -38,6 +38,7 @@
  *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
  *   transcript      Transcript, Turn, Message, Bubble, Answer, Disclosure
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
+ *   agents          AgentRows > AgentRow (a turn's subagents), AgentRider (a chat's background agents, a line each)
  *   identity        the account and server marks
  *   connection      sign-in, first connection, server selection
  *   browser         the computer's file browser
@@ -79,6 +80,7 @@ import "./transcript.css";
 import "./chat.css";
 import "./code.css";
 import "./trace.css";
+import "./agents.css";
 
 import "./connection.css";
 

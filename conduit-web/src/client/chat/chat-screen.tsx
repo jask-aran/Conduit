@@ -15,6 +15,7 @@ import { harnessLabelFor } from "../harness-brand";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { tabFrostOn } from "../preferences/tab-frost";
+import { awayDevice } from "../state/runtime";
 /*
  * A chat's screen: its header, and its transcript with the composer over it.
  * Out of main.tsx so the gallery draws the same ones.
@@ -57,7 +58,9 @@ export function ChatHeader(props: {
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
-  const projectLabel = () => props.placeLabel || (props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats" : props.project?.name || props.project?.slug || "Chats");
+  // Offline is the workspace's, so it is said where the workspace is named; a step that needs the device asks then.
+  const projectLabel = () => props.placeLabel || (props.appDashboard ? "Conduit" : props.project?.slug === "chat" ? "Chats"
+    : `${props.project?.name || props.project?.slug || "Chats"}${awayDevice(props.project) ? " · offline" : ""}`);
   const runtimeLabel = () => props.runtime ? harnessLabelFor(props.chat?.backendImplementation() || "conduit-runtime") : null;
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");

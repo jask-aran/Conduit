@@ -1,10 +1,11 @@
-import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList } from "../api/client";
 import { createAgentSession } from "./agent-session";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
+  AgentSummary,
   ChatStatus,
   Attachment,
   ChatSummary,
@@ -34,6 +35,7 @@ import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
+import { toast } from "@/components/notifications";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -647,6 +649,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       case "permission_resolved":
         setHostUiRequests((current) => current.filter((item) => item.id !== event.requestId));
         break;
+      case "extension_notice":
+        toast[event.level](event.message);
+        break;
+      case "agents_changed":
+        void refreshAgents();
+        break;
       case "session_checkpoint":
         // The socket is the one channel the open chat is guaranteed to have,
         // so the row it carries updates the catalogue exactly like the global
@@ -808,6 +816,37 @@ export function createActiveChat(options: ActiveChatOptions) {
     const chatId = selectedId();
     if (chatId) permissions?.follow(chatId, options.runtime.getProcess(chatId)?.permissionMode);
   });
+
+  // The chat's subagents (GET /v0/chats/:chatId/agents): read once its transcript names one, and again each time the
+  // server says they changed (agents_changed). One request at a time; a change during it reads once more after.
+  const [agents, setAgents] = createSignal<AgentSummary[]>([]);
+  let agentsAsked: string | null = null;
+  let agentsRequest: Promise<void> | null = null;
+  let agentsAgain = false;
+  const refreshAgents = (): Promise<void> => {
+    const chatId = loadedId();
+    if (!chatId) return Promise.resolve();
+    if (agentsRequest) { agentsAgain = true; return agentsRequest; }
+    agentsAsked = chatId;
+    agentsRequest = api<{ agents: AgentSummary[] }>(`/v0/chats/${encodeURIComponent(chatId)}/agents`)
+      .then((body) => { if (loadedId() === chatId) setAgents(body.agents || []); })
+      .catch(() => {})
+      .finally(() => { agentsRequest = null; if (agentsAgain) { agentsAgain = false; void refreshAgents(); } });
+    return agentsRequest;
+  };
+  createEffect(on(loadedId, () => { agentsAsked = null; setAgents([]); }));
+  createEffect(() => {
+    const chatId = loadedId();
+    if (!chatId || chatId === agentsAsked) return;
+    if (tools().some((tool) => tool.agent) || messages().some((message) => message.agent)) untrack(() => void refreshAgents());
+  });
+  const stopAgent = async (id: string) => {
+    const chatId = loadedId();
+    if (!chatId) return;
+    try { await api(`/v0/chats/${encodeURIComponent(chatId)}/agents/${encodeURIComponent(id)}/stop`, { method: "POST" }); }
+    catch (error) { onError(error); }
+    await refreshAgents();
+  };
 
   // A turn running on the open chat that this page has not joined -- the page
   // opened before the runtime said what runs (a link, a reload, a phone
@@ -1090,6 +1129,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
     const prepared = prepareOutboundMessage();
     if (!prepared.hasContent) return;
+    if (/^\/compact\s+\S/.test(prepared.text) && supports("compaction")) {
+      if (!streaming() && !compacting()) try { await requireAgent("compact"); if (selectedId() !== prepared.chatId) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { onError(error); } return; }
     const busy = streaming();
     const messageId = newMessageId();
     const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
@@ -1396,6 +1437,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
+    agents, stopAgent,
   };
 }
 

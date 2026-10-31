@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
-import { DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
+import { channelKey, DIRECT_PTY_TTL_MS, DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
@@ -41,7 +41,11 @@ function directOf(direct, lanName = null) {
   const names = (Array.isArray(direct.tls?.names) ? direct.tls.names : []).map((name) => String(name).toLowerCase())
     .filter((name) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name) && (name.endsWith(".ts.net") || name === lanName)).slice(0, 4);
   const tls = Number.isInteger(direct.tls?.port) && direct.tls.port > 0 && names.length ? { port: direct.tls.port, names } : null;
-  return { port: direct.port, addresses, tls };
+  // Whether it binds its proofs to where it was reached and lets a client attach to its terminals itself, sealed
+  // (node-direct.js), as a v0.8.7 node does neither; and the key this run of it signs grants with, given only over a
+  // link nobody else reads (node-agent.js).
+  const grantKey = typeof direct.grantKey === "string" && /^[A-Za-z0-9_-]{32,128}$/.test(direct.grantKey) ? direct.grantKey : null;
+  return { port: direct.port, addresses, tls, bound: Boolean(direct.pty), pty: direct.pty === "sealed", reads: direct.reads === "sealed", grantKey };
 }
 
 export class NodeHub extends EventEmitter {
@@ -246,22 +250,54 @@ export class NodeHub extends EventEmitter {
    * A name on this network for a node with an address on one, and the certificate for it, sent to the node; once it
    * serves https under it, its next `direct` says so (lan-names.js). Nothing where the hub has no such names to give.
    */
-  async offerLanName(node, record) {
+  async offerLanName(node, record, { renewed = false } = {}) {
     const address = node.direct?.addresses.find((item) => item.reach === "private")?.address;
     if (!this.lanNames || !address) return;
     const lan = await this.lanNames.forNode(record.id, address).catch(() => null);
     if (!lan || !node.ready || this.live.get(record.id) !== node) return;
     this.lanNameOf.set(record.id, lan.name);
     // Already serving it, and the record already points here (forNode saw to that): nothing to send.
-    if (node.direct?.tls?.names.includes(lan.name)) return;
+    if (!renewed && node.direct?.tls?.names.includes(lan.name)) return;
     node.send({ type: "lan-cert", name: lan.name, cert: lan.cert, key: lan.key });
   }
 
+  async reofferLanNames() {
+    for (const [id, node] of this.live) {
+      if (!node.ready) continue;
+      const record = await this.get(id);
+      if (record) await this.offerLanName(node, record, { renewed: true });
+    }
+  }
+
   async directGrant(nodeId, place, label = "", origin = "") {
+    if (!place?.root) return null;
+    const grant = await this.signDirect(nodeId, { place: { root: place.root, path: place.path || "" }, label, read: true }, DIRECT_TTL_MS, origin);
+    // And the key that seals a read over a LAN in plain HTTP (node-direct.js), where the node seals them.
+    const direct = this.live.get(nodeId)?.direct;
+    return grant && direct?.reads && direct.grantKey ? { ...grant, channel: channelKey(direct.grantKey, grant.nonce, "read") } : grant;
+  }
+
+  /**
+   * A grant to attach to one of a node's terminals without passing through here (node-direct.js), where it allows
+   * that, and the key that seals the channel end to end (direct.js `channelKey`): handed to the client here, over its
+   * own connection to the hub, and worked out by the node. Any route that reaches the node will do, a LAN in plain
+   * HTTP included: nobody between them can read or change what is typed or shown.
+   */
+  async directPtyGrant(nodeId, procId, origin = "") {
+    const direct = this.live.get(nodeId)?.direct;
+    if (!direct?.pty || !direct.grantKey || typeof procId !== "string") return null;
+    const grant = await this.signDirect(nodeId, { pty: procId }, DIRECT_PTY_TTL_MS, origin);
+    return grant ? { ...grant, channel: channelKey(direct.grantKey, grant.nonce) } : null;
+  }
+
+  async signDirect(nodeId, claims, ttl, origin) {
     const node = this.live.get(nodeId);
     const record = await this.get(nodeId);
-    if (!node?.ready || !node.direct || !record?.keyHash || !place?.root) return null;
-    const expiresAt = Date.now() + DIRECT_TTL_MS;
+    if (!node?.ready || !node.direct || !record?.keyHash) return null;
+    // The run's own key where it gave one; a v0.8.7 node, or one reached over plain HTTP, checks reads with its
+    // pairing key's hash.
+    const secret = node.direct.grantKey || record.keyHash;
+    const expiresAt = Date.now() + ttl;
     const { port, addresses } = node.direct;
     // Nearest first: its own machine's loopback (only the app beside it can use that), then its networks', its tailnet's.
     const { tls } = node.direct;
@@ -271,10 +307,11 @@ export class NodeHub extends EventEmitter {
     const routes = [{ url: `http://127.0.0.1:${port}`, reach: "loopback" },
       ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach })), ...secure];
     const nonce = crypto.randomBytes(12).toString("base64url");
-    return { nodeId, routes, expiresAt, nonce, proof: proofKey(record.keyHash, nonce),
+    return { nodeId, routes, expiresAt, nonce, proof: proofKey(secret, nonce),
+      // Whether its proof is bound to the address it was reached at (direct.js): a client then takes nothing else.
+      bound: node.direct.bound,
       // The page it is for, when one asked: the node lets that origin read the answer.
-      token: signGrant(record.keyHash, { place: { root: place.root, path: place.path || "" }, label, read: true, expires: expiresAt, nonce,
-        ...(origin ? { origin } : {}) }) };
+      token: signGrant(secret, { ...claims, expires: expiresAt, nonce, ...(origin ? { origin } : {}) }) };
   }
 
   async computer(nodeId, method, at) {
@@ -456,7 +493,14 @@ export class NodeHub extends EventEmitter {
         if (node.ready) { node.direct = directOf(message.direct, this.lanNameOf.get(record.id)); void this.offerLanName(node, record); }
         return;
       }
-      if (message.type === "proc") return this.following.get(`${record.id} ${message.proc}`)?.deliver(message);
+      if (message.type === "proc") {
+        const follower = this.following.get(`${record.id} ${message.proc}`);
+        if (follower) return follower.deliver(message);
+        // A shell that ended while nothing here followed it (a client attached to it directly, or none): said, so a
+        // terminal is not listed as running when it is gone.
+        if (message.kind === "exit") this.emit("procExit", { nodeId: record.id, procId: message.proc, code: message.code ?? null, signal: message.signal ?? null });
+        return;
+      }
       if (message.type === "tunnel") return this.tunnels.get(`${record.id} ${message.tunnel}`)?.deliver(message);
       if (message.type === "event" && node.watchers.has(message.id)) return node.watchers.get(message.id).onEvent(message);
       const pending = node.calls.get(message.id);

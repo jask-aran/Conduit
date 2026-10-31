@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,6 +187,23 @@ export class DurableRuntime {
     return () => { if (this.askers.get(conversationId) === asker) this.askers.delete(conversationId); };
   }
 
+  /** Who shows a conversation's extension notices: the live chat holding it, if any (a notice is not kept). */
+  noticesFor(conversationId, onNotice) {
+    (this.notices ||= new Map()).set(conversationId, onNotice);
+    return () => { if (this.notices.get(conversationId) === onNotice) this.notices.delete(conversationId); };
+  }
+
+  notify(conversationId, notice) { this.notices?.get(conversationId)?.(notice); }
+
+  /** A prompt a Pi extension sends its conversation (`sendUserMessage`), after what it is doing. */
+  async say(conversationId, content, whenBusy, context) {
+    const conversation = await this.harness.conversation(conversationId, context);
+    const messageId = randomUUID();
+    const text = typeof content === "string" ? content : content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
+    await conversation.submit({ type: "input", content, whenBusy, requestId: messageId,
+      entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString() } } }, context);
+  }
+
   async ask(conversationId, request, context) {
     while (!this.askers.has(conversationId)) {
       await awaitWithContext(new Promise((resolve) => {
@@ -234,14 +252,34 @@ export class DurableRuntime {
           const { nodeId, place } = (await read.snapshot(ConduitWorkspace, conversationId, context)) || {};
           // A conversation on a node never falls back to this machine's disk.
           if (nodeId && (!place || !this.nodeHub)) throw new Error("This conversation's device folder is not known; open it from its workspace again");
-          return placeProcesses(this.nodeHub, { nodeId, place }).env({ cwd, shellEnv,
+          return placeProcesses(this.nodeHub, { nodeId, place }).env({ cwd, shellEnv, shellSettings: this.piSettings(),
             onWait: (device) => this.emitWaiting(conversationId, device), excuse: nodeId ? this.excuseFor(conversationId, nodeId) : null });
         },
-        settings: {
+        settings: ((runtime) => ({
+          get retry() {
+            const retry = runtime.piSettings().retry;
+            return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],
+              ["baseDelayMs", retry?.baseDelayMs], ["maxAgentDelayMs", retry?.maxDelayMs]]
+              .filter(([key, value]) => key === "enabled" ? typeof value === "boolean" : Number.isFinite(value) && value >= 0));
+          },
+          get compaction() {
+            const compaction = runtime.piSettings().compaction;
+            return Object.fromEntries([["enabled", compaction?.enabled], ["reserveTokens", compaction?.reserveTokens],
+              ["keepRecentTokens", compaction?.keepRecentTokens]]
+              .filter(([key, value]) => key === "enabled" ? typeof value === "boolean" : Number.isFinite(value) && value >= 0));
+          },
+          get steeringMode() {
+            const mode = runtime.piSettings().steeringMode;
+            return mode === "all" || mode === "one-at-a-time" ? mode : undefined;
+          },
+          get followUpMode() {
+            const mode = runtime.piSettings().followUpMode;
+            return mode === "all" || mode === "one-at-a-time" ? mode : undefined;
+          },
           // A partial is committed, and so drawn, this often. The default 100ms
           // reads as a stutter; a frame at 30Hz is as often as is worth a write.
           progress: { partialIntervalMs: 33, outputIntervalMs: 100 },
-        },
+        }))(this),
         onReport: (error) => console.warn("[conduit-runtime]", error?.message || error),
       }, this.context);
       this.harness.closed.then((end) => {
@@ -261,16 +299,61 @@ export class DurableRuntime {
    * from the Conduit Pi agent's directory. A runtime without them still runs.
    */
   async webTools() {
+    this.piExtensionLoads = new Map();
+    this.piExtensionFor = async (entry) => {
+      const { resolvePiExtensionEntries } = await import("./pi-extension-bridge.js");
+      const loaded = [];
+      const webEntry = fs.existsSync(WEB_ACCESS) ? fs.realpathSync(WEB_ACCESS) : WEB_ACCESS;
+      // Templates name the package directory; reuse the source entry already used by its tools.
+      const source = fs.existsSync(entry) && fs.realpathSync(entry) === path.dirname(webEntry) ? WEB_ACCESS : entry;
+      for (const file of await resolvePiExtensionEntries(source)) {
+        if (!this.piExtensionLoads.has(file)) {
+          const web = file === webEntry;
+          this.piExtensionLoads.set(file, loadPiExtensionTools(file, { models: this.models, runtime: this,
+            replaySafe: web ? WEB_REPLAY_SAFE : [],
+            env: web ? { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir } : {},
+            ...(web ? { entries: path.join(this.piAgentDir || path.dirname(this.file), "extension-entries", "web.jsonl") } : {}) }));
+        }
+        loaded.push(await this.piExtensionLoads.get(file));
+      }
+      return loaded;
+    };
     try {
-      // Its configuration is the Conduit Pi agent's, named only while its tools run.
-      const tools = await loadPiExtensionTools(WEB_ACCESS, { models: this.models, replaySafe: WEB_REPLAY_SAFE,
-        env: { PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR || this.piAgentDir },
-        entries: path.join(this.piAgentDir || path.dirname(this.file), "extension-entries", "web.jsonl") });
+      const tools = (await this.piExtensionFor(WEB_ACCESS)).flat();
       return defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] });
     } catch (error) {
       console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
       return null;
     }
+  }
+
+  async commandsFor(templateId) {
+    const template = this.templateFor(templateId);
+    if (!template || (!template.extensions?.length && !template.promptTemplates?.length)) return [];
+    await this.open();
+    const loaded = new Set();
+    for (const entry of template.extensions || []) {
+      try { for (const tools of await this.piExtensionFor(entry)) loaded.add(tools); }
+      catch (error) { console.warn("[conduit-runtime] extension commands unavailable:", entry, error?.message || error); }
+    }
+    const commands = [...loaded].flatMap((tools) => tools.commands);
+    const counts = new Map();
+    for (const command of commands) counts.set(command.name, (counts.get(command.name) || 0) + 1);
+    const seen = new Map();
+    const taken = new Set();
+    const resolved = commands.map((command) => {
+      const occurrence = (seen.get(command.name) || 0) + 1;
+      seen.set(command.name, occurrence);
+      let name = counts.get(command.name) > 1 ? `${command.name}:${occurrence}` : command.name;
+      let suffix = occurrence;
+      while (taken.has(name)) name = `${command.name}:${++suffix}`;
+      taken.add(name);
+      return { ...command, name };
+    });
+    const { loadPiPrompts } = await import("./pi-extension-bridge.js");
+    const prompts = template.promptTemplates?.length ? await loadPiPrompts({ cwd: process.cwd(),
+      agentDir: this.piAgentDir, promptPaths: template.promptTemplates, includeDefaults: false }) : [];
+    return [...resolved, ...prompts];
   }
 
   /**
@@ -403,6 +486,24 @@ export class DurableRuntime {
       console.warn("[conduit-runtime] images will not be resized:", error?.message || error);
       return null;
     });
+  }
+
+  piSettings() {
+    try {
+      const file = path.join(this.piAgentDir, "settings.json");
+      const mtime = fs.statSync(file).mtimeMs;
+      if (this.piSettingsCache?.mtime === mtime) return this.piSettingsCache.settings;
+      let settings = {};
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) settings = parsed;
+      } catch {}
+      this.piSettingsCache = { mtime, settings };
+      return settings;
+    } catch {
+      this.piSettingsCache = null;
+      return {};
+    }
   }
 
   async defaultModel() {

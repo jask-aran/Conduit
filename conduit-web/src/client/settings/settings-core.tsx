@@ -18,6 +18,7 @@ import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
@@ -45,7 +46,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/component
 import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/dialog";
-import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading } from "@/components/ui";
+import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential, SettingRecorder, Keycap } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -95,7 +96,10 @@ interface PiAuthProvider {
   label: string;
   oauth: boolean;
   usesCallbackServer: boolean;
-  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; removable: boolean };
+  /** What its key goes with (Cloudflare's account ID), asked for beside it. */
+  fields?: Array<{ name: string; label: string }>;
+  /** kind: a stored credential's, a sign-in or a key. */
+  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; kind?: "oauth" | "key" | null; removable: boolean };
 }
 
 interface PiAuthAttempt {
@@ -133,12 +137,15 @@ interface SearchProvider {
 }
 
 type SearchTool = "webSearch" | "fetchContent" | "sourceCheck" | "getSearchContent";
-type SearchFetching = "github" | "video" | "pdf";
+type SearchFetching = "github" | "video" | "pdf" | "extract";
 interface SearchSettings {
   workflow: "none" | "managed";
-  route: { first: string; fallback: boolean; useCurrentModel: boolean };
+  /** timeoutMs: a routed search's whole time (null: none); offTopic: answers judged off-topic go on down the route. */
+  route: { first: string; fallback: boolean; useCurrentModel: boolean; timeoutMs: number | null; offTopic: boolean };
   tools: Record<SearchTool, boolean>;
   fetching: Record<SearchFetching, boolean>;
+  /** Whether Pi can call Cloudflare Workers AI, which extract mode and the off-topic check run on. */
+  cloudflare: boolean;
   providers: SearchProvider[];
 }
 type SearchEdit = { route?: Partial<SearchSettings["route"]>; tools?: Partial<SearchSettings["tools"]>; fetching?: Partial<SearchSettings["fetching"]> };
@@ -157,6 +164,13 @@ const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string
   { key: "video", label: "YouTube and video", title: "Transcripts, what is on screen and frames, for YouTube and local video files." },
   { key: "pdf", label: "PDFs", title: "Reads a PDF's text instead of returning the file." },
 ];
+const ACCOUNT_SOURCES: Record<NonNullable<PiAuthProvider["auth"]["source"]> | "none", string> = {
+  stored: "connected", environment: "key from the server", managed: "agent settings", none: "not connected",
+};
+const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
+  { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
+];
+const CLOUDFLARE_NEEDED = "Needs a Cloudflare Workers AI key and account ID: add them under Providers below.";
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
@@ -186,6 +200,24 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
 // them in (runtime-settings.js), which it would otherwise clamp to silently.
 type RuntimeDraft = { live: string; generating: string };
 const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8] } as const;
+// A count chosen from steps, the current one kept among them when it is not one (set elsewhere).
+const countSteps = (steps: number[], current: number | string) => [...new Set([...steps, Number(current)])].filter(Number.isFinite).sort((a, b) => a - b);
+/** Whether this browser draws on the graphics card: a software renderer (SwiftShader, llvmpipe) says it does not. */
+const gpuRendering = (() => {
+  let known: boolean | null | undefined;
+  return () => {
+    if (known !== undefined) return known;
+    try {
+      const gl = document.createElement("canvas").getContext("webgl");
+      const info = gl?.getExtension("WEBGL_debug_renderer_info");
+      const renderer = gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : "";
+      known = !gl ? false : renderer ? !/swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer) : null;
+    } catch { known = null; }
+    return known;
+  };
+})();
+const SIDEBAR_CHAT_STEPS = [5, 10, 15, 20, 30, 50, 75, 100];
+const RUNTIME_STEPS = { live: [1, 2, 4, 6, 8, 12, 16, 24, 32], generating: [1, 2, 3, 4, 5, 6, 7, 8] } as const;
 const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
   live: String(settings.maxLiveProcesses),
   generating: String(settings.maxGeneratingProcesses),
@@ -261,6 +293,7 @@ export function Settings(props: {
   const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
+  const [transcriptScaleChoice, setTranscriptScaleChoice] = createSignal(transcriptScale());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
@@ -324,22 +357,20 @@ export function Settings(props: {
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
-  const [authProviderId, setAuthProviderId] = createSignal("");
-  const [apiKey, setApiKey] = createSignal("");
+  // The provider chosen to add (not connected yet), and the search provider chosen to add.
+  const [addingAccount, setAddingAccount] = createSignal("");
+  const [addingSearch, setAddingSearch] = createSignal("");
   const [authResponse, setAuthResponse] = createSignal("");
   const [authLoading, setAuthLoading] = createSignal(false);
   const [authError, setAuthError] = createSignal("");
   const [authUnavailable, setAuthUnavailable] = createSignal(false);
   const [chatGptStatus, setChatGptStatus] = createSignal<ChatGptWebStatus | null>(null);
-  const [chatGptCookie, setChatGptCookie] = createSignal("");
   const [chatGptBusy, setChatGptBusy] = createSignal(false);
   const [chatGptError, setChatGptError] = createSignal("");
   const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
   const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [searchError, setSearchError] = createSignal("");
   // A provider's key being entered, in its row; one row at a time.
-  const [keyFor, setKeyFor] = createSignal<string | null>(null);
-  const [searchKey, setSearchKey] = createSignal("");
   const [searchSaving, setSearchSaving] = createSignal(false);
   // Each answer is the whole page; only the latest edit's is shown, so an
   // older answer never undoes a toggle made since.
@@ -351,8 +382,9 @@ export function Settings(props: {
   const [voiceServerSettings, setVoiceServerSettings] = createSignal<VoiceServerSettings | null>(null);
   const [voiceStatus, setVoiceStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [voiceError, setVoiceError] = createSignal("");
-  const [voiceSecret, setVoiceSecret] = createSignal("");
   const [voiceBusy, setVoiceBusy] = createSignal(false);
+  const [recordingVoiceKeys, setRecordingVoiceKeys] = createSignal(false);
+  const [voiceKeys, setVoiceKeys] = createSignal("");
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
   const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
@@ -441,10 +473,10 @@ export function Settings(props: {
       event.preventDefault();
       return;
     }
+    // A secret being entered in its row, or keys being recorded: their own Escape puts the row back, Settings stays.
+    if (target?.closest("[data-credential], .ui-setting-recorder")) return;
     event.preventDefault();
     event.stopPropagation();
-    // A key being entered in its row: Escape puts the row back, Settings stays.
-    if (keyFor() && target?.closest('[id^="search-key-"]')) return closeKey();
     props.onOpenChange(false);
   };
   const navigateSettingsTabs = (event: KeyboardEvent) => {
@@ -469,10 +501,7 @@ export function Settings(props: {
       audioInputSession?.dispose();
       audioInputSession = null;
       setAudioInputBusy(false);
-      setApiKey("");
       setAuthResponse("");
-      setSearchKey("");
-      setVoiceSecret("");
       setVoiceTestResult("");
       audioInputWaveform.reset();
       clearAudioInputTest();
@@ -531,6 +560,36 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
+  // The processes running now, each named by its chat; read again every few seconds while the page is open.
+  type LiveProcess = { id: string; chatId: string; status: string; activity?: string; generation?: unknown; model?: string; createdAt?: string };
+  const [processes, setProcesses] = createSignal<LiveProcess[]>([]);
+  const chatTitles = new Map<string, string>();
+  const [titlesSeen, setTitlesSeen] = createSignal(0);
+  const loadProcesses = async () => {
+    try {
+      const { sessions } = await api<{ sessions: LiveProcess[] }>("/v0/live-sessions");
+      const live = sessions.filter((session) => session.status !== "stopped");
+      setProcesses(live);
+      const unknown = live.filter((session) => !chatTitles.has(session.chatId));
+      await Promise.all(unknown.map(async (session) => {
+        const chat = await api<{ title?: string; status?: string }>(`/v0/chats/${encodeURIComponent(session.chatId)}`).catch(() => null);
+        // An empty draft is a new chat started ahead, so the next one opens at once.
+        chatTitles.set(session.chatId, chat?.title || (chat?.status === "draft" ? "New chat, started ahead" : "Untitled chat"));
+      }));
+      if (unknown.length) setTitlesSeen((count) => count + 1);
+    } catch { /* the counts above still say how many */ }
+  };
+  createEffect(() => {
+    if (!props.open || section() !== "runtime") return;
+    void loadProcesses();
+    const timer = window.setInterval(() => void loadProcesses(), 5000);
+    onCleanup(() => window.clearInterval(timer));
+  });
+  const stopProcess = async (id: string) => {
+    try { await api(`/v0/live-sessions/${encodeURIComponent(id)}/process`, { method: "DELETE" }); }
+    catch (error) { setRuntimeError((error as Error).message); }
+    await Promise.all([loadProcesses(), loadRuntime()]);
+  };
 
   const choosePrompt = (id: string, items = prompts()) => {
     if (id !== promptId()) void promptAutosave.flush();
@@ -601,7 +660,7 @@ export function Settings(props: {
       ]);
       applyAuthProviders(status.providers);
       setAuthAttempt(attempt.attempt);
-      if (!authProviderId()) setAuthProviderId(status.providers[0]?.id || "");
+      if (status.providers.some((provider) => provider.id === addingAccount() && provider.auth.configured)) setAddingAccount("");
       setAuthError("");
       setAuthUnavailable(false);
     } catch (error) {
@@ -610,18 +669,18 @@ export function Settings(props: {
       setAuthError(response.message);
     } finally { setAuthLoading(false); }
   };
-  createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
+  // Search shows Cloudflare Workers AI's account too (its off-topic check and extract mode run on it).
+  createEffect(() => { if (props.open && (section() === "models" || section() === "search")) void loadPiAuth(); });
   const loadChatGptStatus = async () => {
     try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
     catch (error) { setChatGptError((error as Error).message); }
   };
-  const saveChatGptCookie = async () => {
+  const saveChatGptCookie = async (cookie: string) => {
     setChatGptBusy(true);
     try {
-      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie: chatGptCookie() }) }));
-      setChatGptCookie("");
+      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie }) }));
       setChatGptError("");
-    } catch (error) { setChatGptError((error as Error).message); }
+    } catch (error) { setChatGptError((error as Error).message); throw error; }
     finally { setChatGptBusy(false); }
   };
   const removeChatGptCookie = async () => {
@@ -645,12 +704,11 @@ export function Settings(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
-  const startOAuth = async () => {
-    if (!authProviderId()) return;
+  const startOAuth = async (providerId: string) => {
     setAuthLoading(true);
     setAuthError("");
     try {
-      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId: authProviderId() }) });
+      const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId }) });
       setAuthAttempt(result.attempt);
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
@@ -669,22 +727,57 @@ export function Settings(props: {
     try { await api("/v0/pi-auth/attempt/cancel", { method: "POST" }); await loadPiAuth(); }
     catch (error) { setAuthError((error as Error).message); }
   };
-  const saveApiKey = async () => {
-    if (!authProviderId() || !apiKey()) return;
-    setAuthLoading(true);
+  const saveApiKey = async (providerId: string, key: string, env: Record<string, string>) => {
     setAuthError("");
     try {
-      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId: authProviderId(), key: apiKey() }) });
-      setApiKey("");
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key, env }) });
       await loadPiAuth();
-    } catch (error) { setAuthError((error as Error).message); }
-    finally { setAuthLoading(false); }
+      if (section() === "search") void loadSearchSettings();
+    } catch (error) { setAuthError((error as Error).message); throw error; }
   };
   const removePiAuth = async (providerId: string) => {
     setAuthLoading(true);
-    try { await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" }); await loadPiAuth(); }
+    try {
+      await api(`/v0/pi-auth/${encodeURIComponent(providerId)}`, { method: "DELETE" });
+      await loadPiAuth();
+      if (section() === "search") void loadSearchSettings();
+    }
     catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
+  };
+  /**
+   * A provider account's line: how it is connected and its own actions (sign in, a key, remove), its key form in
+   * place of them while open, the fields that go with the key and a sign-in under way below it. One credential,
+   * shown in Models & accounts and, for what search runs on, in Web search.
+   */
+  const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
+    const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
+    const configured = () => provider.auth.configured;
+    const signedIn = () => provider.auth.kind === "oauth";
+    const state = () => provider.auth.kind ? (signedIn() ? "signed in" : "key stored") : ACCOUNT_SOURCES[provider.auth.source || "none"];
+    return <>
+      <SettingCredential label={options.label || provider.label} title={options.title} state={<>{state()}</>} busy={authLoading()}
+        stored={provider.auth.removable && !signedIn()} editable={provider.auth.source !== "environment" && !signedIn()} add={provider.oauth ? "Use a key" : "Add key"}
+        fields={(provider.fields || []).map((field) => ({ ...field, placeholder: provider.auth.kind === "key" ? "Unchanged" : "",
+          title: `${field.name}, stored with the key. Left empty, the one stored before stays, or the server's own ${field.name} is used.` }))}
+        onSave={(key, env) => saveApiKey(provider.id, key, env)} onRemove={provider.auth.removable ? () => void removePiAuth(provider.id) : undefined}
+        actions={<>
+          <Show when={provider.oauth && (!configured() || signedIn())}><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>{signedIn() ? "Sign in again" : "Sign in"}</Button></Show>
+          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+          <Show when={options.pending}><Button variant="ghost" size="sm" onClick={() => setAddingAccount("")}>Cancel</Button></Show>
+        </>} />
+      <Show when={attempt()}>{(current) => <>
+        <SettingLine plain label="Sign-in" state={<>{current().message}</>}>
+          <Show when={current().authUrl}><SettingLink href={current().authUrl!}>Open sign-in</SettingLink></Show>
+          <Show when={current().active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
+        </SettingLine>
+        <Show when={current().authUrl && current().instructions}><SettingNote tone="quiet">{current().instructions}</SettingNote></Show>
+        <Show when={current().deviceCode}><SettingLine plain label="Code" state={<><code>{current().deviceCode!.userCode}</code></>}><SettingLink href={current().deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
+        <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
+        <Show when={current().prompt && current().prompt!.type !== "select"}><SettingLine plain label={current().prompt!.message}><Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
+        <Show when={current().error}><SettingNote tone="error">{current().error}</SettingNote></Show>
+      </>}</Show>
+    </>;
   };
 
   const loadSearchSettings = async () => {
@@ -719,18 +812,11 @@ export function Settings(props: {
     const source = searchProvider(first)?.source;
     return source ? SEARCH_SOURCE_LABELS[source] : "not set up";
   };
-  const openKey = (id: string) => { setSearchError(""); setSearchKey(""); setKeyFor(id); };
-  const closeKey = () => { setKeyFor(null); setSearchKey(""); };
-  const saveSearchKey = async () => {
-    const id = keyFor();
-    const key = searchKey().trim();
-    if (!id || !key) return;
+  const saveSearchKey = async (id: string, key: string) => {
     setSearchSaving(true);
     setSearchError("");
-    try {
-      setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) }));
-      closeKey();
-    } catch (error) { setSearchError((error as Error).message); }
+    try { setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) })); }
+    catch (error) { setSearchError((error as Error).message); throw error; }
     finally { setSearchSaving(false); }
   };
   const removeSearchKey = async (id: string) => {
@@ -965,9 +1051,7 @@ export function Settings(props: {
   };
   // A key is a credential, so it is saved by its own button (or Enter), not
   // as it is typed; what else is waiting is sent first.
-  const saveVoiceSecret = async () => {
-    const secret = voiceSecret().trim();
-    if (!secret) return;
+  const saveVoiceSecret = async (secret: string) => {
     setVoiceBusy(true);
     setVoiceError("");
     setVoiceTestResult("");
@@ -977,12 +1061,10 @@ export function Settings(props: {
       if (!settings) return;
       setVoiceServerSettings(await persistVoiceServer(settings, secret));
       setVoiceServerEdited(false);
-      setVoiceSecret("");
-    } catch (error) { setVoiceError((error as Error).message); }
+    } catch (error) { setVoiceError((error as Error).message); throw error; }
     finally { setVoiceBusy(false); }
   };
   const testVoiceServer = async () => {
-    if (voiceSecret().trim()) await saveVoiceSecret();
     const settings = voiceServerSettings();
     if (!settings) return;
     setVoiceBusy(true);
@@ -1185,21 +1267,54 @@ export function Settings(props: {
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
                   </SettingLine>
-                  <SettingLine label="Transcript font">
-                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
-                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
                   <SettingLine label="Terminal font">
                     <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
                       <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
                   <SettingLine label="Sidebar chats">
-                    <Input id="sidebar-chat-limit" type="number" min={MIN_SIDEBAR_CHAT_LIMIT} max={MAX_SIDEBAR_CHAT_LIMIT} step="1" value={props.sidebarChatLimit} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} onBlur={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))} />
+                    <Select id="sidebar-chat-limit" aria-label="Sidebar chats" value={String(props.sidebarChatLimit)} onChange={(event) => props.onSidebarChatLimitChange(Number(event.currentTarget.value))}>
+                      <For each={countSteps(SIDEBAR_CHAT_STEPS, props.sidebarChatLimit).filter((count) => count >= MIN_SIDEBAR_CHAT_LIMIT && count <= MAX_SIDEBAR_CHAT_LIMIT)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                    </Select>
                   </SettingLine>
                   <SettingLine label="Tab row">
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
+                  </SettingLine>
+                  <SettingLine label="Panel drag">
+                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
+                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Meteor field">
+                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
+                  </SettingLine>
+              </SettingGroup>
+              <DesktopSettingsTile />
+              <SettingGroup title="Reading">
+                  <SettingLine label="Transcript size" title="Messages and answers, on top of the Interface size; the chrome around them keeps its size.">
+                    <Select id="transcript-scale" aria-label="Transcript size" value={String(transcriptScaleChoice())} onChange={(event) => setTranscriptScaleChoice(saveTranscriptScale(Number(event.currentTarget.value) as TranscriptScale))}>
+                      <For each={TRANSCRIPT_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "As the interface" : `${Math.round(scale * 100)}%`}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Transcript font">
+                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
+                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Transcript width">
+                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
+                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Wide blocks">
+                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
+                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Code width">
+                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
+                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
                   </SettingLine>
                   <SettingLine label="Markdown">
                     <Select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
@@ -1216,32 +1331,6 @@ export function Settings(props: {
                       <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
                     </SettingLine>
                   </Show>
-                  <SettingLine label="Meteor field">
-                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
-                  </SettingLine>
-              </SettingGroup>
-              <DesktopSettingsTile />
-              <SettingGroup title="Reading">
-                  <SettingLine label="Transcript width">
-                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
-                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Wide blocks">
-                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
-                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Code width">
-                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
-                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Panel drag">
-                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
-                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
               </SettingGroup>
               <SettingGroup title="Collapse">
                   <SettingLine label="Code blocks">
@@ -1261,7 +1350,8 @@ export function Settings(props: {
                   </SettingLine>
               </SettingGroup>
               <SettingGroup title="Graphics">
-                <SettingLine plain label="Hardware acceleration" title="For smooth animations, backdrop blur and high-refresh-rate rendering, turn on “Use graphics acceleration when available” in your browser settings, then relaunch the browser."><SettingValue>Turn on in browser</SettingValue></SettingLine>
+                <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
+                <Show when={gpuRendering() === false}><SettingNote>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</SettingNote></Show>
               </SettingGroup>
             </>
           </Show>
@@ -1271,8 +1361,20 @@ export function Settings(props: {
             <>
               <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<SettingLoading>Loading runtime settings…</SettingLoading>}><SettingNote tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></SettingNote></Show>}>
                 <SettingGroup title="Agent processes">
-                  <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Input id="warm-processes" type="number" inputMode="numeric" value={runtimeDraft().live} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "live")) || undefined} onInput={(event) => editRuntime("live", event.currentTarget.value)} /></SettingLine>
-                  <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Input id="generations" type="number" inputMode="numeric" value={runtimeDraft().generating} aria-invalid={Boolean(runtimeFieldError(runtimeDraft(), "generating")) || undefined} onInput={(event) => editRuntime("generating", event.currentTarget.value)} /></SettingLine>
+                  <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Select id="warm-processes" aria-label="Warm processes" value={runtimeDraft().live} onChange={(event) => editRuntime("live", event.currentTarget.value)}>
+                    <For each={countSteps([...RUNTIME_STEPS.live], runtimeDraft().live)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                  </Select></SettingLine>
+                  <SettingLine label="Concurrent generations" state={<><Show when={runtimeFieldError(runtimeDraft(), "generating")} fallback={<>{runtime()!.generatingCount || 0} generating</>}>{(message) => message()}</Show></>}><Select id="generations" aria-label="Concurrent generations" value={runtimeDraft().generating} onChange={(event) => editRuntime("generating", event.currentTarget.value)}>
+                    <For each={countSteps([...RUNTIME_STEPS.generating], runtimeDraft().generating)}>{(count) => <option value={String(count)}>{count}</option>}</For>
+                  </Select></SettingLine>
+                </SettingGroup>
+                <SettingGroup title="Running now">
+                  <For each={processes()} fallback={<SettingNote>No agent processes are running.</SettingNote>}>{(process) =>
+                    <SettingLine plain label={(titlesSeen(), chatTitles.get(process.chatId) || "…")} title={`${process.model || ""}${process.createdAt ? ` · since ${new Date(process.createdAt).toLocaleString()}` : ""}`}
+                      state={<>{process.generation || (process.activity && process.activity !== "idle") ? "working" : "idle"}{process.model ? ` · ${process.model.split("/").at(-1)}` : ""}</>}>
+                      <Button variant="ghost" size="sm" onClick={() => void stopProcess(process.id)}>Stop</Button>
+                    </SettingLine>
+                  }</For>
                 </SettingGroup>
               </Show>
             </>
@@ -1320,7 +1422,6 @@ export function Settings(props: {
                   <Show when={voiceServerSettings()!.mode === "remote"}>
                     <SettingLine label="Provider"><Select id="voice-provider" disabled={voiceBusy()} value={voiceServerSettings()!.provider} onChange={(event) => {
                       const provider = voiceServerSettings()!.providers.find((candidate) => candidate.id === event.currentTarget.value)!;
-                      setVoiceSecret("");
                       editVoiceServer((current) => ({ ...current, provider: provider.id, adapter: provider.adapter, endpoint: provider.endpoint, model: provider.models[0]?.id || "", auth: { ...current.auth, type: provider.id === "custom" ? current.auth.type : "bearer", configured: Boolean(provider.configured), source: provider.configured ? "stored" : null, removable: Boolean(provider.configured) } }));
                     }}><For each={voiceServerSettings()!.providers}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
                     <Show when={selectedVoiceProvider()?.models.length}>
@@ -1345,11 +1446,9 @@ export function Settings(props: {
                       </Show>
                     </Show>
                     <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
-                      <SettingLine plain label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}>
-                          <Input id="voice-secret" aria-label={selectedVoiceProvider()?.authLabel || "Key"} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore disabled={voiceBusy()} value={voiceSecret()} onInput={(event) => setVoiceSecret(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveVoiceSecret(); }} placeholder={voiceServerSettings()!.auth.configured ? "Replace" : "Paste key"} />
-                          <Show when={voiceSecret().trim()}><Button size="sm" disabled={voiceBusy()} onClick={() => void saveVoiceSecret()}>Save</Button></Show>
-                          <Show when={!voiceSecret().trim() && voiceServerSettings()!.auth.removable}><Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void removeVoiceCredential()}>Remove</Button></Show>
-                      </SettingLine>
+                      <SettingCredential label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}
+                        busy={voiceBusy()} stored={voiceServerSettings()!.auth.configured} placeholder={selectedVoiceProvider()?.authLabel || "Key"}
+                        onSave={(secret) => saveVoiceSecret(secret)} onRemove={voiceServerSettings()!.auth.removable ? () => void removeVoiceCredential() : undefined} />
                     </Show>
                     <SettingLine plain label="Connection" state={<>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</>}>
                       <Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
@@ -1379,14 +1478,23 @@ export function Settings(props: {
                       { value: "processed", label: "Processed" },
                     ]} />
                   </SettingLine>
-                  <SettingLine label="Shortcut" title="Focus and press a shortcut"><Input id="dictation-shortcut" title="Focus and press a shortcut" value={voiceDraft().shortcut} readOnly onKeyDown={(event) => {
-                    // Tab and Esc still leave the field; every other key is recorded.
-                    if (event.key === "Tab" || event.key === "Escape") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const shortcut = shortcutFromKeyboardEvent(event);
-                    if (shortcut) updateVoiceDraft({ shortcut });
-                  }} /></SettingLine>
+                  {/* As on the Shortcuts page: its keys, which open a recorder under the line. */}
+                  <SettingLine plain label="Shortcut" title="Hold or press to dictate">
+                    <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
+                  </SettingLine>
+                  <Show when={recordingVoiceKeys()}>
+                    <SettingRecorder ref={(element) => queueMicrotask(() => element.focus())} label="Record the dictation shortcut" keys={voiceKeys() ? [voiceKeys()] : undefined}
+                      onKeyDown={(event) => {
+                        if (event.key === "Tab") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (event.key === "Escape") return setRecordingVoiceKeys(false);
+                        if (event.key === "Backspace") return setVoiceKeys("");
+                        const shortcut = shortcutFromKeyboardEvent(event);
+                        if (shortcut) setVoiceKeys(shortcut);
+                      }}
+                      onSave={() => { updateVoiceDraft({ shortcut: voiceKeys() }); setRecordingVoiceKeys(false); }} onCancel={() => setRecordingVoiceKeys(false)} />
+                  </Show>
                   <SettingLine plain label="Activation">
                     <Segmented arrows label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
                       { value: "push_to_talk", label: "Hold", icon: <HandIcon /> },
@@ -1416,8 +1524,20 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
                   <Show when={settings().route.first !== "auto"}>
-                    <SettingLine label="Fall back to the others" title="When it fails or is out of quota, the search goes on to every other provider that can search, in the order below.">
+                    <SettingLine label="Fall back to the others" title="When it fails, is out of quota, or finds nothing (or nothing on the sites asked for), the search goes on to every other provider that can search, in the order below. If they all find nothing, the first answer is kept.">
                       <Switch label="Fall back to the others" checked={settings().route.fallback} onChange={(fallback) => editSearch({ route: { fallback } })} />
+                    </SettingLine>
+                    <Show when={settings().route.fallback}>
+                      <SettingLine label="Skip off-topic results" title={settings().cloudflare
+                        ? "Each answer is checked against the query by Cloudflare's Clef classifier on your Cloudflare account (the query, answer and snippets are sent to it); one about something else goes on to the next provider."
+                        : CLOUDFLARE_NEEDED}>
+                        <Switch label="Skip off-topic results" disabled={!settings().cloudflare && !settings().route.offTopic} checked={settings().route.offTopic} onChange={(offTopic) => editSearch({ route: { offTopic } })} />
+                      </SettingLine>
+                    </Show>
+                    <SettingLine label="Time limit" title="The most one search may take across every provider it tries; when it runs out, the best answer so far is kept.">
+                      <Select id="search-time-limit" value={String(settings().route.timeoutMs ?? "")} onChange={(event) => editSearch({ route: { timeoutMs: event.currentTarget.value ? Number(event.currentTarget.value) : null } })}>
+                        <For each={SEARCH_TIME_LIMITS}>{(limit) => <option value={limit.ms === null ? "" : String(limit.ms)}>{limit.label}</option>}</For>
+                      </Select>
                     </SettingLine>
                     <SettingLine label="Match the chat's model" title="A GPT model on OpenAI's own endpoints searches with its own hosted search; any other model goes on down the route.">
                       <Switch label="Match the chat's model" checked={settings().route.useCurrentModel} onChange={(useCurrentModel) => editSearch({ route: { useCurrentModel } })} />
@@ -1438,24 +1558,34 @@ export function Settings(props: {
                       <Switch label={item.label} checked={settings().fetching[item.key]} onChange={(on) => editSearch({ fetching: { [item.key]: on } })} />
                     </SettingLine>
                   }</For>
+                  <SettingLine label="Read values off pages" title={settings().cloudflare
+                    ? "fetch_content's extract mode: a price, a date or a limit as a typed value, with the line it came from, or said not to be there. Read by Cloudflare's Clairic model on your Cloudflare account; the page text is sent to Cloudflare."
+                    : CLOUDFLARE_NEEDED}>
+                    <Switch label="Read values off pages" disabled={!settings().cloudflare && !settings().fetching.extract} checked={settings().fetching.extract} onChange={(extract) => editSearch({ fetching: { extract } })} />
+                  </SettingLine>
+                  <Show when={!settings().cloudflare}><SettingNote>{CLOUDFLARE_NEEDED}</SettingNote></Show>
                 </SettingGroup>
                 <SettingGroup title="Providers">
-                  <For each={settings().providers}>{(provider) =>
-                    <SettingLine plain label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}>
-                      <Show when={keyFor() === provider.id} fallback={<>
-                        <Show when={provider.source !== "environment"}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => openKey(provider.id)}>{provider.stored ? "Replace" : "Add key"}</Button></Show>
-                        <Show when={provider.removable}><Button variant="ghost" size="sm" disabled={searchSaving()} onClick={() => void removeSearchKey(provider.id)}>Remove</Button></Show>
-                      </>}>
-                        <Input id={`search-key-${provider.id}`} aria-label={`${provider.label} API key`} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
-                          ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())}
-                          value={searchKey()} onInput={(event) => setSearchKey(event.currentTarget.value)} placeholder="API key"
-                          onKeyDown={(event) => { if (event.key === "Enter") void saveSearchKey(); }} />
-                        <Button size="sm" disabled={searchSaving() || !searchKey().trim()} onClick={() => void saveSearchKey()}>{searchSaving() ? <Spinner /> : null}Save</Button>
-                        <Button variant="ghost" size="sm" disabled={searchSaving()} onClick={closeKey}>Cancel</Button>
-                      </Show>
-                    </SettingLine>
+                  {/* Those that can search now, then the one being added; the rest are a search away. */}
+                  <For each={settings().providers.filter((provider) => provider.ready || provider.id === addingSearch())}>{(provider) =>
+                    <SettingCredential label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}
+                      busy={searchSaving()} stored={provider.stored} editable={provider.source !== "environment"}
+                      actions={<Show when={!provider.ready}><Button variant="ghost" size="sm" onClick={() => setAddingSearch("")}>Cancel</Button></Show>}
+                      onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
+                  <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
+                    title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models & accounts.",
+                  })}</Show>
+                  <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
+                    <SettingLine label="Add a provider" title="A search provider's API key, kept in pi-web-access's web-search.json on this server.">
+                      <Select id="search-add-provider" aria-label="Add a provider" search="Search providers" value="" onChange={(event) => setAddingSearch(event.currentTarget.value)}>
+                        <option value="">Choose a provider</option>
+                        <For each={settings().providers.filter((provider) => !provider.ready && provider.id !== addingSearch())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                      </Select>
+                    </SettingLine>
+                  </Show>
                   <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+                  <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
                   <SettingNote>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></SettingNote>
                 </SettingGroup>
               </>}
@@ -1480,17 +1610,16 @@ export function Settings(props: {
               <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
             </SettingGroup>
             <SettingGroup title="ChatGPT Web">
-              <SettingLine plain label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>} title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}>
-                  <Input id="chatgpt-web-cookie" aria-label="Cookies" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore value={chatGptCookie()} onInput={(event) => setChatGptCookie(event.currentTarget.value)} placeholder={chatGptStatus()?.auth === "configured" ? "Replace" : "Paste the Cookie header"} onKeyDown={(event) => { if (event.key === "Enter" && chatGptCookie().trim()) void saveChatGptCookie(); }} />
-                  <Show when={chatGptCookie().trim()}><Button size="sm" disabled={chatGptBusy()} onClick={() => void saveChatGptCookie()}>{chatGptBusy() ? <Spinner /> : null}Save</Button></Show>
-                  <Show when={!chatGptCookie().trim() && chatGptStatus()?.auth === "configured"}><Button variant="ghost" size="sm" disabled={chatGptBusy()} onClick={() => void removeChatGptCookie()}>Remove</Button></Show>
-              </SettingLine>
+              <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
+                title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}
+                busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
+                onSave={(cookie) => saveChatGptCookie(cookie)} onRemove={() => void removeChatGptCookie()} />
               <SettingDetails summary="Where to find them">
                 <ol>
                   <li>Sign in at <SettingLink href="https://chatgpt.com">chatgpt.com</SettingLink>.</li>
                   <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
                   <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
-                  <li>Paste it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
+                  <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
                 </ol>
                 <SettingNote>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</SettingNote>
               </SettingDetails>
@@ -1500,29 +1629,17 @@ export function Settings(props: {
               <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</SettingNote></Show>
               <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <SettingLine label="Provider" title="Credentials are stored only in Conduit durable agent."><Select id="pi-auth-provider" aria-label="Model provider" value={authProviderId()} onChange={(event) => setAuthProviderId(event.currentTarget.value)}><For each={authProviders()}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For></Select></SettingLine>
-                <Show when={authProviders().find((provider) => provider.id === authProviderId())?.oauth}>
-                  <SettingLine plain label="Sign in"><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth()}>{authLoading() ? <Spinner /> : null}Sign in with browser</Button></SettingLine>
-                </Show>
-                <SettingLine plain label="API key">
-                    <Input id="pi-api-key" aria-label="API key" type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore value={apiKey()} onInput={(event) => setApiKey(event.currentTarget.value)} placeholder="Stored in the Conduit durable agent" onKeyDown={(event) => { if (event.key === "Enter" && apiKey()) void saveApiKey(); }} />
-                    <Show when={apiKey()}><Button size="sm" disabled={authLoading()} onClick={() => void saveApiKey()}>{authLoading() ? <Spinner /> : null}Save</Button></Show>
-                </SettingLine>
-                <Show when={authAttempt()?.owned}>
-                  <SettingLine plain label={authAttempt()!.providerLabel} state={<>{authAttempt()!.message}</>}>
-                      <Show when={authAttempt()!.authUrl}><SettingLink href={authAttempt()!.authUrl!}>Open sign-in</SettingLink></Show>
-                      <Show when={authAttempt()!.active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
+                <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
+                <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
+                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept by the Conduit durable agent on this server.">
+                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => setAddingAccount(event.currentTarget.value)}>
+                      <option value="">Choose a provider</option>
+                      <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                    </Select>
                   </SettingLine>
-                  <Show when={authAttempt()!.authUrl && authAttempt()!.instructions}><SettingNote tone="quiet">{authAttempt()!.instructions}</SettingNote></Show>
-                  <Show when={authAttempt()!.deviceCode}><SettingLine plain label="Code" state={<><code>{authAttempt()!.deviceCode!.userCode}</code></>}><SettingLink href={authAttempt()!.deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
-                  <Show when={authAttempt()!.prompt?.type === "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><For each={authAttempt()!.prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
-                  <Show when={authAttempt()!.prompt && authAttempt()!.prompt!.type !== "select"}><SettingLine plain label={authAttempt()!.prompt!.message}><Input id="pi-auth-response" aria-label={authAttempt()!.prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={authAttempt()!.prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
-                  <Show when={authAttempt()!.error}><SettingNote tone="error">{authAttempt()!.error}</SettingNote></Show>
                 </Show>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => <SettingLine plain label={provider.label} state={<>{provider.auth.source === "stored" ? "stored" : provider.auth.source === "environment" ? "environment" : "Agent settings"}</>} title={provider.auth.source === "stored" ? "Credential stored for the Conduit durable agent" : provider.auth.source === "environment" ? "Credential available from the server environment" : "Credential managed by the agent settings"}>
-                  <Show when={provider.auth.removable} fallback={<span />}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
-                </SettingLine>}</For>
-              </Show>}><SettingLine plain label="Provider" state={<>loading…</>}><span /></SettingLine></Show>
+              </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </SettingGroup>
           </></Show>
       </OverlayPage>

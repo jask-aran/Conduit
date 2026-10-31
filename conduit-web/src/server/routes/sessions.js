@@ -12,7 +12,7 @@ import {
   moveDurableChat,
   sessionDirectoryForChat,
   sessionDirectoryRootForChat,
-  stopSessionProcesses,
+  discardSession,
 } from "../../session-operations.js";
 
 export function registerSessionRoutes(app, {
@@ -62,7 +62,42 @@ export function registerSessionRoutes(app, {
       opaqueSession: context.chat.backend?.opaqueSession,
       project: context.project,
     });
-    return transcriptFromMessages(projection.messages || []).trim();
+    if (context.chat.backend?.implementation !== "conduit-runtime") return transcriptFromMessages(projection.messages || []).trim();
+    const tools = new Map((projection.tools || []).map((tool) => [tool.toolCallId, tool]));
+    const sections = [];
+    // Bound added tool text per result and per export; message text stays unchanged.
+    let remaining = 1024 * 1024;
+    let truncated = false;
+    // Fenced longer than any run of backticks inside, so tool text cannot end its own block.
+    const includeTool = (text, info = "") => {
+      const limit = Math.min(32 * 1024, remaining);
+      if (!limit) { truncated = true; return ""; }
+      const kept = text.slice(0, limit);
+      remaining -= kept.length;
+      const fence = "`".repeat(Math.max(3, ...[...kept.matchAll(/`+/g)].map((run) => run[0].length + 1)));
+      return `${fence}${info}\n${kept.replace(/\n+$/, "")}\n${fence}${text.length > limit ? "\n\n[Tool text truncated]" : ""}`;
+    };
+    for (const message of projection.messages || []) {
+      const text = transcriptFromMessages([message]);
+      if (text) sections.push(text);
+      for (const block of Array.isArray(message.blocks) ? message.blocks : []) {
+        if (block?.kind !== "tool_call") continue;
+        if (!remaining) { truncated = true; continue; }
+        const tool = tools.get(block.toolCallId);
+        const input = block.input ?? tool?.input;
+        let argumentsText;
+        try { argumentsText = JSON.stringify(input ?? {}, null, 2); }
+        catch { argumentsText = "[Tool arguments unavailable]"; }
+        const call = includeTool(argumentsText, "json");
+        if (call) sections.push(`## Tool call: ${block.name || tool?.name || "tool"}\n\n${call}`);
+        if (typeof tool?.output === "string" && tool.output.trim()) {
+          const output = includeTool(tool.output);
+          if (output) sections.push(`## Tool result\n\n${output}`);
+        }
+      }
+    }
+    if (truncated) sections.push("[Further tool text omitted: export tool-text limit reached]");
+    return sections.join("\n\n").trim();
   }
 
   /*
@@ -224,7 +259,7 @@ export function registerSessionRoutes(app, {
             foreign = true;
             console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
           }
-          await stopSessionProcesses(backends, context.chat);
+          await discardSession(backends, context.chat, registry);
           if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
           // A converted chat's classic session goes too: left behind, startup
           // recovers it as a lost session and the chat comes back.

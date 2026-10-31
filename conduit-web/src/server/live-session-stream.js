@@ -292,7 +292,15 @@ export function createLiveSessionStream({
     return taken;
   }
 
+  const assertChildCommand = (record, command) => {
+    if ((record.readOnly || registry.metadata(record.chatId)?.status === "subagent")
+      && !["frame_interval", "resume_log", "refresh_context"].includes(command?.type)) {
+      throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
+    }
+  };
+
   async function handleClientCommand(record, command) {
+    assertChildCommand(record, command);
     const adapter = adapterFor(record);
     if (command.type === "prompt") {
       if (record.ephemeral) return startGeneration(record,
@@ -402,7 +410,7 @@ export function createLiveSessionStream({
       return null;
     }
     if (command.type === "refresh_context") return adapter.refreshContext(record.id);
-    if (command.type === "compact") return adapter.compact(record.id);
+    if (command.type === "compact") return adapter.compact(record.id, typeof command.instructions === "string" ? command.instructions.trim().slice(0, 2000).trim() || undefined : undefined);
     throw Object.assign(new Error(`Unknown live-session command: ${String(command.type || "")}`), {
       code: "invalid_request", status: 400,
     });
@@ -416,6 +424,7 @@ export function createLiveSessionStream({
    * caller with no socket: a headless run.
    */
   async function submitPrompt(chatId, message, { model = "", thinkingLevel = "" } = {}) {
+    if (registry.metadata(chatId)?.status === "subagent") throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
     return lifecycle.run(chatId, async () => {
       const context = await findChatContext(chatId);
       if (!context) throw Object.assign(new Error("Chat not found"), { code: "chat_not_found", status: 404 });
@@ -490,6 +499,7 @@ export function createLiveSessionStream({
       let command;
       try { command = JSON.parse(String(data)); }
       catch (error) { report(Object.assign(error, { code: "invalid_request" })); return; }
+      try { assertChildCommand(record, command); } catch (error) { report(error); return; }
       // How fast this reader draws, measured by the only party that can see it.
       // About this one socket; it never joins the ordered command chain.
       if (command.type === "frame_interval") {

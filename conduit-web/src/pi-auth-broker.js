@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
@@ -46,6 +47,13 @@ function messageFor(errorValue) {
   return errorValue instanceof Error ? errorValue.message : String(errorValue || "Authentication failed");
 }
 
+// What a provider's API key goes with, asked for beside it (Pi's own login prompts for these), stored on the credential's
+// `env`; the server's environment fills any left empty.
+const KEY_FIELDS = {
+  "cloudflare-workers-ai": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }],
+  "cloudflare-ai-gateway": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }, { name: "CLOUDFLARE_GATEWAY_ID", label: "Gateway ID" }],
+};
+
 export class PiAuthBroker {
   constructor({ authStorage, modelRegistry, modelRuntime = null, authFile = "", onCredentialsChanged = async () => {}, now = () => Date.now() }) {
     this.authStorage = authStorage;
@@ -55,6 +63,27 @@ export class PiAuthBroker {
     this.onCredentialsChanged = onCredentialsChanged;
     this.now = now;
     this.attempt = null;
+  }
+
+  /**
+   * This installation's device ID, as a provider's sign-in asks for one (Sign in with ChatGPT names the agent host by
+   * it): made on first use beside the auth file, the same on every later sign-in.
+   */
+  deviceId() {
+    const file = path.join(path.dirname(this.authFile || "."), "conduit-device-id");
+    try {
+      const saved = readFileSync(file, "utf8").trim();
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved)) return saved;
+    } catch { /* made below */ }
+    const id = crypto.randomUUID();
+    writeFileSync(file, `${id}\n`, { mode: 0o600 });
+    return id;
+  }
+
+  /** What each stored credential is, a sign-in or a key, so its account offers the matching action. */
+  async storedKinds() {
+    const stored = this.authFile ? await readAuthFile(this.authFile) : {};
+    return Object.fromEntries(Object.entries(stored).map(([id, credential]) => [id, credential?.type === "oauth" ? "oauth" : "key"]));
   }
 
   providers() {
@@ -76,6 +105,7 @@ export class PiAuthBroker {
             label: provider.name || provider.id,
             oauth: Boolean(oauth),
             usesCallbackServer: false,
+            fields: KEY_FIELDS[provider.id] || [],
             auth: {
               configured: status.configured === true,
               source,
@@ -247,7 +277,7 @@ export class PiAuthBroker {
               attempt.message = event.message;
             }
           },
-        });
+        }, { getDeviceId: () => this.deviceId(), agentName: "Conduit" });
       } else {
         await this.authStorage.login(attempt.providerId, callbacks);
       }
@@ -296,14 +326,17 @@ export class PiAuthBroker {
     return true;
   }
 
-  async setApiKey(providerId, key) {
+  async setApiKey(providerId, key, env = {}) {
     if (this.modelRuntime) {
       const provider = this.modelRuntime.getProvider(providerId);
       if (!provider || !this.authFile) throw error("api_key_provider_unknown", "Choose a provider known to the Conduit durable agent");
       const value = String(key || "");
       if (!value.trim()) throw error("api_key_required", "API key cannot be empty");
       const auth = await readAuthFile(this.authFile);
-      auth[providerId] = { type: "api_key", key: literalApiKey(value) };
+      // A field left empty keeps what was stored with the key before (a new key, the same account).
+      const fields = Object.fromEntries((KEY_FIELDS[providerId] || [])
+        .map((field) => [field.name, String(env?.[field.name] || "").trim() || auth[providerId]?.env?.[field.name] || ""]).filter(([, given]) => given));
+      auth[providerId] = { type: "api_key", key: literalApiKey(value), ...(Object.keys(fields).length ? { env: fields } : {}) };
       await writeAuthFile(this.authFile, auth);
       await this.modelRuntime.refresh({ allowNetwork: false });
       await this.onCredentialsChanged(providerId);

@@ -1,7 +1,8 @@
 import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Suspense, Switch } from "solid-js";
 
-import type { Message, ToolItem, ToolKind } from "../api/contracts";
+import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
+import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { elapsed, KIND_ICONS, stepDuration, ToolStep, VERBS } from "./tool-card";
 import { Orb, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
@@ -31,6 +32,7 @@ const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   search: (count) => `Ran ${count} searches`,
   fetch: (count) => `Ran ${count} fetches`,
   script: (count) => `Scripted tools ${count} times`,
+  agent: (count) => `Managed agents ${count} times`,
   other: (count) => `Used ${count} tools`,
 };
 type TrailItem =
@@ -41,7 +43,8 @@ type TrailItem =
   | { type: "hidden" };
 
 /* The segments as the trail's lines: a run of tools of one kind becomes a
-   group, anything else its own line. */
+   group, anything else its own line. A subagent's spawn is not a line: it is
+   pinned under the head (TurnAgents), where the fold does not hide it. */
 function trailOf(segments: TraceSegment[]): TrailItem[] {
   const items: TrailItem[] = [];
   let run: ToolItem[] = [];
@@ -64,6 +67,7 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
       continue;
     }
     if (segment.kind === "tool") {
+      if (spawned(segment.tool)) continue;
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
       run.push(segment.tool);
       continue;
@@ -147,6 +151,7 @@ const KIND_WORDS: Record<ToolKind, [string, string]> = {
   search: ["search", "searches"],
   fetch: ["fetch", "fetches"],
   script: ["script", "scripts"],
+  agent: ["agent", "agents"],
   other: ["tool", "tools"],
 };
 const plural = (count: number, [one, many]: [string, string]) => `${count} ${count === 1 ? one : many}`;
@@ -159,14 +164,15 @@ const unnamed = (tool: ToolItem) => !tool.name || tool.name === "tool";
 
 function workOf(tools: ToolItem[]): string {
   const counts = new Map<ToolKind, number>();
-  for (const tool of tools) if (!unnamed(tool)) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
+  // An agent is counted once, where it was handed its task; listing or messaging agents is not another.
+  for (const tool of tools) if (!unnamed(tool) && (tool.kind !== "agent" || spawned(tool))) counts.set(tool.kind || "other", (counts.get(tool.kind || "other") || 0) + 1);
   return [...counts].sort((left, right) => right[1] - left[1])
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
 
 /* What a running tool of each kind is doing. */
 const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
-  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools",
+  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools", agent: "Delegating",
 };
 
 /* One verb for what it is doing, or how it ended -- always there, so a clean
@@ -182,7 +188,7 @@ const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
 type Mark = { orb: OrbState; frame?: ModeFrame };
 const KIND_ORBS: Record<ToolKind, Mark> = {
   command: { orb: "solving" }, read: { orb: "weaving" }, edit: { orb: "working", frame: ORBITS_TRAILED },
-  search: { orb: "searching" }, fetch: { orb: "searching" }, script: { orb: "solving" }, other: { orb: "solving" },
+  search: { orb: "searching" }, fetch: { orb: "searching" }, script: { orb: "solving" }, agent: { orb: "weaving" }, other: { orb: "solving" },
 };
 
 function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string } {
@@ -247,7 +253,8 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
     const segment = trace.segments[index]!;
     let detail: Detail | null = null;
     if (segment.kind === "tool") {
-      const line = unnamed(segment.tool) ? "" : stepLine(segment.tool, trace.active);
+      // A spawn says itself in its pinned row, under this line.
+      const line = unnamed(segment.tool) || spawned(segment.tool) ? "" : stepLine(segment.tool, trace.active);
       if (line) latest ??= { text: line, markdown: false };
       continue;
     }
@@ -325,12 +332,14 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
 }
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
-export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
+/** agents: the chat's (its background ones' state); onStopAgent: stops a background one. */
+export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const trail = createMemo(() => trailOf(props.trace.segments));
+  const spawns = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && spawned(segment.tool) ? [segment.tool] : []));
   let opened = 0;
   // One renderer for the line, its text growing in place: a new one each delta draws a blank frame between them.
   // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
@@ -340,7 +349,8 @@ export function TurnTrace(props: { trace: TurnTraceData; writing?: boolean; rend
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={preview().status.verb} time={time() || undefined} work={preview().work || undefined} latest={latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
-      opens={props.trace.segments.length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
+      pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
+      opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace>;
