@@ -4,7 +4,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type 
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
-import { type Density, type Motion, motionOf, moveCursor } from "./shared";
+import { cssTime, type Density, type Motion, motionOf, moveCursor } from "./shared";
 
 /*
  * Overlay: raised frost over a dimmed page -- the app's large surfaces (the
@@ -49,7 +49,7 @@ function createWidthSettle(frame: () => HTMLElement | undefined, width: () => un
     if (page) page.style.setProperty("--overlay-page-width", `${page.getBoundingClientRect().width}px`);
     element.dataset.settling = "";
     running = element.animate([{ width: `${from}px` }, { width: `${to}px` }], {
-      duration: parseFloat(style.getPropertyValue("--duration-fold")) || 240, easing: style.getPropertyValue("--ease-settle").trim() || "ease-out" });
+      duration: cssTime(element, "--duration-fold", 240), easing: style.getPropertyValue("--ease-settle").trim() || "ease-out" });
     const done = running;
     const finish = () => { if (running !== done) return; running = undefined; delete element.dataset.settling; page?.style.removeProperty("--overlay-page-width"); };
     done.onfinish = finish; done.oncancel = finish;
@@ -146,7 +146,7 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
     const busy = Boolean(props.busy);
     if (busy) { clearTimeout(timer); if (held() === null) since = performance.now(); setHeld(props.status ?? "Saving"); return; }
     if (held() === null) return;
-    const turn = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-spin")) || 800;
+    const turn = cssTime(document.documentElement, "--duration-spin", 800);
     const left = props.failed ? 0 : turn - (performance.now() - since);
     clearTimeout(timer);
     if (left <= 0) setHeld(null); else timer = setTimeout(() => setHeld(null), left);
