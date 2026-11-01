@@ -22,6 +22,12 @@
 .ui-agent-open:focus-visible .ui-agent-chevron { opacity: 1; }
 @media (hover: hover) { .ui-agent-open:hover .ui-agent-chevron { opacity: 1; } }
 .ui-agent-stop { flex: none; color: var(--muted-foreground); }
+/* A background spawn: one line, the verb in the row's weight, the ids in data type, the task muted after them. */
+.ui-agent-spawn .ui-agent-head { flex: 1; }
+.ui-agent-spawn .ui-agent-title { color: var(--muted-foreground); }
+.ui-agent-verb { flex: none; font-weight: var(--weight-lift); }
+.ui-agent-row .ui-button.ui-agent-report { flex: none; gap: var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
+.ui-agent-report > svg { width: var(--icon-xs); height: var(--icon-xs); }
 span.ui-agent-stop { width: var(--control-sm); }
 
 /* One line: the status after the task, both cut short (the task first, to a share of the row), the time at the end. */

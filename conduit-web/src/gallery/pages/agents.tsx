@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentRider, AgentRow, AgentRows, Button, HarnessPrompt, Orb, Trace, type AgentState } from "@/components/ui";
+import { AgentRider, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
@@ -51,9 +51,15 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     row("AgentRow states", "a turn's own (no id) and background ones (an id, and Stop while they work); finished, failed, stopped", () => turn(ROWS), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentRider", "a chat's background agents on its composer, a line each: mark, id, task, status, time; Stop while it works; past five it scrolls", () => strip(STRIP), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentRider · one", "a single agent", () => strip(STRIP.slice(0, 1)), { surfaces: ["ground"] }),
+    row("AgentSpawn", "where background agents branched off a turn: one quiet line (Started, the ids, the task for one); Report jumps to the report once it is back. How they are doing rides on the composer", () =>
+      <Trace orb={orb(true)} status="Done" time="4s" pinned={<AgentRows><AgentSpawn ids={["sa-1"]} title="Research gassho house pricing" onOpen={() => {}} onReport={() => {}} /><AgentSpawn ids={["sa-2", "sa-3", "sa-4"]} /></AgentRows>} />,
+      { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
+    row("Report row", "the join: a background agent's answer as it reached the thread; Started goes back to its spawn line, Open run to its transcript", () =>
+      <Inbound shut icon={<Icons.Agent aria-hidden="true" />} from="sa-1" meta="sa-1 · finished" time="10:22 PM" onOpen={() => {}} openLabel="Open run" onBack={() => {}} backLabel="Started">ping</Inbound>,
+      { source: "components/ui/transcript.tsx · Inbound", surfaces: ["ground"], phone: true }),
     row("Report", "a background agent's report arrives as the harness's own line, and opens the subagent's transcript", () => <HarnessPrompt onOpen={() => {}}>sa-1 finished: Research gassho house pricing</HarnessPrompt>, { source: "components/ui/transcript.tsx · HarnessPrompt", surfaces: ["ground"] }),
     row("Beside the queued rider", "riders stack on the composer; the agents sit above what waits to be sent", () => <div class="g-stack">{strip(STRIP.slice(0, 2))}<div class="g-composer">{queued()}</div></div>, { surfaces: ["ground"] }),
   ],
   motion: [row("An agent arrives", "each new agent's line fades into the rider", () => <StripCycle />, { surfaces: ["ground"] })],
-  api: ["AgentRows", "AgentRow", "AgentRider", "Trace", "HarnessPrompt"],
+  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentRider", "Inbound", "Trace", "HarnessPrompt"],
 };

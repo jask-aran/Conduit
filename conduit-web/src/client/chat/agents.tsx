@@ -1,4 +1,4 @@
-import { AgentRider, AgentRow, AgentRows, type AgentState } from "@/components/ui";
+import { AgentRider, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show } from "solid-js";
 
 import type { AgentSummary, ToolItem } from "../api/contracts";
@@ -68,16 +68,35 @@ function rowOfAgent(agent: AgentSummary): Row {
     usage: agent.status !== "running" && agent.usage.context ? context(agent.usage.context) : undefined };
 }
 
+/** Scroll the transcript the person is in to a row, gently, centred: a report from its spawn line, or back. */
+function scrollToRow(selector: string, last = false) {
+  const root = (document.activeElement?.closest(".ui-transcript") ?? document) as ParentNode;
+  const found = [...root.querySelectorAll<HTMLElement>(selector)];
+  (last ? found.at(-1) : found[0])?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+/** Back from a report to the line that started its agent. */
+export const jumpToSpawn = (id: string) => scrollToRow(`[data-spawn~="${CSS.escape(id)}"]`);
+const jumpToReport = (ids: string[]) => scrollToRow(ids.map((id) => `[data-report="${CSS.escape(id)}"]`).join(", "), true);
+
 /** A turn's agents: its spawn calls', then those its codemode scripts spawned (`scripts`: the turn's script call ids),
- *  drawn alike -- a spawn is a spawn however the model asked for it. */
+ *  drawn alike -- a spawn is a spawn however the model asked for it. A foreground one starts and ends inside the turn,
+ *  so it is one live AgentRow; background ones branch off and join later as reports, so the turn keeps only where they
+ *  started (AgentSpawn, one line for those started together) -- how they are doing rides on the composer. */
 export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; scripts?: string[]; onStop?: (id: string) => void }) {
-  const rows = createMemo(() => [...props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)),
+  const all = createMemo(() => [...props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)),
     ...(props.scripts?.length ? props.agents.filter((agent) => agent.via && props.scripts!.includes(agent.via)).map(rowOfAgent) : [])]);
+  const rows = createMemo(() => all().filter((row) => !(row.background && row.id)));
+  const started = createMemo(() => all().filter((row) => row.background && row.id));
   const now = useNow(() => rows().some((row) => row.state === "running"));
-  return <Show when={rows().length}>
+  const reported = () => started().filter((row) => row.state !== "running").map((row) => row.id!);
+  return <Show when={all().length}>
     <AgentRows><Index each={rows()}>{(row) => <AgentRow id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
-      time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined}
-      onStop={row().background && row().id && props.onStop ? () => props.onStop!(row().id!) : undefined} />}</Index></AgentRows>
+      time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
+      <Show when={started().length}>
+        <AgentSpawn ids={started().map((row) => row.id!)} title={started().length === 1 ? started()[0]!.title : undefined}
+          onOpen={started().length === 1 && started()[0]!.chatId ? () => openAgentChat(started()[0]!.chatId!) : undefined}
+          onReport={reported().length ? () => jumpToReport(reported()) : undefined} />
+      </Show></AgentRows>
   </Show>;
 }
 

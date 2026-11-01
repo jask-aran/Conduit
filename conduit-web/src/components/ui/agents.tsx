@@ -47,6 +47,23 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
   </li>;
 }
 
+/**
+ * A background subagent where it branched off a turn: one quiet line, not a live row -- it belongs to no turn once
+ * started, so how it is doing rides on the composer's AgentRider, and its answer joins the thread later as a report.
+ * ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one. The line opens its transcript (onOpen);
+ * once it has reported, onReport jumps to that report. data-spawn holds the ids, for a report to jump back to.
+ */
+export function AgentSpawn(props: { ids: string[]; title?: string; onOpen?: () => void; onReport?: () => void; motion?: Motion }) {
+  return <li class="ui-agent-row ui-agent-spawn" data-spawn={props.ids.join(" ")} {...motionOf(props.motion)}>
+    <button type="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => props.onOpen?.()}>
+      <span class="ui-agent-mark"><Icons.Agent /></span>
+      <span class="ui-agent-head"><span class="ui-agent-verb">Started</span><code class="ui-agent-id">{props.ids.join(", ")}</code><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show></span>
+      <Show when={props.onOpen}><Icons.ChevronRight class="ui-agent-chevron" /></Show>
+    </button>
+    <Show when={props.onReport}><Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => props.onReport?.()}>Report<Icons.ArrowDown /></Button></Show>
+  </li>;
+}
+
 /** A chat's background agents on its composer: their AgentRows, each on one line (AgentRow line). No title: each row
  *  carries its agent's mark. A long list scrolls in place of growing over the transcript. */
 export function AgentRider(props: { motion?: Motion; children: JSX.Element }) {
