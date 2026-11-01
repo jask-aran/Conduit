@@ -33,7 +33,7 @@ test("runtime context, notes and local flags survive the same fold on reload and
   assert.deepEqual(contexts.map((message) => [message.id, message.answers, message.context.kind]),
     [["c42-2", "u1", "prompt"], ["c42-4", "u1", "update"], ["c42-5", "u1", "compaction"]]);
   assert.deepEqual(contexts[0].context.sections, [{ name: "instructions", chars: 11 }, { name: "cwd", chars: 5 }, { name: "web", chars: 11 }]);
-  assert.deepEqual(contexts[1].context.tools, { added: [], removed: [], restated: 1 });
+  assert.deepEqual(contexts[1].context.tools, { added: [], removed: [], changed: ["read"] });
   assert.equal(contexts[1].context.sections[1].chars, 0);
   assert.equal(contexts[2].context.summary.chars, entries[4].model[0].content[0].text.length);
   assert.equal(reopened[0].notes, "Stop &amp; update");

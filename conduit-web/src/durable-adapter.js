@@ -287,8 +287,27 @@ const userMessage = (entry) => {
     ...(data.attachments?.length ? { attachments: data.attachments } : {}) };
 };
 
-/** Read only the context this entry supplied; the model's wrapped summary stays verbatim. */
-export function contextEntry(entry) {
+/** The tools a conversation had been offered before an entry: name -> the definition last sent (pi.system entries). */
+export function toolsBefore(entries, beforeId) {
+  const tools = new Map();
+  for (const item of entries) {
+    if (item.id >= beforeId) continue;
+    if (item.kind === "pi.system") offerTools(tools, item);
+  }
+  return tools;
+}
+function offerTools(tools, entry) {
+  const message = entry.model?.[0] || {};
+  for (const tool of message.toolsRemoved || []) tools.delete(tool.name);
+  for (const tool of message.toolsAdded || []) tools.set(tool.name, JSON.stringify(tool));
+}
+
+/**
+ * Read only the context this entry supplied; the model's wrapped summary stays verbatim. `before`: the tools offered
+ * until then (toolsBefore), so a restatement (every tool removed and sent again, as pi-durable does when one changes)
+ * names the ones whose definition changed; `restated` is left only when none did.
+ */
+export function contextEntry(entry, before = null) {
   if (entry.kind === "pi.compaction") return { kind: "compaction", sections: [], summary: modelText(entry) };
   if (entry.kind !== "pi.system") return null;
   const message = entry.model?.[0] || {};
@@ -297,17 +316,19 @@ export function contextEntry(entry) {
   const added = [...new Set((message.toolsAdded || []).map((tool) => tool.name))];
   const removed = [...new Set((message.toolsRemoved || []).map((tool) => tool.name))];
   const addedNames = new Set(added), removedNames = new Set(removed);
-  const restated = added.length > 0 && added.length === removed.length && added.every((name) => removedNames.has(name));
+  const sameNames = added.length > 0 && added.length === removed.length && added.every((name) => removedNames.has(name));
+  const changed = before ? (message.toolsAdded || []).filter((tool) => removedNames.has(tool.name) && before.has(tool.name) && before.get(tool.name) !== JSON.stringify(tool)).map((tool) => tool.name) : [];
+  const restated = sameNames && !changed.length;
   return { kind: sections.some(([name, text]) => name === "instructions" && typeof text === "string") ? "prompt" : "update",
     sections: sections.map(([name, text]) => ({ name, text: text ?? "" })),
     ...(message.toolsAdded || message.toolsRemoved ? { tools: {
       added: added.filter((name) => !removedNames.has(name)), removed: removed.filter((name) => !addedNames.has(name)),
-      ...(restated ? { restated: added.length } : {}),
+      ...(changed.length ? { changed } : {}), ...(restated ? { restated: added.length } : {}),
     } } : {}) };
 }
 
-const contextOp = (entry, answers) => {
-  const context = contextEntry(entry);
+const contextOp = (entry, answers, before = null) => {
+  const context = contextEntry(entry, before);
   if (!context) return null;
   const timestamp = entry.model?.[0]?.timestamp;
   return messageOpen({ id: `c${entry.conversationId}-${entry.id}`, role: "system", answers,
@@ -342,6 +363,8 @@ const beatOps = (entry) => {
 
 export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
+  // The tools offered so far, so a restatement can say which changed.
+  const offered = new Map();
   const calls = new Map();
   const details = new Map(entries.filter((entry) => entry.kind === "pi.tool-result")
     .map((entry) => [entry.model?.[0]?.toolCallId, entry.model?.[0]?.details]));
@@ -370,7 +393,8 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.system" || entry.kind === "pi.compaction") {
-      ops.push(contextOp(entry, prompt));
+      ops.push(contextOp(entry, prompt, offered));
+      if (entry.kind === "pi.system") offerTools(offered, entry);
     } else if (entry.kind === "conduit.agent-beat") {
       // Its own settled line: not a prompt, so a turn around it goes on as it was.
       ops.push(...beatOps(entry));
@@ -868,7 +892,7 @@ export class DurableAdapter extends EventEmitter {
       // Read the entry order on first use too, including a session attached after its last prompt.
       const entries = await this.entries(record.conversation);
       const prompt = entries.findLast((item) => item.id < entry.id && (item.kind === USER_ENTRY || item.kind === "conduit.subagent-report"));
-      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null));
+      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null, toolsBefore(entries, entry.id)));
       return;
     }
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
@@ -1468,7 +1492,7 @@ export class DurableAdapter extends EventEmitter {
     // The handle checks visibility, including entries inherited by this conversation's fork.
     const entry = (await conversation.entries({ minEntryId: entryId, maxEntryId: entryId }, 1, undefined, this.context)).items[0];
     if (!entry) return null;
-    const context = contextEntry(entry);
+    const context = contextEntry(entry, toolsBefore(await this.entries(conversation), entry.id));
     if (context?.kind !== "prompt") return context;
     const view = await conversation.context(this.context, { at: entryId });
     const tools = getCurrentTools(view.messages);

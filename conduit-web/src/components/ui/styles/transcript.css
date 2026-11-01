@@ -31,8 +31,14 @@
 /* Messages in and out (Envelope): a header of who and when, the text on a rule hung from the mark. */
 .ui-envelope { display: grid; gap: var(--flow-attached); min-width: 0; }
 .ui-envelope-head { display: flex; align-items: center; gap: var(--row-gap); min-width: 0; color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-row); }
-.ui-envelope-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
-.ui-envelope-head > b { flex: none; color: var(--foreground); font-weight: var(--weight-strong); }
+.ui-envelope-head > svg, .ui-envelope-toggle > svg:not(.ui-disclosure-chevron) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-envelope-head > b, .ui-envelope-toggle > b { flex: none; color: var(--foreground); font-weight: var(--weight-strong); }
+/* A shut envelope's header opens it: who and what, then the chevron. */
+.ui-envelope-toggle { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ui-envelope-toggle > .ui-disclosure-chevron { margin-left: 0; }
+.ui-envelope-toggle:focus-visible { outline: none; background: var(--tint); }
+@media (hover: hover) { .ui-envelope-toggle:hover { background: var(--tint); } }
+.ui-envelope.ui-disclosure[data-open="true"] { gap: var(--flow-attached); }
 .ui-envelope-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-envelope-head > time { flex: none; margin-left: auto; font-size: var(--text-caption); }
 .ui-envelope-open { display: inline-flex; flex: none; align-items: center; margin-left: auto; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-xs); color: inherit; font: inherit; cursor: pointer; }

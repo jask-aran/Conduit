@@ -300,6 +300,19 @@ const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
 const says = (block: { kind: string; identity: string }, classifications: Record<string, "interim" | "answer">, show: boolean) =>
   show ? block.kind === "text" || block.kind === "narration" : block.kind === "text" && classifications[block.identity] === "answer";
 
+/**
+ * The system prompt a thread started with, drawn above its first message in every thread: the runtime writes it as the
+ * first request is made, after the prompt that started it, but it is what the thread begins from. Only a prompt
+ * context no answer came before (a later re-stated prompt stays where it was given).
+ */
+export function openingPrompt(messages: Message[]): Message | null {
+  for (const message of messages) {
+    if (message.role === "assistant") return null;
+    if (message.role === "system" && message.context?.kind === "prompt") return message;
+  }
+  return null;
+}
+
 /** Context precedes the next assistant message in transcript order; context after the last stays at the end. */
 function liveContexts(messages: Message[], generation: ActiveGenerationView, owner: Message | null): Map<string | null, Message[]> {
   const slots = new Map<string | null, Message[]>();
@@ -313,8 +326,9 @@ function liveContexts(messages: Message[], generation: ActiveGenerationView, own
     }
   }
   let pending: Message[] = [];
+  const opening = openingPrompt(messages);
   for (const message of messages.slice(start)) {
-    if (message.role === "system" && message.context && message.answers === (owner?.id ?? null)) pending.push(message);
+    if (message.role === "system" && message.context && message !== opening && message.answers === (owner?.id ?? null)) pending.push(message);
     if (assistants.delete(message.id) && pending.length) { slots.set(message.id, pending); pending = []; }
   }
   // Paint can arrive before its message.open; those blocks follow the context already received.
@@ -751,7 +765,9 @@ export function projectPersistedTurns(
     turns.push(current);
     if (message.id) byPrompt.set(message.id, current);
   }
+  const opening = openingPrompt(messages);
   for (const message of messages) {
+    if (message === opening) { turns[0]!.assistants.push(message); continue; }
     if (message.role !== "assistant" && !(message.role === "system" && message.context)) continue;
     // An answer still arriving is drawn by the live overlay, not from here. Its
     // row is in the list all the same, holding the place the overlay is drawn

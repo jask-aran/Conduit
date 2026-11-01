@@ -288,10 +288,12 @@ One model draws every turn, a chat's and jbot's alike; they differ in one policy
   - A **harness prompt** with nothing more to read (a background task finishing, a heartbeat's quiet line) stays one
     muted line with its mark, no bubble and no actions. A line the agent was never given says so after it ("never
     sent to the agent"): the thread shows only what the agent had, or says when it does not.
-  - *Context*: what the agent was given besides messages is a step in the trail where it was given, never left out --
-    its system prompt at the thread's start (its pieces and how many tools), each later change (a section such as
-    jbot's inbox or files, tools added or removed, a prompt re-stated), a compaction's summary. The step names what
-    changed; opened, each piece's text under its name, fetched then. Every runtime chat has them, not only jbot's.
+  - *Context*: what the agent was given besides messages is a step, never left out -- the system prompt a thread
+    opened with, above its first message (its pieces and how many tools); each later change in the trail where it was
+    given (a section such as jbot's inbox or files, the tools that were added, removed or changed by name, "System
+    prompt changed" when it was edited), a compaction's summary. The step names what changed; opened, each piece's
+    text under its name, fetched then. Every runtime chat has them, not only jbot's.
+  - A run's report and a notification start as their header line (who, what, when), opening in place to the text.
 - **Disclosure.** Everything that folds is one piece: a header, one turning chevron, a body that unfolds in height and folds to nothing. Opened at the tail, it lets go of the tail rather than being chased.
 
 # Pieces

@@ -306,7 +306,7 @@ export interface Message {
     kind: "prompt" | "update" | "compaction";
     entryId: number;
     sections: { name: string; chars: number }[];
-    tools?: { added: string[]; removed: string[]; restated?: number };
+    tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number };
     summary?: { chars: number };
   };
   /** The verbatim inner text of the model's conduit_note prefix. */

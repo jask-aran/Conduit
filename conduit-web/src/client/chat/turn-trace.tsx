@@ -16,7 +16,7 @@ import { fullDateTime } from "./full-date-time";
 
 /** A context step's text, fetched when it opens (GET /v0/sessions/:id/context/:entryId). */
 export type ContextText = { kind: string; sections: { name: string; text: string }[];
-  tools?: { added: string[]; removed: string[]; restated?: number; all?: { name: string; description: string }[] }; summary?: string };
+  tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number; all?: { name: string; description: string }[] }; summary?: string };
 type RowProps = {
   loadContext?: (entryId: number) => Promise<ContextText>;
   onRendered?: () => void;
@@ -325,7 +325,7 @@ const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(
 const tokensOf = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
 /* What the model was given besides messages: its system prompt, a change to it, a compaction. Says what, and how much;
    opens to each piece's text, fetched then. */
-function ContextStep(props: RowProps & { message: Message; motion?: "entering" }) {
+function ContextStep(props: RowProps & { message: Message; motion?: "entering"; opening?: boolean }) {
   const context = () => props.message.context!;
   const fold = useFold(() => props.message.id, props);
   const [text, setText] = createSignal<ContextText | null>(null);
@@ -340,10 +340,13 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
   const tools = () => {
     const change = context().tools;
     if (!change) return "";
-    if (change.restated) return `${change.restated} tools restated`;
-    return [change.added.length ? (context().kind === "prompt" ? `${change.added.length} tools` : `+${change.added.length} tools`) : "", change.removed.length ? `\u2212${change.removed.length} tools` : ""].filter(Boolean).join(" ");
+    if (change.restated) return `${change.restated} tools restated, unchanged`;
+    const names = (list: string[], sign: string) => list.length > 2 ? `${sign}${list.length} tools` : list.map((name) => `${sign}${name}`).join(" ");
+    return [context().kind === "prompt" ? (change.added.length ? `${change.added.length} tools` : "") : names(change.added, "+"), names(change.removed, "\u2212"),
+      change.changed?.length ? `${change.changed.length > 2 ? `${change.changed.length} tools` : change.changed.join(", ")} changed` : ""].filter(Boolean).join(" ");
   };
-  const verb = () => context().kind === "compaction" ? "Compacted" : context().kind === "prompt" ? "System prompt" : "Context changed";
+  // The prompt a thread opened with is its System prompt; one sent again later (it was edited) is a change to it.
+  const verb = () => context().kind === "compaction" ? "Compacted" : context().kind === "prompt" ? props.opening ? "System prompt" : "System prompt changed" : "Context changed";
   const subject = () => context().kind === "compaction" ? "the conversation so far, as a summary" : [pieces().join(", "), tools()].filter(Boolean).join(" \u00b7 ") || (context().sections.some((section) => section.name === "instructions") ? "system prompt" : "");
   const chars = () => context().kind === "compaction" ? context().summary?.chars ?? 0 : context().sections.reduce((sum, section) => sum + section.chars, 0);
   const sections = () => {
@@ -352,16 +355,16 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
     return [...loaded.sections.map((section) => ({ label: capitalised(sectionLabel(section.name)), text: section.text })), ...(loaded.summary ? [{ label: "Summary", text: loaded.summary }] : [])];
   };
   const toolNames = () => { const loaded = text()?.tools; if (!loaded) return undefined;
-    return loaded.all?.map((tool) => tool.name).join(", ") || [loaded.added.length ? `Added: ${loaded.added.join(", ")}` : "", loaded.removed.length ? `Removed: ${loaded.removed.join(", ")}` : "", loaded.restated ? `${loaded.restated} restated, unchanged` : ""].filter(Boolean).join(" \u00b7 ") || undefined; };
+    return loaded.all?.map((tool) => tool.name).join(", ") || [loaded.added.length ? `Added: ${loaded.added.join(", ")}` : "", loaded.removed.length ? `Removed: ${loaded.removed.join(", ")}` : "", loaded.changed?.length ? `Changed: ${loaded.changed.join(", ")}` : "", loaded.restated ? `${loaded.restated} restated, unchanged` : ""].filter(Boolean).join(" \u00b7 ") || undefined; };
   return <Step icon={context().kind === "compaction" ? <Icons.Compact /> : <Icons.Context />} verb={verb()} subject={subject() || undefined} face="text" aside={chars() ? tokensOf(chars()) : undefined}
     motion={props.motion} opens open={fold.open()} onToggle={fold.toggle}>
     <StepSections loading={!text() && !failure()} error={failure() || undefined} sections={sections()} tools={toolNames()} />
   </Step>;
 }
-function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
+function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean; opening?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
-    <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
+    <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} opening={props.opening} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       return <Step icon={segment().kind === "thinking" ? <Icons.Thinking /> : <Icons.Message />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
@@ -477,10 +480,12 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const single = () => narrated() && trail().filter((item) => item.type !== "text" && item.type !== "hidden" && item.type !== "context").length <= 1;
   const settledRun = () => narrated() && !props.trace.active && !unfinished();
   const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-  return <Show when={!single()} fallback={<>
+  // A trace that is only context (a thread's opening system prompt, above its first message) is its lines alone.
+  const onlyContext = () => props.trace.segments.length > 0 && props.trace.segments.every((segment) => segment.kind === "context");
+  return <Show when={!single() && !onlyContext()} fallback={<>
       <TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />
       <Trail><Index each={trail()}>{(item) =>
-        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+        <TrailLine item={item()} opening={onlyContext()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
     </>}>
     <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}

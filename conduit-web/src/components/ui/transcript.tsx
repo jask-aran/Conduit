@@ -87,9 +87,11 @@ export const ConduitAdded = (props: { text: string; before?: boolean }) =>
  * asks for after it (`appended`).
  */
 function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: string; meta?: string; time?: string; dateTime?: string; title?: string;
-  onOpen?: () => void; openLabel?: string; fold?: number; noted?: string; appended?: string; children?: JSX.Element }) {
+  onOpen?: () => void; openLabel?: string; fold?: number; noted?: string; appended?: string; shut?: boolean; children?: JSX.Element }) {
   let text!: HTMLDivElement;
   const [open, setOpen] = createSignal(false);
+  // shut: starts as its header alone (who, what, when), opening in place to its text -- a run's report, a notification.
+  const [shown, setShown] = createSignal(!props.shut);
   // Held to its fold until opened; whether it runs past it is measured against the fold itself, again whenever the
   // text grows (its Markdown arrives after the first paint) or the column changes width.
   const [fits, setFits] = createSignal(true);
@@ -102,18 +104,21 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
     if (text.firstElementChild) resized.observe(text.firstElementChild);
     onCleanup(() => resized.disconnect());
   });
-  return <section class="ui-envelope" data-direction={props.direction}>
-    <header class="ui-envelope-head">{props.icon}<b>{props.from}</b>
-      <Show when={props.meta}><span class="ui-envelope-meta">{props.meta}</span></Show>
+  const who = () => <>{props.icon}<b>{props.from}</b><Show when={props.meta}><span class="ui-envelope-meta">{props.meta}</span></Show></>;
+  return <section class="ui-envelope ui-disclosure" data-direction={props.direction} data-open={shown() ? "true" : "false"}>
+    <header class="ui-envelope-head">
+      <Show when={props.shut} fallback={who()}>
+        <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
+      </Show>
       <Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
       <Show when={props.onOpen}><button type="button" class="ui-envelope-open" onClick={() => props.onOpen?.()}>{props.openLabel ?? "Open"}<Icons.ChevronRight aria-hidden="true" /></button></Show>
     </header>
-    <div class="ui-envelope-rule">
+    <div class="ui-disclosure-body"><div class="ui-envelope-rule">
       <Show when={props.noted}><ConduitAdded before text={props.noted!} /></Show>
       <div ref={text} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
       <Show when={props.fold && !fits()}><button type="button" class="ui-envelope-more" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Show less" : "Show all"}</button></Show>
       <Show when={props.appended}><ConduitAdded text={props.appended!} /></Show>
-    </div>
+    </div></div>
   </section>;
 }
 /** A prompt the person did not write, as the agent was given it (Envelope): a run's report under its routine's mark and

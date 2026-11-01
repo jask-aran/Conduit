@@ -155,7 +155,7 @@ function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
 function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
   const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown };
   const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent" : "to your devices";
-  return <Outbound icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta={[state(), input().urgent === true && "urgent"].filter(Boolean).join(" · ")}
+  return <Outbound shut icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta={[state(), input().urgent === true && "urgent"].filter(Boolean).join(" · ")}
     time={clock(props.tool.completedAt || props.tool.timestamp)} dateTime={props.tool.completedAt || props.tool.timestamp} title={props.tool.timestamp ? fullDateTime(props.tool.timestamp) : undefined}>
     <ChatText renderer={props.renderer} text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
   </Outbound>;
@@ -1204,7 +1204,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
-              <Show when={item.answerless && !item.value.active && !item.afterAnswer}>
+              <Show when={item.answerless && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
                 <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
@@ -1257,7 +1257,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
             return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
-                <Inbound icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
+                <Inbound shut icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
                   noted={message().notes} appended={message().appended}>
