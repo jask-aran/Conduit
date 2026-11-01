@@ -70,12 +70,19 @@ export class ChatGptWebAdapter extends EventEmitter {
           CONDUIT_CHATGPT_WEB_COOKIE_FILE: path.join(this.dataDir, "cookies.json") },
       });
       this.child = child;
-      const timer = setTimeout(() => reject(adapterError("ChatGPT Web sidecar did not start", "rpc_timeout", 504)), this.requestTimeoutMs);
+      const timer = setTimeout(() => {
+        if (this.child === child) {
+          this.child = null;
+          this.origin = "";
+        }
+        child.kill();
+        reject(adapterError("ChatGPT Web sidecar did not start", "rpc_timeout", 504));
+      }, this.requestTimeoutMs);
       timer.unref?.();
       readline.createInterface({ input: child.stdout }).on("line", (line) => {
         let event;
         try { event = JSON.parse(line); } catch { return; }
-        if (event.event === "ready" && Number.isInteger(event.port)) {
+        if (this.child === child && event.event === "ready" && Number.isInteger(event.port)) {
           clearTimeout(timer);
           this.origin = `http://127.0.0.1:${event.port}`;
           resolve();
@@ -84,6 +91,7 @@ export class ChatGptWebAdapter extends EventEmitter {
       child.stderr.on("data", (data) => this.emit("diagnostic", { message: String(data) }));
       child.once("error", (cause) => { clearTimeout(timer); reject(adapterError(cause.message)); });
       child.once("exit", (code) => {
+        if (this.child !== child) return;
         this.origin = "";
         this.child = null;
         if (code && this.starting) reject(adapterError(`ChatGPT Web sidecar exited with ${code}`));
@@ -244,25 +252,27 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
 
   settle(record, detail) {
+    if (record.generation?.settled) return;
+    Object.assign(record.generation, { closed: true, settled: true });
     this.settleTurn(record, detail === "stopped" ? "interrupted" : "complete");
     record.active = false;
     record.stopping = false;
     record.activity = "idle";
     record.abortController = null;
-    Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.generationSeq,
       status: "idle", activity: "idle", detail: null });
     this.emit("settled", { record, completed: detail !== "stopped" });
   }
 
   failGeneration(record, cause, text = "") {
+    if (record.generation?.settled) return;
+    if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
     this.closeTurn(record, "error", text);
     this.settleTurn(record, "failed");
     record.active = false;
     record.stopping = false;
     record.activity = "failed";
     record.abortController = null;
-    if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
     const code = ["auth_expired", "rate_limited", "backend_unavailable"].includes(cause.code) ? cause.code : "backend_unavailable";
     this.publish(record, { type: "error", generationId: record.generation?.id || null,
       error: { code, message: cause.message, ...(code === "rate_limited" ? { retryAfterMs: cause.retryAfterMs || 60_000 } : {}) } });

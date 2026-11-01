@@ -460,7 +460,9 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   async finish(record, acpStopReason) {
-    if (!record.active) return;
+    if (!record.active || record.generation.closed) return;
+    // Claim the turn before reading history; process exit can fail it again.
+    record.generation.closed = true;
     let stopReason = FX_STOP_REASONS[acpStopReason] || "stop";
     const stopped = stopReason === "aborted" || stopReason === "error";
     let error = null;
@@ -533,7 +535,7 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   failPrompt(record, cause) {
-    if (!record.active) return;
+    if (!record.active || record.generation.closed) return;
     this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
       error: { code: "backend_unavailable", message: cause.message || String(cause) } });
     void this.finish(record, "error");
@@ -560,7 +562,7 @@ export class FxAcpAdapter extends EventEmitter {
   resolveRequest(record, requestId) {
     record.requests.delete(requestId);
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    record.activity = record.active ? "working" : "idle";
+    record.activity = record.stopping ? "stopping" : record.active ? "working" : "idle";
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
   }
 

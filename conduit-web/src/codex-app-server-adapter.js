@@ -105,6 +105,11 @@ const userInputAnswers = (host, response) => Object.fromEntries(isDismissal(resp
 }));
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
+const activityOf = (record) => record.failedAtSettle ? "failed"
+  : record.stopping ? "stopping"
+  : record.approvals.size ? "waiting_for_user"
+  : record.compacting ? "compacting"
+  : record.active || record.turnStarting ? "working" : "idle";
 const waitForClose = (socket, timeoutMs = 2_000) => {
   if (!socket || socket.readyState === WebSocket.CLOSED) return Promise.resolve();
   return new Promise((resolve) => {
@@ -772,7 +777,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   ask(record, host, generationId) {
-    record.activity = "waiting_for_user";
+    record.activity = activityOf(record);
     this.publish(record, { type: "permission_request", generationId, requestId: host.id, ...host });
     // What the session is busy with, not a transition the turn made. It used to
     // be published as a `status` with no phase, which is a shape neither fold
@@ -804,7 +809,7 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   settleApproval(record, requestId, generationId) {
     record.approvals.delete(requestId);
-    if (!record.approvals.size) record.activity = record.active ? "working" : "idle";
+    record.activity = activityOf(record);
     this.publish(record, { type: "permission_resolved", generationId, requestId });
     this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
   }
@@ -951,12 +956,18 @@ export class CodexAppServerAdapter extends EventEmitter {
         this.emit("changed", { record, reason: "named", name });
       }
     } else if (method === "turn/started") {
+      const stopOwed = record.turnStarting && record.stopping;
       record.active = true;
       record.turnStarting = false;
-      record.activity = "working";
+      record.stopping = Boolean(stopOwed);
+      record.failedAtSettle = false;
+      record.activity = activityOf(record);
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
       this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+      if (stopOwed) void this.cancel(record.id, turnId).catch((cause) => {
+        this.emit("diagnostic", { chatId: record.chatId, message: `Codex turn interrupt failed: ${cause.message}` });
+      });
     } else if (method === "thread/tokenUsage/updated" && params.tokenUsage) {
       // OpenAI counts cached input inside input; Conduit's shape keeps them apart.
       const { last, total, modelContextWindow } = params.tokenUsage;
@@ -981,7 +992,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: record.cache.stats || null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
-      record.activity = "compacting";
+      record.activity = activityOf(record);
       this.publish(record, { type: "compaction", generationId: turnId, active: true });
     } else if (method === "account/rateLimits/updated" && params.rateLimits) {
       CodexAppServerAdapter.plan = { at: Date.now(), value: declarePlan("codex", codexPlan(params.rateLimits, null)) };
@@ -992,7 +1003,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     } else if ((method === "item/completed" && params.item?.type === "contextCompaction") || method === "thread/compacted") {
       if (record.compacting || method === "thread/compacted") record.compactions = (record.compactions || 0) + 1;
       record.compacting = false;
-      record.activity = record.active ? "working" : "idle";
+      record.activity = activityOf(record);
       this.publish(record, { type: "compaction", generationId: turnId, active: false });
     } else if (method === "item/started" && params.item?.type === "userMessage") {
       const messageId = params.item.clientId || params.item.id;
@@ -1111,9 +1122,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       // the same way a finished one does, and only one of them is readable.
       const stopped = Boolean(record.stopping);
       record.active = false;
+      record.turnStarting = false;
       record.stopping = false;
       record.compacting = false;
-      record.activity = failed ? "failed" : "idle";
+      record.failedAtSettle = failed;
+      record.activity = activityOf(record);
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
       // A turn nobody stopped, whose last message Codex never labelled, ends by
@@ -1142,12 +1155,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       record.prompts = new Set();
       record.answering = null;
-      record.turnStarting = false;
       this.publish(record, failed
         ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
         : { type: "status", generationId: turnId, phase: "settled", seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
       this.emit("settled", { record, completed: !failed && !stopped });
-      if (record.followUp.length) void this.flushFollowUp(record);
+      if (record.status !== "stopped" && record.followUp.length) void this.flushFollowUp(record);
     }
   }
 
@@ -1260,7 +1272,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.answering = clientUserMessageId;
     // The slot is held from turn/start until Codex says the turn started (see isGeneratingRecord).
     record.turnStarting = true;
-    record.prompts = new Set([clientUserMessageId]);
+    record.generation = null;
+    record.stopping = false;
+    record.failedAtSettle = false;
+    record.activity = activityOf(record);
+    const prompts = new Set([clientUserMessageId]);
+    record.prompts = prompts;
     this.openMessage(record, clientUserMessageId, "user", {
       content: parseAttachmentEnvelope(message).message,
       timestamp: new Date().toISOString(),
@@ -1278,11 +1295,15 @@ export class CodexAppServerAdapter extends EventEmitter {
         ...CodexAppServerAdapter.policy(record.approvalPolicy, record.approvalsReviewer),
       });
     } catch (cause) {
+      // A late reply must not undo a started, settled or replacement turn.
+      if (record.prompts !== prompts || !record.turnStarting) throw cause;
       // A prompt Codex refused writes nothing, so the row stated for it goes
       // back rather than waiting for a turn that will never start.
       record.messageIds.delete(clientUserMessageId);
       record.answering = null;
       record.turnStarting = false;
+      record.stopping = false;
+      record.activity = activityOf(record);
       if (this.states(record)) {
         this.publish(record, messageDrop({ messageId: clientUserMessageId }));
       }
@@ -1296,15 +1317,22 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   async cancel(id, generationId = null) {
     const record = this.get(id);
-    const turnId = generationId || record?.generation?.id;
-    if (!record?.sessionId || !turnId) return false;
+    if (!record?.sessionId || (!record.active && !record.turnStarting)) return false;
+    const generation = record.generation;
+    const turnId = record.turnStarting ? null : generation?.id;
+    if (generationId && generationId !== turnId) return false;
+    if (!record.turnStarting && !turnId) return false;
     record.stopping = true;
-    record.activity = "stopping";
+    record.activity = activityOf(record);
+    // The starting turn has no id yet; turn/started sends its owed interrupt.
+    if (record.turnStarting) return true;
     try {
       await this.request(record, "turn/interrupt", { threadId: record.sessionId, turnId });
     } catch (cause) {
-      record.stopping = false;
-      record.activity = record.active ? "working" : "idle";
+      if (record.generation === generation) {
+        record.stopping = false;
+        record.activity = activityOf(record);
+      }
       throw cause;
     }
     return true;
@@ -1415,6 +1443,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const entryId = historyTarget.nodeId;
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
+    if (record.active || record.turnStarting) throw error("Codex session is busy", "generation_limit", 409);
     const sourceThreadId = record.sessionId;
     const read = await this.request(record, "thread/read", { threadId: sourceThreadId, includeTurns: true });
     const turns = read?.thread?.turns || [];
@@ -1583,9 +1612,12 @@ export class CodexAppServerAdapter extends EventEmitter {
   fail(record, cause) { for (const pending of record.pending.values()) { clearTimeout(pending.timer); pending.reject(error(cause.message)); } record.pending.clear(); }
   exit(record, code) {
     if (record.status === "stopped") return;
-    if (code) this.publish(record, { type: "error", generationId: record.generation?.id || null,
-      error: { code: "backend_unavailable", message: `Codex app-server exited with ${code}` } });
     record.status = "stopped";
+    if (record.active || record.turnStarting) {
+      this.notification(record, "turn/completed", { turn: { id: record.generation?.id || null,
+        status: "failed", error: { message: `Codex app-server exited with ${code}` } } });
+    } else if (code) this.publish(record, { type: "error", generationId: record.generation?.id || null,
+      error: { code: "backend_unavailable", message: `Codex app-server exited with ${code}` } });
     record.active = false;
     this.sessions.remove(record.id);
     this.emit("removed", { id: record.id, chatId: record.chatId });
