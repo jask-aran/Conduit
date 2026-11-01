@@ -49,7 +49,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
+import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -304,16 +304,26 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // The latest exchange -- the person's last message and the last answer -- keeps its message foot shown; older ones
   // show theirs on hover (transcript.css).
   const latestExchange = createMemo(() => {
-    const ids = new Set<string>();
-    for (let index = timeline.length - 1; index >= 0 && ids.size < 2; index -= 1) {
+    let answer: string | undefined, person: string | undefined;
+    for (let index = timeline.length - 1; index >= 0 && !(answer && person); index -= 1) {
       const row = timeline[index]!;
       if (row.type !== "message") continue;
-      const role = row.value.role === "user" ? "user" : "answer";
-      if (![...ids].some((id) => id.startsWith(role))) ids.add(`${role}:${row.value.id}`);
-      if (role === "user") break;
+      // A run's report or Conduit's note is not the person's message: it has no foot of its own.
+      if (row.value.role === "user") person ??= row.value.origin === "harness" ? undefined : row.value.id;
+      else answer ??= row.value.id;
     }
-    return new Set([...ids].map((id) => id.slice(id.indexOf(":") + 1)));
+    return new Set([answer, person].filter((id): id is string => Boolean(id)));
   });
+  // On touch there is no hover: a tap on an older message's bubble or plain text shows its message foot (one at a time);
+  // a tap on a link, code, a control or a selection keeps its own meaning.
+  const [revealed, setRevealed] = createSignal<string | null>(null);
+  const revealFoot = (id: string) => (event: MouseEvent) => {
+    if (!matchMedia("(hover: none)").matches || latestExchange().has(id)) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("a, button, input, textarea, select, pre, code, summary, [role='button'], .ui-message-foot") || getSelection()?.toString()) return;
+    haptic("select");
+    setRevealed((current) => current === id ? null : id);
+  };
   // The orb follows generation: only the latest turn shows it, on the row where it is working or its last answer.
   const latestOrb = createMemo(() => {
     for (let index = timeline.length - 1; index >= 0; index -= 1) {
@@ -1268,7 +1278,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} flow={flow()}>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound shut icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
@@ -1288,7 +1298,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setCopied(true);
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
-          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} flow={flow()}>
+          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
             <Show when={user()} fallback={<Turn orb={narrated() && item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>

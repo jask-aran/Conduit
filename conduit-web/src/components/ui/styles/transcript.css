@@ -88,15 +88,14 @@
 .ui-turn-orb > * { width: 100%; height: 100%; }
 /* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
    keeps the full column, a trace's orb sits in its own row beside its status (trace.css), and a turn whose orb is its
-   own (an answer that ends a turn) takes a smaller orb at its first line. */
+   own (the latest generation's) takes a smaller orb on a line of its own above it -- never indenting its text, so
+   the answer stays where it will be once the orb has moved on. */
 @media (--conduit-phone-layout) {
   .ui-turn:not([data-density="desktop"] *) { --turn-step: 0px; }
-  .ui-turn:not([data-density="desktop"] *):has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
-  .ui-turn:not([data-density="desktop"] *) > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
+  .ui-turn:not([data-density="desktop"] *) > .ui-turn-orb { position: static; width: var(--icon-lg); height: var(--icon-lg); }
 }
 [data-density="phone"] .ui-turn { --turn-step: 0px; }
-[data-density="phone"] .ui-turn:has(> .ui-turn-orb) { --turn-orb-reach: calc(var(--icon-lg) + var(--row-gap)); padding-inline-start: var(--turn-orb-reach); }
-[data-density="phone"] .ui-turn > .ui-turn-orb { left: 0; width: var(--icon-lg); height: var(--icon-lg); }
+[data-density="phone"] .ui-turn > .ui-turn-orb { position: static; width: var(--icon-lg); height: var(--icon-lg); }
 .ui-message { display: grid; min-width: 0; justify-items: end; gap: var(--flow-attached); }
 /* The foot: the time first, muted and tabular, then icon buttons; under a user's message, at the right. */
 .ui-message-foot { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); }
@@ -110,11 +109,15 @@
 .ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
 /* A message's time and actions show while its row is hovered or holds focus, and on the latest exchange (a trial,
-   2026-11-01); on touch they stay.
+   2026-11-01). On touch: the latest exchange's, and an older message's once it is tapped ([data-revealed]).
    How it ended (status) and what it changed (Changes) are facts, never hidden. Opacity only: nothing moves. */
 @media (hover: hover) {
   .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
   .ui-transcript-row:is(:hover, :focus-within, [data-latest]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
+}
+@media (hover: none) {
+  .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
+  .ui-transcript-row:is([data-latest], [data-revealed]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; pointer-events: auto; }
 }
 /* Its buttons are the smallest icon buttons, whatever size they were asked for. */
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
