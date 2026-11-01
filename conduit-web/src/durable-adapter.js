@@ -1406,9 +1406,19 @@ export class DurableAdapter extends EventEmitter {
     const record = this.get(id);
     this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
+    const summaries = async () => (await this.entries(record.conversation)).filter((entry) => entry.kind === "pi.compaction").length;
+    const before = await summaries();
     const taskId = await record.conversation.compact(instructions, this.context);
     const { outcome } = (await this.runtime.harness.waitForTask(taskId, this.context)).state;
-    return { compacted: outcome?.status === "completed" };
+    // pi-durable keeps the most recent keepRecentTokens as they are and summarises only what is older; with nothing
+    // older it finishes without a summary, which the person is told rather than left wondering.
+    const compacted = outcome?.status === "completed" && await summaries() > before;
+    if (outcome?.status === "completed" && !compacted) {
+      const keep = this.runtime.piSettings?.().compaction?.keepRecentTokens ?? 20000;
+      this.publish(record, { type: "extension_notice", level: "info",
+        message: `Nothing to compact yet: the most recent ${Math.round(keep / 1000)}k tokens are always kept as they are, and this chat is all within them.` });
+    }
+    return { compacted };
   }
 
   contextUsage(record) { return record?.history?.contextUsage || null; }
