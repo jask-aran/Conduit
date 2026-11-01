@@ -246,7 +246,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let navigationRequest: Promise<void> | null = null;
 
   let currentGeneration: string | null = null;
-  let stopPending = false;
+  let stopRequest: { generationId: string | null } | null = null;
   let selectionToken = 0;
   let navigationToken = 0;
   let liveOpening: LiveOpening | null = null;
@@ -318,12 +318,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (chat.projectId) warmTurnArtifacts(chat.projectId, chat);
   };
   // A stop is finished when the turn says it stopped, settled or is stopping.
-  // `generation_failed` used to be in here and could never arrive: a failed
-  // generation reaches the browser as `error`, which is not a structured
-  // generation event and never reached this check.
   const STOP_TERMINAL_PHASES = new Set(["stopping", "stopped", "settled"]);
 
   const selectedId = catalogue.selectedId;
+  const finishLiveAttach = () => {
+    const opening = liveOpening;
+    if (!opening) return;
+    opening.socketReady = true;
+    finishLiveOpening(opening);
+  };
   /**
    * This chat's connection to its agent.
    *
@@ -367,8 +370,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       }
       catch (error) { onError(error); }
     },
-    onLost: () => setLive(null),
-    onError,
+    onLost: () => { setLive(null); if (liveOpening?.transcriptReady) finishLiveAttach(); },
+    onError: (error) => { finishLiveAttach(); onError(error); },
   });
   const ensureAgent = session.ensure;
   const requireAgent = session.require;
@@ -454,7 +457,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGenerationChange(null);
     setActiveGeneration(null);
     currentGeneration = null;
-    stopPending = false;
+    stopRequest = null;
     if (draftProfileId) {
       setStatus("draft");
       setTitle("");
@@ -465,7 +468,11 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   /** The only client owner of assistant generation state and terminal handoff. */
   const applyGenerationEvent = (event: StructuredGenerationEvent | FoldedTurnEvent) => {
-    if (stopPending && !(event.type === "status" && STOP_TERMINAL_PHASES.has(String(event.phase)))) return;
+    // The turn being stopped draws nothing more; only its end comes through. A
+    // stop that does not yet know its turn holds nothing back, so that turn's
+    // start can arrive and name it.
+    if (stopRequest?.generationId && event.generationId === stopRequest.generationId
+      && !(event.type === "status" && STOP_TERMINAL_PHASES.has(String(event.phase)))) return;
     if (!live() || live()!.chatId !== selectedId()) return;
     const previous = activeGeneration();
     // The Solid store mutates in place. Capture the status before apply;
@@ -488,7 +495,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
-    if (!next) return;
+    if (!next || !result.accepted) return;
     // A terminal turn moves into the transcript exactly once. A harness can already
     // have committed its final message; Codex does not. Both copies carry the
     // generation id, so this replacement handles either path and the later
@@ -508,8 +515,9 @@ export function createActiveChat(options: ActiveChatOptions) {
         setActiveGeneration(null);
       });
     }
-    currentGeneration = next.id;
+    currentGeneration = terminal ? null : next.id;
     if (terminal) {
+      stopRequest = null;
       resetLiveFlags();
     } else {
       const blocks = next.assistantMessages.flatMap((message) => message.blocks);
@@ -521,10 +529,14 @@ export function createActiveChat(options: ActiveChatOptions) {
       setActiveToolKind(runningTool?.kind || null);
       setRetry((next as { retry?: RetryState | null }).retry || null);
     }
-    if (next.status === "stopping") setGeneration("stopping");
+    // Stop can precede the turn's identity. Install the turn before cancelling it.
+    if (stopRequest && !stopRequest.generationId && event.type === "status" && event.phase === "started") {
+      stopRequest.generationId = next.id;
+      session.sendWhenReady({ type: "stop_generation", generationId: next.id });
+    }
+    if (stopRequest || next.status === "stopping") setGeneration("stopping");
     else if (next.status === "failed") setGeneration("failed")
     else if (next.status === "stopped") {
-      stopPending = false;
       setGeneration("idle");
       // A stopped turn asks nothing more; not every harness withdraws what it asked.
       setHostUiRequests([]);
@@ -533,10 +545,8 @@ export function createActiveChat(options: ActiveChatOptions) {
         session.detach();
       }
     } else if (next.status === "complete") {
-      stopPending = false;
       setGeneration("idle");
     } else {
-      stopPending = false;
       setGeneration("active");
     }
   };
@@ -613,9 +623,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (session.retry !== undefined) setRetry(session.retry);
     if (session.capabilities) setCapabilities(session.capabilities);
     const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
-    if (session.stopping) setGeneration("stopping");
+    if (session.stopping || (stopRequest && (turnOpen || session.active))) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
-    else setGeneration("idle");
+    else {
+      // A stop owed to a prompt whose turn has not started yet still stands.
+      if (stopRequest?.generationId) stopRequest = null;
+      currentGeneration = null;
+      setGeneration("idle");
+    }
   };
 
   function applyLiveEvent(event: LiveEvent) {
@@ -724,6 +739,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       // within a second -- which is why Stop process appeared to do nothing and
       // the live dot came straight back. A crash still reconnects.
       case "runtime_exit":
+        stopRequest = null;
+        if (generation() === "stopping") setGeneration("idle");
         if (event.deliberate) {
           setLive(null);
           resetLiveFlags();
@@ -740,11 +757,13 @@ export function createActiveChat(options: ActiveChatOptions) {
         // is, rather than the browser reading it off two event names that only
         // one of the four harnesses ever distinguished.
         if (event.scope === "runtime") {
-          if (!stopPending) setGeneration("failed");
+          stopRequest = null;
+          setGeneration("failed");
           resetLiveFlags();
-        } else if (generation() === "submitting") {
+        } else if (generation() === "submitting" || (stopRequest && !stopRequest.generationId)) {
           // The request failed before a turn began. An error from a steer or
           // another command during an active turn must leave that turn alone.
+          stopRequest = null;
           setGeneration("idle");
           resetLiveFlags();
         }
@@ -1009,22 +1028,22 @@ export function createActiveChat(options: ActiveChatOptions) {
       settleRequest(attachRequest),
     ]);
     if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
-    if (transcriptResult.kind === "error") {
+    // The process can settle between the runtime-list click and the attach. A
+    // second transcript read after that answer is the authoritative settled
+    // state; there is no socket snapshot to wait for in this branch.
+    const detailResult = transcriptResult.kind === "value" && attachResult.kind === "value" && !attachResult.value
+      ? await settleRequest(fetchTranscript(chat)) : transcriptResult;
+    if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
+    if (detailResult.kind === "error") {
       batch(() => {
         setPresentation({ kind: "live_error", chatId: chat.id });
         navigationOptions.onShown?.();
       });
       liveOpening = null;
       opening.resolve();
-      throw transcriptResult.error;
+      throw detailResult.error;
     }
-    let detail = transcriptResult.value;
-
-    // The process can settle between the runtime-list click and the attach. A
-    // second transcript read after that answer is the authoritative settled
-    // state; there is no socket snapshot to wait for in this branch.
-    if (attachResult.kind === "value" && !attachResult.value) detail = await fetchTranscript(chat);
-    if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
+    const detail = detailResult.value;
     applyDetail(detail);
     // Each scope selects the target synchronously before its request yields.
     // Start it before reveal so no visible control belongs to the prior chat;
@@ -1032,9 +1051,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     const scopeReload = reconcileChatScope(chat, project, detail, true);
     opening.transcriptReady = true;
     for (const event of opening.events.splice(0)) consume(event);
-    if (attachResult.kind === "error") onError(attachResult.error);
-    else if (!attachResult.value) opening.socketReady = true;
+    if (attachResult.kind === "error" || !attachResult.value || !live()) opening.socketReady = true;
     finishLiveOpening(opening);
+    if (attachResult.kind === "error") onError(attachResult.error);
     await shown;
     await scopeReload;
   };
@@ -1139,6 +1158,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (generation() === "stopping") return;
     if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
     const prepared = prepareOutboundMessage();
+    const chatId = selectedId();
+    const selection = selectionToken;
+    const current = () => selectedId() === chatId && selectionToken === selection;
     if (!prepared.hasContent) return;
     if (/^\/compact\s+\S/.test(prepared.text) && supports("compaction")) {
       if (!streaming() && !compacting()) try { await requireAgent("compact"); if (selectedId() !== prepared.chatId) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { onError(error); } return; }
@@ -1159,9 +1181,10 @@ export function createActiveChat(options: ActiveChatOptions) {
       setDraft("");
       try {
         await requireAgent("steer");
+        if (!current()) return;
         session.send({ type: queueMode === "steer" ? "steer" : "follow_up", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
         acceptOutboundMessage(prepared);
-      } catch (error) { setDraft(prepared.text); onError(error); }
+      } catch (error) { if (!current()) return; setDraft(prepared.text); onError(error); }
       return;
     }
 
@@ -1181,14 +1204,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     setDraft("");
     setMessages(placeLocal);
     setGeneration("submitting");
+    currentGeneration = null;
     if (!live() || live()!.chatId !== selectedId() || !session.isOpen()) {
       try { await requireAgent("prompt"); } catch (error) {
+        if (!current()) return;
+        stopRequest = null;
         setMessages(previous);
         setDraft(prepared.text);
         setGeneration("idle");
         onError(error);
         return;
       }
+      if (!current()) return;
       // A snapshot read while the agent started may not hold it yet.
       setMessages(placeLocal);
     }
@@ -1198,9 +1225,11 @@ export function createActiveChat(options: ActiveChatOptions) {
         : { type: "prompt", messageId, message: prepared.message, attachmentIds: prepared.attachmentIds });
       acceptOutboundMessage(prepared);
       setStatus("active");
-      setGeneration("active");
+      setGeneration(stopRequest ? "stopping" : "active");
       setEditingEntryId(null);
     } catch (error) {
+      if (!current()) return;
+      stopRequest = null;
       setMessages(previous);
       setEditingEntryId(editId);
       setDraft(prepared.text);
@@ -1211,12 +1240,12 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const stop = () => {
     if (!streaming()) return;
-    stopPending = true;
+    stopRequest = { generationId: currentGeneration };
     setGeneration("stopping");
     // The server clears the queue before it stops, so what was queued comes
     // back to the composer rather than being sent after the stop.
     clearQueue();
-    session.sendWhenReady({ type: "stop_generation", generationId: currentGeneration });
+    if (stopRequest.generationId) session.sendWhenReady({ type: "stop_generation", generationId: stopRequest.generationId });
   };
 
   const regenerate = async (entryId: string) => {

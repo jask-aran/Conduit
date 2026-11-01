@@ -85,6 +85,7 @@ export function createAgentSession(deps: {
   let pending: { chatId: string; attempt: Promise<LiveRecord | null> } | null = null;
   /** Bumped whenever the session is pointed somewhere else; stale work checks it. */
   let epoch = 0;
+  let connectToken = 0;
 
   const cancelReconnect = () => {
     reconnectToken += 1;
@@ -128,10 +129,20 @@ export function createAgentSession(deps: {
   };
 
   const connect = async (record: LiveRecord, chatId: string, era: number) => {
+    if (era !== epoch || deps.chatId() !== chatId) return;
+    const token = ++connectToken;
     cancelReconnect();
-    socket?.close();
-    const next = new WebSocket(await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`));
+    let url: string;
+    try { url = await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`); }
+    catch (error) {
+      if (era !== epoch || deps.chatId() !== chatId || token !== connectToken) return;
+      throw error;
+    }
+    if (era !== epoch || deps.chatId() !== chatId || token !== connectToken) return;
+    const previous = socket;
+    const next = new WebSocket(url);
     socket = next;
+    previous?.close();
     next.onmessage = ({ data }) => {
       if (socket !== next || era !== epoch || deps.chatId() !== chatId) return;
       deps.onEvent(String(data), chatId);
@@ -158,9 +169,17 @@ export function createAgentSession(deps: {
     const current = socket;
     if (!current) return reject(new Error("Could not connect to the agent"));
     if (current.readyState === WebSocket.OPEN) return resolve();
+    if (current.readyState === WebSocket.CLOSING || current.readyState === WebSocket.CLOSED) {
+      return reject(new Error("The live stream closed before it connected."));
+    }
+    const failed = (message: string) => {
+      // A replaced socket must not make its waiter detach the new stream.
+      if (socket && socket !== current) void waitForSocket().then(resolve, reject);
+      else reject(new Error(message));
+    };
     current.addEventListener("open", () => resolve(), { once: true });
-    current.addEventListener("error", () => reject(new Error("The live stream failed. Try again.")), { once: true });
-    current.addEventListener("close", () => reject(new Error("The live stream closed before it connected.")), { once: true });
+    current.addEventListener("error", () => failed("The live stream failed. Try again."), { once: true });
+    current.addEventListener("close", () => failed("The live stream closed before it connected."), { once: true });
   });
 
   /** The record for a process the runtime stream already knows about. */
@@ -229,7 +248,7 @@ export function createAgentSession(deps: {
           if (request.detail) deps.onDetail(request.detail, chatId);
           adopt(supplied);
           await connect({ ...supplied, chatId }, chatId, era);
-          return supplied;
+          return current() ? supplied : null;
         }
         // The runtime stream is the server's process catalogue, so a process it
         // already knows about needs no request at all.
@@ -238,9 +257,11 @@ export function createAgentSession(deps: {
           adopt(resident);
           try {
             await connect(resident, chatId, era);
+            if (!current()) return null;
             await waitForSocket();
             return current() ? resident : null;
           } catch {
+            if (!current()) return null;
             // The stream refused: the view was stale, so ask properly below.
             detach();
           }
@@ -249,6 +270,7 @@ export function createAgentSession(deps: {
         if (!current()) return null;
         adopt(record);
         await connect(record, chatId, era);
+        if (!current()) return null;
         await waitForSocket();
         return current() ? record : null;
       } catch (error) {
@@ -287,6 +309,7 @@ export function createAgentSession(deps: {
 
   /** Drop the stream without giving up on the process behind it. */
   const detach = () => {
+    connectToken += 1;
     cancelReconnect();
     socket?.close();
     socket = null;
@@ -308,6 +331,7 @@ export function createAgentSession(deps: {
   /** Point the session at a different chat: everything in flight is abandoned. */
   const reset = () => {
     epoch += 1;
+    connectToken += 1;
     cancelReconnect();
     launchRequest?.abort();
     launchRequest = null;
@@ -336,7 +360,10 @@ export function createAgentSession(deps: {
     const chatId = deps.chatId();
     if (pendingRecord && chatId && pendingRecord.chatId === chatId) {
       reconnectAttempts = 0;
-      void connect(pendingRecord, chatId, epoch).catch(deps.onError);
+      const era = epoch;
+      void connect(pendingRecord, chatId, era).catch((error) => {
+        if (era === epoch && deps.chatId() === chatId) deps.onError(error);
+      });
     }
   };
   const onVisibility = () => resume();
