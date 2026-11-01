@@ -1,3 +1,4 @@
+import { notice } from "../context/notices.js";
 import { agentProfiles, harnessIdForImplementation, profileSelection, templateBackend } from "../chat-backend.js";
 import { isGeneratingRecord } from "../chat-backend-registry.js";
 import { applyTranscriptOps } from "../transcript-fold.js";
@@ -28,7 +29,7 @@ function transcriptText(projection, limit, maxChars) {
 }
 
 /** Use the same registry, transcript readers and prompt paths as the HTTP routes. */
-export function createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, submitPrompt }) {
+export function createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, submitPrompt, contextStore }) {
   const visible = () => registry.list().filter((chat) => !chat.backend?.agentThread
     && chat.status !== "subagent" && !chat.untracked && !chat.run)
     .sort((a, b) => String(b.lastMessageAt || b.updatedAt || b.createdAt || "")
@@ -154,8 +155,8 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
       if (isGeneratingRecord(record)) {
         const adapter = backends.forChat(context.chat);
         if (!adapter.getCapabilities().steer) throw new Error("This harness cannot steer a busy chat");
-        await adapter.queue(record.id, "steer", text);
-      } else await submitPrompt(chatId, text);
+        await adapter.queue(record.id, "steer", text, { notice: true });
+      } else await submitPrompt(chatId, text, { notice: true });
     },
 
     async steerChat(chatId, message, { from } = {}) {
@@ -165,13 +166,13 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
       personChat(chatId);
       const record = backends.getByChatId(chatId);
       if (!record) throw new Error("This chat has no live agent process");
-      const text = `[${line(from || "Agent")}] ${message}`;
+      const text = await notice(contextStore, "steer", { assistant: { name: line(from || "Agent") }, message });
       if (isGeneratingRecord(record)) {
         const adapter = backends.forChat(context.chat);
         if (!adapter.getCapabilities().steer) throw new Error("This harness cannot steer a busy chat");
-        await adapter.queue(record.id, "steer", text);
+        await adapter.queue(record.id, "steer", text, { notice: true });
       } else {
-        await submitPrompt(chatId, text);
+        await submitPrompt(chatId, text, { notice: true });
       }
       return { chatId, sent: true };
     },

@@ -1,0 +1,1 @@
+[Approval] Allowed: {{ask.title}} (ask {{ask.id}}). Do it now: call `approved` with ask {{ask.id}}.

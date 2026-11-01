@@ -10,7 +10,7 @@ import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
-import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
+import { createRegistry, defineDoc, defineExtension, defineTool, GenerationTask, Harness, hook, ProviderDoc, section } from "@earendil-works/pi-durable";
 import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools, createCodingTools } from "@earendil-works/pi-durable/tools";
@@ -19,6 +19,8 @@ import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
+// What each persistent-agent thread was last told (fixed slots, the time): the durable adapter keeps it per conversation.
+export { ConduitNotices } from "../context/notices.js";
 
 // What the web tools are for and how to use them; a template that asks for
 // them also brings the web-research skill.
@@ -83,6 +85,9 @@ const Conduit = (runtime) => defineExtension({
     // The working directory the tools resolve against: the chat's project.
     section("cwd", (input) => input.env?.cwd),
   ],
+  // Before each request: the persistent agent's threads and runs keep their prompt cache 12 hours (it wakes hourly
+  // and its runs share a prompt); everything else keeps the provider's default.
+  hooks: [hook(GenerationTask, { beforeRequest: async (_request, task, context) => { await runtime.markLongCache(task, context); return undefined; } })],
 });
 
 /**
@@ -148,6 +153,9 @@ export class DurableRuntime {
     // The profiles (Assistant, Coding, Runtime) this agent runs: Conduit's templates.
     this.templates = templates;
     this.contextStore = contextStore;
+    // Conversations whose prompt cache is kept 12 hours (markLongCache): checked ids, and their provider session ids.
+    this.longCacheChecked = new Set();
+    this.longCacheKeys = new Set();
     this.dataRoot = dataRoot;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
@@ -281,9 +289,11 @@ export class DurableRuntime {
             onWait: (device) => this.emitWaiting(conversationId, device), excuse: nodeId ? this.excuseFor(conversationId, nodeId) : null });
         },
         settings: ((runtime) => ({
-          // Ask providers to keep the prompt cache long (OpenAI: 24 h, or 30 min on GPT-5.6 and later; Anthropic: 1 h):
-          // the persistent agent wakes hourly and people come back to chats, and the prefix is only ever appended to.
-          stream: { cacheRetention: "long" },
+          // Ask providers to keep the prompt cache long: 24 h on OpenAI models before GPT-5.6 (no extra charge), 1 h on
+          // Anthropic; on GPT-5.6 and later "long" is the 30-minute default, and the persistent agent's conversations ask
+          // for 12 h (longCachePayload) where the account takes it. The prefix is only ever appended to, so what is
+          // cached stays usable.
+          stream: { cacheRetention: "long", onPayload: (params) => runtime.longCachePayload(params) },
           get retry() {
             const retry = runtime.piSettings().retry;
             return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],
@@ -407,7 +417,33 @@ export class DurableRuntime {
     });
   }
 
-  async agentFor(templateId, { roaming = false } = {}) {
+  /**
+   * The persistent agent's conversations (its home and side threads and its runs) ask OpenAI for the 12-hour prompt
+   * cache: it wakes hourly, and a run's prompt is the same every time. Their provider session ids (pi.provider, the
+   * request's prompt_cache_key) are noted before each request; ensuring the id here is what pi-durable does next anyway.
+   */
+  async markLongCache(task, context) {
+    const conversationId = task.conversationId;
+    if (this.longCacheChecked.has(conversationId) || !this.agent?.enabled?.()) return;
+    const thread = await this.agent.threadOf(conversationId).catch(() => null);
+    this.longCacheChecked.add(conversationId);
+    if (!thread || thread.role === "chat") return;
+    let sessionId = (await task.snapshot(ProviderDoc, conversationId, context))?.sessionId;
+    if (!sessionId) await task.commit(async (tx) => { sessionId = (await tx.doc(ProviderDoc, conversationId)).sessionId; return undefined; }, context);
+    if (sessionId) this.longCacheKeys.add(sessionId);
+  }
+
+  /**
+   * A request of one of those conversations asks for 12 h where pi-ai already sends prompt_cache_options (an API key
+   * on a model flagged for it). A ChatGPT sign-in takes no cache option at all (400 "not supported on this model",
+   * checked 2026-11-01): signed-in accounts keep their cache server-side, so their requests go as pi-ai built them.
+   */
+  longCachePayload(params) {
+    if (!params?.prompt_cache_options || !this.longCacheKeys.has(params.prompt_cache_key)) return undefined;
+    return { ...params, prompt_cache_options: { ...params.prompt_cache_options, ttl: "12h" } };
+  }
+
+  async agentFor(templateId, { roaming = false, fixedVars = null } = {}) {
     await this.open();
     const template = this.templateFor(templateId);
     if (!template) return {};
@@ -429,7 +465,7 @@ export class DurableRuntime {
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
-    const vars = isAgent && this.agentVars ? await this.agentVars().catch(() => ({})) : undefined;
+    const vars = isAgent && this.agentVars ? fixedVars || await this.agentVars().catch(() => ({})) : undefined;
     const instructions = this.contextStore
       ? await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars })
       : [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(this.skillsFor(template.id).length ? ["# Skills", ...this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");

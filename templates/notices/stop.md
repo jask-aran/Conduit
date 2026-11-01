@@ -1,0 +1,1 @@
+The user stopped your previous response before it finished. Anything it was running was cancelled by that stop, not by an error or by the system.

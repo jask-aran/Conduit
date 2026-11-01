@@ -1,3 +1,4 @@
+import { notice } from "../context/notices.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { entryText, inQuietHours, listInbox } from "./inbox.js";
@@ -49,7 +50,7 @@ const folderText = async (agent, ...parts) => (await readFolderFile(agent.folder
  * into. Stable between firings of one routine, so the provider's prompt cache holds.
  */
 export async function runInstructions(agent, routine = null, now = Date.now()) {
-  const vars = await promptVars(agent, now);
+  const { now: _now, ...vars } = await promptVars(agent, now);
   const store = agent.runtime?.contextStore;
   const parts = store ? [await store.assemble(routine ? `run:${routine.name}` : "run:task", { vars })] : [renderVars(await folderText(agent, RUN_FILE), vars).trim(), ...(routine?.body?.trim() ? [block("routine", { name: routine.name, title: routine.title }, renderVars(routine.body, vars))] : [])];
   const context = await routineContext(agent, routine, now);
@@ -158,7 +159,7 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
   return {
     run: true, cursors: next, tasks, items: [], fresh,
     instructions: await runInstructions(agent, routine, now),
-    message: [`It is ${vars.now}. ${routine.title} (the ${routine.name} routine).`, ...blocks].join("\n\n"),
+    message: [await notice(agent.runtime?.contextStore, "wake-routine", { ...vars, routine }), ...blocks].join("\n\n"),
   };
 }
 

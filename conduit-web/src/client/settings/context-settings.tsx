@@ -16,13 +16,15 @@ import { SettingLoading, SettingNote } from "@/components/ui/overlay";
  * into documents, one document per role -- a profile, jbot, a routine's run, a subagent, chat naming. Prompts shows a
  * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
  */
-export type BlockSummary = { id: string; label: string; kind: "text" | "live"; source: "shipped" | "jbot" | "custom" | "conduit";
-  description?: string; tag?: string; template?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
+export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "jbot" | "custom" | "conduit";
+  description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
-  blocks: string[]; live: string[]; first: string[]; modified: boolean };
+  blocks: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean };
 type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string };
-export type ContextVar = { name: string; description: string; value?: string };
+/** A slot: fixed (filled into a system prompt when a thread starts; a change reaches the thread as an update notice)
+ *  or current (never in a system prompt; it travels on notices). */
+export type ContextVar = { name: string; description: string; value?: string; scope?: "fixed" | "current" };
 
 const ROLE_KIND: Record<RoleKind, string> = { profile: "Profile", agent: "Persistent agent", run: "Run", subagent: "Subagent", service: "Service" };
 /** What a role's document starts, said once under its name. */
@@ -75,7 +77,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const current = createMemo(() => props.context.document(props.documentId) ?? documents()[0]);
   const texts = () => (props.context.data()?.blocks ?? []).filter((block) => block.kind === "text" && block.id !== "web-tools");
   createEffect(() => { if (!props.context.document(props.documentId) && documents()[0]) props.onDocument(documents()[0]!.id); });
-  const every = () => { const doc = current(); return doc ? [...doc.blocks, ...doc.live, ...doc.first] : []; };
+  const every = () => { const doc = current(); return doc ? [...doc.blocks, ...doc.live, ...doc.first, ...(doc.notices ?? [])] : []; };
   createEffect(() => { if (!every().includes(chosen())) setChosen(current()?.blocks[0] ?? ""); });
   createEffect(() => {
     const id = chosen();
@@ -113,7 +115,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     <For each={others()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
   </Select>;
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
-    return <ChainLink index={index} live={block()?.kind === "live"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : undefined : SOURCE[block()!.source]) : "missing"}
+    return <ChainLink index={index} live={block()?.kind === "live"} notice={block()?.kind === "notice"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : block()!.kind === "notice" && block()!.modified ? "changed" : undefined : SOURCE[block()!.source]) : "missing"}
       size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); }} />; };
   const Detail = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(block) => {
     const live = () => block().kind === "live";
@@ -137,7 +139,10 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
       </>}
       status={<>
         <StatusText>{tokens(live() ? shown().length : block().chars)}</StatusText>
-        <Show when={live()} fallback={<Show when={block().usedBy.length > 1}><StatusText>{`in ${block().usedBy.length} documents`}</StatusText></Show>}>
+        <Show when={live()} fallback={<>
+          <Show when={block().kind === "notice"}><StatusText>{block().appendix ? `notice · then ${block().appendix}` : "notice: Conduit writes it into the thread"}</StatusText></Show>
+          <Show when={block().usedBy.length > 1}><StatusText>{`in ${block().usedBy.length} documents`}</StatusText></Show>
+        </>}>
           <StatusText>{block().tag ? `<${block().tag}> · filled in by Conduit` : "filled in by Conduit"}</StatusText>
         </Show>
       </>} />; }}</Show>;
@@ -153,6 +158,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>
         <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
         <Show when={doc().first.length}><ChainBreak label="First message" /><For each={doc().first}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
+        <Show when={doc().notices?.length}><ChainBreak label="Notices it receives" /><For each={doc().notices}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
       </ChainMap>} />
     </Workbench>}</Show>
   </Show>;
@@ -180,7 +186,8 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       setDetail(loaded); setDraft(loaded.content ?? ""); setLabel(loaded.label);
     }, (cause) => setFailure(String(cause?.message || cause)));
   });
-  const dirty = () => detail()?.kind === "text" && (draft() !== (detail()?.content ?? "") || (detail()?.source === "custom" && label().trim() !== detail()?.label));
+  const editable = (block: BlockSummary | null | undefined) => block?.kind === "text" || block?.kind === "notice";
+  const dirty = () => editable(detail()) && (draft() !== (detail()?.content ?? "") || (detail()?.source === "custom" && label().trim() !== detail()?.label));
   const run = async (work: () => Promise<unknown>) => {
     setState("saving"); setFailure("");
     try { await work(); await props.context.load(); setState("saved"); }
@@ -202,19 +209,26 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const remove = () => run(async () => { await api(`/v0/context/blocks/${encodeURIComponent(current()!.id)}`, { method: "DELETE" }); props.onBlock(""); });
   const groups = (): { title: string; items: BlockSummary[] }[] => [
     { title: "yours", items: blocks().filter((block) => block.source === "custom") },
-    { title: "shipped", items: blocks().filter((block) => block.source === "shipped") },
+    { title: "shipped", items: blocks().filter((block) => block.source === "shipped" && block.kind === "text") },
     { title: "jbot's file", items: blocks().filter((block) => block.source === "jbot") },
     { title: "filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
+    { title: "notice", items: blocks().filter((block) => block.kind === "notice") },
   ].filter((group) => group.items.length);
   const documentLabel = (id: string) => props.context.document(id)?.role.label ?? id;
-  const usesSlots = (block: BlockSummary) => block.kind === "text" && block.usedBy.some((id) => id === "agent" || id.startsWith("run:"));
+  // The slots a block can use: a notice declares its own; a jbot or run block gets the fixed slots (the current time
+  // never goes in a system prompt).
+  const slotsOf = (block: BlockSummary): { name: string; description: string; value?: string }[] => {
+    const vars = props.context.data()?.vars ?? [];
+    if (block.kind === "notice") return (block.slots ?? []).map((slot) => ({ ...slot, value: vars.find((item) => item.name === slot.name)?.value }));
+    return block.kind === "text" && block.usedBy.some((id) => id === "agent" || id.startsWith("run:")) ? vars.filter((item) => item.scope !== "current") : [];
+  };
   const Main = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(loaded) => {
     const live = () => loaded().kind === "live";
     return <TextEditor fill readOnly={live()} label={`${loaded().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`}
       value={live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "") : draft()}
       onChange={(value) => { setDraft(value); setState("idle"); }} onSave={save}
       head={<>
-        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{live() ? "Template" : "Text"}</span>
+        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</span>
         <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
@@ -226,11 +240,11 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       </>}
       status={<>
         <StatusText>{tokens(live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "").length : draft().length)}</StatusText>
-        <StatusText>{live() ? loaded().tag ? `<${loaded().tag}> · filled in by Conduit` : "filled in by Conduit" : loaded().source === "jbot" ? "jbot's file: jbot can change it too" : SOURCE[loaded().source]}</StatusText>
+        <StatusText>{live() ? loaded().tag ? `<${loaded().tag}> · filled in by Conduit` : "filled in by Conduit" : loaded().kind === "notice" ? "notice: Conduit writes it into the thread" : loaded().source === "jbot" ? "jbot's file: jbot can change it too" : SOURCE[loaded().source]}</StatusText>
       </>} />; }}</Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading blocks…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
     <Show when={current()}>{(block) => <Workbench label="Blocks">
-      <WorkbenchTitle meta={`${block().kind === "live" ? block().description ?? SOURCE.conduit : SOURCE[block().source]}${block().modified ? " · changed" : ""}`}
+      <WorkbenchTitle meta={`${block().kind === "live" || block().kind === "notice" ? block().description ?? SOURCE.conduit : SOURCE[block().source]}${block().modified ? " · changed" : ""}`}
         title={<Select look="title" id="context-block" search="Search blocks" aria-label="Block" title="Choose a block" value={block().id} onChange={(event) => props.onBlock(event.currentTarget.value)}>
           <For each={groups()}>{(group) => <For each={group.items}>{(item) => <option value={item.id}>{item.label}</option>}</For>}</For>
         </Select>}
@@ -245,10 +259,13 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
             <For each={block().usedBy}>{(id) => <NavRow icon={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</NavRow>}</For>
           </Show>
         </WorkbenchSection>
-        <Show when={usesSlots(block()) && props.context.data()?.vars?.length}>
+        <Show when={slotsOf(block()).length}>
           <WorkbenchSection title="Slots it can use">
-            <For each={props.context.data()!.vars!}>{(slot) => <WorkbenchFact code name={`{{${slot.name}}}`} value={slot.value || undefined} title={slot.description} />}</For>
+            <For each={slotsOf(block())}>{(slot) => <WorkbenchFact code name={`{{${slot.name}}}`} value={slot.value || (block().kind === "notice" ? slot.description : undefined)} title={slot.description} />}</For>
           </WorkbenchSection>
+        </Show>
+        <Show when={block().appendix}>
+          <WorkbenchSection title="Conduit then adds"><p class="ui-workbench-meta">{block().appendix}</p></WorkbenchSection>
         </Show>
       </>} />
     </Workbench>}</Show>

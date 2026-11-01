@@ -713,7 +713,7 @@ const durableAdapter = backends.adapters.get("conduit-runtime") || null;
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
 registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {
-  persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession,
+  persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
   durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });

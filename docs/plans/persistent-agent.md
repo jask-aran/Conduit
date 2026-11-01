@@ -147,13 +147,46 @@ Belongs in a user-facing README with diagrams later; this is the record.
 
 ### How prompts are assembled
 
-- **jbot**: its system prompt (SYSTEM.md, editable in Settings with a reset to default) with `{{variables}}`
-  filled, then the blocks it gets each turn: `<soul>`, `<user>`, `<memory>`, `<inbox>`, `<interruptions>`.
+- **jbot**: its document (Settings › Prompts) with its fixed `{{slots}}` filled when the thread starts, then the
+  sections Conduit adds: `<cwd>`, `<codemode>`, its files (`<soul>`, `<user>`, `<memory>`, `<diary>`), `<agent-inbox>`
+  (the dial and what waits, each entry with when it came, not its age).
 - **A routine's run**: system prompt = RUN.md, then `<routine name="…">` (the routine file's body), variables
   filled; stable between firings, so the prompt cache holds. First message = the trigger line ("It is 9:00am Fri
   30 Oct. Deliver the morning brief." or "1 new entry came into the inbox since the last heartbeat.") then each
   task's output as a tagged block. No "You are jbot's heartbeat" preamble: the routine file is the role.
 - **An ad-hoc run**: RUN.md, then the task as its first message.
+
+### Slots, tags and notices (decided 2026-11-01)
+
+What Conduit fills in and writes into threads on its own, named so it can be seen and edited (Settings › Prompts and
+Blocks) and so the prompt prefix is never changed under the cache.
+
+- **Slot**: a `{{name}}` Conduit fills. *Fixed* slots -- `person.name`, `person.home` (USER.md's front matter),
+  `assistant.name`, `timezone` -- are filled into system-prompt blocks when a thread starts. A later change is never
+  written back into the prompt; the thread hears it in an **update** notice and treats the newer value as true.
+  The *current* slot -- `now` -- is never in a system prompt: it travels on notices (every wake opens with it) and on
+  the **time** notice.
+- **Tag**: the wrapper round filled-in text: sections (`<cwd>`, `<codemode>`, `<agent-inbox>`; jbot's files are
+  `<soul>` `<user>` `<memory>` `<diary day>` with no outer wrapper), a routine's body (`<routine>`), each task's output
+  (`<inbox new unhandled>`, `<calendar from days>`…).
+- **Notice**: a whole message Conduit writes into a thread on its own. Each is a block (its wording editable, its
+  slots and anything Conduit appends fixed), and each document lists the notices its role receives:
+  - **wake** -- a run's first message: `wake-routine` (the time, the routine, then each task's tagged output),
+    `wake-run` (a check-back, a feed, Run now), `wake-event`, `wake-webhook` (outside data fenced, never instructions);
+  - **report** -- `report-run` / `report-brief` (a run's answer, then how jbot should weigh it), `report-subagent`
+    (a background subagent's answer to any chat);
+  - **approval** -- `approval-allowed` / `approval-denied`, `[Approval] …`;
+  - **steer** -- jbot's message into one of the person's chats, `[jbot] …`;
+  - **stop**, **update**, **time** -- short notes put before the next message in one `<conduit_note>`: the person
+    stopped the last reply; a fixed slot changed; the time, when the thread has not been told it in 30 minutes or the
+    day changed.
+- **The prefix is append-only.** pi-durable stores the prompt and each section where it was sent and appends only
+  what changed; every request asks providers for long cache retention. So nothing per-turn goes in a system prompt or
+  a section (no ages, no clock): what changes arrives later, as a notice, and the model reads the latest as current.
+- **Cache lifetime.** Every request asks for long retention (24 h on OpenAI models before GPT-5.6, 1 h on Anthropic);
+  jbot's threads and runs ask OpenAI for 12 h where the account takes `prompt_cache_options` (an API key). A ChatGPT
+  sign-in rejects any cache option ("not supported on this model", checked 2026-11-01); signed-in accounts keep their
+  cache server-side, so a resumed conversation hits it as long as its prefix is unchanged.
 
 ### Verbs
 

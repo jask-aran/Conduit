@@ -1,13 +1,13 @@
+import { submitWithNotes } from "./context/notices.js";
 import { remoteNode } from "./place.js";
 import { connectorFacts, connectorSubject } from "./agent/connector-services.js";
 import crypto from "node:crypto";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import fs from "node:fs/promises";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
-import { withConduitNote } from "./attachment-envelope.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
 import { backgroundSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
@@ -17,7 +17,7 @@ import { applyTranscriptOps } from "./transcript-fold.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { usageFromRequests } from "./cache-stats.js";
-import { ConduitIds, ConduitWorkspace, USER_ENTRY } from "./server/durable-runtime.js";
+import { ConduitIds, ConduitWorkspace, ConduitNotices, USER_ENTRY } from "./server/durable-runtime.js";
 
 /**
  * Chats on Conduit's own runtime (pi-durable, see `server/durable-runtime.js`).
@@ -55,14 +55,6 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   attachments: true,
   interruptKeepsPartial: false,
 });
-
-/**
- * What the model is told on the turn after a stop, as classic Pi was. A stopped
- * tool is filed as an aborted one and nothing else says a person did it, so
- * without this the next turn blames the system.
- */
-const STOPPED_NOTE = "The user stopped your previous response before it finished. "
-  + "Anything it was running was cancelled by that stop, not by an error or by the system.";
 
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
@@ -284,7 +276,7 @@ const reportMessage = (entry, child) => {
     : text.lastIndexOf(`${APPENDED_RULE}That was your `);
   const content = cut >= 0 ? text.slice(0, cut).replace(/\n*-{3}\n*$/, "").trimEnd() : text;
   return { role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
-    content: content || `${data.subagentId} ${data.status}: ${data.title}`,
+    content: typeof data.report === "string" ? data.report : content || `${data.subagentId} ${data.status}: ${data.title}`,
     ...(cut >= 0 ? { appended: text.slice(cut).replace(/^\s*-{3}\s*/, "") } : {}),
     ...(entry.model?.[0]?.timestamp ? { timestamp: new Date(entry.model[0].timestamp).toISOString() } : {}),
     sender: { name: data.title || data.subagentId, ...(data.origin?.kind ? { routine: data.origin.kind } : {}), ...(data.status ? { status: data.status } : {}) } };
@@ -483,12 +475,18 @@ export class DurableAdapter extends EventEmitter {
     const harness = await this.runtime.open();
     const fallback = await this.runtime.defaultModel();
     const spec = splitSpec(options.model) || (fallback && { provider: fallback.provider, modelId: fallback.modelId });
+    let fixedVars = null;
+    if (options.templateId === "agent" && this.runtime.agentVars) {
+      const { now: _now, ...fixed } = await this.runtime.agentVars();
+      fixedVars = fixed;
+    }
     const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
-      ...await this.runtime.agentFor(options.templateId, { roaming: options.roaming }),
+      ...await this.runtime.agentFor(options.templateId, { roaming: options.roaming, fixedVars }),
       ...(spec ? { model: spec } : {}),
       ...(options.thinkingLevel || fallback?.thinkingLevel ? { thinkingLevel: options.thinkingLevel || fallback.thinkingLevel } : {}),
       ...(options.project?.workingRoot ? { cwd: options.project.workingRoot } : {}),
     } }, this.context);
+    if (fixedVars) await conversation.commit(async (tx) => { Object.assign(await tx.doc(ConduitNotices, conversation.id), { prompt: fixedVars, told: fixedVars }); }, this.context);
     await this.remember(conversation, options.chatId,
       remoteNode(options.project) ? { nodeId: remoteNode(options.project), place: options.project.place }
         : options.roaming ? { nodeId: null, place: null, roaming: true } : null);
@@ -505,7 +503,13 @@ export class DurableAdapter extends EventEmitter {
     if (options.readOnly) return this.start(conversation, options);
     // The template as it is now: its tools, extensions and prompt (as edited in Settings).
     const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
-    await conversation.configure(await this.runtime.agentFor(options.templateId, { roaming }), this.context);
+    const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
+    const settings = await this.runtime.agentFor(options.templateId, { roaming, fixedVars: noticeState?.prompt });
+    if (options.templateId === "agent") {
+      const stored = await harness.snapshot(DurableAgentDoc, conversation.id, this.context);
+      if (stored?.instructions !== undefined) settings.instructions = stored.instructions;
+    }
+    await conversation.configure(settings, this.context);
     // A conversation from before places learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {
@@ -703,7 +707,7 @@ export class DurableAdapter extends EventEmitter {
       ...(options.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
     turn.opened = new Set([messageId]);
     try {
-      await this.submit(record, message, messageId, undefined, options.attachments);
+      await this.submit(record, message, messageId, undefined, options.attachments, options.notice);
     } catch (cause) {
       // The turn was announced; one that never reached the conversation ends failed, not busy forever.
       this.publish(record, { type: "error", generationId: turn.generationId, scope: "runtime",
@@ -715,20 +719,18 @@ export class DurableAdapter extends EventEmitter {
     return { generationId: turn.generationId, attachmentIdentity: { messageId } };
   }
 
-  async submit(record, text, messageId, whenBusy, attachments = []) {
+  async submit(record, text, messageId, whenBusy, attachments = [], isNotice = false) {
     this.assertWritable(record);
     const summary = attachmentSummary(attachments);
-    // A fresh prompt after a stop says so; a steer or follow-up joins the turn it lands in.
-    const afterStop = record.stoppedByUser && !whenBusy;
-    if (!whenBusy) record.stoppedByUser = false;
     const expanded = await this.expandInput(record, text, { messageId, whenBusy, summary });
     if (expanded === null) return null;
-    const said = afterStop ? withConduitNote(STOPPED_NOTE, expanded) : expanded;
-    const submission = await record.conversation.submit({
-      type: "input", content: await promptInput(said, attachments, { onDevice: Boolean(record.nodeId), processor: this.runtime.images }), requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
+    const submission = await submitWithNotes(this.runtime, record.conversation, {
+      type: "input", content: expanded, requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
         ...(summary.length ? { attachments: summary } : {}) } },
-    }, this.context);
+    }, this.context, { jbot: record.templateId === "agent", freshPerson: !whenBusy && !isNotice,
+      prepare: (content) => promptInput(content, attachments, { onDevice: Boolean(record.nodeId), processor: this.runtime.images }),
+    });
     record.prompts.set(submission.id, messageId);
     record.texts.set(messageId, text);
     if (whenBusy) record.modes.set(messageId, whenBusy);
@@ -1125,7 +1127,10 @@ export class DurableAdapter extends EventEmitter {
     // A Stop for a turn that has already ended (from another tab, say) leaves the next one alone.
     if (generationId && record.generation?.id && generationId !== record.generation.id) return null;
     record.stopping = true;
-    record.stoppedByUser = true;
+    await record.conversation.commit(async (tx) => {
+      const state = await tx.doc(ConduitNotices, record.conversationId);
+      state.pending = [{ name: "stop", id: record.generation?.id || crypto.randomUUID() }];
+    }, this.context);
     record.activity = "stopping";
     this.publish(record, { type: "status", generationId: record.generation?.id || null, phase: "stopping", seq: ++record.generationSeq,
       status: "stopping", activity: "stopping", detail: null });
@@ -1140,7 +1145,7 @@ export class DurableAdapter extends EventEmitter {
     this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const messageId = options.messageId || crypto.randomUUID();
-    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || []);
+    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || [], options.notice);
     return { attachmentIdentity: { messageId } };
   }
 

@@ -423,7 +423,7 @@ export function createLiveSessionStream({
    * generation cap -- for a
    * caller with no socket: a headless run.
    */
-  async function submitPrompt(chatId, message, { model = "", thinkingLevel = "" } = {}) {
+  async function submitPrompt(chatId, message, { model = "", thinkingLevel = "", notice = false } = {}) {
     if (registry.metadata(chatId)?.status === "subagent") throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
     return lifecycle.run(chatId, async () => {
       const context = await findChatContext(chatId);
@@ -433,7 +433,7 @@ export function createLiveSessionStream({
       if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
       await applyComposerModel(record, { model, thinkingLevel });
       const prepared = await promptForChat(record, { attachmentIds: [] }, String(message || ""));
-      return sendPrompt(record, prepared, {});
+      return sendPrompt(record, prepared, { notice });
     });
   }
 

@@ -23,16 +23,44 @@ const live = {
     template: "<agent-inbox>\nHow often the person wants to be interrupted: {{dial}} ({{what the dial means}}).\nUnhandled in your inbox ({{count}}). Tell the person what matters when it fits, then mark it with inbox handle:\n{{each unhandled entry, twelve at most}}\n</agent-inbox>" },
   "live-routine-context": { label: "Routine's context", description: "The files the routine opts into (its context: list), each in its own tag.",
     template: "<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>\n\n<{{user | memory | soul}}>\n{{the file, as it stands}}\n</{{user | memory | soul}}>" },
-  "live-run-message": { label: "Run message", description: "When and why the run was woken, then what each of the routine's tasks gathered, each in a tag named for the task.",
-    template: "It is {{now}}. {{routine title}} (the {{routine name}} routine).\n\n<{{task id}} new=\"{{how many are new}}\">\n{{what the task gathered}}\n</{{task id}}>" },
   "live-subagent-task": { label: "Task", description: "The task the parent hands it, whole: goal, context, constraints, what to report.",
     template: "{{the task, as the parent wrote it}}" },
 };
 /** The {{variables}} a jbot or run block can use (routines.js promptVars), with what each is. */
 const VARS = [
   ["person.name", "The person's name (USER.md's name field)"], ["person.home", "Where they live (USER.md's home field)"],
-  ["assistant.name", "jbot's name (Settings › jbot)"], ["timezone", "Their time zone"], ["now", "The date and time the thread or turn starts"],
+  ["assistant.name", "jbot's name (Settings › jbot)"], ["timezone", "Their time zone"], ["now", "The current date and time; never filled in a system prompt"],
 ];
+const NOTICE_SPECS = {
+  "wake-run": [["now", "The current date and time"], ["reason", "The person asked for this run; A check-back you set; An event woke this run; A webhook woke this run; A feed's check; or A <kind> run"], ["task", "The run's task"]],
+  "wake-event": [["task", "The watch's task"], ["event", "What happened"]],
+  "wake-webhook": [["task", "The webhook's task"]],
+  "wake-routine": [["now", "The current date and time"], ["routine.title", "The routine's title"], ["routine.name", "The routine's name"]],
+  "report-run": [["report", "The run's report"], ["title", "The run's title"]],
+  "report-brief": [["report", "The run's report"], ["title", "The run's title"]],
+  "report-subagent": [["report", "The subagent's report"]],
+  "approval-allowed": [["ask.title", "The approval's title"], ["ask.id", "The approval's id"]],
+  "approval-denied": [["ask.title", "The approval's title"], ["ask.id", "The approval's id"]],
+  "steer": [["assistant.name", "The assistant's name"], ["message", "The message"]],
+  "stop": [], "update": [["changes", "The fixed slots that changed"]], "time": [["now", "The current date and time"]],
+};
+/** Each notice's name and what it is, as Settings says them. */
+const NOTICE_ABOUT = {
+  "wake-run": ["Run wake", "A run's first message when a check-back, a feed, Run now or a task jbot started wakes it."],
+  "wake-event": ["Event wake", "What an event run is told happened (a device online, a chat finished), after its task."],
+  "wake-webhook": ["Webhook wake", "A webhook run's warning that what follows is outside data, never instructions."],
+  "wake-routine": ["Routine wake", "A routine's run's first message: the time and the routine, then what each task gathered."],
+  "report-run": ["Run report", "A run's answer as it reaches jbot's home thread, then how jbot should weigh it."],
+  "report-brief": ["Brief report", "The morning brief's answer as it reaches jbot, then: write the person the day's brief."],
+  "report-subagent": ["Subagent report", "A background subagent's answer as it reaches the chat that started it."],
+  "approval-allowed": ["Approval allowed", "The person allowed something the agent asked to do: it may now run exactly that, once."],
+  "approval-denied": ["Approval denied", "The person declined something the agent asked to do."],
+  "steer": ["Steer", "jbot's message into one of the person's chats (after they approve it)."],
+  "stop": ["Stop note", "Before the next message after the person stopped a reply: the stop, not an error, cancelled it."],
+  "update": ["Update note", "Before the next message when a fixed slot changed since the thread began (a name, the time zone)."],
+  "time": ["Time note", "Before the person's message in a jbot thread not told the time in 30 minutes, or on a new day."],
+};
+const NOTICE_APPENDIX = { "wake-routine": "Conduit appends the routine's task blocks.", "wake-webhook": "Conduit appends the fenced webhook body." };
 /** A skill as a block's name: "web-research" reads "Web research skill". */
 const skillLabel = (name) => `${name.replace(/[-_]+/g, " ").replace(/^./, (letter) => letter.toUpperCase())} skill`;
 const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || path.basename(folder);
@@ -80,6 +108,7 @@ export class ContextStore {
         add(`routine-${routine.name}`, `${routine.title} instructions`, "jbot", { routine, defaultBody: seedText === null ? null : parseRoutine(seedText, routine.name).body });
       }
     }
+    for (const [name, slots] of Object.entries(NOTICE_SPECS)) add(`notice-${name}`, NOTICE_ABOUT[name]?.[0] ?? name.replace(/-/g, " "), "shipped", { kind: "notice", description: NOTICE_ABOUT[name]?.[1], file: new URL(`../../../templates/notices/${name}.md`, import.meta.url), slots: slots.map(([name, description]) => ({ name, description })), ...(NOTICE_APPENDIX[name] ? { appendix: NOTICE_APPENDIX[name] } : {}) });
     for (const [id, label] of Object.entries(await this.json("blocks.json"))) {
       if (safeId.test(id) && !blocks.has(id) && typeof label === "string") add(id, label, "custom");
     }
@@ -89,18 +118,18 @@ export class ContextStore {
   async documents(catalog) {
     catalog ||= await this.catalog();
     const docs = [];
-    const add = (id, kind, roleId, label, blocks, sections = [], first = []) => docs.push({ id, label, role: { kind, id: roleId, label }, blocks, live: sections, first });
+    const add = (id, kind, roleId, label, blocks, sections = [], first = [], notices = []) => docs.push({ id, label, role: { kind, id: roleId, label }, blocks, live: sections, first, notices });
     const templateBlocks = (t) => [t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`)];
     const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox"] : [])];
     for (const t of this.templates) {
-      if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true));
-      else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t));
+      if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
+      else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t), [], [...(t.connectors ? ["notice-approval-allowed", "notice-approval-denied"] : []), "notice-report-subagent", "notice-stop"]);
     }
     const agentTemplate = this.templates.find((t) => t.id === "agent");
     if (agentTemplate && catalog.has("run-rules")) {
       const sections = templateLive(agentTemplate, true).filter((x) => x !== "live-jbot-files" && x !== "live-inbox");
-      add("run:task", "run", "task", "Task run", ["run-rules"], sections, ["live-run-message"]);
-      for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["live-run-message"]);
+      add("run:task", "run", "task", "Task run", ["run-rules"], sections, ["notice-wake-run"], ["notice-wake-event", "notice-wake-webhook"]);
+      for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["notice-wake-routine"]);
     }
     add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base"], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
@@ -125,11 +154,11 @@ export class ContextStore {
     return live[id].template;
   }
   async summary(item, docs) {
-    const usedBy = docs.filter((doc) => [...doc.blocks, ...doc.live, ...doc.first].includes(item.id)).map((doc) => doc.id);
+    const usedBy = docs.filter((doc) => [...doc.blocks, ...doc.live, ...doc.first, ...doc.notices].includes(item.id)).map((doc) => doc.id);
     if (item.kind === "live") return { id: item.id, label: item.label, kind: item.kind, source: item.source, description: item.description, tag: item.tag, template: item.template, modified: false, editable: false, resettable: false, deletable: false, chars: (await this.previewLive(item.id)).length, usedBy };
     const content = await this.content(item);
     const def = await this.defaultContent(item);
-    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(item.description ? { description: item.description } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
+    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
   }
   async list() {
     const catalog = await this.catalog(); const documents = await this.documents(catalog);
@@ -137,7 +166,7 @@ export class ContextStore {
     const values = agent ? await promptVars(agent).catch(() => null) : null;
     const value = (name) => name.split(".").reduce((at, key) => at?.[key], values);
     return { blocks: await Promise.all([...catalog.values()].map((item) => this.summary(item, documents))), documents,
-      vars: VARS.map(([name, description]) => ({ name, description, ...(values ? { value: String(value(name) ?? "") } : {}) })) };
+      vars: VARS.map(([name, description]) => ({ name, description, scope: name === "now" ? "current" : "fixed", ...(values ? { value: String(value(name) ?? "") } : {}) })) };
   }
   async get(id) {
     const catalog = await this.catalog(); const item = catalog.get(id);
@@ -154,7 +183,7 @@ export class ContextStore {
   async save(id, { content, label } = {}) {
     const catalog = await this.catalog(); const item = catalog.get(id);
     if (!item) throw fail("Unknown block", 404);
-    if (item.kind !== "text") throw fail("Block is read-only");
+    if (item.kind !== "text" && item.kind !== "notice") throw fail("Block is read-only");
     if (label !== undefined && (item.source !== "custom" || typeof label !== "string" || !label.trim())) throw fail("Invalid block label");
     if (content !== undefined) {
       this.validate(content);
@@ -203,6 +232,11 @@ export class ContextStore {
     if (!item || item.kind !== "text") throw fail("Unknown text block", 404);
     return this.content(item);
   }
+  async notice(name, vars = {}) {
+    const item = (await this.catalog()).get(`notice-${name}`);
+    if (!item || item.kind !== "notice") throw fail("Unknown notice", 404);
+    return renderVars(await this.content(item), vars);
+  }
   async document(id) {
     const doc = (await this.documents()).find((item) => item.id === id);
     if (!doc) throw fail("Unknown document", 404);
@@ -225,7 +259,7 @@ export class ContextStore {
       // fatal: a role must still start.
       const item = catalog.get(key); if (!item || item.kind !== "text") continue;
       let text = await this.content(item);
-      if (vars && (id === "agent" || id.startsWith("run:"))) text = renderVars(text, vars);
+      if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
       else if (item.skill) text = `${previousSkill ? "" : "# Skills\n\n"}## Skill: ${skillName(text, item.skill)}\n\n${skillBody(text)}`;
       else if (id !== "service:chat-naming") text = text.trim();
@@ -239,9 +273,10 @@ export class ContextStore {
     const agent = this.agent();
     const vars = agent && (id === "agent" || id.startsWith("run:")) ? await promptVars(agent) : undefined;
     const { doc, sections } = await this.textSections(id, { vars });
-    for (const [part, ids] of [["system", doc.live], ["first", doc.first]]) for (const blockId of ids) {
+    for (const [part, ids] of [["system", doc.live], ["first", doc.first], ["notice", doc.notices]]) for (const blockId of ids) {
       const routine = blockId === "live-routine-context" ? (await this.catalog()).get(`routine-${doc.role.id}`)?.routine : null;
       const item = (await this.catalog()).get(blockId);
+      if (item?.kind === "notice") { const sample = { ...(vars || {}), now: vars?.now || new Date().toLocaleString(), task: "The task", reason: "The person asked for this run", event: "An event", routine: { title: "Routine", name: "routine" }, report: "The report", title: "Run", ask: { title: "Approval", id: "a-1" }, assistant: { name: "jbot" }, message: "Message", changes: "the person is now Sam" }; sections.push({ blockId, label: item.label, kind: "notice", part, text: renderVars(await this.content(item), sample) }); continue; }
       if (item?.kind === "text") { sections.push({ blockId, label: item.label, kind: "text", part, placed: true, text: (await this.content(item)).trim() }); continue; }
       const text = routine && agent?.folder ? await routineContext(agent, routine) : await this.previewLive(blockId);
       sections.push({ blockId, label: live[blockId].label, kind: "live", part, text });

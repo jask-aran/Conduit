@@ -1,3 +1,4 @@
+import { notice } from "../context/notices.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -364,7 +365,7 @@ export class PersistentAgent {
     const work = this.settings().work[kind === "brief" || kind === "morning-brief" ? "brief" : kind === "heartbeat" ? "heartbeat" : "other"];
     const chosen = model ? { model, thinkingLevel } : work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {};
     return this.runtime.spawnBackground(tx, conversationId, { key, title: title || kind,
-      task: raw ? task : runBrief(kind, task, this.settings().timezone), instructions: instructions ?? await runInstructions(this),
+      task: raw ? task : await runBrief(kind, task, this.settings().timezone, this.runtime.contextStore), instructions: instructions ?? await runInstructions(this),
       origin: { kind, key, ...(output ? { output } : {}) }, gate: true, ...chosen });
   }
 
@@ -407,8 +408,7 @@ const KIND_WORDS = { manual: "The person asked for this run", checkback: "A chec
   webhook: "A webhook woke this run", feed: "A feed's check" };
 
 /** An ad-hoc run's first message: when and why, then its task. How it reports is RUN.md's (its system prompt). */
-export const runBrief = (kind, task, timeZone) => [
-  `It is ${new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" })}. ${KIND_WORDS[kind] || `A ${kind} run`}.`,
-  "",
-  String(task || "").trim(),
-].join("\n");
+export const runBrief = (kind, task, timeZone, store) => notice(store, "wake-run", {
+  now: new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" }),
+  reason: KIND_WORDS[kind] || `A ${kind} run`, task: String(task || "").trim(),
+});

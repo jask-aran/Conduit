@@ -11,6 +11,7 @@ import {
   ListCollapseIcon,
   ListEndIcon,
   ArrowDownIcon,
+  ArrowDownLeftIcon,
   ArrowLeftIcon,
   ArrowLeftRightIcon,
   ArrowRightIcon,
@@ -114,6 +115,8 @@ export const Quiet = MoonIcon;
 export const Add = PlusIcon;
 /** Download, move downward or reach recent content. */
 export const ArrowDown = ArrowDownIcon;
+/** Something coming in: a notice Conduit writes into a thread. */
+export const ArrowDownLeft = ArrowDownLeftIcon;
 /** Return to the previous view. */
 export const Back = ArrowLeftIcon;
 /** Swap pane or comparison sides. */

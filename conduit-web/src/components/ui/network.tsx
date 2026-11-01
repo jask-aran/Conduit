@@ -115,14 +115,15 @@ export function ChainHead(props: { kind: string; name: string; meta?: string; ic
 /** index: its place in the chain. meta: what it is (shared, yours, filled in by Conduit). size: how much of it there
  *  is, at the end. onSelect: the box is chosen by a click (current: the chosen one), and what can be done to it is
  *  beside the chain (ChainLayout's detail), never hidden behind hover. */
-export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
+export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; notice?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
   const inner = () => <>
     <Show when={props.index != null}><span class="ui-chain-index" aria-hidden="true">{props.index}</span></Show>
+    <Show when={props.notice}><span class="ui-chain-mark" aria-hidden="true"><Icons.ArrowDownLeft /></span></Show>
     <span class="ui-chain-name">{props.name}<Show when={props.modified}><span class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></span>
     <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
     <Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show>
   </>;
-  return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
+  return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-notice={props.notice ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
     <Show when={props.onSelect} fallback={<div class="ui-chain-line">{inner()}</div>}>
       <button type="button" class="ui-chain-line ui-chain-open" aria-pressed={Boolean(props.current)} onClick={() => props.onSelect?.()}>{inner()}</button>
     </Show>

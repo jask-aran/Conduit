@@ -1,0 +1,1 @@
+[{{assistant.name}}] {{message}}

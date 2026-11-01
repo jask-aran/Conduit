@@ -1,3 +1,4 @@
+import { notice } from "../context/notices.js";
 import { nextId } from "./agent-doc.js";
 
 const HOUR24 = 86400_000;
@@ -36,8 +37,7 @@ export async function decide(agent, id, choice) {
   });
   if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : outcome.error === 400 ? "This approval has no reusable rule" : "Ask already decided or expired"), { status: outcome.error });
   const ask = outcome.ask;
-  const message = choice === "deny" ? `[Approval] Not allowed: ${ask.title} (ask ${ask.id}). Do not do it; say so if it matters.`
-    : `[Approval] Allowed: ${ask.title} (ask ${ask.id}). Do it now: call \`approved\` with ask ${ask.id}.`;
+  const message = await notice(agent.runtime?.contextStore, choice === "deny" ? "approval-denied" : "approval-allowed", { ask });
   // The decision stands even if the thread cannot be told now: an allowed call still goes through when it is made.
   try { await agent.chatHost.deliverApproval(ask.chatId, message); return { ...ask, delivered: true }; }
   catch (error) {

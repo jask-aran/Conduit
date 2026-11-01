@@ -1,3 +1,4 @@
+import { notice, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
 import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { AgentDoc } from "../agent/agent-doc.js";
@@ -191,8 +192,8 @@ export function Subagents(runtime) {
       let unobserve = async () => {};
       try {
         unobserve = await observe(api.conversationId, child, api, context);
-        const settled = await (await handle.submit({ type: "input", content, whenBusy: mode, requestId,
-          entry: { kind: "conduit.user", data: { messageId: requestId, text: content, timestamp: new Date().toISOString() } } }, context)).wait(context);
+        const settled = await (await submitWithNotes(runtime, await runtime.harness.conversation(child, context), { type: "input", content, whenBusy: mode, requestId,
+          entry: { kind: "conduit.user", data: { messageId: requestId, text: content, timestamp: new Date().toISOString() } } }, context, { opensWithTime: Boolean(task.input.gate), admit: (input) => handle.submit(input, context) })).wait(context);
         const conversation = await runtime.harness.conversation(child, context);
         const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
@@ -265,15 +266,13 @@ export function Subagents(runtime) {
           const handle = await api.conversation(api.conversationId, context);
           // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
           // acknowledged it ("Noted. …") instead of choosing. The thread shows both, the addition apart.
-          const appended = task.input.gate ? `That was your ${title} run's report. Decide as in "When a run reports": `
-            + (kind === "brief" || kind === "morning-brief" ? "this is the morning brief, so write the person the day's brief, then notify."
-              : "if the person should hear it, write them a report and notify if it should reach their phone now; if not, say in one short line what came in, without notifying. Never just acknowledge it.")
-            : null;
-          const content = appended ? `${report.answer}\n\n---\n${appended}` : report.answer;
-          await handle.submit({ type: "input", whenBusy: "followUp", requestId,
+          const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: report.answer, title });
+          const at = content.indexOf(report.answer);
+          const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
+          await submitWithNotes(runtime, parent, { type: "input", whenBusy: "followUp", requestId,
             content, entry: { kind: "conduit.subagent-report",
-              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, ...(appended ? { appended } : {}),
-                ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context);
+              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
+                ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context, { admit: (input) => handle.submit(input, context) });
           // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
           runtime.wakeChat?.(api.conversationId);
           // The person's devices hear of it only if jbot decides they should (its `notify`); approvals push on their own.
