@@ -87,27 +87,26 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
     ...(props.scripts?.length ? props.agents.filter((agent) => agent.via && props.scripts!.includes(agent.via)).map(rowOfAgent) : [])]);
   const rows = createMemo(() => all().filter((row) => !(row.background && row.id)));
   const started = createMemo(() => all().filter((row) => row.background && row.id));
-  const now = useNow(() => rows().some((row) => row.state === "running"));
+  const now = useNow(() => all().some((row) => row.state === "running"));
   const reported = () => started().filter((row) => row.state !== "running").map((row) => row.id!);
   return <Show when={all().length}>
     <AgentRows><Index each={rows()}>{(row) => <AgentRow id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
       time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
       <Show when={started().length}>
         <AgentSpawn ids={started().map((row) => row.id!)} title={started().length === 1 ? started()[0]!.title : undefined}
-          onOpen={started().length === 1 && started()[0]!.chatId ? () => openAgentChat(started()[0]!.chatId!) : undefined}
-          onReport={reported().length ? () => jumpToReport(reported()) : undefined} />
+          onReport={reported().length ? () => jumpToReport(reported()) : undefined}>
+          <Index each={started()}>{(row) => <AgentRow line id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
+            time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
+        </AgentSpawn>
       </Show></AgentRows>
   </Show>;
 }
 
-/** Long enough to see how it ended; its report is in the transcript after that. */
-const ENDED_SHOWN_MS = 2 * 60_000;
-
-/** A chat's background agents on its composer: those working, and those that ended in the last two minutes. */
+/** A chat's background agents on its composer, while they work: a rider is what is under way, not a history -- one
+ *  that has ended is in the transcript as its report, and on its turn's Started line. */
 export function BackgroundAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
-  const background = createMemo(() => props.agents.filter((agent) => agent.mode === "background" && agent.id));
-  const now = useNow(() => background().some((agent) => agent.status === "running" || (agent.endedAt && Date.now() - Date.parse(agent.endedAt) < ENDED_SHOWN_MS)));
-  const shown = createMemo(() => background().filter((agent) => agent.status === "running" || (agent.endedAt && now() - Date.parse(agent.endedAt) < ENDED_SHOWN_MS)));
+  const shown = createMemo(() => props.agents.filter((agent) => agent.mode === "background" && agent.id && agent.status === "running"));
+  const now = useNow(() => shown().length > 0);
   return <Show when={shown().length}>
     <AgentRider><Index each={shown()}>{(agent) => <AgentRow line id={agent().id!} title={agent().title} state={agent().status} activity={agent().activity || undefined}
       usage={agent().status !== "running" && agent().usage.context ? context(agent().usage.context!) : undefined} time={span(agent().startedAt, agent().endedAt, now())}

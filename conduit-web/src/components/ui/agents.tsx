@@ -1,6 +1,7 @@
 import * as Icons from "./icons";
-import { Show, type JSX } from "solid-js";
+import { createSignal, Show, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
+import { Expand } from "./expand";
 import { Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
@@ -48,19 +49,25 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
 }
 
 /**
- * A background subagent where it branched off a turn: one quiet line, not a live row -- it belongs to no turn once
- * started, so how it is doing rides on the composer's AgentRider, and its answer joins the thread later as a report.
- * ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one. The line opens its transcript (onOpen);
- * once it has reported, onReport jumps to that report. data-spawn holds the ids, for a report to jump back to.
+ * Background subagents where they branched off a turn: one quiet line, not live rows -- they belong to no turn once
+ * started, so how they are doing rides on the composer's AgentRider, and each answer joins the thread later as a
+ * report. ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one. The line is a disclosure: it
+ * drops down what was started (children: an AgentRow line each, which opens that agent's run), Expand under it. Once
+ * one has reported, onReport jumps to the report. data-spawn holds the ids, for a report to jump back to.
  */
-export function AgentSpawn(props: { ids: string[]; title?: string; onOpen?: () => void; onReport?: () => void; motion?: Motion }) {
-  return <li class="ui-agent-row ui-agent-spawn" data-spawn={props.ids.join(" ")} {...motionOf(props.motion)}>
-    <button type="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => props.onOpen?.()}>
-      <span class="ui-agent-mark"><Icons.Agent /></span>
-      <span class="ui-agent-head"><span class="ui-agent-verb">Started</span><code class="ui-agent-id">{props.ids.join(", ")}</code><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show></span>
-      <Show when={props.onOpen}><Icons.ChevronRight class="ui-agent-chevron" /></Show>
-    </button>
-    <Show when={props.onReport}><Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => props.onReport?.()}>Report<Icons.ArrowDown /></Button></Show>
+export function AgentSpawn(props: { ids: string[]; title?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  return <li class="ui-agent-spawn" data-spawn={props.ids.join(" ")} data-open={open() ? "" : undefined} {...motionOf(props.motion)}>
+    <div class="ui-agent-row">
+      <button type="button" class="ui-agent-open" disabled={!props.children} aria-expanded={props.children ? open() : undefined}
+        aria-label={`Started ${props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => setOpen(!open())}>
+        <span class="ui-agent-mark"><Icons.Agent /></span>
+        <span class="ui-agent-head"><span class="ui-agent-verb">Started</span><code class="ui-agent-id">{props.ids.join(", ")}</code><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show></span>
+        <Show when={props.children}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
+      </button>
+      <Show when={props.onReport}><Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => props.onReport?.()}>Report<Icons.ArrowDown /></Button></Show>
+    </div>
+    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{props.children}</ul></Expand>
   </li>;
 }
 
