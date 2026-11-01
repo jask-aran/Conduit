@@ -447,7 +447,13 @@ export class VoiceModelManager {
     };
     await fs.writeFile(path.join(staging, "manifest.json"), `${JSON.stringify(finalManifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     this.progress.phase = "activating";
-    if (this.activeModelId === model.id) await this.stop();
+    // Only the running copy goes. stop() is the whole manager's shutdown, and it
+    // waits for the install in progress, which is this one.
+    if (this.activeModelId === model.id || this.startingModelId === model.id) {
+      const startup = this.startPromise;
+      if (startup) await startup.catch(() => {});
+      await this.stopActive();
+    }
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     await fs.rename(staging, this.modelRoot(model.id));
     this.lastErrors.delete(model.id);

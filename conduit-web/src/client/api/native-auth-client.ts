@@ -60,12 +60,15 @@ export async function clearNativeBearerToken(origin = activeOrigin()) {
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   if (isInstalledClient()) await trustSettled();
   const headers = new Headers(init.headers);
-  const token = await nativeBearerToken();
+  // The server this request went to. A 401 that lands after a switch is about
+  // that server's sign-in, not the one now chosen.
+  const origin = activeOrigin();
+  const token = await nativeBearerToken(origin);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(input, { ...init, headers });
   if (isInstalledClient() && response.status === 401) {
-    await clearNativeBearerToken();
-    window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
+    await clearNativeBearerToken(origin);
+    if (origin === activeOrigin()) window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
   }
   return response;
 }

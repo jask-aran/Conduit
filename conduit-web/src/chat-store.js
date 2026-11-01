@@ -605,12 +605,15 @@ export class ChatStore {
       else chat.backend ||= templateBackend({ id: chat.templateId || "assistant", version: chat.templateVersion });
     }
     const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
-    this.writeQueue = this.writeQueue.then(async () => {
+    const write = async () => {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temporary = `${this.file}.tmp`;
       await fs.writeFile(temporary, value, "utf8");
       await fs.rename(temporary, this.file);
-    });
+    };
+    // A failed write fails its own flush, not every one after it: the next
+    // flush writes the whole registry again, so it repairs what this one lost.
+    this.writeQueue = this.writeQueue.then(write, write);
     return this.writeQueue;
   }
 }

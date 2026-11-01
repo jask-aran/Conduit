@@ -537,9 +537,11 @@ function NativeRoot() {
   createEffect(() => {
     const origin = activeOrigin();
     if (!origin) return setState("login");
+    // Only the chosen server's answer counts: a slower check for the one
+    // switched away from must not open, or sign out of, this one.
     void nativeBearerToken(origin)
-      .then((token) => setState(token ? "app" : "login"))
-      .catch(() => setState("login"));
+      .then((token) => { if (activeOrigin() === origin) setState(token ? "app" : "login"); })
+      .catch(() => { if (activeOrigin() === origin) setState("login"); });
   });
   // Sign-in has no arrival to wait for; it fades in on its own.
   createEffect(() => { if (state() === "login") dismissLaunchMark(); });
@@ -5336,6 +5338,10 @@ function App() {
       })
       .catch(() => {});
 
+    // Where the page was opened. A click while it loads has already set its own
+    // route; what loaded then fills the catalogue but does not take the page back.
+    const bootPath = location.pathname;
+    const navigated = () => location.pathname !== bootPath;
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
         catalogueRequest,
@@ -5351,6 +5357,7 @@ function App() {
         if (JSON.stringify(fresh) === JSON.stringify(cachedCatalogue)) return;
         catalogue.setProjects(asList<Project>(fresh.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) })));
       }).catch(() => {});
+      if (navigated()) return;
       if (selectedChat) {
         const [target, detail] = selectedChat;
         let project = projects.find((item) => item.id === target.projectId);
@@ -5362,6 +5369,7 @@ function App() {
         project ||= projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         await chat.initialize(target, project, detail);
+        if (navigated()) return;
         setRouteKind("chat");
         setRouteBootstrap("ready");
       } else if (initialProjectRouteId) {
@@ -5386,9 +5394,11 @@ function App() {
         const project = projects.find((item) => item.slug === "chat") || projects[0];
         if (!project) throw new Error("Conduit has no chat project");
         const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "assistant" }) });
+        if (navigated()) return;
         history.replaceState({}, "", `/chat/${created.id}`);
         await chat.initialize(created, project);
         setRouteKind("chat");
+        setRouteBootstrap("ready");
       }
     })().catch((error) => {
       if (initialRouteId && (error as { error?: string }).error === "chat_not_found") {
@@ -5396,7 +5406,8 @@ function App() {
         return;
       }
       const message = (error as Error).message;
-      if (initialRouteId || initialProjectRouteId) {
+      // Any route still waiting says why, rather than loading for ever.
+      if (routeBootstrap() === "loading" && !navigated()) {
         setRouteBootstrapError(message);
         setRouteBootstrap("error");
       }
