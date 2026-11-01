@@ -55,7 +55,8 @@ export async function stopBackgroundSubagents(harness, conversationId, context) 
 /** The HTTP stop and the tool use the same durable anchor cancellation. */
 export async function stopBackgroundSubagent(harness, conversationId, id, context) {
   const item = (await backgroundSubagents(harness, conversationId, context)).find((item) => item.id === id);
-  if (!item || item.status !== "running") return false;
+  // A stop tool may have committed its status before it could cancel the durable anchor.
+  if (!item || (item.status !== "running" && item.status !== "stopped")) return false;
   await harness.abortTask(item.anchor, context);
   await harness.waitForTask(item.anchor, context);
   return true;

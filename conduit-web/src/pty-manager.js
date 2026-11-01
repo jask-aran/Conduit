@@ -208,7 +208,7 @@ export class PtyManager extends EventEmitter {
     }
 
     for (const item of this.records.values()) {
-      // A device's shell outlives this server; whether it still runs is asked on attach.
+      // A device's shell outlives this server; until attach confirms it, it has no metadata and uses no capacity.
       if (item.status !== "running" || item.nodeId) continue;
       const metadata = active.get(item.tmuxSession || terminalSessionName(item.id));
       if (metadata) {
@@ -313,7 +313,7 @@ export class PtyManager extends EventEmitter {
     if (!cwdStat.isDirectory()) throw failure("pty_cwd_unavailable", "Terminal working directory is not a directory");
 
     await this.reconcile();
-    if ([...this.records.values()].filter((item) => item.status === "running").length >= this.maxSessions) {
+    if ([...this.records.values()].filter((item) => item.status === "running" && (!item.nodeId || this.metadata.has(item.id))).length >= this.maxSessions) {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
     await this.ensureTmux();
@@ -490,7 +490,7 @@ export class PtyManager extends EventEmitter {
     if (requestedTitle != null && (!customTitle || customTitle.length > 80)) {
       throw failure("pty_title_invalid", "Terminal title must be between 1 and 80 characters");
     }
-    if ([...this.records.values()].filter((item) => item.status === "running").length >= this.maxSessions) {
+    if ([...this.records.values()].filter((item) => item.status === "running" && (!item.nodeId || this.metadata.has(item.id))).length >= this.maxSessions) {
       throw failure("pty_capacity_reached", "The terminal session limit has been reached");
     }
     const shell = await placeProcesses(this.nodeHub, { nodeId: remoteNode(project), place: project.place })
@@ -521,7 +521,7 @@ export class PtyManager extends EventEmitter {
       // Claimed for this client: a client attached on the device directly may hold it (nodes/node-direct.js).
       shell = await placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.reattach(record.procId, { claim: true, takeover });
     } catch (error) {
-      this.attachments.delete(record.id);
+      if (this.attachments.get(record.id) === lease) this.attachments.delete(record.id);
       if (error.code === "pty_in_use") throw failure("pty_in_use", "Terminal is attached in another Conduit client");
       // The node's word for a process it no longer has (it restarted, or the exit was long ago).
       if (/No such process/.test(error.message)) {
@@ -530,8 +530,13 @@ export class PtyManager extends EventEmitter {
       }
       throw failure("pty_not_running", error.message);
     }
+    if (this.attachments.get(record.id) !== lease || lease.cancelled) {
+      shell.detach();
+      throw failure("pty_not_running", "Terminal is no longer available");
+    }
     lease.state = "attached";
     lease.handle = { kill: () => shell.detach() };
+    if (!this.metadata.has(record.id)) this.metadata.set(record.id, {});
     shell.resize(boundedDimension(cols, 80), boundedDimension(rows, 24));
     const release = () => { if (this.attachments.get(record.id) === lease) this.attachments.delete(record.id); };
     shell.onExit((event) => { release(); void this.deviceExited(record, event); });

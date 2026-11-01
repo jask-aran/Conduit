@@ -472,14 +472,16 @@ export class NodeHub extends EventEmitter {
         void this.save().catch(() => {});
         this.emit("changed");
         this.emit(`online:${record.id}`);
-        // Processes let go of while it was away are stopped now.
+        // Keep each kill until the device acknowledges it, so a disconnect cannot lose it.
         if (record.pendingKills?.length) {
           const kills = record.pendingKills;
-          record.pendingKills = [];
-          void this.save().catch(() => {});
           for (const procId of kills) {
             void this.call(record.id, { target: "proc", method: "kill", args: [procId], cwd: null },
-              withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT)).catch(() => {});
+              withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT)).then(async (result) => {
+              if (!result.ok) return;
+              record.pendingKills = record.pendingKills.filter((id) => id !== procId);
+              await this.save();
+            }).catch(() => {});
           }
         }
         // A follower whose process the device no longer has (it restarted) ends; never this server.
