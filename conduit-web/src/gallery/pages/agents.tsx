@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentRider, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
@@ -54,12 +54,19 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     row("AgentSpawn", "where background agents branched off a turn: one quiet line (Started, the ids, the task for one) that drops down what was started, a line each opening its run; Report jumps to the report once it is back. How they are doing rides on the composer", () =>
       <Trace orb={orb(true)} status="Done" time="4s" pinned={<AgentRows><AgentSpawn ids={["sa-1"]} title="Research gassho house pricing" status="Finished" onReport={() => {}}><AgentRow line id="sa-1" title="Research gassho house pricing" state="finished" usage="4.1k context" time="12.4s" onOpen={() => {}} /></AgentSpawn><AgentSpawn ids={["sa-2", "sa-3", "sa-4"]} status="1 of 3 running"><AgentRow line id="sa-2" title="Check Shirakawa-go bus times" state="finished" usage="2.8k context" time="8.0s" onOpen={() => {}} /><AgentRow line id="sa-3" title="Find ryokan with private onsen" state="running" activity="fetch_content booking.com" time="14s" onOpen={() => {}} /><AgentRow line id="sa-4" title="Compare rail pass prices" state="failed" time="3.2s" onOpen={() => {}} /></AgentSpawn></AgentRows>} />,
       { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
-    row("Report row", "the join: a background agent's answer as it reached the thread; Started goes back to its spawn line, Open run to its transcript", () =>
-      <Inbound shut icon={<Icons.Agent aria-hidden="true" />} from="sa-1" meta="sa-1 · finished" time="10:22 PM" onOpen={() => {}} openLabel="Open run" onBack={() => {}} backLabel="Started">ping</Inbound>,
-      { source: "components/ui/transcript.tsx · Inbound", surfaces: ["ground"], phone: true }),
+    row("AgentReport", "the join: background agents' answers where they reached the thread, one line for those that landed together, the same line as Started; it drops down each agent's line (opening its run) and what it said; Started goes back to the spawn line", () =>
+      <AgentRows><AgentReport ids={["sa-2", "sa-3", "sa-4"]} status="2 finished · 1 failed" onBack={() => {}}>
+        <AgentReportItem id="sa-2" title="Check Shirakawa-go bus times" state="finished" time="8.0s" onOpen={() => {}}>Nohi buses leave Takayama every hour from 8:00.</AgentReportItem>
+        <AgentReportItem id="sa-3" title="Find ryokan with private onsen" state="finished" time="14.2s" onOpen={() => {}}>Three in Ogimachi have private baths; two have rooms in May.</AgentReportItem>
+        <AgentReportItem id="sa-4" title="Compare rail pass prices" state="failed" time="3.2s" onOpen={() => {}}>The fare site would not load.</AgentReportItem>
+      </AgentReport></AgentRows>,
+      { source: "client/chat/agents.tsx · TurnReports", surfaces: ["ground"], phone: true }),
+    row("AgentDelegate", "a turn's foreground fan-out: several agents the turn waits for, one line (Delegated · 3 agents) dropping down an AgentRow each; one foreground agent stays its own AgentRow", () =>
+      <AgentRows><AgentDelegate count={3} status="1 of 3 running"><For each={STRIP.slice(0, 3)}>{(row) => <AgentRow line {...row} id={undefined} onOpen={() => {}} />}</For></AgentDelegate></AgentRows>,
+      { source: "client/chat/agents.tsx · TurnAgents", surfaces: ["ground"], phone: true }),
     row("Report", "a background agent's report arrives as the harness's own line, and opens the subagent's transcript", () => <HarnessPrompt onOpen={() => {}}>sa-1 finished: Research gassho house pricing</HarnessPrompt>, { source: "components/ui/transcript.tsx · HarnessPrompt", surfaces: ["ground"] }),
     row("Beside the queued rider", "riders stack on the composer; the agents sit above what waits to be sent", () => <div class="g-stack">{strip(STRIP.slice(0, 2))}<div class="g-composer">{queued()}</div></div>, { surfaces: ["ground"] }),
   ],
   motion: [row("An agent arrives", "each new agent's line fades into the rider", () => <StripCycle />, { surfaces: ["ground"] })],
-  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentRider", "Inbound", "Trace", "HarnessPrompt"],
+  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentReport", "AgentReportItem", "AgentDelegate", "AgentRider", "Inbound", "Trace", "HarnessPrompt"],
 };

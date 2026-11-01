@@ -10,15 +10,19 @@
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width. */
 .ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; margin-inline: auto; }
 /* Hung marks: a row that starts with a mark (a step, an agent, an envelope's sender) hangs it in the gutter, so every
-   line of text a turn writes starts on the column's edge -- the answer's, the commentary's, a step's verb. --mark-hang
-   is the mark and its gap; a turn's orb hangs beyond it. A phone has no gutter: there the marks stay in the column. */
-:root { --mark-hang: calc(var(--icon-sm) + var(--row-gap)); }
+   line of text a turn writes starts on the column's edge -- the answer's, the commentary's, a step's verb -- and the
+   turn's orb hangs in a column of its own beyond the marks, never over one. Neither moves the text: where the room
+   beside the column (100cqw less the column, halved, resolved where it is used) holds the orb and the marks, the marks
+   hang (--mark-hang, the mark and its gap); where it does not (a narrow pane, a phone) they stay in the column (0)
+   and the orb keeps its own place. */
+.ui-transcript { --mark-reach: calc(var(--icon-sm) + var(--row-gap));
+  --mark-hang: clamp(0px, ((100cqw - 100%) / 2 - var(--icon-xl) - 2 * var(--row-gap) - var(--mark-reach) - var(--space-xs)) * 1000, var(--mark-reach)); }
 @media (--conduit-phone-layout) { .ui-transcript:not([data-density="desktop"] *) { --mark-hang: 0px; } }
 [data-density="phone"] .ui-transcript { --mark-hang: 0px; }
 .ui-turn > :is(.ui-trail, .ui-agent-rows) { margin-left: calc(-1 * var(--mark-hang)); }
 /* An envelope stands outside a turn but keeps its edge: where a narrow column makes the turns step in (.ui-turn's
    --turn-step, for the orb), it steps in by as much, then hangs its mark. */
-:is(.ui-transcript, .ui-transcript-row) > .ui-envelope { margin-left: calc(max(0px, var(--icon-xl) + var(--row-gap) + var(--mark-hang) + var(--space-xs) - (100cqw - 100%) / 2) - var(--mark-hang)); }
+:is(.ui-transcript, .ui-transcript-row) > .ui-envelope { margin-left: calc(max(0px, var(--icon-xl) + var(--row-gap) + var(--space-xs) - (100cqw - 100%) / 2) - var(--mark-hang)); }
 .ui-transcript-row { min-width: 0; }
 .ui-loading-earlier { display: flex; justify-content: center; }
 /* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
@@ -90,11 +94,11 @@
 /* A turn's orb hangs in the gutter left of the column (the trace's, or TurnOrb's). Where the column has no gutter to
    hang it in (a phone), the turn steps in by what is missing: --turn-step, from the room either side of the column in
    its container. */
-.ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap) + var(--mark-hang)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
+.ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
   position: relative; display: grid; min-width: 0; gap: var(--flow-attached); padding-inline-start: var(--turn-step); }
 /* A turn composed whole (trace, answer, foot): its answer is a step under its trace, as its own row would be. */
 .ui-turn > :is(.ui-trace, .ui-trace-fold) + .ui-answer { margin-top: calc(var(--flow-step) - var(--flow-attached)); }
-.ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
+.ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach) - var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
 .ui-turn-orb > * { width: 100%; height: 100%; }
 /* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
    keeps the full column and draws no orb (trace.css too) -- on a line of its own it cost a line, and said less than the

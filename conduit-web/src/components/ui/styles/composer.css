@@ -1,6 +1,6 @@
 /* DesktopComposer: resting frost holding a field above a toolbar, riders on its top
    edge. Measured from the app's composer, in units of the density (u). */
-.ui-composer-stack, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
+.ui-composer-stack, .ui-composer-under, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
   --cmp-radius: var(--radius-message);
   --cmp-field-min: calc(var(--control) + var(--space-md)); --cmp-field-max: var(--measure-xs);
   --cmp-field-pad: var(--space-lg) var(--space-lg) var(--space-2xs);

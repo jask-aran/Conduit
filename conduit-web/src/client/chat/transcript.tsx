@@ -11,9 +11,9 @@ import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { type ContextText, AnswerOrb, TraceOrb, TraceStarting, TurnTrace } from "./turn-trace";
-import { jumpToSpawn, openAgentChat } from "./agents";
+import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
-import type { Narration, TurnRow } from "../turn-rows";
+import { isAgentReport, type Narration, type TurnRow } from "../turn-rows";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -295,7 +295,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // Rhythm (DESIGN Transcript › Rhythm): how a row relates to the row above it. A message -- the person's, or one the
   // harness sent on its own -- starts an exchange; the first row of the reply to it is the exchange's; anything after
   // that is the next step of the same reply.
-  const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user";
+  // Reports start no exchange of the person's: they sit a step from what is around them.
+  const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && !isAgentReport(row.value);
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
     if (fromPerson(timeline[index])) return "turn";
@@ -1227,13 +1228,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
-              <Show when={item.answerless && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
+              <Show when={item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
                 <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
                 </MessageFoot>
               </Show></Turn></TranscriptRow>;
           }
+          if (item.type === "reports") return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value[0]!.id} data-report={item.value.map((message) => message.agent?.id).join(" ")} flow={flow()}>
+            <Turn><TurnReports reports={item.value} agents={props.chat.agents?.() || []} text={(message) => <ChatText renderer={markdownRenderer()} text={message.content || ""} />} /></Turn>
+          </TranscriptRow>;
           if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} renderer={markdownRenderer()} /></TranscriptRow>;
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
@@ -1283,7 +1287,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 <Inbound shut icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
-                  onBack={message().agent?.id && !message().sender ? () => jumpToSpawn(message().agent!.id!) : undefined} backLabel="Started"
+                  onBack={message().agent?.id && !message().sender?.routine ? () => jumpToSpawn(message().agent!.id!) : undefined} backLabel="Started"
                   noted={message().notes} appended={message().appended}>
                   <ChatText renderer={markdownRenderer()} text={message().content || ""} />
                 </Inbound>

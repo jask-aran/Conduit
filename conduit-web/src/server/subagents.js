@@ -276,10 +276,12 @@ export function Subagents(runtime) {
           const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
           const data = { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
             ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
-          // A Stop leaves background agents working, but meant stop: until the person speaks again a report is kept
+          // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is kept
           // -- written to the thread without a turn, for the next turn to read -- whether it waited in the stopped turn
           // (a Stop withdraws what waits) or came after.
-          const quiet = await api.memo("quiet", await stopPending(runtime, parent, context), context);
+          // A run of the persistent agent's (`gate`: heartbeat, brief, check-back) is the app's, not the thread's: a Stop
+          // there never quiets it.
+          const quiet = await api.memo("quiet", !task.input.gate && await stopPending(runtime, parent, context), context);
           let kept = quiet;
           if (!quiet) {
             const submitted = await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
@@ -289,7 +291,13 @@ export function Subagents(runtime) {
             const settled = await submitted.wait(context);
             kept = settled.status === "unanswered" && settled.reason === "aborted" && settled.entry === undefined;
           }
-          if (kept) {
+          if (kept && task.input.gate) {
+            // A Stop in the home thread withdrew a run's report that waited there: the run is the app's, so it is given
+            // again, to wake jbot once the stopped turn has ended.
+            await submitWithNotes(runtime, parent, { type: "input", whenBusy: "followUp", requestId: `${requestId}:again`,
+              content, entry: { kind: "conduit.subagent-report", data: { ...data, messageId: `${requestId}:again` } } }, context, { admit: (input) => handle.submit(input, context) });
+            runtime.wakeChat?.(api.conversationId);
+          } else if (kept) {
             const timestamp = await api.memo("keptAt", Date.now(), context);
             await (await handle.submit({ type: "write", requestId: `${requestId}:kept`, entry: { kind: "conduit.subagent-report",
               data: { ...data, messageId: `${requestId}:kept`, kept: true }, model: [{ role: "user", content, timestamp }] } }, context)).wait(context);

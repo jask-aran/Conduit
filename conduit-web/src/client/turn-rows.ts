@@ -107,11 +107,13 @@ export type TurnRow =
   // `continues`: a narrated turn's work after its first row, drawn close to what came before it.
   // `afterAnswer`: a narrated turn's work after its last answer (a notify after the brief): the answer carries the
   // turn's foot, so this row has none.
-  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean }
+  | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean; goesOn?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
   | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string }
   // What the turn sent the person outside the thread (a `message` tool: a notification), as it was sent.
-  | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string };
+  | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string }
+  // Background agents' reports that reached the thread together, one row (AgentReport): consecutive report messages.
+  | { key: string; type: "reports"; value: Message[] };
 
 /** A codemode script's message calls as the calls they are (a script's `notify` is a notification like a direct one),
  *  and the script without them: gone when they were all it did and it ended well. */
@@ -148,12 +150,12 @@ function splitSent(rows: TurnRow[], show: boolean): TurnRow[] {
 
 export type TurnOrbState = "live" | "settled" | "failed";
 /** Gives a turn's orb to one row: the last row while it runs, else its last answer (its last trace
- *  when it has none). */
+ *  when it has none). Commentary is no answer: a turn a report cut off as it talked ends on its trace. */
 function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
   const own = (row: TurnRow) => row.type === "trace" || (row.type === "message" && row.value.role !== "user");
+  const answer = (row: TurnRow) => row.type === "message" && row.value.role !== "user" && row.value.interim !== true;
   const index = state === "live" ? rows.findLastIndex(own)
-    : rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") >= 0
-      ? rows.findLastIndex((row) => row.type === "message" && row.value.role !== "user") : rows.findLastIndex(own);
+    : rows.findLastIndex(answer) >= 0 ? rows.findLastIndex(answer) : rows.findLastIndex(own);
   const row = rows[index];
   if (row && (row.type === "trace" || row.type === "message")) rows[index] = { ...row, orb: state };
   const first = rows.findIndex(own);
@@ -845,6 +847,26 @@ export function projectPersistedTurns(
  * Persisted history retains its transcript projection while a live Generation
  * projects directly from normalized backend blocks.
  */
+/** A background agent's report (not a run's, which has its routine, nor a heartbeat's quiet line). */
+export const isAgentReport = (message: Message) => message.role === "user" && message.origin === "harness" && Boolean(message.agent?.id)
+  && !message.sender?.routine && !message.id.startsWith("beat:");
+/** Reports that came in one after another are one row, as their agents started on one line. */
+export function groupReports(rows: TurnRow[]): TurnRow[] {
+  if (!rows.some((row) => row.type === "message" && isAgentReport(row.value))) return rows;
+  const out: TurnRow[] = [];
+  for (const row of rows) {
+    if (row.type !== "message" || !isAgentReport(row.value)) { out.push(row); continue; }
+    const last = out.at(-1);
+    if (last?.type === "reports") out[out.length - 1] = { ...last, value: [...last.value, row.value] };
+    else {
+      // Reports that reached a turn as it worked moved it on: what came before has no end of its own (no foot).
+      if (last?.type === "trace") out[out.length - 1] = { ...last, goesOn: true };
+      out.push({ key: `reports:${row.value.id}`, type: "reports", value: [row.value] });
+    }
+  }
+  return out;
+}
+
 export function buildTurnRows(
   messages: Message[],
   tools: ToolItem[],
@@ -853,5 +875,5 @@ export function buildTurnRows(
   } & TurnLayout = {},
 ): TurnRow[] {
   const persisted = projectPersistedTurns(messages, tools, [], opts).rows;
-  return opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted;
+  return groupReports(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted);
 }

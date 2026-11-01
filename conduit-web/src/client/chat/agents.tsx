@@ -1,7 +1,8 @@
-import { AgentRider, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
-import { createEffect, createMemo, createSignal, Index, onCleanup, Show } from "solid-js";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, type JSX } from "solid-js";
 
-import type { AgentSummary, ToolItem } from "../api/contracts";
+import type { AgentSummary, Message, ToolItem } from "../api/contracts";
+import { createLeaving, riderMotion } from "./composer-cards";
 import { elapsed } from "./tool-card";
 
 /*
@@ -61,6 +62,14 @@ function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
 }
 
 const ENDED_LABEL = { finished: "Finished", failed: "Failed", stopped: "Stopped" } as const;
+/** How agents taken together are doing, for a shut line: "2 of 3 running", "Finished", "2 finished · 1 failed". */
+function together(states: AgentState[]): string {
+  const count = (state: AgentState) => states.filter((value) => value === state).length;
+  const running = count("running");
+  if (running) return states.length === 1 ? "Running" : `${running} of ${states.length} running`;
+  const ended = (["finished", "failed", "stopped"] as const).map((state) => [state, count(state)] as const).filter(([, n]) => n);
+  return ended.length === 1 ? ENDED_LABEL[ended[0]![0]] : ended.map(([state, n]) => `${n} ${state}`).join(" · ");
+}
 /** An agent a codemode script spawned: the chat's agents are all there is of it (no call of the turn names it). */
 function rowOfAgent(agent: AgentSummary): Row {
   return { id: agent.id || undefined, background: agent.mode === "background", state: agent.status, chatId: agent.chatId, title: agent.title,
@@ -76,7 +85,7 @@ function scrollToRow(selector: string, last = false) {
 }
 /** Back from a report to the line that started its agent. */
 export const jumpToSpawn = (id: string) => scrollToRow(`[data-spawn~="${CSS.escape(id)}"]`);
-const jumpToReport = (ids: string[]) => scrollToRow(ids.map((id) => `[data-report="${CSS.escape(id)}"]`).join(", "), true);
+const jumpToReport = (ids: string[]) => scrollToRow(ids.map((id) => `[data-report~="${CSS.escape(id)}"]`).join(", "), true);
 
 /** A turn's agents: its spawn calls', then those its codemode scripts spawned (`scripts`: the turn's script call ids),
  *  drawn alike -- a spawn is a spawn however the model asked for it. A foreground one starts and ends inside the turn,
@@ -90,17 +99,15 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   const now = useNow(() => all().some((row) => row.state === "running"));
   const reported = () => started().filter((row) => row.state !== "running").map((row) => row.id!);
   // How the started ones are doing, together: the shut line says whether they are all back.
-  const status = () => {
-    const rows = started();
-    const count = (state: AgentState) => rows.filter((row) => row.state === state).length;
-    const running = count("running");
-    if (running) return rows.length === 1 ? "Running" : `${running} of ${rows.length} running`;
-    const ended = (["finished", "failed", "stopped"] as const).map((state) => [state, count(state)] as const).filter(([, n]) => n);
-    return ended.length === 1 ? ENDED_LABEL[ended[0]![0]] : ended.map(([state, n]) => `${n} ${state}`).join(" · ");
-  };
+  const status = () => together(started().map((row) => row.state));
   return <Show when={all().length}>
-    <AgentRows><Index each={rows()}>{(row) => <AgentRow id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
-      time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
+    <AgentRows>
+      <Show when={rows().length}>
+        <AgentDelegate count={rows().length} title={rows().length === 1 ? rows()[0]!.title : undefined} status={together(rows().map((row) => row.state))}>
+          <Index each={rows()}>{(row) => <AgentRow line id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
+            time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
+        </AgentDelegate>
+      </Show>
       <Show when={started().length}>
         <AgentSpawn ids={started().map((row) => row.id!)} title={started().length === 1 ? started()[0]!.title : undefined} status={status()}
           onReport={reported().length ? () => jumpToReport(reported()) : undefined}>
@@ -111,13 +118,35 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   </Show>;
 }
 
+/** Background agents' reports that reached the thread together (a "reports" row): one AgentReport line, the join
+ *  of their Started line, dropping down each agent's line and what it said (`text`, the transcript's renderer). */
+export function TurnReports(props: { reports: Message[]; agents: AgentSummary[]; text: (message: Message) => JSX.Element }) {
+  const ids = () => props.reports.map((message) => message.agent!.id!);
+  const listed = (message: Message) => props.agents.find((agent) => agent.id === message.agent?.id);
+  const state = (message: Message): AgentState => message.sender?.status === "failed" ? "failed" : listed(message)?.status === "stopped" ? "stopped" : "finished";
+  return <AgentRows><AgentReport ids={ids()} title={props.reports.length === 1 ? props.reports[0]!.sender?.name : undefined}
+    status={together(props.reports.map(state))} onBack={() => jumpToSpawn(ids()[0]!)}>
+    <For each={props.reports}>{(message) => {
+      const agent = () => listed(message);
+      return <AgentReportItem id={message.agent!.id!} title={message.sender?.name || agent()?.title || "Subagent"} state={state(message)}
+        time={agent() ? span(agent()!.startedAt, agent()!.endedAt, Date.now()) : undefined}
+        usage={agent()?.usage.context ? context(agent()!.usage.context!) : undefined}
+        onOpen={agent()?.chatId ? () => openAgentChat(agent()!.chatId!) : undefined}>{props.text(message)}</AgentReportItem>;
+    }}</For>
+  </AgentReport></AgentRows>;
+}
+
 /** A chat's background agents on its composer, while they work: a rider is what is under way, not a history -- one
  *  that has ended is in the transcript as its report, and on its turn's Started line. */
 export function BackgroundAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
-  const shown = createMemo(() => props.agents.filter((agent) => agent.mode === "background" && agent.id && agent.status === "running"));
-  const now = useNow(() => shown().length > 0);
+  const running = createMemo(() => props.agents.filter((agent) => agent.mode === "background" && agent.id && agent.status === "running"));
+  // The rider rises in and, when the last has ended, drops back into the composer (the riders' motion), its rows held
+  // for the drop.
+  const rider = createLeaving(running, (list) => list.length > 0);
+  const shown = () => rider.value();
+  const now = useNow(() => running().length > 0);
   return <Show when={shown().length}>
-    <AgentRider><Index each={shown()}>{(agent) => <AgentRow line id={agent().id!} title={agent().title} state={agent().status} activity={agent().activity || undefined}
+    <AgentRider motion={riderMotion(rider.leaving())}><Index each={shown()}>{(agent) => <AgentRow line id={agent().id!} title={agent().title} state={agent().status} activity={agent().activity || undefined}
       usage={agent().status !== "running" && agent().usage.context ? context(agent().usage.context!) : undefined} time={span(agent().startedAt, agent().endedAt, now())}
       onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined} onStop={props.onStop ? () => props.onStop!(agent().id!) : undefined} />}</Index></AgentRider>
   </Show>;

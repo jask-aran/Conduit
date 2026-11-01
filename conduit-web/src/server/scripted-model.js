@@ -83,7 +83,7 @@ export function scriptedStep(context) {
     // ", narrating": a line of commentary before each step, as the parent's narrate.
     const said = /narrating/i.test(prompt) ? [fauxText(`Step ${taken + 1} of ${steps}: a slow shell step.`)] : [];
     if (taken < steps) return fauxAssistantMessage([...said, fauxToolCall("bash", { command: `sleep 2 && echo step ${taken + 1}` }, { id: `scripted-${randomUUID()}` })], { stopReason: "toolUse" });
-    const single = prompt.match(/^reply with the single word\s+([^\s.!]+)/i);
+    const single = prompt.match(/reply with the single word\s+([^\s.!]+)/i);
     return fauxAssistantMessage(single ? single[1] : `Done: ${prompt.split(/\r?\n/)[0]}`);
   }
   const isReport = reportText(prompt);
@@ -100,23 +100,23 @@ export function scriptedStep(context) {
   const selected = [];
   const calls = [];
   // Calls run in the order their words come in the prompt ("background slow 3 tools": the agent works while the reads run).
-  const add = (keyword, name, args, where) => { selected.push(keyword); calls.push({ name, args, at: prompt.search(where) }); };
+  const add = (keyword, name, args, where, say) => { selected.push(keyword); calls.push({ name, args, at: prompt.search(where), say }); };
   const count = (pattern) => Math.min(8, Number(prompt.match(pattern)?.[1] || 0));
   const readCount = count(/\b(\d+)\s+tools\b/i) || (has(/\btools?\b/i) ? 1 : 0);
-  if (readCount) { selected.push(readCount > 1 ? `${readCount} tools` : "tool"); for (let i = 0; i < readCount; i++) calls.push({ name: "read", args: { path: file }, at: prompt.search(/\btools?\b/i) }); }
-  if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" }, /\bbash\b/i);
-  if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" }, /\bfail\b/i);
-  if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` }, /\bscript\b/i);
+  if (readCount) { selected.push(readCount > 1 ? `${readCount} tools` : "tool"); for (let i = 0; i < readCount; i++) calls.push({ name: "read", args: { path: file }, at: prompt.search(/\btools?\b/i), say: i ? `Reading ${file} again for the next part.` : `Let me read ${file} first.` }); }
+  if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" }, /\bbash\b/i, "I'll run a quick shell check.");
+  if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" }, /\bfail\b/i, "Let me check the settings file too.");
+  if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` }, /\bscript\b/i, "I'll read and check in one script.");
   // "slow": each subagent takes three 2-second steps first.
   const slow = has(/\bslow\b/i) ? ` First take 3 slow steps${has(/\bnarrate\b/i) ? ", narrating" : ""}.` : "";
   if (slow) selected.push("slow");
-  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Reply with the single word pong.${slow}` }, /\bspawn\b/i);
-  if (has(/\bbackground\b/i)) add("background", "subagent", { task: `Reply with the single word ping.${slow}`, background: true }, /\bbackground\b/i);
+  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Look over the project and reply with the single word pong.${slow}` }, /\bspawn\b/i, "I'll hand the project to an agent to look over, and wait for it.");
+  if (has(/\bbackground\b/i)) add("background", "subagent", { task: `Keep watch on the build and reply with the single word ping.${slow}`, background: true }, /\bbackground\b/i, "I'll start an agent in the background to keep watch on the build, and carry on meanwhile.");
   const fan = count(/\b(\d+)\s+spawns\b/i) || (has(/\bfan\s+out\b/i) ? 3 : 0);
-  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Reply with the single word pong${i + 1}.${slow}"})`).join(", ")}]);` }, /\b(?:fan\s+out|\d+\s+spawns)\b/i);
+  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Look over part ${i + 1} and reply with the single word pong${i + 1}.${slow}"})`).join(", ")}]);` }, /\b(?:fan\s+out|\d+\s+spawns)\b/i, `Let me fan out ${fan} agents to look over each part, and wait for them.`);
   const away = count(/\b(\d+)\s+backgrounds\b/i);
-  if (away) add(`${away} backgrounds`, "codemode", { code: `console.log(JSON.stringify(await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Reply with the single word ping${i + 1}.${slow}", background: true})`).join(", ")}])));` }, /\b\d+\s+backgrounds\b/i);
-  if (has(/\bask\b/i)) add("ask", "ask_user", { questions: [{ question: "Which option do you prefer?", header: "Test", options: [{ label: "First" }, { label: "Second" }] }] }, /\bask\b/i);
+  if (away) add(`${away} backgrounds`, "codemode", { code: `console.log(JSON.stringify(await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Keep watch on job ${i + 1} and reply with the single word ping${i + 1}.${slow}", background: true})`).join(", ")}])));` }, /\b\d+\s+backgrounds\b/i, `I'll start ${away} background agents to keep watch on the jobs; they'll report back while I carry on.`);
+  if (has(/\bask\b/i)) add("ask", "ask_user", { questions: [{ question: "Which option do you prefer?", header: "Test", options: [{ label: "First" }, { label: "Second" }] }] }, /\bask\b/i, "Before I go on, one question for you.");
   calls.sort((a, b) => a.at - b.at);
   const thinking = has(/\bthink\b/i);
   const narrate = has(/\bnarrate\b/i);
@@ -132,7 +132,7 @@ export function scriptedStep(context) {
   if (thinking) blocks.push(fauxThinking(thought || rich ? stretch(rich ? RICH_PROSE : THOUGHT, (thought || 400) * 4) : "I will follow the scripted steps in order."));
   if (done < calls.length) {
     const call = calls[done];
-    if (narrate) blocks.push(fauxText(`I will call ${call.name} now.`));
+    if (narrate) blocks.push(fauxText(call.say || `I will call ${call.name} now.`));
     blocks.push(fauxToolCall(call.name, call.args, { id: `scripted-${randomUUID()}` }));
     return fauxAssistantMessage(blocks, { stopReason: "toolUse" });
   }
@@ -162,26 +162,22 @@ export function scriptedProvider() {
     // One core per call avoids a shared response queue and lets concurrent streams use different speeds.
     const speed = { ...(SHAPES[model.id] || SHAPES.steady), tokensPerSecond: SPEEDS[options?.reasoning] || SPEEDS.off };
     const request = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions,
-      tokensPerSecond: speed.gapsMs ? 100_000 : speed.tokensPerSecond, tokenSize: { min: 4, max: 4 } });
+      tokensPerSecond: speed.tokensPerSecond, tokenSize: { min: 4, max: 4 } });
     request.setResponses([scriptedStep]);
     const source = request.stream(model, context, options);
     const output = createAssistantMessageEventStream();
     (async () => {
-      // Bursty: deltas held and let out a gap's worth at a time, so the average stays the pace.
-      let gap = 0, owed = 0;
+      // Bursty: the core writes at the pace; its deltas are held and let out together after each uneven gap, so the
+      // average stays the pace (a fast core paced by the gaps alone let a long reply out in a few huge bursts).
+      let gap = 0, held = [], due = Date.now() + (speed.gapsMs?.[0] ?? 0);
+      const flush = () => { for (const item of held) output.push(item); held = []; due = Date.now() + speed.gapsMs[++gap % speed.gapsMs.length]; };
       for await (const event of source) {
         for (const key of ["partial", "message", "error"]) if (event[key]) event[key] = { ...event[key], usage: zeroUsage };
-        if (speed.gapsMs && /_delta$/.test(event.type)) {
-          if (owed <= 0) {
-            const wait = speed.gapsMs[gap++ % speed.gapsMs.length];
-            await new Promise((resolve) => setTimeout(resolve, wait));
-            owed = Math.max(4, Math.round(wait * speed.tokensPerSecond / 1000) * 4);
-          }
-          // Counted in characters, about four a token: a fast core may send several tokens in one delta.
-          owed -= String(event.delta ?? "").length || 4;
-        }
-        output.push(event);
+        if (!speed.gapsMs) { output.push(event); continue; }
+        held.push(event);
+        if (!/_delta$/.test(event.type) || Date.now() >= due) flush();
       }
+      if (held.length) flush();
       output.end();
     })();
     return output;

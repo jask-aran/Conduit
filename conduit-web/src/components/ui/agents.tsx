@@ -48,29 +48,61 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
   </li>;
 }
 
+/** One quiet line for agents taken together, a disclosure of what it holds (Expand under it): the verb, the ids, the
+ *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
+function AgentLine(props: { kind: "spawn" | "report" | "delegate"; verb: string; ids: string[]; count?: string; title?: string; where?: string; status?: string; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? props.ids.join(" ") : undefined}
+    data-open={open() ? "" : undefined} {...motionOf(props.motion)}>
+    <div class="ui-agent-row">
+      <button type="button" class="ui-agent-open" disabled={!props.children} aria-expanded={props.children ? open() : undefined}
+        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => setOpen(!open())}>
+        <span class="ui-agent-mark"><Icons.Agent /></span>
+        <span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
+          <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>
+        <Show when={props.status}><span class="ui-agent-line ui-agent-status">{props.status}</span></Show>
+        <Show when={props.children}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
+      </button>
+      <Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>
+    </div>
+    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{props.children}</ul></Expand>
+  </li>;
+}
+
 /**
  * Background subagents where they branched off a turn: one quiet line, not live rows -- they belong to no turn once
  * started, so how they are doing rides on the composer's AgentRider, and each answer joins the thread later as a
  * report. ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one; status, how they are doing taken
- * together ("2 of 3 running", "Finished"), so the shut line says it. The line is a disclosure: it
- * drops down what was started (children: an AgentRow line each, which opens that agent's run), Expand under it. Once
- * one has reported, onReport jumps to the report. data-spawn holds the ids, for a report to jump back to.
+ * together ("2 of 3 running", "Finished"), so the shut line says it. The line drops down what was started (children:
+ * an AgentRow line each, which opens that agent's run). Once one has reported, onReport jumps to the report.
+ * data-spawn holds the ids, for a report to jump back to.
  */
 export function AgentSpawn(props: { ids: string[]; title?: string; status?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
-  const [open, setOpen] = createSignal(false);
-  return <li class="ui-agent-spawn" data-spawn={props.ids.join(" ")} data-open={open() ? "" : undefined} {...motionOf(props.motion)}>
-    <div class="ui-agent-row">
-      <button type="button" class="ui-agent-open" disabled={!props.children} aria-expanded={props.children ? open() : undefined}
-        aria-label={`Started ${props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => setOpen(!open())}>
-        <span class="ui-agent-mark"><Icons.Agent /></span>
-        <span class="ui-agent-head"><span class="ui-agent-verb">Started</span><code class="ui-agent-id">{props.ids.join(", ")}</code><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show></span>
-        <Show when={props.status}><span class="ui-agent-line ui-agent-status">{props.status}</span></Show>
-        <Show when={props.children}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
-      </button>
-      <Show when={props.onReport}><Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => props.onReport?.()}>Report<Icons.ArrowDown /></Button></Show>
-    </div>
-    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{props.children}</ul></Expand>
-  </li>;
+  return <AgentLine kind="spawn" verb="Started" ids={props.ids} title={props.title} where="in the background" status={props.status} motion={props.motion}
+    jump={props.onReport ? { label: "Report", onClick: props.onReport } : undefined}>{props.children}</AgentLine>;
+}
+
+/**
+ * The join, the other end of AgentSpawn: background agents' answers where they reached the thread, one line for those
+ * that landed together ("Reported sa-4, sa-5, sa-6"), the same line as where they started. It drops down each
+ * (children: an AgentReportItem each, its line and what it said); onBack jumps to where they started.
+ */
+export function AgentReport(props: { ids: string[]; title?: string; status?: string; onBack?: () => void; motion?: Motion; children?: JSX.Element }) {
+  return <AgentLine kind="report" verb="Reported" ids={props.ids} title={props.title} status={props.status} motion={props.motion}
+    jump={props.onBack ? { label: "Started", up: true, onClick: props.onBack } : undefined}>{props.children}</AgentLine>;
+}
+
+/** Foreground agents a turn handed work to and waits for, the same line as Started: "Delegated 3 agents in this turn"
+ *  (the task, for one), how they are doing, dropping down an AgentRow line each. The turn's own: no ids, no report. */
+export function AgentDelegate(props: { count: number; title?: string; status?: string; motion?: Motion; children?: JSX.Element }) {
+  return <AgentLine kind="delegate" verb="Delegated" ids={[]} count={props.title ? undefined : `${props.count} agents`} title={props.title}
+    where="in this turn" status={props.status} motion={props.motion}>{props.children}</AgentLine>;
+}
+
+/** One agent's report in an AgentReport: its line (an AgentRow, which opens its run), then what it said under its task. */
+export function AgentReportItem(props: { id: string; title: string; state: AgentState; time?: string; usage?: string; onOpen?: () => void; children: JSX.Element }) {
+  return <><AgentRow line id={props.id} title={props.title} state={props.state} time={props.time} usage={props.usage} onOpen={props.onOpen} />
+    <li class="ui-agent-said">{props.children}</li></>;
 }
 
 /** A chat's background agents on its composer: their AgentRows, each on one line (AgentRow line). No title: each row

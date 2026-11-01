@@ -309,7 +309,7 @@ the single word X" with X, and a report gets one line back.
 | --- | --- |
 | `help` | this table |
 | `think`, `think 900` | thinking before each step, about that many tokens |
-| `narrate` | commentary before each tool call |
+| `narrate` | commentary before each tool call, saying what it is for ("Let me fan out 3 agents to look over each part, and wait for them.") |
 | `tool`, `3 tools` | that many read calls |
 | `bash` | `echo scripted` |
 | `fail` | a read of a missing path |

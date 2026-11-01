@@ -48,7 +48,8 @@ type TrailItem =
   | { type: "context"; message: Message }
   | { type: "hidden" };
 
-const spawnsOnly = (tool: ToolItem) => tool.kind === "script" && tool.done !== false && !tool.isError
+// Running too: while its agents work they are the rows that say so, and a "Delegating" line beside them said it twice.
+const spawnsOnly = (tool: ToolItem) => tool.kind === "script" && !tool.isError
   && Boolean(tool.calls?.some((call) => call.name === "subagent")) && tool.calls!.every((call) => call.earlier || call.name === "subagent");
 /* The segments as the trail's lines: a run of tools of one kind becomes a
    group, anything else its own line. A subagent's spawn is not a line: it is
