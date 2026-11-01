@@ -155,7 +155,9 @@ export function scriptedStep(context) {
 export function scriptedProvider() {
   const core = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions });
   // Every thinking level offered, extra high and max included (the slider is the pace).
-  for (const model of core.models) model.thinkingLevelMap = { xhigh: "xhigh", max: "max" };
+  // Each level is named by its pace (thinkingLabels: the model's own names for its levels, as the pickers show them).
+  for (const model of core.models) Object.assign(model, { thinkingLevelMap: { xhigh: "xhigh", max: "max" },
+    thinkingLabels: Object.fromEntries(Object.entries(SPEEDS).map(([level, pace]) => [level, `${pace} tok/s`])) });
   const stream = (model, context, options) => {
     // One core per call avoids a shared response queue and lets concurrent streams use different speeds.
     const speed = { ...(SHAPES[model.id] || SHAPES.steady), tokensPerSecond: SPEEDS[options?.reasoning] || SPEEDS.off };

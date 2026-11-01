@@ -5,7 +5,10 @@ import { MenuNote, Picker, Section, Slider, Spinner } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
 import type { ModelOption } from "../api/contracts";
 
-const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
+const LEVEL_NAMES: Record<string, string> = { xhigh: "Extra high" };
+/** A thinking level as the pickers name it: the model's own name for it, else the level's. */
+export const thinkingLabel = (value: string, model?: ModelOption) =>
+  model?.thinkingLabels?.[value || "off"] || (value ? LEVEL_NAMES[value] || value[0]!.toUpperCase() + value.slice(1) : "Off");
 
 type ModelMenuProps = {
   models: ModelOption[];
@@ -36,11 +39,11 @@ export function ModelMenuItems(props: ModelMenuProps) {
     <Show when={selected()}>
       <Section kind="slider">
         <Slider label="Thinking" value={levels().length > 1 ? props.thinkingLevel : levels()[0]!} disabled={levels().length < 2}
-          options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))} onChange={props.onThinkingLevelChange}
+          options={levels().map((level) => ({ value: level, label: thinkingLabel(level, selected()) }))} onChange={props.onThinkingLevelChange}
           control={levels().length < 2 ? undefined : (shown) => <MenuSub>
             <MenuSubValue>{shown()}</MenuSubValue>
             <MenuSubContent><MenuSection title="Thinking"><MenuRadioGroup value={props.thinkingLevel} onChange={props.onThinkingLevelChange}>
-              <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+              <For each={levels()}>{(level) => <MenuRadioItem value={level}>{thinkingLabel(level, selected())}</MenuRadioItem>}</For>
             </MenuRadioGroup></MenuSection></MenuSubContent>
           </MenuSub>} />
       </Section>
@@ -73,7 +76,7 @@ export function ModelSelector(props: {
 
   return <DropdownMenu>
     <DropdownMenu.Trigger as={Picker} subject={Boolean(props.onSearchModels)} aria-label={pending() ? "Connecting to model" : `${label() || "Model"} ${props.thinkingLevel || "off"}`} disabled={props.disabled || pending()}
-      icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.quiet ?? (props.thinkingLevel || "off")} />
+      icon={pending() ? <Spinner /> : undefined} value={pending() ? "Connecting…" : label() || "Model"} quiet={pending() ? undefined : props.quiet ?? (selected()?.thinkingLabels?.[props.thinkingLevel || "off"] || props.thinkingLevel || "off")} />
     <MenuContent><ModelMenuItems {...props} /></MenuContent>
   </DropdownMenu>;
 }

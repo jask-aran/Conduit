@@ -14,13 +14,18 @@ import type { Motion } from "./shared";
  * tokens (--cmp-*), measured from the app and scaled by density; its width is
  * the pane's to declare (--composer-width).
  */
-/** takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
+/** Riders split by what they are about. riders: what goes with the message being written (queued messages,
+ *  attachments, references, the voice), on the composer's top edge. under: the state of work under way (background
+ *  agents), below it -- not part of what is written, so a takeover leaves them where they are.
+ *  takeover: a card Rider (the question) that takes the composer's place: the composer drops out of the pane but
  *  keeps its room, and the card rises into the slot. opening: its chat is still arriving (reattaching), so only the
  *  field shows; its toolbar and riders keep their room, unseen. */
-export function DesktopComposer(props: { riders?: JSX.Element; takeover?: JSX.Element; opening?: boolean; class?: string; children: JSX.Element }) {
+export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Element; takeover?: JSX.Element; opening?: boolean; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
+  const under = children(() => props.under);
   return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
-    <div class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}</div>;
+    <div class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}
+    <Show when={under.toArray().length}><div class="ui-composer-under">{under()}</div></Show></div>;
 }
 /** The voice while dictating, riding just over the composer: a PillWave across a wave Rider, an Aura glowing under it
  *  as under a phone's voice track. The words go into the field as they come. levels: the waveform's history (0-1);

@@ -9,6 +9,16 @@
 @media (hover: hover) { .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); } }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width. */
 .ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; margin-inline: auto; }
+/* Hung marks: a row that starts with a mark (a step, an agent, an envelope's sender) hangs it in the gutter, so every
+   line of text a turn writes starts on the column's edge -- the answer's, the commentary's, a step's verb. --mark-hang
+   is the mark and its gap; a turn's orb hangs beyond it. A phone has no gutter: there the marks stay in the column. */
+:root { --mark-hang: calc(var(--icon-sm) + var(--row-gap)); }
+@media (--conduit-phone-layout) { .ui-transcript:not([data-density="desktop"] *) { --mark-hang: 0px; } }
+[data-density="phone"] .ui-transcript { --mark-hang: 0px; }
+.ui-turn > :is(.ui-trail, .ui-agent-rows) { margin-left: calc(-1 * var(--mark-hang)); }
+/* An envelope stands outside a turn but keeps its edge: where a narrow column makes the turns step in (.ui-turn's
+   --turn-step, for the orb), it steps in by as much, then hangs its mark. */
+:is(.ui-transcript, .ui-transcript-row) > .ui-envelope { margin-left: calc(max(0px, var(--icon-xl) + var(--row-gap) + var(--mark-hang) + var(--space-xs) - (100cqw - 100%) / 2) - var(--mark-hang)); }
 .ui-transcript-row { min-width: 0; }
 .ui-loading-earlier { display: flex; justify-content: center; }
 /* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
@@ -80,7 +90,7 @@
 /* A turn's orb hangs in the gutter left of the column (the trace's, or TurnOrb's). Where the column has no gutter to
    hang it in (a phone), the turn steps in by what is missing: --turn-step, from the room either side of the column in
    its container. */
-.ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
+.ui-turn { --turn-orb-reach: calc(var(--icon-xl) + var(--row-gap) + var(--mark-hang)); --turn-step: max(0px, calc(var(--turn-orb-reach) + var(--space-xs) - (100cqw - 100%) / 2));
   position: relative; display: grid; min-width: 0; gap: var(--flow-attached); padding-inline-start: var(--turn-step); }
 /* A turn composed whole (trace, answer, foot): its answer is a step under its trace, as its own row would be. */
 .ui-turn > :is(.ui-trace, .ui-trace-fold) + .ui-answer { margin-top: calc(var(--flow-step) - var(--flow-attached)); }

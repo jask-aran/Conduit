@@ -12,8 +12,12 @@
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
 /* The composer's slot: the composer (with its riders) and a takeover (the question) share one cell, bottom-aligned.
    Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
-.ui-composer-slot { display: grid; }
+.ui-composer-slot { display: grid; grid-template-columns: minmax(0, 1fr); }
 .ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
+/* Under: the state riders, a row of their own below the composer and its takeover, so neither moves them. They come
+   out of the composer's bottom edge, down, and go back up into it (--rise turned over). */
+.ui-composer-slot > .ui-composer-under { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--cmp-rider-gap); margin-top: var(--cmp-rider-gap); }
+.ui-composer-under > .ui-rider { --rise: calc(-1 * var(--space-md)); }
 /* The stack only moves; its frosts (riders, composer) fade themselves (6). */
 .ui-composer-slot > .ui-composer-stack { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
   transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
@@ -72,7 +76,7 @@
 .ui-picker > .ui-picker-chevron { color: var(--muted-foreground); }
 
 /* Opening (its chat still arriving): the field alone; the toolbar and riders keep their room, unseen. */
-.ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer)) { visibility: hidden; }
+.ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer), .ui-composer-under) { visibility: hidden; }
 
 /* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
 .ui-composer-field > textarea { font-family: var(--font-transcript); }

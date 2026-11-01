@@ -302,9 +302,11 @@ export class DurableRuntime {
               ["keepRecentTokens", compaction?.keepRecentTokens]]
               .filter(([key, value]) => key === "enabled" ? typeof value === "boolean" : Number.isFinite(value) && value >= 0));
           },
+          // pi's settings.json says how messages waiting in a turn join it (steeringMode); unset, all at its next pause,
+          // together: reports from agents that finished together are read in one reply, not a request each.
           get steeringMode() {
             const mode = runtime.piSettings().steeringMode;
-            return mode === "all" || mode === "one-at-a-time" ? mode : undefined;
+            return mode === "one-at-a-time" ? mode : "all";
           },
           get followUpMode() {
             const mode = runtime.piSettings().followUpMode;

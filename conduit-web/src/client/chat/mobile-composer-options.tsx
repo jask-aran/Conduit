@@ -7,6 +7,7 @@ import { DropdownMenu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioIt
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";
+import { thinkingLabel } from "./model-selector";
 import type { ComposerPermissions } from "./composer-permissions";
 import type { ServiceLevelSettings } from "../state/service-level-settings";
 
@@ -14,7 +15,6 @@ import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace, PlaceGlyph, type PlaceOptions } from "./place-picker";
 import { PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 
-const thinkingLabel = (value: string) => value ? value[0]!.toUpperCase() + value.slice(1) : "Off";
 
 export function MobileComposerOptions(props: {
   /** Told when the menu opens and closes (a PhoneComposer dims under it). */
@@ -99,7 +99,7 @@ export function MobileComposerOptions(props: {
         </MenuSection>
         <Section kind="slider">
           <Slider label="Effort" value={composer.models.effort()} disabled={!composer.serverOnline || levels().length < 2}
-            options={levels().map((level) => ({ value: level, label: thinkingLabel(level) }))} onChange={(value) => void composer.models.chooseEffort(value)}
+            options={levels().map((level) => ({ value: level, label: thinkingLabel(level, selectedModel()) }))} onChange={(value) => void composer.models.chooseEffort(value)}
             control={(shown) => <MenuSub phone>
               <MenuSubValue disabled={!composer.serverOnline || levels().length < 2}>{shown()}</MenuSubValue>
               <MenuSubContent><EffortChoices composer={composer} levels={levels()} /></MenuSubContent>
@@ -146,7 +146,7 @@ function ModelChoices(props: { composer: Options }) {
 function EffortChoices(props: { composer: Options; levels: string[] }) {
   const back = useMenuBack();
   return <MenuSection title="Effort"><MenuRadioGroup value={props.composer.models.effort()} onChange={(value) => { void props.composer.models.chooseEffort(value); back(); }}>
-    <For each={props.levels}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level)}</MenuRadioItem>}</For>
+    <For each={props.levels}>{(level) => <MenuRadioItem value={level} closeOnSelect={false}>{thinkingLabel(level, props.composer.models.models().find((item) => item.spec === props.composer.models.model()))}</MenuRadioItem>}</For>
   </MenuRadioGroup></MenuSection>;
 }
 

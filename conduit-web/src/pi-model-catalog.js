@@ -176,6 +176,7 @@ export class PiModelCatalog {
       label: model.name || model.id,
       reasoning: model.reasoning === true,
       thinkingLevels: getSupportedThinkingLevels(model),
+      ...(model.thinkingLabels ? { thinkingLabels: model.thinkingLabels } : {}),
       contextWindow: Number(model.contextWindow) || null,
     };
   }

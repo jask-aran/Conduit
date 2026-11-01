@@ -1,7 +1,7 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { Show } from "solid-js";
-import { Picker, Gauge, Swatch, Completion, VoiceRider, Spinner, StopGlyph, Choices, Button, Choice, ComposerField, DesktopComposer, TextArea, Rider, RiderTitle, Toolbar } from "@/components/ui";
+import { createSignal, Show } from "solid-js";
+import { Picker, Gauge, Swatch, Completion, VoiceRider, Spinner, StopGlyph, Choices, Button, Choice, ComposerField, DesktopComposer, TextArea, Rider, RiderTitle, Toolbar, AgentRider, AgentRow } from "@/components/ui";
 import { Replay } from "../specs";
 import { COMPOSER_SIZES } from "../foundations";
 import { ghost, queued, speech, attachments } from "../demos";
@@ -12,6 +12,18 @@ export const toolbarEnd = () => ghost("Start voice dictation", <Icons.Microphone
 export const send = () => ghost("Send message", <Icons.Send />);
 
 const composerScene = () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>;
+
+// State under the composer: background agents keep their place below while a question takes the composer's.
+function UnderScene() {
+  const [asking, setAsking] = createSignal(false);
+  const question = () => <Show when={asking()}><Rider label="Question" layout="card" motion="entering">
+    <Choices><Choice n={1} label="First" active onPick={() => setAsking(false)} /><Choice n={2} label="Second" onPick={() => setAsking(false)} /></Choices></Rider></Show>;
+  return <div class="g-composer g-stack"><Button variant="ghost" size="sm" onClick={() => setAsking(!asking())}>{asking() ? "Answer the question" : "Ask a question"}</Button>
+    <DesktopComposer takeover={question()} under={<AgentRider motion="entering">
+      <AgentRow line id="sa-1" title="Research gassho house pricing" state="running" activity="fetch_content booking.com" time="14s" onOpen={() => {}} onStop={() => {}} />
+      <AgentRow line id="sa-2" title="Check Shirakawa-go bus times" state="running" activity="web_search nohi bus" time="09s" onOpen={() => {}} onStop={() => {}} />
+    </AgentRider>}><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>;
+}
 
 const dictation = (listening: () => boolean) => {
   const voice = speech(listening);
@@ -26,7 +38,7 @@ export const desktopComposerPage: Page = {
   preview: composerScene,
   usage: `import { DesktopComposer, ComposerField, TextArea, Toolbar, Picker, Button, Icons } from "@/components/ui";
 
-<DesktopComposer riders={riders()} takeover={question()}>
+<DesktopComposer riders={riders()} under={agents()} takeover={question()}>
   <ComposerField><TextArea value={draft()} onInput={(event) => setDraft(event.currentTarget.value)} placeholder="Send a message…" /></ComposerField>
   <Toolbar
     start={<Picker subject value={model()} onClick={openModelSelector} />}
@@ -54,6 +66,7 @@ export const desktopComposerPage: Page = {
     row("Gauge", "idle (nothing reported), normal, warning, critical; --warn · --destructive", () => <div class="g-row"><Gauge value={0} tone="idle" /><Gauge value={42} /><Gauge value={78} tone="warning" /><Gauge value={94} tone="critical" /></div>, { surfaces: ["ground"], code: "<Gauge value tone>" }),
     row("Swatch", "a part's colour beside its label; hollow for what sits outside; fill: the whole of a colour choice; --icon-dot", () => <div class="g-row"><Swatch colour="oklch(0.72 0.15 300)" /><Swatch hollow /><Button variant="ghost" size="icon-sm" aria-label="Mauve"><Swatch colour="oklch(0.72 0.15 300)" fill /></Button></div>, { surfaces: ["ground"], code: "<Swatch colour hollow fill>" }),
     row("Completion", "a slash command the draft completes to: the rest ghosted after what is typed, then what it does; --cmp-field-pad · --text-caption", () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea value="/" /><Completion typed="/" rest="attach" detail="Choose files to attach" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>, { surfaces: ["ground"], code: "<Completion typed rest detail>" }),
+    row("under", "riders about state go below the composer, riders about the message above: background agents (AgentRider) in their own row, which a takeover (the question) leaves in place; they come out of the composer's bottom edge, down; a phone keeps them above (PhoneComposer riders); --cmp-rider-gap", () => <UnderScene />, { code: "<DesktopComposer under={<AgentRider>…</AgentRider>}>", source: "chat/composer.tsx agents()", surfaces: ["ground"] }),
     row("Composer · QueuedMessages + AttachmentStrip", "chat/composer.tsx, queued-messages.tsx, attachment-strip.tsx", () => <div class="g-composer"><DesktopComposer riders={<>{queued()}{attachments()}</>}><ComposerField><TextArea value="see the attached notes" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>, { source: "chat/composer.tsx, queued-messages.tsx, attachment-strip.tsx", surfaces: ["ground"] }),
   ],
   motion: [

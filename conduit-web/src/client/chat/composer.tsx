@@ -772,8 +772,10 @@ export function Composer(props: {
     <TextArea ref={input} rows={1} data-composer-input="" aria-label="Message the agent" data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
+  // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the
+  // keyboard and the home bar have the bottom edge.
+  const agents = () => <Show when={props.chat.agents().length}><BackgroundAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
   const riders = () => <>
-    <Show when={props.chat.agents().length}><BackgroundAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>
     <QueuedMessages messages={props.chat.pendingMessages()} busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
     <Show when={comments().length}><Rider label="File references"><ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} /></Rider></Show>
     <Show when={props.attachmentsSupported !== false}>
@@ -787,7 +789,7 @@ export function Composer(props: {
   // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
-  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening}
+  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening} under={agents()}
     riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} level={Math.min(1, dictationWaveform.level() * 2.5)} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
     <Toolbar ref={toolbarRef}
@@ -820,7 +822,7 @@ export function Composer(props: {
       primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><Icons.Send /></LibraryButton>}>{stopButton()}</Show>} />
   </DesktopComposer>;
   const phone = () => <PhoneComposer opening={props.opening} mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
-    riders={<>{question()}{riders()}</>}
+    riders={<>{question()}{agents()}{riders()}</>}
     field={<PillField>{field()}</PillField>}
     track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
     captions={<Show when={captionLead() || dictatedText()}><Captions lead={captionLead()} words={dictatedText().split(/(?<=\s)/)} ref={announceCaptions} /></Show>}

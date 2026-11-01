@@ -468,6 +468,8 @@ export interface ModelOption {
   spec: string;
   label: string;
   thinkingLevels: string[];
+  /** The model's own names for its levels, where it has them (the Test models' paces); else the level's. */
+  thinkingLabels?: Record<string, string>;
   defaultThinkingLevel?: string;
   outsideScope?: boolean;
 }

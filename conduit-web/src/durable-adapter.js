@@ -1334,7 +1334,7 @@ export class DurableAdapter extends EventEmitter {
       const levels = model.reasoning ? getSupportedThinkingLevels(model) : [];
       return { provider: model.provider, id: model.id, spec: `${model.provider}/${model.id}`, label: model.name || model.id,
         reasoning: Boolean(model.reasoning), thinkingLevels: levels, defaultThinkingLevel: levels.includes("medium") ? "medium" : levels[0] || "",
-        contextWindow: model.contextWindow || null };
+        ...(model.thinkingLabels ? { thinkingLabels: model.thinkingLabels } : {}), contextWindow: model.contextWindow || null };
     });
   }
 
