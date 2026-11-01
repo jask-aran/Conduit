@@ -45,6 +45,11 @@ export async function backgroundSubagents(harness, conversationId, context) {
   return Object.values((await harness.snapshot(SubagentRoster, conversationId, context))?.children || {});
 }
 
+/** Foreground subagents a codemode script spawned: no top-level call names them, so the roster does (`nested`). */
+export async function nestedSubagents(harness, conversationId, context) {
+  return Object.values((await harness.snapshot(SubagentRoster, conversationId, context))?.nested || {});
+}
+
 /** Stop a conversation's background subagents: its chat is going, and a late report would start a turn no one sees. */
 export async function stopBackgroundSubagents(harness, conversationId, context) {
   for (const item of await backgroundSubagents(harness, conversationId, context)) {
@@ -320,12 +325,10 @@ export function Subagents(runtime) {
         return textResult(Object.entries(roster?.children || {}).map(([key, item]) => `${key}: ${item.status}: ${item.title}`).join("\n") || "No background subagents.");
       }
       if ((action === "spawn" || action === "message") && typeof task !== "string") throw new Error("subagent requires task for spawn or message.");
-      // Spawned from inside a script, the agent is one of the script's calls: the person never sees it in the turn
-      // (its row, its stop, its transcript). A spawn is its own call, so it is refused there and the model calls it.
-      if (action === "spawn") {
-        const own = await api.getTask(api.taskId, context);
-        if (own?.input?.kind === "nested") return { output: [{ type: "text", text: "Spawn subagents with the subagent tool directly, not from a codemode script, so the person can see and stop them. Call subagent now with the same task." }], isError: true };
-      }
+      // A spawn from inside a codemode script is the same spawn: the roster notes the script's call (`via`, the model's
+      // call id, before any nested key) so the turn draws its agent row under that call, as for a direct one.
+      const own = action === "spawn" ? await api.getTask(api.taskId, context) : null;
+      const via = own?.input?.kind === "nested" && own.input.parentCallId ? String(own.input.parentCallId).split("/")[0] : null;
       // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
       const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
         ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || await runtime.contextStore?.assemble("subagent") || "", context);
@@ -341,6 +344,17 @@ export function Subagents(runtime) {
         const title = subagentTitle(task);
         const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
         await api.details({ conversationId: child, subagentId: null, title, startedAt }, context);
+        const noteNested = async (fields) => {
+          if (!via) return;
+          await api.commit(async (tx) => {
+            const roster = await tx.doc(SubagentRoster, api.conversationId);
+            roster.nested ||= {};
+            roster.nested[child] = { ...roster.nested[child], conversationId: child, title, via, startedAt, ...fields };
+            return undefined;
+          }, context);
+          runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: fields.status });
+        };
+        await noteNested({ status: "running", endedAt: null });
         await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: null, title });
         const unobserve = await observe(api.conversationId, child, api, context, true);
         try {
@@ -348,9 +362,9 @@ export function Subagents(runtime) {
           const requestId = `subagent:${api.taskId}`;
           const settled = await (await handle.submit({ type: "input", content: task, requestId,
             entry: { kind: "conduit.user", data: { messageId: requestId, text: task, timestamp: new Date().toISOString() } } }, context)).wait(context);
-          await api.details({ conversationId: child, subagentId: null, title, startedAt,
-            status: settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed",
-            endedAt: new Date().toISOString() }, context);
+          const ended = { status: settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed", endedAt: new Date().toISOString() };
+          await api.details({ conversationId: child, subagentId: null, title, startedAt, ...ended }, context);
+          await noteNested(ended);
           const answer = await runtime.lastAnswer(child);
           const usage = totalUsage(await api.snapshot(UsageDoc, child, context));
           if (settled.status !== "done" && !answer) {
@@ -371,7 +385,7 @@ export function Subagents(runtime) {
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
           await stripTools(tx, child.id);
           if (runPrompt) await configure(tx, child.id, { instructions: runPrompt });
-          roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0,
+          roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }
         const held = Object.hasOwn(roster.children, id) ? roster.children[id] : null;

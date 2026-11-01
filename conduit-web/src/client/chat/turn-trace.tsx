@@ -463,6 +463,8 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
   const trail = createMemo(() => trailOf(props.trace.segments));
   const spawns = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && spawned(segment.tool) ? [segment.tool] : []));
+  // Its codemode scripts' call ids: an agent a script spawned is drawn with the turn's own spawns.
+  const scripts = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && segment.tool.kind === "script" ? [segment.tool.toolCallId] : []));
   let opened = 0;
   // One renderer for the line, its text growing in place: a new one each delta draws a blank frame between them.
   // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
@@ -485,7 +487,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   // A trace that is only context (a thread's opening system prompt, above its first message) is its lines alone.
   const onlyContext = () => props.trace.segments.length > 0 && props.trace.segments.every((segment) => segment.kind === "context");
   return <Show when={!single() && !onlyContext()} fallback={<>
-      <TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />
+      <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />
       <Trail><Index each={trail()}>{(item) =>
         <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
     </>}>
@@ -493,7 +495,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
       work={settledRun() ? undefined : preview().work || undefined}
       latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
-      pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
+      pinned={<TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
       {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>

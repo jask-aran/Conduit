@@ -295,6 +295,8 @@ export interface AgentSummary {
   endedAt: string | null;
   /** What it is doing now, while it runs. */
   activity: string | null;
+  /** The codemode script call that spawned it, when a script did: its row is drawn under that call. */
+  via?: string;
   /** `context`: what its last request held, as a chat's context pane says; `tokens`: summed over its requests. */
   usage: { tokens: number; context?: number | null; cost: number };
 }

@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
-import { backgroundSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
+import { backgroundSubagents, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
@@ -1540,10 +1540,15 @@ export class DurableAdapter extends EventEmitter {
     for (const item of await backgroundSubagents(harness, conversationId, this.context)) {
       const task = item.reporter ? await harness.getTask(item.reporter, this.context) : null;
       const failed = task?.state.status === "terminal" && task.state.outcome.status !== "completed";
-      agents.push({ id: item.id, conversationId: item.child, title: item.title, mode: "background",
+      agents.push({ id: item.id, conversationId: item.child, title: item.title, mode: "background", ...(item.via ? { via: item.via } : {}),
         status: item.status === "running" && failed ? "failed" : item.status,
         startedAt: item.startedAt || (task?.startedAt ? new Date(task.startedAt).toISOString() : null),
         endedAt: item.endedAt || (task?.endedAt ? new Date(task.endedAt).toISOString() : null) });
+    }
+    // A codemode script's foreground spawns, under the script's call (`via`).
+    for (const item of await nestedSubagents(harness, conversationId, this.context)) {
+      agents.push({ id: null, conversationId: item.conversationId, title: item.title, mode: "foreground", via: item.via,
+        status: item.status || "running", startedAt: item.startedAt || null, endedAt: item.endedAt || null });
     }
     for (const entry of entries) {
       if (entry.kind !== "pi.assistant") continue;

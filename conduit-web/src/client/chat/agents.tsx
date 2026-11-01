@@ -61,8 +61,18 @@ function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
 }
 
 /** A turn's subagents, pinned under its head: one row per spawn among its tools. */
-export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; onStop?: (id: string) => void }) {
-  const rows = createMemo(() => props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)));
+/** An agent a codemode script spawned: the chat's agents are all there is of it (no call of the turn names it). */
+function rowOfAgent(agent: AgentSummary): Row {
+  return { id: agent.id || undefined, background: agent.mode === "background", state: agent.status, chatId: agent.chatId, title: agent.title,
+    activity: agent.status === "running" ? agent.activity || undefined : undefined, startedAt: agent.startedAt, endedAt: agent.endedAt,
+    usage: agent.status !== "running" && agent.usage.context ? context(agent.usage.context) : undefined };
+}
+
+/** A turn's agents: its spawn calls', then those its codemode scripts spawned (`scripts`: the turn's script call ids),
+ *  drawn alike -- a spawn is a spawn however the model asked for it. */
+export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; scripts?: string[]; onStop?: (id: string) => void }) {
+  const rows = createMemo(() => [...props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)),
+    ...(props.scripts?.length ? props.agents.filter((agent) => agent.via && props.scripts!.includes(agent.via)).map(rowOfAgent) : [])]);
   const now = useNow(() => rows().some((row) => row.state === "running"));
   return <Show when={rows().length}>
     <AgentRows><Index each={rows()}>{(row) => <AgentRow id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
