@@ -48,6 +48,8 @@ type TrailItem =
   | { type: "context"; message: Message }
   | { type: "hidden" };
 
+const spawnsOnly = (tool: ToolItem) => tool.kind === "script" && tool.done !== false && !tool.isError
+  && Boolean(tool.calls?.some((call) => call.name === "subagent")) && tool.calls!.every((call) => call.earlier || call.name === "subagent");
 /* The segments as the trail's lines: a run of tools of one kind becomes a
    group, anything else its own line. A subagent's spawn is not a line: it is
    pinned under the head (TurnAgents), where the fold does not hide it. */
@@ -75,7 +77,8 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
     // What the model was given besides messages is its own line, where it was given (DESIGN, Messages in and out).
     if (segment.kind === "context") { flush(); items.push({ type: "context", message: segment.message }); continue; }
     if (segment.kind === "tool") {
-      if (spawned(segment.tool)) continue;
+      // A script that only spawned subagents is its agent rows (TurnAgents), as a direct spawn is.
+      if (spawned(segment.tool) || spawnsOnly(segment.tool)) continue;
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
       run.push(segment.tool);
       continue;

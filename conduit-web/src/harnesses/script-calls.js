@@ -59,7 +59,10 @@ const step = (tools, name, input) => {
   const subject = tools.subjectOf(name, input);
   // What the adapter can say of the call better than its subject (ToolFacts), less a diff: a script's rows are lines.
   const { diff, ...facts } = tools.factsOf?.(name, input) || {};
-  return { name, kind: tools.kindOf(name) || "other", ...(subject ? { subject } : {}), ...(Object.keys(facts).length ? { facts } : {}) };
+  const kind = tools.kindOf(name) || "other";
+  // A message a script sends (notify) keeps what it said: it is drawn as its own row, as a direct call's is.
+  return { name, kind, ...(subject ? { subject } : {}), ...(Object.keys(facts).length ? { facts } : {}),
+    ...(kind === "message" && input && typeof input === "object" ? { input } : {}) };
 };
 
 /**

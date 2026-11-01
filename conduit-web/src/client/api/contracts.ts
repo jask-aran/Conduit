@@ -411,6 +411,8 @@ export interface ToolCallStep {
   isError?: boolean;
   durationMs?: number;
   facts?: ToolFacts;
+  /** A message call's arguments (title, text): it is drawn as its own row, as a direct call's is. */
+  input?: unknown;
 }
 
 export interface ToolFacts {

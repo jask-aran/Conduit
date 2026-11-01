@@ -113,15 +113,30 @@ export type TurnRow =
   // What the turn sent the person outside the thread (a `message` tool: a notification), as it was sent.
   | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string };
 
+/** A codemode script's message calls as the calls they are (a script's `notify` is a notification like a direct one),
+ *  and the script without them: gone when they were all it did and it ended well. */
+function liftScriptMessages(segment: TraceSegment): { segment: TraceSegment | null; messages: ToolItem[] } {
+  if (segment.kind !== "tool" || segment.tool.kind !== "script" || !segment.tool.calls?.some((call) => call.kind === "message" && !call.planned)) return { segment, messages: [] };
+  const script = segment.tool;
+  const messages = script.calls!.flatMap((call, index): ToolItem[] => call.kind === "message" && !call.planned ? [{
+    toolCallId: `${script.toolCallId}/${index}`, name: call.name, kind: "message", input: call.input, subject: call.subject,
+    done: call.done !== false, isError: call.isError, timestamp: script.timestamp, completedAt: script.completedAt } as ToolItem] : []);
+  const calls = script.calls!.filter((call) => !(call.kind === "message" && !call.planned));
+  const alone = !calls.some((call) => !call.earlier) && script.done !== false && !script.isError;
+  return { segment: alone ? null : { ...segment, tool: { ...script, calls } }, messages };
+}
+
 /** A message the turn sent the person is not work: it leaves the trace it was called in and stands as its own row,
  *  after that trace (Narrated) or under the turn (Folded). A trace that held only that is not drawn, unless live. */
 function splitSent(rows: TurnRow[], show: boolean): TurnRow[] {
   const sent: TurnRow[] = [];
   const out = rows.flatMap((row): TurnRow[] => {
     if (row.type !== "trace") return [row];
-    const messages = row.value.segments.flatMap((segment) => segment.kind === "tool" && segment.tool.kind === "message" ? [segment.tool] : []);
+    const lifted = row.value.segments.map(liftScriptMessages);
+    const messages = [...lifted.flatMap((item) => item.segment?.kind === "tool" && item.segment.tool.kind === "message" ? [item.segment.tool] : []),
+      ...lifted.flatMap((item) => item.messages)];
     if (!messages.length) return [row];
-    const segments = row.value.segments.filter((segment) => !(segment.kind === "tool" && segment.tool.kind === "message"));
+    const segments = lifted.flatMap((item) => item.segment ? [item.segment] : []).filter((segment) => !(segment.kind === "tool" && segment.tool.kind === "message"));
     const own = messages.map((tool): TurnRow => ({ key: `sent:${tool.toolCallId}`, type: "sent", value: tool, precedingUserId: row.precedingUserId }));
     const kept = segments.length || row.value.active ? [{ ...row, value: { ...row.value, segments } }] : [];
     if (show) return [...kept, ...own];

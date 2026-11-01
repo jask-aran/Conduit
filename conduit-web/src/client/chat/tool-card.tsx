@@ -118,7 +118,8 @@ export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boole
     onToggle={props.onToggle}>
     <>
       <Show when={facts()?.diff?.length}><StepDiff lines={facts()!.diff!} hidden={(facts()!.added || 0) + (facts()!.removed || 0) > facts()!.diff!.filter((line) => line.sign !== "\u2026").length ? (facts()!.added || 0) + (facts()!.removed || 0) - facts()!.diff!.filter((line) => line.sign !== "\u2026").length : undefined} /></Show>
-      <Show when={props.tool.calls?.length}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
+      {/* A script that made one call is said as that call already: its list would say it again. */}
+      <Show when={props.tool.calls?.length && !(said() && props.tool.calls!.filter((call) => !call.earlier).length <= 1)}><Trail nested="calls"><Index each={props.tool.calls!}>{(call) => {
         const callKind = () => stepKind(call()) in KIND_ICONS ? stepKind(call()) : "other";
         const running = () => call().done === false;
         const callParts = () => stepParts(call());
