@@ -44,6 +44,10 @@ export class PiModelCatalog {
     authStorage,
     modelRegistry,
     modelPatterns = [],
+    // A profile with models of its own (the scripted Test profile): its patterns, not the person's scoped models,
+    // and these providers registered on its runtime only.
+    ownModels = false,
+    providers = [],
     settingsFactory = (cwd) => SettingsManager.create(cwd, agentDir, { projectTrusted: false }),
   } = {}) {
     this.agentDir = agentDir;
@@ -59,12 +63,15 @@ export class PiModelCatalog {
         refreshOnCreate: false,
       });
     this.modelPatterns = modelPatterns;
+    this.ownModels = ownModels;
+    this.providers = providers;
     this.settingsFactory = settingsFactory;
   }
 
   async ready() {
     if (!this.runtimePromise) return this;
     this.modelRuntime = await this.runtimePromise;
+    for (const provider of this.providers) this.modelRuntime.registerNativeProvider(provider);
     this.modelRegistry = new ModelRegistry(this.modelRuntime);
     this.runtimePromise = null;
     return this;
@@ -114,7 +121,7 @@ export class PiModelCatalog {
     else await this.modelRegistry.refresh();
 
     const configuredModels = settings.getEnabledModels?.();
-    const modelPatterns = Array.isArray(configuredModels) ? configuredModels : this.modelPatterns;
+    const modelPatterns = Array.isArray(configuredModels) && !this.ownModels ? configuredModels : this.modelPatterns;
     const modelSource = this.modelRuntime || this.modelRegistry;
     // The scope moves only with the patterns or a refresh (which clears it).
     const scopeKey = JSON.stringify(modelPatterns);

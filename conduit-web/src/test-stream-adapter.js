@@ -81,22 +81,22 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
  * something gives.
  */
 export const TEST_STREAM_SPEEDS = Object.freeze([
-  { id: "paced-60", label: "60 tokens/s · about a real model", tokensPerSecond: 60 },
-  { id: "fast-250", label: "250 tokens/s", tokensPerSecond: 250 },
-  { id: "fast-1000", label: "1000 tokens/s", tokensPerSecond: 1000 },
-  { id: "flood-4000", label: "4000 tokens/s · past any real provider", tokensPerSecond: 4000 },
-  // A real reply replayed word for word at a real model's pace: what the
-  // renderer does with the text a model actually writes, which the filler
-  // words never exercise. The whole reply streams whatever the level says.
+  { id: "paced-60", label: "60 tok/s · like a real model", tokensPerSecond: 60 },
   // A real provider's cadence: the same average rate, delivered as chunks
   // after uneven gaps, one of them a long pause. Even ticks flatter any
   // reveal; this is the pause-then-paragraph a real turn has, repeatably.
-  { id: "bursty-60", label: "60 tokens/s in uneven bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
-  { id: "replay-markdown", label: "Markdown replay · lists, table, math, code", tokensPerSecond: 60, replay: MARKDOWN_MIX },
-  { id: "replay-markdown-bursty", label: "Markdown replay in uneven bursts", tokensPerSecond: 60, replay: MARKDOWN_MIX, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
-  { id: "replay-katex-limits", label: "KaTeX replay · long aligned blocks", tokensPerSecond: 60, replay: KATEX_LIMITS },
-  { id: "replay-katex-compendium", label: "KaTeX replay · hundreds of formulas", tokensPerSecond: 60, replay: KATEX_COMPENDIUM },
+  { id: "bursty-60", label: "60 tok/s in bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
+  { id: "fast-250", label: "250 tok/s", tokensPerSecond: 250 },
+  { id: "fast-1000", label: "1000 tok/s", tokensPerSecond: 1000 },
+  { id: "flood-4000", label: "4000 tok/s · past any provider", tokensPerSecond: 4000 },
 ].map(Object.freeze));
+
+const REPLAY_ALIASES = new Map([
+  ["replay-markdown", { pace: "paced-60", replay: MARKDOWN_MIX }],
+  ["replay-markdown-bursty", { pace: "bursty-60", replay: MARKDOWN_MIX }],
+  ["replay-katex-limits", { pace: "paced-60", replay: KATEX_LIMITS }],
+  ["replay-katex-compendium", { pace: "paced-60", replay: KATEX_COMPENDIUM }],
+]);
 
 /**
  * How much, as the thinking levels.
@@ -133,7 +133,7 @@ const WORDS = ("the quick brown fox jumps over a lazy dog while conduit streams 
 const adapterError = (message, code = "backend_unavailable", status = 409) =>
   Object.assign(new Error(message), { code, status });
 
-export const speedFor = (id) => TEST_STREAM_SPEEDS.find((speed) => speed.id === id)
+export const speedFor = (id) => TEST_STREAM_SPEEDS.find((speed) => speed.id === (REPLAY_ALIASES.get(id)?.pace || id))
   || TEST_STREAM_SPEEDS.find((speed) => speed.id === DEFAULT_SPEED_ID);
 export const amountFor = (id) => TEST_STREAM_AMOUNTS.find((amount) => amount.id === id)
   || TEST_STREAM_AMOUNTS.find((amount) => amount.id === DEFAULT_AMOUNT_ID);
@@ -181,6 +181,14 @@ export function thinkingFromPrompt(message) {
 export const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
 /** "rich" streams real-looking text: typographic punctuation, Markdown, formulas, code (test-stream-replays.js). */
 export const richFromPrompt = (message) => /\brich\b/i.test(String(message || ""));
+/** "markdown", "katex", and "katex limits" replay whole recorded replies (test-stream-replays.js). */
+export function replayFromPrompt(message) {
+  const text = String(message || "");
+  if (/\bkatex(?:\s+|-)limits\b/i.test(text)) return KATEX_LIMITS;
+  if (/\bkatex\b/i.test(text)) return KATEX_COMPENDIUM;
+  if (/\bmarkdown\b/i.test(text)) return MARKDOWN_MIX;
+  return null;
+}
 /** What a refused call returns to the model. */
 export const TEST_STREAM_DENIED = "Denied: the user did not allow this call.";
 export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
@@ -267,7 +275,7 @@ export class TestStreamAdapter extends EventEmitter {
     this.logs = logs;
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
-    Object.assign(this, unsupported(TEST_STREAM_CAPABILITIES, { label: "Test stream" }));
+    Object.assign(this, unsupported(TEST_STREAM_CAPABILITIES, { label: "Render test" }));
   }
 
   async launch(context, { model = "", thinkingLevel = "", forceModel = false } = {}) {
@@ -300,7 +308,7 @@ export class TestStreamAdapter extends EventEmitter {
       activity: "idle",
       active: false,
       stopping: false,
-      model: speedFor(model).id,
+      model: REPLAY_ALIASES.has(model) ? model : speedFor(model).id,
       thinkingLevel: amount.id,
       tokens: amount.tokens,
       generation: null,
@@ -328,7 +336,7 @@ export class TestStreamAdapter extends EventEmitter {
     // name. Inventing one here would state a second row for a message that is
     // on screen: the same prompt twice, until a reload agreed with neither.
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
-    const replay = speedFor(record.model).replay;
+    const replay = REPLAY_ALIASES.get(record.model)?.replay || replayFromPrompt(message);
     record.tokens = replay ? replayTokens(replay).length : amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     record.active = true;
     record.activity = "working";
@@ -353,6 +361,7 @@ export class TestStreamAdapter extends EventEmitter {
         .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
       rich: richFromPrompt(message),
+      replay,
       approvals: approvalFromPrompt(message),
       attachments: attachmentSummary(options?.attachments || []),
       sent: 0,
@@ -431,7 +440,7 @@ export class TestStreamAdapter extends EventEmitter {
       let burst = "";
       while (turn.sent < due) {
         const delta = step.text ? replayTokens(step.text)[turn.sent - from] ?? ""
-          : speed.replay ? replayTokens(speed.replay)[turn.sent] ?? ""
+          : turn.replay ? replayTokens(turn.replay)[turn.sent] ?? ""
           : turn.rich ? loopedToken(blockKind === "thinking" ? RICH_PROSE : RICH_MIX, turn.sent - from) : tokenAt(turn.sent);
         if (blockKind === "thinking") turn.thinking += delta;
         else turn.text += delta;
@@ -748,7 +757,7 @@ export class TestStreamAdapter extends EventEmitter {
     const record = this.get(id);
     // Only the speed: how much comes back is the level's business, and changing
     // one should not silently change the other.
-    if (record) record.model = speedFor(model).id;
+    if (record) record.model = REPLAY_ALIASES.has(model) ? model : speedFor(model).id;
     return record?.model || DEFAULT_SPEED_ID;
   }
 

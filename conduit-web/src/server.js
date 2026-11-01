@@ -15,6 +15,7 @@ import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
 import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
+import { scriptedProvider } from "./server/scripted-model.js";
 import { ProjectStore } from "./project-store.js";
 import { ChatLogs } from "./server/chat-log.js";
 import { TurnTimings } from "./server/turn-timings.js";
@@ -322,7 +323,8 @@ const harnessModels = createHarnessModelCatalogue();
 function catalogFor(runtime, template) {
   const key = `isolated:${template?.id || config.piTemplate.id}`;
   if (!modelCatalogs.has(key)) {
-    modelCatalogs.set(key, new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models }));
+    modelCatalogs.set(key, new PiModelCatalog({ agentDir: config.piAgentDir, modelPatterns: template?.models || config.piTemplate.models,
+      ...(template?.ownModels ? { ownModels: true, providers: [scriptedProvider()] } : {}) }));
   }
   return modelCatalogs.get(key);
 }

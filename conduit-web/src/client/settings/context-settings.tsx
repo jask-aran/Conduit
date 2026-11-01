@@ -10,6 +10,8 @@ import { FileButton, StatusText } from "@/components/ui/file";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import { SettingLoading, SettingNote } from "@/components/ui/overlay";
+import type { ModelOption } from "../api/contracts";
+import { ModelSelector } from "../chat/model-selector";
 
 /*
  * What every thread Conduit starts is given (GET /v0/context, context-store.js): blocks, named pieces of text, stacked
@@ -20,7 +22,7 @@ export type BlockSummary = { id: string; label: string; kind: "text" | "live" | 
   description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
-  blocks: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean };
+  blocks: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean; subagents?: { model: string; thinkingLevel: string } | null };
 type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string };
 /** A slot: fixed (filled into a system prompt when a thread starts; a change reaches the thread as an update notice)
  *  or current (never in a system prompt; it travels on notices). */
@@ -66,7 +68,7 @@ function createBlockDetails(context: ContextData) {
  *  blocks in the order the model reads them, then what Conduit adds, then a run's first message -- beside the chosen
  *  block in an editor pane filling the height, the block's actions in the pane's bar and what is known of it in its
  *  foot. */
-export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void }) {
+export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void; models?: () => ModelOption[]; onManageModels?: () => void }) {
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal("");
   const [chosen, setChosen] = createSignal("");
@@ -101,6 +103,30 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
+  // A profile's subagents: the model and effort they run on ("Same as the chat" stores nothing).
+  const setChildren = async (value: { model: string; thinkingLevel: string } | null) => {
+    const doc = current();
+    if (!doc) return;
+    setBusy(true); setFailure("");
+    try { await api(`/v0/context/documents/${encodeURIComponent(doc.id)}`, { method: "PUT", body: JSON.stringify({ subagents: value }) }); await props.context.load(); }
+    catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(false); }
+  };
+  const SAME_CHAT = { provider: "its chat", id: "", spec: "", label: "Same as the chat", thinkingLevels: [] } as unknown as ModelOption;
+  const levelsOf = (spec: string) => props.models?.().find((model) => model.spec === spec)?.thinkingLevels || ["off"];
+  const chooseChildren = (spec: string) => {
+    if (!spec) return void setChildren(null);
+    const keep = current()?.subagents?.thinkingLevel;
+    const allowed = levelsOf(spec);
+    void setChildren({ model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" });
+  };
+  const Children = () => <Show when={current()?.role.kind === "profile" && props.models}>
+    <WorkbenchFact name="Subagents" title="The model and effort this profile's subagents run on">
+      <ModelSelector models={[SAME_CHAT, ...props.models!()]} model={current()?.subagents?.model ?? ""} thinkingLevel={current()?.subagents?.thinkingLevel ?? ""}
+        quiet={current()?.subagents ? undefined : ""} onModelChange={chooseChildren} onManageModels={props.onManageModels}
+        onThinkingLevelChange={(thinkingLevel) => current()?.subagents && void setChildren({ ...current()!.subagents!, thinkingLevel })} />
+    </WorkbenchFact>
+  </Show>;
   const at = () => current()?.blocks.indexOf(chosen()) ?? -1;
   const edit = (change: (list: string[]) => void) => { const list = [...current()!.blocks]; change(list); void save(list); };
   const move = (to: number) => edit((list) => { const [item] = list.splice(at(), 1); list.splice(to, 0, item!); });
@@ -152,7 +178,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         title={<Select look="title" id="context-document" search="Search documents" aria-label="Document" title="Choose a document" value={doc().id} onChange={(event) => props.onDocument(event.currentTarget.value)}>
           <For each={documents()}>{(item) => <option value={item.id}>{item.role.label}</option>}</For>
         </Select>}
-        actions={<Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button>} />
+        actions={<><Children /><Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button></>} />
       <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
       <WorkbenchSplit main={<Detail />} side={<ChainMap label={`${doc().role.label}'s document`}>
         <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>

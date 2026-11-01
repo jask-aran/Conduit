@@ -10,8 +10,8 @@ import { READY } from "./probe.js";
 // is offered at all is the `profile` flag below.
 export const manifest = {
   id: "test-stream",
-  label: "Test stream",
-  profileLabel: "Test profile",
+  label: "Render test",
+  profileLabel: "Render test profile",
   description: "A synthetic backend that streams tokens, or replays a real reply, at a fixed rate, for profiling the transcript",
   protocol: "native_api",
   installationId: "conduit-test-stream",

@@ -134,7 +134,7 @@ export class ContextStore {
     add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base"], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");
-    return docs.map((doc) => ({ ...doc, blocks: saved[doc.id]?.blocks || doc.blocks, modified: Boolean(saved[doc.id]) }));
+    return docs.map((doc) => ({ ...doc, blocks: saved[doc.id]?.blocks || doc.blocks, subagents: saved[doc.id]?.subagents ?? null, modified: Boolean(saved[doc.id]) }));
   }
   async content(item) {
     if (item.routine) return item.routine.body;
@@ -242,13 +242,21 @@ export class ContextStore {
     if (!doc) throw fail("Unknown document", 404);
     return doc;
   }
-  async saveDocument(id, blocks) {
+  async saveDocument(id, input = {}) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Invalid document settings");
+    const { blocks, subagents } = input;
     await this.document(id); const catalog = await this.catalog();
-    if (!Array.isArray(blocks) || !blocks.length || blocks.some((key) => typeof key !== "string" || catalog.get(key)?.kind !== "text")) throw fail("Document needs at least one text block");
-    const saved = await this.json("documents.json"); saved[id] = { blocks }; await this.writeJson("documents.json", saved); return this.document(id);
+    if (blocks !== undefined && (!Array.isArray(blocks) || !blocks.length || blocks.some((key) => typeof key !== "string" || catalog.get(key)?.kind !== "text"))) throw fail("Document needs at least one text block");
+    if (subagents !== undefined && subagents !== null && (typeof subagents !== "object" || Array.isArray(subagents)
+      || Object.keys(subagents).length !== 2 || typeof subagents.model !== "string" || !/^[^/\s]+\/\S+$/.test(subagents.model)
+      || !["off", "minimal", "low", "medium", "high", "max", "xhigh"].includes(subagents.thinkingLevel))) throw fail("Invalid subagents settings");
+    if (blocks === undefined && subagents === undefined) throw fail("Document needs blocks or subagents");
+    const saved = await this.json("documents.json"); saved[id] = { ...saved[id], ...(blocks !== undefined ? { blocks } : {}), ...(subagents !== undefined ? { subagents } : {}) }; await this.writeJson("documents.json", saved); return this.document(id);
   }
   async resetDocument(id) {
-    await this.document(id); const saved = await this.json("documents.json"); delete saved[id]; await this.writeJson("documents.json", saved); return this.document(id);
+    await this.document(id); const saved = await this.json("documents.json");
+    if (saved[id]) { delete saved[id].blocks; if (!Object.keys(saved[id]).length) delete saved[id]; }
+    await this.writeJson("documents.json", saved); return this.document(id);
   }
   async textSections(id, { vars } = {}) {
     const catalog = await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);

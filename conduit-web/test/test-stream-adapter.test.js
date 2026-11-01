@@ -3,6 +3,7 @@ import test from "node:test";
 import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { agentProfiles } from "../src/chat-backend.js";
 import { manifest } from "../src/harnesses/test-stream.js";
+import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX } from "../src/test-stream-replays.js";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 import { applyToolOp, applyTranscriptOp, isToolOp } from "../src/transcript-fold.js";
 import {
@@ -16,6 +17,7 @@ import {
   TestStreamAdapter,
   amountFor,
   amountFromPrompt,
+  replayTokens,
   speedFor,
   tokenAt,
 } from "../src/test-stream-adapter.js";
@@ -43,7 +45,8 @@ test("the test profile is offered like any other harness-backed profile", () => 
   const profiles = agentProfiles([], { available: new Set(["test-stream"]) });
   const profile = profiles.find((item) => item.id === "test-stream");
   assert.ok(profile, "the manifest alone puts it in the profile list");
-  assert.equal(profile.label, "Test profile");
+  assert.equal(profile.label, "Render test profile");
+  assert.equal(manifest.label, "Render test");
   assert.equal(profile.disabled, false);
   assert.equal(profile.agent.implementation, "test-stream");
 });
@@ -115,7 +118,7 @@ test("speed is the model and amount is the thinking level", async () => {
   // level is a string the harness interprets; this one reads it as how much to
   // send back, so it is written as the amount.
   assert.deepEqual(TEST_STREAM_SPEEDS.map((speed) => speed.id),
-    ["paced-60", "fast-250", "fast-1000", "flood-4000", "bursty-60", "replay-markdown", "replay-markdown-bursty", "replay-katex-limits", "replay-katex-compendium"]);
+    ["paced-60", "bursty-60", "fast-250", "fast-1000", "flood-4000"]);
   assert.deepEqual(TEST_STREAM_AMOUNTS.map((amount) => amount.id),
     ["400 tokens", "2000 tokens", "8000 tokens", "32000 tokens"]);
   assert.equal(speedFor("nonsense").id, DEFAULT_SPEED_ID);
@@ -135,6 +138,33 @@ test("speed is the model and amount is the thinking level", async () => {
   await adapter.setThinkingLevel(record.id, "400 tokens");
   assert.deepEqual(await adapter.getModelState(record.id), { model: "flood-4000", thinkingLevel: "400 tokens" });
   assert.equal(record.tokens, 400);
+});
+
+test("replay keywords and legacy models select whole replies at the chosen pace", async () => {
+  const adapter = new TestStreamAdapter();
+  const cases = [
+    ["flood-4000", "markdown 1t", "flood-4000", MARKDOWN_MIX],
+    ["bursty-60", "markdown", "bursty-60", MARKDOWN_MIX],
+    ["fast-250", "KATEX", "fast-250", KATEX_COMPENDIUM],
+    ["fast-1000", "katex limits", "fast-1000", KATEX_LIMITS],
+    ["fast-1000", "katex-limits", "fast-1000", KATEX_LIMITS],
+    ["replay-markdown", "plain", "paced-60", MARKDOWN_MIX],
+    ["replay-markdown-bursty", "plain", "bursty-60", MARKDOWN_MIX],
+    ["replay-katex-limits", "plain", "paced-60", KATEX_LIMITS],
+    ["replay-katex-compendium", "plain", "paced-60", KATEX_COMPENDIUM],
+  ];
+  for (const [model, prompt, pace, replay] of cases) {
+    const record = await adapter.create({ chatId: `replay-${model}-${prompt}`, model, thinkingLevel: "400 tokens" });
+    assert.equal(record.model, model);
+    assert.equal(speedFor(record.model).id, pace);
+    await adapter.prompt(record.id, prompt);
+    assert.equal(record.turn.replay, replay);
+    assert.equal(record.tokens, replayTokens(replay).length);
+    await adapter.close(record.id);
+  }
+  const { socket } = await streamed(adapter, { model: "flood-4000", prompt: "markdown 1t" });
+  assert.equal(socket.sent.filter((event) => event.type === "assistant_content" && event.phase === "delta")
+    .map((event) => event.delta).join(""), MARKDOWN_MIX);
 });
 
 test("a prompt can name a one-off amount the levels do not cover", () => {

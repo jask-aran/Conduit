@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { scriptedProvider } from "./scripted-model.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,6 +244,7 @@ export class DurableRuntime {
       this.models = await ModelRuntime.create({
         authPath: agent("auth.json"), modelsPath: agent("models.json"), modelsStorePath: agent("models-store.json"),
       });
+      this.models.registerNativeProvider(scriptedProvider());
       const registry = createRegistry();
       // Every extension a template may select, by name; a conversation selects its template's.
       this.extensions = new Map();
@@ -401,6 +403,18 @@ export class DurableRuntime {
       || this.templates.find((item) => item.id === "assistant") || this.templates[0] || null;
   }
 
+  async subagentSettings(conversationId, context) {
+    const identity = await this.harness.snapshot(ConduitIds, conversationId, context);
+    const chat = identity?.chatId && this.agent?.registry.metadata(identity.chatId);
+    if (!chat || chat.backend?.agentThread || chat.templateId === "agent") return null;
+    const template = this.templateFor(chat.templateId || chat.backend?.profileId);
+    if (!template || template.internal || !this.contextStore) return null;
+    const settings = (await this.contextStore.document(`profile:${template.id}`)).subagents;
+    if (!settings) return null;
+    const slash = settings.model.indexOf("/");
+    return { model: { provider: settings.model.slice(0, slash), modelId: settings.model.slice(slash + 1) }, thinkingLevel: settings.thinkingLevel };
+  }
+
   /** A template's skills: name, description and body (frontmatter stripped). */
   skillsFor(templateId) {
     return (this.templateFor(templateId)?.skills || []).map((folder) => {
@@ -423,8 +437,10 @@ export class DurableRuntime {
     // The person's connected accounts (Executor), reached from codemode, each write asked first: the agent's threads,
     // and a template that asks for them (`"connectors": true`, the Assistant).
     const connects = isAgent || template.connectors === true;
-    const extensions = ["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(connects ? ["codemode", "connectors"] : []), ...(isAgent ? ["agent"] : [])]
+    // Codemode comes with the connected accounts, or with a template that lists it.
+    const codes = connects || template.tools.includes("codemode");
+    const extensions = [...new Set(["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
     const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
       ...(connects ? ["codemode", "approved"] : [])]);
@@ -514,6 +530,7 @@ export class DurableRuntime {
     } catch {}
     patterns ??= [...new Set(this.templates.flatMap((template) => template.models || []))];
     if (!patterns.length) return available;
+    patterns = [...patterns, "conduit-test/paced", "conduit-test/fast"];
     const { scopedModels } = await resolveModelScopeWithDiagnostics(patterns, this.models);
     return scopedModels.map(({ model }) => model);
   }
@@ -554,7 +571,7 @@ export class DurableRuntime {
         return { provider: settings.defaultProvider, modelId: settings.defaultModel, thinkingLevel: settings.defaultThinkingLevel || "" };
       }
     } catch {}
-    const [first] = await this.availableModels();
+    const first = (await this.availableModels()).find((model) => model.provider !== "conduit-test");
     return first ? { provider: first.provider, modelId: first.id, thinkingLevel: "" } : null;
   }
 

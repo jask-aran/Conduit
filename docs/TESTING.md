@@ -113,13 +113,13 @@ invariant it broke (DESIGN.md Motion).
 - `node scripts/motion-check/components.mjs` -- Disclosure, CodeBlock,
   DesktopComposer.
 - `node scripts/motion-check/trace-record.mjs save <file> [--phone]`, then
-  `diff <before> <after>` -- one scripted Test-profile conversation (thinking,
+  `diff <before> <after>` -- one scripted Render test profile conversation (thinking,
   narration, tools, stopped while writing, a tool denied, stopped at an
   approval, a plain answer): each turn's states, where its main thread's time
   went, and every trace settled with each step opened. Two recordings of one
   build do not differ. Before and after a change to what draws the trace.
 - `node scripts/motion-check/trace-parity.mjs [--chat <id>]` -- with the
-  gallery served and :4310 signed in in that Chrome: makes a Test-profile chat
+  gallery served and :4310 signed in in that Chrome: makes a Render test profile chat
   (or checks an existing one), loads it into the gallery's phone preview and
   walks both traces, printing each line that differs. Settled turns only.
 - `node scripts/motion-check/trace-stream.mjs ["<prompt>"] [stop]` -- the same
@@ -226,7 +226,7 @@ next run, or the next load can hang.
 | `dictation-row.mjs` | How the phone composer's row moves as dictation starts and stops, empty and with a draft (synthetic mic). |
 | `send-motion.mjs` | What moves when a message is sent from the phone composer; saves a frame strip. |
 | `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call. |
-| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Test-profile turn's main-thread time goes, by trace state: % busy, frames the compositor drew and dropped (the frame rate; main-thread paints a second are not it), tasks against 6.94ms, rendering by phase, JS self time by function. `--phone` is 412x860 at 2.625x with touch. A run of slow frames whose element counts match their neighbours' is the machine, not the page. Build with source maps for names. |
+| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Render test profile turn's main-thread time goes, by trace state: % busy, frames the compositor drew and dropped (the frame rate; main-thread paints a second are not it), tasks against 6.94ms, rendering by phase, JS self time by function. `--phone` is 412x860 at 2.625x with touch. A run of slow frames whose element counts match their neighbours' is the machine, not the page. Build with source maps for names. |
 | `call-counts.mjs [prompt] [--phone] [--match <text>] [--top N]` | How many times each function ran in one streamed turn, per socket message and frame. Counts don't vary run to run, so they state exactly what a change removed. Build with source maps first. |
 | `load-waterfall.mjs [--rtt <ms>] [--cpu 4] [--runs <n>]` | How long the first open takes to its fade, and what it waits on. |
 | `load-profile.mjs [--cpu 4] [--slices]` | What the first open spends its main thread on. Names after `npx vite build --sourcemap`; rebuild without it afterwards. |
@@ -242,7 +242,7 @@ use the CLI's `performance_start_trace` for frame numbers on DOM-heavy work:
 it turns on invalidation tracking, which reported ten times the over-budget
 tasks on a KaTeX stream.
 
-For streaming-render faults, replay the Test profile's KaTeX models in the
+For streaming-render faults, replay the Render test profile's KaTeX replies in the
 `test` project and check every frame for a math element removed or emptied,
 or TeX commands outside math.
 
@@ -269,11 +269,11 @@ delays.
   `Animation.setPlaybackRate` (0.1–0.2) and step a width across a switch in
   both directions. Measure in a microtask after Solid's effect, before paint.
 
-## The Test profile
+## The Render test profile
 
 A chat on the `test-stream` profile (`src/test-stream-adapter.js`) answers
 instantly and deterministically, with no model call. The model picks the pace
-(`paced-60` about a real model, `fast-250`, `fast-1000`, `flood-4000`); the
+(`paced-60`, `bursty-60`, `fast-250`, `fast-1000`, `flood-4000`); the
 thinking level picks how many tokens. Words in the prompt shape the turn, and
 the same prompt always produces the same turn:
 
@@ -283,6 +283,9 @@ the same prompt always produces the same turn:
 | `tool`, `3 tools` | that many calls, one a message, then the answer |
 | `narrate` | a sentence of narration before each call |
 | `rich` | realistic text (punctuation past Latin-1, which V8 keeps as two-byte strings, lists, a table, inline and display formulas, a five-line code block and a 137-line source file), the thinking typographic prose; plain prompts stream ASCII words |
+| `markdown` | the whole recorded Markdown reply, whatever the level says |
+| `katex` | the whole recorded KaTeX compendium, whatever the level says |
+| `katex limits`, `katex-limits` | the whole recorded KaTeX limits reply, whatever the level says |
 | `approve` | each call asks for approval; denied, it fails with the refusal and the turn goes on, as Pi returns a blocked call |
 | `think`, `think 900` | thinking, 400 tokens or the number given, shared across the turn's messages (`think 900 1500t`) |
 
@@ -290,6 +293,25 @@ Sending while it answers steers, as a real harness reads its queue: after a
 tool call the message joins the turn; once the answer has ended it starts the
 next turn; never between thinking and its answer. Stopping keeps the partial
 answer.
+
+## The Test profile
+
+The `test` profile uses the real runtime with a scripted model. It needs no credentials. The same prompt produces the same turn. The existing test-stream profile is being renamed “Render test”.
+
+| Keyword | Turn |
+| --- | --- |
+| `help` | Show this keyword table |
+| `think` | Add thinking before each step |
+| `narrate` | Add commentary before each tool call |
+| `tool`, `3 tools` | Make one or three read calls |
+| `bash` | Run `echo scripted` |
+| `fail` | Read a missing path |
+| `script` | Call read and bash through codemode |
+| `spawn` | Spawn a foreground subagent |
+| `background` | Spawn a background subagent |
+| `fan out`, `3 spawns` | Spawn three foreground subagents in parallel through codemode |
+| `ask` | Ask a question with two options |
+| `1500t` | Answer in about 1500 tokens |
 
 ## Transcript pipeline tests
 

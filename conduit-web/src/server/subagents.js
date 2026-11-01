@@ -85,7 +85,7 @@ export async function stopBackgroundSubagent(harness, conversationId, id, contex
  * anchor task the parent conversation owns, so the parent's Esc and idle never
  * reach it, and stays to be messaged again until stopped or the parent resets.
  * Each message is delivered by a reporter task the anchor owns, which posts the
- * answer back to the parent as a follow-up (`conduit.subagent-report`, a short
+ * answer back to the parent (`conduit.subagent-report`, a short
  * harness row in the transcript); request ids keep a restart from sending a
  * message or a report twice. Its spend stays in the child's own ledger, which
  * the chat's totals add (`backgroundSubagents`): pi-durable's ledger is its own.
@@ -274,7 +274,7 @@ export function Subagents(runtime) {
           const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: report.answer, title });
           const at = content.indexOf(report.answer);
           const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
-          await submitWithNotes(runtime, parent, { type: "input", whenBusy: "followUp", requestId,
+          await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
             content, entry: { kind: "conduit.subagent-report",
               data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
                 ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context, { admit: (input) => handle.submit(input, context) });
@@ -307,8 +307,10 @@ export function Subagents(runtime) {
   const subagent = defineTool({
     name: "subagent",
     description: "Delegate a self-contained task with your tools and workspace but no conversation history. "
-      + "Default: wait for its answer; Esc stops it. background:true returns an id immediately and reports the answer "
-      + "as a follow-up while you can go idle; parent Esc leaves it running. Children cannot delegate or ask the user. "
+      + "Default: wait for its answer; Esc stops it. Prefer this: the answer comes back inside your turn. For several at once, "
+      + "spawn them in parallel from one codemode script (Promise.all) rather than as background children. "
+      + "Use background:true only when the work should outlive your turn; it returns an id immediately and reports the answer "
+      + "back to you while you can go idle; parent Esc leaves it running. Children cannot delegate or ask the user. "
       + "Manage your background children with action:list, message (id, task, mode:steer or followUp), wait (id), or stop (id). "
       + "Message sends new work and returns immediately; wait returns the latest delivery. stop ends the child and its reporters.",
     parameters: Type.Object({
@@ -332,6 +334,8 @@ export function Subagents(runtime) {
       // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
       const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
         ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || await runtime.contextStore?.assemble("subagent") || "", context);
+      const childSettings = action !== "spawn" ? null : (await api.memo("childSettings", context)
+        ?? await api.memo("childSettings", { value: await runtime.subagentSettings?.(api.conversationId, context) || null }, context)).value;
       if (action === "spawn" && !background) {
         const child = await api.commit(async (tx) => {
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];
@@ -339,6 +343,7 @@ export function Subagents(runtime) {
           const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
           await stripTools(tx, created.id);
           if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
+          if (childSettings) await configure(tx, created.id, childSettings);
           return created.id;
         }, context);
         const title = subagentTitle(task);
@@ -385,6 +390,7 @@ export function Subagents(runtime) {
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
           await stripTools(tx, child.id);
           if (runPrompt) await configure(tx, child.id, { instructions: runPrompt });
+          if (childSettings) await configure(tx, child.id, childSettings);
           roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }

@@ -21,6 +21,6 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element }) 
 /** A titled group in the side column (Used in, Slots). */
 export const WorkbenchSection = (props: { title: string; children: JSX.Element }) => <section class="ui-workbench-section"><h4 class="ui-title">{props.title}</h4>{props.children}</section>;
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
-export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean }) => <div class="ui-workbench-fact" title={props.title}>
-  {props.code ? <code>{props.name}</code> : <span>{props.name}</span>}<Show when={props.value}><span class="ui-workbench-fact-value">{props.value}</span></Show>
+export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) => <div class="ui-workbench-fact" title={props.title}>
+  {props.code ? <code>{props.name}</code> : <span>{props.name}</span>}<Show when={props.value}><span class="ui-workbench-fact-value">{props.value}</span></Show>{props.children}
 </div>;

@@ -12,7 +12,7 @@ export function registerContextRoutes(app, { contextStore }) {
   app.post("/v0/context/blocks", route(async (req, res) => res.status(201).json(await contextStore.create(req.body))));
   app.delete("/v0/context/blocks/:id", route(async (req, res) => { await contextStore.remove(req.params.id); res.sendStatus(204); }));
   app.post("/v0/context/blocks/:id/reset", route(async (req, res) => res.json(await contextStore.reset(req.params.id))));
-  app.put("/v0/context/documents/:id", route(async (req, res) => res.json(await contextStore.saveDocument(req.params.id, req.body?.blocks))));
+  app.put("/v0/context/documents/:id", route(async (req, res) => res.json(await contextStore.saveDocument(req.params.id, req.body))));
   app.post("/v0/context/documents/:id/reset", route(async (req, res) => res.json(await contextStore.resetDocument(req.params.id))));
   app.get("/v0/context/documents/:id/preview", route(async (req, res) => res.json(await contextStore.preview(req.params.id))));
 }

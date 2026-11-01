@@ -57,6 +57,8 @@ export function loadPiTemplate(file) {
     internal: template.internal === true,
     // The person's connected accounts (Executor), through codemode, a write asked first (durable-runtime agentFor).
     connectors: template.connectors === true,
+    // Models of its own (the scripted Test profile): its list, not the person's scoped models.
+    ownModels: template.ownModels === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
     // The prompt it shares with other templates (the Assistant's and jbot's), drawn under its own.
