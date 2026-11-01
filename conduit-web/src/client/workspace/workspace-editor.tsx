@@ -83,6 +83,7 @@ function indentationExtensions(indentation: Indentation) {
 }
 
 export default function WorkspaceEditor(props: {
+  projectId: string;
   path: string;
   value: string;
   wrap: boolean;
@@ -115,6 +116,7 @@ export default function WorkspaceEditor(props: {
   const commentHighlightsCompartment = new Compartment();
   const editable = () => props.editable !== false;
   let activePath = props.path;
+  let activeKey = JSON.stringify([props.projectId, activePath]);
   let revealedNonce = 0;
   let savedDocument = Text.of(props.value.split("\n"));
   let languageLoadToken = 0;
@@ -216,8 +218,8 @@ export default function WorkspaceEditor(props: {
 
   const cacheActiveDocument = () => {
     if (!view) return;
-    documents.delete(activePath);
-    documents.set(activePath, {
+    documents.delete(activeKey);
+    documents.set(activeKey, {
       state: view.state,
       savedDocument,
       indentation: indentation(),
@@ -230,9 +232,10 @@ export default function WorkspaceEditor(props: {
     if (oldestCleanPath) documents.delete(oldestCleanPath);
   };
 
-  const openDocument = (path: string, value: string) => {
-    if (!view || path === activePath) {
-      if (path === activePath && view && view.state.doc.eq(savedDocument) && value !== savedDocument.toString()) {
+  const openDocument = (path: string, value: string, projectId: string) => {
+    const key = JSON.stringify([projectId, path]);
+    if (!view || key === activeKey) {
+      if (key === activeKey && view && view.state.doc.eq(savedDocument) && value !== savedDocument.toString()) {
         editorHandle.replaceDocument(value);
       }
       return;
@@ -240,8 +243,9 @@ export default function WorkspaceEditor(props: {
     cacheActiveDocument();
     languageLoadToken += 1;
     activePath = path;
+    activeKey = key;
     const incomingDocument = Text.of(value.split("\n"));
-    const cached = documents.get(path);
+    const cached = documents.get(key);
     const canRestore = Boolean(cached && (!cached.state.doc.eq(cached.savedDocument) || cached.savedDocument.eq(incomingDocument)));
     const nextIndentation = canRestore ? cached!.indentation : detectIndentation(incomingDocument);
     const nextLanguage = canRestore ? cached!.language : languageNameForPath(path);
@@ -266,7 +270,7 @@ export default function WorkspaceEditor(props: {
     const scrollTop = canRestore ? cached!.scrollTop : 0;
     const scrollLeft = canRestore ? cached!.scrollLeft : 0;
     requestAnimationFrame(() => {
-      if (!view || activePath !== path) return;
+      if (!view || activeKey !== key) return;
       view.scrollDOM.scrollTop = scrollTop;
       view.scrollDOM.scrollLeft = scrollLeft;
     });
@@ -301,7 +305,8 @@ export default function WorkspaceEditor(props: {
   createEffect(() => {
     const path = props.path;
     const value = props.value;
-    if (view && path !== activePath) openDocument(path, value);
+    const projectId = props.projectId;
+    if (view && JSON.stringify([projectId, path]) !== activeKey) openDocument(path, value, projectId);
   });
 
   createEffect(() => {
@@ -428,7 +433,7 @@ export interface WorkspaceEditorHandle {
   focus: () => void;
   acknowledgeSaved: (value: string) => void;
   replaceDocument: (value: string) => void;
-  openDocument: (path: string, value: string) => void;
+  openDocument: (path: string, value: string, projectId: string) => void;
 }
 
 interface CachedDocument {

@@ -194,6 +194,7 @@ export default function WorkspaceFileSlot(props: {
   const [editorDirty, setEditorDirty] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
+  const [documentProjectId, setDocumentProjectId] = createSignal(props.projectId);
   const hasUnsavedChanges = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated && editorDirty());
   const label = props.slot === "primary" ? "File preview" : "Second file preview";
   const closeLabel = props.slot === "primary" ? "Close file" : "Close second file";
@@ -274,7 +275,7 @@ export default function WorkspaceFileSlot(props: {
   };
 
   const loadText = async (path: string, projectId: string, owns: () => boolean, options: { forceText?: boolean; preview?: boolean }) => {
-    const replacesOpenDocument = preview()?.path === path;
+    const replacesOpenDocument = documentProjectId() === projectId && preview()?.path === path;
     const query = [options.forceText && "force=text", options.preview && "preview=1"].filter(Boolean).join("&");
     const payload = await workspaceFileJson<FilePreview>(projectId, `path=${encodeURIComponent(path)}${query ? `&${query}` : ""}`, { signal: controller?.signal });
     if (!owns()) return;
@@ -284,27 +285,30 @@ export default function WorkspaceFileSlot(props: {
       setAsset(null);
       setImageDimensions(null);
       setPreview({ ...payload, kind: "text", mime: payload.mime || "text/plain" });
+      setDocumentProjectId(projectId);
       setEditorDirty(false);
       setEditing(false);
     });
     if (replacesOpenDocument) editor?.replaceDocument(payload.content);
-    else editor?.openDocument(payload.path, payload.content);
+    else editor?.openDocument(payload.path, payload.content, projectId);
     props.onLoaded?.({ path: payload.path, size: payload.size, kind: "text", mime: payload.mime });
   };
 
   const load = async (background = false, options: { forceText?: boolean; preview?: boolean } = {}) => {
     const path = props.path;
     const projectId = props.projectId;
+    controller?.abort();
+    const token = ++loadToken;
     if (!path) {
       clear();
       return;
     }
-    controller?.abort();
     controller = new AbortController();
-    const token = ++loadToken;
     const owns = () => token === loadToken && props.path === path && props.projectId === projectId;
     if (fallbackKind(path) === "text") void loadWorkspaceEditor().catch(() => undefined);
-    if (asset()?.path !== path && preview()?.path !== path) {
+    // A matching path in another project is a different document. The editor
+    // keeps the one it leaves (unsaved edits included) under its own project.
+    if (documentProjectId() !== projectId || (asset()?.path !== path && preview()?.path !== path)) {
       const kind = fallbackKind(path);
       if (kind === "text" && preview()) {
         releaseAsset();
@@ -355,6 +359,7 @@ export default function WorkspaceFileSlot(props: {
           batch(() => {
             setAsset(null);
             setPreview({ ...metadata, kind: "text", mime: metadata.mime, revision: metadata.revision || "", content: "", truncated: true, readOnly: true });
+            setDocumentProjectId(projectId);
             setEditorDirty(false);
             setEditing(false);
           });
@@ -385,16 +390,19 @@ export default function WorkspaceFileSlot(props: {
 
   const save = async (content?: string) => {
     const file = preview();
-    if (!file || !hasUnsavedChanges() || saving()) return;
+    const projectId = props.projectId;
+    if (!file || documentProjectId() !== projectId || file.path !== props.path || !hasUnsavedChanges() || saving()) return;
     const submittedEditor = editor;
     const submittedContent = content ?? submittedEditor?.getValue() ?? file.content;
+    // A read started before this write must not replace its content or revision.
+    loadToken += 1;
     setSaving(true);
     try {
       const written = await api<FileWriteResult>(
-        `/v0/projects/${encodeURIComponent(props.projectId)}/file?path=${encodeURIComponent(file.path)}`,
+        `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(file.path)}`,
         { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": file.revision }, body: submittedContent },
       );
-      if (preview()?.path === file.path) {
+      if (props.projectId === projectId && documentProjectId() === projectId && preview()?.path === file.path && editor === submittedEditor) {
         const next = { ...file, ...written, content: submittedContent };
         setPreview(next);
         if (editor === submittedEditor) submittedEditor?.acknowledgeSaved(submittedContent);
@@ -612,6 +620,7 @@ export default function WorkspaceFileSlot(props: {
             <Show when={file().path}>{(path) =>
               <Suspense fallback={<PaneEmpty>Loading preview…</PaneEmpty>}>
                 <WorkspaceEditor
+                  projectId={documentProjectId()}
                   header={textHeader()}
                   ref={(handle) => { editor = handle; }}
                   path={path()}

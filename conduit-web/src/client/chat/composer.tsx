@@ -110,8 +110,8 @@ export function Composer(props: {
      on the text pill places the cursor (where dictation will land) or starts
      a selection, with inputmode="none" keeping the keyboard down. */
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
-  const [sendingTake, setSendingTake] = createSignal(false);
-  const sendingOut = () => sendingTake() || props.chat.generation() === "submitting";
+  const [sendingTake, setSendingTake] = createSignal<DictationTake | null>(null);
+  const sendingOut = () => Boolean(sendingTake()) || props.chat.generation() === "submitting";
   const toggleKeyboard = () => {
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
     // Focused with the keyboard down and nothing left (a dictation cleared
@@ -199,12 +199,13 @@ export function Composer(props: {
   /* One take per press of the mic. A stopped take keeps finalising on its own
      client and writes into its own range while the next one records; ranges
      after a take shift when its text changes length. */
-  type DictationTake = { client: VoiceClient; range: { start: number; end: number } | null; cancelled: boolean; restoreFocus: boolean; autoSend: boolean; sendWhenDone?: boolean };
+  type DictationTake = { client: VoiceClient; chatId: string | null; range: { start: number; end: number } | null; cancelled: boolean; restoreFocus: boolean; autoSend: boolean; sendWhenDone?: boolean };
   type VoiceClient = ReturnType<typeof createVoiceDictationClient>;
   const voiceClients: VoiceClient[] = [];
   const takes = new Map<VoiceClient, DictationTake>();
   let currentTake: DictationTake | null = null;
-  let autoSendPending = false;
+  let autoSendPending: DictationTake | null = null;
+  const takeIsCurrentChat = (take: DictationTake) => take.chatId === props.chat.loadedId();
   const [finalisingTakes, setFinalisingTakes] = createSignal(0);
   let pendingDictationLaunch: { inputFocused: boolean; keyboardOpen: boolean; acceptedAt: number } | null = null;
   let historyIndex: number | null = null;
@@ -352,7 +353,8 @@ export function Composer(props: {
     if (take === currentTake) setDictatedRange(range);
   };
   const cancelTakes = () => {
-    autoSendPending = false;
+    autoSendPending = null;
+    setSendingTake(null);
     for (const take of takes.values()) {
       if (!take.range && take.cancelled) continue;
       take.cancelled = true;
@@ -361,11 +363,11 @@ export function Composer(props: {
     }
     setDictatedRange(null);
   };
-  const countFinalising = () => setFinalisingTakes(voiceClients.filter((client) => ["finishing", "waiting", "transcribing"].includes(client.state())).length);
+  const countFinalising = () => setFinalisingTakes([...takes.values()].filter((take) => take.chatId === props.chat.loadedId() && ["finishing", "waiting", "transcribing"].includes(take.client.state())).length);
 
   const applyTranscript = (take: DictationTake, text: string) => {
     const range = take.range;
-    if (!range || take.cancelled) return;
+    if (!range || take.cancelled || !takeIsCurrentChat(take)) return;
     const draft = props.chat.draft();
     const next = replaceDictatedRange(draft, range, text);
     const shift = next.text.length - draft.length;
@@ -377,6 +379,7 @@ export function Composer(props: {
     if (take !== currentTake) { queueMicrotask(resize); return; }
     setDictationSelectionOwned(true);
     queueMicrotask(() => {
+      if (!takeIsCurrentChat(take) || take !== currentTake) return;
       resize();
       // The keyboard was up when dictation began: it comes back with focus.
       if (take.restoreFocus) { if (document.activeElement !== input) setKeyboardWanted(true); input.focus({ preventScroll: true }); }
@@ -384,18 +387,20 @@ export function Composer(props: {
     });
   };
 
-  const sendDraftNow = () => queueMicrotask(() => {
+  const sendDraftNow = (take: DictationTake) => queueMicrotask(() => {
+    if (!takeIsCurrentChat(take)) return;
     if (props.onSendDraft) void props.onSendDraft(props.chat.draft());
     else void props.chat.send();
   });
   // Auto-send waits for every take still recording or finalising.
   const settleAutoSend = () => {
-    if (!autoSendPending || voiceClients.some((client) => ["starting", "listening", "finishing", "waiting", "transcribing"].includes(client.state()))) return;
-    autoSendPending = false;
+    const pending = autoSendPending;
+    if (!pending || !takeIsCurrentChat(pending) || [...takes.values()].some((take) => take.chatId === props.chat.loadedId() && ["starting", "listening", "finishing", "waiting", "transcribing"].includes(take.client.state()))) return;
+    autoSendPending = null;
     setDictatedRange(null);
     for (const take of takes.values()) take.range = null;
-    sendDraftNow();
-    queueMicrotask(() => setSendingTake(false));
+    sendDraftNow(pending);
+    queueMicrotask(() => { if (sendingTake() === pending) setSendingTake(null); });
   };
 
   const createTakeClient = () => {
@@ -403,6 +408,7 @@ export function Composer(props: {
       onState: (next) => {
         countFinalising();
         const take = takes.get(client);
+        if (!take || !takeIsCurrentChat(take)) return;
         if (take && take === currentTake) {
           setDictationState(next);
           if (next === "starting") setTranscriberReady(false);
@@ -418,10 +424,11 @@ export function Composer(props: {
       onFinal: (text) => { const take = takes.get(client); if (take) applyTranscript(take, text); },
       onInputLevel: (level) => { if (takes.get(client) === currentTake) setInputLevel(level); },
       onCompleted: (completion) => {
-        const take = takes.get(client);
-        // After this body, whichever way it returns.
-        queueMicrotask(() => { settleAutoSend(); if (!autoSendPending) setSendingTake(false); });
         window.dispatchEvent(new CustomEvent("conduit:voice-dictation-metrics", { detail: completion }));
+        const take = takes.get(client);
+        if (!take || !takeIsCurrentChat(take)) return;
+        // After this body, whichever way it returns.
+        queueMicrotask(() => { settleAutoSend(); if (!autoSendPending && sendingTake() === take) setSendingTake(null); });
         const clear = () => {
           if (take) setTakeRange(take, null);
           if (take === currentTake) setDictationSelectionOwned(false);
@@ -435,7 +442,7 @@ export function Composer(props: {
         if (!transcript) {
           clear();
           // Stop and send with nothing new said still sends what was there.
-          if (take?.sendWhenDone && !take.cancelled && props.chat.draft().trim()) autoSendPending = true;
+          if (take?.sendWhenDone && !take.cancelled && props.chat.draft().trim()) autoSendPending = take;
           if (!completion.inputSignalDetected && shouldReportNoSignal(completion)) {
             setDictationError(`No microphone signal detected after ${Math.max(1, Math.round(completion.captureDurationMs / 1000))}s (peak ${completion.maxInputPeak.toFixed(3)}). Check Voice → Microphone and Chrome site settings.`);
           } else if (completion.completionReason === "duration_limit") {
@@ -449,20 +456,22 @@ export function Composer(props: {
         if (take) applyTranscript(take, transcript);
         // Finished: the text pill shows the end of the draft, not wherever the
         // dictated range left it scrolled.
-        if (take === currentTake) requestAnimationFrame(() => { input.scrollTop = input.scrollHeight; });
+        if (take === currentTake) requestAnimationFrame(() => { if (takeIsCurrentChat(take) && take === currentTake) input.scrollTop = input.scrollHeight; });
         if (completion.completionReason === "duration_limit") {
           setDictationError("Dictation reached the server time limit. Start another dictation to continue.");
         }
         if (audioTransferLost(completion)) {
           setDictationError(`Microphone audio was truncated before transcription (${completion.serverAudioBytes} of ${completion.audioBytesSent} bytes reached the server). Check the connection and try again.`);
         }
-        if (take?.sendWhenDone && !take.cancelled) autoSendPending = true;
+        if (take?.sendWhenDone && !take.cancelled) autoSendPending = take;
         else if (take && !take.cancelled && take.autoSend && completion.completionReason !== "duration_limit" && shouldAutoSend({ enabled: props.voiceSettings.autoSend, ...completion })) {
-          autoSendPending = true;
+          autoSendPending = take;
         }
       },
       onError: (error) => {
-        setSendingTake(false);
+        const take = takes.get(client);
+        if (!take || !takeIsCurrentChat(take)) return;
+        if (sendingTake() === take) setSendingTake(null);
         setDictationError(error.message);
         const code = (error as Error & { code?: string }).code;
         if (props.voiceSettings.inputDeviceId && ["NotFoundError", "OverconstrainedError"].includes(code || "")) {
@@ -481,11 +490,12 @@ export function Composer(props: {
   const stopTake = () => currentTake?.client.stop();
   // Ends the take and sends the draft once its transcript lands.
   const stopAndSend = () => {
-    if (!currentTake) return;
-    currentTake.sendWhenDone = true;
-    setSendingTake(true);
+    const take = currentTake;
+    if (!take || !takeIsCurrentChat(take)) return;
+    take.sendWhenDone = true;
+    setSendingTake(take);
     // Never left hiding the draft if the transcript does not come back.
-    setTimeout(() => setSendingTake(false), 20_000);
+    setTimeout(() => { if (sendingTake() === take) setSendingTake(null); }, 20_000);
     stopTake();
   };
 
@@ -513,7 +523,7 @@ export function Composer(props: {
     const end = selectionIsAutomatic ? start : focused ? input.selectionEnd ?? start : start;
     // A client that has finished is reused, so a warm microphone stays warm.
     const client = voiceClients.find((candidate) => ["idle", "completed", "failed"].includes(candidate.state())) ?? createTakeClient();
-    const take: DictationTake = { client, range: null, cancelled: false, restoreFocus, autoSend: true };
+    const take: DictationTake = { client, chatId: props.chat.loadedId(), range: null, cancelled: false, restoreFocus, autoSend: true };
     takes.set(client, take);
     currentTake = take;
     setTakeRange(take, beginDictatedRange(draft, start, end));
@@ -529,7 +539,7 @@ export function Composer(props: {
   const sendMessage = async (mode?: "steer" | "follow_up") => {
     historyIndex = null;
     historyDraft = "";
-    autoSendPending = false;
+    autoSendPending = null;
     setDictatedRange(null);
     for (const take of takes.values()) take.range = null;
     setDictationSelectionOwned(false);
@@ -698,6 +708,19 @@ export function Composer(props: {
       historyIndex = null;
       historyDraft = "";
     });
+    createEffect(on(() => props.chat.loadedId(), () => {
+      // Final transcripts and queued sends belong to the chat that started them.
+      cancelTakes();
+      currentTake = null;
+      pendingDictationLaunch = null;
+      pushToTalkActive = false;
+      setDictationState("idle");
+      setTranscriberReady(false);
+      setDictationSelectionOwned(false);
+      setDictationError("");
+      dictationWaveform.reset();
+      countFinalising();
+    }, { defer: true }));
     const voiceKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector('[role="dialog"][aria-label="Settings"][data-state="open"]')) return;
       if (props.keyboardOwner && !props.keyboardOwner()) return;
