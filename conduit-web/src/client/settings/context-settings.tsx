@@ -103,7 +103,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
-  // A profile's subagents: the model and effort they run on ("Same as the chat" stores nothing).
+  // A profile's subagents: the model and effort they run on ("Chat's model" stores nothing).
   const setChildren = async (value: { model: string; thinkingLevel: string } | null) => {
     const doc = current();
     if (!doc) return;
@@ -112,7 +112,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
-  const SAME_CHAT = { provider: "its chat", id: "", spec: "", label: "Same as the chat", thinkingLevels: [] } as unknown as ModelOption;
+  const SAME_CHAT = { provider: "its chat", id: "", spec: "", label: "Chat's model", thinkingLevels: [] } as unknown as ModelOption;
   const levelsOf = (spec: string) => props.models?.().find((model) => model.spec === spec)?.thinkingLevels || ["off"];
   const chooseChildren = (spec: string) => {
     if (!spec) return void setChildren(null);
