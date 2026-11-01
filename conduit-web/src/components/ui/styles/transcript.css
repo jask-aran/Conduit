@@ -109,6 +109,12 @@
 .ui-stop-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
+/* A message's time and actions show while its row is hovered or holds focus (a trial, 2026-11-01); on touch they stay.
+   How it ended (status) and what it changed (Changes) are facts, never hidden. Opacity only: nothing moves. */
+@media (hover: hover) {
+  .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
+  .ui-transcript-row:is(:hover, :focus-within) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
+}
 /* Its buttons are the smallest icon buttons, whatever size they were asked for. */
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
 .ui-message-foot .ui-button[data-size^="icon"] svg { width: var(--icon-sm); height: var(--icon-sm); }
