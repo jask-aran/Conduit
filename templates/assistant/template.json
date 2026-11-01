@@ -1,6 +1,6 @@
 {
   "id": "assistant",
-  "version": "14",
+  "version": "15",
   "label": "Assistant",
   "description": "General-purpose Pi with file, shell, web research, subagents, and the person's connected accounts through Executor.",
   "posture": "read / write / edit / shell / web search / source fetch / subagents / connected accounts",

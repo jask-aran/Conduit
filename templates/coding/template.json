@@ -1,6 +1,6 @@
 {
   "id": "coding",
-  "version": "9",
+  "version": "10",
   "label": "Coding",
   "description": "Development Pi with Git/GitHub and web research skills, every tool reached through Pi codemode scripts.",
   "posture": "codemode: read / edit / shell / web search / source fetch",

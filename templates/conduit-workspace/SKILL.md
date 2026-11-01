@@ -6,8 +6,8 @@ description: Interpret Conduit attachment paths and control-plane metadata in a 
 # Conduit Workspace Bridge
 
 Conduit stores uploaded files below `.conduit/chats/<chat-id>/attachments` in
-the current working directory. Treat paths inside `<conduit_attachments>` as
-server-validated references supplied with the user's message.
+the current working directory. The `Attached file: <path>` lines after the user's
+message are server-validated references to them.
 
 - Read the exact supplied path when attachment contents matter.
 - Do not search `/tmp`, clipboard folders, or unrelated chat directories.

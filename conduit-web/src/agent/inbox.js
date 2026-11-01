@@ -29,12 +29,11 @@ export const headlineOf = (text, max = 160) => {
 export async function renderWaitingInbox(agent) {
     const state = await agent.state();
     const items = listInbox(state, { unhandled: true });
-    const now = Date.now();
     // Whether a report reaches the person's phone is jbot's call (`notify`), weighed against how often they want it.
     const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
     if (!items.length) return dial;
     return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
-      ...items.slice(0, 12).map((item) => line(item, now)),
+      ...items.slice(0, 12).map((item) => line(item, agent.settings().timezone)),
       ...(items.length > 12 ? [`… and ${items.length - 12} more (inbox list).`] : [])].join("\n");
 }
 
@@ -59,11 +58,9 @@ export const listInbox = (state, { unhandled = false } = {}) => Object.values(st
   .sort((a, b) => b.at.localeCompare(a.at));
 
 const LEVEL_LABEL = { fyi: "FYI", attention: "ATTENTION", urgent: "URGENT", failed: "FAILED" };
-const ago = (at, now) => {
-  const minutes = Math.max(0, Math.round((now - Date.parse(at)) / 60000));
-  return minutes < 60 ? `${minutes} min ago` : minutes < 2880 ? `${Math.round(minutes / 60)} h ago` : `${Math.round(minutes / 1440)} d ago`;
-};
-const line = (item, now) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}: ${item.headline || "(no text)"} (${item.kind}, ${ago(item.at, now)})`;
+/* An entry's line says when it came, not how long ago: a line that ages every turn would be a different section every
+   turn, sent again each time (the prompt cache keeps only what does not change). */
+const line = (item, timeZone) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}: ${item.headline || "(no text)"} (${item.kind}, ${new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(item.at))})`;
 
 /** Whether it is the person's quiet hours, in the agent's time zone: `{ enabled, start, end }`, wrapping midnight. */
 export function inQuietHours(settings, now = Date.now()) {
@@ -125,14 +122,14 @@ export function InboxTools(runtime) {
       const state = await api.snapshot(AgentDoc, context);
       if (action === "list") {
         const items = listInbox(state, { unhandled: !all });
-        return result(items.map((item) => `${line(item, Date.now())}${item.status === "handled" ? ` [handled: ${item.outcome || "done"}]` : ""}`).join("\n")
+        return result(items.map((item) => `${line(item, agent.settings().timezone)}${item.status === "handled" ? ` [handled: ${item.outcome || "done"}]` : ""}`).join("\n")
           || (all ? "The inbox is empty." : "Nothing waits in the inbox."));
       }
       if (action === "read") {
         const item = id && state?.inbox?.[id];
         if (!item) return result("No such entry.", true);
         const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
-        return result(`${line(item, Date.now())}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
+        return result(`${line(item, agent.settings().timezone)}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
       }
       const wanted = [...new Set([...(ids || []), ...(id ? [id] : [])])];
       if (!wanted.length || !outcome?.trim()) return result("ids and an outcome are required.", true);

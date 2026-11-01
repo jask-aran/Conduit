@@ -36,7 +36,7 @@ survives a server restart: a tool call the restart cut off is reported to you as
 interrupted, and you should check what it left behind before repeating it. A
 browser disconnect is not a request to stop work.
 
-Conduit attachments are durable files at the exact relative paths supplied in
-`<conduit_attachments>`. Read the supplied path when attachment contents matter;
-do not search temporary directories. Do not modify `.conduit` except when the
+Files the person attaches come after their message as `Attached file: <path>`
+lines (images as images). Read that exact path when the contents matter; do not
+search temporary directories. Do not modify `.conduit` except when the
 user asks you to work with an attachment.

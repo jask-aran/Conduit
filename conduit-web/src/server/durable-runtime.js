@@ -281,6 +281,9 @@ export class DurableRuntime {
             onWait: (device) => this.emitWaiting(conversationId, device), excuse: nodeId ? this.excuseFor(conversationId, nodeId) : null });
         },
         settings: ((runtime) => ({
+          // Ask providers to keep the prompt cache long (OpenAI: 24 h, or 30 min on GPT-5.6 and later; Anthropic: 1 h):
+          // the persistent agent wakes hourly and people come back to chats, and the prefix is only ever appended to.
+          stream: { cacheRetention: "long" },
           get retry() {
             const retry = runtime.piSettings().retry;
             return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],
