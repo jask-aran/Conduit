@@ -1,6 +1,6 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { createEffect, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
@@ -26,8 +26,49 @@ export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDi
 
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
  *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
+/*
+ * An overlay that changes width (Settings opening wider on a two-column page) settles to it as panes do (shell.css
+ * .ui-sheet[data-moving]): the frame eases on --duration-fold and --ease-settle, starting from rest, while the page
+ * beside the rail holds the width it lands at and the frame clips it, so nothing re-wraps mid-motion. Interrupted, it
+ * eases on from where it is. Reduced motion: it lands at once.
+ */
+function createWidthSettle(frame: () => HTMLElement | undefined, width: () => unknown) {
+  let settled = 0;
+  let running: Animation | undefined;
+  createEffect(on(width, () => {
+    const element = frame();
+    if (!element) return;
+    const from = running ? element.getBoundingClientRect().width : settled;
+    running?.cancel();
+    const page = element.querySelector<HTMLElement>(":scope > .ui-overlay-page");
+    page?.style.removeProperty("--overlay-page-width");
+    const to = element.getBoundingClientRect().width;
+    settled = to;
+    if (!from || Math.abs(from - to) < 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const style = getComputedStyle(element);
+    if (page) page.style.setProperty("--overlay-page-width", `${page.getBoundingClientRect().width}px`);
+    element.dataset.settling = "";
+    running = element.animate([{ width: `${from}px` }, { width: `${to}px` }], {
+      duration: parseFloat(style.getPropertyValue("--duration-fold")) || 240, easing: style.getPropertyValue("--ease-settle").trim() || "ease-out" });
+    const done = running;
+    const finish = () => { if (running !== done) return; running = undefined; delete element.dataset.settling; page?.style.removeProperty("--overlay-page-width"); };
+    done.onfinish = finish; done.oncancel = finish;
+  }, { defer: true }));
+  // The width it rests at, kept current through window resizes, so the next change eases from what is on screen.
+  createEffect(() => {
+    const element = frame();
+    if (!element) return;
+    settled = element.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => { if (!running) settled = element.getBoundingClientRect().width; });
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
+  });
+}
+
 export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
-  return <Frost lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+  const [frame, setFrame] = createSignal<HTMLElement>();
+  createWidthSettle(frame, () => (props.style as Record<string, unknown> | undefined)?.["--overlay-width"]);
+  return <Frost ref={setFrame} lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
     data-density={props.density} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
