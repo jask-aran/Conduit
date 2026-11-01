@@ -40,10 +40,18 @@ span.ui-agent-stop { width: var(--control-sm); }
 /* One line: the status after the task, both cut short (the task first, to a share of the row), the time at the end. */
 .ui-agent-row[data-line] .ui-agent-open { padding-block: var(--space-2xs); }
 .ui-agent-row[data-line] .ui-agent-copy { flex-direction: row; align-items: baseline; gap: var(--space-md); }
-.ui-agent-row[data-line] .ui-agent-head { min-width: 0; flex: 0 1 auto; max-width: 60%; }
+/* The task takes a fixed share, so every row's status starts in one column whatever the task's width. */
+.ui-agent-row[data-line] .ui-agent-head { min-width: 0; flex: 0 0 50%; }
 .ui-agent-row[data-line] .ui-agent-line { flex: 1 1 0; }
 .ui-agent-row:not([data-state="running"]) .ui-agent-title { color: var(--muted-foreground); }
 
 /* The rider: the list alone, its rows meeting the rider's edge as the queued lines do; past five it scrolls. */
-.ui-frost.ui-rider.ui-agent-rider { display: flex; padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-lg); }
+.ui-frost.ui-rider.ui-agent-rider { display: flex; padding: var(--space-xs); }
+/* In the rider the wash is the whole row, stop included, rounded as the rider's slots: the row's own button sat in a
+   scroller that cut its left corners square, and stopped short of the stop. The icon stays on the composer's text. */
+.ui-agent-rider .ui-agent-row { border-radius: var(--cmp-slot-radius); }
+.ui-agent-rider .ui-agent-open { width: auto; margin-left: 0; padding-left: calc(var(--space-lg) - var(--space-xs)); }
+.ui-agent-rider .ui-agent-open:focus-visible { background: transparent; }
+.ui-agent-rider .ui-agent-row:focus-within { background: var(--tint); }
+@media (hover: hover) { .ui-agent-rider .ui-agent-open:not(:disabled):hover { background: transparent; } .ui-agent-rider .ui-agent-row:hover { background: var(--tint); } }
 .ui-agent-rider > .ui-agent-rows { min-width: 0; max-height: calc(5 * (var(--leading-row) * var(--text-row) + 2 * var(--space-2xs)) + 4 * var(--space-2xs)); flex: 1; margin: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
