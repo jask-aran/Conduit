@@ -916,6 +916,19 @@ export class DurableAdapter extends EventEmitter {
       // Reports have no browser prompt; open them at placement, as the agent was given them.
       const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
       const child = data.conversationId ?? (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === data.subagentId)?.child ?? null;
+      // Steered into a running turn (a plain report; a run's follows up, and the run that takes it opens it): the turn
+      // moves on from its prompt as for a steered message, so what comes next answers the report and is drawn under it.
+      const turn = record.turn;
+      if (turn?.inputs?.length && !data.origin && !turn.opened?.has(id)) {
+        turn.opened ||= new Set();
+        turn.opened.add(id);
+        this.closeAnswer(record);
+        for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
+        this.publish(record, messageOpen({ id, ...reportMessage(entry, child), generationId: turn.generationId }));
+        turn.prompts = [id];
+        turn.answers = id;
+        return;
+      }
       this.publish(record, messageOpen({ id, ...reportMessage(entry, child) }));
       return;
     }
@@ -1547,8 +1560,21 @@ export class DurableAdapter extends EventEmitter {
     }
     // A codemode script's foreground spawns, under the script's call (`via`).
     for (const item of await nestedSubagents(harness, conversationId, this.context)) {
+      // A stopped script's spawn is aborted mid-call, before it can note how it ended: the task that owns its child
+      // says whether it is still going.
+      let { status = "running", endedAt = null } = item;
+      if (status === "running") {
+        const record = await harness.commit((tx) => tx.conversation(item.conversationId), this.context).catch(() => null);
+        const ownerTask = record?.owner?.taskId ?? (record?.ownership?.kind === "task" ? record.ownership.taskId : null);
+        const owner = ownerTask ? await harness.getTask(ownerTask, this.context).catch(() => null) : null;
+        if (owner?.state.status === "terminal") {
+          const outcome = owner.state.outcome.status;
+          status = outcome === "completed" ? "finished" : outcome === "aborted" ? "stopped" : "failed";
+          endedAt = owner.endedAt ? new Date(owner.endedAt).toISOString() : null;
+        }
+      }
       agents.push({ id: null, conversationId: item.conversationId, title: item.title, mode: "foreground", via: item.via,
-        status: item.status || "running", startedAt: item.startedAt || null, endedAt: item.endedAt || null });
+        status, startedAt: item.startedAt || null, endedAt });
     }
     for (const entry of entries) {
       if (entry.kind !== "pi.assistant") continue;

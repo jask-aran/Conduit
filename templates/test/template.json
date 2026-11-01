@@ -18,11 +18,8 @@
     "codemode"
   ],
   "models": [
-    "conduit-test/paced",
-    "conduit-test/bursty",
     "conduit-test/steady",
-    "conduit-test/fast",
-    "conduit-test/flood"
+    "conduit-test/bursty"
   ],
   "extensions": [
     "../../conduit-web/node_modules/pi-web-access"

@@ -1,4 +1,4 @@
-import { notice, submitWithNotes } from "../context/notices.js";
+import { notice, stopPending, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { AgentDoc } from "../agent/agent-doc.js";
@@ -274,12 +274,26 @@ export function Subagents(runtime) {
           const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: report.answer, title });
           const at = content.indexOf(report.answer);
           const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
-          await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
-            content, entry: { kind: "conduit.subagent-report",
-              data: { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
-                ...(task.input.origin ? { origin: task.input.origin, level } : {}) } } }, context, { admit: (input) => handle.submit(input, context) });
-          // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
-          runtime.wakeChat?.(api.conversationId);
+          const data = { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
+            ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
+          // A Stop leaves background agents working, but meant stop: until the person speaks again a report is kept
+          // -- written to the thread without a turn, for the next turn to read -- whether it waited in the stopped turn
+          // (a Stop withdraws what waits) or came after.
+          const quiet = await api.memo("quiet", await stopPending(runtime, parent, context), context);
+          let kept = quiet;
+          if (!quiet) {
+            const submitted = await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
+              content, entry: { kind: "conduit.subagent-report", data } }, context, { admit: (input) => handle.submit(input, context) });
+            // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
+            runtime.wakeChat?.(api.conversationId);
+            const settled = await submitted.wait(context);
+            kept = settled.status === "unanswered" && settled.reason === "aborted" && settled.entry === undefined;
+          }
+          if (kept) {
+            const timestamp = await api.memo("keptAt", Date.now(), context);
+            await (await handle.submit({ type: "write", requestId: `${requestId}:kept`, entry: { kind: "conduit.subagent-report",
+              data: { ...data, messageId: `${requestId}:kept`, kept: true }, model: [{ role: "user", content, timestamp }] } }, context)).wait(context);
+          }
           // The person's devices hear of it only if jbot decides they should (its `notify`); approvals push on their own.
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);

@@ -39,6 +39,13 @@ async function deliveredNotes(conversation, state, context, consumedStops) {
 }
 
 /** All person inputs and notices use one prefix; only a fresh person input consumes a stop note. */
+/** Whether the person stopped the conversation's last turn and has not spoken since (the stop note still waits). */
+export async function stopPending(runtime, conversation, context) {
+  const saved = await runtime.harness.snapshot(ConduitNotices, conversation.id, context);
+  const state = await deliveredNotes(conversation, JSON.parse(JSON.stringify(saved || initialNotes())), context, new Set());
+  return Boolean(state.pending?.some((note) => note.name === "stop"));
+}
+
 export async function submitWithNotes(runtime, conversation, draft, context, { jbot = false, freshPerson = false, opensWithTime = false, prepare = (text) => text, admit = (input) => conversation.submit(input, context) } = {}) {
   // Reports and chat inputs can arrive together. Keep their checks and admissions in conversation order.
   runtime.noteSubmissions ||= new Map();

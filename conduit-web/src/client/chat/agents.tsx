@@ -60,7 +60,7 @@ function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
   };
 }
 
-/** A turn's subagents, pinned under its head: one row per spawn among its tools. */
+const ENDED_LABEL = { finished: "Finished", failed: "Failed", stopped: "Stopped" } as const;
 /** An agent a codemode script spawned: the chat's agents are all there is of it (no call of the turn names it). */
 function rowOfAgent(agent: AgentSummary): Row {
   return { id: agent.id || undefined, background: agent.mode === "background", state: agent.status, chatId: agent.chatId, title: agent.title,
@@ -89,11 +89,20 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   const started = createMemo(() => all().filter((row) => row.background && row.id));
   const now = useNow(() => all().some((row) => row.state === "running"));
   const reported = () => started().filter((row) => row.state !== "running").map((row) => row.id!);
+  // How the started ones are doing, together: the shut line says whether they are all back.
+  const status = () => {
+    const rows = started();
+    const count = (state: AgentState) => rows.filter((row) => row.state === state).length;
+    const running = count("running");
+    if (running) return rows.length === 1 ? "Running" : `${running} of ${rows.length} running`;
+    const ended = (["finished", "failed", "stopped"] as const).map((state) => [state, count(state)] as const).filter(([, n]) => n);
+    return ended.length === 1 ? ENDED_LABEL[ended[0]![0]] : ended.map(([state, n]) => `${n} ${state}`).join(" · ");
+  };
   return <Show when={all().length}>
     <AgentRows><Index each={rows()}>{(row) => <AgentRow id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
       time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
       <Show when={started().length}>
-        <AgentSpawn ids={started().map((row) => row.id!)} title={started().length === 1 ? started()[0]!.title : undefined}
+        <AgentSpawn ids={started().map((row) => row.id!)} title={started().length === 1 ? started()[0]!.title : undefined} status={status()}
           onReport={reported().length ? () => jumpToReport(reported()) : undefined}>
           <Index each={started()}>{(row) => <AgentRow line id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
             time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>

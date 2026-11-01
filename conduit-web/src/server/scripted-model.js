@@ -5,16 +5,14 @@ import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } from "../test-stream-replays.js";
 import { createAssistantMessageEventStream, createFauxCore, createProvider, fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
 
-/** The paces, as the models (Render test's, same ids where they existed before): bursty is 60 tok/s on average, sent
- *  as chunks after uneven gaps with one long pause, as a real provider does. */
-const SPEEDS = {
-  paced: { name: "Scripted · 60 tok/s · like a real model", tokensPerSecond: 60 },
-  bursty: { name: "Scripted · 60 tok/s in bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
-  steady: { name: "Scripted · 250 tok/s", tokensPerSecond: 250 },
-  fast: { name: "Scripted · 1000 tok/s", tokensPerSecond: 1000 },
-  flood: { name: "Scripted · 4000 tok/s · past any provider", tokensPerSecond: 4000 },
+/** The model is how text arrives: steady, or in bursts after uneven gaps with one long pause (as a real provider
+ *  sends it), averaging the same pace. The thinking level is the pace (SPEEDS); the turn is the prompt's words. */
+const SHAPES = {
+  steady: { name: "Scripted · steady" },
+  bursty: { name: "Scripted · bursty", gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
 };
-const definitions = Object.entries(SPEEDS).map(([id, speed]) => ({ id, name: speed.name, reasoning: true }));
+const SPEEDS = { off: 20, minimal: 40, low: 60, medium: 120, high: 250, xhigh: 1000, max: 4000 };
+const definitions = Object.entries(SHAPES).map(([id, shape]) => ({ id, name: shape.name, reasoning: true }));
 export const SCRIPTED_MODELS = definitions.map((model) => `conduit-test/${model.id}`);
 const THOUGHT = "Working through the request step by step, checking what each part needs before answering. ";
 /** A text repeated to about `chars` characters. */
@@ -24,6 +22,7 @@ const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalToken
 const help = `| Keyword | Turn |
 | --- | --- |
 | help | Show this table |
+| (thinking level) | The pace: off 20, minimal 40, low 60, medium 120, high 250, extra high 1000, max 4000 tok/s |
 | think, think 900 | Thinking before each step (about that many tokens) |
 | narrate | Commentary before each tool call |
 | tool, 3 tools | That many read calls |
@@ -66,7 +65,9 @@ export function scriptedStep(context) {
   // A report or notice steered into a turn still under way (between its calls) is heard, and the turn goes on with
   // its own prompt; only one that arrives once the turn has answered starts a turn of its own.
   const asked = messages.findLastIndex((message) => message.role === "user" && !reportText(promptOf(message)) && !noticeText(promptOf(message)));
-  const midTurn = asked >= 0 && asked < last && !messages.slice(asked + 1, last).some(finalAnswer);
+  // A turn stopped is over too (its call came back aborted): a report after it starts a turn of its own.
+  const stopped = (message) => message.role === "toolResult" && /\bwas aborted\b/.test(textOf(message)) || message.stopReason === "aborted";
+  const midTurn = asked >= 0 && asked < last && !messages.slice(asked + 1, last).some((message) => finalAnswer(message) || stopped(message));
   const at = midTurn ? asked : last;
   const heard = midTurn ? messages.map((message, index) => ({ message, index })).slice(at + 1)
     .filter(({ message }) => message.role === "user" && reportText(promptOf(message))).map(({ message, index }) => `${reporter(messages, index)} reported ${promptOf(message).replace(/[.!]?$/, "")}`) : [];
@@ -153,9 +154,11 @@ export function scriptedStep(context) {
 
 export function scriptedProvider() {
   const core = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions });
+  // Every thinking level offered, extra high and max included (the slider is the pace).
+  for (const model of core.models) model.thinkingLevelMap = { xhigh: "xhigh", max: "max" };
   const stream = (model, context, options) => {
     // One core per call avoids a shared response queue and lets concurrent streams use different speeds.
-    const speed = SPEEDS[model.id] || SPEEDS.paced;
+    const speed = { ...(SHAPES[model.id] || SHAPES.steady), tokensPerSecond: SPEEDS[options?.reasoning] || SPEEDS.off };
     const request = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions,
       tokensPerSecond: speed.gapsMs ? 100_000 : speed.tokensPerSecond, tokenSize: { min: 4, max: 4 } });
     request.setResponses([scriptedStep]);
