@@ -64,6 +64,9 @@ const sectionGroups = [
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
 type Section = VisibleSection | "workspaces";
+/** Pages that lay two columns side by side (Prompts: a document's chain beside the chosen block) open Settings wider,
+ *  as far as the window allows; every other page keeps its width. */
+const WIDE_SECTIONS = new Set<string>(["prompts"]);
 const sectionLabels: Record<Section, string> = {
   ui: "Appearance",
   shortcuts: "Shortcuts",
@@ -1172,7 +1175,7 @@ export function Settings(props: {
     label="Settings"
     placement="center"
     layout="rail"
-    style={narrow() ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
+    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
     onEscapeKeyDown={dismissEscape}
     onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
   >
