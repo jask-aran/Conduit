@@ -113,9 +113,9 @@ export function ChainHead(props: { kind: string; name: string; meta?: string; ic
   </section>;
 }
 /** index: its place in the chain. meta: what it is (shared, yours, filled in by Conduit). size: how much of it there
- *  is, at the end. onOpen: the box opens it (to edit). actions: what can be done to it in place (move, swap, remove),
- *  shown on hover or focus where there is hover, always on touch. */
-export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; modified?: boolean; current?: boolean; onOpen?: () => void; openLabel?: string; actions?: JSX.Element }) {
+ *  is, at the end. onSelect: the box is chosen by a click (current: the chosen one), and what can be done to it is
+ *  beside the chain (ChainLayout's detail), never hidden behind hover. */
+export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
   const inner = () => <>
     <Show when={props.index != null}><span class="ui-chain-index" aria-hidden="true">{props.index}</span></Show>
     <span class="ui-chain-name">{props.name}<Show when={props.modified}><span class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></span>
@@ -123,11 +123,47 @@ export function ChainLink(props: { name: string; index?: number; meta?: string; 
     <Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show>
   </>;
   return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
-    <Show when={props.onOpen} fallback={<div class="ui-chain-line">{inner()}</div>}>
-      <button type="button" class="ui-chain-line ui-chain-open" aria-label={props.openLabel} onClick={() => props.onOpen?.()}>{inner()}</button>
+    <Show when={props.onSelect} fallback={<div class="ui-chain-line">{inner()}</div>}>
+      <button type="button" class="ui-chain-line ui-chain-open" aria-pressed={Boolean(props.current)} onClick={() => props.onSelect?.()}>{inner()}</button>
     </Show>
-    <Show when={props.actions}><span class="ui-chain-actions">{props.actions}</span></Show>
   </section>;
 }
-export const ChainGap = (props: { children?: JSX.Element }) => <div class="ui-chain-gap" data-control={props.children ? "" : undefined}>{props.children}</div>;
+export const ChainGap = () => <div class="ui-chain-gap" aria-hidden="true" />;
 export const ChainBreak = (props: { label: string }) => <div class="ui-chain-break"><span class="ui-title">{props.label}</span></div>;
+
+/** The chain beside what is chosen in it: two columns where both fit at their measures, else the detail under it. */
+export const ChainLayout = (props: { map: JSX.Element; detail: JSX.Element }) => <div class="ui-chain-layout">
+  <div class="ui-chain-layout-map">{props.map}</div>
+  <section class="ui-chain-detail">{props.detail}</section>
+</div>;
+/** The chosen box's head in the detail: its name, what it is, how big, then its actions -- buttons, always shown. */
+export const ChainDetailHead = (props: { name: string; meta?: string; size?: string; live?: boolean; actions?: JSX.Element }) => <header class="ui-chain-detail-head">
+  <div class="ui-chain-detail-title"><h3 data-live={props.live ? "" : undefined}>{props.name}</h3><Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show></div>
+  <Show when={props.meta}><p class="ui-network-meta">{props.meta}</p></Show>
+  <Show when={props.actions}><div class="ui-chain-detail-actions">{props.actions}</div></Show>
+</header>;
+
+/*
+ * Prompt text as the model reads it: whitespace kept, the tags it is wrapped in (<cwd>, <diary day="…">) quiet, and the
+ * slots Conduit fills ({{person.name}}, {{working folder}}) marked, so a template reads as one.
+ */
+const PROMPT_MARKS = /\{\{[^{}\n]*\}\}|<\/?(?:[a-z][\w-]*|\{\{[^{}\n]*\}\})(?:\s[^<>\n]*)?>/gi;
+export function PromptText(props: { text: string; label?: string }) {
+  const parts = () => {
+    const out: { text: string; mark?: "slot" | "tag" }[] = [];
+    let at = 0;
+    for (const match of props.text.matchAll(PROMPT_MARKS)) {
+      if (match.index! > at) out.push({ text: props.text.slice(at, match.index) });
+      out.push({ text: match[0], mark: match[0].startsWith("{{") ? "slot" : "tag" });
+      at = match.index! + match[0].length;
+    }
+    if (at < props.text.length) out.push({ text: props.text.slice(at) });
+    return out;
+  };
+  return <pre class="ui-prompt-text" aria-label={props.label}><For each={parts()}>{(part) => part.mark ? <span class={`ui-prompt-${part.mark}`}>{part.text}</span> : part.text}</For></pre>;
+}
+/** One block of a document read whole (Prompts › Text): its name and size over its text. */
+export const PromptSection = (props: { name: string; meta?: string; size?: string; live?: boolean; text: string }) => <section class="ui-prompt-section" data-live={props.live ? "" : undefined}>
+  <header><span class="ui-chain-name">{props.name}</span><Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show><Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show></header>
+  <PromptText text={props.text} label={props.name} />
+</section>;

@@ -51,14 +51,14 @@
 /* ChainMap: the map's boxes stacked down one line. Every part is the column's width (a measure, never wider than the
    room); the line runs through the gaps between boxes; a gap's control sits on the line, the ground behind it. */
 .ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
-.ui-chain > * { width: min(100%, var(--measure-lg)); }
+.ui-chain > :not(.ui-chain-gap) { width: min(100%, var(--measure-lg)); }
 .ui-chain-box { gap: 0; padding-block: var(--space-xs); }
 .ui-chain-box[data-head] { padding-top: var(--space-md); }
 .ui-chain-box[data-head] > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-chain-line { display: flex; min-width: 0; min-height: var(--row-min); flex: 1; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); text-align: left; }
+/* A link is chosen by a click: no wash when pointed at (the chosen one is the only wash), a ring on keyboard focus. */
 button.ui-chain-open { cursor: pointer; }
-button.ui-chain-open:focus-visible { background: var(--tint); outline: none; }
-@media (hover: hover) { button.ui-chain-open:hover { background: var(--tint); } }
+button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--muted-foreground); outline-offset: calc(-1 * var(--stroke-thin)); }
 .ui-chain-name { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-chain-box[data-head] .ui-chain-name { font-weight: var(--weight-strong); }
 .ui-chain-index { flex: none; min-width: var(--icon-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
@@ -67,25 +67,35 @@ button.ui-chain-open:focus-visible { background: var(--tint); outline: none; }
 .ui-chain-link { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
 .ui-chain-link[data-live] { border-style: dashed; }
 .ui-chain-link[data-live] .ui-chain-name { color: var(--muted-foreground); }
-.ui-chain-link[data-current] { border-color: var(--muted-foreground); }
-/* A link's actions take the place of what it says about itself while it is pointed at (where there is hover), so
-   the line never squeezes; without hover they are a line of their own under it, at its end. */
-.ui-chain-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-chain-link > .ui-chain-actions { width: 100%; justify-content: flex-end; }
-@media (hover: hover) {
-  .ui-chain-link > .ui-chain-actions { display: none; width: auto; }
-  .ui-chain-link:is(:hover, :focus-within) > .ui-chain-actions { display: inline-flex; }
-  .ui-chain-link:is(:hover, :focus-within) > .ui-chain-line :is(.ui-network-meta, .ui-chain-size) { display: none; }
-}
-/* A gap's control sits just right of the line, so nothing has to be painted behind it; a break's label stands in the
-   line, which stops either side of it. */
-.ui-chain-gap { position: relative; display: flex; min-height: var(--space-lg); align-items: center; padding-left: calc(50% + var(--space-sm)); }
-.ui-chain-gap[data-control] { min-height: calc(var(--control-xs) + var(--space-xs)); }
-.ui-chain-gap::before { position: absolute; top: 0; bottom: 0; left: 50%; border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-chain-link[data-current] { border-color: var(--muted-foreground); background: var(--tint); }
+/* The line between two links; a break's label stands in the line, which stops either side of it. */
+.ui-chain-gap { width: 0; height: var(--space-lg); border-left: var(--hairline) solid var(--tint); }
 .ui-chain-break { display: flex; flex-direction: column; align-items: center; }
 .ui-chain-break::before, .ui-chain-break::after { height: var(--space-md); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-chain-break > .ui-title { margin: 0; padding: var(--space-2xs) var(--space-sm); }
-@media (hover: hover) {
-  .ui-chain-gap[data-control] > * { opacity: 0; transition: opacity var(--duration-quick) var(--ease-arrive); }
-  .ui-chain-gap[data-control]:is(:hover, :focus-within) > * { opacity: 1; }
-}
+
+/* The chain beside its detail: side by side while both fit at their measures (the chain's, and a reading measure for
+   the detail), else the detail wraps under the chain -- measured from the content, no breakpoint. The detail stays in
+   view while a long chain scrolls past. */
+.ui-chain-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-xl); }
+.ui-chain-layout-map { flex: 1 1 var(--measure-md); max-width: var(--measure-lg); }
+.ui-chain-layout-map > .ui-chain { padding-top: 0; }
+.ui-chain-layout-map > .ui-chain > :not(.ui-chain-gap) { width: 100%; }
+.ui-chain-detail { position: sticky; top: 0; flex: 999 1 var(--measure-xl); }
+.ui-chain-detail { display: flex; min-width: 0; flex-direction: column; gap: var(--space-md); }
+.ui-chain-detail-head { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-chain-detail-title { display: flex; align-items: baseline; gap: var(--space-sm); }
+.ui-chain-detail-title > h3 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); }
+.ui-chain-detail-title > h3[data-live] { color: var(--muted-foreground); }
+.ui-chain-detail-head > .ui-network-meta { margin: 0; white-space: normal; }
+.ui-chain-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); margin-top: var(--space-xs); }
+
+/* Prompt text: the model's view, whitespace kept; tags quiet, slots marked. */
+.ui-prompt-text { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--foreground); font: var(--text-caption)/var(--leading-code) var(--font-data); }
+.ui-prompt-tag { color: var(--muted-foreground); }
+.ui-prompt-slot { border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs); color: var(--foreground); }
+.ui-prompt-section { display: flex; flex-direction: column; gap: var(--space-xs); }
+.ui-prompt-section + .ui-prompt-section { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-md); margin-top: var(--space-md); }
+.ui-prompt-section > header { display: flex; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); }
+.ui-prompt-section[data-live] > header .ui-chain-name { color: var(--muted-foreground); }
+.ui-prompt-section > header .ui-chain-size { margin-left: auto; }

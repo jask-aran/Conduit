@@ -345,7 +345,7 @@ export class DurableRuntime {
     };
     try {
       const tools = (await this.piExtensionFor(WEB_ACCESS)).flat();
-      return defineExtension({ name: "web", tools, sections: [section("web", () => WEB_PROMPT, { tag: false })] });
+      return defineExtension({ name: "web", tools, sections: [section("web", async () => this.contextStore ? this.contextStore.text("web-tools") : WEB_PROMPT, { tag: false })] });
     } catch (error) {
       console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
       return null;

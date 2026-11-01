@@ -1,6 +1,6 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
@@ -96,9 +96,26 @@ export const OverlayFact = (props: { label: string; value: string; title?: strin
 /** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups.
  *  busy: a spinner before the status (Saving); failed: the status in the destructive colour, why in its title, and Retry when onRetry. */
 export function OverlayPage(props: { title: string; status?: string; busy?: boolean; failed?: boolean; why?: string; onRetry?: () => void; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
+  /* A save is often quicker than the spinner's turn, which then cut out and jumped to Saved. Saving is held until its
+     spinner has made one whole turn (--duration-spin); a failure is said at once. */
+  const [held, setHeld] = createSignal<string | null>(null);
+  let since = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    const busy = Boolean(props.busy);
+    if (busy) { clearTimeout(timer); if (held() === null) since = performance.now(); setHeld(props.status ?? "Saving"); return; }
+    if (held() === null) return;
+    const turn = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--duration-spin")) || 800;
+    const left = props.failed ? 0 : turn - (performance.now() - since);
+    clearTimeout(timer);
+    if (left <= 0) setHeld(null); else timer = setTimeout(() => setHeld(null), left);
+  });
+  onCleanup(() => clearTimeout(timer));
+  const busy = () => Boolean(props.busy) || held() !== null;
+  const status = () => held() ?? props.status;
   return <main class="ui-overlay-page">
     <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
-      <Show when={props.status}><span class="ui-overlay-status" role="status" data-failed={props.failed ? "" : undefined} title={props.why}><Show when={props.busy}><Spinner /></Show>{props.status}
+      <Show when={status()}><span class="ui-overlay-status" role="status" data-failed={props.failed && held() === null ? "" : undefined} title={props.why}><Show when={busy()}><Spinner /></Show>{status()}
         <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>
       <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><Icons.Close /></Button></Show></div>
     {props.children}

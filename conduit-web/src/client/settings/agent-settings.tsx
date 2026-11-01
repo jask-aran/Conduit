@@ -88,7 +88,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         <SettingLine label="Name" title="What it is called, here and in its notifications. Its home thread takes the name too." state={nameError() || undefined}>
           <Input id="agent-name" value={draft().name} maxLength={60} onInput={(event) => editName(event.currentTarget.value)} />
         </SettingLine>
-        <SettingLine label="Speaks up" title={DIALS.find((dial) => dial.value === current().dial)?.title}>
+        <SettingLine plain label="Speaks up" title={DIALS.find((dial) => dial.value === current().dial)?.title}>
           <Segmented label="Speaks up" value={current().dial} options={DIALS.map(({ value, label }) => ({ value, label }))} onChange={(dial) => set({ dial })} />
         </SettingLine>
         <SettingLine label="Daily budget" title="The most its background work may spend in a day, in dollars; 0 is no limit. Past it, scheduled work waits for tomorrow and says so." state={budgetError() || undefined}>
