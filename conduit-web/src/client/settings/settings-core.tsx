@@ -64,9 +64,9 @@ const sectionGroups = [
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
 type Section = VisibleSection | "workspaces";
-/** Pages that lay two columns side by side (Prompts: a document's chain beside the chosen block) open Settings wider,
+/** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
-const WIDE_SECTIONS = new Set<string>(["prompts"]);
+const WIDE_SECTIONS = new Set<string>(["prompts", "blocks"]);
 const sectionLabels: Record<Section, string> = {
   ui: "Appearance",
   shortcuts: "Shortcuts",

@@ -356,3 +356,5 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-flow-scene .ui-transcript-row[data-flow="step"]::before { height: var(--flow-step); }
 .g-flow-scene .ui-transcript-row[data-flow="exchange"]::before { height: var(--flow-exchange); }
 .g-flow-scene .ui-transcript-row[data-flow="turn"]::before { height: var(--flow-turn); }
+/* A workbench needs a height to fill: a settings page's. */
+.g-workbench { display: flex; width: 100%; height: 520px; flex-direction: column; }

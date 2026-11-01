@@ -76,3 +76,6 @@
 .ui-text-editor-title[data-live] { color: var(--muted-foreground); }
 .ui-text-editor-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
 .ui-text-editor-head .ui-seg { flex: none; }
+/* The marks TextEditor puts in prompt text: the tags it is wrapped in quiet, the slots Conduit fills marked. */
+.ui-prompt-tag { color: var(--muted-foreground); }
+.ui-prompt-slot { border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs); color: var(--foreground); }

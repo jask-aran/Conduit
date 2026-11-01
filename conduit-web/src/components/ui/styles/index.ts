@@ -73,6 +73,7 @@ import "./identity.css";
 import "./toast.css";
 import "./overlay.css";
 import "./network.css";
+import "./workbench.css";
 import "./leader.css";
 import "./pill.css";
 import "./phone-composer.css";

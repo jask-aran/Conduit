@@ -13,6 +13,7 @@ import * as Icons from "./icons";
  * Text edited in a pane of its own (a prompt block, a note): the workspace editor's setup (code-setup.ts: its theme,
  * highlighting, line numbers, find and replace) in a box that scrolls inside itself, so a settings page never scrolls
  * for its text. The tags a prompt is wrapped in and the {{slots}} filled in are marked as PromptText marks them.
+ * It brings CodeMirror, so it is not in the library's barrel: import it from here, lazily where the app loads it.
  * Its bar: what it is and what can be done to it (head: a block's name and actions), then find, undo, redo, wrap. Its
  * foot, as a file's: what is known of it (status: where it comes from, how big) and where the caret is. Mod-S saves
  * when onSave is given.

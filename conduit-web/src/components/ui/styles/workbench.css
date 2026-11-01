@@ -1,0 +1,19 @@
+/* Workbench (workbench.tsx): one thing worked on, its title choosing it, the split filling the page's height. */
+.ui-workbench { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-lg); }
+.ui-workbench-title { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-workbench-title-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
+.ui-workbench-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-workbench-meta { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); }
+/* One line, never wrapping (a wrapping line is as tall as its tallest content, which would push the pane's foot off
+   the page): the side scrolls in its column, the main pane scrolls inside itself. */
+.ui-workbench-split { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-xl); }
+.ui-workbench-side { display: flex; min-width: var(--measure-sm); max-width: var(--measure-lg); flex: 1 1 var(--measure-md); flex-direction: column; gap: var(--space-lg); overflow: auto; scrollbar-width: none; }
+.ui-workbench-main { display: flex; min-width: 0; min-height: calc(24 * var(--u-space)); flex: 999 1 var(--measure-xl); flex-direction: column; gap: var(--space-md); }
+.ui-workbench-side > .ui-chain { padding: 0; }
+.ui-workbench-side > .ui-chain > :not(.ui-chain-gap) { width: 100%; }
+.ui-workbench-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-workbench-section > .ui-title { margin: 0 0 var(--space-2xs); padding-inline: var(--row-inset); }
+.ui-workbench-section > .ui-workbench-meta { padding-inline: var(--row-inset); }
+.ui-workbench-fact { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); padding: var(--space-2xs) var(--row-inset); font-size: var(--text-row); }
+.ui-workbench-fact > code { flex: none; font: var(--text-caption) var(--font-data); }
+.ui-workbench-fact-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }

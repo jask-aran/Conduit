@@ -32,7 +32,7 @@ export * from "./identity";
 export * from "./toast";
 export * from "./overlay";
 export * from "./network";
-export * from "./text-editor";
+export * from "./workbench";
 export * from "./leader";
 export * from "./pill";
 export * from "./phone-composer";

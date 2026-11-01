@@ -29,6 +29,7 @@ import { cardPage } from "./pages/card";
 import { toastPage } from "./pages/toast";
 import { overlayPage } from "./pages/overlay";
 import { networkPage } from "./pages/network";
+import { workbenchPage } from "./pages/workbench";
 import { leaderPage } from "./pages/leader";
 import { desktopComposerPage } from "./pages/desktop-composer";
 import { riderPage } from "./pages/rider";
@@ -75,6 +76,7 @@ const piecePages: Page[] = [
   toastPage,
   overlayPage,
   networkPage,
+  workbenchPage,
   leaderPage,
   desktopComposerPage,
   riderPage,

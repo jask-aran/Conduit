@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { Field, SettingWide, Card, CardBody } from "@/components/ui";
-import { TextArea, TextEditor } from "@/components/ui";
+import { TextArea } from "@/components/ui";
+import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
 
 function PromptExample() {

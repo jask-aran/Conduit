@@ -1,13 +1,15 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, lazy, Show, type JSX } from "solid-js";
 import { api } from "../api/client.ts";
 import { Select } from "@/components/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { NavRow } from "@/components/ui/nav";
-import { ChainBreak, ChainGap, ChainLayout, ChainLink, ChainMap } from "@/components/ui/network";
+import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
+import { Workbench, WorkbenchFact, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { FileButton, StatusText } from "@/components/ui/file";
-import { TextEditor } from "@/components/ui/text-editor";
-import { SettingGroup, SettingLine, SettingLoading, SettingNote, SettingWide } from "@/components/ui/overlay";
+// The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
+const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
+import { SettingLoading, SettingNote } from "@/components/ui/overlay";
 
 /*
  * What every thread Conduit starts is given (GET /v0/context, context-store.js): blocks, named pieces of text, stacked
@@ -140,56 +142,55 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         </Show>
       </>} />; }}</Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading documents…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
-    <Show when={current()}>{(doc) => <div class="ui-chain-page">
-      <header class="ui-chain-title">
-        <div class="ui-chain-title-line">
-          <Select look="title" id="context-document" search="Search documents" aria-label="Document" title="Choose a document" value={doc().id} onChange={(event) => props.onDocument(event.currentTarget.value)}>
-            <For each={documents()}>{(item) => <option value={item.id}>{item.role.label}</option>}</For>
-          </Select>
-          <Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button>
-        </div>
-        <p class="ui-network-meta">{`${ROLE_KIND[doc().role.kind]} · ${ROLE_STARTS[doc().role.kind]}${doc().modified ? " · changed" : ""}`}</p>
-      </header>
+    <Show when={current()}>{(doc) => <Workbench label="Prompts">
+      <WorkbenchTitle meta={`${ROLE_KIND[doc().role.kind]} · ${ROLE_STARTS[doc().role.kind]}${doc().modified ? " · changed" : ""}`}
+        title={<Select look="title" id="context-document" search="Search documents" aria-label="Document" title="Choose a document" value={doc().id} onChange={(event) => props.onDocument(event.currentTarget.value)}>
+          <For each={documents()}>{(item) => <option value={item.id}>{item.role.label}</option>}</For>
+        </Select>}
+        actions={<Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button>} />
       <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
-      <ChainLayout fill detail={<Detail />} map={<ChainMap label={`${doc().role.label}'s document`}>
+      <WorkbenchSplit main={<Detail />} side={<ChainMap label={`${doc().role.label}'s document`}>
         <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>
         <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
         <Show when={doc().first.length}><ChainBreak label="First message" /><For each={doc().first}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
       </ChainMap>} />
-    </div>}</Show>
+    </Workbench>}</Show>
   </Show>;
 }
 
-/** Settings › Blocks: every block, one open to edit, and the documents it is in (each opens in Prompts). */
+/** Settings › Blocks: a workbench on one block -- its name the page's title (choosing another), its text in an editor
+ *  pane filling the height (save, reset, delete in the pane's bar; tokens and where it comes from in its foot), and
+ *  beside it the documents it is in (each opening in Prompts) and the slots it can use. */
 export function BlocksSettings(props: { context: ContextData; blockId: string; onBlock: (id: string) => void; onOpenDocument: (id: string) => void }) {
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [draft, setDraft] = createSignal("");
   const [label, setLabel] = createSignal("");
   const [state, setState] = createSignal<"idle" | "saving" | "saved">("idle");
   const [failure, setFailure] = createSignal("");
+  const [liveView, setLiveView] = createSignal<"template" | "now">("template");
   const blocks = () => props.context.data()?.blocks ?? [];
   const current = createMemo(() => props.context.block(props.blockId) ?? blocks()[0]);
   createEffect(() => { if (!props.context.block(props.blockId) && blocks()[0]) props.onBlock(blocks()[0]!.id); });
   createEffect(() => {
     const block = current();
     if (!block) return;
-    setDetail(null); setFailure(""); setState("idle");
+    setDetail(null); setFailure(""); setState("idle"); setLiveView("template");
     void api<BlockDetail>(`/v0/context/blocks/${encodeURIComponent(block.id)}`).then((loaded) => {
       if (loaded.id !== current()?.id) return;
       setDetail(loaded); setDraft(loaded.content ?? ""); setLabel(loaded.label);
     }, (cause) => setFailure(String(cause?.message || cause)));
   });
-  const dirty = () => detail()?.kind === "text" && (draft() !== (detail()?.content ?? "") || (detail()?.source === "custom" && label() !== detail()?.label));
+  const dirty = () => detail()?.kind === "text" && (draft() !== (detail()?.content ?? "") || (detail()?.source === "custom" && label().trim() !== detail()?.label));
   const run = async (work: () => Promise<unknown>) => {
     setState("saving"); setFailure("");
     try { await work(); await props.context.load(); setState("saved"); }
     catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); setState("idle"); }
   };
-  const save = () => run(async () => {
+  const save = () => { if (!dirty() || !draft().trim()) return; void run(async () => {
     const block = current()!;
-    const saved = await api<BlockDetail>(`/v0/context/blocks/${encodeURIComponent(block.id)}`, { method: "PUT", body: JSON.stringify({ content: draft(), ...(block.source === "custom" ? { label: label() } : {}) }) });
-    setDetail(saved); setDraft(saved.content ?? draft());
-  });
+    const saved = await api<BlockDetail>(`/v0/context/blocks/${encodeURIComponent(block.id)}`, { method: "PUT", body: JSON.stringify({ content: draft(), ...(block.source === "custom" && label().trim() ? { label: label().trim() } : {}) }) });
+    setDetail(saved); setDraft(saved.content ?? draft()); setLabel(saved.label);
+  }); };
   const reset = () => run(async () => {
     const saved = await api<BlockDetail>(`/v0/context/blocks/${encodeURIComponent(current()!.id)}/reset`, { method: "POST" });
     setDetail(saved); setDraft(saved.content ?? "");
@@ -200,56 +201,56 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   });
   const remove = () => run(async () => { await api(`/v0/context/blocks/${encodeURIComponent(current()!.id)}`, { method: "DELETE" }); props.onBlock(""); });
   const groups = (): { title: string; items: BlockSummary[] }[] => [
-    { title: "Yours", items: blocks().filter((block) => block.source === "custom") },
-    { title: "Shipped", items: blocks().filter((block) => block.source === "shipped") },
-    { title: "jbot's files", items: blocks().filter((block) => block.source === "jbot") },
-    { title: "Filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
+    { title: "yours", items: blocks().filter((block) => block.source === "custom") },
+    { title: "shipped", items: blocks().filter((block) => block.source === "shipped") },
+    { title: "jbot's file", items: blocks().filter((block) => block.source === "jbot") },
+    { title: "filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
   ].filter((group) => group.items.length);
-  const documentLabel = (id: string) => { const doc = props.context.document(id); return doc ? `${doc.role.label} · ${ROLE_KIND[doc.role.kind].toLowerCase()}` : id; };
+  const documentLabel = (id: string) => props.context.document(id)?.role.label ?? id;
+  const usesSlots = (block: BlockSummary) => block.kind === "text" && block.usedBy.some((id) => id === "agent" || id.startsWith("run:"));
+  const Main = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(loaded) => {
+    const live = () => loaded().kind === "live";
+    return <TextEditor fill readOnly={live()} label={`${loaded().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`}
+      value={live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "") : draft()}
+      onChange={(value) => { setDraft(value); setState("idle"); }} onSave={save}
+      head={<>
+        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{live() ? "Template" : "Text"}</span>
+        <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
+          <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
+        </Show>
+        <Show when={!live()}><span class="ui-text-editor-actions">
+          <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || state() === "saving"} title="Save (Ctrl+S)" onClick={save}>{state() === "saving" ? "Saving…" : dirty() ? "Save" : "Saved"}</Button>
+          <FileButton label="Reset to the shipped text" disabled={!loaded().resettable || !loaded().modified || state() === "saving"} onClick={() => void reset()}><Icons.Reset /></FileButton>
+          <Show when={loaded().source === "custom"}><FileButton label={loaded().usedBy.length ? "Remove it from every document to delete it" : "Delete block"} disabled={loaded().usedBy.length > 0 || state() === "saving"} onClick={() => void remove()}><Icons.Delete /></FileButton></Show>
+        </span></Show>
+      </>}
+      status={<>
+        <StatusText>{tokens(live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "").length : draft().length)}</StatusText>
+        <StatusText>{live() ? loaded().tag ? `<${loaded().tag}> · filled in by Conduit` : "filled in by Conduit" : loaded().source === "jbot" ? "jbot's file: jbot can change it too" : SOURCE[loaded().source]}</StatusText>
+      </>} />; }}</Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading blocks…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
-    <SettingGroup title="Block">
-      <SettingLine label="Block" state={current()?.modified ? "changed" : undefined}>
-        <Select id="context-block" search="Search blocks" aria-label="Block" value={current()?.id ?? ""} onChange={(event) => props.onBlock(event.currentTarget.value)}>
-          <For each={groups()}>{(group) => <For each={group.items}>{(block) => <option value={block.id}>{block.label} · {group.title.toLowerCase()}</option>}</For>}</For>
-        </Select>
-        <Button variant="ghost" size="icon-sm" aria-label="New block" title="New block" disabled={state() === "saving"} onClick={() => void create()}><Icons.Add /></Button>
-      </SettingLine>
-    </SettingGroup>
-    <Show when={current()}>{(block) => <>
-      <SettingGroup title="Used in">
-        <Show when={block().usedBy.length} fallback={<SettingNote>In no document yet: add it to one from Prompts.</SettingNote>}>
-          <For each={block().usedBy}>{(id) => <NavRow icon={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</NavRow>}</For>
-        </Show>
-      </SettingGroup>
-      <SettingGroup title={block().kind === "live" ? "Template" : "Text"}>
+    <Show when={current()}>{(block) => <Workbench label="Blocks">
+      <WorkbenchTitle meta={`${block().kind === "live" ? block().description ?? SOURCE.conduit : SOURCE[block().source]}${block().modified ? " · changed" : ""}`}
+        title={<Select look="title" id="context-block" search="Search blocks" aria-label="Block" title="Choose a block" value={block().id} onChange={(event) => props.onBlock(event.currentTarget.value)}>
+          <For each={groups()}>{(group) => <For each={group.items}>{(item) => <option value={item.id}>{item.label}</option>}</For>}</For>
+        </Select>}
+        actions={<Button variant="ghost" size="icon-sm" aria-label="New block" title="New block" disabled={state() === "saving"} onClick={() => void create()}><Icons.Add /></Button>} />
+      <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
+      <WorkbenchSplit main={<Main />} side={<>
         <Show when={block().source === "custom"}>
-          <SettingLine label="Name"><Input aria-label="Block name" value={label()} onInput={(event) => setLabel(event.currentTarget.value)} /></SettingLine>
+          <WorkbenchSection title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></WorkbenchSection>
         </Show>
-        <SettingLine plain label={block().kind === "live" ? "Filled in" : SOURCE[block().source]} state={block().kind === "text" ? tokens(draft().length) : undefined}
-          title={block().source === "jbot" ? "A file in jbot's folder: jbot can change it too (with your approval)." : undefined}>
-          <Show when={block().kind === "text"}>
-            <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || state() === "saving"} onClick={() => void save()}>{state() === "saving" ? "Saving…" : dirty() ? "Save" : state() === "saved" ? "Saved" : "Save"}</Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={!block().resettable || !block().modified || state() === "saving"} onClick={() => void reset()}><Icons.Reset /></Button>
-            <Show when={block().deletable}><Button variant="ghost" size="icon-sm" aria-label="Delete block" title={block().usedBy.length ? "Remove it from every document first" : "Delete block"} disabled={block().usedBy.length > 0 || state() === "saving"} onClick={() => void remove()}><Icons.Delete /></Button></Show>
+        <WorkbenchSection title="Used in">
+          <Show when={block().usedBy.length} fallback={<p class="ui-workbench-meta">In no document yet: add it to one from Prompts.</p>}>
+            <For each={block().usedBy}>{(id) => <NavRow icon={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</NavRow>}</For>
           </Show>
-        </SettingLine>
-        <Show when={block().description && block().kind === "live"}><SettingNote>{block().description!}</SettingNote></Show>
-        <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
-        <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(loaded) => <SettingWide>
-          <Show when={loaded().kind === "text"} fallback={<>
-            <TextEditor readOnly label={`${loaded().label} template`} value={loaded().template ?? ""} />
-            <Show when={loaded().preview && loaded().preview !== loaded().template}><SettingGroup title="As it stands now"><TextEditor readOnly label={`${loaded().label} now`} value={loaded().preview!} /></SettingGroup></Show>
-          </>}>
-            <TextEditor label={`${loaded().label} text`} value={draft()} onChange={(value) => { setDraft(value); setState("idle"); }} onSave={() => { if (dirty() && draft().trim()) void save(); }} />
-          </Show>
-        </SettingWide>}</Show>
-      </SettingGroup>
-      <Show when={block().kind === "text" && block().usedBy.some((id) => id === "agent" || id.startsWith("run:")) && props.context.data()?.vars?.length}>
-        <SettingGroup title="Slots it can use">
-          <SettingNote>Written as {"{{name}}"} in a jbot or run block, filled in when the thread or turn starts.</SettingNote>
-          <For each={props.context.data()!.vars!}>{(slot) => <SettingLine plain label={<code>{`{{${slot.name}}}`}</code>} title={slot.description} state={slot.value || undefined} />}</For>
-        </SettingGroup>
-      </Show>
-    </>}</Show>
+        </WorkbenchSection>
+        <Show when={usesSlots(block()) && props.context.data()?.vars?.length}>
+          <WorkbenchSection title="Slots it can use">
+            <For each={props.context.data()!.vars!}>{(slot) => <WorkbenchFact code name={`{{${slot.name}}}`} value={slot.value || undefined} title={slot.description} />}</For>
+          </WorkbenchSection>
+        </Show>
+      </>} />
+    </Workbench>}</Show>
   </Show>;
 }
