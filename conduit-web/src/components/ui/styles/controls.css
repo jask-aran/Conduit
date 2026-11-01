@@ -75,10 +75,12 @@
    pill form is the phone header's: the track is itself frost. */
 /* The track at --radius-control; the wash and segments 2px in (its line and 1px), so their corner is
    the track's less those 2px: the space round the wash is even, corners included. Segments touch. */
-.ui-seg { --seg-pad: var(--hairline); --seg-inner: calc(var(--radius-control) - var(--hairline) - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: 0; background: transparent; padding: var(--seg-pad); }
+/* The thumb and a pointed-at segment sit inset from the hairline, and segments a gap apart, so the wash of the one
+   pointed at never touches the thumb's beside it. */
+.ui-seg { --seg-pad: calc(2 * var(--hairline)); --seg-gap: var(--seg-pad); --seg-inner: calc(var(--radius-control) - var(--hairline) - var(--seg-pad)); --seg-cell: calc((100% - 2 * var(--seg-pad) - (var(--segments) - 1) * var(--seg-gap)) / var(--segments)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: var(--seg-gap); background: transparent; padding: var(--seg-pad); }
 /* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
-.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)); width: calc((100% - 2 * var(--seg-pad)) / var(--segments)); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
+.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (var(--seg-cell) + var(--seg-gap)) * var(--segment)); width: var(--seg-cell); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon); height: var(--icon); }
 .ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
