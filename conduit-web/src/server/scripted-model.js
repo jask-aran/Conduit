@@ -42,11 +42,35 @@ const help = `| Keyword | Turn |
 const textOf = (message) => typeof message?.content === "string" ? message.content : (message?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("\n");
 
 // The context is the state machine: every completed call advances one step.
+const promptOf = (message) => parseAttachmentEnvelope(textOf(message).trim()).message.trim();
+const reportText = (prompt) => /^(?:sa-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt);
+const noticeText = (prompt) => !prompt || /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i.test(prompt);
+const finalAnswer = (message) => message.role === "assistant" && !(message.content || []).some((part) => part.type === "toolCall");
+/** Which agent sent the report at `index`: it holds only the child's answer, "ping" or "pingN", the word its task asked
+ *  for, and the id is in the result of the call that started it -- the last background subagent call (ping), or the
+ *  Nth of the last script that asked for pingN. */
+function reporter(messages, index) {
+  const before = messages.slice(0, index);
+  const word = promptOf(messages[index]).match(/^ping(\d*)[.!]?$/i);
+  const starter = word && before.filter((message) => message.role === "assistant").flatMap((message) => message.content || [])
+    .findLast((part) => part.type === "toolCall" && (word[1]
+      ? part.name === "codemode" && String(part.arguments?.code || "").includes(`word ping${word[1]}.`)
+      : part.name === "subagent" && part.arguments?.background));
+  const started = starter && textOf(before.find((message) => message.role === "toolResult" && message.toolCallId === starter.id));
+  return promptOf(messages[index]).match(/^sa-\d+\b/)?.[0] || started?.match(/\bsa-\d+\b/g)?.[word?.[1] ? Number(word[1]) - 1 : 0] || "A subagent";
+}
+
 export function scriptedStep(context) {
   const messages = context.messages || [];
-  const at = messages.findLastIndex((message) => message.role === "user");
-  const raw = textOf(messages[at]).trim();
-  const prompt = parseAttachmentEnvelope(raw).message.trim();
+  const last = messages.findLastIndex((message) => message.role === "user");
+  // A report or notice steered into a turn still under way (between its calls) is heard, and the turn goes on with
+  // its own prompt; only one that arrives once the turn has answered starts a turn of its own.
+  const asked = messages.findLastIndex((message) => message.role === "user" && !reportText(promptOf(message)) && !noticeText(promptOf(message)));
+  const midTurn = asked >= 0 && asked < last && !messages.slice(asked + 1, last).some(finalAnswer);
+  const at = midTurn ? asked : last;
+  const heard = midTurn ? messages.map((message, index) => ({ message, index })).slice(at + 1)
+    .filter(({ message }) => message.role === "user" && reportText(promptOf(message))).map(({ message, index }) => `${reporter(messages, index)} reported ${promptOf(message).replace(/[.!]?$/, "")}`) : [];
+  const prompt = promptOf(messages[at]);
   const later = messages.slice(at + 1);
   const systemMessage = getCurrentSystemMessage(messages);
   const system = [context.systemPrompt || "", getCurrentSystemPrompt(messages)].join("\n");
@@ -61,20 +85,10 @@ export function scriptedStep(context) {
     const single = prompt.match(/^reply with the single word\s+([^\s.!]+)/i);
     return fauxAssistantMessage(single ? single[1] : `Done: ${prompt.split(/\r?\n/)[0]}`);
   }
-  // A report holds only the child's answer: "ping" or "pingN", the word its task asked for. Its id is in the result of
-  // the call that started it: the last background subagent call (ping), or the Nth of the last script that asked for pingN.
-  const before = messages.slice(0, at);
-  const reportWord = prompt.match(/^ping(\d*)[.!]?$/i);
-  const starter = reportWord && before.filter((message) => message.role === "assistant").flatMap((message) => message.content || [])
-    .findLast((part) => part.type === "toolCall" && (reportWord[1]
-      ? part.name === "codemode" && String(part.arguments?.code || "").includes(`word ping${reportWord[1]}.`)
-      : part.name === "subagent" && part.arguments?.background));
-  const started = starter && textOf(before.find((message) => message.role === "toolResult" && message.toolCallId === starter.id));
-  const reportId = started?.match(/\bsa-\d+\b/g)?.[reportWord[1] ? Number(reportWord[1]) - 1 : 0];
-  const isReport = /^(?:sa-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt);
-  const isNotice = !prompt || /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i.test(prompt);
+  const isReport = reportText(prompt);
+  const isNotice = noticeText(prompt);
   if (isReport) {
-    const id = prompt.match(/^sa-\d+\b/)?.[0] || reportId || "A subagent";
+    const id = reporter(messages, at);
     return fauxAssistantMessage(`${id} reported: ${prompt.replace(/\s+/g, " ").replace(/[.!]?$/, ".")}`);
   }
   if (isNotice) return fauxAssistantMessage("Notice received.");
@@ -84,23 +98,25 @@ export function scriptedStep(context) {
   const has = (pattern) => pattern.test(prompt);
   const selected = [];
   const calls = [];
-  const add = (keyword, name, args) => { selected.push(keyword); calls.push({ name, args }); };
+  // Calls run in the order their words come in the prompt ("background slow 3 tools": the agent works while the reads run).
+  const add = (keyword, name, args, where) => { selected.push(keyword); calls.push({ name, args, at: prompt.search(where) }); };
   const count = (pattern) => Math.min(8, Number(prompt.match(pattern)?.[1] || 0));
   const readCount = count(/\b(\d+)\s+tools\b/i) || (has(/\btools?\b/i) ? 1 : 0);
-  if (readCount) { selected.push(readCount > 1 ? `${readCount} tools` : "tool"); for (let i = 0; i < readCount; i++) calls.push({ name: "read", args: { path: file } }); }
-  if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" });
-  if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" });
-  if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` });
+  if (readCount) { selected.push(readCount > 1 ? `${readCount} tools` : "tool"); for (let i = 0; i < readCount; i++) calls.push({ name: "read", args: { path: file }, at: prompt.search(/\btools?\b/i) }); }
+  if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" }, /\bbash\b/i);
+  if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" }, /\bfail\b/i);
+  if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` }, /\bscript\b/i);
   // "slow": each subagent takes three 2-second steps first.
   const slow = has(/\bslow\b/i) ? ` First take 3 slow steps${has(/\bnarrate\b/i) ? ", narrating" : ""}.` : "";
   if (slow) selected.push("slow");
-  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Reply with the single word pong.${slow}` });
-  if (has(/\bbackground\b/i)) add("background", "subagent", { task: `Reply with the single word ping.${slow}`, background: true });
+  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Reply with the single word pong.${slow}` }, /\bspawn\b/i);
+  if (has(/\bbackground\b/i)) add("background", "subagent", { task: `Reply with the single word ping.${slow}`, background: true }, /\bbackground\b/i);
   const fan = count(/\b(\d+)\s+spawns\b/i) || (has(/\bfan\s+out\b/i) ? 3 : 0);
-  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Reply with the single word pong${i + 1}.${slow}"})`).join(", ")}]);` });
+  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Reply with the single word pong${i + 1}.${slow}"})`).join(", ")}]);` }, /\b(?:fan\s+out|\d+\s+spawns)\b/i);
   const away = count(/\b(\d+)\s+backgrounds\b/i);
-  if (away) add(`${away} backgrounds`, "codemode", { code: `console.log(JSON.stringify(await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Reply with the single word ping${i + 1}.${slow}", background: true})`).join(", ")}])));` });
-  if (has(/\bask\b/i)) add("ask", "ask_user", { questions: [{ question: "Which option do you prefer?", header: "Test", options: [{ label: "First" }, { label: "Second" }] }] });
+  if (away) add(`${away} backgrounds`, "codemode", { code: `console.log(JSON.stringify(await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Reply with the single word ping${i + 1}.${slow}", background: true})`).join(", ")}])));` }, /\b\d+\s+backgrounds\b/i);
+  if (has(/\bask\b/i)) add("ask", "ask_user", { questions: [{ question: "Which option do you prefer?", header: "Test", options: [{ label: "First" }, { label: "Second" }] }] }, /\bask\b/i);
+  calls.sort((a, b) => a.at - b.at);
   const thinking = has(/\bthink\b/i);
   const narrate = has(/\bnarrate\b/i);
   if (thinking) selected.unshift("think");
@@ -121,11 +137,12 @@ export function scriptedStep(context) {
   }
   // Content, as Render test's replays: a recorded reply streamed whole, or realistic text to the length asked.
   const replay = has(/\bkatex(?:\s+|-)limits\b/i) ? KATEX_LIMITS : has(/\bkatex\b/i) ? KATEX_COMPENDIUM : has(/\bmarkdown\b/i) ? MARKDOWN_MIX : null;
+  const news = heard.length ? `While that ran, ${heard.join("; ")}.\n\n` : "";
   if (replay || rich) {
-    blocks.push(fauxText(replay ?? stretch(RICH_MIX, length ? length * 4 : RICH_MIX.length)));
+    blocks.push(fauxText(news + (replay ?? stretch(RICH_MIX, length ? length * 4 : RICH_MIX.length))));
     return fauxAssistantMessage(blocks);
   }
-  let answer = `The scripted turn acted on: ${selected.join(", ") || "no keywords"}. The requested steps are complete.`;
+  let answer = `${news}The scripted turn acted on: ${selected.join(", ") || "no keywords"}. The requested steps are complete.`;
   if (has(/\bhelp\b/i)) answer += `\n\n${help}`;
   const target = length ? Math.min(400_000, length * 4) : 480;
   const filler = " This is a repeatable response from the scripted model. It uses the real runtime and reports each requested step.";

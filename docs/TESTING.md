@@ -299,7 +299,9 @@ answer.
 The `test` profile runs the real runtime -- subagents, codemode scripts, question cards, context steps, reports --
 on a scripted model (`src/server/scripted-model.js`). It needs no credentials and costs nothing, and the same prompt
 produces the same turn. The model picks the pace, as Render test's do: 60 tok/s, 60 tok/s in bursts, 250, 1000 and
-4000 tok/s. Words in the prompt pick the turn and combine (`think narrate 3 tools`); a subagent answers "Reply with
+4000 tok/s. Words in the prompt pick the turn and combine (`think narrate 3 tools`); calls run in the order their words come,
+so `background slow 3 tools bash` keeps the agent working while the reads run. A report that arrives between a turn's
+calls is heard and the turn goes on, its answer opening with it; a subagent answers "Reply with
 the single word X" with X, and a report gets one line back.
 
 | Keyword | Turn |
