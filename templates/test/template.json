@@ -19,7 +19,10 @@
   ],
   "models": [
     "conduit-test/paced",
-    "conduit-test/fast"
+    "conduit-test/bursty",
+    "conduit-test/steady",
+    "conduit-test/fast",
+    "conduit-test/flood"
   ],
   "extensions": [
     "../../conduit-web/node_modules/pi-web-access"

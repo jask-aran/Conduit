@@ -296,22 +296,32 @@ answer.
 
 ## The Test profile
 
-The `test` profile uses the real runtime with a scripted model. It needs no credentials. The same prompt produces the same turn. The existing test-stream profile is being renamed “Render test”.
+The `test` profile runs the real runtime -- subagents, codemode scripts, question cards, context steps, reports --
+on a scripted model (`src/server/scripted-model.js`). It needs no credentials and costs nothing, and the same prompt
+produces the same turn. The model picks the pace, as Render test's do: 60 tok/s, 60 tok/s in bursts, 250, 1000 and
+4000 tok/s. Words in the prompt pick the turn and combine (`think narrate 3 tools`); a subagent answers "Reply with
+the single word X" with X, and a report gets one line back.
 
 | Keyword | Turn |
 | --- | --- |
-| `help` | Show this keyword table |
-| `think` | Add thinking before each step |
-| `narrate` | Add commentary before each tool call |
-| `tool`, `3 tools` | Make one or three read calls |
-| `bash` | Run `echo scripted` |
-| `fail` | Read a missing path |
-| `script` | Call read and bash through codemode |
-| `spawn` | Spawn a foreground subagent |
-| `background` | Spawn a background subagent |
-| `fan out`, `3 spawns` | Spawn three foreground subagents in parallel through codemode |
-| `ask` | Ask a question with two options |
-| `1500t` | Answer in about 1500 tokens |
+| `help` | this table |
+| `think`, `think 900` | thinking before each step, about that many tokens |
+| `narrate` | commentary before each tool call |
+| `tool`, `3 tools` | that many read calls |
+| `bash` | `echo scripted` |
+| `fail` | a read of a missing path |
+| `script` | read and bash from one codemode script |
+| `spawn` | a foreground subagent |
+| `background` | a background subagent |
+| `fan out`, `3 spawns` | that many foreground subagents in parallel from one script (`fan out`: 3) |
+| `3 backgrounds` | that many background subagents from one script |
+| `ask` | a question card with two options |
+| `1500t` | an answer of about that many tokens |
+| `rich` | realistic text: typographic punctuation, Markdown, formulas, code |
+| `markdown`, `katex`, `katex limits` | a recorded reply streamed whole |
+
+Render test stays the profile for paint and pace pressure on its own: forks, tree history, kept partials and the
+probes in `scripts/probes` run on it.
 
 ## Transcript pipeline tests
 

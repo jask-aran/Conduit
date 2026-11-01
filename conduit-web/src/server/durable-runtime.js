@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { scriptedProvider } from "./scripted-model.js";
+import { SCRIPTED_MODELS, scriptedProvider } from "./scripted-model.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -530,7 +530,7 @@ export class DurableRuntime {
     } catch {}
     patterns ??= [...new Set(this.templates.flatMap((template) => template.models || []))];
     if (!patterns.length) return available;
-    patterns = [...patterns, "conduit-test/paced", "conduit-test/fast"];
+    patterns = [...patterns, ...SCRIPTED_MODELS];
     const { scopedModels } = await resolveModelScopeWithDiagnostics(patterns, this.models);
     return scopedModels.map(({ model }) => model);
   }
