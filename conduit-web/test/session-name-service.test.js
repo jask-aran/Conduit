@@ -12,7 +12,7 @@ test("session naming records request identity and terminal outcome without promp
   const service = new SessionNameService({
     file,
     preferences: { get: () => ({ sessionNameModel: "example/cheap", sessionNameThinkingLevel: "low" }) },
-    promptStore: { read: async () => ({ content: "Name the chat" }) },
+    contextStore: { assemble: async () => "Name the chat" },
     modelCatalog: { generateSessionName: async (_cwd, _model, _thinking, _message, prompt) => prompt === "Name the chat" ? "Useful Name" : "" },
     now: () => times.shift(),
   });
@@ -43,7 +43,7 @@ test("a failed log append does not poison later writes", async () => {
     file: root,
     preferences: { get: () => ({}) },
     modelCatalog: {},
-    promptStore: {},
+    contextStore: {},
   });
 
   await assert.rejects(service.recordFallback({ chatId: "first", name: "First" }));

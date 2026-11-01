@@ -328,7 +328,7 @@ export function Subagents(runtime) {
       }
       // A child of the persistent agent's threads is a run like any other: RUN.md is its prompt, not jbot's.
       const runPrompt = action !== "spawn" ? "" : await api.memo("runPrompt", context)
-        ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || "", context);
+        ?? await api.memo("runPrompt", (await runtime.agentRunPrompt?.(api.conversationId)) || await runtime.contextStore.assemble("subagent"), context);
       if (action === "spawn" && !background) {
         const child = await api.commit(async (tx) => {
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];

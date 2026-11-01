@@ -3,11 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export class SessionNameService {
-  constructor({ file, modelCatalog, preferences, promptStore, now = () => Date.now() }) {
+  constructor({ file, modelCatalog, preferences, contextStore, now = () => Date.now() }) {
     this.file = path.resolve(file);
     this.modelCatalog = modelCatalog;
     this.preferences = preferences;
-    this.promptStore = promptStore;
+    this.contextStore = contextStore;
     this.now = now;
     this.writeQueue = Promise.resolve();
   }
@@ -48,7 +48,7 @@ export class SessionNameService {
         preference.sessionNameModel,
         preference.sessionNameThinkingLevel,
         message,
-        (await this.promptStore.read("chat-naming")).content,
+        await this.contextStore.assemble("service:chat-naming"),
       );
       if (!name) throw Object.assign(new Error("The naming model returned an empty title"), { code: "session_name_empty" });
       const outcome = await apply(name);

@@ -88,7 +88,8 @@ import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
 import { VoiceSettingsStore } from "./voice-settings.js";
 import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
-import { PromptStore } from "./prompt-store.js";
+import { ContextStore } from "./context/context-store.js";
+import { registerContextRoutes } from "./server/routes/context.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
@@ -166,17 +167,15 @@ const voiceRecordingStore = lifetime.own("voice archive", new VoiceRecordingStor
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...result }));
 }, { timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS + 1_000 });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
-const promptStore = new PromptStore({
-  root: config.promptOverridesRoot,
-  prompts: [
-    ...config.piTemplates.map((template) => ({ id: template.id, label: template.label, kind: "profile", defaultPath: template.systemPrompt })),
-    // The base the Assistant and jbot share, edited once (durable-runtime agentFor draws it under each one's own).
-    ...[...new Set(config.piTemplates.map((template) => template.basePrompt).filter(Boolean))].slice(0, 1)
-      .map((defaultPath) => ({ id: "base", label: "Shared base", kind: "base", defaultPath })),
-    { id: "chat-naming", label: "Chat naming", kind: "service", defaultPath: config.sessionNamePrompt },
-  ],
+const contextStore = new ContextStore({
+  root: config.promptOverridesRoot, templates: config.piTemplates,
+  agent: () => backends.adapters.get("conduit-runtime")?.runtime.agent,
+  webPath: path.join(config.repositoryRoot, "templates/conduit-runtime/WEB.md"),
+  seedDir: path.join(config.repositoryRoot, "templates/agent/seed"),
+  subagentPath: path.join(config.repositoryRoot, "templates/subagent/BRIEF.md"),
+  chatNamingPath: config.sessionNamePrompt,
 });
-config.promptStore = promptStore;
+config.contextStore = contextStore;
 const knownTemplateIds = config.piTemplates
   .filter((template) => template.defaultable !== false)
   .map((template) => template.id);
@@ -244,7 +243,7 @@ const harnessConfig = {
   nodeHub,
   // The Conduit durable agent's profiles, and their prompts as edited in Settings.
   piTemplates: config.piTemplates,
-  promptStore,
+  contextStore,
 };
 const backends = lifetime.own("agents", ChatBackendRegistry.fromManifests(MANIFESTS, await detect(MANIFESTS, harnessConfig), harnessConfig), async (owned) => {
   const stopped = await owned.shutdown();
@@ -296,7 +295,7 @@ const sessionNames = new SessionNameService({
   file: config.sessionNameLogFile,
   modelCatalog,
   preferences,
-  promptStore,
+  contextStore,
 });
 const sessionNameTasks = new Map();
 const piAuth = new PiAuthBroker({
@@ -553,6 +552,7 @@ async function findChatContext(chatId) {
 
 registerAttachmentRoutes(app, { attachments, findChatContext });
 
+app.use("/v0/context", express.json({ limit: "256kb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 
@@ -608,6 +608,7 @@ for (const adapter of backends.instances()) {
   if (adapter.sessions) adapter.sessions.onTurn = (record) => publishProcessChange(adapter.view(record), record, "turn");
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
+registerContextRoutes(app, { contextStore });
 registerRuntimeRoutes(app, {
   attachments,
   config,
@@ -621,7 +622,6 @@ registerRuntimeRoutes(app, {
   runtimeHub,
   templatePublicView,
   projects,
-  promptStore,
   serverIdentity,
   onServerRenamed: (name) => lanAdvertisement.rename(name),
 });

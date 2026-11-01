@@ -19,7 +19,6 @@ import { createCodemodeExtension } from "@earendil-works/pi-durable/codemode";
 import { CodemodeSandbox } from "@earendil-works/pi-codemode";
 import { ModelRuntime, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
 import { buildManagedToolEnvironment } from "../../../scripts/pi-runtime.mjs";
-import { renderVars } from "../agent/routine-files.js";
 
 // What the web tools are for and how to use them; a template that asks for
 // them also brings the web-research skill.
@@ -144,11 +143,11 @@ const cappedOutput = (models) => new Proxy(models, {
 });
 
 export class DurableRuntime {
-  constructor({ dataRoot, piAgentDir, nodeHub = null, templates = [], promptStore = null }) {
+  constructor({ dataRoot, piAgentDir, nodeHub = null, templates = [], contextStore = null }) {
     this.nodeHub = nodeHub;
     // The profiles (Assistant, Coding, Runtime) this agent runs: Conduit's templates.
     this.templates = templates;
-    this.promptStore = promptStore;
+    this.contextStore = contextStore;
     this.dataRoot = dataRoot;
     this.file = path.join(dataRoot, "runtime", "conduit-runtime.sqlite");
     this.piAgentDir = piAgentDir;
@@ -427,19 +426,15 @@ export class DurableRuntime {
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
-    const raw = this.promptStore ? (await this.promptStore.read(template.id)).content : fs.readFileSync(template.systemPrompt, "utf8");
-    // The persistent agent's prompt names the person and itself ({{person.name}}, USER.md's front matter).
-    const prompt = isAgent && this.agentVars ? renderVars(raw, await this.agentVars().catch(() => ({}))) : raw;
-    // The base it shares (the Assistant's rules for search, files, approvals), under its own prompt: the Settings copy
-    // where one was saved, else the file.
-    const base = !template.basePrompt ? "" : this.promptStore ? await this.promptStore.read("base").then((item) => item.content, () => fs.readFileSync(template.basePrompt, "utf8"))
-      : fs.readFileSync(template.basePrompt, "utf8");
-    const skills = this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`);
+    const vars = isAgent && this.agentVars ? await this.agentVars().catch(() => ({})) : undefined;
+    const instructions = this.contextStore
+      ? await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars })
+      : [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(this.skillsFor(template.id).length ? ["# Skills", ...this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");
     return {
       extensions, tools,
       modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
         : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
-      instructions: [prompt.trim(), ...(base.trim() ? [base.trim()] : []), ...(skills.length ? ["# Skills", ...skills] : [])].join("\n\n"),
+      instructions,
     };
   }
 

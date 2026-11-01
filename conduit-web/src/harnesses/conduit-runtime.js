@@ -25,7 +25,7 @@ export const manifest = {
   probe: () => READY(),
   build: (config) => new DurableAdapter({
     runtime: new DurableRuntime({ dataRoot: config.dataRoot, piAgentDir: config.piAgentDir, nodeHub: config.nodeHub,
-      templates: config.piTemplates || [], promptStore: config.promptStore || null }),
+      templates: config.piTemplates || [], contextStore: config.contextStore || null }),
     logs: config.logs,
   }),
 };

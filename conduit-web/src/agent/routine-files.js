@@ -174,6 +174,12 @@ export async function readFolderFile(folder, ...parts) {
   } finally { await handle?.close(); }
 }
 
+export async function writeFolderFile(folder, name, content) {
+  await readFolderFile(folder, name);
+  const root = await fs.realpath(folder);
+  await writeFile(path.join(root, name), content);
+}
+
 export async function routineText(folder, name) {
   if (typeof name !== "string" || !namePattern.test(name)) throw new Error("Invalid routine name.");
   return readFolderFile(folder, ROUTINES_DIR, `${name}.md`);

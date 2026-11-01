@@ -26,6 +26,18 @@ export const headlineOf = (text, max = 160) => {
   return first.length > max ? `${first.slice(0, max - 1)}…` : first;
 };
 
+export async function renderWaitingInbox(agent) {
+    const state = await agent.state();
+    const items = listInbox(state, { unhandled: true });
+    const now = Date.now();
+    // Whether a report reaches the person's phone is jbot's call (`notify`), weighed against how often they want it.
+    const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
+    if (!items.length) return dial;
+    return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
+      ...items.slice(0, 12).map((item) => line(item, now)),
+      ...(items.length > 12 ? [`… and ${items.length - 12} more (inbox list).`] : [])].join("\n");
+}
+
 /** Append a run's entry in the caller's commit; idempotent by `key`. Prunes what has been handled a week. */
 export function appendEntry(doc, entry, now = Date.now()) {
   doc.inbox ||= {};
@@ -145,16 +157,8 @@ export function InboxTools(runtime) {
   const waiting = section("agent-inbox", async (input) => {
     const agent = runtime.agent;
     if (!agent?.enabled()) return undefined;
-    const state = await agent.state();
-    if (state.home?.conversationId !== input.conversationId) return undefined;
-    const items = listInbox(state, { unhandled: true });
-    const now = Date.now();
-    // Whether a report reaches the person's phone is jbot's call (`notify`), weighed against how often they want it.
-    const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
-    if (!items.length) return dial;
-    return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
-      ...items.slice(0, 12).map((item) => line(item, now)),
-      ...(items.length > 12 ? [`… and ${items.length - 12} more (inbox list).`] : [])].join("\n");
+    if ((await agent.state()).home?.conversationId !== input.conversationId) return undefined;
+    return renderWaitingInbox(agent);
   });
   // In a thread (the home thread above all), after a run's report: jbot decides whether the person hears it now.
   const notify = defineTool({

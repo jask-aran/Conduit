@@ -92,3 +92,42 @@ export function ClientPlaces(props: { label?: string; none?: boolean; empty?: st
 
 /** A card's room for what is not there yet (pairing an environment): a dashed outline, its content inside. */
 export const ClientAdd = (props: { children: JSX.Element }) => <section class="ui-client-card" role="listitem" data-add="">{props.children}</section>;
+
+/**
+ * A chain: one thing at the top and what it is made of hung under it in order, a line between each -- the network
+ * map's boxes and lines, stacked rather than spread. A document's blocks under the role it starts (Settings ›
+ * Prompts). ChainHead is the top box; ChainLink a box in the chain (live: filled in by something else, drawn dashed);
+ * ChainGap the line between two links, carrying a control on it (insert here); ChainBreak a labelled stretch of line
+ * where the chain changes part ("First message").
+ */
+export const ChainMap = (props: { label: string; children: JSX.Element }) => <figure class="ui-chain" aria-label={props.label}>{props.children}</figure>;
+export function ChainHead(props: { kind: string; name: string; meta?: string; icon?: JSX.Element; actions?: JSX.Element }) {
+  return <section class="ui-network-box ui-chain-box" data-head="" aria-label={props.name}>
+    <h4 class="ui-title">{props.kind}</h4>
+    <div class="ui-chain-line">
+      <Show when={props.icon}><span class="ui-network-mark" aria-hidden="true">{props.icon}</span></Show>
+      <span class="ui-chain-name">{props.name}</span>
+      <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
+      <Show when={props.actions}><span class="ui-chain-actions" data-always="">{props.actions}</span></Show>
+    </div>
+  </section>;
+}
+/** index: its place in the chain. meta: what it is (shared, yours, filled in by Conduit). size: how much of it there
+ *  is, at the end. onOpen: the box opens it (to edit). actions: what can be done to it in place (move, swap, remove),
+ *  shown on hover or focus where there is hover, always on touch. */
+export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; modified?: boolean; current?: boolean; onOpen?: () => void; openLabel?: string; actions?: JSX.Element }) {
+  const inner = () => <>
+    <Show when={props.index != null}><span class="ui-chain-index" aria-hidden="true">{props.index}</span></Show>
+    <span class="ui-chain-name">{props.name}<Show when={props.modified}><span class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></span>
+    <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
+    <Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show>
+  </>;
+  return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
+    <Show when={props.onOpen} fallback={<div class="ui-chain-line">{inner()}</div>}>
+      <button type="button" class="ui-chain-line ui-chain-open" aria-label={props.openLabel} onClick={() => props.onOpen?.()}>{inner()}</button>
+    </Show>
+    <Show when={props.actions}><span class="ui-chain-actions">{props.actions}</span></Show>
+  </section>;
+}
+export const ChainGap = (props: { children?: JSX.Element }) => <div class="ui-chain-gap" data-control={props.children ? "" : undefined}>{props.children}</div>;
+export const ChainBreak = (props: { label: string }) => <div class="ui-chain-break"><span class="ui-title">{props.label}</span></div>;

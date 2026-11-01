@@ -47,3 +47,45 @@
 .ui-client-places .ui-nav-row { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
 .ui-client-empty { margin: 0; color: var(--muted-foreground); }
 .ui-client-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: auto; padding-top: var(--space-xs); margin-inline: calc(-1 * var(--space-sm)); }
+
+/* ChainMap: the map's boxes stacked down one line. Every part is the column's width (a measure, never wider than the
+   room); the line runs through the gaps between boxes; a gap's control sits on the line, the ground behind it. */
+.ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
+.ui-chain > * { width: min(100%, var(--measure-lg)); }
+.ui-chain-box { gap: 0; padding-block: var(--space-xs); }
+.ui-chain-box[data-head] { padding-top: var(--space-md); }
+.ui-chain-box[data-head] > .ui-title { margin: 0; padding: 0 var(--space-sm); }
+.ui-chain-line { display: flex; min-width: 0; min-height: var(--row-min); flex: 1; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); text-align: left; }
+button.ui-chain-open { cursor: pointer; }
+button.ui-chain-open:focus-visible { background: var(--tint); outline: none; }
+@media (hover: hover) { button.ui-chain-open:hover { background: var(--tint); } }
+.ui-chain-name { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); white-space: nowrap; }
+.ui-chain-box[data-head] .ui-chain-name { font-weight: var(--weight-strong); }
+.ui-chain-index { flex: none; min-width: var(--icon-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-chain-modified { width: var(--space-xs); height: var(--space-xs); border-radius: 50%; background: var(--status-unread); }
+.ui-chain-size { flex: none; margin-left: auto; padding-left: var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-chain-link { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
+.ui-chain-link[data-live] { border-style: dashed; }
+.ui-chain-link[data-live] .ui-chain-name { color: var(--muted-foreground); }
+.ui-chain-link[data-current] { border-color: var(--muted-foreground); }
+/* A link's actions take the place of what it says about itself while it is pointed at (where there is hover), so
+   the line never squeezes; without hover they are a line of their own under it, at its end. */
+.ui-chain-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-chain-link > .ui-chain-actions { width: 100%; justify-content: flex-end; }
+@media (hover: hover) {
+  .ui-chain-link > .ui-chain-actions { display: none; width: auto; }
+  .ui-chain-link:is(:hover, :focus-within) > .ui-chain-actions { display: inline-flex; }
+  .ui-chain-link:is(:hover, :focus-within) > .ui-chain-line :is(.ui-network-meta, .ui-chain-size) { display: none; }
+}
+/* A gap's control sits just right of the line, so nothing has to be painted behind it; a break's label stands in the
+   line, which stops either side of it. */
+.ui-chain-gap { position: relative; display: flex; min-height: var(--space-lg); align-items: center; padding-left: calc(50% + var(--space-sm)); }
+.ui-chain-gap[data-control] { min-height: calc(var(--control-xs) + var(--space-xs)); }
+.ui-chain-gap::before { position: absolute; top: 0; bottom: 0; left: 50%; border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-chain-break { display: flex; flex-direction: column; align-items: center; }
+.ui-chain-break::before, .ui-chain-break::after { height: var(--space-md); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-chain-break > .ui-title { margin: 0; padding: var(--space-2xs) var(--space-sm); }
+@media (hover: hover) {
+  .ui-chain-gap[data-control] > * { opacity: 0; transition: opacity var(--duration-quick) var(--ease-arrive); }
+  .ui-chain-gap[data-control]:is(:hover, :focus-within) > * { opacity: 1; }
+}

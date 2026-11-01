@@ -116,16 +116,16 @@ exit 0
     assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
     assert.equal(templateCatalog.defaultTemplateId, "assistant");
     assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
-    const promptCatalog = await fetch(`${origin}/v0/prompts`).then((response) => response.json());
-    assert.ok(promptCatalog.prompts.some((item) => item.id === "assistant" && item.modified === false));
-    assert.ok(promptCatalog.prompts.some((item) => item.id === "chat-naming" && item.kind === "service"));
-    const savedPrompt = await fetch(`${origin}/v0/prompts/chat-naming`, {
+    const promptCatalog = await fetch(`${origin}/v0/context`).then((response) => response.json());
+    assert.ok(promptCatalog.blocks.some((item) => item.id === "assistant" && item.modified === false));
+    assert.ok(promptCatalog.blocks.some((item) => item.id === "chat-naming" && item.source === "shipped"));
+    const savedPrompt = await fetch(`${origin}/v0/context/blocks/chat-naming`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: "Name this conversation." }),
     }).then((response) => response.json());
     assert.equal(savedPrompt.modified, true);
-    assert.equal((await fetch(`${origin}/v0/prompts/chat-naming`, { method: "DELETE" }).then((response) => response.json())).modified, false);
+    assert.equal((await fetch(`${origin}/v0/context/blocks/chat-naming/reset`, { method: "POST" }).then((response) => response.json())).modified, false);
 
     const linkedResponse = await fetch(`${origin}/v0/projects`, {
       method: "POST",

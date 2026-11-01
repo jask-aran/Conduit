@@ -6,6 +6,7 @@ import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
+import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
 import { createAgentSettings } from "./agent-settings";
 import { ConnectorsGroup } from "./connectors-settings";
 import { agentView } from "../state/agent";
@@ -57,7 +58,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
 ] as const;
@@ -68,6 +69,7 @@ const sectionLabels: Record<Section, string> = {
   shortcuts: "Shortcuts",
   models: "Models & accounts",
   prompts: "Prompts",
+  blocks: "Blocks",
   runtime: "Runtime",
   devices: "Devices",
   agent: "Agent",
@@ -89,13 +91,6 @@ interface GeneralPreferences {
   sessionNameThinkingLevel: string;
 }
 
-interface EditablePrompt {
-  id: string;
-  label: string;
-  kind: "profile" | "service" | "base";
-  content: string;
-  modified: boolean;
-}
 
 interface PiAuthProvider {
   id: string;
@@ -296,7 +291,7 @@ export function Settings(props: {
   onOpenWorkspace: (project: Project) => void;
   shortcuts: ShortcutManager;
 }) {
-  const { confirm: confirmDialog } = createDecisionScope(() => props.open ? promptId() : null);
+  const { confirm: confirmDialog } = createDecisionScope(() => props.open ? "settings" : null);
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [transcriptScaleChoice, setTranscriptScaleChoice] = createSignal(transcriptScale());
@@ -344,22 +339,12 @@ export function Settings(props: {
     save: async (id) => { await props.onDefaultTemplateChange(id); return id; },
     onSaved: () => {},
   });
-  const [prompts, setPrompts] = createSignal<EditablePrompt[]>([]);
-  const [promptId, setPromptId] = createSignal("");
-  const [promptDraft, setPromptDraft] = createSignal("");
-  const [promptBaseline, setPromptBaseline] = createSignal("");
-  const [promptStatus, setPromptStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
-  const [promptSaving, setPromptSaving] = createSignal(false);
-  const promptAutosave = createAutosave<{ id: string; content: string }>({
-    save: async (value) => (await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(value.id)}`, { method: "PUT", body: JSON.stringify({ content: value.content }) })),
-    onSaved: (saved) => {
-      const prompt = saved as EditablePrompt;
-      setPrompts((items) => items.map((item) => item.id === prompt.id ? prompt : item));
-      if (prompt.id === promptId()) { setPromptDraft(prompt.content); setPromptBaseline(prompt.content); }
-    },
-    delayMs: 800,
-  });
-  const [promptError, setPromptError] = createSignal("");
+  // Prompts and Blocks share one load of the context (context-settings.tsx): a block opened from a document's stack
+  // opens in Blocks, and a document a block is used in opens in Prompts.
+  const context = createContextData();
+  const [contextDocument, setContextDocument] = createSignal("");
+  const [contextBlock, setContextBlock] = createSignal("");
+  createEffect(() => { if (props.open && (section() === "prompts" || section() === "blocks")) void context.load(); });
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
@@ -597,54 +582,6 @@ export function Settings(props: {
     await Promise.all([loadProcesses(), loadRuntime()]);
   };
 
-  const choosePrompt = (id: string, items = prompts()) => {
-    if (id !== promptId()) void promptAutosave.flush();
-    const selected = items.find((item) => item.id === id) || items[0];
-    if (!selected) return;
-    setPromptId(selected.id);
-    setPromptDraft(selected.content);
-    setPromptBaseline(selected.content);
-  };
-  const loadPrompts = async () => {
-    setPromptStatus("loading");
-    setPromptError("");
-    try {
-      await promptAutosave.flush();
-      const result = await api<{ prompts: EditablePrompt[] }>("/v0/prompts");
-      setPrompts(result.prompts);
-      choosePrompt(promptId(), result.prompts);
-      setPromptStatus("ready");
-    } catch (error) {
-      setPromptError((error as Error).message);
-      setPromptStatus("error");
-    }
-  };
-  createEffect(() => { if (props.open && section() === "prompts") void loadPrompts(); });
-  // An empty prompt is held back rather than saved.
-  const editPrompt = (content: string) => {
-    setPromptDraft(content);
-    if (!promptId()) return;
-    if (!content.trim()) return promptAutosave.hold();
-    promptAutosave.edit({ id: promptId(), content });
-  };
-  const resetPrompt = async () => {
-    const current = prompts().find((item) => item.id === promptId());
-    if (!current) return;
-    if (!current.modified && promptDraft() === promptBaseline()) return;
-    if (!(await confirmDialog(`Reset ${current.label} to its shipped default?`))) return;
-    promptAutosave.hold();
-    setPromptSaving(true);
-    setPromptError("");
-    try {
-      await promptAutosave.flush();
-      const reset = await api<EditablePrompt>(`/v0/prompts/${encodeURIComponent(current.id)}`, { method: "DELETE" });
-      setPrompts((items) => items.map((item) => item.id === reset.id ? reset : item));
-      setPromptDraft(reset.content);
-      setPromptBaseline(reset.content);
-      toast.success(`${reset.label} prompt reset`);
-    } catch (error) { setPromptError((error as Error).message); }
-    finally { setPromptSaving(false); }
-  };
 
   const applyAuthProviders = (next: PiAuthProvider[]) => {
     const configured = (providers: PiAuthProvider[]) => providers
@@ -1200,7 +1137,6 @@ export function Settings(props: {
   const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector });
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
     runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
-    prompts: { label: "Prompt", saves: [promptAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
     models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave] },
     search: { label: "Web search", saves: [searchAutosave] },
@@ -1250,23 +1186,8 @@ export function Settings(props: {
     </Show>
     <Show when={!showingIndex()}>
       <OverlayPage title={label(section())} {...status()} onBack={narrow() ? backToSections : undefined} onClose={close}>
-          <Show when={section() === "prompts"}>
-            <Show when={promptStatus() === "ready"} fallback={<Show when={promptStatus() === "error"} fallback={<SettingLoading>Loading prompts…</SettingLoading>}><SettingNote tone="error">{promptError()}</SettingNote></Show>}>
-              <>
-                <SettingGroup title="System prompt">
-                  <SettingLine plain label="Prompt" state={<>{prompts().find((item) => item.id === promptId())?.modified ? "modified" : "default"}</>} title="Changes apply when the next runtime or naming request starts.">
-                      <Select id="prompt-selector" aria-label="Prompt" value={promptId()} onChange={(event) => choosePrompt(event.currentTarget.value)}>
-                        <For each={prompts()}>{(prompt) => <option value={prompt.id} selected={prompt.id === promptId()}>{prompt.label}{prompt.kind === "service" ? " · service" : prompt.kind === "base" ? " · under Assistant and jbot" : ""}</option>}</For>
-                      </Select>
-                      <Button variant="ghost" size="icon-sm" aria-label="Reset to default" title="Reset to default" disabled={promptSaving() || (!prompts().find((item) => item.id === promptId())?.modified && promptDraft() === promptBaseline())} onClick={() => void resetPrompt()}><Icons.Reset /></Button>
-                  </SettingLine>
-                  <Show when={!promptDraft().trim()}><SettingNote tone="error">A prompt cannot be empty; it is not saved until it has text.</SettingNote></Show>
-                  <Show when={promptError() || promptStatus() === "error"}><SettingNote tone="error">{promptError()}</SettingNote></Show>
-                  <SettingWide><TextArea aria-label="System prompt" spellcheck={false} value={promptDraft()} onInput={(event) => editPrompt(event.currentTarget.value)} /></SettingWide>
-                </SettingGroup>
-              </>
-            </Show>
-          </Show>
+          <Show when={section() === "prompts"}><PromptsSettings context={context} documentId={contextDocument()} onDocument={setContextDocument} onEditBlock={(id) => { setContextBlock(id); openSection("blocks"); }} /></Show>
+          <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "ui"}>
             <>
               <SettingGroup title="Interface">

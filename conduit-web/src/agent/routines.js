@@ -50,14 +50,20 @@ const folderText = async (agent, ...parts) => (await readFolderFile(agent.folder
  */
 export async function runInstructions(agent, routine = null, now = Date.now()) {
   const vars = await promptVars(agent, now);
-  const base = await folderText(agent, RUN_FILE);
-  const parts = [renderVars(base, vars).trim()];
-  if (routine?.body?.trim()) parts.push(block("routine", { name: routine.name, title: routine.title }, renderVars(routine.body, vars)));
+  const store = agent.runtime?.contextStore;
+  const parts = store ? [await store.assemble(routine ? `run:${routine.name}` : "run:task", { vars })] : [renderVars(await folderText(agent, RUN_FILE), vars).trim(), ...(routine?.body?.trim() ? [block("routine", { name: routine.name, title: routine.title }, renderVars(routine.body, vars))] : [])];
+  const context = await routineContext(agent, routine, now);
+  if (context) parts.push(context);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+export async function routineContext(agent, routine, now = Date.now()) {
+  const parts = [];
   for (const name of routine?.context || []) {
     if (name === "diary") parts.push(block("diary", { day: agent.today(now) }, await folderText(agent, "diary", `${agent.today(now)}.md`)));
     else if (CONTEXT_FILES[name]) parts.push(block(name, {}, splitFrontMatter(await folderText(agent, CONTEXT_FILES[name])).body));
   }
-  return parts.filter(Boolean).join("\n\n");
+  return parts.join("\n\n");
 }
 
 /** Conduit's own chats that finished since a time, outside the agent's workspace. */

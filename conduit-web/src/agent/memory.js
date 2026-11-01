@@ -176,7 +176,7 @@ async function search(agent, query) {
 }
 
 /** jbot's files as tagged blocks (routines.js `block`), each turn; USER.md without its front matter (the fields). */
-async function render(agent) {
+export async function render(agent) {
   const today = agent.today();
   const [soul, user, memory, diary] = await Promise.all(["soul", "user", "memory", "diary"].map(async (file) => read(await filePath(agent, file, today))));
   const diaryLines = linesOf(diary);

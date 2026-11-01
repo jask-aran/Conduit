@@ -321,3 +321,12 @@ What each kind of piece does; how it looks is its gallery family.
 - `docs/design/palette-sketch/palette-sketch.html` -- chat search, the command palette and their states (serve the repository root).
 - `docs/design/orb-catalogue/contact-sheet.html` -- every thinking-orb frame and which state uses it.
 - `docs/design/dashboard-layout/`, `docs/design/conduit-home-dashboard/` -- the dashboard sketches.
+
+## Context: blocks, documents, roles
+
+What every thread Conduit starts is given, in three words (Settings › Prompts and Blocks; `conduit-web/src/context/context-store.js`).
+
+- **Block**: one named piece of context. *Text* blocks are editable: a profile's own lines, the shared base, a skill, chat naming, jbot's run rules and each routine's instructions (files in jbot's folder, which jbot can change too), blocks the person makes. *Live* blocks are filled in by Conduit when the model runs and read-only: the working folder, web tools, the codemode tool list, jbot's files, its waiting inbox, a routine's context, a run's first message, a subagent's task.
+- **Document**: the whole context a role starts a thread with: its text blocks in order (reorder, swap, add, remove), then the live blocks Conduit adds, then -- for a run or a subagent -- the first message. A block sits in any number of documents; edited once, it changes in all of them. The runtime assembles every prompt from its document, so the page is the source of truth.
+- **Role**: what a document starts a thread as: each profile, jbot, each routine's run, the default subagent, chat naming.
+- **Prompts** shows one document as a `ChainMap` (the network map's boxes, stacked down one line): the role at the top, then its blocks numbered in reading order, each opening in Blocks; a link's actions (move, swap, remove) take the place of what it says about itself on hover, a gap's "Add a block" sits just right of the line; live links are dashed under "Conduit adds" and "First message". Text shows the document assembled as the model gets it now. **Blocks** edits one block and lists the documents it is in, each opening in Prompts. A block's size is said in tokens (four characters each).
