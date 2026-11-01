@@ -313,6 +313,25 @@ export function openingPrompt(messages: Message[]): Message | null {
   return null;
 }
 
+/**
+ * The model's reading order for context the runtime moves: pi-durable writes a prompt as the request is made, after the
+ * prompt that started it, and sends it first (leadWithSystem). A thread's opening prompt goes to the top (openingPrompt);
+ * a prompt sent again after a compaction is read before the compaction's summary, so it is drawn just before it, in
+ * the summary's turn. `answers` says which turn each moved one is drawn in.
+ */
+function readingOrder(messages: Message[]): { ordered: Message[]; answers: Map<Message, string | null> } {
+  const answers = new Map<Message, string | null>();
+  if (!messages.some((message) => message.context?.resent)) return { ordered: messages, answers };
+  const ordered: Message[] = [];
+  for (const message of messages) {
+    const summary = message.context?.resent ? ordered.findLast((item) => item.context?.kind === "compaction") : undefined;
+    if (!summary) { ordered.push(message); continue; }
+    ordered.splice(ordered.indexOf(summary), 0, message);
+    answers.set(message, summary.answers ?? null);
+  }
+  return { ordered, answers };
+}
+
 /** Context precedes the next assistant message in transcript order; context after the last stays at the end. */
 function liveContexts(messages: Message[], generation: ActiveGenerationView, owner: Message | null): Map<string | null, Message[]> {
   const slots = new Map<string | null, Message[]>();
@@ -328,7 +347,7 @@ function liveContexts(messages: Message[], generation: ActiveGenerationView, own
   let pending: Message[] = [];
   const opening = openingPrompt(messages);
   for (const message of messages.slice(start)) {
-    if (message.role === "system" && message.context && message !== opening && message.answers === (owner?.id ?? null)) pending.push(message);
+    if (message.role === "system" && message.context && message !== opening && !message.context.resent && message.answers === (owner?.id ?? null)) pending.push(message);
     if (assistants.delete(message.id) && pending.length) { slots.set(message.id, pending); pending = []; }
   }
   // Paint can arrive before its message.open; those blocks follow the context already received.
@@ -766,7 +785,8 @@ export function projectPersistedTurns(
     if (message.id) byPrompt.set(message.id, current);
   }
   const opening = openingPrompt(messages);
-  for (const message of messages) {
+  const reading = readingOrder(messages);
+  for (const message of reading.ordered) {
     if (message === opening) { turns[0]!.assistants.push(message); continue; }
     if (message.role !== "assistant" && !(message.role === "system" && message.context)) continue;
     // An answer still arriving is drawn by the live overlay, not from here. Its
@@ -776,7 +796,7 @@ export function projectPersistedTurns(
     // An answer belongs to the prompt it says it answers. Reading that off the
     // transcript instead -- whichever prompt the row happens to sit under --
     // is the guess that put one turn's work beneath another turn's prompt.
-    const answers = message.role === "system" ? message.answers : statedAnswers(message);
+    const answers = reading.answers.has(message) ? reading.answers.get(message) : message.role === "system" ? message.answers : statedAnswers(message);
     const stated = answers ? byPrompt.get(answers) : null;
     (stated || turnAt.get(message) || current).assistants.push(message);
   }
