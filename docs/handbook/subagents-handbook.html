@@ -358,7 +358,7 @@
     <div class="num">2.1.4</div>
     <div>
       <h2>RESTART AND REPLAY.</h2>
-      <p>Every step is a commit, so a restarted hub continues rather than starts again. The foreground call is replay-safe: rerun after a crash, it finds its child through the ownership index and its submission through the request id <span class="nowrap">subagent:&lt;task id&gt;</span>, and waits again. The anchor's sleep is durable. A reporter memoizes the child's answer before posting it, and the report's request id makes a second post a no-op. A spawn inside a codemode script is a nested call keyed by its position; the script's journal replays it to the same child.</p>
+      <p>Every step is a commit, so a restarted hub continues. The replay-safe foreground call finds its child through the ownership index and its submission through <span class="nowrap">subagent:&lt;task id&gt;</span>. The anchor's sleep is durable; a reporter memoizes the answer before posting, and the report's request id makes a second post a no-op. A script's spawn is a nested call that the script's journal replays to the same child.</p>
     </div>
   </section>
 
@@ -366,7 +366,7 @@
     <div class="num">2.1.5</div>
     <div>
       <h2>WHAT CONDUIT ADDS.</h2>
-      <p>Pi-durable supplies ownership, tasks, submissions and the two example patterns. Conduit adds the roster document (ids, status, deliveries, and since this revision the script call that spawned a child), the child's own system prompt (the subagent document, or a run's RUN.md for jbot), an observer that turns the child's events into an activity line, and the report notice. Jbot's routines use the same anchor and reporter without a tool call, through a gated spawn whose report is weighed, counted against the day's budget and sent to the inbox or the home thread.</p>
+      <p>Pi-durable supplies ownership, tasks, submissions and both patterns. Conduit adds the roster (ids, status, deliveries, the spawning script call), the child's prompt (the subagent document, or RUN.md for jbot), an observer for the activity line, and the report notice. Jbot's routines use the same anchor and reporter through a gated spawn that weighs the report and counts its spend.</p>
     </div>
   </section>
 
@@ -374,7 +374,7 @@
     <div class="num">2.1.6</div>
     <div>
       <h2>PROPOSED PRESENTATION.</h2>
-      <p>A subagent is not a tool call. The calls are its two ends: the spawn, where it branches off, and the answer, where it joins back. The transcript draws each end where it lands. A foreground child begins and ends inside one turn, so one agent row covers it. A background child branches in one turn and joins in a later one, so it is drawn as a spawn line, a rider while it works, and a report row that links back to the spawn (figure 2.1-3, table 2.1-2).</p>
+      <p>A subagent is not a tool call; the calls are its two ends, the spawn where it branches and the answer where it joins. A foreground child starts and ends in one turn, so one agent row covers it. A background child is a spawn line, a rider while it works, and a report row linked back to the spawn (figure 2.1-3, table 2.1-2).</p>
     </div>
   </section>
 
@@ -433,21 +433,21 @@
       <h2>OPEN DECISIONS.</h2>
     </div>
   </section>
-  <section class="para">
+    <section class="para">
     <div class="num">2.1.7.1</div>
-    <div><h3>Default Shape.</h3><p class="flush">A foreground child holds the parent's run and dies with Esc; a background child survives Esc but each report costs a full parent run. Which the model reaches for, and for how long a task, is a prompt and tool-description choice.</p></div>
+    <div><h3>Default Shape.</h3><p class="flush">A foreground child holds the parent's run; a background child frees it but each report costs a parent run. <b>Recommended:</b> Keep foreground as the default: the answer returns inside the turn at no extra run. Background only when the work outlives the turn or the parent has more to do meanwhile; jbot defaults to background. Fan-out is one script's parallel foreground spawns.</p></div>
   </section>
   <section class="para">
     <div class="num">2.1.7.2</div>
-    <div><h3>Report Delivery.</h3><p class="flush">A report is a follow-up input today, so each one starts a parent run. Pi-durable also accepts a write: an entry with model content is placed at the next boundary and read on the parent's next request without starting a run, so reports could wait, or be batched.</p></div>
+    <div><h3>Report Delivery.</h3><p class="flush">A report is a follow-up input, so each one starts a parent run. <b>Recommended:</b> Deliver by the parent's state: busy, as a write with model content that joins the running work at the next boundary (no extra run); idle, as a follow-up, coalescing reports that land seconds apart.</p></div>
   </section>
   <section class="para">
     <div class="num">2.1.7.3</div>
-    <div><h3>Depth and Inheritance.</h3><p class="flush">Children cannot delegate. Allowing it deepens the tree; stop and spend follow ownership, but the transcript must draw grandchildren. Every child gets the subagent document as its prompt; its own model and effort are set only for jbot's runs.</p></div>
+    <div><h3>Depth and Inheritance.</h3><p class="flush">Children cannot delegate; only jbot's runs choose their own model and effort. <b>Recommended:</b> Keep depth 1. Give every profile a child model and effort setting, not a tool argument: a cheaper child is the main cost lever, and the person should pick it.</p></div>
   </section>
   <section class="para">
     <div class="num">2.1.7.4</div>
-    <div><h3>Source of Truth.</h3><p class="flush">The UI reads Conduit's roster. Pi-durable's task graph (owner edges, background flags) and its nested tool events (parentToolCallId) carry the same facts, and other harnesses' subagents could map onto the same two shapes.</p></div>
+    <div><h3>Source of Truth.</h3><p class="flush">The UI reads Conduit's roster, which repeats facts pi-durable already holds. <b>Recommended:</b> Read pi-durable where it has the fact: nested tool events (parentToolCallId) for script spawns, replacing the roster's nested list; the task graph for a runtime panel. Keep the roster for Conduit's own facts (sa-N, deliveries); other harnesses (#59) map onto the same shapes.</p></div>
   </section>
 
   <div class="lower">
