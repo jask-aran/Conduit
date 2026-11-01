@@ -35,6 +35,7 @@ const help = `| Keyword | Turn |
 | fan out, 3 spawns | That many foreground subagents in parallel, from one codemode script (fan out: 3) |
 | 3 backgrounds | That many background subagents, from one codemode script |
 | ask | Ask a question with two options |
+| slow | Each subagent takes three 2-second steps before it answers |
 | 1500t | An answer of about that many tokens |
 | rich | Realistic text: typographic punctuation, Markdown, formulas, code (thinking too) |
 | markdown, katex, katex limits | A recorded reply streamed whole: lists, table and code; hundreds of formulas; long aligned blocks |`;
@@ -51,7 +52,11 @@ export function scriptedStep(context) {
   const system = [context.systemPrompt || "", getCurrentSystemPrompt(messages)].join("\n");
   const child = /you are a subagent working for another agent/i.test(system);
   if (child) {
-    const single = prompt.match(/^reply with the single word\s+([^\s]+?)[.!]?$/i);
+    // "First take N slow steps": that many 2-second shell calls before answering, so its row is seen working.
+    const steps = Number(prompt.match(/first take (\d+) slow steps/i)?.[1] || 0);
+    const taken = messages.slice(at + 1).filter((message) => message.role === "assistant").flatMap((message) => message.content || []).filter((part) => part.type === "toolCall").length;
+    if (taken < steps) return fauxAssistantMessage([fauxToolCall("bash", { command: `sleep 2 && echo step ${taken + 1}` }, { id: `scripted-${randomUUID()}` })], { stopReason: "toolUse" });
+    const single = prompt.match(/^reply with the single word\s+([^\s.!]+)/i);
     return fauxAssistantMessage(single ? single[1] : `Done: ${prompt.split(/\r?\n/)[0]}`);
   }
   // The report-subagent template contains only the answer. Recognize our child's fixed reply from its prior call.
@@ -79,12 +84,15 @@ export function scriptedStep(context) {
   if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" });
   if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" });
   if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` });
-  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: "Reply with the single word pong." });
-  if (has(/\bbackground\b/i)) add("background", "subagent", { task: "Reply with the single word ping.", background: true });
+  // "slow": each subagent takes three 2-second steps first.
+  const slow = has(/\bslow\b/i) ? " First take 3 slow steps." : "";
+  if (slow) selected.push("slow");
+  if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Reply with the single word pong.${slow}` });
+  if (has(/\bbackground\b/i)) add("background", "subagent", { task: `Reply with the single word ping.${slow}`, background: true });
   const fan = count(/\b(\d+)\s+spawns\b/i) || (has(/\bfan\s+out\b/i) ? 3 : 0);
-  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Reply with the single word pong${i + 1}."})`).join(", ")}]);` });
+  if (fan) add(has(/\bspawns\b/i) ? `${fan} spawns` : "fan out", "codemode", { code: `await Promise.all([${Array.from({ length: fan }, (_, i) => `tools.subagent({task: "Reply with the single word pong${i + 1}.${slow}"})`).join(", ")}]);` });
   const away = count(/\b(\d+)\s+backgrounds\b/i);
-  if (away) add(`${away} backgrounds`, "codemode", { code: `await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Reply with the single word ping${i + 1}.", background: true})`).join(", ")}]);` });
+  if (away) add(`${away} backgrounds`, "codemode", { code: `await Promise.all([${Array.from({ length: away }, (_, i) => `tools.subagent({task: "Reply with the single word ping${i + 1}.${slow}", background: true})`).join(", ")}]);` });
   if (has(/\bask\b/i)) add("ask", "ask_user", { questions: [{ question: "Which option do you prefer?", header: "Test", options: [{ label: "First" }, { label: "Second" }] }] });
   const thinking = has(/\bthink\b/i);
   const narrate = has(/\bnarrate\b/i);

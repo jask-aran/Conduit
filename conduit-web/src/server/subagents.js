@@ -1,6 +1,6 @@
 import { notice, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
-import { configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
@@ -299,10 +299,17 @@ export function Subagents(runtime) {
     } },
     abort: aborted,
   });
+  // The child starts as a copy of its parent's agent (pi-durable copies the owner's `pi.agent`); it loses only
+  // delegation and the question card. Edited in place on the copy: `configure`'s `{ remove }` would replace the copied
+  // lists with "the host's default selection less these" -- every extension and tool the hub has, jbot's included.
   const stripTools = async (tx, child) => {
-    const askUser = runtime.extensions.get("conduit")?.tools?.find((tool) => tool.name === "ask_user");
-    await configure(tx, child, { extensions: { remove: [extension] },
-      tools: { remove: [subagent, ...(askUser ? [askUser] : [])] } });
+    const gone = new Set(["subagent", "ask_user"]);
+    const agent = await tx.doc(PiAgentDoc, child);
+    if (Array.isArray(agent.extensions)) agent.extensions = agent.extensions.filter((name) => name !== extension.name);
+    else agent.extensions = { ...agent.extensions, remove: [...new Set([...(agent.extensions?.remove || []), extension.name])] };
+    if (Array.isArray(agent.tools)) agent.tools = agent.tools.filter((name) => !gone.has(name));
+    else agent.tools = { remove: [...new Set([...(agent.tools?.remove || []), ...gone])] };
+    if (Array.isArray(agent.modelTools)) agent.modelTools = agent.modelTools.filter((name) => !gone.has(name));
   };
   const subagent = defineTool({
     name: "subagent",

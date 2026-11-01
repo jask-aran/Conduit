@@ -316,6 +316,7 @@ the single word X" with X, and a report gets one line back.
 | `fan out`, `3 spawns` | that many foreground subagents in parallel from one script (`fan out`: 3) |
 | `3 backgrounds` | that many background subagents from one script |
 | `ask` | a question card with two options |
+| `slow` | each subagent takes three 2-second steps before it answers, so its row is seen working |
 | `1500t` | an answer of about that many tokens |
 | `rich` | realistic text: typographic punctuation, Markdown, formulas, code |
 | `markdown`, `katex`, `katex limits` | a recorded reply streamed whole |
