@@ -301,6 +301,19 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     if (fromPerson(timeline[index])) return "turn";
     return fromPerson(timeline[index - 1]) ? "exchange" : "step";
   };
+  // The latest exchange -- the person's last message and the last answer -- keeps its message foot shown; older ones
+  // show theirs on hover (transcript.css).
+  const latestExchange = createMemo(() => {
+    const ids = new Set<string>();
+    for (let index = timeline.length - 1; index >= 0 && ids.size < 2; index -= 1) {
+      const row = timeline[index]!;
+      if (row.type !== "message") continue;
+      const role = row.value.role === "user" ? "user" : "answer";
+      if (![...ids].some((id) => id.startsWith(role))) ids.add(`${role}:${row.value.id}`);
+      if (role === "user") break;
+    }
+    return new Set([...ids].map((id) => id.slice(id.indexOf(":") + 1)));
+  });
   // The orb follows generation: only the latest turn shows it, on the row where it is working or its last answer.
   const latestOrb = createMemo(() => {
     for (let index = timeline.length - 1; index >= 0; index -= 1) {
@@ -1255,7 +1268,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound shut icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
@@ -1275,7 +1288,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setCopied(true);
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
-          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
+          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} flow={flow()}>
             <Show when={user()} fallback={<Turn orb={narrated() && item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>

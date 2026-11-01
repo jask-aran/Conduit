@@ -327,12 +327,27 @@ export function contextEntry(entry, before = null) {
     } } : {}) };
 }
 
-const contextOp = (entry, answers, before = null) => {
+/**
+ * How a context entry stands to the ones before it: `opening` for the first prompt a conversation was given, `resent`
+ * for a prompt sent again because a compaction replaced what came before (not a change).
+ */
+function contextPlace(entries, entry) {
+  let prompted = false, compacted = false;
+  for (const item of entries) {
+    if (item.id >= entry.id) continue;
+    if (item.kind === "pi.compaction") compacted = true;
+    else if (item.kind === "pi.system" && contextEntry(item)?.kind === "prompt") { prompted = true; compacted = false; }
+  }
+  return { opening: !prompted, resent: prompted && compacted };
+}
+
+const contextOp = (entry, answers, before = null, place = null) => {
   const context = contextEntry(entry, before);
   if (!context) return null;
   const timestamp = entry.model?.[0]?.timestamp;
   return messageOpen({ id: `c${entry.conversationId}-${entry.id}`, role: "system", answers,
-    context: { kind: context.kind, entryId: entry.id, sections: context.sections.map(({ name, text }) => ({ name, chars: text.length })),
+    context: { kind: context.kind, entryId: entry.id, ...(context.kind === "prompt" && place?.opening ? { opening: true } : {}),
+      ...(context.kind === "prompt" && place?.resent ? { resent: true } : {}), sections: context.sections.map(({ name, text }) => ({ name, chars: text.length })),
       ...(context.tools ? { tools: context.tools } : {}),
       ...(context.summary !== undefined ? { summary: { chars: context.summary.length } } : {}) },
     ...(timestamp ? { timestamp: new Date(timestamp).toISOString() } : {}) });
@@ -393,7 +408,7 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.system" || entry.kind === "pi.compaction") {
-      ops.push(contextOp(entry, prompt, offered));
+      ops.push(contextOp(entry, prompt, offered, contextPlace(entries, entry)));
       if (entry.kind === "pi.system") offerTools(offered, entry);
     } else if (entry.kind === "conduit.agent-beat") {
       // Its own settled line: not a prompt, so a turn around it goes on as it was.
@@ -892,7 +907,7 @@ export class DurableAdapter extends EventEmitter {
       // Read the entry order on first use too, including a session attached after its last prompt.
       const entries = await this.entries(record.conversation);
       const prompt = entries.findLast((item) => item.id < entry.id && (item.kind === USER_ENTRY || item.kind === "conduit.subagent-report"));
-      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null, toolsBefore(entries, entry.id)));
+      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null, toolsBefore(entries, entry.id), contextPlace(entries, entry)));
       return;
     }
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }

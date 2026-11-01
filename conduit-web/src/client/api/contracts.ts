@@ -305,6 +305,9 @@ export interface Message {
   context?: {
     kind: "prompt" | "update" | "compaction";
     entryId: number;
+    /** The first prompt the conversation was given; `resent`: sent again because a compaction replaced what came before. */
+    opening?: boolean;
+    resent?: boolean;
     sections: { name: string; chars: number }[];
     tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number };
     summary?: { chars: number };
