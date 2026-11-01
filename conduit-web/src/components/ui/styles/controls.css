@@ -69,6 +69,18 @@
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
 .ui-input[data-bare]:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { .ui-input[data-bare]:is(:hover, :focus-visible) { color: var(--foreground); } }
+/* A select as a page's title: the heading's size and weight, its chevron quiet until pointed at. */
+.ui-input[data-look="title"] { width: auto; max-width: 100%; height: auto; gap: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); }
+.ui-input[data-look="title"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-input[data-look="title"] > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
+.ui-input[data-look="title"]:focus-visible > svg { color: var(--foreground); }
+@media (hover: hover) { .ui-input[data-look="title"]:is(:hover, :focus-visible) > svg { color: var(--foreground); } }
+/* A select as a toolbar's icon button: a ghost icon button's size and wash. */
+.ui-input[data-look="icon"] { width: var(--control-xs); min-width: var(--control-xs); height: var(--control-xs); flex: none; justify-content: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); }
+.ui-input[data-look="icon"] > svg { width: var(--icon); height: var(--icon); }
+.ui-input[data-look="icon"]:is(:focus-visible, [aria-expanded="true"]) { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-input[data-look="icon"]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); } }
+.ui-input[data-look="icon"]:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 
 /* Segmented choice: a hairline track and a sliding thumb (the app's
    settings and dashboard filters): the surface's tint for both. The

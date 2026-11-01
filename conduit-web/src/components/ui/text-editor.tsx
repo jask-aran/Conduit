@@ -4,16 +4,18 @@ import { openSearchPanel } from "@codemirror/search";
 import { Compartment, EditorState } from "@codemirror/state";
 import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, MatchDecorator, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { Redo2Icon, Undo2Icon, WrapTextIcon } from "lucide-solid";
-import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { codeReadOnlySetup } from "./code-setup";
-import { FileButton } from "./file";
+import { FileButton, StatusBar, StatusText } from "./file";
 import * as Icons from "./icons";
 
 /*
  * Text edited in a pane of its own (a prompt block, a note): the workspace editor's setup (code-setup.ts: its theme,
  * highlighting, line numbers, find and replace) in a box that scrolls inside itself, so a settings page never scrolls
  * for its text. The tags a prompt is wrapped in and the {{slots}} filled in are marked as PromptText marks them.
- * Its bar: find, undo, redo, wrap; Mod-S saves when onSave is given.
+ * Its bar: what it is and what can be done to it (head: a block's name and actions), then find, undo, redo, wrap. Its
+ * foot, as a file's: what is known of it (status: where it comes from, how big) and where the caret is. Mod-S saves
+ * when onSave is given.
  */
 const slotMarks = new MatchDecorator({
   regexp: /\{\{[^{}\n]*\}\}|<\/?(?:[a-z][\w-]*|\{\{[^{}\n]*\}\})(?:\s[^<>\n]*)?>/gi,
@@ -25,13 +27,15 @@ const promptMarks = ViewPlugin.fromClass(class {
   update(update: ViewUpdate) { this.decorations = slotMarks.updateDeco(update, this.decorations); }
 }, { decorations: (plugin) => plugin.decorations });
 
-export function TextEditor(props: { value: string; label: string; onChange?: (value: string) => void; onSave?: () => void; readOnly?: boolean; markdown?: boolean; wrap?: boolean; fill?: boolean }) {
+export function TextEditor(props: { value: string; label: string; onChange?: (value: string) => void; onSave?: () => void; readOnly?: boolean; markdown?: boolean; wrap?: boolean; fill?: boolean; head?: JSX.Element; status?: JSX.Element }) {
   let host!: HTMLDivElement;
   let view: EditorView | undefined;
   const editable = new Compartment();
   const wrapping = new Compartment();
   const [wrap, setWrap] = createSignal(props.wrap ?? true);
   const [depth, setDepth] = createSignal({ undo: 0, redo: 0 });
+  const [caret, setCaret] = createSignal({ line: 1, column: 1, lines: 1 });
+  const place = (state: EditorState) => { const head = state.selection.main.head; const line = state.doc.lineAt(head); setCaret({ line: line.number, column: head - line.from + 1, lines: state.doc.lines }); };
   onMount(() => {
     view = new EditorView({ parent: host, state: EditorState.create({ doc: props.value, extensions: [
       codeReadOnlySetup(),
@@ -45,6 +49,7 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
       EditorView.contentAttributes.of({ "aria-label": props.label, spellcheck: "true" }),
       keymap.of([...historyKeymap, indentWithTab, { key: "Mod-s", preventDefault: true, run: () => { if (!props.onSave) return false; props.onSave(); return true; } }]),
       EditorView.updateListener.of((update) => {
+        if (update.docChanged || update.selectionSet) place(update.state);
         if (!update.docChanged) return;
         setDepth({ undo: undoDepth(update.state), redo: redoDepth(update.state) });
         // A change the host made (a reset, a load) is not an edit to report back.
@@ -52,6 +57,7 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
           props.onChange?.(update.state.doc.toString());
       }),
     ] }) });
+    place(view.state);
   });
   onCleanup(() => view?.destroy());
   // The host's value wins when it is not what the editor holds: a block loaded, reset or saved elsewhere.
@@ -64,13 +70,20 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
   const run = (command: (target: EditorView) => boolean) => { if (view) { command(view); view.focus(); } };
   return <div class="ui-text-editor" data-fill={props.fill ? "" : undefined} data-readonly={props.readOnly ? "" : undefined}>
     <div class="ui-text-editor-bar">
+      <Show when={props.head}><div class="ui-text-editor-head">{props.head}</div></Show>
+      <span class="ui-text-editor-tools">
       <FileButton label="Find and replace (Ctrl+F)" onClick={() => run(openSearchPanel)}><Icons.Search /></FileButton>
       <Show when={!props.readOnly}>
         <FileButton label="Undo (Ctrl+Z)" disabled={!depth().undo} onClick={() => run(undo)}><Undo2Icon /></FileButton>
         <FileButton label="Redo (Ctrl+Shift+Z)" disabled={!depth().redo} onClick={() => run(redo)}><Redo2Icon /></FileButton>
       </Show>
       <FileButton label={wrap() ? "Don't wrap lines" : "Wrap lines"} aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></FileButton>
+      </span>
     </div>
     <div ref={host} class="ui-text-editor-host" />
+    <StatusBar label={`${props.label} status`} commands={props.status}>
+      <StatusText>{`Ln ${caret().line}, Col ${caret().column}`}</StatusText>
+      <StatusText>{`${caret().lines} lines`}</StatusText>
+    </StatusBar>
   </div>;
 }

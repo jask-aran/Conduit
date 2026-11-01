@@ -58,9 +58,14 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
-export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "value"> & { value: string; bare?: boolean }) {
-  const [local, rest] = splitProps(props, ["value", "bare", "class"]);
-  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare ? "" : undefined}><span>{local.value}</span><Icons.ChevronDown /></button>;
+/** A select's trigger. look: field (the value in a field, or bare: the value quiet), title (the value as a page's title,
+ *  what the page is showing, its chevron saying it can be changed), icon (an icon button for a toolbar, the value or
+ *  title said on hover and to a screen reader). */
+export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "value"> & { value: string; bare?: boolean; look?: "field" | "title" | "icon"; icon?: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["value", "bare", "class", "look", "icon"]);
+  return <button type="button" {...rest} class={cn("ui-input", local.class)} data-bare={local.bare && !local.look ? "" : undefined} data-look={local.look}>
+    <Show when={local.look === "icon"} fallback={<><span>{local.value}</span><Icons.ChevronDown /></>}>{local.icon}</Show>
+  </button>;
 }
 
 /** A few choices side by side, one current. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);

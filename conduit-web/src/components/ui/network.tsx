@@ -131,8 +131,9 @@ export function ChainLink(props: { name: string; index?: number; meta?: string; 
 export const ChainGap = () => <div class="ui-chain-gap" aria-hidden="true" />;
 export const ChainBreak = (props: { label: string }) => <div class="ui-chain-break"><span class="ui-title">{props.label}</span></div>;
 
-/** The chain beside what is chosen in it: two columns where both fit at their measures, else the detail under it. */
-export const ChainLayout = (props: { map: JSX.Element; detail: JSX.Element }) => <div class="ui-chain-layout">
+/** The chain beside what is chosen in it: two columns where both fit at their measures, else the detail under it.
+ *  fill: it takes the height its page leaves, the chain scrolling in its column and the detail filling the other. */
+export const ChainLayout = (props: { map: JSX.Element; detail: JSX.Element; fill?: boolean }) => <div class="ui-chain-layout" data-fill={props.fill ? "" : undefined}>
   <div class="ui-chain-layout-map">{props.map}</div>
   <section class="ui-chain-detail">{props.detail}</section>
 </div>;

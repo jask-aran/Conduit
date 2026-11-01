@@ -1,5 +1,5 @@
 import { createSignal, Show } from "solid-js";
-import { Field, Item, Menu, Section, SettingLine } from "@/components/ui";
+import { Field, Icons, Item, Menu, Section, SettingLine } from "@/components/ui";
 import { SelectTrigger } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { row, token, type Page } from "../model";
@@ -42,6 +42,8 @@ export const selectPage: Page = {
     { selector: ".ui-input > svg", name: "Chevron", does: "shows that choices can open", from: "SelectTrigger" },
   ] },
   examples: [
+    row("title", "look=\"title\": the select is the page's title -- what it shows, chosen by pressing it (Settings › Prompts' document); the same popover opens", () => <Select look="title" search="Search documents" aria-label="Document" value="agent"><option value="agent">jbot</option><option value="assistant">Assistant</option><option value="heartbeat">Heartbeat</option></Select>, { code: '<Select look="title" search="…">' }),
+    row("icon", "look=\"icon\": a toolbar's icon button opening the choices (swap a block, add one after)", () => <Select look="icon" icon={<Icons.Swap />} search="Search blocks" aria-label="Swap for another block" title="Swap for another block" value=""><option value="">Swap for another block</option><option value="base">Shared base</option><option value="naming">Chat naming</option></Select>, { code: '<Select look="icon" icon={<Icons.Swap />} />' }),
     row("Select", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
     row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />, { source: "components/menus.tsx Select" }),
     row("choose provider", "Open choices and change the value", () => <ProviderSelect />, { code: "Field > SelectTrigger + Menu" }),

@@ -102,3 +102,16 @@ button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--mut
 /* A document read whole, in a pane that scrolls inside itself (the page around it does not), as TextEditor does. */
 .ui-prompt-pane { height: var(--text-editor-height, min(calc(48 * var(--u-space)), 70dvh)); overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md) var(--space-lg); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-prompt-pane:focus-visible { border-color: var(--ring); outline: none; }
+
+/* A page that is one chain beside its detail (Settings › Prompts): its title -- what it shows, chosen by pressing it --
+   then the layout taking the rest of the height, so the detail's pane reaches the foot and the page never scrolls. */
+.ui-chain-page { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-lg); }
+.ui-chain-title { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-chain-title-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
+.ui-chain-title > .ui-network-meta { margin: 0; white-space: normal; }
+/* Filling, it stays one line (a wrapping line is as tall as its tallest content, which would push the pane's foot
+   off the page): the chain scrolls in its column, the detail's pane scrolls inside itself. */
+.ui-chain-layout[data-fill] { min-height: 0; flex: 1; flex-wrap: nowrap; align-items: stretch; }
+.ui-chain-layout[data-fill] > .ui-chain-layout-map { min-width: var(--measure-sm); overflow: auto; scrollbar-width: none; }
+.ui-chain-layout[data-fill] > .ui-chain-detail { position: static; min-height: calc(24 * var(--u-space)); }
+.ui-chain-layout-map > .ui-chain { padding-bottom: 0; }

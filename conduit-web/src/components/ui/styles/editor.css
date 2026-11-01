@@ -61,9 +61,18 @@
 .ui-text-editor { display: flex; height: var(--text-editor-height, min(calc(40 * var(--u-space)), 60dvh)); min-height: calc(12 * var(--u-space)); flex-direction: column; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
 .ui-text-editor[data-fill] { height: auto; flex: 1; }
 .ui-text-editor:focus-within { border-color: var(--ring); }
-.ui-text-editor-bar { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: var(--space-2xs); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-2xs) var(--space-xs); }
+.ui-text-editor-bar { display: flex; flex: none; align-items: center; gap: var(--space-xs); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-md); }
+.ui-text-editor-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-2xs); }
+.ui-text-editor-tools { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: auto; }
+/* Its foot reads as the file viewer's, on the pane's own ground (frost or a page), not the workspace's darker one. */
+.ui-text-editor > .ui-status-bar { min-height: var(--control-sm); border-top-color: var(--tint); background: transparent; padding-block: var(--space-2xs); }
 .ui-text-editor-bar .ui-file-button[aria-pressed="true"] { color: var(--foreground); }
 .ui-text-editor-host { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: var(--text-caption); }
 .ui-text-editor-host .cm-editor { height: 100%; }
 .ui-text-editor-host .cm-scroller { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-text-editor[data-readonly] .cm-cursor { display: none; }
+/* What the pane's head says: the name of what it holds (quiet when Conduit fills it in), then its actions. */
+.ui-text-editor-title { min-width: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.ui-text-editor-title[data-live] { color: var(--muted-foreground); }
+.ui-text-editor-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
+.ui-text-editor-head .ui-seg { flex: none; }

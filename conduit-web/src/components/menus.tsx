@@ -269,8 +269,8 @@ export function SearchList<T>(props: {
  * search: a long list's choices open under a search instead (SearchList), its text the field's placeholder;
  * an option with no value (a prompt such as "Choose a provider") is the trigger's text, not a choice.
  */
-export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean; search?: string }) {
-  const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare", "search"]);
+export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean; search?: string; look?: "field" | "title" | "icon"; icon?: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare", "search", "look", "icon"]);
   const [searching, setSearching] = createSignal(false);
   let select!: HTMLSelectElement;
   const [value, setValue] = createSignal("");
@@ -302,7 +302,7 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
   };
   return <>
     <Show when={local.search} fallback={<DropdownMenu modal={false} placement="bottom-end" onOpenChange={(open) => open && read()}>
-      <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
+      <KMenu.Trigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} look={local.look} icon={local.icon} />
       <MenuContent>
         <KMenu.RadioGroup value={value()} onChange={choose}>
           <For each={options()}>{(option) => <MenuRadioItem value={option.value} disabled={option.disabled}>{option.label}</MenuRadioItem>}</For>
@@ -310,7 +310,7 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
       </MenuContent>
     </DropdownMenu>}>
       <Popover open={searching()} onOpenChange={(open) => { if (open) read(); setSearching(open); }}>
-        <PopoverTrigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} />
+        <PopoverTrigger as={SelectTrigger} id={local.id} title={local.title} disabled={local.disabled} aria-label={local["aria-label"]} value={label()} bare={local.bare ?? true} look={local.look} icon={local.icon} />
         <PopoverContent aria-label={local["aria-label"]}>
           <SearchList items={options().filter((option) => option.value && !option.disabled)} placeholder={local.search!}
             matches={(option, needle) => option.label.toLowerCase().includes(needle)} isCurrent={(option) => option.value === value()}

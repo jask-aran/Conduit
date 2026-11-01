@@ -1,10 +1,11 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { api } from "../api/client.ts";
 import { Select } from "@/components/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { NavRow } from "@/components/ui/nav";
-import { ChainBreak, ChainDetailHead, ChainGap, ChainHead, ChainLayout, ChainLink, ChainMap, PromptSection } from "@/components/ui/network";
+import { ChainBreak, ChainGap, ChainLayout, ChainLink, ChainMap } from "@/components/ui/network";
+import { FileButton, StatusText } from "@/components/ui/file";
 import { TextEditor } from "@/components/ui/text-editor";
 import { SettingGroup, SettingLine, SettingLoading, SettingNote, SettingWide } from "@/components/ui/overlay";
 
@@ -19,7 +20,6 @@ export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
   blocks: string[]; live: string[]; first: string[]; modified: boolean };
 type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string };
-type Preview = { sections: { blockId: string; label: string; kind: "text" | "live"; part: "system" | "first"; placed?: boolean; text: string }[]; chars: number };
 export type ContextVar = { name: string; description: string; value?: string };
 
 const ROLE_KIND: Record<RoleKind, string> = { profile: "Profile", agent: "Persistent agent", run: "Run", subagent: "Subagent", service: "Service" };
@@ -58,16 +58,16 @@ function createBlockDetails(context: ContextData) {
   };
 }
 
-/** Settings › Prompts: one document as its stack -- the role at the top, its blocks in the order the model reads them,
- *  then what Conduit adds, then a run's first message -- beside the chosen block: its text or template and what can be
- *  done to it here. Text reads the whole document as the model gets it now. */
+/** Settings › Prompts: one document, named by its title (which is also how another is chosen), as its stack -- its
+ *  blocks in the order the model reads them, then what Conduit adds, then a run's first message -- beside the chosen
+ *  block in an editor pane filling the height, the block's actions in the pane's bar and what is known of it in its
+ *  foot. */
 export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void }) {
-  const [view, setView] = createSignal<"stack" | "text">("stack");
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal("");
-  const [preview, setPreview] = createSignal<Preview | null>(null);
   const [chosen, setChosen] = createSignal("");
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
+  const [liveView, setLiveView] = createSignal<"template" | "now">("template");
   const details = createBlockDetails(props.context);
   const documents = () => props.context.data()?.documents ?? [];
   const current = createMemo(() => props.context.document(props.documentId) ?? documents()[0]);
@@ -80,12 +80,6 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     props.context.data();
     if (!id) return setDetail(null);
     void details(id).then((loaded) => { if (chosen() === id) setDetail(loaded); }, (cause) => setFailure(String(cause?.message || cause)));
-  });
-  createEffect(() => {
-    const doc = current();
-    props.context.data();
-    if (view() !== "text" || !doc) return;
-    void api<Preview>(`/v0/context/documents/${encodeURIComponent(doc.id)}/preview`).then(setPreview, (cause) => setFailure(String(cause?.message || cause)));
   });
   const save = async (blocks: string[]) => {
     const doc = current();
@@ -109,67 +103,60 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const swap = (id: string) => { if (!id) return; const from = at(); edit((list) => { list[from] = id; }); setChosen(id); };
   const insert = (id: string) => { if (!id) return; const after = at(); edit((list) => list.splice(after + 1, 0, id)); setChosen(id); };
   const remove = () => edit((list) => list.splice(at(), 1));
-  const placeOf = (id: string) => { const doc = current(); return !doc ? "" : doc.blocks.includes(id) ? "own" : doc.first.includes(id) ? "first" : "placed"; };
+  const own = (id: string) => Boolean(current()?.blocks.includes(id));
   const others = () => texts().filter((block) => !current()?.blocks.includes(block.id));
-  const BlockPicker = (pickProps: { label: string; title: string; onPick: (id: string) => void }) => <Select bare search="Search blocks" aria-label={pickProps.title} value="" disabled={busy()} onChange={(event) => pickProps.onPick(event.currentTarget.value)}>
-    <option value="">{pickProps.label}</option>
+  /** Swap or add: an icon in the pane's bar opening a search over the blocks not already in the document. */
+  const BlockPicker = (pickProps: { title: string; icon: JSX.Element; onPick: (id: string) => void }) => <Select look="icon" icon={pickProps.icon} search="Search blocks" title={pickProps.title} aria-label={pickProps.title} value="" disabled={busy()} onChange={(event) => pickProps.onPick(event.currentTarget.value)}>
+    <option value="">{pickProps.title}</option>
     <For each={others()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
   </Select>;
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
     return <ChainLink index={index} live={block()?.kind === "live"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : undefined : SOURCE[block()!.source]) : "missing"}
-      size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => setChosen(id)} />; };
+      size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); }} />; };
   const Detail = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(block) => {
-    const own = () => placeOf(block().id) === "own";
-    return <>
-      <ChainDetailHead name={block().label} live={block().kind === "live"} size={tokens(block().chars)}
-        meta={block().kind === "live" ? block().description : [own() ? SOURCE[block().source] : block().description, block().usedBy.length > 1 ? `in ${block().usedBy.length} documents` : "only in this document"].filter(Boolean).join(" · ")}
-        actions={<>
-          <Show when={block().kind === "text"}><Button variant="ghost" size="sm" onClick={() => props.onEditBlock(block().id)}><Icons.Edit />Edit</Button></Show>
-          <Show when={block().kind === "live"}><Button variant="ghost" size="sm" onClick={() => props.onEditBlock(block().id)}><Icons.Preview />Where it is used</Button></Show>
-          <Show when={own()}>
-            <Button variant="ghost" size="icon-sm" aria-label="Move up" title="Move up" disabled={busy() || at() <= 0} onClick={() => move(at() - 1)}><Icons.ArrowUp /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Move down" title="Move down" disabled={busy() || at() >= current()!.blocks.length - 1} onClick={() => move(at() + 1)}><Icons.ArrowDown /></Button>
-            <BlockPicker label="Swap for…" title={`Swap ${block().label} for another block`} onPick={swap} />
-            <BlockPicker label="Add after…" title="Add a block after this one" onPick={insert} />
-            <Button variant="ghost" size="icon-sm" aria-label="Remove from this document" title="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></Button>
-          </Show>
-        </>} />
-      <Show when={block().kind === "live"} fallback={<TextEditor readOnly label={`${block().label} text`} value={block().content ?? ""} />}>
-        <SettingGroup title="Template"><TextEditor readOnly label={`${block().label} template`} value={block().template ?? ""} /></SettingGroup>
-        <Show when={block().preview && block().preview !== block().template}>
-          <SettingGroup title="As it stands now"><TextEditor readOnly label={`${block().label} now`} value={block().preview!} /></SettingGroup>
+    const live = () => block().kind === "live";
+    const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
+    return <TextEditor fill readOnly label={`${block().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`} value={shown()}
+      head={<>
+        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{block().label}</span>
+        <Show when={live() && block().preview && block().preview !== block().template}>
+          <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
-      </Show>
-    </>; }}</Show>;
+        <span class="ui-text-editor-actions">
+          <FileButton label={live() ? "Where it is used" : `Edit ${block().label}`} onClick={() => props.onEditBlock(block().id)}>{live() ? <Icons.Preview /> : <Icons.Edit />}</FileButton>
+          <Show when={own(block().id)}>
+            <FileButton label="Move up" disabled={busy() || at() <= 0} onClick={() => move(at() - 1)}><Icons.ArrowUp /></FileButton>
+            <FileButton label="Move down" disabled={busy() || at() >= current()!.blocks.length - 1} onClick={() => move(at() + 1)}><Icons.ArrowDown /></FileButton>
+            <BlockPicker title={`Swap ${block().label} for another block`} icon={<Icons.Swap />} onPick={swap} />
+            <BlockPicker title="Add a block after this one" icon={<Icons.Add />} onPick={insert} />
+            <FileButton label="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></FileButton>
+          </Show>
+        </span>
+      </>}
+      status={<>
+        <StatusText>{tokens(live() ? shown().length : block().chars)}</StatusText>
+        <Show when={live()} fallback={<Show when={block().usedBy.length > 1}><StatusText>{`in ${block().usedBy.length} documents`}</StatusText></Show>}>
+          <StatusText>{block().tag ? `<${block().tag}> · filled in by Conduit` : "filled in by Conduit"}</StatusText>
+        </Show>
+      </>} />; }}</Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading documents…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
-    <SettingGroup title="Document">
-      <SettingLine label="Document" state={current()?.modified ? "changed" : undefined} title="The document a role starts its threads with. Changes apply when the next thread or turn starts.">
-        <Select id="context-document" search="Search documents" aria-label="Document" value={current()?.id ?? ""} onChange={(event) => props.onDocument(event.currentTarget.value)}>
-          <For each={documents()}>{(doc) => <option value={doc.id}>{doc.role.label} · {ROLE_KIND[doc.role.kind].toLowerCase()}</option>}</For>
-        </Select>
-        <Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !current()?.modified} onClick={() => void reset()}><Icons.Reset /></Button>
-      </SettingLine>
-      <SettingLine plain label="Show">
-        <Segmented label="Show" value={view()} options={[{ value: "stack", label: "Blocks" }, { value: "text", label: "Text" }]} onChange={setView} />
-      </SettingLine>
+    <Show when={current()}>{(doc) => <div class="ui-chain-page">
+      <header class="ui-chain-title">
+        <div class="ui-chain-title-line">
+          <Select look="title" id="context-document" search="Search documents" aria-label="Document" title="Choose a document" value={doc().id} onChange={(event) => props.onDocument(event.currentTarget.value)}>
+            <For each={documents()}>{(item) => <option value={item.id}>{item.role.label}</option>}</For>
+          </Select>
+          <Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button>
+        </div>
+        <p class="ui-network-meta">{`${ROLE_KIND[doc().role.kind]} · ${ROLE_STARTS[doc().role.kind]}${doc().modified ? " · changed" : ""}`}</p>
+      </header>
       <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
-    </SettingGroup>
-    <Show when={current()}>{(doc) => <Show when={view() === "stack"} fallback={
-      <SettingGroup title={preview() ? `As the model gets it now · ${tokens(preview()!.chars)}` : "As the model gets it now"}>
-        <Show when={preview()} fallback={<SettingLoading>Putting it together…</SettingLoading>}>{(shown) => <div class="ui-prompt-pane" role="document" aria-label="The document as the model gets it" tabIndex={0}><For each={shown().sections}>{(section, index) => <>
-          <Show when={section.part === "first" && shown().sections[index() - 1]?.part !== "first"}><ChainBreak label="First message" /></Show>
-          <PromptSection name={section.label} live={section.kind === "live"} meta={section.kind === "live" ? "filled in by Conduit" : section.placed ? "placed by Conduit" : undefined} size={tokens(section.text.length)} text={section.text} />
-        </>}</For></div>}</Show>
-      </SettingGroup>}>
-      <SettingGroup title="Blocks">
-        <ChainLayout detail={<Detail />} map={<ChainMap label={`${doc().role.label}'s document`}>
-          <ChainHead kind={ROLE_KIND[doc().role.kind]} name={doc().role.label} meta={ROLE_STARTS[doc().role.kind]} icon={ROLE_ICON[doc().role.kind]()} />
-          <For each={doc().blocks}>{(id, index) => <><ChainGap />{link(id, index() + 1)}</>}</For>
-          <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
-          <Show when={doc().first.length}><ChainBreak label="First message" /><For each={doc().first}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
-        </ChainMap>} />
-      </SettingGroup>
-    </Show>}</Show>
+      <ChainLayout fill detail={<Detail />} map={<ChainMap label={`${doc().role.label}'s document`}>
+        <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>
+        <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
+        <Show when={doc().first.length}><ChainBreak label="First message" /><For each={doc().first}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
+      </ChainMap>} />
+    </div>}</Show>
   </Show>;
 }
 
