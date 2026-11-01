@@ -62,10 +62,10 @@ export async function submitWithNotes(runtime, conversation, draft, context, { j
     }
     if (jbot && runtime.agentVars) {
       const { now: _now, ...fixed } = await runtime.agentVars();
-      const before = state.told || state.prompt || {};
+      const before = state.told || state.prompt || fixed;
       const changes = [];
       for (const [oldValue, newValue, label] of [[before.person?.name, fixed.person?.name, "the person's name"], [before.person?.home, fixed.person?.home, "the person's home"], [before.assistant?.name, fixed.assistant?.name, "your name"], [before.timezone, fixed.timezone, "your time zone"]]) {
-        if (oldValue !== newValue) changes.push(`${label} is now ${newValue}`);
+        if (oldValue !== newValue) changes.push(newValue ? `${label} is now ${newValue}` : `${label} is no longer set`);
       }
       if (changes.length) notes.push(await notice(runtime.contextStore, "update", { changes: changes.join("; ") }));
       const now = Date.now();

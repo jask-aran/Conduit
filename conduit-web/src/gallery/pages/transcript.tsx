@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createSignal } from "solid-js";
-import { Welcome, ANSWER_MARKDOWN, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, Inbound, Outbound, Changes, LoadingEarlier, TraceHeader, Trail, Step, StepDiff, Answer, CodeBlock, MessageFoot, StopLine, Orb, Button, Read } from "@/components/ui";
+import { Welcome, ANSWER_MARKDOWN, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, ConduitAdded, Inbound, Outbound, Changes, LoadingEarlier, TraceHeader, Trail, Step, StepDiff, Answer, CodeBlock, MessageFoot, StopLine, Orb, Button, Read } from "@/components/ui";
 import { px, fg, Replay } from "../specs";
 import katex from "katex";
 import { orb, typeOf } from "../demos";
@@ -103,8 +103,12 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
         appended={'That was your Heartbeat run\'s report. Decide as in "When a run reports": if the person should hear it, write them a report and notify if it should reach their phone now.'}>
         <Answer html={"<p>1 email came in from Amazon.com.au. <strong>Order confirmation:</strong> USB-C adapter couplers (2-pack), total <strong>$7.99</strong>; order <strong>503-4261375-6658233</strong>, arriving tomorrow. <a href=\"#\">View order</a>.</p>"} />
       </Inbound>
-      <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta="an approval allowed · a-34" time="00:39"><Answer html={"<p>Allowed: Use Executor: resume (ask a-34). Do it now: call <code>approved</code> with ask a-34.</p>"} /></Inbound>
+      <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta="an approval allowed · a-34" time="00:39" noted="It is Sunday, 1 November 2026 at 5:55 pm."><Answer html={"<p>Allowed: Use Executor: resume (ask a-34). Do it now: call <code>approved</code> with ask a-34.</p>"} /></Inbound>
     </Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<Inbound icon from meta time onOpen fold appended>" }),
+    row("conduit added", "text Conduit put into a prompt it delivered, labelled, in full: before the person's message (the stop, update and time notes), as on an inbound's rule before or after its text; caption, muted", () => <Read class="g-read"><Transcript>
+      <TranscriptRow><Message time="18:02" before={<ConduitAdded before text={"It is Sunday, 1 November 2026 at 6:02 pm."} />}>what's on tomorrow?</Message></TranscriptRow>
+      <TranscriptRow flow="turn"><HarnessPrompt icon={<Icons.Heartbeat aria-hidden="true" />} unseen="never sent to the agent">Heartbeat · 2 handled</HarnessPrompt></TranscriptRow>
+    </Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<Message before={<ConduitAdded before text />}> · <HarnessPrompt unseen>" }),
     row("outbound", "what the agent sent the person outside the thread, as it was sent: a notification's title and line on the same rule, in the text colour", () => <Read class="g-read"><Transcript>
       <Outbound icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta="to your devices" time="15:20"><Answer html={"<p><strong>Amazon parcel delivered</strong></p><p>Your wig was left near the front door or porch at 3:04pm.</p>"} /></Outbound>
     </Transcript></Read>, { surfaces: ["ground"], phone: true, code: "<Outbound icon from meta time>" }),
@@ -137,5 +141,5 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     token("--icon-sm", "small icons"),
     token("--text-caption", "caption text size")
   ] }],
-  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "Inbound", "Outbound", "Welcome", "Disclosure", "Bubble"],
+  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "ConduitAdded", "Inbound", "Outbound", "Welcome", "Disclosure", "Bubble"],
 };

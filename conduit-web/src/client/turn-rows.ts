@@ -80,6 +80,7 @@ export type TraceSegment =
   | { kind: "thinking"; id: string; text: string; live?: boolean; discarded?: boolean; hidden?: boolean }
   | { kind: "narration"; id: string; text: string; live?: boolean; discarded?: boolean }
   | { kind: "error"; id: string; message: Message }
+  | { kind: "context"; id: string; message: Message }
   | { kind: "tool"; id: string; tool: ToolItem };
 
 export interface TurnTraceData {
@@ -148,6 +149,7 @@ function placeTurnOrb(rows: TurnRow[], state: TurnOrbState) {
 
 interface PersistedTurn {
   userMessage: Message | null;
+  // Assistant messages and context entries, in transcript order.
   assistants: Message[];
 }
 
@@ -298,6 +300,28 @@ const liveOwner = (messages: Message[], generation: ActiveGenerationView) => {
 const says = (block: { kind: string; identity: string }, classifications: Record<string, "interim" | "answer">, show: boolean) =>
   show ? block.kind === "text" || block.kind === "narration" : block.kind === "text" && classifications[block.identity] === "answer";
 
+/** Context precedes the next assistant message in transcript order; context after the last stays at the end. */
+function liveContexts(messages: Message[], generation: ActiveGenerationView, owner: Message | null): Map<string | null, Message[]> {
+  const slots = new Map<string | null, Message[]>();
+  const assistants = new Set(generation.assistantMessages.map((message) => message.id));
+  let start = 0;
+  if (!owner) {
+    // Earlier settled preamble requests keep their context in the persisted history.
+    const firstLive = messages.findIndex((message) => assistants.has(message.id));
+    for (let at = 0; at < (firstLive < 0 ? messages.length : firstLive); at += 1) {
+      if (messages[at]!.role === "assistant" && !messages[at]!.streaming) start = at + 1;
+    }
+  }
+  let pending: Message[] = [];
+  for (const message of messages.slice(start)) {
+    if (message.role === "system" && message.context && message.answers === (owner?.id ?? null)) pending.push(message);
+    if (assistants.delete(message.id) && pending.length) { slots.set(message.id, pending); pending = []; }
+  }
+  // Paint can arrive before its message.open; those blocks follow the context already received.
+  if (pending.length) slots.set(generation.assistantMessages.find((message) => assistants.has(message.id))?.id ?? null, pending);
+  return slots;
+}
+
 /** Where each block of a live turn is drawn: `liveRows`' walk, without building rows. */
 export function buildLiveProjectionIndex(
   wholeGeneration: ActiveGenerationView,
@@ -308,6 +332,7 @@ export function buildLiveProjectionIndex(
   const generation = currentSegment(wholeGeneration, messages);
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const owner = liveOwner(messages, generation);
+  const contexts = liveContexts(messages, generation, owner);
   const base = owner ? owner.id : `live:${generation.id}`;
   const blockLocations = new Map<string, LiveBlockLocation>();
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
@@ -318,6 +343,7 @@ export function buildLiveProjectionIndex(
   let answers = 0;
   let segmentIndex = 0;
   for (const assistant of generation.assistantMessages) {
+    segmentIndex += contexts.get(assistant.id)?.length || 0;
     const said = assistant.blocks.filter((block) => says(block, classifications, show));
     let answered = false;
     const answer = () => {
@@ -343,6 +369,7 @@ export function buildLiveProjectionIndex(
     if (assistant.stopReason === "error" && (!show || generation.assistantMessages.at(-1) !== assistant)) segmentIndex += 1;
     answer();
   }
+  segmentIndex += contexts.get(null)?.length || 0;
   return { generationId: generation.id, traceRowKey: segmentIndex ? traceGroupKey(base, group) : null, blockLocations, toolLocations,
     answerBlockIdentities, answerRowKeys, firstAnswerAssistantId };
 }
@@ -488,10 +515,11 @@ const turnTime = (startedAt?: string | null, endedAt?: string | null) => ({
 });
 
 /** A live turn's rows (`TurnLayout`): its trace or traces, its answers, or where its answer will be. */
-function liveRows(generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[], show: boolean): TurnRow[] {
+function liveRows(generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[], show: boolean, messages: Message[]): TurnRow[] {
   const classifications = textBlockClassifications(generation) as Record<string, "interim" | "answer">;
   const base = owner ? owner.id : `live:${generation.id}`;
   const running = active(generation);
+  const contexts = liveContexts(messages, generation, owner);
   const rows: TurnRow[] = [];
   // Folded, the answers wait below the turn's one trace.
   const answers: TurnRow[] = [];
@@ -511,6 +539,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
       precedingUserId: owner?.id, answerless, timestamp: generation.assistantMessages.at(-1)?.timestamp || undefined });
   };
   for (const assistant of generation.assistantMessages) {
+    for (const message of contexts.get(assistant.id) || []) segments.push({ kind: "context", id: message.id, message });
     const said = assistant.blocks.filter((block) => says(block, classifications, show));
     const text = said.map((block) => block.text || "").join("\n");
     const terminalError = generation.status === "failed" && assistant.stopReason === "error" && generation.assistantMessages.at(-1) === assistant;
@@ -543,6 +572,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     if (assistant.stopReason === "error" && generation.assistantMessages.at(-1) !== assistant) segments.push(buildLiveErrorSegment(assistant));
     answer();
   }
+  for (const message of contexts.get(null) || []) segments.push({ kind: "context", id: message.id, message });
   // Every turn that has shown anything has its trace: one with no thinking and no tools is its header alone -- the orb,
   // what it is doing, the time. One stopped or failed before it showed anything is that header too, as the saved turn is.
   const endedEarly = generation.status === "stopped" || generation.status === "failed";
@@ -578,8 +608,17 @@ export function projectLiveTurn(
   const generation = currentSegment(wholeGeneration, messages);
   const owner = liveOwner(messages, generation);
   const show = layout.narration === "show";
-  const live = (generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[]) => liveRows(generation, owner, tools, show);
-  if (!owner) return [...persistedRows, ...live(generation, null, tools)];
+  const live = (generation: ActiveGenerationView, owner: Message | null, tools: ToolItem[]) => liveRows(generation, owner, tools, show, messages);
+  if (!owner) {
+    const contexts = new Set([...liveContexts(messages, generation, null).values()].flat().map((message) => message.id));
+    const history = persistedRows.flatMap((row): TurnRow[] => {
+      if (row.type !== "trace") return [row];
+      const segments = row.value.segments.filter((segment) => segment.kind !== "context" || !contexts.has(segment.id));
+      if (segments.length === row.value.segments.length) return [row];
+      return segments.length ? [{ ...row, value: { ...row.value, segments } }] : [];
+    });
+    return [...history, ...live(generation, null, tools)];
+  }
   const ownerRow = persistedRows.findIndex((row) => row.key === `message:${owner.id}`);
   if (ownerRow < 0) return [...persistedRows, ...live(generation, owner, tools)];
   let nextTurn = ownerRow + 1;
@@ -614,7 +653,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
   if (owner) rows.push({ key: `message:${owner.id}`, type: "message", value: owner });
   if (!turn.assistants.length) return rows;
   const base = owner ? owner.id : turn.assistants[0]!.id;
-  const finalAssistant = turn.assistants.at(-1) || null;
+  const finalAssistant = turn.assistants.findLast((message) => message.role === "assistant") || null;
   const outcome = owner?.outcome;
   const claimed = new Set<string>();
   let segments: TraceSegment[] = [];
@@ -634,6 +673,10 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
       ...(last && owner && !outcome && segments.length > 0 ? { unstated: true } : {}) });
   };
   for (const assistant of turn.assistants) {
+    if (assistant.role === "system" && assistant.context) {
+      segments.push({ kind: "context", id: assistant.id, message: assistant });
+      continue;
+    }
     const discarded = assistant.discarded === true;
     const failed = assistant.stopReason === "error";
     const thinking = thinkingOf(assistant);
@@ -709,7 +752,7 @@ export function projectPersistedTurns(
     if (message.id) byPrompt.set(message.id, current);
   }
   for (const message of messages) {
-    if (message.role !== "assistant") continue;
+    if (message.role !== "assistant" && !(message.role === "system" && message.context)) continue;
     // An answer still arriving is drawn by the live overlay, not from here. Its
     // row is in the list all the same, holding the place the overlay is drawn
     // in, and settles into an ordinary answer when the turn ends.
@@ -717,7 +760,7 @@ export function projectPersistedTurns(
     // An answer belongs to the prompt it says it answers. Reading that off the
     // transcript instead -- whichever prompt the row happens to sit under --
     // is the guess that put one turn's work beneath another turn's prompt.
-    const answers = statedAnswers(message);
+    const answers = message.role === "system" ? message.answers : statedAnswers(message);
     const stated = answers ? byPrompt.get(answers) : null;
     (stated || turnAt.get(message) || current).assistants.push(message);
   }

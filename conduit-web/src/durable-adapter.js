@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
 import { backgroundSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
@@ -268,15 +269,64 @@ export const beatLine = (data = {}) => ["Heartbeat",
 // A run's report, as the agent was given it: the report, what Conduit added to it for the agent (the decision it asks
 // for, stated apart since 0.8.9; split at its rule before), and who sent it.
 const APPENDED_RULE = "\n\n---\n";
+const modelText = (entry) => {
+  const content = entry.model?.[0]?.content;
+  return typeof content === "string" ? content : textOf(content);
+};
+const withoutNote = (text) => {
+  const match = /^<conduit_note>([\s\S]*?)<\/conduit_note>(?:\r?\n){0,2}/.exec(text);
+  return match ? { content: text.slice(match[0].length), notes: match[1].trim() } : { content: text };
+};
+const userMessage = (entry) => {
+  const data = entry.data || {};
+  const given = withoutNote(modelText(entry));
+  const fallback = given.notes !== undefined ? given.content : textOf(entry.model?.[0]?.content);
+  return { role: "user", content: withoutNote(data.text || fallback).content,
+    ...(given.notes !== undefined ? { notes: given.notes } : {}),
+    ...(data.timestamp ? { timestamp: data.timestamp } : {}),
+    ...(data.attachments?.length ? { attachments: data.attachments } : {}) };
+};
+
+/** Read only the context this entry supplied; the model's wrapped summary stays verbatim. */
+export function contextEntry(entry) {
+  if (entry.kind === "pi.compaction") return { kind: "compaction", sections: [], summary: modelText(entry) };
+  if (entry.kind !== "pi.system") return null;
+  const message = entry.model?.[0] || {};
+  const sections = Object.entries(message.sections || {});
+  sections.sort(([a], [b]) => a === "instructions" ? -1 : b === "instructions" ? 1 : 0);
+  const added = [...new Set((message.toolsAdded || []).map((tool) => tool.name))];
+  const removed = [...new Set((message.toolsRemoved || []).map((tool) => tool.name))];
+  const addedNames = new Set(added), removedNames = new Set(removed);
+  const restated = added.length > 0 && added.length === removed.length && added.every((name) => removedNames.has(name));
+  return { kind: sections.some(([name, text]) => name === "instructions" && typeof text === "string") ? "prompt" : "update",
+    sections: sections.map(([name, text]) => ({ name, text: text ?? "" })),
+    ...(message.toolsAdded || message.toolsRemoved ? { tools: {
+      added: added.filter((name) => !removedNames.has(name)), removed: removed.filter((name) => !addedNames.has(name)),
+      ...(restated ? { restated: added.length } : {}),
+    } } : {}) };
+}
+
+const contextOp = (entry, answers) => {
+  const context = contextEntry(entry);
+  if (!context) return null;
+  const timestamp = entry.model?.[0]?.timestamp;
+  return messageOpen({ id: `c${entry.conversationId}-${entry.id}`, role: "system", answers,
+    context: { kind: context.kind, entryId: entry.id, sections: context.sections.map(({ name, text }) => ({ name, chars: text.length })),
+      ...(context.tools ? { tools: context.tools } : {}),
+      ...(context.summary !== undefined ? { summary: { chars: context.summary.length } } : {}) },
+    ...(timestamp ? { timestamp: new Date(timestamp).toISOString() } : {}) });
+};
+
 const reportMessage = (entry, child) => {
   const data = entry.data || {};
-  const given = entry.model?.[0]?.content;
-  const text = typeof given === "string" ? given : textOf(given);
+  const given = withoutNote(modelText(entry));
+  const text = given.content;
   const cut = data.appended && text.endsWith(data.appended) ? text.length - data.appended.length
     : text.lastIndexOf(`${APPENDED_RULE}That was your `);
   const content = cut >= 0 ? text.slice(0, cut).replace(/\n*-{3}\n*$/, "").trimEnd() : text;
   return { role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
-    content: typeof data.report === "string" ? data.report : content || `${data.subagentId} ${data.status}: ${data.title}`,
+    content: typeof data.report === "string" ? withoutNote(data.report).content : content || `${data.subagentId} ${data.status}: ${data.title}`,
+    ...(given.notes !== undefined ? { notes: given.notes } : {}),
     ...(cut >= 0 ? { appended: text.slice(cut).replace(/^\s*-{3}\s*/, "") } : {}),
     ...(entry.model?.[0]?.timestamp ? { timestamp: new Date(entry.model[0].timestamp).toISOString() } : {}),
     sender: { name: data.title || data.subagentId, ...(data.origin?.kind ? { routine: data.origin.kind } : {}), ...(data.status ? { status: data.status } : {}) } };
@@ -285,7 +335,7 @@ const reportMessage = (entry, child) => {
 const beatOps = (entry) => {
   const data = entry.data || {};
   const id = data.messageId || `b${entry.conversationId}-${entry.id}`;
-  return [messageOpen({ id, role: "user", origin: "harness", content: beatLine(data),
+  return [messageOpen({ id, role: "user", origin: "harness", unseen: true, content: beatLine(data),
     agent: { id: data.subagentId, conversationId: data.conversationId ?? null }, ...(data.timestamp ? { timestamp: data.timestamp } : {}) }),
   turnSettle({ promptId: id, outcome: "complete" })];
 };
@@ -315,10 +365,12 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
       const data = entry.data || {};
       prompt = data.messageId || `u${entry.conversationId}-${entry.id}`;
       last = null;
-      ops.push(messageOpen({ id: prompt, role: "user", content: data.text || textOf(entry.model?.[0]?.content),
+      ops.push(messageOpen({ id: prompt, ...userMessage(entry),
         ...(entry.kind === "conduit.subagent-report" ? reportMessage(entry, data.conversationId ?? children.get(data.subagentId)?.conversationId ?? null) : {}),
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
+    } else if (entry.kind === "pi.system" || entry.kind === "pi.compaction") {
+      ops.push(contextOp(entry, prompt));
     } else if (entry.kind === "conduit.agent-beat") {
       // Its own settled line: not a prompt, so a turn around it goes on as it was.
       ops.push(...beatOps(entry));
@@ -755,6 +807,7 @@ export class DurableAdapter extends EventEmitter {
             turn.opened.add(promptId);
             this.publish(record, messageOpen({ id: promptId, role: "user", generationId: turn.generationId,
               content: data.text || "", ...(data.timestamp ? { timestamp: data.timestamp } : {}),
+              ...(data.notes !== undefined ? { notes: data.notes } : {}),
               ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
           }
           this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
@@ -811,6 +864,13 @@ export class DurableAdapter extends EventEmitter {
 
   /** A prompt entering the transcript mid-run is a steer or a follow-up the run took. */
   async placed(record, entry) {
+    if (entry?.kind === "pi.system" || entry?.kind === "pi.compaction") {
+      // Read the entry order on first use too, including a session attached after its last prompt.
+      const entries = await this.entries(record.conversation);
+      const prompt = entries.findLast((item) => item.id < entry.id && (item.kind === USER_ENTRY || item.kind === "conduit.subagent-report"));
+      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null));
+      return;
+    }
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
@@ -822,19 +882,25 @@ export class DurableAdapter extends EventEmitter {
     }
     if (entry?.kind === USER_ENTRY) {
       const turn = record.turn;
-      const messageId = entry.data?.messageId;
-      if (!messageId || turn?.opened?.has(messageId)) return;
+      const messageId = entry.data?.messageId || `u${entry.conversationId}-${entry.id}`;
+      const message = userMessage(entry);
+      if (turn?.opened?.has(messageId)) {
+        // openMessage merges by id; placement adds the model's notes to the browser's pending row.
+        if (message.notes !== undefined) this.publish(record, messageOpen({ id: messageId, ...message, generationId: turn.generationId }));
+        return;
+      }
       // Placed before its run started, or a follow-up placed as the run ends:
       // the run that answers it opens it (see run_start).
-      if (!turn || !turn.inputs.length || record.modes.get(messageId) === "followUp") { record.unopened.set(messageId, entry.data); return; }
+      if (!turn || !turn.inputs.length || record.modes.get(messageId) === "followUp") {
+        record.unopened.set(messageId, { ...entry.data, text: message.content, ...(message.notes !== undefined ? { notes: message.notes } : {}) });
+        return;
+      }
       turn.opened ||= new Set();
       turn.opened.add(messageId);
       this.closeAnswer(record);
       // The prompt the turn moves on from is answered now.
       for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
-      this.publish(record, messageOpen({ id: messageId, role: "user", generationId: turn.generationId,
-        content: entry.data.text || "", ...(entry.data.timestamp ? { timestamp: entry.data.timestamp } : {}),
-        ...(entry.data.attachments?.length ? { attachments: entry.data.attachments } : {}) }));
+      this.publish(record, messageOpen({ id: messageId, ...message, generationId: turn.generationId }));
       turn.prompts = [messageId];
       turn.answers = messageId;
       return;
@@ -1391,6 +1457,23 @@ export class DurableAdapter extends EventEmitter {
     // An answer still being written is the live stream's, not the reload's.
     return { messages: messages.filter((message) => !message.streaming), tools, page: { before: null },
       ...(identity?.subagent ? { turnOpen: Boolean(live?.run) } : {}) };
+  }
+
+  async readContextEntry({ opaqueSession, entryId }) {
+    const conversationId = Number(opaqueSession);
+    if (!Number.isSafeInteger(conversationId) || !Number.isSafeInteger(entryId)) return null;
+    const harness = await this.runtime.open();
+    const conversation = await harness.conversation(conversationId, this.context);
+    if (!conversation) return null;
+    // The handle checks visibility, including entries inherited by this conversation's fork.
+    const entry = (await conversation.entries({ minEntryId: entryId, maxEntryId: entryId }, 1, undefined, this.context)).items[0];
+    if (!entry) return null;
+    const context = contextEntry(entry);
+    if (context?.kind !== "prompt") return context;
+    const view = await conversation.context(this.context, { at: entryId });
+    const tools = getCurrentTools(view.messages);
+    return { ...context, tools: { ...context.tools, added: context.tools?.added || [], removed: context.tools?.removed || [],
+      all: tools.map((tool) => ({ name: tool.name, description: (tool.description || "").split(/\r?\n/)[0] })) } };
   }
 
   /** Browser roster: foreground calls and the persistent background roster, each counted from its own ledger. */

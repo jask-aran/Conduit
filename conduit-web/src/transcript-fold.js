@@ -70,7 +70,10 @@ export function applyTranscriptOp(messages, event) {
       }
       : {
         // Stated now, so no longer only this client's.
-        id: incoming.id, role: "user", content: displayUserText(incoming), local: undefined,
+        id: incoming.id, role: incoming.role === "system" ? "system" : "user", content: displayUserText(incoming), local: undefined,
+        ...(incoming.unseen ? { unseen: true } : {}),
+        ...(incoming.context ? { context: incoming.context, answers: event.answers ?? null } : {}),
+        ...(typeof incoming.notes === "string" ? { notes: incoming.notes } : {}),
         timestamp: incoming.timestamp || new Date().toISOString(),
         // A prompt the harness made itself, not the user's words.
         ...(incoming.origin === "harness" ? { origin: "harness" } : {}),

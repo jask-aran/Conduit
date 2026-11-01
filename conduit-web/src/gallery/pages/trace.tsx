@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createSignal, For, Index, onCleanup, type JSX } from "solid-js";
-import { TraceHeader, Trail, Step, Orb, Trace, StepOutput, StepProse, TraceError, ORBITS_TRAILED, Read } from "@/components/ui";
+import { TraceHeader, Trail, Step, Orb, Trace, StepOutput, StepProse, StepSections, TraceError, ORBITS_TRAILED, Read } from "@/components/ui";
 
 import { orb } from "../demos";
 import { row, token, type Page } from "../model";
@@ -98,6 +98,13 @@ export const tracePage: Page = { title: "Trace", summary: "A turn's work, over i
     { selector: ".ui-step-item:nth-child(2) .ui-step", name: "Step", does: "Icon · Verb · Subject · Flags · Time; opens to what it did (Steps below)", from: "a line of the Trail" }] },
   examples: [
     row("States", "<TraceHeader status orb latest live tone>", () => <TraceStates />),
+    row("context", "what the model was given, in the trail where it was given: its system prompt at a thread's start, a section that changed later (jbot's inbox, its files), a compaction; opens to each piece under its name, fetched when opened; never hidden", () => <Read class="g-read">{<Trail>
+      <Fold icon={<Icons.Context />} verb="System prompt" subject="working folder, web tools, codemode tools, jbot's files, waiting inbox · 27 tools" face="text" aside="6.1k tok" initial>
+        <StepSections sections={[{ label: "Waiting inbox", text: "<agent-inbox>\nHow often the person wants to be interrupted: normal.\n- Sun 5:55 pm · Heartbeat · 1 new email, from Amazon.com.au\n</agent-inbox>" }]} tools="ask_user, devices, read, write, edit, bash, web_search, fetch_content, subagent, codemode, memory, schedule, notify" />
+      </Fold>
+      <Fold icon={<Icons.Context />} verb="Context changed" subject="waiting inbox" face="text" aside="30 tok" />
+      <Fold icon={<Icons.Compact />} verb="Compacted" subject="summary of 84 messages" face="text" aside="3.2k tok" />
+    </Trail>}</Read>, { surfaces: ["ground"], phone: true, code: "<Step icon={<Icons.Context />} verb subject face=\"text\" aside><StepSections sections tools /></Step>" }),
     row("read", "a tool, settled: its kind's icon, past verb, subject, time; opens to its output; verb foreground · subject code face · time caption tabular", () => <Read class="g-read">{<Trail><Fold icon={<Icons.FileText />} verb="Read" subject="lorem_ipsum.txt" time="0ms" initial><StepOutput text={"Lorem ipsum dolor sit amet, consectetur adipiscing elit.\nSed do eiusmod tempor incididunt ut labore."} /></Fold></Trail>}</Read>, { surfaces: ["ground"], code: "<Step icon verb subject time><StepOutput text /></Step>" }),
     row("drawn once opened", "opens: its body is not drawn until first opened, then kept to fold away; foldBody", () => <Read class="g-read">{<Trail><Fold icon={<Icons.Shell />} verb="Ran" subject="npm run build" time="3s" opens><StepOutput text={"vite v7 building for production…\n✓ built in 2.9s"} /></Fold></Trail>}</Read>, { surfaces: ["ground"], code: "<Step opens>" }),
     row("running", "present verb, a spinner for its icon; ui-spinner icon-sm", () => <Read class="g-read"><Trail><Step state="running" verb="Running" subject="npm run build" /></Trail></Read>, { surfaces: ["ground"], code: "state=running" }),
@@ -125,5 +132,5 @@ export const tracePage: Page = { title: "Trace", summary: "A turn's work, over i
     token("--row-gap", "spacing and size"),
     token("--muted-foreground", "secondary text")
   ] }],
-  api: ["Trace", "TraceHeader", "Orb", "Trail", "Step", "StepOutput", "StepProse", "TraceError", "Read"],
+  api: ["Trace", "TraceHeader", "Orb", "Trail", "Step", "StepOutput", "StepProse", "StepSections", "TraceError", "Read"],
 };

@@ -48,9 +48,13 @@
 .ui-envelope-more { border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
 @media (hover: hover) { .ui-envelope-more:is(:hover, :focus-visible) { color: var(--foreground); } }
 .ui-envelope-more:focus-visible { outline: none; color: var(--foreground); }
-.ui-envelope-added { justify-self: stretch; display: grid; gap: var(--flow-line); margin-top: var(--flow-attached); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
-.ui-envelope-added > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.ui-envelope-added > span { font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-conduit-added { justify-self: stretch; display: grid; gap: var(--flow-line); margin-top: var(--flow-attached); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
+.ui-conduit-added[data-before] { margin: 0 0 var(--flow-attached); }
+.ui-conduit-added > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-conduit-added > span { font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+/* Before the person's message: at the bubble's side, as wide as a bubble may be. */
+.ui-message > .ui-conduit-added { justify-self: end; max-width: min(var(--measure-2xl), 88cqw); margin: 0; text-align: left; }
+.ui-harness-prompt-unseen { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */

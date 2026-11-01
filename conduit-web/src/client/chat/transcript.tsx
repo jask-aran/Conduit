@@ -10,7 +10,7 @@ import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
-import { AnswerOrb, TraceOrb, TraceStarting, TurnTrace } from "./turn-trace";
+import { type ContextText, AnswerOrb, TraceOrb, TraceStarting, TurnTrace } from "./turn-trace";
 import { openAgentChat } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import type { Narration, TurnRow } from "../turn-rows";
@@ -49,7 +49,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
+import { ApprovalCard, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
@@ -91,6 +91,7 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   const timestamp = () => props.message.timestamp || undefined;
   return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
     time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
+    before={props.message.notes ? <ConduitAdded before text={props.message.notes} /> : undefined}
     under={props.under}
     actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><Icons.Edit /></LibraryButton></Show>}>
     {props.text || undefined}
@@ -1199,7 +1200,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn orb={narrated() && item.key === latestOrb() ? <TraceOrb trace={item.value} writing={item.answerless === false} /> : undefined}><TurnTrace since={arrive} trace={item.value} orb={narrated() ? item.key === latestOrb() : true} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn orb={narrated() && item.key === latestOrb() ? <TraceOrb trace={item.value} writing={item.answerless === false} /> : undefined}><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={narrated() ? item.key === latestOrb() : true} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1255,11 +1256,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
             return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} flow={flow()}>
-              <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
+              <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
-                  appended={message().appended}>
+                  noted={message().notes} appended={message().appended}>
                   <ChatText renderer={markdownRenderer()} text={message().content || ""} />
                 </Inbound>
               </Show>
@@ -1304,7 +1305,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
                 </>} />}>
-                <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta={approvalMeta(message().content || "")} time={clock(message().timestamp)}
+                <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta={approvalMeta(message().content || "")} time={clock(message().timestamp)} noted={message().notes}
                   dateTime={message().timestamp || undefined} title={message().timestamp ? fullDateTime(message().timestamp) : undefined}>
                   <ChatText renderer={markdownRenderer()} text={(message().content || "").slice(APPROVAL_NOTE.length)} />
                 </Inbound>

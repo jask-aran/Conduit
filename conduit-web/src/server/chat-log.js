@@ -144,6 +144,8 @@ export class ChatLog {
   position(event) {
     if (event?.type === "transcript_op") {
       if (event.op === "message.open") {
+        // Adding notes to an existing prompt must not move the tail used to place the next row.
+        if (event.message?.notes !== undefined && this.stated.messages.some((message) => message.id === event.message.id)) return event;
         const placed = event.after === undefined ? { ...event, after: this.tail } : event;
         if (placed.message?.id) {
           this.tail = placed.message.id;

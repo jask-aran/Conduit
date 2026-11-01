@@ -12,6 +12,7 @@ import {
   ListEndIcon,
   ArrowDownIcon,
   ArrowDownLeftIcon,
+  ScrollTextIcon,
   ArrowLeftIcon,
   ArrowLeftRightIcon,
   ArrowRightIcon,
@@ -117,6 +118,8 @@ export const Add = PlusIcon;
 export const ArrowDown = ArrowDownIcon;
 /** Something coming in: a notice Conduit writes into a thread. */
 export const ArrowDownLeft = ArrowDownLeftIcon;
+/** What a model was given as context: a system prompt, a section that changed. */
+export const Context = ScrollTextIcon;
 /** Return to the previous view. */
 export const Back = ArrowLeftIcon;
 /** Swap pane or comparison sides. */

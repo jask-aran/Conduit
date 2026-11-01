@@ -4,7 +4,89 @@ import {
   buildLiveAnswerRow,
   buildLiveProjectionIndex,
   buildTurnRows,
+  projectPersistedTurns,
 } from "../src/client/turn-rows.ts";
+
+const contextMessage = (id, answers = "u1") => ({ id, role: "system", answers,
+  context: { kind: "update", entryId: Number(id.replace(/\D/g, "")), sections: [{ name: "cwd", chars: 5 }] } });
+const contextSegments = (rows) => rows.flatMap((row) => row.type === "trace" ? row.value.segments : []);
+
+for (const narration of ["fold", "show"]) {
+  test(`keeps context first and between assistant messages (${narration})`, () => {
+    const first = contextMessage("c1"), middle = contextMessage("c2");
+    const messages = [{ id: "u1", role: "user", content: "Inspect", outcome: "complete" }, first,
+      { id: "a1", role: "assistant", answers: "u1", interim: true, content: "Checking", blocks: [{ kind: "thinking", text: "Plan" }] }, middle,
+      { id: "a2", role: "assistant", answers: "u1", interim: false, content: "Done", blocks: [{ kind: "thinking", text: "Finish" }] }];
+    const rows = buildTurnRows(messages, [], { narration });
+    assert.deepEqual(contextSegments(rows).map((segment) => segment.kind),
+      narration === "fold" ? ["context", "thinking", "narration", "context", "thinking"] : ["context", "thinking", "context", "thinking"]);
+    assert.deepEqual(contextSegments(rows).filter((segment) => segment.kind === "context").map((segment) => segment.message), [first, middle]);
+    if (narration === "show") assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message", "trace", "message"]);
+  });
+
+  test(`keeps context-only turns and preamble context (${narration})`, () => {
+    const preamble = contextMessage("c1", null), context = contextMessage("c2");
+    const rows = buildTurnRows([preamble, { id: "u1", role: "user", content: "Inspect" }, context], [], { narration });
+    assert.deepEqual(rows.map((row) => row.type), ["trace", "message", "trace"]);
+    assert.deepEqual(contextSegments(rows).map((segment) => segment.id), ["c1", "c2"]);
+  });
+
+  test(`places live context before the request it preceded (${narration})`, () => {
+    const first = contextMessage("c1"), middle = contextMessage("c2"), tail = contextMessage("c3");
+    const messages = [{ id: "u1", role: "user", content: "Inspect" }, first,
+      { id: "a1", role: "assistant", answers: "u1", streaming: true }, middle,
+      { id: "a2", role: "assistant", answers: "u1", streaming: true }, tail];
+    const generation = { id: "g1", status: "running", lastSeq: 1, toolExecutions: {}, assistantMessages: [
+      { id: "a1", stopReason: "toolUse", blocks: [{ kind: "thinking", identity: "p1", contentIndex: 0, text: "Plan", status: "complete" },
+        { kind: "text", identity: "t1", contentIndex: 1, text: "Checking", status: "complete" }] },
+      { id: "a2", blocks: [{ kind: "thinking", identity: "p2", contentIndex: 0, text: "Finish", status: "streaming" }] },
+    ] };
+    const rows = buildTurnRows(messages, [], { activeGeneration: generation, narration });
+    const segments = contextSegments(rows);
+    assert.deepEqual(segments.map((segment) => segment.id), narration === "fold" ? ["c1", "p1", "t1", "c2", "p2", "c3"] : ["c1", "p1", "c2", "p2", "c3"]);
+    const index = buildLiveProjectionIndex(generation, messages, { narration });
+    for (const identity of ["p1", "p2"]) {
+      const location = index.blockLocations.get(identity);
+      const row = rows.find((row) => row.key === location.rowKey);
+      assert.equal(row.value.segments[location.segmentIndex].id, identity);
+    }
+  });
+}
+
+test("invalidates a cached turn when context changes", () => {
+  const prompt = { id: "u1", role: "user", content: "Inspect" };
+  const first = projectPersistedTurns([prompt, contextMessage("c1")], []);
+  const replacement = { ...contextMessage("c1"), context: { kind: "compaction", entryId: 1, sections: [], summary: { chars: 8 } } };
+  const second = projectPersistedTurns([prompt, replacement], [], first.turns);
+  assert.equal(contextSegments(second.rows)[0].message, replacement);
+});
+
+test("keeps live preamble context once, including before any assistant exists", () => {
+  const context = contextMessage("c1", null);
+  const generation = { id: "g1", status: "running", lastSeq: 1, toolExecutions: {}, assistantMessages: [] };
+  const rows = buildTurnRows([context], [], { activeGeneration: generation });
+  assert.deepEqual(contextSegments(rows).map((segment) => segment.id), ["c1"]);
+  assert.equal(rows.length, 1);
+  assert.equal(buildLiveProjectionIndex(generation, [context]).traceRowKey, rows[0].key);
+});
+
+for (const narration of ["fold", "show"]) {
+  test(`keeps historical preamble context before its settled request during a live run (${narration})`, () => {
+    const messages = [contextMessage("c1", null),
+      { id: "old", role: "assistant", answers: null, interim: false, content: "Earlier answer" },
+      contextMessage("c2", null), { id: "live", role: "assistant", answers: null, streaming: true }];
+    const generation = { id: "g1", status: "running", lastSeq: 1, toolExecutions: {}, assistantMessages: [
+      { id: "live", blocks: [{ kind: "thinking", identity: "p1", contentIndex: 0, text: "Current plan", status: "streaming" }] },
+    ] };
+    const rows = buildTurnRows(messages, [], { activeGeneration: generation, narration });
+    assert.deepEqual(rows.map((row) => row.type), ["trace", "message", "trace"]);
+    assert.deepEqual(rows[0].value.segments.map((segment) => segment.id), ["c1"]);
+    assert.equal(rows[1].value.content, "Earlier answer");
+    assert.deepEqual(rows[2].value.segments.map((segment) => segment.id), ["c2", "p1"]);
+    const location = buildLiveProjectionIndex(generation, messages, { narration }).blockLocations.get("p1");
+    assert.equal(rows[2].value.segments[location.segmentIndex].id, "p1");
+  });
+}
 
 test("projects a live generation directly from ordered Pi blocks", () => {
   const rows = buildTurnRows([

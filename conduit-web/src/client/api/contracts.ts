@@ -301,6 +301,16 @@ export interface AgentSummary {
 
 export interface Message {
   id: string;
+  /** Model context stored in a runtime entry; its text is fetched on demand. */
+  context?: {
+    kind: "prompt" | "update" | "compaction";
+    entryId: number;
+    sections: { name: string; chars: number }[];
+    tools?: { added: string[]; removed: string[]; restated?: number };
+    summary?: { chars: number };
+  };
+  /** The verbatim inner text of the model's conduit_note prefix. */
+  notes?: string;
   /** A subagent's report: the agent it is from. */
   agent?: AgentRef;
   /** The live generation this message was frozen out of, until a sync names it. */
@@ -320,6 +330,8 @@ export interface Message {
   pending?: boolean;
   /** Added by this client and not yet stated by the server. */
   local?: boolean;
+  /** A line in the record the model was never given (a heartbeat's quiet line): drawn, and said to be unseen. */
+  unseen?: boolean;
   /**
    * An answer that is still arriving. It takes its place in the transcript the
    * moment the harness names it, so everything sent afterwards lands after it,

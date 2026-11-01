@@ -83,6 +83,7 @@ import { directAddresses } from "./nodes/direct.js";
 import { lanNamesService } from "./network/lan-names-service.js";
 import { registerNetworkRoutes } from "./server/routes/network.js";
 import { registerSessionRoutes } from "./server/routes/sessions.js";
+import { registerSessionContextRoutes } from "./server/routes/session-context.js";
 import { registerSearchRoutes } from "./server/routes/search.js";
 import { registerVoiceRoutes } from "./server/routes/voice.js";
 import { SearchSettingsStore } from "./search-settings.js";
@@ -724,6 +725,7 @@ if (persistentAgent) {
   void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
     .catch((error) => console.error("[agent] could not load", error));
 }
+registerSessionContextRoutes(app, { backends, findChatContext });
 registerSessionRoutes(app, {
   attachments,
   backends,

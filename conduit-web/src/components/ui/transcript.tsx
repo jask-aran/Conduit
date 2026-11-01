@@ -65,22 +65,29 @@ export function Failure(props: { time?: string; dateTime?: string; facts?: strin
     <pre>{props.message}</pre></div>;
 }
 /** A prompt the harness sent on its own with nothing more to read (a background task finishing): one muted line, a bell
- *  before it (or its own icon: a heartbeat's quiet line), no bubble and no actions. A message with a body is Inbound. */
-export const HarnessPrompt = (props: { onOpen?: () => void; icon?: JSX.Element; children: JSX.Element }) => <p class="ui-harness-prompt">
+ *  before it (or its own icon: a heartbeat's quiet line), no bubble and no actions. A message with a body is Inbound.
+ *  unseen: a line only Conduit's record has (the agent was never given it), said after it so the thread stays faithful. */
+export const HarnessPrompt = (props: { onOpen?: () => void; icon?: JSX.Element; unseen?: string; children: JSX.Element }) => <p class="ui-harness-prompt">
   <Show when={props.onOpen} fallback={<>{props.icon ?? <Icons.Notification aria-hidden="true" />}<span>{props.children}</span></>}>
     <button type="button" class="ui-harness-prompt-open" onClick={() => props.onOpen?.()}>{props.icon ?? <Icons.Agent aria-hidden="true" />}<span>{props.children}</span><Icons.ChevronRight aria-hidden="true" /></button>
   </Show>
+  <Show when={props.unseen}><span class="ui-harness-prompt-unseen">{props.unseen}</span></Show>
 </p>;
+/** Text Conduit put into a prompt it delivered, beside the prompt's own: before it (`before`: the stop, update and time
+ *  notes) or after it (the decision a report asks for). Labelled and quieter, in full: shown, never hidden. */
+export const ConduitAdded = (props: { text: string; before?: boolean }) =>
+  <div class="ui-conduit-added" data-before={props.before ? "" : undefined}><span>Conduit added</span><p>{props.text}</p></div>;
 /**
  * A message that crosses the thread's edge, drawn as it crossed (DESIGN Transcript, Messages in and out). Inbound: a
  * prompt the person did not write -- a run reporting back, Conduit saying how an approval went -- exactly as the agent
  * was given it. Outbound: what the agent sent the person outside the thread (a notification). Both at the left: a
  * header of who and when (its mark, its name, what it was in `meta`, the time; Open at the right when it has a
  * transcript), then the text on a hairline rule hung from the mark, folding past `fold` lines. What Conduit added to it
- * for the agent (`appended`) sits apart under the text, labelled, quieter -- shown, never hidden.
+ * for the agent sits apart, labelled, quieter -- shown, never hidden: notes before the text (`noted`), the decision it
+ * asks for after it (`appended`).
  */
 function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: string; meta?: string; time?: string; dateTime?: string; title?: string;
-  onOpen?: () => void; openLabel?: string; fold?: number; appended?: string; children?: JSX.Element }) {
+  onOpen?: () => void; openLabel?: string; fold?: number; noted?: string; appended?: string; children?: JSX.Element }) {
   let text!: HTMLDivElement;
   const [open, setOpen] = createSignal(false);
   // Held to its fold until opened; whether it runs past it is measured against the fold itself, again whenever the
@@ -102,9 +109,10 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
       <Show when={props.onOpen}><button type="button" class="ui-envelope-open" onClick={() => props.onOpen?.()}>{props.openLabel ?? "Open"}<Icons.ChevronRight aria-hidden="true" /></button></Show>
     </header>
     <div class="ui-envelope-rule">
+      <Show when={props.noted}><ConduitAdded before text={props.noted!} /></Show>
       <div ref={text} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
       <Show when={props.fold && !fits()}><button type="button" class="ui-envelope-more" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Show less" : "Show all"}</button></Show>
-      <Show when={props.appended}><div class="ui-envelope-added"><span>Conduit added</span><p>{props.appended}</p></div></Show>
+      <Show when={props.appended}><ConduitAdded text={props.appended!} /></Show>
     </div>
   </section>;
 }
@@ -112,7 +120,7 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
  *  name, `meta` its id and how it ended; Conduit on an approval. */
 export const Inbound = (props: Omit<Parameters<typeof Envelope>[0], "direction">) => <Envelope direction="in" {...props} />;
 /** What the agent sent the person outside the thread, as it was sent (Envelope): a notification's title and line. */
-export const Outbound = (props: Omit<Parameters<typeof Envelope>[0], "direction" | "appended">) => <Envelope direction="out" {...props} />;
+export const Outbound = (props: Omit<Parameters<typeof Envelope>[0], "direction" | "appended" | "noted">) => <Envelope direction="out" {...props} />;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
@@ -152,12 +160,13 @@ export const Welcome = (props: { title: string }) => <div class="ui-welcome"><h1
 export const Turn = (props: { orb?: JSX.Element; children: JSX.Element }) =>
   <article class="ui-turn"><Show when={props.orb}><span class="ui-turn-orb" aria-hidden="true">{props.orb}</span></Show>{props.children}</article>;
 /**
- * The user's message: its Bubble (none when it is only attachments), what came with it (`under`: attachments,
- * references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and
+ * The user's message: what Conduit put before it (`before`: ConduitAdded), its Bubble (none when it is only
+ * attachments), what came with it (`under`: attachments, references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and
  * title the foot's. since: how far into its entrance it already is (sinceOf).
  */
-export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
+export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; before?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
   <article class="ui-message" {...motionOf(props.motion)} style={sinceOf(props.since)}>
+    {props.before}
     <Show when={props.children}><Bubble fold={props.fold} open={props.open} onToggle={props.onToggle} editing={props.editing}>{props.children}</Bubble></Show>
     {props.under}
     <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} end>{props.actions}</MessageFoot>

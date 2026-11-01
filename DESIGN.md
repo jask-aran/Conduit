@@ -280,12 +280,18 @@ One model draws every turn, a chat's and jbot's alike; they differ in one policy
   transcript), then the text on a hairline rule hung from the mark, folding past 8 lines.
   - *In*: a prompt the person did not write, exactly as the agent received it -- a run reporting back (its routine's
     mark and name, its id and how it ended; Open run), Conduit saying how an approval was answered. The text is muted:
-    it is what the agent reads, not what it says. What Conduit added to it for the agent (the decision a report asks
-    for) sits apart under it, labelled "Conduit added", at caption size.
+    it is what the agent reads, not what it says. What Conduit added to it for the agent sits apart, labelled "Conduit
+    added", at caption size: the stop, update and time notes before the text (and before the person's own bubble,
+    at its side), the decision a report asks for after it.
   - *Out*: what the agent sent the person outside the thread (a `message` tool: a notification now, messages later),
     in the text colour, as its own row after the work it ended -- never a line inside a disclosure.
-  - A **harness prompt** with nothing more to read (a background task finishing, a heartbeat's quiet line that was
-    never sent to the agent) stays one muted line with its mark, no bubble and no actions.
+  - A **harness prompt** with nothing more to read (a background task finishing, a heartbeat's quiet line) stays one
+    muted line with its mark, no bubble and no actions. A line the agent was never given says so after it ("never
+    sent to the agent"): the thread shows only what the agent had, or says when it does not.
+  - *Context*: what the agent was given besides messages is a step in the trail where it was given, never left out --
+    its system prompt at the thread's start (its pieces and how many tools), each later change (a section such as
+    jbot's inbox or files, tools added or removed, a prompt re-stated), a compaction's summary. The step names what
+    changed; opened, each piece's text under its name, fetched then. Every runtime chat has them, not only jbot's.
 - **Disclosure.** Everything that folds is one piece: a header, one turning chevron, a body that unfolds in height and folds to nothing. Opened at the tail, it lets go of the tail rather than being chased.
 
 # Pieces

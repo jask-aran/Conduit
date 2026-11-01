@@ -80,6 +80,18 @@ export function StepOutput(props: { text: string; hidden?: number; full?: boolea
     <Show when={props.hidden}><Button variant="ghost" size="sm" class="ui-step-more" onClick={() => props.onToggleFull?.()}>{props.full ? "Show preview" : `Show full output · ${props.hidden} hidden characters`}</Button></Show>
   </>;
 }
+/** What a context step opens to: each piece of context the model was given, under its name, in mono, and the tools it
+ *  was offered as one line of names. Its text is fetched when it opens: `loading` until then. */
+export function StepSections(props: { sections?: { label: string; text: string }[]; tools?: string; loading?: boolean; error?: string }) {
+  return <div class="ui-step-sections">
+    <Show when={!props.loading} fallback={<p class="ui-step-sections-note">Loading…</p>}>
+      <Show when={!props.error} fallback={<p class="ui-step-sections-note">{props.error}</p>}>
+        <For each={props.sections}>{(section) => <section><h4>{section.label}</h4><pre class="ui-step-output">{section.text}</pre></section>}</For>
+        <Show when={props.tools}><section><h4>Tools</h4><p class="ui-step-sections-tools">{props.tools}</p></section></Show>
+      </Show>
+    </Show>
+  </div>;
+}
 /** What a thinking or narration step opens to: its whole text, the Answer's prose a step quieter. */
 export const StepProse = (props: { children: JSX.Element }) => <div class="ui-step-prose"><div class="ui-answer">{props.children}</div></div>;
 /** A failed request in the trail: what failed, when, on what, and the error. */

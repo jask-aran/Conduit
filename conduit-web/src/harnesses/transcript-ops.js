@@ -44,7 +44,7 @@ import { wasDiscarded } from "../abort-signature.js";
  * rendered wrong while every test passed.
  */
 
-const ROLES = new Set(["user", "assistant"]);
+const ROLES = new Set(["user", "assistant", "system"]);
 const OUTCOMES = new Set(["complete", "interrupted", "failed"]);
 export const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 const text = (value) => typeof value === "string" && value.length > 0;
@@ -139,6 +139,7 @@ export function assertTranscriptOp(event) {
   if (event.op === "message.open") {
     if (!text(event.message?.id)) bad("no message id");
     if (!ROLES.has(event.message?.role)) bad(`role ${JSON.stringify(event.message?.role)}`);
+    if (event.message.context !== undefined && (!event.message.context || typeof event.message.context !== "object" || Array.isArray(event.message.context))) bad("context must be an object");
     if (event.answers !== null && !text(event.answers)) bad("answers must be a message id or null");
   } else if (event.op === "message.close") {
     if (!text(event.messageId)) bad("no message id");

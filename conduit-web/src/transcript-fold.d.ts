@@ -7,6 +7,9 @@ export interface ProtocolMessage {
   timestamp?: string;
   stopReason?: string;
   errorMessage?: string | null;
+  context?: Message["context"];
+  notes?: string;
+  unseen?: boolean;
 }
 
 export interface TranscriptOp {

@@ -78,6 +78,11 @@ button.ui-step:is(:focus-visible) { background: var(--tint); }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
 .ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
+/* A context step's body: each piece under its name (a label), its text in mono, scrolling. */
+.ui-step-sections { display: grid; gap: var(--flow-block); }
+.ui-step-sections > section { display: grid; gap: var(--flow-line); min-width: 0; }
+.ui-step-sections h4 { margin: 0; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-step-sections-tools, .ui-step-sections-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
 .ui-step-more { margin-top: var(--space-xs); }
 .ui-step-prose { color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-text); }
 /* Its text is an Answer's Markdown, muted at the trail's size. */

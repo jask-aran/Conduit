@@ -26,6 +26,7 @@ function sameTraceSegment(left: TraceSegment, right: TraceSegment): boolean {
   if (left.kind !== right.kind || left.id !== right.id) return false;
   if (left.kind === "tool" && right.kind === "tool") return left.tool === right.tool;
   if (left.kind === "error" && right.kind === "error") return left.message === right.message;
+  if (left.kind === "context" && right.kind === "context") return left.message === right.message;
   if ((left.kind === "thinking" || left.kind === "narration")
     && (right.kind === "thinking" || right.kind === "narration")) {
     return left.text === right.text && left.live === right.live && left.discarded === right.discarded

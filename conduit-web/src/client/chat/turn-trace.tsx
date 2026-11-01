@@ -5,7 +5,7 @@ import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
 import { elapsed, KIND_ICONS, scriptSaid, stepDuration, stepKind, stepText, stepVerb, toolName, ToolStep, VERBS } from "./tool-card";
-import { Orb, ServiceIcon, Step, StepProse, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
+import { Orb, ServiceIcon, Step, StepProse, StepSections, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
@@ -14,7 +14,11 @@ import type { MarkdownRendererId } from "./markdown-settings";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 
+/** A context step's text, fetched when it opens (GET /v0/sessions/:id/context/:entryId). */
+export type ContextText = { kind: string; sections: { name: string; text: string }[];
+  tools?: { added: string[]; removed: string[]; restated?: number; all?: { name: string; description: string }[] }; summary?: string };
 type RowProps = {
+  loadContext?: (entryId: number) => Promise<ContextText>;
   onRendered?: () => void;
   renderer?: MarkdownRendererId;
   profileLabel?: string;
@@ -41,6 +45,7 @@ type TrailItem =
   | { type: "error"; message: Message }
   | { type: "tool"; tool: ToolItem }
   | { type: "group"; kind: ToolKind; tools: ToolItem[] }
+  | { type: "context"; message: Message }
   | { type: "hidden" };
 
 /* The segments as the trail's lines: a run of tools of one kind becomes a
@@ -67,6 +72,8 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
       items.push({ type: "hidden" });
       continue;
     }
+    // What the model was given besides messages is its own line, where it was given (DESIGN, Messages in and out).
+    if (segment.kind === "context") { flush(); items.push({ type: "context", message: segment.message }); continue; }
     if (segment.kind === "tool") {
       if (spawned(segment.tool)) continue;
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
@@ -257,6 +264,7 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   for (let index = trace.segments.length - 1; index >= 0 && !thought; index -= 1) {
     const segment = trace.segments[index]!;
     let detail: Detail | null = null;
+    if (segment.kind === "context") continue;
     if (segment.kind === "tool") {
       // A spawn says itself in its pinned row, under this line.
       const tool = segment.tool;
@@ -310,9 +318,50 @@ function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpe
 }
 const inline = (props: Pick<RowProps, "renderer">, text: string) =>
   <Suspense fallback={text}><ChatMarkdown inline renderer={props.renderer}>{text || "\u2026"}</ChatMarkdown></Suspense>;
+/* A context piece by the name its block has in Settings › Blocks. */
+const SECTION_LABELS: Record<string, string> = { instructions: "system prompt", cwd: "working folder", web: "web tools", codemode: "codemode tools", "agent-memory": "jbot's files", "agent-inbox": "waiting inbox" };
+const sectionLabel = (name: string) => SECTION_LABELS[name] ?? name.replace(/[-_]+/g, " ");
+const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const tokensOf = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
+/* What the model was given besides messages: its system prompt, a change to it, a compaction. Says what, and how much;
+   opens to each piece's text, fetched then. */
+function ContextStep(props: RowProps & { message: Message; motion?: "entering" }) {
+  const context = () => props.message.context!;
+  const fold = useFold(() => props.message.id, props);
+  const [text, setText] = createSignal<ContextText | null>(null);
+  const [failure, setFailure] = createSignal("");
+  let asked = false;
+  createEffect(() => {
+    if (!fold.open() || asked || !props.loadContext) return;
+    asked = true;
+    props.loadContext(context().entryId).then(setText, (cause) => { asked = false; setFailure(String(cause?.message || cause)); });
+  });
+  const pieces = () => context().sections.filter((section) => section.name !== "instructions").map((section) => sectionLabel(section.name));
+  const tools = () => {
+    const change = context().tools;
+    if (!change) return "";
+    if (change.restated) return `${change.restated} tools restated`;
+    return [change.added.length ? (context().kind === "prompt" ? `${change.added.length} tools` : `+${change.added.length} tools`) : "", change.removed.length ? `\u2212${change.removed.length} tools` : ""].filter(Boolean).join(" ");
+  };
+  const verb = () => context().kind === "compaction" ? "Compacted" : context().kind === "prompt" ? "System prompt" : "Context changed";
+  const subject = () => context().kind === "compaction" ? "the conversation so far, as a summary" : [pieces().join(", "), tools()].filter(Boolean).join(" \u00b7 ") || (context().sections.some((section) => section.name === "instructions") ? "system prompt" : "");
+  const chars = () => context().kind === "compaction" ? context().summary?.chars ?? 0 : context().sections.reduce((sum, section) => sum + section.chars, 0);
+  const sections = () => {
+    const loaded = text();
+    if (!loaded) return undefined;
+    return [...loaded.sections.map((section) => ({ label: capitalised(sectionLabel(section.name)), text: section.text })), ...(loaded.summary ? [{ label: "Summary", text: loaded.summary }] : [])];
+  };
+  const toolNames = () => { const loaded = text()?.tools; if (!loaded) return undefined;
+    return loaded.all?.map((tool) => tool.name).join(", ") || [loaded.added.length ? `Added: ${loaded.added.join(", ")}` : "", loaded.removed.length ? `Removed: ${loaded.removed.join(", ")}` : "", loaded.restated ? `${loaded.restated} restated, unchanged` : ""].filter(Boolean).join(" \u00b7 ") || undefined; };
+  return <Step icon={context().kind === "compaction" ? <Icons.Compact /> : <Icons.Context />} verb={verb()} subject={subject() || undefined} face="text" aside={chars() ? tokensOf(chars()) : undefined}
+    motion={props.motion} opens open={fold.open()} onToggle={fold.toggle}>
+    <StepSections loading={!text() && !failure()} error={failure() || undefined} sections={sections()} tools={toolNames()} />
+  </Step>;
+}
 function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
+    <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       return <Step icon={segment().kind === "thinking" ? <Icons.Thinking /> : <Icons.Message />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
@@ -398,7 +447,7 @@ const LATEST_CHARS = 240;
 /** gathering: a piece of the persistent agent's work between the things it says (turn-rows.ts TurnLayout). Live it is
  *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
  *  repeated; a settled piece with no work draws nothing. */
-export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
+export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
   /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
   orb?: boolean;
   /** A Narrated turn's work between texts: its trail's own lines, no header (the orb is its row's, TraceOrb). */
@@ -425,13 +474,13 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
   // worded as Folded's: live, what it is doing; settled, what it did ("9 edits, 7 searches · 2m 23s"), never Done --
   // that is how a whole turn ended. The orb is the row's (TraceOrb), not the header's. (DESIGN.md, Turns.)
   const narrated = () => Boolean(props.narrated) && !props.gathering;
-  const single = () => narrated() && trail().filter((item) => item.type !== "text" && item.type !== "hidden").length <= 1;
+  const single = () => narrated() && trail().filter((item) => item.type !== "text" && item.type !== "hidden" && item.type !== "context").length <= 1;
   const settledRun = () => narrated() && !props.trace.active && !unfinished();
   const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
   return <Show when={!single()} fallback={<>
       <TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />
       <Trail><Index each={trail()}>{(item) =>
-        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
     </>}>
     <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
@@ -439,9 +488,9 @@ export function TurnTrace(props: { trace: TurnTraceData; agents?: AgentSummary[]
       latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
-      {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+      {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
-        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
+        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace></Show></Show>;
 }
 
