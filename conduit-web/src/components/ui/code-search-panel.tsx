@@ -1,6 +1,6 @@
-import { Icons } from "@/components/ui";
-import { FileButton } from "@/components/ui/file";
-import { SearchBar, SearchActions, SearchField, searchPanelClass } from "@/components/ui/editor";
+import * as Icons from "./icons";
+import { FileButton } from "./file";
+import { SearchBar, SearchActions, SearchField, searchPanelClass } from "./editor";
 import { SearchQuery, closeSearchPanel, findNext, findPrevious, getSearchQuery, replaceAll, replaceNext, setSearchQuery } from "@codemirror/search";
 import type { EditorView, Panel, ViewUpdate } from "@codemirror/view";
 import { CaseSensitiveIcon, ChevronUpIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
@@ -77,7 +77,7 @@ function WorkspaceSearchControls(props: {
   </SearchBar>;
 }
 
-export function createWorkspaceSearchPanel(view: EditorView): Panel {
+export function createCodeSearchPanel(view: EditorView): Panel {
   const dom = document.createElement("div");
   dom.className = searchPanelClass;
   const [query, setQuery] = createSignal(getSearchQuery(view.state));

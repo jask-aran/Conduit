@@ -9,7 +9,7 @@ import { lintKeymap } from "@codemirror/lint";
 import { gotoLine, openSearchPanel } from "@codemirror/search";
 import { Compartment, EditorState, Text, Transaction } from "@codemirror/state";
 import { dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, type Command } from "@codemirror/view";
-import { workspaceReadOnlySetup } from "./workspace-editor-base";
+import { codeReadOnlySetup } from "@/components/ui/code-setup";
 import { Redo2Icon } from "lucide-solid";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
@@ -23,7 +23,7 @@ export function isVisualMarkdownFile(path: string) {
 }
 
 const sourceEditorSetup = [
-  workspaceReadOnlySetup(),
+  codeReadOnlySetup(),
   dropCursor(),
   indentOnInput(),
   closeBrackets(),

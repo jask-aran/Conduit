@@ -54,3 +54,16 @@
 .ui-code-host .cm-scroller::-webkit-scrollbar { width: var(--space-md); height: var(--space-md); }
 .ui-code-host .cm-scroller::-webkit-scrollbar-track, .ui-code-host .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
 .ui-code-host .cm-scroller::-webkit-scrollbar-thumb { border: var(--space-2xs) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
+
+/* TextEditor (text-editor.tsx): text edited in a box that scrolls inside itself, so the page around it never scrolls
+   for its text. A hairline round it as a field has; its bar (find, undo, redo, wrap) over the text; at a reading
+   height by default, or filling what its column leaves (fill). Find and replace opens under the text. */
+.ui-text-editor { display: flex; height: var(--text-editor-height, min(calc(40 * var(--u-space)), 60dvh)); min-height: calc(12 * var(--u-space)); flex-direction: column; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
+.ui-text-editor[data-fill] { height: auto; flex: 1; }
+.ui-text-editor:focus-within { border-color: var(--ring); }
+.ui-text-editor-bar { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: var(--space-2xs); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-2xs) var(--space-xs); }
+.ui-text-editor-bar .ui-file-button[aria-pressed="true"] { color: var(--foreground); }
+.ui-text-editor-host { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: var(--text-caption); }
+.ui-text-editor-host .cm-editor { height: 100%; }
+.ui-text-editor-host .cm-scroller { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-text-editor[data-readonly] .cm-cursor { display: none; }

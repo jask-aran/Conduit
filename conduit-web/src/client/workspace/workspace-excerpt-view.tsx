@@ -5,7 +5,7 @@ import type { ReviewCommentCounterpart, ReviewCommentSide } from "../chat/review
 import { commentRange } from "./workspace-annotate";
 import { inlineLineNumbers, workspaceInlineDiff } from "./workspace-diff-setup";
 import { buildInlineDiff, inlineDocLine } from "./workspace-inline-diff";
-import { indentationGuides } from "./workspace-editor-base";
+import { indentationGuides } from "@/components/ui/code-setup";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 import { CodeExcerpt, codeExcerptSetup } from "@/components/ui/code-excerpt";
 import { reviewCommentClass } from "@/components/ui/editor";

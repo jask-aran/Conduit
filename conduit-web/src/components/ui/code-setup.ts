@@ -4,7 +4,7 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { EditorState, RangeSetBuilder } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, highlightSpecialChars, keymap, lineNumbers, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { createWorkspaceSearchPanel } from "./workspace-search-panel";
+import { createCodeSearchPanel } from "./code-search-panel";
 
 export const editorTheme = EditorView.theme({
   "&": {
@@ -116,7 +116,7 @@ export const editorTheme = EditorView.theme({
   },
 }, { dark: true });
 
-export const workspaceHighlightStyle = HighlightStyle.define([
+export const codeHighlightStyle = HighlightStyle.define([
   { tag: tags.content, color: "var(--code-foreground)" },
   { tag: tags.punctuation, color: "var(--code-foreground)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment, tags.quote], color: "var(--code-comment)", fontStyle: "italic" },
@@ -194,15 +194,15 @@ export const indentationGuides = ViewPlugin.fromClass(class {
   }
 }, { decorations: (plugin) => plugin.decorations });
 
-export const workspaceReadOnlySetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
+export const codeReadOnlySetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
   editorTheme,
   lineNumbers(numbers),
   highlightSpecialChars(),
   drawSelection(),
   EditorState.allowMultipleSelections.of(true),
-  syntaxHighlighting(workspaceHighlightStyle, { fallback: true }),
+  syntaxHighlighting(codeHighlightStyle, { fallback: true }),
   bracketMatching(),
-  search({ top: false, createPanel: createWorkspaceSearchPanel }),
+  search({ top: false, createPanel: createCodeSearchPanel }),
   highlightSelectionMatches(),
   foldGutter({ markerDOM: createFoldMarker }),
   indentationGuides,

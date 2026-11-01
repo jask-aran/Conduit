@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { Field, SettingWide, Card, CardBody } from "@/components/ui";
-import { TextArea } from "@/components/ui";
+import { TextArea, TextEditor } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 function PromptExample() {
@@ -19,6 +19,8 @@ export const textareaPage: Page = {
   examples: [
     row("TextArea", "TextArea: multi-line, grows with its lines, bare -- what holds it pads it", () => <div class="g-field"><TextArea placeholder="Type several lines…" /><TextArea value={"Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit."} /></div>),
     row("system prompt", "Editable multiline setting", () => <PromptExample />, { code: "SettingWide > Field > TextArea rows spellcheck onInput" }),
+    row("text editor", "TextEditor: text edited in a pane that scrolls inside itself (a prompt block), the workspace editor's setup -- markdown, line numbers, find and replace -- with tags quiet and {{slots}} marked; its bar finds, undoes, redoes, wraps; Mod-S saves", () => <TextEditor label="Block text" value={"# {{assistant.name}}\n\nYou are {{person.name}}'s assistant. Your persona is in `<soul>` below.\n\n## Where you speak\n\n- **The home thread** never ends.\n\n<cwd>\n{{working folder}}\n</cwd>"} />, { code: "<TextEditor label value onChange onSave />", surfaces: ["frost", "ground"] }),
+    row("text editor, read only", "The same pane reading: no caret, no undo", () => <TextEditor readOnly label="Template" value={"<agent-inbox>\nHow often the person wants to be interrupted: {{dial}}.\n{{each unhandled entry, twelve at most}}\n</agent-inbox>"} />, { code: "<TextEditor readOnly />" }),
     row("disabled", "Composer while server is unavailable", () => <TextArea aria-label="Message" placeholder="Server unavailable" disabled />, { code: "<TextArea disabled>" }),
     row("read only", "Saved review comment", () => <TextArea aria-label="Saved comment" readOnly value="Keep the current folder when a terminal reconnects." />, { code: "<TextArea readOnly>" }),
     row("long review", "Long lines inside a review card", () => <Card title="Edit review comment"><CardBody><TextArea aria-label="Review comment" rows={4} value={"Keep the workspace path visible when this menu opens so the selected folder is clear. Verify the same path after the terminal reconnects.\nAlso preserve the active chat and its draft."} /></CardBody></Card>, { code: "Card > CardBody > TextArea rows", surfaces: ["ground"] }),
@@ -29,5 +31,5 @@ export const textareaPage: Page = {
     token("--muted-foreground", "Quiet text or stroke colour"),
     token("--tint", "Surface tint"),
   ] }],
-  api: ["TextArea"],
+  api: ["TextArea", "TextEditor"],
 };

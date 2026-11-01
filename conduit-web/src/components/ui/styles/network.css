@@ -99,3 +99,6 @@ button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--mut
 .ui-prompt-section > header { display: flex; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); }
 .ui-prompt-section[data-live] > header .ui-chain-name { color: var(--muted-foreground); }
 .ui-prompt-section > header .ui-chain-size { margin-left: auto; }
+/* A document read whole, in a pane that scrolls inside itself (the page around it does not), as TextEditor does. */
+.ui-prompt-pane { height: var(--text-editor-height, min(calc(48 * var(--u-space)), 70dvh)); overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md) var(--space-lg); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
+.ui-prompt-pane:focus-visible { border-color: var(--ring); outline: none; }

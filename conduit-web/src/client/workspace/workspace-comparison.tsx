@@ -13,7 +13,7 @@ import { codeFolding, foldEffect } from "@codemirror/language";
 
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { readSetting, writeSetting, WORKSPACE_PANEL_GLOBAL_SCOPE } from "./workspace-panel-storage";
-import { workspaceReadOnlySetup } from "./workspace-editor-base";
+import { codeReadOnlySetup } from "@/components/ui/code-setup";
 import { workspaceLanguageForFilename } from "./workspace-languages";
 
 import { annotationExtension, annotationSpan, commentHighlightsExtension, commentRange, selectionEnd, WorkspaceAnnotationPopup, type AnnotationReading, type AnnotationSelection, type AnnotationSpan, type CommentHighlight } from "./workspace-annotate";
@@ -80,7 +80,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     const language = new Compartment();
     const wrapping = new Compartment();
     const extensions: Extension[] = [
-      workspaceReadOnlySetup(split ? {} : inlineLineNumbers),
+      codeReadOnlySetup(split ? {} : inlineLineNumbers),
       EditorState.readOnly.of(true),
       EditorView.contentAttributes.of({ "aria-label": `${data.path} comparison` }),
       language.of([]), wrapping.of([]),

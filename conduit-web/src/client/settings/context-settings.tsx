@@ -1,10 +1,11 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { api } from "../api/client.ts";
 import { Select } from "@/components/menus";
-import { Button, Input, Segmented, TextArea } from "@/components/ui/controls";
+import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { NavRow } from "@/components/ui/nav";
-import { ChainBreak, ChainDetailHead, ChainGap, ChainHead, ChainLayout, ChainLink, ChainMap, PromptSection, PromptText } from "@/components/ui/network";
+import { ChainBreak, ChainDetailHead, ChainGap, ChainHead, ChainLayout, ChainLink, ChainMap, PromptSection } from "@/components/ui/network";
+import { TextEditor } from "@/components/ui/text-editor";
 import { SettingGroup, SettingLine, SettingLoading, SettingNote, SettingWide } from "@/components/ui/overlay";
 
 /*
@@ -133,10 +134,10 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
             <Button variant="ghost" size="icon-sm" aria-label="Remove from this document" title="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></Button>
           </Show>
         </>} />
-      <Show when={block().kind === "live"} fallback={<PromptText label={`${block().label} text`} text={block().content ?? ""} />}>
-        <SettingGroup title="Template"><PromptText label={`${block().label} template`} text={block().template ?? ""} /></SettingGroup>
+      <Show when={block().kind === "live"} fallback={<TextEditor readOnly label={`${block().label} text`} value={block().content ?? ""} />}>
+        <SettingGroup title="Template"><TextEditor readOnly label={`${block().label} template`} value={block().template ?? ""} /></SettingGroup>
         <Show when={block().preview && block().preview !== block().template}>
-          <SettingGroup title="As it stands now"><PromptText label={`${block().label} now`} text={block().preview!} /></SettingGroup>
+          <SettingGroup title="As it stands now"><TextEditor readOnly label={`${block().label} now`} value={block().preview!} /></SettingGroup>
         </Show>
       </Show>
     </>; }}</Show>;
@@ -155,10 +156,10 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     </SettingGroup>
     <Show when={current()}>{(doc) => <Show when={view() === "stack"} fallback={
       <SettingGroup title={preview() ? `As the model gets it now · ${tokens(preview()!.chars)}` : "As the model gets it now"}>
-        <Show when={preview()} fallback={<SettingLoading>Putting it together…</SettingLoading>}>{(shown) => <For each={shown().sections}>{(section, index) => <>
+        <Show when={preview()} fallback={<SettingLoading>Putting it together…</SettingLoading>}>{(shown) => <div class="ui-prompt-pane" role="document" aria-label="The document as the model gets it" tabIndex={0}><For each={shown().sections}>{(section, index) => <>
           <Show when={section.part === "first" && shown().sections[index() - 1]?.part !== "first"}><ChainBreak label="First message" /></Show>
           <PromptSection name={section.label} live={section.kind === "live"} meta={section.kind === "live" ? "filled in by Conduit" : section.placed ? "placed by Conduit" : undefined} size={tokens(section.text.length)} text={section.text} />
-        </>}</For>}</Show>
+        </>}</For></div>}</Show>
       </SettingGroup>}>
       <SettingGroup title="Blocks">
         <ChainLayout detail={<Detail />} map={<ChainMap label={`${doc().role.label}'s document`}>
@@ -249,10 +250,10 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
         <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
         <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(loaded) => <SettingWide>
           <Show when={loaded().kind === "text"} fallback={<>
-            <PromptText label={`${loaded().label} template`} text={loaded().template ?? ""} />
-            <Show when={loaded().preview && loaded().preview !== loaded().template}><SettingGroup title="As it stands now"><PromptText label={`${loaded().label} now`} text={loaded().preview!} /></SettingGroup></Show>
+            <TextEditor readOnly label={`${loaded().label} template`} value={loaded().template ?? ""} />
+            <Show when={loaded().preview && loaded().preview !== loaded().template}><SettingGroup title="As it stands now"><TextEditor readOnly label={`${loaded().label} now`} value={loaded().preview!} /></SettingGroup></Show>
           </>}>
-            <TextArea aria-label={`${loaded().label} text`} spellcheck={false} value={draft()} onInput={(event) => { setDraft(event.currentTarget.value); setState("idle"); }} />
+            <TextEditor label={`${loaded().label} text`} value={draft()} onChange={(value) => { setDraft(value); setState("idle"); }} onSave={() => { if (dirty() && draft().trim()) void save(); }} />
           </Show>
         </SettingWide>}</Show>
       </SettingGroup>
