@@ -200,6 +200,10 @@ export function createLiveSessionStream({
         { reuseSlot: promptOptions.streamingBehavior === "steer" || promptOptions.streamingBehavior === "followUp" });
     } catch (error) { throw error; }
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
+    // The send ledger: what makes these files the message's (drawn on it, after a reload too) and not the composer's
+    // still -- lost with classic Pi's removal, so a reopened chat put its first prompt's image back in the composer.
+    await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
+      (typeof accepted === "object" ? accepted?.attachmentIdentity : null) || (messageId ? { messageId } : null), prepared.attachments);
     if (checkpoint && generationId) {
       const messageId = typeof accepted === "object" ? accepted?.attachmentIdentity?.messageId : null;
       try { await turnCheckpoints.assignTurn(checkpoint, generationId, messageId); }
