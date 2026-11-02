@@ -59,9 +59,9 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
 
 /** One quiet line for agents taken together, a disclosure of what it holds (Expand under it): the verb, the ids, the
  *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
-function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
+function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; keys?: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
-  return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? props.ids.join(" ") : undefined}
+  return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? (props.keys || props.ids).join(" ") : undefined}
     data-open={open() ? "" : undefined} data-quiet={props.quiet ? "" : undefined} {...motionOf(props.motion)}>
     <div class="ui-agent-row" data-state={props.failed ? "failed" : undefined}>
       <button type="button" class="ui-agent-open" disabled={!props.children && !props.onOpen} aria-expanded={props.children ? open() : undefined}
@@ -84,10 +84,10 @@ function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb:
  * report. ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one; status, how they are doing taken
  * together ("2 of 3 running", "Finished"), so the shut line says it. The line drops down what was started (children:
  * an AgentRow line each, which opens that agent's run). Once one has reported, onReport jumps to the report.
- * data-spawn holds the ids, for a report to jump back to.
+ * data-spawn holds the agents' keys (`keys`, their conversations; else the ids), for a report to jump back to.
  */
-export function AgentSpawn(props: { ids: string[]; title?: string; status?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
-  return <AgentLine kind="spawn" verb="Started" ids={props.ids} title={props.title} where="in the background" status={props.status} motion={props.motion}
+export function AgentSpawn(props: { ids: string[]; keys?: string[]; title?: string; status?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
+  return <AgentLine kind="spawn" verb="Started" ids={props.ids} keys={props.keys} title={props.title} where="in the background" status={props.status} motion={props.motion}
     jump={props.onReport ? { label: "Report", onClick: props.onReport } : undefined}>{props.children}</AgentLine>;
 }
 

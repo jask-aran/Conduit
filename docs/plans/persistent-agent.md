@@ -284,6 +284,27 @@ reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. Th
   has no delete API; what is really wanted is archival or compression of finished work, asked of upstream rather
   than written against its storage.
 
+### From the precedent review (2026-11-02)
+
+A review of Duet, Muse, Grok Bot, Open Muse and OpenBot (`references/jbot/message-log-precedent.md`, gitignored,
+with source citations) found each piece has precedent but not the whole. What it changes:
+
+- **One assistant, one thread under every room.** OpenBot gives each outside conversation its own agent session;
+  jbot deliberately does not. jbot is one assistant (Muse, Instinct), not a roster of bots (Grok Bot, dots): every
+  room, channel and run meets in its single pi-durable thread, and the log is how the person sees their side of it.
+- **Delivery lifecycle on every outgoing message**: `pending → sent | failed | uncertain`, with an idempotency key
+  and a snapshot of the destination taken when the message is written, so a settings change cannot redirect a
+  message already on its way and a retry cannot send twice. The app room is delivered the moment it is written;
+  other channels need the full lifecycle.
+- **Log first, prompt second**: an incoming message is written to the log and acknowledged at once, then given to
+  jbot's thread as a separate step, so a busy thread never rejects or loses a message (Open Muse answers 503 while
+  busy).
+- **Limits per sender** once anyone other than the person can reach jbot: queue and cap by sender.
+- **Stricter than OpenBot, on purpose**: a send into a room with others in it goes through approvals (OpenBot posts
+  to groups freely); an empty routine never wakes jbot (OpenBot runs it and suppresses empty output afterwards).
+- **Words**: here a *channel* is a way of reaching jbot and a *room* is one conversation within it. Elsewhere
+  OpenBot's "channel" is a room and Duet's "channels" are topic threads; outside material uses them differently.
+
 ## What the products converged on
 
 | | Duet (Anthropic, 2026-10-21) | Muse (Meta) | Instinct | Dots (OpenAI) |

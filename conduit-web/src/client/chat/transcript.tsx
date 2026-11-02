@@ -1233,7 +1233,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 </MessageFoot>
               </Show></Turn></TranscriptRow>;
           }
-          if (item.type === "reports") return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value[0]!.id} data-report={item.value.map((message) => message.agent?.id).join(" ")} flow={flow()}>
+          if (item.type === "reports") return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value[0]!.id} data-report={item.value.map((message) => message.agent?.conversationId ?? message.agent?.id).join(" ")} flow={flow()}>
             <Turn><TurnReports reports={item.value} agents={props.chat.agents?.() || []} text={(message) => <ChatText renderer={markdownRenderer()} text={message.content || ""} />} /></Turn>
           </TranscriptRow>;
           if (item.type === "message" && item.value.run) {
@@ -1301,12 +1301,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-report={message().agent?.id || undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-report={message().agent?.conversationId ?? message().agent?.id ?? undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound shut icon={<RoutineIcon routine={message().sender?.routine} />} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
-                  onBack={message().agent?.id && !message().sender?.routine ? () => jumpToSpawn(message().agent!.id!) : undefined} backLabel="Started"
+                  onBack={message().agent?.id && !message().sender?.routine ? () => jumpToSpawn(String(message().agent!.conversationId ?? message().agent!.id)) : undefined} backLabel="Started"
                   noted={message().notes} appended={message().appended}>
                   <ChatText renderer={markdownRenderer()} text={message().content || ""} />
                 </Inbound>

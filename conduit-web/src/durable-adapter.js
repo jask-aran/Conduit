@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
-import { backgroundSubagents, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
+import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
@@ -935,7 +935,7 @@ export class DurableAdapter extends EventEmitter {
       const data = entry.data || {};
       // Reports have no browser prompt; open them at placement, as the agent was given them.
       const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
-      const child = data.conversationId ?? (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === data.subagentId)?.child ?? null;
+      const child = data.conversationId ?? findSubagent(await backgroundSubagents(this.runtime.harness, record.conversationId, this.context), data.subagentId)?.child ?? null;
       // Steered into a running turn (a plain report; a run's follows up, and the run that takes it opens it): the turn
       // moves on from its prompt as for a steered message, so what comes next answers the report and is drawn under it.
       const turn = record.turn;
@@ -1081,7 +1081,7 @@ export class DurableAdapter extends EventEmitter {
     const known = { ...(turn.tools.get(event.toolCallId) || { messageId: null }), name: event.toolName, input: event.args };
     let details = null;
     if (event.toolName === "subagent" && event.args?.id) {
-      const child = (await backgroundSubagents(this.runtime.harness, record.conversationId, this.context)).find((item) => item.id === event.args.id);
+      const child = findSubagent(await backgroundSubagents(this.runtime.harness, record.conversationId, this.context), event.args.id);
       if (child) details = { subagentId: child.id, conversationId: child.child, title: child.title };
       if (record.turn !== turn) return;
     }

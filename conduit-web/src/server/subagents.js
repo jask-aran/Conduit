@@ -11,11 +11,31 @@ const SubagentRoster = defineDoc({
 const runLabel = (kind) => ({ heartbeat: "Heartbeat", brief: "Morning brief", "morning-brief": "Morning brief",
   "check-back": "Check-back", checkback: "Check-back", webhook: "Webhook", manual: "Run" })[kind]
   || kind.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+// An agent's key is its own and never reused (`key`; older agents' were their label); its label -- bg-3, fg-2, a run's
+// Heartbeat #4 -- is a name only, counted from 1 each local day. A label still running is skipped, so the model never
+// has two agents of one name to address.
+const today = () => { const at = new Date(); return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`; };
+const nextNumber = (roster, counter, taken = () => false) => {
+  if (roster.day !== today()) { roster.day = today(); roster.counts = {}; }
+  roster.counts ||= {};
+  let number = roster.counts[counter] || 0;
+  do number += 1; while (taken(number));
+  roster.counts[counter] = number;
+  return number;
+};
+const nextKey = (roster) => `k${roster.serial = (roster.serial || 0) + 1}`;
+const runningLabels = (roster) => new Set([...Object.values(roster.children), ...Object.values(roster.nested || {})]
+  .filter((item) => item.status === "running").map((item) => item.id));
+const nextLabel = (roster, prefix) => { const taken = runningLabels(roster); return `${prefix}-${nextNumber(roster, prefix, (n) => taken.has(`${prefix}-${n}`))}`; };
+/** The agent a label names: by its key, else the running one of that label, else the latest. */
+export const findSubagent = (items, id) => {
+  const named = items.filter((item) => item.id === id);
+  return items.find((item) => item.key === id) || named.find((item) => item.status === "running") || named.at(-1);
+};
 const nextRun = (roster, origin, trigger = null) => {
   if (!origin?.kind) return null;
   const kind = origin.kind;
-  const number = (roster.runs?.[kind] || 0) + 1;
-  roster.runs = { ...roster.runs, [kind]: number };
+  const number = nextNumber(roster, `run:${kind}`);
   return { routine: kind, label: runLabel(kind), number, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null) };
 };
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
@@ -70,7 +90,7 @@ export async function stopBackgroundSubagents(harness, conversationId, context) 
 
 /** The HTTP stop and the tool use the same durable anchor cancellation. */
 export async function stopBackgroundSubagent(harness, conversationId, id, context) {
-  const item = (await backgroundSubagents(harness, conversationId, context)).find((item) => item.id === id);
+  const item = findSubagent(await backgroundSubagents(harness, conversationId, context), id);
   // A stop tool may have committed its status before it could cancel the durable anchor.
   if (!item || (item.status !== "running" && item.status !== "stopped")) return false;
   await harness.abortTask(item.anchor, context);
@@ -199,7 +219,7 @@ export function Subagents(runtime) {
         item.endedAt = new Date().toISOString();
         return { status: "terminal", outcome: { status: "aborted" } };
       }, context);
-      const item = (await backgroundSubagents(runtime.harness, api.conversationId, context)).find((item) => item.id === task.input.id);
+      const item = (await backgroundSubagents(runtime.harness, api.conversationId, context)).find((item) => (item.key || item.id) === task.input.id);
       if (item) runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: "stopped" });
     },
   });
@@ -207,6 +227,8 @@ export function Subagents(runtime) {
     name: "conduit.subagent-reporter", version: 1, initial: () => ({ phase: "deliver" }),
     phases: { deliver: async (task, api, context) => {
       const { id, child, title, content, mode, number } = task.input;
+      // `id` is the agent's key in the roster; what the thread and the person call it is its label.
+      const label = (await api.snapshot(SubagentRoster, api.conversationId, context))?.children[id]?.id || id;
       const handle = await api.conversation(child, context);
       const requestId = `subagent-message:${child}:${number}`;
       let unobserve = async () => {};
@@ -266,7 +288,7 @@ export function Subagents(runtime) {
         if (task.input.gate && !task.input.origin?.test && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
-            appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
+            appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: label, conversationId: child, level,
               headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
               status: "unhandled" }, Date.parse(at));
           }, context);
@@ -296,7 +318,7 @@ export function Subagents(runtime) {
             const summary = level === "failed" ? `failed${reason ? `: ${reason}` : ""}`
               : counts.handled || counts.set ? [counts.handled && `handled ${counts.handled}`, counts.set && `set ${counts.set}`].filter(Boolean).join(" · ")
               : level === "none" ? "nothing new" : headlineOf(report.answer);
-            await tx.appendEntry(api.conversationId, { kind: "conduit.run-quiet", data: { messageId: `run-quiet:${child}:${item.run?.number ?? number}`, subagentId: id,
+            await tx.appendEntry(api.conversationId, { kind: "conduit.run-quiet", data: { messageId: `run-quiet:${child}:${item.run?.number ?? number}`, subagentId: label,
               conversationId: child, title, run: { ...item.run, woke: false, status: report.status, startedAt: item.startedAt, endedAt: item.endedAt, summary },
               level, timestamp: counts.at } });
           }, context);
@@ -311,7 +333,7 @@ export function Subagents(runtime) {
           const at = content.indexOf(report.answer);
           const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
           const item = (await api.snapshot(SubagentRoster, api.conversationId, context)).children[id];
-          const data = { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
+          const data = { subagentId: label, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
             ...(item.run ? { run: { ...item.run, startedAt: item.startedAt, endedAt: item.endedAt } } : {}),
             ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
           // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is kept
@@ -423,8 +445,7 @@ export function Subagents(runtime) {
           await stripTools(tx, created.id);
           if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
           if (childSettings) await configure(tx, created.id, childSettings);
-          roster.nextForeground = (roster.nextForeground || 1);
-          const agentId = `fg-${roster.nextForeground++}`;
+          const agentId = nextLabel(roster, "fg");
           roster.foreground[created.id] = agentId;
           return { child: created.id, agentId };
         }, context);
@@ -465,7 +486,8 @@ export function Subagents(runtime) {
         if (action === "spawn") {
           const existing = Object.values(roster.children).find((value) => value.spawn === api.taskId);
           if (existing) return JSON.parse(JSON.stringify(existing));
-          id = `bg-${roster.next++}`;
+          const label = nextLabel(roster, "bg");
+          id = nextKey(roster);
           const title = titled();
           const sinceEntry = (await tx.scanEntries({ conversationId: api.conversationId }, 1)).items[0]?.id || 0;
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
@@ -473,9 +495,11 @@ export function Subagents(runtime) {
           await stripTools(tx, child.id);
           if (runPrompt) await configure(tx, child.id, { instructions: runPrompt });
           if (childSettings) await configure(tx, child.id, childSettings);
-          roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
+          roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
         }
+        // The model names an agent by its label; the roster holds it by its key.
+        else id = (findSubagent(Object.values(roster.children), id)?.key) || id;
         const held = Object.hasOwn(roster.children, id) ? roster.children[id] : null;
         if (!held) throw new Error(`Unknown background subagent: ${id}`);
         if (action === "stop") { held.status = "stopped"; held.endedAt = new Date().toISOString(); }
@@ -521,7 +545,8 @@ export function Subagents(runtime) {
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
     const run = nextRun(roster, origin, trigger);
-    const id = `bg-${roster.next++}`;
+    const label = nextLabel(roster, "bg");
+    const id = nextKey(roster);
     const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
     const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
@@ -535,7 +560,7 @@ export function Subagents(runtime) {
     }
     const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
       gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
-    roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
+    roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
       status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
       ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
     return JSON.parse(JSON.stringify(roster.children[id]));
