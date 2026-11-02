@@ -111,7 +111,6 @@ import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { harnessLabelFor } from "./harness-brand";
 import { createAgentUiBridge } from "./agent-ui";
-import { BrowserPane } from "./browser/browser-pane";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -195,6 +194,8 @@ const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
 const TerminalPane = lazy(() => import("./remotes/terminal-pane").then((module) => ({ default: module.TerminalPane })));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
+// Loaded when a Browser pane first opens: nothing else needs it.
+const BrowserPane = lazy(() => import("./browser/browser-pane").then((module) => ({ default: module.BrowserPane })));
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
