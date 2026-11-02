@@ -467,7 +467,15 @@ export class DurableRuntime {
   /** agent-browser's tools into the `browser` extension; again whenever the host is set or its server returns. */
   async loadBrowserTools() {
     if (!this.extensions || !this.browserHost?.available) return;
-    try { this.install(defineExtension({ name: "browser", tools: await this.browserHost.tools() })); }
+    try {
+      // As connectors' (refreshConnectors): in name order, and declared again only when they change, so a reload with
+      // the same tools never breaks a thread's prompt cache.
+      const tools = [...await this.browserHost.tools()].sort((a, b) => a.name.localeCompare(b.name));
+      const shape = JSON.stringify(tools.map((tool) => [tool.name, tool.description, tool.parameters]));
+      if (shape === this.browserShape) return;
+      this.browserShape = shape;
+      this.install(defineExtension({ name: "browser", tools }));
+    }
     catch (error) { console.warn("[browser] agent-browser's tools could not be loaded:", error?.message || error); }
   }
 
