@@ -267,8 +267,22 @@ so it is never confused with messages. Code names follow when it is next touched
 The message log's app view, newest at the bottom, with the composer back under it. Reports as cards opening the
 reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. The raw thread stays one Open away.
 
-Open: how folded other-room rows look and sit in the stream; whether the app can reply into another room (answer
-an email thread from the app) or only jbot can; retention of the log.
+### Decided 2026-11-02 (second round)
+
+- **Folded rows**: one quiet row per run of another room's messages: channel icon, room name, N messages, the last
+  line, time. Tapping expands the exchange inline as compact bubbles. Consecutive messages of one room merge into
+  one row; an app-room message ends the run. Never notifies.
+- **Replying into another room**: via jbot. Expanding a room row offers Reply, which puts a room chip on the
+  composer; the message goes to jbot ("reply saying Thursday") and jbot sends into the room. Because the person asked,
+  that send needs no further approval. The app never sends into a room directly.
+- **Agent ids and labels** (every thread, not only jbot's): an agent's key is its child conversation's id (global,
+  never reused). `bg-N`, `fg-N` and a run's `Heartbeat #N` are labels only, restarting at 1 each local day, skipping
+  a label still running so the model never has two agents of one name to address. The roster, report matching and
+  the UI key by the conversation id. (Today `bg-N` is the roster key and what reports are matched by: changing that
+  comes first.)
+- **Retention**: keep everything for now: roster entries, run conversations, finished tasks, the log. pi-durable
+  has no delete API; what is really wanted is archival or compression of finished work, asked of upstream rather
+  than written against its storage.
 
 ## What the products converged on
 
