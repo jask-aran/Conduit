@@ -205,10 +205,10 @@ export class NodeHub extends EventEmitter {
   }
 
   async listDevices() {
-    await this.load();
+    const [records, hubNode] = await Promise.all([this.load(), this.hub ? this.hubView() : null]);
     // The hub's device is named as the machine is, until renamed; the hub itself goes by the server's name.
     const hub = this.hub ? [{ id: this.hub.deviceId, name: this.hubDevice.name || os.hostname() || this.hub.name(), local: true, hub: this.hub.name(),
-      nodes: [await this.hubView(), ...this.records.filter((record) => record.deviceId === this.hub.deviceId).map((record) => this.view(record))] }] : [];
+      nodes: [hubNode, ...records.filter((record) => record.deviceId === this.hub.deviceId).map((record) => this.view(record))] }] : [];
     return [...hub, ...this.devices.map((device) => this.deviceView(device))];
   }
 

@@ -341,15 +341,15 @@ export class VoiceModelManager {
   }
 
   async publicView() {
-    const backendPaths = await this.backendPathStatuses();
-    return {
-      catalogue: publicVoiceExecutionCatalog(this.catalog),
-      backendPaths,
-      installingModelId: this.installingModelId,
-      progress: this.installPromise ? { ...this.progress } : null,
-      activeModelId: this.activeModelId,
-      models: await Promise.all(LOCAL_VOICE_MODELS.map(async (model) => {
-        const [manifest, staged] = await Promise.all([this.installedManifest(model.id), this.hasStaging(model.id)]);
+    const manifests = new Map();
+    const manifestFor = (modelId) => {
+      if (!manifests.has(modelId)) manifests.set(modelId, this.installedManifest(modelId));
+      return manifests.get(modelId);
+    };
+    const [backendPaths, models] = await Promise.all([
+      this.backendPathStatuses(manifestFor),
+      Promise.all(LOCAL_VOICE_MODELS.map(async (model) => {
+        const [manifest, staged] = await Promise.all([manifestFor(model.id), this.hasStaging(model.id)]);
         return {
           ...model,
           repository: undefined,
@@ -361,6 +361,14 @@ export class VoiceModelManager {
           error: this.lastErrors.get(model.id) || null,
         };
       })),
+    ]);
+    return {
+      catalogue: publicVoiceExecutionCatalog(this.catalog),
+      backendPaths,
+      installingModelId: this.installingModelId,
+      progress: this.installPromise ? { ...this.progress } : null,
+      activeModelId: this.activeModelId,
+      models,
     };
   }
 
@@ -728,11 +736,11 @@ export class VoiceModelManager {
     return removed;
   }
 
-  async backendPathStatuses() {
+  async backendPathStatuses(manifestFor = (modelId) => this.installedManifest(modelId)) {
     return Promise.all(this.catalog.backendPaths.map(async (backendPath) => {
       const artifact = this.catalog.artifacts.find((candidate) => candidate.id === backendPath.artifactId);
       const modelId = artifact?.legacyModelId;
-      const manifest = modelId ? await this.installedManifest(modelId) : null;
+      const manifest = modelId ? await manifestFor(modelId) : null;
       const active = Boolean(modelId && this.activeModelId === modelId && this.activeRuntimeId === backendPath.runtimeId);
       const runtime = modelId ? this.activeRuntime(LOCAL_VOICE_MODELS.find((model) => model.id === modelId), backendPath.runtimeId) : null;
       const runtimeDefinition = this.catalog.runtimes.find((candidate) => candidate.id === backendPath.runtimeId);
