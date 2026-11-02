@@ -322,8 +322,10 @@ function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpe
   const [open, setOpen] = createSignal(initial);
   return { open, toggle: () => { const next = !open(); setOpen(next); props.onToolOpenChange?.(id(), next); } };
 }
-const inline = (props: Pick<RowProps, "renderer">, text: string) =>
-  <Suspense fallback={text}><ChatMarkdown inline renderer={props.renderer}>{text || "\u2026"}</ChatMarkdown></Suspense>;
+/* Built once, its text growing in place: passed as a prop's expression it was built again on every read of the prop,
+   a fresh renderer (and its link dialog) for each delta of a thought, twice. */
+const inline = (props: Pick<RowProps, "renderer">, text: () => string) =>
+  <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "\u2026"}</ChatMarkdown></Suspense>;
 /* A context piece by the name its block has in Settings › Blocks. */
 const SECTION_LABELS: Record<string, string> = { instructions: "system prompt", cwd: "working folder", web: "web tools", codemode: "codemode tools", "agent-memory": "jbot's files", "agent-inbox": "waiting inbox" };
 const sectionLabel = (name: string) => SECTION_LABELS[name] ?? name.replace(/[-_]+/g, " ");
@@ -375,7 +377,9 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
     <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
-      return <Step icon={segment().kind === "thinking" ? <Icons.Thinking /> : <Icons.Message />} summary={inline(props, summaryOf(segment().text))} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
+      const summary = inline(props, () => summaryOf(segment().text));
+      const thought = createMemo(() => segment().kind === "thinking");
+      return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
         <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>
