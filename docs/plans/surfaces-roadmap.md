@@ -210,8 +210,9 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 ### Chat, agents and voice (decided 2026-11-02)
 
-- [ ] 27. Message queue: rework what a message sent mid-turn does (queue, steer, interrupt); the current behaviour
-  is not what the user wants. Design first.
+- [x] 27. Message queue: what a message sent mid-turn does. Settled 2026-11-02 as it already works: it steers
+  (`active-chat.ts` send), queues as a follow-up only on a harness that cannot steer, and interrupt-and-send is the
+  explicit alternative.
 - [x] 28. Sub-agent limits: extend the `subagent` tool with limits (concurrent and background runs, iterations,
   output size). Built in `conduit-web/src/server/subagents.js` (`SUBAGENT_LIMITS`, overridable by
   `runtime.subagentLimits`): 16 foreground agents at once per conversation, 10 background agents running at once
@@ -226,7 +227,10 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 ### Later or lower priority
 
-- [ ] 19. Memory view with scope and provenance.
+- [ ] 19. Memory view with scope and provenance. Prototype 2026-11-02 on jbot's page, a Remembered group over its
+  Memory files: each list line of SOUL (only what it added), USER, MEMORY and 14 days of diary, newest learned first;
+  where it is kept and how long ago, with what reads it and who wrote it from which chat on hover; its chat opens
+  from the row; forget asks twice and removes that exact line (`GET /v0/agent/memory`, `POST .../memory/forget`).
 - [ ] 20. Skill discovery and status.
 - [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
 - [ ] 22. Commit message drafting with its own model.

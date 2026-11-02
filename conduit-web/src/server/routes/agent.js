@@ -3,7 +3,7 @@ import { safeRedirectTarget } from "../../auth-middleware.js";
 import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, webhook } from "../../agent/events.js";
-import { acceptProposal, listProposals, rejectProposal } from "../../agent/memory.js";
+import { acceptProposal, forgetLine, listProposals, memoryEntries, rejectProposal } from "../../agent/memory.js";
 import { listRoutines, readRoutine } from "../../agent/routine-files.js";
 import { executeRoutine } from "../../agent/routines.js";
 import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
@@ -386,6 +386,22 @@ export function registerAgentRoutes(app, { agent, backends }) {
       await cancelSchedule(agent, request.params.id);
       response.status(204).end();
     } catch (error) { next(error); }
+  });
+
+  // The memory view: every line with its scope and provenance, and forgetting one exactly as it was shown.
+  app.get("/v0/agent/memory", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      response.json({ entries: await memoryEntries(agent, { days: Math.min(60, Math.max(1, Number(request.query.days) || 14)) }) });
+    } catch (error) { next(error); }
+  });
+  app.post("/v0/agent/memory/forget", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const { file, date = null, line } = request.body || {};
+      await forgetLine(agent, file, date, line);
+      response.status(204).end();
+    } catch (error) { if (error.status) return response.status(error.status).json({ error: error.message }); next(error); }
   });
 
   for (const [verb, act] of [["accept", acceptProposal], ["reject", rejectProposal]]) {

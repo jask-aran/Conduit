@@ -7,7 +7,7 @@ import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 
@@ -240,6 +240,47 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
+  // What it remembers, line by line (GET /v0/agent/memory): where each line is, what reads it, who wrote it, when and
+  // where; its chat button opens the chat it was learned in; forgetting asks twice. A prototype (roadmap 19).
+  type MemoryEntry = { file: string; date: string | null; section: string | null; text: string; line: string; scope: string;
+    provenance: { by: string; from: string; chatId: string | null; at: string; accepted: string | null } | null };
+  const FILE_LABELS: Record<string, string> = { soul: "Soul", user: "About you", memory: "Memory", diary: "Diary" };
+  const [remembered, setRemembered] = createSignal<MemoryEntry[] | null>(null);
+  const [allRemembered, setAllRemembered] = createSignal(false);
+  const [arming, setArming] = createSignal<string | null>(null);
+  const loadRemembered = () => void api<{ entries: MemoryEntry[] }>("/v0/agent/memory").then((value) => setRemembered(value.entries)).catch(() => setRemembered(null));
+  onMount(loadRemembered);
+  const rememberedOrder = createMemo(() => [...(remembered() || [])].sort((left, right) =>
+    (right.provenance?.at || "").localeCompare(left.provenance?.at || "")));
+  const entryKey = (entry: MemoryEntry) => `${entry.file}:${entry.date || ""}:${entry.line}`;
+  const forget = (entry: MemoryEntry) => {
+    const key = entryKey(entry);
+    if (arming() !== key) { setArming(key); setTimeout(() => { if (arming() === key) setArming(null); }, 3000); return; }
+    setArming(null);
+    void act(key, () => api("/v0/agent/memory/forget", { method: "POST", body: JSON.stringify({ file: entry.file, date: entry.date, line: entry.line }) })).finally(loadRemembered);
+  };
+  const whereOf = (entry: MemoryEntry) => [entry.file === "diary" ? `Diary ${entry.date}` : FILE_LABELS[entry.file] || entry.file,
+    entry.section && entry.section !== entry.date && entry.section !== FILE_LABELS[entry.file] ? entry.section : null].filter(Boolean).join(" › ");
+  const whoOf = (entry: MemoryEntry) => entry.provenance
+    ? `${entry.provenance.accepted ? "kept by you, from" : "from"} ${entry.provenance.from} · ${age(entry.provenance.at, now())}`
+    : "written by you";
+  const rememberedGroup = () => <Show when={remembered()}>{(entries) =>
+    <SplitGroup id="agent-remembered" label="Remembered" count={entries().length || null}
+      more={rememberedOrder().length > 6 && !allRemembered() ? <SplitGroupMore count={rememberedOrder().length - 6} onClick={() => setAllRemembered(true)}>Show all</SplitGroupMore> : undefined}>
+      <Show when={entries().length} fallback={<SplitEmpty>Nothing remembered yet.</SplitEmpty>}>
+        <For each={allRemembered() ? rememberedOrder() : rememberedOrder().slice(0, 6)}>{(entry) =>
+          <SplitRow lead={entry.provenance ? <Icons.Agent /> : <Icons.User />} primary={entry.text} title={`${entry.text}\n${whereOf(entry)}, ${whoOf(entry)}\n${entry.scope}`}
+            context={`${entry.file === "diary" ? "Diary" : entry.section || FILE_LABELS[entry.file] || entry.file} · ${entry.provenance ? age(entry.provenance.at, now()) : "you"}`}
+            trailing={<><Show when={entry.provenance?.chatId}>{(chatId) =>
+              <DashIconButton aria-label="Open the chat it was learned in" title="Open the chat it was learned in" onClick={(event: MouseEvent) => props.onOpenChat(chatId(), event)}><Icons.Chat /></DashIconButton>}</Show>
+              <DashIconButton aria-label={arming() === entryKey(entry) ? "Forget it: click again" : "Forget"} title={arming() === entryKey(entry) ? "Click again to forget" : "Forget"}
+              disabled={busy() !== null} onClick={() => forget(entry)}>
+              {arming() === entryKey(entry) ? <Icons.Check /> : <Icons.Close />}</DashIconButton></>} />}
+        </For>
+      </Show>
+    </SplitGroup>}
+  </Show>;
+
   // Its memory is files in its folder, read and edited where any file is.
   const memoryGroup = () => <SplitGroup id="agent-memory" label="Memory">
     <For each={MEMORY}>{(file) =>
@@ -286,7 +327,7 @@ export function AgentPage(props: {
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer}
-          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
+          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{rememberedGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>
 

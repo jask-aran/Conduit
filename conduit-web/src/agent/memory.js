@@ -193,6 +193,60 @@ export async function render(agent) {
   return output;
 }
 
+const SCOPES = { soul: "Who it is: read in every turn", user: "About you: read in every turn", memory: "What it keeps: read in every turn" };
+const BY = { home: "home thread", side: "a side thread", run: "a run", agent: "itself" };
+
+/**
+ * Every line of its memory as an entry, for the memory view: which file and section, what reads it (scope), and who
+ * wrote it, from where, when (provenance; none for a line you or an editor wrote). Diary days back `days`.
+ */
+export async function memoryEntries(agent, { days = 14 } = {}) {
+  const today = agent.today();
+  const dates = [];
+  const day = new Date(`${today}T00:00:00Z`);
+  for (let i = 0; i < days; i++) { dates.push(day.toISOString().slice(0, 10)); day.setUTCDate(day.getUTCDate() - 1); }
+  const sources = [...Object.keys(FILES).map((file) => ({ file, date: null })), ...dates.map((date) => ({ file: "diary", date }))];
+  const read_ = await Promise.all(sources.map(async ({ file, date }) => read(await filePath(agent, file, date))));
+  const entries = [];
+  sources.forEach(({ file, date }, index) => {
+    const content = file === "user" ? splitFrontMatter(read_[index]).body : read_[index];
+    let section = null;
+    for (const line of content.split(/\r?\n/)) {
+      const heading = /^#{1,3}\s+(.+)$/.exec(line);
+      if (heading) { section = heading[1].replace(provenance, "").trim(); continue; }
+      // What is remembered is the list's items (every line the agent writes is one); a file's prose (its seed's own
+      // explanation, a persona) is the file's, not a memory.
+      if (!/^\s*[-*]\s+/.test(line)) continue;
+      const text = line.replace(provenance, "").replace(/^\s*[-*]\s+/, "").trim();
+      if (!text || /^<!--.*-->$/.test(text)) continue;
+      const match = line.match(provenance);
+      // The persona as seeded or written by you is who it is, not something it learned: only what it added shows.
+      if (file === "soul" && !match) continue;
+      entries.push({
+        file, date, section, text, line,
+        scope: file === "diary" ? (date === today ? "Today's diary: read in every turn" : "An earlier day: found when it searches") : SCOPES[file],
+        provenance: match ? { by: match[1], from: BY[match[1]], chatId: match[2] === "-" ? null : match[2], callId: match[3], at: match[4], accepted: match[5] || null } : null,
+      });
+    }
+  });
+  return entries;
+}
+
+/** You forgetting one line, exactly as it stands (`line`): any line, yours or its own; none if it has changed since. */
+export async function forgetLine(agent, file, date, line) {
+  if (typeof line !== "string" || !line.trim()) throw Object.assign(new Error("Choose a line."), { status: 400 });
+  const target = await filePath(agent, file, date);
+  return locked(target, async () => {
+    await filePath(agent, file, date);
+    const lines = linesOf(await read(target));
+    const matches = lines.map((item, index) => lineText(item) === line ? index : -1).filter((index) => index >= 0);
+    if (matches.length !== 1) throw Object.assign(new Error(matches.length ? "Several lines match." : "That line has changed."), { status: 409 });
+    lines.splice(matches[0], 1);
+    await write(target, lines.join(""));
+    return true;
+  });
+}
+
 export function MemoryTools(runtime) {
   const memory = defineTool({
     name: "memory",
