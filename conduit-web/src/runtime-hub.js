@@ -62,6 +62,14 @@ export class RuntimeHub {
     if (client) Object.assign(client.peer, fields);
   }
 
+  /** One connection's event alone (an agent's command to a tab of it); false when it has gone. */
+  sendTo(id, event) {
+    const client = [...this.clients].find((candidate) => candidate.peer.id === id);
+    if (!client) return false;
+    this.write(client, JSON.stringify(event));
+    return true;
+  }
+
   /** The live connections, as Settings and the CLI show them. */
   connections() {
     return [...this.clients].map((client) => ({ ...client.peer }));

@@ -49,6 +49,7 @@ import { currentMagicDnsOrigin } from "./tailscale-share.js";
 import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
+import { UiControl } from "./server/ui-control.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
@@ -613,7 +614,10 @@ for (const adapter of backends.instances()) {
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerContextRoutes(app, { contextStore });
+// Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
+const uiControl = new UiControl({ runtimeHub });
 registerRuntimeRoutes(app, {
+  uiControl,
   attachments,
   config,
   currentMagicDnsOrigin,
@@ -716,6 +720,7 @@ await push.load();
 // The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
 // clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
+if (durableAdapter) durableAdapter.runtime.uiControl = uiControl;
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
 registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {

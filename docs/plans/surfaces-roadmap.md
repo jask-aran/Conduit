@@ -121,7 +121,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [ ] 9. Browsers on client devices, reachable from any other client through the hub.
 - [ ] 10. Acting as you: jbot uses your browser on a device you choose.
 - [ ] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
-  open, close and focus panes; use the browser.
+  open, close and focus panes; use the browser. Partly built: every open tab tells the server its panes (what each
+  shows, which has the keyboard, whether the tab is in use; `client/agent-ui.ts`), and the server sends a command to
+  one tab over its runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have a `ui` tool
+  (look, open, close, focus; in every profile, from codemode in Coding, not in subagents), and `GET /v0/ui` and
+  `POST /v0/ui/commands` are the same for a CLI or MCP server. Left: an MCP server for other harnesses on top of those
+  routes, and the browser (with #7).
 - [ ] 12. Add Vercel's agent-desktop for driving desktop apps on devices.
 
 ### Settings

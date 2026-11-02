@@ -91,7 +91,7 @@ import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from 
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
 import { createSideChat, type SideChat } from "./state/side-chat";
-import { createRuntimeStore, deviceLabel, deviceStates } from "./state/runtime";
+import { connectionId, createRuntimeStore, deviceLabel, deviceStates } from "./state/runtime";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
 import { isShortcutRegion } from "./shortcuts/shortcut-types";
@@ -110,6 +110,7 @@ import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFE
 import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { harnessLabelFor } from "./harness-brand";
+import { createAgentUiBridge } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -4393,6 +4394,39 @@ function App() {
     setPaneAOverride(null);
     void Promise.resolve(openInPaneA(view)).finally(() => { swappingPanes = false; reconcileTabs(); });
   };
+  /*
+   * Agents see and arrange this tab's panes (agent-ui.ts, the `ui` tool): each pane's document as its view and title,
+   * the one with the keyboard; open (in pane A, a pane given, or beside), close, focus -- the same moves a person makes.
+   */
+  createAgentUiBridge({
+    connection: connectionId,
+    route: () => routeKind(),
+    panes: () => panesShown().map((pane) => { const view = viewOf(pane); return { pane, view, title: view ? viewName(view) : "Empty pane", focused: keyboardPane() === pane }; }),
+    run: async (command) => {
+      const shown = panesShown();
+      const pane = command.pane ?? keyboardPane();
+      if (command.action !== "open" && !shown.includes(pane)) throw new Error(`No pane ${String(pane)} is open; open ones: ${shown.map(String).join(", ")}`);
+      if (command.action === "focus") { focusAnyPane(pane); return `Focused pane ${String(pane)}.`; }
+      if (command.action === "close") {
+        if (command.pane === undefined) throw new Error("Say which pane to close (main or its number, from look).");
+        await closeDocument(pane); return `Closed what pane ${String(pane)} showed.`;
+      }
+      const view = command.view;
+      if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use chat:<id>, page:dashboard, page:agent, page:project:<id>, terminal or files.`);
+      if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
+        const slot = await openBeside(view, true);
+        // Where it landed: a pane in the row, or the dock when the window has no room for another beside.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const at = panesShown().find((candidate) => viewOf(candidate) === view);
+        if (at !== undefined) return `Opened ${viewName(view)} in pane ${String(at)}.`;
+        return typeof slot === "number" ? `Opened ${viewName(view)} in the dock: the window has no room for another pane beside.` : `Could not open ${viewName(view)} beside.`;
+      }
+      if (pane === "main" || !shown.includes(pane)) { await openInPaneA(view); focusAnyPane("main"); return `Opened ${viewName(view)} in pane main.`; }
+      await setSlotView(pane as number, view);
+      focusAnyPane(pane);
+      return `Opened ${viewName(view)} in pane ${String(pane)}.`;
+    },
+  });
   // A pane beside A, in the row or (docked) in the dock.
   const renderSlot = (slot: number, position: () => number, docked: boolean) => {
       const pane = paneSlot(slot);

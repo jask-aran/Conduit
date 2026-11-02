@@ -8,6 +8,7 @@ import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { UsageLedger } from "./usage-ledger.js";
+import { UiTool } from "./ui-control.js";
 import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -260,6 +261,7 @@ export class DurableRuntime {
       install(DeviceTools(this, coding));
       install(Subagents(this));
       install(Handoff);
+      install(defineExtension({ name: "ui", tools: [UiTool(this)] }));
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
@@ -445,10 +447,10 @@ export class DurableRuntime {
     const connects = isAgent || template.connectors === true;
     // Codemode comes with the connected accounts, or with a template that lists it.
     const codes = connects || template.tools.includes("codemode");
-    const extensions = [...new Set(["conduit", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
+    const extensions = [...new Set(["conduit", "ui", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
+    const wanted = new Set([...ALWAYS, "ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
       ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])

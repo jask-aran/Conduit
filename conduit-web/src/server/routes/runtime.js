@@ -10,6 +10,7 @@ const PROOF_LIMIT = 20;
 const drainsOnRestart = (process) => manifestForImplementation(process.backend?.implementation)?.restartDrain !== false;
 
 export function registerRuntimeRoutes(app, {
+  uiControl,
   attachments,
   config,
   currentMagicDnsOrigin,
@@ -236,6 +237,22 @@ export function registerRuntimeRoutes(app, {
 
   app.post("/v0/runtime/clients/:id/nodes", (request, response) => {
     response.status(runtimeHub.locate(request.params.id, request.body?.nodes) ? 204 : 404).end();
+  });
+
+  // A tab of this connection says what it shows (agent-ui.ts), and answers a command it was sent.
+  app.post("/v0/runtime/clients/:id/view", (request, response) => {
+    response.status(uiControl.report(request.params.id, request.body) ? 204 : 404).end();
+  });
+  app.post("/v0/runtime/clients/:id/commands/:command", (request, response) => {
+    response.status(uiControl.answer(request.params.id, request.params.command, request.body) ? 204 : 404).end();
+  });
+  // The same as the `ui` tool, for a CLI or an MCP server: every open tab and its panes; a command to one of them.
+  app.get("/v0/ui", (_request, response) => response.json({ tabs: uiControl.look() }));
+  app.post("/v0/ui/commands", async (request, response) => {
+    const { action, view, pane, beside, client } = request.body || {};
+    if (!["open", "close", "focus"].includes(action)) return response.status(400).json({ error: "invalid_action" });
+    try { response.json(await uiControl.command({ action, ...(view ? { view: String(view) } : {}), ...(pane !== undefined ? { pane: pane === "main" ? "main" : Number(pane) } : {}), ...(beside ? { beside: true } : {}) }, client || null)); }
+    catch (error) { response.status(error.status || 500).json({ error: error.message }); }
   });
 
   // The launcher: a restart to this service-worker hash is coming.

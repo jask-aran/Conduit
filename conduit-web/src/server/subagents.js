@@ -423,7 +423,7 @@ export function Subagents(runtime) {
   // delegation and the question card. Edited in place on the copy: `configure`'s `{ remove }` would replace the copied
   // lists with "the host's default selection less these" -- every extension and tool the hub has, jbot's included.
   const stripTools = async (tx, child) => {
-    const gone = new Set(["subagent", "ask_user"]);
+    const gone = new Set(["subagent", "ask_user", "ui"]);
     const agent = await tx.doc(PiAgentDoc, child);
     if (Array.isArray(agent.extensions)) agent.extensions = agent.extensions.filter((name) => name !== extension.name);
     else agent.extensions = { ...agent.extensions, remove: [...new Set([...(agent.extensions?.remove || []), extension.name])] };
