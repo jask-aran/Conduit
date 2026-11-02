@@ -36,7 +36,7 @@ const PROBE = `window.__probe2 = (spec) => new Promise((res) => {
     res([...bad]); };
   requestAnimationFrame(tick);
 });`;
-const go = async (fam) => { await page.evaluate((fam) => [...document.querySelectorAll(".g-rail .ui-nav-row")].find((e) => e.textContent.trim() === fam)?.click(), fam); await page.waitForTimeout(700); await page.evaluate(PROBE); };
+const go = async (fam) => { await page.evaluate((fam) => [...document.querySelectorAll(".g-rail .ui-row[data-density=nav]")].find((e) => e.textContent.trim() === fam)?.click(), fam); await page.waitForTimeout(700); await page.evaluate(PROBE); };
 const report = (name, r) => console.log(r.length ? "✗" : "✓", name, r.join("; "));
 try {
   // Disclosure (and what folds as one: a Trace, an opening Step): close and open each, watching its body and the rows after it.
@@ -76,4 +76,4 @@ try {
   }
   console.log("errors", errs);
 } catch (e) { console.log("ERROR", e.message.split("\n")[0]); }
-finally { await page.evaluate((v) => { if (v) localStorage.setItem("gallery:speed", v); }, userSpeed); await page.reload(); await page.waitForTimeout(2500); await page.evaluate(() => [...document.querySelectorAll(".g-rail .ui-nav-row")].find((e) => e.textContent.trim() === "PhoneComposer")?.click()); await b.close(); }
+finally { await page.evaluate((v) => { if (v) localStorage.setItem("gallery:speed", v); }, userSpeed); await page.reload(); await page.waitForTimeout(2500); await page.evaluate(() => [...document.querySelectorAll(".g-rail .ui-row[data-density=nav]")].find((e) => e.textContent.trim() === "PhoneComposer")?.click()); await b.close(); }

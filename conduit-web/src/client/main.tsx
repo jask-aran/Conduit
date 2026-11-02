@@ -4,7 +4,7 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DashHeader, DashRow, DropOverlay, Group, GroupHeading, Notice, PaneEmpty, RiderActions, RiderButton, Sheet, SheetFill } from "@/components/ui";
+import { AppShell, DashHeader, DropOverlay, Group, GroupHeading, Notice, PaneEmpty, RiderActions, RiderButton, Sheet, SheetFill, Row } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
@@ -2207,7 +2207,7 @@ function App() {
       const row = [
         ...sidebar.querySelectorAll('[aria-current="page"]'),
         ...sidebar.querySelectorAll("[data-within]"),
-        ...sidebar.querySelectorAll(".ui-nav-row, .ui-rail-button"),
+        ...sidebar.querySelectorAll(".ui-row[data-density=nav], .ui-rail-button"),
       ].find(shown);
       const target = row && (row.matches("button, a") ? row : row.querySelector("button, a"));
       (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });
@@ -3131,12 +3131,12 @@ function App() {
         </RiderActions>
         <Show when={recent().length}>
           <Group id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
-            <For each={recent()}>{(item) => <DashRow element="button" lead={<Icons.Chat />} primary={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
+            <For each={recent()}>{(item) => <Row density="list" element="button" lead={<Icons.Chat />} label={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
           </Group>
         </Show>
         <Show when={projects().length}>
           <Group id="Projects" heading={<GroupHeading>Projects</GroupHeading>}>
-            <For each={projects()}>{(project) => <DashRow element="button" lead={<Icons.Folder />} primary={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
+            <For each={projects()}>{(project) => <Row density="list" element="button" lead={<Icons.Folder />} label={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
           </Group>
         </Show>
       </PaneHome>

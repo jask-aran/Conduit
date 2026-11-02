@@ -21,7 +21,7 @@
  * the cursor where it was (data-held), since focus there is only waiting.
  */
 
-const ROWS = ":is(.ui-dash-row:is(button, a), .ui-dash-more, .ui-folder)";
+const ROWS = ":is(.ui-row[data-density=list]:is(button, a), .ui-dash-more, .ui-folder)";
 const CONTROLS = ".ui-dash-group-head :is(button, a[href])";
 const INPUT = ":is(.ui-dash-composer, [data-dash-dock]) :is(textarea, [contenteditable='true'])";
 

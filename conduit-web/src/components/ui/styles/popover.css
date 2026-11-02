@@ -20,48 +20,48 @@
 .ui-search { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-row); outline: none; }
 .ui-search::placeholder { color: var(--muted-foreground); }
 
-.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--row-pad); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); font-weight: var(--weight-rest); line-height: var(--leading-text); text-align: left; cursor: default; user-select: none; outline: none; }
+.ui-row:where([data-density="menu"]) { padding: var(--row-pad); font-weight: var(--weight-rest); line-height: var(--leading-text); cursor: default; user-select: none; outline: none; }
 /* The icon slot: every leading mark -- a lucide icon, a workspace glyph, a
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
 .ui-icon > .ui-glyph svg { width: 100%; height: 100%; }
 .ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-row > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row:where([data-density="menu"]) > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
 /* The meta gives way before the label does: a long one (a model's spec) truncates first. */
-.ui-row > :is(small, .ui-meta) { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
-.ui-row > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
-.ui-row > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
+.ui-row:where([data-density="menu"]) > :is(small, .ui-meta) { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-row:where([data-density="menu"]) > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
+.ui-row:where([data-density="menu"]) > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 /* The cursor (DESIGN Interaction): one row at a time, the wash, white, no change of weight.
    The pointer moves it (moveCursor), as the keyboard does; hover alone never washes a second row. */
-.ui-row:is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
+.ui-row:where([data-density="menu"]):is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
 /* On a touch screen the row under the finger is washed while it is pressed: what lifting it will choose. */
-@media (hover: none) { .ui-row:not([data-disabled]):active { background: var(--tint); color: var(--foreground); } }
+@media (hover: none) { .ui-row:where([data-density="menu"]):not([data-disabled]):active { background: var(--tint); color: var(--foreground); } }
 /* There a menu item is focused only to carry the keys (a submenu shut puts it back on its trigger): it is the cursor
    only when the focus is shown, so a row tapped or returned to is not left washed. A search's rows keep theirs. */
-@media (hover: none) { .ui-row[role^="menuitem"][data-highlighted]:not(:focus-visible, :active, [data-expanded]) { background: none; color: inherit; } }
-.ui-row[data-checked], [data-surface="frost"] .ui-row[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
+@media (hover: none) { .ui-row:where([data-density="menu"])[role^="menuitem"][data-highlighted]:not(:focus-visible, :active, [data-expanded]) { background: none; color: inherit; } }
+.ui-row:where([data-density="menu"])[data-checked], [data-surface="frost"] .ui-row:where([data-density="menu"])[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
 /* Over frost the row reads a touch heavier and brighter (text over frost reads thinner). */
 /* The row role, one for every row (list, menu, palette, settings, the sidebar): over frost a touch heavier and brighter, since text there reads thinner. */
-[data-surface="frost"] :is(.ui-row, .ui-nav-row) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-weight: var(--weight-lift); }
+[data-surface="frost"] :is(.ui-row:where([data-density="menu"]), .ui-row:where([data-density="nav"])) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-weight: var(--weight-lift); }
 /* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
-.ui-row > .ui-icon { color: var(--muted-foreground); }
-.ui-row:is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
-:is(.ui-row[data-checked] > .ui-icon, .ui-nav-row[aria-current="page"] > .ui-nav-icon, .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
+.ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
+.ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
+:is(.ui-row:where([data-density="menu"])[data-checked] > .ui-icon, .ui-row:where([data-density="nav"])[aria-current="page"] > .ui-row-lead:where([data-density="nav"] *), .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
 /* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
-.ui-row .ui-harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
-.ui-row:is([data-highlighted], [data-checked]) .ui-harness-mark { filter: none; opacity: 1; }
-.ui-row[data-disabled], [data-surface="frost"] .ui-row[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent var(--tone-faint)); text-decoration: line-through var(--stroke-thin); }
-.ui-row[data-disabled] > small { text-decoration: none; }
-.ui-row[data-destructive], .ui-row[data-destructive] > .ui-icon { color: var(--destructive); }
-.ui-row[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
+.ui-row:where([data-density="menu"]) .ui-harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
+.ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) .ui-harness-mark { filter: none; opacity: 1; }
+.ui-row:where([data-density="menu"])[data-disabled], [data-surface="frost"] .ui-row:where([data-density="menu"])[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent var(--tone-faint)); text-decoration: line-through var(--stroke-thin); }
+.ui-row:where([data-density="menu"])[data-disabled] > small { text-decoration: none; }
+.ui-row:where([data-density="menu"])[data-destructive], .ui-row:where([data-density="menu"])[data-destructive] > .ui-icon { color: var(--destructive); }
+.ui-row:where([data-density="menu"])[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
 /* A row dragged over (data-drop-target, a list a pointer reorders): a line where the dragged row will land. */
-.ui-row[data-drop-target] { box-shadow: inset 0 var(--stroke) 0 var(--foreground); }
+.ui-row:where([data-density="menu"])[data-drop-target] { box-shadow: inset 0 var(--stroke) 0 var(--foreground); }
 /* RowGroup: the row fills; its actions are --control-sm squares after it, each with the row's cursor wash when it holds
    the cursor. Where a pointer hovers they show on the hovered row or the one the cursor is in. */
 .ui-row-group { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2xs); }
-.ui-row-group > .ui-row { min-width: 0; flex: 1; }
+.ui-row-group > .ui-row:where([data-density="menu"]) { min-width: 0; flex: 1; }
 .ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
 .ui-row-action { display: grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); cursor: pointer; }
 .ui-row-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
@@ -71,31 +71,31 @@
 .ui-row-action[data-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
 @media (hover: hover) { .ui-row-group:not(:hover, :focus-within) > .ui-row-actions { visibility: hidden; } }
 
-.ui-row > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
+.ui-row:where([data-density="menu"]) > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
 /* Heading section: the popover's subject, then items about it (a field row). */
 
 /* A field row: its name muted at the row role (never uppercase), its value after it. */
 /* A field row reads as its section's title (a slider's, the plus menu's PROFILE and EFFORT): the name in the label's
    voice, its value in the text's, quiet, and a small chevron -- the row that unfolds the section's reading under it. */
-.ui-row[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
-.ui-row[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
-.ui-row[data-field] > .ui-chevron { width: var(--icon-xs); height: var(--icon-xs); }
+.ui-row:where([data-density="menu"])[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-row:where([data-density="menu"])[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
+.ui-row:where([data-density="menu"])[data-field] > .ui-chevron { width: var(--icon-xs); height: var(--icon-xs); }
 
 /* An item's detail: a second line under its label (a route's address). */
-.ui-row > .ui-label[data-stacked] { display: flex; flex-direction: column; }
+.ui-row:where([data-density="menu"]) > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-tight) inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
 /* Data: a second line that is a value reads in the data face, as a row's meta does. */
 .ui-label > .ui-detail[data-data] { font-family: var(--font-data); }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
-.ui-row > :is(svg, .ui-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
-.ui-row > .ui-harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-row:where([data-density="menu"]) > :is(svg, .ui-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-row:where([data-density="menu"]) > .ui-harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
    which stay). */
 [data-density="phone"] .ui-keys { display: none; }
-@media (--conduit-phone-layout) { .ui-row > .ui-keys { display: none; } }
+@media (--conduit-phone-layout) { .ui-row:where([data-density="menu"]) > .ui-keys { display: none; } }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
 
 .ui-menu-action > :is(svg, img), .ui-menu-action > :first-child:not(:last-child) { width: var(--icon); height: var(--icon); flex: none; }
@@ -112,7 +112,7 @@
 .ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-popover) + 1); width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
 .ui-menu-note[data-error] { color: var(--destructive); }
-.ui-row > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row:where([data-density="menu"]) > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) { .ui-menu-parent { transition: none; } }
 
@@ -134,21 +134,21 @@
 .ui-readout > span:last-child { min-width: 0; text-align: end; overflow-wrap: anywhere; }
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
 /* A row that opens in place turns its chevron down while open. */
-.ui-row > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-row[aria-expanded="true"] > .ui-chevron { rotate: 90deg; }
+.ui-row:where([data-density="menu"]) > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
+.ui-row:where([data-density="menu"])[aria-expanded="true"] > .ui-chevron { rotate: 90deg; }
 /* A chevron that is its own press: the glyph's box, the wash under the pointer. */
 button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
 button.ui-chevron > svg { width: 100%; height: 100%; }
 @media (hover: hover) { button.ui-chevron:hover { background: var(--tint); color: var(--foreground); } }
 /* A child row sits an icon and a gap in, under its parent's label. */
-.ui-row:not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }
-@media (--conduit-phone-layout) { .ui-row > .ui-row-end[data-reveal] { display: none; } }
-.ui-row[data-indent] { width: calc(100% - var(--icon) - var(--row-gap)); margin-left: calc(var(--icon) + var(--row-gap)); }
+.ui-row:where([data-density="menu"]):not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }
+@media (--conduit-phone-layout) { .ui-row:where([data-density="menu"]) > .ui-row-end[data-reveal] { display: none; } }
+.ui-row:where([data-density="menu"])[data-indent] { width: calc(100% - var(--icon) - var(--row-gap)); margin-left: calc(var(--icon) + var(--row-gap)); }
 /* An edit's check column: a box per row, ticked when chosen; chosen rows wear the wash. */
 .ui-row-check { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; border: var(--hairline) solid color-mix(in oklch, var(--foreground), transparent var(--tone-line)); border-radius: var(--radius-inset); }
 .ui-row-check > svg { width: var(--icon-sm); height: var(--icon-sm); stroke-width: 3; }
-.ui-row[data-picked] { background: var(--tint); color: var(--foreground); }
-.ui-row[data-picked] > .ui-row-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
+.ui-row:where([data-density="menu"])[data-picked] { background: var(--tint); color: var(--foreground); }
+.ui-row:where([data-density="menu"])[data-picked] > .ui-row-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
 
 /* Text a row is given as its own span (not a label part) runs out in an ellipsis, as a label does. */
-.ui-row > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end, .ui-row-check) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row:where([data-density="menu"]) > span:not(.ui-icon, .ui-keys, .ui-meta, .ui-row-end, .ui-row-check) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

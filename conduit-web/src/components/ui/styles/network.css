@@ -39,7 +39,7 @@
 .ui-client-status { margin: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-client-places { display: grid; margin-top: var(--space-xs); }
 .ui-client-places > h5 { margin-bottom: var(--space-2xs); }
-.ui-client-places .ui-nav-row { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
+.ui-client-places .ui-row:where([data-density="nav"]) { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
 .ui-client-empty { margin: 0; color: var(--muted-foreground); }
 .ui-client-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: auto; padding-top: var(--space-xs); margin-inline: calc(-1 * var(--space-sm)); }
 

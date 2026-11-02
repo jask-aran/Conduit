@@ -7,9 +7,10 @@ import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
+import { Row } from "@/components/ui/row";
 
 /**
  * The hub's persistent agent's page (docs/plans/persistent-agent.md): its messages with the person (the message log's
@@ -118,38 +119,38 @@ export function AgentPage(props: {
 
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(run.id);
-    return <SplitRow element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
+    return <Row density="list" element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
       lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
-      primary={run.title || "A run"}
+      label={run.title || "A run"}
       context={[RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null].filter(Boolean).join(" · ")}
-      trailing={age(live ? run.startedAt : run.endedAt, now())} />;
+      meta={age(live ? run.startedAt : run.endedAt, now())} />;
   };
 
   const needsGroup = () => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first">
     <Show when={agentNeeds()} fallback={<SplitEmpty>Nothing waits on you.</SplitEmpty>}>
       <For each={needs()?.asks}>{(ask) =>
-        <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(ask.chatId, event)}
-          lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} primary={ask.title} title={ask.lines.map(approvalLineText).join("\n")}
+        <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(ask.chatId, event)}
+          lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} label={ask.title} title={ask.lines.map(approvalLineText).join("\n")}
           context="Waiting for your approval · open to see it all"
-          trailing={<>
+          meta={<>
             <DashIconButton aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></DashIconButton>
           </>} />}
       </For>
       <For each={needs()?.questions}>{(question) =>
-        <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(question.chatId, event)}
-          lead={<StatusDot label="Waiting" tone="warn" />} primary={question.title} context="Waiting for your answer" />}
+        <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(question.chatId, event)}
+          lead={<StatusDot label="Waiting" tone="warn" />} label={question.title} context="Waiting for your answer" />}
       </For>
       <For each={needs()?.proposals}>{(proposal) =>
-        <SplitRow lead={<Icons.FileText />} primary={proposal.text} title={proposal.text}
+        <Row density="list" lead={<Icons.FileText />} label={proposal.text} title={proposal.text}
           context={`${proposal.op === "remove" ? "Forget" : "Remember"} · ${proposal.file}`}
-          trailing={<>
+          meta={<>
             <DashIconButton aria-label="Keep" title="Keep" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/accept`, { method: "POST" }))}><Icons.Check /></DashIconButton>
             <DashIconButton aria-label="Discard" title="Discard" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/reject`, { method: "POST" }))}><Icons.Close /></DashIconButton>
           </>} />}
       </For>
       <For each={needs()?.notices}>{(notice) =>
-        <SplitRow lead={<Icons.Warning />} primary={notice.text} title={notice.text} context={age(notice.at, now())}
-          trailing={<DashIconButton aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
+        <Row density="list" lead={<Icons.Warning />} label={notice.text} title={notice.text} context={age(notice.at, now())}
+          meta={<DashIconButton aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -171,8 +172,8 @@ export function AgentPage(props: {
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inbox()}>{(entry) =>
-        <SplitRow lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} primary={tally([entry])}
-          context={entry.status === "handled" ? `${entry.title} · handled` : `${entry.title} · for the next heartbeat`} trailing={age(entry.at, now())} />}
+        <Row density="list" lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={tally([entry])}
+          context={entry.status === "handled" ? `${entry.title} · handled` : `${entry.title} · for the next heartbeat`} meta={age(entry.at, now())} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -223,8 +224,8 @@ export function AgentPage(props: {
   const watchesGroup = () => <Show when={working()?.watches.length}>
     <SplitGroup id="agent-watches" label="Watching" count={working()?.watches.length}>
       <For each={working()?.watches}>{(watch) =>
-        <SplitRow lead={watch.kind === "webhook" ? <Icons.ExternalLink /> : <Icons.Focus />} primary={watch.title}
-          context={watch.kind === "webhook" ? "Webhook" : watch.event?.replace(/_/g, " ")} trailing={age(watch.lastFiredAt, now())} />}
+        <Row density="list" lead={watch.kind === "webhook" ? <Icons.ExternalLink /> : <Icons.Focus />} label={watch.title}
+          context={watch.kind === "webhook" ? "Webhook" : watch.event?.replace(/_/g, " ")} meta={age(watch.lastFiredAt, now())} />}
       </For>
     </SplitGroup>
   </Show>;
@@ -233,8 +234,8 @@ export function AgentPage(props: {
   const rulesGroup = () => <Show when={view()?.rules?.length}>
     <SplitGroup id="agent-rules" label="Allowed" count={view()?.rules?.length}>
       <For each={view()?.rules}>{(rule) =>
-        <SplitRow lead={<Icons.Permissions />} primary={rule.label} title={rule.label} context={age(rule.createdAt, now())}
-          trailing={<DashIconButton aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
+        <Row density="list" lead={<Icons.Permissions />} label={rule.label} title={rule.label} context={age(rule.createdAt, now())}
+          meta={<DashIconButton aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
             onClick={() => act(rule.id, () => api(`/v0/agent/rules/${encodeURIComponent(rule.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
       </For>
     </SplitGroup>
@@ -269,9 +270,9 @@ export function AgentPage(props: {
       more={rememberedOrder().length > 6 && !allRemembered() ? <SplitGroupMore count={rememberedOrder().length - 6} onClick={() => setAllRemembered(true)}>Show all</SplitGroupMore> : undefined}>
       <Show when={entries().length} fallback={<SplitEmpty>Nothing remembered yet.</SplitEmpty>}>
         <For each={allRemembered() ? rememberedOrder() : rememberedOrder().slice(0, 6)}>{(entry) =>
-          <SplitRow lead={entry.provenance ? <Icons.Agent /> : <Icons.User />} primary={entry.text} title={`${entry.text}\n${whereOf(entry)}, ${whoOf(entry)}\n${entry.scope}`}
+          <Row density="list" lead={entry.provenance ? <Icons.Agent /> : <Icons.User />} label={entry.text} title={`${entry.text}\n${whereOf(entry)}, ${whoOf(entry)}\n${entry.scope}`}
             context={`${entry.file === "diary" ? "Diary" : entry.section || FILE_LABELS[entry.file] || entry.file} · ${entry.provenance ? age(entry.provenance.at, now()) : "you"}`}
-            trailing={<><Show when={entry.provenance?.chatId}>{(chatId) =>
+            meta={<><Show when={entry.provenance?.chatId}>{(chatId) =>
               <DashIconButton aria-label="Open the chat it was learned in" title="Open the chat it was learned in" onClick={(event: MouseEvent) => props.onOpenChat(chatId(), event)}><Icons.Chat /></DashIconButton>}</Show>
               <DashIconButton aria-label={arming() === entryKey(entry) ? "Forget it: click again" : "Forget"} title={arming() === entryKey(entry) ? "Click again to forget" : "Forget"}
               disabled={busy() !== null} onClick={() => forget(entry)}>
@@ -284,7 +285,7 @@ export function AgentPage(props: {
   // Its memory is files in its folder, read and edited where any file is.
   const memoryGroup = () => <SplitGroup id="agent-memory" label="Memory">
     <For each={MEMORY}>{(file) =>
-      <SplitRow element="button" onClick={() => props.onOpenFile(file.path)} lead={<Icons.FileText />} primary={file.label} context={file.context} />}
+      <Row density="list" element="button" onClick={() => props.onOpenFile(file.path)} lead={<Icons.FileText />} label={file.label} context={file.context} />}
     </For>
   </SplitGroup>;
 
@@ -298,10 +299,10 @@ export function AgentPage(props: {
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
   const threadsGroup = () => <SplitGroup id="agent-threads" label="Threads" count={threads().length + (view()?.home ? 1 : 0)}>
     <Show when={view()?.home}>{(home) =>
-      <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} primary="Home" context="Where it talks to you" />}
+      <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} label="Home" context="Where it talks to you" />}
     </Show>
     <For each={threads()}>{(side) =>
-      <SplitRow element="button" onClick={(event: MouseEvent) => props.onOpenChat(side.chatId, event)} lead={<Icons.Chat />} primary={side.title || "Untitled thread"} trailing={age(side.updatedAt, now())} />}
+      <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(side.chatId, event)} lead={<Icons.Chat />} label={side.title || "Untitled thread"} meta={age(side.updatedAt, now())} />}
     </For>
   </SplitGroup>;
 

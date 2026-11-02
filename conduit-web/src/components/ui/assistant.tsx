@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { DashRow } from "./dashboard";
 import { Expand } from "./expand";
+import { Row } from "./row";
 
 /*
  * Assistant: the pieces of an agent that keeps going on its own (docs/plans/persistent-agent.md): how a report
@@ -87,10 +87,10 @@ const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
  * went (status; warn: it failed, the icon a warning), then when it runs next; actions at the end (remove).
  */
 export function ClockRow(props: { kind: ClockKind; title: string; cadence: string; status?: string; next?: string; warn?: string; off?: boolean; actions?: JSX.Element }) {
-  return <DashRow data-clock="" data-off={props.off ? "" : undefined} title={props.warn}
-    lead={props.warn ? <Icons.Warning class="ui-clock-warn" /> : CLOCK_ICON[props.kind]()} primary={props.title}
+  return <Row density="list" data-clock="" data-off={props.off ? "" : undefined} title={props.warn}
+    lead={props.warn ? <Icons.Warning class="ui-clock-warn" /> : CLOCK_ICON[props.kind]()} label={props.title}
     context={<><code>{props.cadence}</code><Show when={props.status}>{` · ${props.status}`}</Show></>}
-    trailing={props.next || props.actions ? <span class="ui-clock-end"><Show when={props.next}><span>{props.next}</span></Show>{props.actions}</span> : undefined} />;
+    meta={props.next || props.actions ? <span class="ui-clock-end"><Show when={props.next}><span>{props.next}</span></Show>{props.actions}</span> : undefined} />;
 }
 
 /** A moment on the day, in minutes after midnight (0 to 1440). */

@@ -1,0 +1,4 @@
+/* Row (row.tsx): every row's box and voice -- a nav row, a list's, a menu's -- one flex line on no ground, its marks
+   and words in the row's gap, at rest in the row's tone. A density (data-density) sets the rest: nav and list in
+   nav.css and dashboard.css, menu in popover.css, each with its parts and its cursor. Loaded before them. */
+.ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); text-align: left; }

@@ -4,6 +4,7 @@ import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
+import { Row, type RowProps } from "./row";
 
 /*
  * Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). Rows rest grey; the cursor (pointer,
@@ -48,56 +49,15 @@ export function NavGroup(props: { label?: string; away?: string; children: JSX.E
   </section>;
 }
 
-type RowState = {
-  icon?: JSX.Element;
-  /** Under the row it belongs to (a chat under its folder); 2: under one of those (a folder under a device's client). */
-  indent?: boolean | 2;
-  /** Where you are. */
-  current?: boolean;
-  /** Holds where you are (a folder holding the open chat): drawn as current. */
-  within?: boolean;
-  /** Open, but not where you are (the chat in the other pane): white at the resting weight. */
-  open?: boolean;
-  /** Chosen for an action on several: the wash. */
-  selected?: boolean;
-  /** A second, muted line under the label. */
-  detail?: JSX.Element;
-  /** Muted at the end (a count). */
-  meta?: JSX.Element;
-  /** A mark at the end, in a control's room (an external link, a status). */
-  end?: JSX.Element;
-  /** Smaller and quieter: a row that leads elsewhere ("View all"). */
-  quiet?: boolean;
-};
-const rowData = (props: RowState) => ({
-  "data-indent": props.indent === 2 ? "2" : props.indent ? "" : undefined, "aria-current": props.current ? "page" as const : undefined, "data-within": props.within ? "" : undefined,
-  "data-open": props.open ? "" : undefined, "data-selected": props.selected ? "" : undefined, "data-quiet": props.quiet ? "" : undefined,
-});
-const ROW_PARTS = ["icon", "indent", "current", "within", "open", "selected", "detail", "meta", "end", "quiet", "children", "class"] as const;
-
-/** A nav row: icon, label (and a detail under it), meta or an end mark. A button, so a menu's trigger can be one. */
-export function NavRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & RowState) {
-  const [local, rest] = splitProps(props, ROW_PARTS);
-  return <button type="button" {...rest} class="ui-nav-row" {...rowData(local)}>
-    <Show when={local.icon}><span class="ui-nav-icon">{local.icon}</span></Show>
-    <Show when={local.detail} fallback={<span class="ui-nav-text">{local.children}</span>}>
-      <span class="ui-nav-text" data-stacked=""><span>{local.children}</span><small>{local.detail}</small></span>
-    </Show>
-    <Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show>
-    <Show when={local.end}><span class="ui-nav-end">{local.end}</span></Show>
-  </button>;
-}
-
-
 /** A folder's row: its link (icon, a mark such as unread, the name, a muted meta such as "Cloning…") and the chevron
  *  that opens it. The chevron is out of the tab order: → and ← press it. The row is a div so a menu's trigger can hold both. */
 export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon: JSX.Element; mark?: JSX.Element; meta?: JSX.Element; open: boolean; current?: boolean; within?: boolean;
   link: JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>; toggle: JSX.ButtonHTMLAttributes<HTMLButtonElement> }) {
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
-  return <div {...rest} class="ui-nav-row ui-nav-folder" data-folder-open={local.open ? "" : undefined} {...rowData(local)}>
-    <button type="button" {...local.link} class="ui-nav-link"><span class="ui-nav-icon">{local.icon}</span>{local.mark}<span class="ui-nav-text">{local.children}</span><Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show></button>
+  return <Row density="nav" bare {...(rest as unknown as RowProps)} class="ui-nav-folder" data-folder-open={local.open ? "" : undefined} open={local.open} current={local.current} within={local.within}>
+    <button type="button" {...local.link} class="ui-nav-link"><span class="ui-row-lead">{local.icon}</span>{local.mark}<span class="ui-row-title">{local.children}</span><Show when={local.meta}><small class="ui-row-meta">{local.meta}</small></Show></button>
     <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight /></button>
-  </div>;
+  </Row>;
 }
 
 /** A folder: its row, then its rows, which slide open and shut (Expand). Shut, nothing stays in the document. */

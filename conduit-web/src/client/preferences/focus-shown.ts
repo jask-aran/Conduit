@@ -1,14 +1,14 @@
 /*
  * Mark the row that holds visible focus, for the stylesheet.
  *
- * `.ui-nav-row:has(:focus-visible)` said this in CSS, but a :has() whose
+ * `.ui-row[data-density=nav]:has(:focus-visible)` said this in CSS, but a :has() whose
  * argument is a pseudo-class, attribute or tag cannot be narrowed by Chrome:
  * every DOM change anywhere made it re-check ancestors. A streaming answer
  * changes the DOM every frame, and those checks were most of each frame's
  * style work late in a long one. One focus listener says the same thing.
  */
 const HOSTS: ReadonlyArray<[host: string, focus: string]> = [
-  [".ui-nav-row", ":focus-visible"],
+  [".ui-row[data-density=nav]", ":focus-visible"],
   [".settings-line", ":focus-visible, input:focus"],
 ];
 const ATTRIBUTE = "data-focus-shown";

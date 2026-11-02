@@ -3,7 +3,6 @@ import { api } from "../api/client.ts";
 import { Select } from "@/components/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
-import { NavRow } from "@/components/ui/nav";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
 import { TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { FileButton, StatusText } from "@/components/ui/file";
@@ -12,6 +11,7 @@ const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module
 import { SettingLoading, SettingNote } from "@/components/ui/overlay";
 import type { ModelOption } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
+import { Row } from "@/components/ui/row";
 
 /*
  * What every thread Conduit starts is given (GET /v0/context, context-store.js): blocks, named pieces of text, stacked
@@ -283,7 +283,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
         </Show>
         <WorkbenchSection title="Used in">
           <Show when={block().usedBy.length} fallback={<WorkbenchNote>In no document yet: add it to one from Prompts.</WorkbenchNote>}>
-            <For each={block().usedBy}>{(id) => <NavRow icon={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</NavRow>}</For>
+            <For each={block().usedBy}>{(id) => <Row density="nav" element="button" lead={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</Row>}</For>
           </Show>
         </WorkbenchSection>
         <Show when={slotsOf(block()).length}>

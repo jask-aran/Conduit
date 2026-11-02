@@ -4,6 +4,7 @@ import { For, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
+import { Row, type RowProps } from "./row";
 import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
@@ -77,8 +78,8 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   indent?: boolean; picked?: boolean;
 }) {
   const [, rest] = splitProps(props, ["icon", "meta", "detail", "detailData", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
-  return <div role={props.checked !== undefined ? "menuitemradio" : "menuitem"} class="ui-row" aria-checked={props.checked} data-field={props.field ? "" : undefined}
-    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...rest}>
+  return <Row density="menu" bare role={props.checked !== undefined ? "menuitemradio" : "menuitem"} aria-checked={props.checked} data-field={props.field ? "" : undefined}
+    data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...(rest as unknown as RowProps)}>
     <Show when={props.picked !== undefined}><span class="ui-row-check" aria-hidden="true"><Show when={props.picked}><Icons.Check /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
@@ -89,7 +90,7 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
     </Show></Show>
     <Show when={props.away && !props.opens}><Icons.ExternalLink class="ui-chevron" data-away="" aria-hidden="true" /></Show>
     <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>
-  </div>;
+  </Row>;
 }
 
 /** The letters of a label a query matched: the run when it holds the query, else its letters in order; null when it
@@ -128,7 +129,7 @@ export const Rule = () => <hr class="ui-rule" />;
 /** A row's meta: muted, after its label (a value, a latency). */
 
 /** A behavior engine can supply focus, selection and keyboard attributes. */
-export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-row ui-menu-action" />;
+export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <Row density="menu" bare {...(props as unknown as RowProps)} class="ui-menu-action" />;
 
 /** Menu panels keep the parent in place; the behavior adapter supplies coordinates. */
 export const MenuParent = (props: JSX.HTMLAttributes<HTMLDivElement> & { under: boolean }) => {

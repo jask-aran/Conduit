@@ -4,7 +4,7 @@ import "../client/styles.css";
 import "./gallery.css";
 import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
-import { NavGroup, NavRow } from "@/components/ui";
+import { NavGroup, Row } from "@/components/ui";
 import { SidebarScreen } from "./sidebar-story";
 import { TypeLens } from "./type-lens";
 
@@ -115,11 +115,11 @@ function Canvas() {
   });
   return <div class="g-canvas" data-preview={preview()} data-app={app() ? undefined : "hidden"}>
     <TypeLens on={lens()} frames={frames} />
-    {/* The rail is drawn as the sidebar is, with the library's NavGroups and NavRows, at the desktop's density. */}
+    {/* The rail is drawn as the sidebar is, with the library's NavGroups and Rows, at the desktop's density. */}
     <nav class="g-rail" aria-label="Families" data-density="desktop">
       <div class="g-rail-head"><strong>Gallery</strong><small>components v2</small></div>
       <For each={rail}>{([label, families]) => <NavGroup label={label}>
-        <For each={families}>{(family) => <NavRow current={current() === family.title} onClick={() => pick(family.title)}>{family.title}</NavRow>}</For>
+        <For each={families}>{(family) => <Row density="nav" element="button" current={current() === family.title} onClick={() => pick(family.title)}>{family.title}</Row>}</For>
       </NavGroup>}</For>
     </nav>
     <section class="g-left" ref={left}>

@@ -8,6 +8,7 @@ import { sliderPage } from "./pages/slider";
 import { switchPage } from "./pages/switch";
 import { spinnerPage } from "./pages/spinner";
 import { statusDotPage } from "./pages/status-dot";
+import { rowPage } from "./pages/row";
 import { fieldPage } from "./pages/field";
 import { meterPage } from "./pages/meter";
 import { swatchPage } from "./pages/swatch";
@@ -56,6 +57,7 @@ const piecePages: Page[] = [
   switchPage,
   spinnerPage,
   statusDotPage,
+  rowPage,
   fieldPage,
   meterPage,
   swatchPage,

@@ -2,7 +2,7 @@ import { ComposerDock } from "@/components/ui";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, DashRow, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
+import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 
@@ -279,9 +279,6 @@ export function SplitEmpty(props: { children: JSX.Element }) {
   return <DashEmpty>{props.children}</DashEmpty>;
 }
 
-/** A row: the library's DashRow, which keeps one flat props type so Kobalte's polymorphic `as` keeps the
- *  anchor- and button-specific attributes. */
-export const SplitRow = DashRow;
 
 /** The workspace panel's line counts: removed, then added. */
 export const SplitCounts = Counts;

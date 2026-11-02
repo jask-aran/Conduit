@@ -9,7 +9,7 @@ import { createServerHealth, ServerFacts } from "./server-inspect.tsx";
 import type { Project } from "../api/contracts";
 import { Button, Input, Switch } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
-import { NavFolder, NavFolderRow, NavRow, StatusDot } from "@/components/ui/nav";
+import { NavFolder, NavFolderRow, StatusDot } from "@/components/ui/nav";
 import { ClientCard, ClientCards, ClientPlaces, NetworkMap, type NetworkClient } from "@/components/ui/network";
 import { Reading, ReadingStat, ReadingStats } from "@/components/ui/reading";
 import { connectionId } from "../state/runtime.ts";
@@ -21,6 +21,7 @@ import { NetworkSettings } from "./network-settings.tsx";
 import { MachineReadout } from "./machine-readout.tsx";
 import { harnessLabelFor } from "../harness-brand";
 import { createPushControl } from "../platform/push.ts";
+import { Row } from "@/components/ui/row";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; browser?: boolean; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
@@ -140,7 +141,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     // Another server's network is inspected, not changed.
     if (!active()) return <ClientCard client={shown.part} status={status(shown)} places={<Show when={shown.node}>{(node) =>
       <ClientPlaces none={!mounted(node()).length}><For each={mounted(node())}>{(project) =>
-        <NavRow icon={<WorkspaceGlyph appearance={project.workspaceAppearance} />} disabled>{project.name}</NavRow>}</For></ClientPlaces>}</Show>} />;
+        <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} disabled>{project.name}</Row>}</For></ClientPlaces>}</Show>} />;
     return <ClientCard client={shown.part} status={status(shown)}
       places={<Show when={shown.node}>{(node) => <ClientPlaces none={!mounted(node()).length && !unmounted(node()).length}>{places(node(), false)}</ClientPlaces>}</Show>}
       actions={<>
@@ -158,10 +159,10 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   /** A client's workspaces as rows (opening them), then folders it shares that are no workspace yet (mounting them). */
   const places = (node: Node, named: boolean) => <>
     <For each={mounted(node)}>{(project) =>
-      <NavRow icon={<WorkspaceGlyph appearance={project.workspaceAppearance} />} meta={named ? node.name : undefined} onClick={() => props.onOpenWorkspace(project)}>{project.name}</NavRow>}</For>
+      <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} meta={named ? node.name : undefined} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
     <For each={unmounted(node)}>{(root) =>
-      <NavRow icon={<Icons.Folder />} meta="Add as workspace" title={`${root.label}: shared, not a workspace yet. Add it as one.`}
-        onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}>{folderName(root.label)}</NavRow>}</For>
+      <Row density="nav" element="button" lead={<Icons.Folder />} meta="Add as workspace" title={`${root.label}: shared, not a workspace yet. Add it as one.`}
+        onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}>{folderName(root.label)}</Row>}</For>
   </>;
 
   /**

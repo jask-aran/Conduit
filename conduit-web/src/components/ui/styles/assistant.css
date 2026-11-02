@@ -1,5 +1,5 @@
 /* Assistant: an agent that keeps going on its own. Its inbox (InboxRow under a LevelMark), what runs on its clock
-   (ClockRow), and its day (DayStrip). Rows are the dashboard's (ui-dash-row); only their parts are drawn here. */
+   (ClockRow), and its day (DayStrip). Rows are Rows in the list density; only their parts are drawn here. */
 
 /* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
 .ui-level { display: grid; width: var(--icon-sm); height: var(--icon-sm); place-items: center; color: var(--foreground); }
@@ -14,8 +14,8 @@
 /* An inbox entry: the row, then its report unfolding under it, at the row's text edge. Handled ones rest quieter. */
 
 /* A clock's row: its cadence in the data face; off (its setting turned off) rests faded; a failure's warning in warn. */
-.ui-dash-row[data-clock][data-off] { opacity: var(--opacity-rest); }
-.ui-dash-row[data-clock] .ui-clock-warn { color: var(--warn); }
+.ui-row:where([data-density="list"])[data-clock][data-off] { opacity: var(--opacity-rest); }
+.ui-row:where([data-density="list"])[data-clock] .ui-clock-warn { color: var(--warn); }
 .ui-clock-end { display: inline-flex; align-items: center; gap: var(--space-xs); }
 
 /* The day: labels over their ticks, a hairline track with quiet hours tinted, the hours under it in the data face. */

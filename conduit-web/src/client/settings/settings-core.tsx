@@ -57,7 +57,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/component
 import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/dialog";
-import { NavGroup, NavRow, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential, SettingRecorder, Keycap } from "@/components/ui";
+import { NavGroup, OverlayPage, OverlayRail, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential, SettingRecorder, Keycap, Row } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -1193,8 +1193,8 @@ export function Settings(props: {
     <Show when={!narrow() || showingIndex()}>
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
         <For each={sectionGroups}>{(group) => <NavGroup label={group.label}>
-          <For each={group.sections}>{(item) => <NavRow role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            icon={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</NavRow>}</For>
+          <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
+            lead={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
         </NavGroup>}</For>
       </OverlayRail>
     </Show>

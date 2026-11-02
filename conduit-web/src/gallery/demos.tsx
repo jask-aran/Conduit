@@ -4,7 +4,7 @@ import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, C
 import { CardNote } from "@/components/ui/card";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";
@@ -173,7 +173,7 @@ export function Settings(props: { close: () => void; phone?: boolean; start?: Se
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
   const rail = () => <OverlayRail title="Settings" foot={<OverlayFacts title="About"><OverlayFact label="Interface" value="0.8.1-dev.20261020063706.abb9a10" /><OverlayFact label="Running as" value="Browser tab" /><OverlayFact label="Server" value="0.8.1-dev.20261020063706.abb9a10 · modified" /></OverlayFacts>} onClose={props.phone ? props.close : undefined}>
     <For each={SETTINGS}>{(group) => <NavGroup label={group.label}><For each={group.sections}>{([id, label, glyph]) =>
-      <NavRow icon={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</NavRow>}</For></NavGroup>}</For>
+      <Row density="nav" element="button" lead={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</Row>}</For></NavGroup>}</For>
   </OverlayRail>;
   const page = (id: SettingsSection) => { const view = SETTING_PAGES[id]; return <OverlayPage title={titleOf(id)} status={view.status} busy={view.busy} failed={view.failed} why={view.why} onRetry={view.failed ? () => {} : undefined} onBack={props.phone ? () => setSection(null) : undefined} onClose={props.close}>{view.body()}</OverlayPage>; };
   return <Overlay label="Settings" layout="rail" style={props.phone ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>

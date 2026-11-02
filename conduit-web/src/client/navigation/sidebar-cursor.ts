@@ -23,7 +23,7 @@
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
-const STOPS = ".ui-rail-button, .ui-nav-row:not(.ui-nav-folder), .ui-nav-link";
+const STOPS = ".ui-rail-button, .ui-row[data-density=nav]:not(.ui-nav-folder), .ui-nav-link";
 // The Conduit / Computer switch in the header, above the rows.
 const SWITCH = ".ui-nav-head .ui-seg button";
 
@@ -158,7 +158,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   };
 
   // The row holding the held stop is marked too, for the stylesheet, in place
-  // of `.ui-nav-row:has([data-held])` (see preferences/focus-shown.ts).
+  // of `.ui-row[data-density=nav]:has([data-held])` (see preferences/focus-shown.ts).
   const release = () => {
     root.querySelector("[data-held]")?.removeAttribute("data-held");
     root.querySelector("[data-held-within]")?.removeAttribute("data-held-within");
@@ -167,7 +167,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     const focused = document.activeElement;
     if (!(focused instanceof HTMLElement) || !root.contains(focused) || !focused.matches(`${STOPS}, ${SWITCH}`)) return;
     focused.setAttribute("data-held", "");
-    const row = focused.parentElement?.closest(".ui-nav-row");
+    const row = focused.parentElement?.closest(".ui-row[data-density=nav]");
     if (row) row.setAttribute("data-held-within", "");
   };
 

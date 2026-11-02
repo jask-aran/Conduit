@@ -25,12 +25,13 @@ import type { Template, DashboardChat, Project, ProjectDashboardPayload, Workspa
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow, SplitQuickActions } from "../dashboard/primitives/split";
+import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions } from "../dashboard/primitives/split";
 import type { Pty } from "../remotes/terminal-pane";
 import { awayDevice, type RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
+import { Row } from "@/components/ui/row";
 
 type WorkspaceView = "files" | "diff" | "terminal";
 const dashboardCache = new Map<string, { expiresAt: number; promise: Promise<ProjectDashboardPayload> }>();
@@ -355,11 +356,11 @@ export function ProjectDashboard(props: {
     <DayGroups groups={chatGroups()}>{(item) => {
       const process = () => props.runtime.getProcess(item.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
-      return <MenuHost><MenuTrigger as={SplitRow} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
+      return <MenuHost><MenuTrigger density="list" as={Row} element="button" draggable="true" data-doc-view={`chat:${item.id}`} onPointerEnter={() => props.onPrefetchChat(item)} onFocus={() => props.onPrefetchChat(item)} onClick={() => void props.onOpenChat(item, props.project)}
           lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={item.unread} fallback={<ThreadHarnessMark id={item.harnessId} label={harnessMarkLabelFor(item.harnessId)} lively />} />}
-          primary={item.title || "Untitled chat"}
+          label={item.title || "Untitled chat"}
           context={live()}
-          trailing={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
+          meta={<time dateTime={item.lastMessageAt || item.createdAt}>{relativeActivity(item.lastMessageAt || item.createdAt, now())}</time>} />
         <MenuContent><ChatMenuFor chat={item} project={props.project} actions={props.menus} /></MenuContent></MenuHost>;
     }}</DayGroups>
   </Show>;
@@ -367,9 +368,9 @@ export function ProjectDashboard(props: {
   const outsideRows = () => <Show when={!outsideLoading()} fallback={<SplitEmpty><Spinner /><span>Looking for threads…</span></SplitEmpty>}>
     <Show when={filteredOutside().length} fallback={<SplitEmpty>No threads outside Conduit in this workspace.</SplitEmpty>}>
       <DayGroups groups={outsideGroups()}>{(thread) =>
-        <SplitRow element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
-          lead={<ThreadHarnessMark id={thread.harnessId} label={harnessMarkLabelFor(thread.harnessId)} lively />} primary={thread.title || "Untitled thread"} context={thread.preview}
-          trailing={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
+        <Row density="list" element="button" title={thread.preview || thread.title} onClick={() => props.onOpenHarnessThread?.(thread.harnessId, workingRoot(), thread.id, thread.title)}
+          lead={<ThreadHarnessMark id={thread.harnessId} label={harnessMarkLabelFor(thread.harnessId)} lively />} label={thread.title || "Untitled thread"} context={thread.preview}
+          meta={thread.at ? relativeActivity(new Date(thread.at).toISOString(), now()) : ""} />}
       </DayGroups>
     </Show>
   </Show>;
@@ -412,8 +413,8 @@ export function ProjectDashboard(props: {
   const terminalsGroup = () => <SplitGroup id="dashboard-terminals" label="Terminals" collapsible count={scopedTerminals().length} busy={terminalsLoading()} actions={<GroupAction onClick={() => props.onOpenView("terminal")}>Open</GroupAction>}>
     <Show when={scopedTerminals().length} fallback={<SplitEmpty>{terminalsLoading() ? "Loading terminals…" : "No live terminals."}</SplitEmpty>}>
       <For each={scopedTerminals()}>{(terminal) =>
-        <ContextMenu><ContextMenuTrigger as={SplitRow} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
-            lead={<Icons.Terminal />} primary={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} trailing={terminalActivity(terminal)} />
+        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onPointerEnter={props.onPrefetchTerminal} onFocus={props.onPrefetchTerminal} onClick={() => props.onOpenTerminal(terminal)}
+            lead={<Icons.Terminal />} label={terminal.title || "Shell"} context={terminal.currentCommand || "shell"} meta={terminalActivity(terminal)} />
           <ContextMenuContent><ContextMenuGroup as={Section}>
             <ContextMenuItem onSelect={() => props.onOpenTerminalMaximized(terminal)}><Icons.Terminal />Open maximized</ContextMenuItem>
             <ContextMenuItem onSelect={() => props.onContextAction("rename-terminal", { terminal })}><Icons.Edit />Rename</ContextMenuItem>
@@ -440,7 +441,7 @@ export function ProjectDashboard(props: {
       : awayDevice(props.project) ? `${props.project.capabilities?.device.name || "Its device"} is offline.`
       : payload()!.recentFiles ? "No files yet." : "The folder could not be read."}</SplitEmpty>}>
       <For each={payload()!.recentFiles!}>{(file) =>
-        <SplitRow element="button" title={file.name} draggable={props.fileView ? "true" : undefined} data-doc-view={props.fileView?.(file.name)} onClick={() => props.onOpenFile ? props.onOpenFile(file.name) : props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} primary={file.name} trailing={relativeActivity(file.modifiedAt, now())} />}
+        <Row density="list" element="button" title={file.name} draggable={props.fileView ? "true" : undefined} data-doc-view={props.fileView?.(file.name)} onClick={() => props.onOpenFile ? props.onOpenFile(file.name) : props.onOpenView("files")} lead={<FileTypeIcon name={file.name} />} label={file.name} meta={relativeActivity(file.modifiedAt, now())} />}
       </For>
     </Show>
   </SplitGroup>;

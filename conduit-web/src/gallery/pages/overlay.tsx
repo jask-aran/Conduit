@@ -4,7 +4,7 @@ import { Icons } from "@/components/ui";
 import { type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
 import { SettingActions, SettingColumn, SettingColumns, SettingTitle } from "@/components/ui/overlay";
-import { Backdrop, Leader, Crumbs, Spotlight, OverlayBar, OverlayChip, OverlayEmpty, OverlayActions, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, Overlay, Scrim, SettingGroup, SettingLine, SettingCredential, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, NavRow, SelectTrigger, Button, TextArea, Frost, Input, Item, Section } from "@/components/ui";
+import { Backdrop, Leader, Crumbs, Spotlight, OverlayBar, OverlayChip, OverlayEmpty, OverlayActions, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty, Overlay, Scrim, SettingGroup, SettingLine, SettingCredential, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, SelectTrigger, Button, TextArea, Frost, Input, Item, Section, Row } from "@/components/ui";
 import { Replay } from "../specs";
 import { orb, glanceChat, type Lit, glyph, paletteList, paletteHints, ChatSearch, Settings, LeaderPath, leaderHints, leaderRows, SwitchDemo, SortToggle, searchHints, chatRows, Theme, reset, noop, glanceMath } from "../demos";
 import { row, token, type Page } from "../model";
@@ -72,12 +72,12 @@ import { Item } from "@/components/ui/popover";
     { selector: ".ui-overlay-hints", name: "Hints", does: "the keys along the foot, start and end", from: "OverlayHints" }
   ] },
     { title: "Anatomy · rail", scene: () => <div class="g-overlay-demo"><Overlay label="Anatomy" layout="rail" style={{ "--overlay-width": "600px" }}>
-        <OverlayRail title="Settings"><NavGroup label="App"><NavRow icon={<Icons.Monitor />} current>Appearance</NavRow><NavRow icon={<Icons.Keyboard />}>Shortcuts</NavRow></NavGroup></OverlayRail>
+        <OverlayRail title="Settings"><NavGroup label="App"><Row density="nav" element="button" lead={<Icons.Monitor />} current>Appearance</Row><Row density="nav" element="button" lead={<Icons.Keyboard />}>Shortcuts</Row></NavGroup></OverlayRail>
         <OverlayPage title="Appearance" onClose={() => {}}><SettingGroup title="Display"><SettingLine label="Density"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Reduce motion"><SwitchDemo /></SettingLine></SettingGroup></OverlayPage>
       </Overlay></div>, parts: [
       { selector: ".ui-overlay-rail", name: "Rail", does: "a title, NavGroups, a foot", from: "OverlayRail" },
       { selector: ".ui-nav-group .ui-nav-label", name: "Nav group", does: "rows under a label", from: "NavGroup" },
-      { selector: ".ui-nav-row", name: "Nav row", does: "a page; the current one lit", from: "NavRow · current" },
+      { selector: ".ui-row[data-density=nav]", name: "Nav row", does: "a page; the current one lit", from: "Row (nav) · current" },
       { selector: ".ui-overlay-page-head", name: "Page", does: "its title, save status and close, over its groups", from: "OverlayPage", side: "above" },
       { selector: ".ui-setting-group", name: "Setting group", does: "lines under a title", from: "SettingGroup", side: "below" },
       { selector: ".ui-setting-line:last-child > span:first-child", name: "Setting line", does: "a name, then its control in the one control column", from: "SettingLine", side: "below" }
@@ -142,5 +142,5 @@ import { Item } from "@/components/ui/popover";
     token("--hairline", "Section rules"),
     token("--duration-gentle", "Arrival duration")
   ] }],
-  api: ["Overlay", "Scrim", "Backdrop", "OverlayBar", "OverlayChip", "SettingTitle", "SettingColumns", "SettingColumn", "SettingActions", "Crumbs", "Button", "Segmented", "OverlaySplit", "OverlayList", "Section", "Item", "Match", "HarnessMark", "OverlayEmpty", "OverlayHints", "OverlayActions", "OverlayRail", "NavGroup", "NavRow", "OverlayFacts", "OverlayFact", "OverlayPage", "SettingGroup", "SettingLine", "SettingCredential", "SelectTrigger", "Input", "Switch", "SettingValue", "SettingLink", "SettingNote", "SettingDetails", "SettingWide", "TextArea", "Progress", "SettingLoading", "SettingRecorder", "Keycap", "Glance", "GlanceHead", "GlancePrompt", "GlanceTurn", "Orb", "GlanceAnswer", "GlanceEmpty", "Frost", "LiveNote"],
+  api: ["Overlay", "Scrim", "Backdrop", "OverlayBar", "OverlayChip", "SettingTitle", "SettingColumns", "SettingColumn", "SettingActions", "Crumbs", "Button", "Segmented", "OverlaySplit", "OverlayList", "Section", "Item", "Match", "HarnessMark", "OverlayEmpty", "OverlayHints", "OverlayActions", "OverlayRail", "NavGroup", "Row", "OverlayFacts", "OverlayFact", "OverlayPage", "SettingGroup", "SettingLine", "SettingCredential", "SelectTrigger", "Input", "Switch", "SettingValue", "SettingLink", "SettingNote", "SettingDetails", "SettingWide", "TextArea", "Progress", "SettingLoading", "SettingRecorder", "Keycap", "Glance", "GlanceHead", "GlancePrompt", "GlanceTurn", "Orb", "GlanceAnswer", "GlanceEmpty", "Frost", "LiveNote"],
 };

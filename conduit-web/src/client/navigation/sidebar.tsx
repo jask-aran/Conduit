@@ -6,7 +6,7 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavRow, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot, Row } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -873,10 +873,10 @@ export function Sidebar(props: {
     const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
     renderedChatTitles.set(menuProps.chat.id, title);
     return <ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
-    <ContextMenuTrigger
-      as={NavRow}
+    <ContextMenuTrigger density="nav" element="button"
+      as={Row}
       indent={menuProps.indent}
-      icon={<Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} label={harnessMarkLabelFor(menuProps.chat.harnessId)} lively />} />}>
+      lead={<Show when={props.navigatingId === menuProps.chat.id} fallback={<RuntimeIndicator process={processFor(menuProps.chat)} stale={props.runtime.stale()} unread={menuProps.chat.unread} fallback={<ThreadHarnessMark id={menuProps.chat.harnessId} label={harnessMarkLabelFor(menuProps.chat.harnessId)} lively />} />}>
         <StatusDot label="Opening chat" spinning />
       </Show>}
       current={(props.focusedId || shownId()) === menuProps.chat.id}
@@ -990,7 +990,7 @@ export function Sidebar(props: {
       : item.type === "project" ? (workspace() ? <WorkspaceGlyph appearance={item.project.workspaceAppearance} /> : <Icons.Folder />)
         : <Icons.Terminal />;
     return <ContextMenu placement={menuPlacement()}>
-      <ContextMenuTrigger as={NavRow} icon={icon()} current={current()} within={item.type === "project" && holdsCurrentChat(item.project)} onClick={open}>{label()}</ContextMenuTrigger>
+      <ContextMenuTrigger density="nav" element="button" as={Row} lead={icon()} current={current()} within={item.type === "project" && holdsCurrentChat(item.project)} onClick={open}>{label()}</ContextMenuTrigger>
       <ContextMenuContent>
         <MenuSection>
           <Show when={workspace()}>
@@ -1012,7 +1012,7 @@ export function Sidebar(props: {
   /** The hub's own page: its harnesses and its files. A dot when a harness needs attention (signing in). */
   // Right-click: its page, or a terminal there filling the window (the hub's is /terminal, as it was).
   const hubRow = () => <ContextMenu placement={menuPlacement()}>
-    <ContextMenuTrigger as={NavRow} icon={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness) || props.terminal) && !props.environment}
+    <ContextMenuTrigger density="nav" element="button" as={Row} lead={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness) || props.terminal) && !props.environment}
       meta="Hub" end={harnesses().some((harness) => harness.status === "authentication_required") ? <StatusDot label="A harness needs signing in" tone="warn" /> : undefined}
       onClick={() => { closeMobile(); props.onOpenComputer(); enterPane(); }}>{hubName() === "the hub" ? "Hub" : hubName()}</ContextMenuTrigger>
     <ContextMenuContent>
@@ -1022,7 +1022,7 @@ export function Sidebar(props: {
   </ContextMenu>;
   /** A client environment's own page: its files, its workspaces, a terminal there. */
   const environmentRow = (machine: Machine) => <ContextMenu placement={menuPlacement()}>
-    <ContextMenuTrigger as={NavRow} icon={<Icons.Monitor />} draggable="true" data-doc-view={`page:environment:${encodeURIComponent(machine.id)}`}
+    <ContextMenuTrigger density="nav" element="button" as={Row} lead={<Icons.Monitor />} draggable="true" data-doc-view={`page:environment:${encodeURIComponent(machine.id)}`}
       current={props.environment === machine.id} meta={machine.online ? undefined : "Offline"}
       onClick={() => { closeMobile(); props.onOpenEnvironment(machine.id); enterPane(); }}>{machine.label.split(" · ").at(-1)}</ContextMenuTrigger>
     <ContextMenuContent>
@@ -1032,7 +1032,7 @@ export function Sidebar(props: {
     </ContextMenuContent>
   </ContextMenu>;
   const TerminalRow = (rowProps: { terminal: Pty }) => <ContextMenu placement={menuPlacement()}>
-    <ContextMenuTrigger as={NavRow} icon={<StatusDot label={terminalAway(rowProps.terminal) ? "Offline" : "Running"} tone={terminalAway(rowProps.terminal) ? "muted" : "success"} />}
+    <ContextMenuTrigger density="nav" element="button" as={Row} lead={<StatusDot label={terminalAway(rowProps.terminal) ? "Offline" : "Running"} tone={terminalAway(rowProps.terminal) ? "muted" : "success"} />}
       detail={<>{terminalScope(rowProps.terminal)} · {rowProps.terminal.currentCommand || "shell"} · {terminalActivity(rowProps.terminal)}</>}
       onClick={() => {
         closeMobile();
@@ -1060,7 +1060,7 @@ export function Sidebar(props: {
       <Show when={groupProps.chatRoot}>
         <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
         <Show when={moreChats() > 0}>
-          <NavRow quiet icon={<Icons.Search />} meta={`${moreChats()} more`} onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>View all chats</NavRow>
+          <Row density="nav" element="button" quiet lead={<Icons.Search />} meta={`${moreChats()} more`} onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>View all chats</Row>
         </Show>
         <Show when={!allChats().length}>
           <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={4} />}><NavNote>No chats</NavNote></Show>
@@ -1170,7 +1170,7 @@ export function Sidebar(props: {
         </>}><UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} /></NavLead>
       </Show>
       <Show when={area() === "computer"}>
-        <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("workspace")}>New workspace</NavRow>
+        <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("workspace")}>New workspace</Row>
         {/* By machine once the server has said which it has; until then, as one list. */}
         <Show when={machines()?.length} fallback={<>
           {hubRow()}
@@ -1190,10 +1190,10 @@ export function Sidebar(props: {
         </Show>
       </Show>
       <Show when={area() === "conduit"}>
-        <NavRow icon={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
-        <Show when={agentView()?.enabled}><NavRow icon={<AgentAvatar />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</NavRow></Show>
-        <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</NavRow>
-        <Show when={props.onNewPane}><NavRow icon={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</NavRow></Show>
+        <Row density="nav" element="button" lead={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</Row>
+        <Show when={agentView()?.enabled}><Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row></Show>
+        <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>
+        <Show when={props.onNewPane}><Row density="nav" element="button" lead={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</Row></Show>
         <Show when={pinnedItems().length}>
           <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>
         </Show>

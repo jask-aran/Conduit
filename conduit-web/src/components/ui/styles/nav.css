@@ -40,20 +40,20 @@
 .ui-nav-group[data-away] > :not(.ui-nav-label) { opacity: var(--opacity-muted); }
 
 /* A row. A folder's row is a row holding its link and its chevron. */
-.ui-nav-row { display: flex; width: 100%; min-width: 0; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--row-inset); color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); line-height: var(--leading-text); text-align: left; }
-.ui-nav-row[data-indent] { padding-left: var(--nav-indent); }
+.ui-row:where([data-density="nav"]) { min-width: 0; padding: var(--space-2xs) var(--row-inset); line-height: var(--leading-text); }
+.ui-row:where([data-density="nav"])[data-indent] { padding-left: var(--nav-indent); }
 /* The second level's icon sits where the first level's text starts. */
-.ui-nav-row[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
-.ui-nav-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-nav-icon > * { width: 100%; height: 100%; }
-.ui-nav-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-nav-text[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
-.ui-nav-text[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
-.ui-nav-text > small { color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-nav-meta { flex: none; color: var(--muted-foreground); font-size: var(--text-label); }
-.ui-nav-end { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
-.ui-nav-end > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-nav-row[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
+.ui-row:where([data-density="nav"])[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
+.ui-row-lead:where([data-density="nav"] *) { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-row-lead:where([data-density="nav"] *) > * { width: 100%; height: 100%; }
+.ui-row-title:where([data-density="nav"] *) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row-title:where([data-density="nav"] *)[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
+.ui-row-title:where([data-density="nav"] *)[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
+.ui-row-title:where([data-density="nav"] *) > small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-row-meta:where([data-density="nav"] *) { flex: none; color: var(--muted-foreground); font-size: var(--text-label); }
+.ui-row-end:where([data-density="nav"] *) { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
+.ui-row-end:where([data-density="nav"] *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-nav-link { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
 .ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
@@ -64,42 +64,42 @@
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
    opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
    its trigger), a row is washed only where a pointer hovers. */
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
-.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-nav-row[data-open] { color: var(--foreground); }
-.ui-nav-row:is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--foreground); } }
-:is(.ui-nav-row:is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
+.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-row:where([data-density="nav"])[data-open] { color: var(--foreground); }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); } }
+:is(.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] :is(.ui-nav-row, .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-nav-icon { color: var(--muted-foreground); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] :is(.ui-row:where([data-density="nav"]), .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--muted-foreground); } }
 
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
 /* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
-.ui-nav-icon:has(> .ui-harness-mark) { width: var(--icon-sm); }
-.ui-nav-row > .ui-nav-icon > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) > .ui-nav-icon > .ui-harness-mark { opacity: 1; } }
-:is(.ui-nav-icon, .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--foreground); }
-.ui-nav-icon > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
+.ui-row-lead:where([data-density="nav"] *):has(> .ui-harness-mark) { width: var(--icon-sm); }
+.ui-row:where([data-density="nav"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; } }
+:is(.ui-row-lead:where([data-density="nav"] *), .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--foreground); }
+.ui-row-lead:where([data-density="nav"] *) > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
 .ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark .ui-harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
-.ui-nav-row:is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; } }
-.ui-nav-row:is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
-@media (hover: hover) { .ui-nav-row:is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: currentColor; opacity: 1; } }
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-nav-row:hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 0; } }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"], [data-held], [data-held-within]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); } }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-tinted { opacity: 0; } }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] { color: var(--muted-foreground); opacity: var(--opacity-rest); } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: currentColor; opacity: 1; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [aria-current="page"]) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ui-thread-harness-mark[data-lively], .ui-thread-harness-mark[data-lively] .ui-harness-mark, .ui-nav-toggle svg { transition: none; } }
 
 /* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */

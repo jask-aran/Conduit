@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { Button, FileButton, Icons, NavRow, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui";
+import { Button, FileButton, Icons, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle, Row } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
@@ -30,7 +30,7 @@ function BlocksBench() {
       title={<Select look="title" search="Search blocks" aria-label="Block" value="run"><option value="run">Run rules</option><option value="base">Shared base</option></Select>}
       actions={<Button variant="ghost" size="icon-sm" aria-label="New block"><Icons.Add /></Button>} />
     <WorkbenchSplit side={<>
-      <WorkbenchSection title="Used in"><NavRow icon={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</NavRow><NavRow icon={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</NavRow></WorkbenchSection>
+      <WorkbenchSection title="Used in"><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</Row><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</Row></WorkbenchSection>
       <WorkbenchSection title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></WorkbenchSection>
       <WorkbenchSection title="Conduit then adds"><WorkbenchNote>The run's routine, then what woke it.</WorkbenchNote></WorkbenchSection>
     </>} main={<TextEditor fill label="Run rules text" value={text()} onChange={setText}

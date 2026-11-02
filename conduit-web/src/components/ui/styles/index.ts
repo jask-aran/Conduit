@@ -15,8 +15,9 @@
  *   fade            the fade at the foot of content cut short (code, a bubble, a glance)
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
- *   nav             NavPane > NavGroup > NavRow, NavFolder, RailButton
- *   dashboard       Dashboard, DashHeader, Group (GroupHeading), DashRow, ChangeRow, FolderShelf
+ *   row             Row (nav, list, menu densities: the box and voice every row shares)
+ *   nav             NavPane > NavGroup > Row, NavFolder, RailButton
+ *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
  *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
@@ -56,6 +57,7 @@ import "./controls.css";
 import "./frost.css";
 import "./fade.css";
 import "./orb.css";
+import "./row.css";
 import "./popover.css";
 import "./reading.css";
 import "./nav.css";

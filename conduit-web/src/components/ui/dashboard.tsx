@@ -1,13 +1,14 @@
 import * as Icons from "./icons";
 import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { Row, type RowProps } from "./row";
 
 
 /*
  * Dashboard: a place's page. A head across the top (its mark, title, quick actions and status line); under it the
  * composer with the chats list on the left and what is live and what changed on the right, each scrolling on its own.
  * One column (oneColumn) stacks them in order: head, notice, composer, first, list, rest. The sections are Groups:
- * a GroupHeading (or switches) with actions at its right, then plain one-line DashRows -- the sidebar's rows at a page.
+ * a GroupHeading (or switches) with actions at its right, then plain one-line Rows (list) -- the sidebar's rows at a page.
  * Behaviour (when to go to one column, the cursor, folding) is the app's: these draw.
  */
 type Order = "first" | "list" | "rest";
@@ -156,39 +157,14 @@ export const DashEmpty = (props: { children: JSX.Element }) => <div class="ui-da
 /** A line of prose in a group (a note, an error). */
 export const DashNote = (props: { error?: boolean; children: JSX.Element }) => <p class="ui-dash-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;
 
-type RowProps = {
-  lead?: JSX.Element;
-  primary: JSX.Element;
-  context?: JSX.Element;
-  trailing?: JSX.Element;
-  element?: "div" | "button" | "a";
-  /** Where you are (a harness's folder that is the current one). */
-  current?: boolean;
-}
-  & Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "ref" | "class">
-  & { ref?: (element: HTMLElement) => void }
-  & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel">>
-  & Partial<Pick<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "disabled">>;
-
-/** A row: a mark, the title, muted context after it, data at the end. A button or a link when it opens something. */
-export function DashRow(props: RowProps) {
-  const [local, rest] = splitProps(props, ["element", "lead", "primary", "context", "trailing", "current"]);
-  return <Dynamic component={local.element || "div"} {...rest} class="ui-dash-row" data-current={local.current ? "" : undefined}>
-    <span class="ui-dash-row-lead">{local.lead}</span>
-    <span class="ui-dash-row-primary">{local.primary}</span>
-    <span class="ui-dash-row-context">{local.context}</span>
-    <Show when={local.trailing}><span class="ui-dash-row-trailing">{local.trailing}</span></Show>
-  </Dynamic>;
-}
-
 /** A change's row, as the workspace panel draws it: file mark, name, folder, line counts, a status letter. */
 export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children" | "class"> & { icon: JSX.Element; name: string; directory?: string; added?: number | null; removed?: number | null; status: string; statusTitle?: string; conflict?: boolean; selected?: boolean }) {
   const [local, rest] = splitProps(props, ["icon", "name", "directory", "added", "removed", "status", "statusTitle", "conflict", "selected"]);
-  return <button type="button" {...rest} class="ui-dash-row" data-change-row="" data-selected={local.selected ? "" : undefined}>
+  return <Row element="button" density="list" bare {...(rest as unknown as RowProps)} data-change-row="" selected={local.selected}>
     {local.icon}<span class="ui-change-name">{local.name}</span><span class="ui-change-directory">{local.directory}</span>
     <Show when={local.added != null} fallback={<span class="ui-counts" aria-label="Counts unknown">—</span>}><Counts added={local.added ?? 0} removed={local.removed ?? 0} /></Show>
     <code class="ui-change-status" data-status={local.status} data-conflict={local.conflict ? "" : undefined} title={local.statusTitle}>{local.status}</code>
-  </button>;
+  </Row>;
 }
 
 /** Line counts: removed, then added. */

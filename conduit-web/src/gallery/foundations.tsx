@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
-import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, Section, Toolbar } from "@/components/ui";
+import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, Overlay, OverlayBar, PillButton, PillField, Section, Toolbar, Row } from "@/components/ui";
 import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
@@ -142,13 +142,13 @@ const radiusScene = () => <div class="g-scene-stack">
 const ICON_MARKS: Part[] = [
   { selector: ".ui-row:not([data-checked]) .ui-icon svg", name: "a row's icon", does: "at rest", from: icon },
   { selector: ".ui-row[data-checked] .ui-icon svg", name: "a current row's", does: "the heavier stroke", from: icon },
-  { selector: ".ui-nav-row svg", name: "the sidebar's icon", does: "sized with its row", from: icon },
+  { selector: ".ui-row[data-density=nav] svg", name: "the sidebar's icon", does: "sized with its row", from: icon },
   { selector: ".ui-toolbar svg", name: "the composer toolbar's icon", does: "sized with its controls", from: icon },
   { selector: ".ui-pill[data-solo] svg", name: "a pill's", does: "--pill-icon, a touch larger", from: icon },
 ];
 const iconScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>
-  <div class="g-ground"><NavRow icon={<SettingsIcon />}>Sidebar</NavRow></div>
+  <div class="g-ground"><Row density="nav" element="button" lead={<SettingsIcon />}>Sidebar</Row></div>
   <Frost class="g-entry"><Toolbar start={<Button variant="ghost" size="icon-sm" aria-label="Attach"><PlusIcon /></Button>} end={<><Button variant="ghost" size="icon-sm" aria-label="Voice"><MicIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Send"><ArrowUpIcon /></Button></>} /></Frost>
   <div class="g-scene-row"><PillButton label="Attach" icon={<PlusIcon />} /><PillButton label="Camera" icon={<CameraIcon />} /><PillButton label="Voice" icon={<MicIcon />} /></div>
 </div>;
@@ -336,7 +336,7 @@ function PageMoves() {
   return <div class="g-replay">
     <div class="g-replay-bar"><Button size="sm" variant="ghost" outline onClick={() => play("open")}>First open</Button><Button size="sm" variant="ghost" outline onClick={() => play("leave")}>Change route</Button></div>
     <Show when={n() + 1} keyed>{(_) => <div class="g-sketch" data-run={run()}>
-      <div class="g-sketch-side"><NavRow current>Chats</NavRow><NavRow>Japan</NavRow><NavRow>Conduit</NavRow></div>
+      <div class="g-sketch-side"><Row density="nav" element="button" current>Chats</Row><Row density="nav" element="button">Japan</Row><Row density="nav" element="button">Conduit</Row></div>
       <div class="g-sketch-main"><div class="g-sketch-read"><Bubble>make the second paragraph shorter</Bubble><p class="g-muted">Done -- the paragraph is two sentences now.</p></div>
         <Frost class="g-sketch-composer">Send a message…</Frost></div>
     </div>}</Show>
@@ -454,7 +454,7 @@ export const TYPE_ROLES: TypeRole[] = [
   { name: "Section label", tokens: "--text-label · --weight-rest · --font-label caps · muted", rule: "every section heading", where: "every menu and popover section (SERVERS, MODEL, APP), the sidebar's PROJECTS, a settings group's title", sig: { size: "label", weight: "rest", face: "mono", caps: true }, selector: ".ui-title", sample: () => onFrost(<Section title="Section label"><Item>Row</Item></Section>) },
   { name: "Row", tokens: "--text-row · --weight-rest · text at 68%", rule: "every list, menu, palette and settings row; over frost", where: "menu, palette, chat search and settings rows; the chat menu's Share, Rename; the plus menu's choices", sig: { size: "row", weight: "rest", face: "sans" }, selector: ".ui-row:not([data-checked])", sample: () => onFrost(<Section><Item icon={<FolderIcon />}>Row at rest</Item></Section>) },
   { name: "Row · current", tokens: "--text-row · --weight-current · text", rule: "where you are: white at the current weight", where: "the server you are on, the picked model or profile, the sidebar server line's name", sig: { size: "row", weight: "current", face: "sans" }, selector: ".ui-row[data-checked]", sample: () => onFrost(<Section><Item icon={<MonitorIcon />} checked>Current row</Item></Section>) },
-  { name: "Row · off frost", tokens: "--text-row · --weight-lift", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", where: "the sidebar's chats, projects and folders; the dashboard's lists", sig: { size: "row", weight: "lift", face: "sans" }, selector: ".ui-nav-row", sample: () => onGround(<NavRow icon={<MonitorIcon />}>Row at rest</NavRow>) },
+  { name: "Row · off frost", tokens: "--text-row · --weight-lift", rule: "the same row on the ground, the sidebar's included: a touch lighter and dimmer", where: "the sidebar's chats, projects and folders; the dashboard's lists", sig: { size: "row", weight: "lift", face: "sans" }, selector: ".ui-row[data-density=nav]", sample: () => onGround(<Row density="nav" element="button" lead={<MonitorIcon />}>Row at rest</Row>) },
   { name: "Meta", tokens: "--text-caption · --font-data · muted", rule: "beside a row's title, right-aligned: a time, a count, a latency", where: "a menu row's latency (14 ms), a chat's age, a model's harness (conduit-test), counts", sig: { size: "caption", weight: "rest", face: "mono" }, selector: ".ui-row > small", sample: () => onFrost(<Section><Item meta="2m ago">Row</Item></Section>) },
   { name: "Data", tokens: "--text-caption · --weight-rest · --font-data · muted", rule: "a figure, state or value that is not a row's meta: a server's state and latency, a reading's shares, a row's second line when it is a value (Item detailData: an address, a command); a description there stays Caption", where: "the sidebar server line's Connected · 14 ms, Route's address, the terminal's commands and sessions, a reading's shares", sig: { size: "caption", weight: "rest", face: "mono" }, selector: ".ui-server-copy > small", sample: () => onGround(<div style={{ width: "calc(16 * var(--u-space))" }}><ServerControl name="Desktop-Dev" detail="Connected · 14 ms" connectivity="online" /></div>) },
   { name: "Figure", tokens: "--text-row · --weight-rest · --font-data · text", rule: "a reading's number, the one thing its tile says", where: "the context reading's plan tiles (17%)", sig: { size: "row", weight: "rest", face: "mono" }, selector: ".ui-reading-stat > dd:first-of-type", sample: () => onFrost(<Reading><ReadingStats title="Plan"><ReadingStat label="Weekly" value="17%" detail="resets Tue" /></ReadingStats></Reading>) },

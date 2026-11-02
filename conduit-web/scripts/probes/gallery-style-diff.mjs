@@ -62,7 +62,7 @@ function compare(label, x, y) {
   return diffs;
 }
 
-const families = await (async () => { const p = await page(origins[0], () => {}); const t = await p.$$eval(".g-rail .ui-nav-row", (rows) => rows.map((r) => r.textContent.trim())); await p.context().close(); return t; })();
+const families = await (async () => { const p = await page(origins[0], () => {}); const t = await p.$$eval(".g-rail .ui-row[data-density=nav]", (rows) => rows.map((r) => r.textContent.trim())); await p.context().close(); return t; })();
 let total = 0;
 for (const family of families) for (const density of ["desktop", "phone"]) {
   const setup = new Function(`localStorage.setItem("gallery:family", ${JSON.stringify(family)}); localStorage.setItem("gallery:stage-density", ${JSON.stringify(density)}); localStorage.setItem("gallery:speed", "1");`);

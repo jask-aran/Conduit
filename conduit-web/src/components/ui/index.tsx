@@ -14,6 +14,7 @@ export * from "./controls";
 export * from "./service-icons";
 export * from "./approval";
 export * from "./frost";
+export * from "./row";
 export * from "./popover";
 export * from "./reading";
 export * from "./nav";

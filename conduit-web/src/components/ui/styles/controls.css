@@ -1,6 +1,6 @@
 /* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
 .ui-keycap { display: inline-grid; white-space: nowrap; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-none) var(--font-label); }
-.ui-row[data-highlighted] .ui-keycap { color: var(--foreground); }
+.ui-row:where([data-density="menu"])[data-highlighted] .ui-keycap { color: var(--foreground); }
 /* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
    chord and a × each a button, a second tint under the one the cursor is on. */
 .ui-keycap[data-editable] { display: inline-flex; height: var(--control-xs); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }

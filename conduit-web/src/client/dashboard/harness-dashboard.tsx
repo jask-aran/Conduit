@@ -14,7 +14,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 import { Button, Input, Segmented } from "@/components/ui/controls";
-import { DashDay, DashEmpty, DashIconButton, DashNote, DashRow, GroupAction, GroupHeading, GroupSwitches } from "@/components/ui/dashboard";
+import { DashDay, DashEmpty, DashIconButton, DashNote, GroupAction, GroupHeading, GroupSwitches } from "@/components/ui/dashboard";
 import { CardPreview, CardRead } from "@/components/ui/card";
 import { Dialog } from "@/components/dialog";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -22,7 +22,8 @@ import { notifyModelFallback } from "../state/model-settings";
 import type { RuntimeStore } from "../state/runtime";
 import { timestampOf } from "./outside-threads";
 import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDay, ShowMore, sortChoice } from "./primitives/chat-list";
-import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitRow } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader } from "./primitives/split";
+import { Row } from "@/components/ui/row";
 
 // A harness's own page: the threads it ran that Conduit does not keep, beside
 // the chats Conduit keeps on it, and the folders it ran them in. It reads as a
@@ -271,10 +272,10 @@ export function HarnessDashboard(props: {
   const outsideRows = () => <Show when={!loading()} fallback={<SplitEmpty>Looking for threads…</SplitEmpty>}>
     <Show when={outside().length} fallback={<SplitEmpty>{query() ? "No threads match this search." : `No threads outside Conduit ${scope() ? "in this folder" : "yet"}.`}</SplitEmpty>}>
       <DayGroups groups={groupByDay(outside().slice(0, limit()), ({ thread }) => sortTime(thread), now())}>{({ group, thread }) =>
-        <SplitRow element="button" disabled={group.missing} title={thread.preview || thread.title} onClick={() => openThread(group, thread)}
-          lead={<ThreadHarnessMark id={props.harnessId} label={harnessMarkLabelFor(props.harnessId)} lively />} primary={thread.title || "Untitled thread"}
+        <Row density="list" element="button" disabled={group.missing} title={thread.preview || thread.title} onClick={() => openThread(group, thread)}
+          lead={<ThreadHarnessMark id={props.harnessId} label={harnessMarkLabelFor(props.harnessId)} lively />} label={thread.title || "Untitled thread"}
           context={[scope() ? null : group.display, group.repository?.branch, group.missing ? "Folder is gone" : null].filter(Boolean).join(" · ")}
-          trailing={shortAge(sortTime(thread), now())} />}
+          meta={shortAge(sortTime(thread), now())} />}
       </DayGroups>
       <Show when={truncated() && outside().length <= limit()}><DashNote>Older threads are not shown.</DashNote></Show>
     </Show>
@@ -283,11 +284,11 @@ export function HarnessDashboard(props: {
     <DayGroups groups={groupByDay(kept().slice(0, limit()), (row) => row.at, now())}>{({ chat, project }) => {
       const process = () => props.runtime.getProcess(chat.id);
       const live = () => process()?.active ? activityLabel(runtimeActivity(process()) || "working", activityDetail(process())) : "";
-      return <SplitRow element="button" onClick={() => props.onOpenChat(chat, project)}
+      return <Row density="list" element="button" onClick={() => props.onOpenChat(chat, project)}
         lead={<RuntimeIndicator process={process()} stale={props.runtime.stale()} unread={chat.unread} fallback={<ThreadHarnessMark id={chat.harnessId} label={harnessMarkLabelFor(chat.harnessId)} lively />} />}
-        primary={chat.title || "Untitled chat"}
+        label={chat.title || "Untitled chat"}
         context={[live(), scope() ? null : project.name].filter(Boolean).join(" · ")}
-        trailing={shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())} />;
+        meta={shortAge(Date.parse(chat.lastMessageAt || chat.createdAt || "") || 0, now())} />;
     }}</DayGroups>
   </Show>;
 
@@ -316,10 +317,10 @@ export function HarnessDashboard(props: {
 
   const foldersGroup = () => <SplitGroup id="harness-folders" label={showOutside() ? "Folders" : "Workspaces"} count={folders().length} actions={showOutside() ? <GroupAction onClick={() => void browse(launchCwd())}>Browse</GroupAction> : undefined}>
     <Show when={folders().length} fallback={<SplitEmpty>{showOutside() ? `${label()} has not said where it ran.` : "No workspaces yet."}</SplitEmpty>}>
-      <SplitRow element="button" aria-current={scope() ? undefined : "true"} onClick={() => props.onScope(null)} lead={<Icons.Profile />} primary="All folders" />
+      <Row density="list" element="button" aria-current={scope() ? undefined : "true"} onClick={() => props.onScope(null)} lead={<Icons.Profile />} label="All folders" />
       <For each={folders()}>{(row) =>
-        <SplitRow element="button" aria-current={row.path === scope() ? "true" : undefined} disabled={row.missing} title={row.path} onClick={() => props.onScope(row.path)}
-          lead={row.project ? <WorkspaceGlyph appearance={row.project.workspaceAppearance} /> : <Icons.Folder />} primary={row.label} context={row.missing ? "Folder is gone" : row.path} />}
+        <Row density="list" element="button" aria-current={row.path === scope() ? "true" : undefined} disabled={row.missing} title={row.path} onClick={() => props.onScope(row.path)}
+          lead={row.project ? <WorkspaceGlyph appearance={row.project.workspaceAppearance} /> : <Icons.Folder />} label={row.label} context={row.missing ? "Folder is gone" : row.path} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -345,14 +346,14 @@ export function HarnessDashboard(props: {
       <CardRead>{location().project.workingRoot}</CardRead>
       <CardPreview>
         <Show when={location().project.workingRoot !== location().home}>
-          <DashRow element="button" type="button" lead={<Icons.Home />} primary="Home" context={location().home} onClick={() => void browse(location().home)} />
-          <DashRow element="button" type="button" lead={<Icons.ArrowUp />} primary="Up" context={location().parent} onClick={() => void browse(location().parent)} />
+          <Row density="list" element="button" type="button" lead={<Icons.Home />} label="Home" context={location().home} onClick={() => void browse(location().home)} />
+          <Row density="list" element="button" type="button" lead={<Icons.ArrowUp />} label="Up" context={location().parent} onClick={() => void browse(location().parent)} />
         </Show>
-        <For each={pickerDirectories()}>{(entry) => <DashRow element="button" type="button" lead={<Icons.Folder />} primary={entry.name} onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)} />}</For>
+        <For each={pickerDirectories()}>{(entry) => <Row density="list" element="button" type="button" lead={<Icons.Folder />} label={entry.name} onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)} />}</For>
         <Show when={!pickerDirectories().length}><DashEmpty>No folders here.</DashEmpty></Show>
         <Show when={launchFolders().length}>
           <DashDay>Recent</DashDay>
-          <For each={launchFolders()}>{(row) => <DashRow element="button" type="button" lead={<Icons.Folder />} primary={row.label} context={row.path} title={row.path} onClick={() => void browse(row.path)} />}</For>
+          <For each={launchFolders()}>{(row) => <Row density="list" element="button" type="button" lead={<Icons.Folder />} label={row.label} context={row.path} title={row.path} onClick={() => void browse(row.path)} />}</For>
         </Show>
       </CardPreview>
     </>}</Show>
