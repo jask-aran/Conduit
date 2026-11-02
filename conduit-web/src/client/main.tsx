@@ -3083,7 +3083,8 @@ function App() {
     const fill = async (view: SplitView) => { if (await setPaneView(pane, view)) focusAnyPane(pane); };
     const terminal = async () => { const id = await pickShell(); if (id) await fill(`term:${id}`); else toast.info("Open a workspace first: a terminal starts in one."); };
     const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; };
-    const workspaces = () => catalogue.projects().filter((project) => project.slug !== "chat").slice(0, 5);
+    // Projects, as the sidebar lists them: not the chats place, nor a workspace (a linked or created folder).
+    const projects = () => catalogue.projects().filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace").slice(0, 5);
     const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
     return <>
@@ -3099,9 +3100,9 @@ function App() {
             <For each={recent()}>{(item) => <DashRow element="button" lead={<Icons.Chat />} primary={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
           </Group>
         </Show>
-        <Show when={workspaces().length}>
-          <Group id="Workspaces" heading={<GroupHeading>Workspaces</GroupHeading>}>
-            <For each={workspaces()}>{(project) => <DashRow element="button" lead={<Icons.Folder />} primary={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
+        <Show when={projects().length}>
+          <Group id="Projects" heading={<GroupHeading>Projects</GroupHeading>}>
+            <For each={projects()}>{(project) => <DashRow element="button" lead={<Icons.Folder />} primary={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
           </Group>
         </Show>
       </PaneHome>

@@ -161,8 +161,12 @@
 .ui-pane-empty p { margin: 0; line-height: var(--leading-text); }
 
 /* An empty pane's Home: a column centred in the pane, its pieces (head, actions, groups) the library's own. */
-.ui-pane-home { display: grid; flex: 1; min-height: 0; overflow-y: auto; place-items: center; padding: var(--space-2xl) var(--space-xl); }
-.ui-pane-home-column { display: grid; width: min(100%, var(--measure-lg)); gap: var(--space-2xl); }
+/* Above the middle, where the eye lands (two parts above, three below); the head's status line in data, the groups
+   named by the quiet section label as the sidebar's are. */
+.ui-pane-home { display: grid; flex: 1; min-height: 0; overflow-y: auto; grid-template-rows: 2fr auto 3fr; justify-items: center; padding: var(--space-2xl) var(--space-xl); }
+.ui-pane-home-column { display: grid; grid-row: 2; width: min(100%, var(--measure-lg)); gap: var(--space-2xl); }
+.ui-pane-home .ui-dash-context { font-family: var(--font-data); }
+.ui-pane-home .ui-group-heading { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 
 /* Phone tool controls retain the reference's finger targets and strip spacing. */
 @media (--conduit-phone-layout) {
