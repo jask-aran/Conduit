@@ -1,6 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { Button } from "@/components/ui/controls";
-import { SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { Button, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 
@@ -36,8 +35,9 @@ export function ToolsSettings() {
   const asking = createMemo(() => profile()?.tools.filter((tool) => tool.asks !== "never").length || 0);
   const nameOf = (item: ProfileTools) => item.agent ? `${item.label} (jbot)` : item.label;
 
+  // Its description is its title (Settings list: descriptions go in a title); what it asks, when it does, its state.
   const line = (tool: ProfileTool) =>
-    <SettingLine plain label={<code>{tool.name}</code>} state={tool.asks !== "never" ? tool.when : tool.description}
+    <SettingLine plain mono label={tool.name} state={tool.asks === "sometimes" ? tool.when : undefined}
       title={[tool.description, tool.extension ? `From ${tool.extension}.` : "", tool.when || ""].filter(Boolean).join(" ")}>
       <SettingValue>{SOURCE[tool.source]} · {ASKS[tool.asks]}</SettingValue>
     </SettingLine>;

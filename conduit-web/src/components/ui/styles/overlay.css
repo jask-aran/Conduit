@@ -109,6 +109,9 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-live-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
 .ui-setting-line > span:first-child { max-width: 100%; flex: 1 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* mono: the name is data (a model id, a tool), in the data face; its state stays in the row's. */
+.ui-setting-line > span:first-child[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
+.ui-setting-line > span:first-child[data-mono] > small { font: var(--weight-rest) var(--text-row) var(--font-sans); }
 .ui-setting-line > span:first-child > small { margin-left: var(--space-md); color: var(--muted-foreground); font-size: inherit; }
 /* Every row's control sits in one column of one width, so they line up. */
 .ui-setting-control { display: inline-flex; min-width: 0; max-width: 100%; flex: 0 1 auto; margin-left: auto; align-items: center; justify-content: flex-end; gap: var(--space-xs); }

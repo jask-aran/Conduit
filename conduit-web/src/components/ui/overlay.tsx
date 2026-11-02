@@ -207,8 +207,9 @@ export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
 
 /** A setting: its name (state that matters muted after it), then its control in the one control column.
  *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
-export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; title?: string; children?: JSX.Element }) => {
-  const inner = () => <><span>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
+/** mono: the name is data (a model id, a tool's name), in the data face. */
+export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element }) => {
+  const inner = () => <><span data-mono={props.mono ? "" : undefined}>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
   return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title}>{inner()}</label>;
 };
 /**

@@ -115,6 +115,23 @@ export function Meter(props: { parts: { value: number; colour: string }[]; mark?
 }
 
 /**
+ * A quantity over time (a day's spend): a column per period, grown from the foot by its share of the largest, on the
+ * track's ground; a period with nothing is the ground alone. The first and last periods are named under it (`ends`
+ * for other words), each column's title is its reading, and `label` says the whole for assistive tech. `current`: the
+ * period you are in (today), at full strength; the others rest a step back.
+ */
+export function Series(props: { label: string; points: { label: string; value: number; title?: string; current?: boolean }[]; ends?: [string, string] }) {
+  const max = () => props.points.reduce((most, point) => Math.max(most, point.value), 0);
+  return <figure class="ui-series" role="img" aria-label={props.label}>
+    <div class="ui-series-bars">
+      <For each={props.points}>{(point) => <span title={point.title ?? `${point.label}: ${point.value}`} data-current={point.current ? "" : undefined}
+        data-empty={point.value > 0 ? undefined : ""} style={{ "--share": max() > 0 ? point.value / max() : 0 }} />}</For>
+    </div>
+    <Show when={props.points.length}><figcaption class="ui-series-ends" aria-hidden="true"><span>{props.ends?.[0] ?? props.points[0]!.label}</span><span>{props.ends?.[1] ?? props.points.at(-1)!.label}</span></figcaption></Show>
+  </figure>;
+}
+
+/**
  * One choice from an ordered list, set by sliding along it. The value follows
  * the thumb and is chosen on release; with onOpen the value is a SliderValue
  * that opens the levels, and control puts the caller's own there (a submenu).
