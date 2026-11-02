@@ -4283,7 +4283,7 @@ function App() {
   const placeLabelOf = (projectId: string) => { const project = catalogue.projects().find((item) => item.id === projectId); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
   const paneTabRow = (pane: PaneKey) => {
     const row = createTabStrip({
-      keys: () => { const list = tabsOf(pane); return list && list.ids.length > 1 && !isMobileLayout() ? list.ids : null; },
+      keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
       place: tabPlace,
       placeLabel: (id) => placeLabelOf(tabPlace(id)),
       title: (id) => viewName(`chat:${id}`),
@@ -4297,10 +4297,7 @@ function App() {
     });
     return { get tabs() { return row(); } };
   };
-  /*
-   * A pane's close: its document goes and the pane stays, empty (Home); an
-   * empty pane's close closes the pane. Pane A alone has nothing to close.
-   */
+  // A tab's close on a pane's only document: the pane stays, empty (Home). An empty pane's close closes the pane.
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
     if (await setPaneView(pane, "home")) focusAnyPane(pane);
@@ -4508,7 +4505,7 @@ function App() {
     <PaneActions>
       <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
       <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label={viewOf(pane) === "home" ? "Close this pane" : "Close this document"} title="Close" onClick={() => void closeDocument(pane)}><Icons.Close /></PaneAction></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></PaneAction></Show>
     </PaneActions>
   </Show>;
   /*
