@@ -93,7 +93,10 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 - [ ] 1. Approve `PaneHome` as a v2 extension: only the container that centres Home and styles the headings and
   status line inside it.
-- [ ] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×.
+- [x] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×. Kept the
+  header (it holds the shell, shortcuts and sessions) and gave it a document's ×: v2's `TermIdentity` takes `onClose`,
+  a × after the terminal's name drawn as a lit tab's, closing the document as any is (`closeDocument`: the pane
+  stays, empty; the shell runs on). Gallery: Panes › TermIdentity · onClose.
 - [ ] 3. Merge the branch into `main` and restart :4310 (`--force` while the stuck "Slow Spawn Narration" test chat
   still waits).
 

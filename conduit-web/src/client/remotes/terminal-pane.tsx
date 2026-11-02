@@ -69,7 +69,7 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element; onClose?: () => void }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -1169,7 +1169,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </TermButton>
         </TermLead>
       </Show>
-      <TermIdentity end={props.headerActions}>
+      <TermIdentity end={props.headerActions} onClose={props.onClose} closeLabel="Close (the shell keeps running)">
         <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <TermContext>{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</TermContext>

@@ -1,6 +1,7 @@
 import { onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
+import * as Icons from "./icons";
 
 /** What a header folds when it is too narrow, first to last: the shortcuts into the ⋯, then the actions' labels. */
 const TERM_FOLDS = ["shortcuts", "labels"] as const;
@@ -45,9 +46,12 @@ export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "clas
 }
 /** Status, a strong title and muted context, followed by the caller's controls. end: what closes the line at its far
  *  end (a pane's own actions, when the terminal is a pane's document). */
-export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { end?: JSX.Element }) {
-  const [local, rest] = splitProps(props, ["children", "end"]);
-  return <div {...rest} class="ui-term-identity">{local.children}<Show when={local.end}><span class="ui-term-identity-end">{local.end}</span></Show></div>;
+/** onClose: the terminal is a pane's document, closed as any is -- a tab's ×, after its name (the pane stays, empty). */
+export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { end?: JSX.Element; onClose?: () => void; closeLabel?: string }) {
+  const [local, rest] = splitProps(props, ["children", "end", "onClose", "closeLabel"]);
+  return <div {...rest} class="ui-term-identity">{local.children}
+    <Show when={local.onClose}><button type="button" class="ui-term-close" aria-label={local.closeLabel ?? "Close terminal"} title={local.closeLabel ?? "Close terminal"} onClick={() => local.onClose?.()}><Icons.Close /></button></Show>
+    <Show when={local.end}><span class="ui-term-identity-end">{local.end}</span></Show></div>;
 }
 /** A context line that truncates within the identity. */
 export const TermContext = (props: { children: JSX.Element }) => <span class="ui-term-context">{props.children}</span>;

@@ -3150,7 +3150,7 @@ function App() {
       <Show when={record()} fallback={<Show when={record() === null}>
         <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><PaneEmpty>This terminal has ended.</PaneEmpty>
       </Show>}>{(found) =>
-        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)} />
+        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)} onClose={() => void closeDocument(pane)} />
       }</Show>
     </SheetFill>;
   };
