@@ -5296,7 +5296,7 @@ function App() {
         const hidden = !owner || !target ? await agentChat(chatId) : null;
         if (hidden) { owner = hidden.project; }
         const resolvedTarget = target || hidden?.chat;
-        if (!owner || !resolvedTarget) throw new Error("Chat not found");
+        if (!owner || !resolvedTarget) throw Object.assign(new Error("Chat not found"), { error: "chat_not_found" });
         await chat.select(resolvedTarget, owner, {
           history: "none",
           onCommit: () => {
@@ -5305,7 +5305,17 @@ function App() {
             setRouteBootstrap("ready");
           },
         });
-      })().catch((error) => showError(error)).finally(() => { requestAnimationFrame(() => { restoringPanes = false; }); });
+      })().catch(async (error) => {
+        // Back or forward onto a chat deleted since: the address said it while
+        // the last chat stayed on screen. It goes to the dashboard instead.
+        if ((error as { error?: unknown } | null)?.error === "chat_not_found" && pathChatId()) {
+          history.replaceState(history.state, "", "/");
+          await openDashboard("none");
+          showPlainError("That chat no longer exists");
+          return;
+        }
+        showError(error);
+      }).finally(() => { requestAnimationFrame(() => { restoringPanes = false; }); });
     };
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
