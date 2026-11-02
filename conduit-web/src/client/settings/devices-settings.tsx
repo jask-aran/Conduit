@@ -18,6 +18,7 @@ import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
+import { MachineReadout } from "./machine-readout.tsx";
 import { createPushControl } from "../platform/push.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
@@ -267,6 +268,8 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
           <ReadingStat label="Workspaces" value={projects().filter(isWorkspace).length} />
         </ReadingStats>
       </Reading></Show>
+      {/* The machine it runs on, read while open; only the server this client is on can be asked. */}
+      <Show when={active()}><MachineReadout open={open().has("server")} /></Show>
       <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
       </NavFolder>
     </SettingGroup>

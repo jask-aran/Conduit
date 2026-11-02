@@ -2,6 +2,7 @@ import { normalizeKnownServers, validKnownServers, validSidebarPins, validTermin
 import { manifestForImplementation } from "../../harnesses/index.js";
 import { clientAddress, isTailnetOrLoopback } from "../../nodes/node-hub.js";
 import { tailnetMachine } from "../../tailscale-share.js";
+import { createMachineReadout } from "../machine-readout.js";
 
 const PROOF_WINDOW_MS = 10_000;
 const PROOF_LIMIT = 20;
@@ -53,6 +54,12 @@ export function registerRuntimeRoutes(app, {
   // Real clients probe a handful of paths now and then; nothing needs more.
   const proofWindows = new Map();
   // A rename is the server's, so every client and the LAN see it.
+  // Settings › Devices: this machine's readout (machine-readout.js), read while its folder is open.
+  const readMachine = createMachineReadout({ root: config.dataRoot });
+  app.get("/v0/server/machine", async (_request, response, next) => {
+    try { response.json(await readMachine()); } catch (error) { next(error); }
+  });
+
   app.put("/v0/server/name", async (request, response) => {
     if (!await serverIdentity.rename(request.body?.name)) {
       return response.status(400).json({ error: "invalid_name", message: "A server name is 1–63 characters with no control characters." });
