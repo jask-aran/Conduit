@@ -62,6 +62,9 @@ function validOnce(at, now) {
   return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
 }
 
+/** How long a run's routine waits for the gathering due with it before going without it. */
+const GATHER_WAIT_MS = 5 * 60_000;
+
 function makeClock(runtime) {
   return defineTask({
     name: "conduit.agent-clock", version: 1, initial: () => ({ phase: "wait" }),
@@ -104,6 +107,16 @@ function makeClock(runtime) {
         // before it is applied, so a replay does not ask Executor again.
         const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
         let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
+        // A routine whose run weighs what was gathered (the heartbeat, the brief) goes after the gathering due with it:
+        // the Email feed and the heartbeat both due at :18:57 must not race, or the run misses what the feed files in
+        // that moment and jbot has to find it on its own. It waits (a few seconds at a time, at most GATHER_WAIT_MS)
+        // until no gathering routine's slot is at or before its own.
+        if (routine && !routine.error && fired === undefined && routine.gate !== "never" && api.now() - Date.parse(slot) < GATHER_WAIT_MS) {
+          const gatherers = new Set((await listRoutines(agent.folder)).filter((other) => !other.error && other.gate === "never").map((other) => `r-${other.name}`));
+          const due = Object.values((await api.snapshot(AgentDoc, context))?.schedules || {})
+            .some((other) => other.id !== schedule.id && gatherers.has(other.id) && other.nextAt && Date.parse(other.nextAt) <= Date.parse(slot));
+          if (due) { await api.sleepUntil(api.now() + 2000, { phase: "fire", slot }, context); return; }
+        }
         if (routine && !routine.error && fired === undefined) {
           const state = await api.snapshot(AgentDoc, context);
           fired = await api.memo(`routine:${slot}`, await executeRoutine(agent, routine, { cursors: state?.cursors?.[routine.name] || {}, state, now: api.now() }), context);
