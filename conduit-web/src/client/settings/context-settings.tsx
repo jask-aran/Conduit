@@ -18,7 +18,7 @@ import { ModelSelector } from "../chat/model-selector";
  * into documents, one document per role -- a profile, jbot, a routine's run, a subagent, chat naming. Prompts shows a
  * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
  */
-export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "jbot" | "custom" | "conduit";
+export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "installed" | "jbot" | "custom" | "conduit";
   description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
@@ -37,7 +37,7 @@ const ROLE_STARTS: Record<RoleKind, string> = {
 const ROLE_ICON: Record<RoleKind, () => ReturnType<typeof Icons.Profile>> = {
   profile: () => <Icons.Profile />, agent: () => <Icons.Agent />, run: () => <Icons.Clock />, subagent: () => <Icons.Agent />, service: () => <Icons.Settings />,
 };
-const SOURCE: Record<BlockSummary["source"], string> = { shipped: "shipped", jbot: "jbot's file", custom: "yours", conduit: "filled in by Conduit" };
+const SOURCE: Record<BlockSummary["source"], string> = { shipped: "shipped", installed: "installed skill", jbot: "jbot's file", custom: "yours", conduit: "filled in by Conduit" };
 /** About how much it costs a thread: tokens at four characters each, the unit a context window is counted in. */
 export const tokens = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
 /** The blocks and documents, loaded once a page opens and again after every change (the server's word is the state). */
@@ -236,6 +236,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const groups = (): { title: string; items: BlockSummary[] }[] => [
     { title: "yours", items: blocks().filter((block) => block.source === "custom") },
     { title: "shipped", items: blocks().filter((block) => block.source === "shipped" && block.kind === "text") },
+    { title: "installed skills", items: blocks().filter((block) => block.source === "installed") },
     { title: "jbot's file", items: blocks().filter((block) => block.source === "jbot") },
     { title: "filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
     { title: "notice", items: blocks().filter((block) => block.kind === "notice") },

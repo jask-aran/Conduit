@@ -56,6 +56,8 @@ import { mcpAccess } from "./server/mcp-access.js";
 import { BrowserHost, createBrowsers } from "./server/browser-host.js";
 import { tunnelTo } from "./nodes/remote-tunnel.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
+import { registerSkillRoutes } from "./server/routes/skills.js";
+import { SkillStore } from "./skills/skill-store.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
@@ -178,7 +180,10 @@ const voiceRecordingStore = lifetime.own("voice archive", new VoiceRecordingStor
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...result }));
 }, { timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS + 1_000 });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
+// The hub's skills (Settings › Skills): shipped with the profiles, or installed here from a registry.
+const skills = await new SkillStore({ root: path.join(config.dataRoot, "skills"), templates: config.piTemplates }).load();
 const contextStore = new ContextStore({
+  skills,
   root: config.promptOverridesRoot, templates: config.piTemplates,
   agent: () => backends.adapters.get("conduit-runtime")?.runtime.agent,
   webPath: path.join(config.repositoryRoot, "templates/conduit-runtime/WEB.md"),
@@ -650,6 +655,7 @@ mcpAccess.browser = browserHost.mcpServer();
 // The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
 const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
 registerBrowserRoutes(app, { browsers });
+registerSkillRoutes(app, { skills });
 registerRuntimeRoutes(app, {
   uiControl,
   attachments,

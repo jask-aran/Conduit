@@ -67,8 +67,9 @@ const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().re
 const skillBody = (text) => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 
 export class ContextStore {
-  constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath }) {
-    Object.assign(this, { root: path.resolve(root), templates, agent, webPath, seedDir, chatNamingPath, subagentPath });
+  constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills = null }) {
+    // skills: the hub's SkillStore (Settings › Skills): installed skills' blocks, and which skills are off.
+    Object.assign(this, { root: path.resolve(root), templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills });
   }
 
   async json(name) {
@@ -96,6 +97,12 @@ export class ContextStore {
       const id = `skill-${path.basename(folder)}`;
       if (!blocks.has(id)) add(id, skillLabel(skillName(await fs.readFile(path.join(folder, "SKILL.md"), "utf8"), folder)), "shipped", { file: path.join(folder, "SKILL.md"), skill: folder });
     }
+    // Skills installed on the hub (Settings › Skills), after the shipped ones; a shipped id keeps its own.
+    for (const { id: skillId, folder } of this.skills?.installedFolders() || []) {
+      const id = `skill-${skillId}`;
+      const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8").catch(() => null);
+      if (text !== null && !blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "installed", { file: path.join(folder, "SKILL.md"), skill: folder, installed: true });
+    }
     add("chat-naming", "Chat naming", "shipped", { file: this.chatNamingPath });
     add("web-tools", "Web tools", "shipped", { file: this.webPath, description: "Comes with the web tools: placed by Conduit after the document's own blocks." });
     add("subagent-brief", "Subagent brief", "shipped", { file: this.subagentPath });
@@ -119,7 +126,9 @@ export class ContextStore {
     catalog ||= await this.catalog();
     const docs = [];
     const add = (id, kind, roleId, label, blocks, sections = [], first = [], notices = []) => docs.push({ id, label, role: { kind, id: roleId, label }, blocks, live: sections, first, notices });
-    const templateBlocks = (t) => [t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`)];
+    // A profile's default: its own skills, then every skill installed on the hub (a saved document keeps its list).
+    const installed = [...catalog.values()].filter((item) => item.installed).map((item) => item.id);
+    const templateBlocks = (t) => [...new Set([t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`), ...installed])];
     const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox"] : [])];
     for (const t of this.templates) {
       if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
@@ -274,13 +283,16 @@ export class ContextStore {
     const sections = []; let previousSkill = false;
     // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
     // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
-    const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text");
+    // A skill turned off in Settings › Skills is left out wherever it is placed.
+    const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text"
+      && !(item.skill && this.skills && !this.skills.enabled(path.basename(item.skill))));
     const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
     for (const [index, { key, item }] of blocks.entries()) {
       let text = contents[index];
       if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
-      else if (item.skill) text = `${previousSkill ? "" : "# Skills\n\n"}## Skill: ${skillName(text, item.skill)}\n\n${skillBody(text)}`;
+      // An installed skill's files (scripts, references) are in its folder on the hub, which its text names relatively.
+      else if (item.skill) text = `${previousSkill ? "" : "# Skills\n\n"}## Skill: ${skillName(text, item.skill)}\n\n${item.installed ? `Its files are in ${item.skill}.\n\n` : ""}${skillBody(text)}`;
       else if (id !== "service:chat-naming") text = text.trim();
       previousSkill = Boolean(item.skill);
       if (text) sections.push({ blockId: key, label: item.label, kind: "text", part: "system", text });

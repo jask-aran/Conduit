@@ -231,7 +231,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   Memory files: each list line of SOUL (only what it added), USER, MEMORY and 14 days of diary, newest learned first;
   where it is kept and how long ago, with what reads it and who wrote it from which chat on hover; its chat opens
   from the row; forget asks twice and removes that exact line (`GET /v0/agent/memory`, `POST .../memory/forget`).
-- [ ] 20. Skill discovery and status.
+- [x] 20. Skill discovery and status. Built 2026-11-02 as Settings › AI › Skills (`skills-settings.tsx`,
+  `src/skills/skill-store.js`): shipped skills (by profile) and ones installed on the hub, each on or off for every
+  profile, with its size in tokens; search skills.sh (the registry `npx skills` uses) and install a result into
+  `data/skills/<id>` by the same download the CLI makes, or remove it. Installed skills are prompt blocks like
+  shipped ones (Blocks lists them; they join every profile's default document). Next: uploads, other registries,
+  and loading a skill's body on demand instead of in every turn.
 - [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
 - [ ] 22. Commit message drafting with its own model.
 - [ ] 23. Notification destinations. jbot-only for now.
