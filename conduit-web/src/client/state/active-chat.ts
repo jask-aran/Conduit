@@ -1,6 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
-import { api, asList } from "../api/client";
+import { api, asList, chatPath } from "../api/client";
 import { createAgentSession } from "./agent-session";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
@@ -920,8 +920,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     const selection = selectionToken;
     batch(() => {
       catalogue.select(chat, project);
-      if (entry.history === "push") history.pushState({}, "", `/chat/${chat.id}`);
-      else if (entry.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
+      if (entry.history === "push") history.pushState({}, "", chatPath(chat.id));
+      else if (entry.history === "replace") history.replaceState({}, "", chatPath(chat.id));
       entry.onCommit?.();
     });
     // Opening is reading, however it was reached -- a click, a pasted URL, the
@@ -1006,8 +1006,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     liveOpening = opening;
     batch(() => {
       catalogue.select(chat, project);
-      if (navigationOptions.history === "push") history.pushState({}, "", `/chat/${chat.id}`);
-      else if (navigationOptions.history === "replace") history.replaceState({}, "", `/chat/${chat.id}`);
+      if (navigationOptions.history === "push") history.pushState({}, "", chatPath(chat.id));
+      else if (navigationOptions.history === "replace") history.replaceState({}, "", chatPath(chat.id));
       navigationOptions.onCommit?.();
       setMessages([]);
       setTools([]);

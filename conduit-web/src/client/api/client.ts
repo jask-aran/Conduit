@@ -155,4 +155,4 @@ export async function apiWhenServed<T>(url: string, keepRetrying = false): Promi
 
 export const asList = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
 
-export { pathChatId, pathProjectId, projectMatchesPath, projectPath } from "./routes.ts";
+export { chatPath, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, setJbotHome } from "./routes.ts";

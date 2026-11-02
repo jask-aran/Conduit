@@ -36,7 +36,7 @@ import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
+import { api, apiWhenServed, asList, chatPath, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -752,7 +752,8 @@ function App() {
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
   // jbot's page; /agent was its first path and still lands there.
-  const initialAgentRoute = location.pathname === "/jbot" || location.pathname === "/agent";
+  // /jbot/thread on a device that has not yet learnt which chat it is: the page first, then the thread (below).
+  const initialAgentRoute = location.pathname === "/jbot" || location.pathname === "/agent" || (location.pathname === JBOT_THREAD_PATH && !initialRouteId);
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer" | "agent">(
     initialAgentRoute ? "agent" : initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
@@ -1205,7 +1206,8 @@ function App() {
   const chatHistory = session.history;
   const openingLiveChat = createMemo(() => chat.presentation().kind === "opening_live");
   const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
-  const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
+  // jbot's threads always exist: never the new-chat welcome, even before anything happens in one.
+  const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !agentThread(chat.loadedId()) && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
   // A send leaves the empty layout at once, not when the agent has started
   // and the message is in the transcript: the composer goes to the foot and
   // holds the message there, beside "Starting agent…", until it lands.
@@ -1484,8 +1486,8 @@ function App() {
 
       const activation = activateCreatedChat(created, ownerProject, profileId);
       batch(() => {
-        if (fromDashboard) history.pushState({}, "", `/chat/${created.id}`);
-        else history.replaceState({}, "", `/chat/${created.id}`);
+        if (fromDashboard) history.pushState({}, "", chatPath(created.id));
+        else history.replaceState({}, "", chatPath(created.id));
       });
       // Show the durable draft without waiting for its scoped controls to load.
       catalogue.setProjects((current) => current.map((item) => {
@@ -1586,6 +1588,14 @@ function App() {
     setRouteBootstrap("ready");
     if (historyMode === "push") history.pushState({}, "", "/jbot");
   };
+  // jbot's thread by its own path: once the agent's view says which chat it is (routes.ts keeps it for next time).
+  const openJbotThread = async () => {
+    const id = (await refreshAgent())?.home?.chatId;
+    if (!id) return openAgent("none");
+    const target = await agentChat(id);
+    await openChatFromPage(target.chat, target.project);
+  };
+  onMount(() => { if (location.pathname === JBOT_THREAD_PATH && !initialRouteId) void openJbotThread().catch(showError); });
 
   let computerRequest = 0;
   let computerController: AbortController | undefined;
@@ -2059,6 +2069,14 @@ function App() {
           setRouteBootstrap("ready");
         },
       });
+      // A select already under way for this chat (jbot's page loading its thread for the composer) settled without
+      // this one's commit: the chat is loaded, so only the route is left to follow.
+      if (routeKind() !== "chat" && chat.loadedId() === target.id) {
+        setRouteKind("chat");
+        setRouteBootstrapError("");
+        setRouteBootstrap("ready");
+        if (location.pathname !== chatPath(target.id)) history.pushState({}, "", chatPath(target.id));
+      }
     }
     catch (error) { showError(error); return; }
   };
@@ -5267,6 +5285,10 @@ function App() {
           await openDashboard("none");
           return;
         }
+        if (location.pathname === JBOT_THREAD_PATH && !pathChatId()) {
+          await openJbotThread();
+          return;
+        }
         if (location.pathname === "/jbot" || location.pathname === "/agent") {
           if (location.pathname === "/agent") history.replaceState(history.state, "", "/jbot");
           await openAgent("none");
@@ -5405,7 +5427,7 @@ function App() {
         if (!project) throw new Error("Conduit has no chat project");
         const created = await api<ChatSummary>("/v0/chats", { method: "POST", body: JSON.stringify({ projectId: project.id, templateId: templatePayload.defaultTemplateId || "assistant" }) });
         if (navigated()) return;
-        history.replaceState({}, "", `/chat/${created.id}`);
+        history.replaceState({}, "", chatPath(created.id));
         await chat.initialize(created, project);
         setRouteKind("chat");
         setRouteBootstrap("ready");
@@ -5629,7 +5651,7 @@ function App() {
         narration={surfaceChat.loadedId() && surfaceChat.status() !== "draft" ? { value: mode(), onChange: (value) => props.narration && props.onNarration ? props.onNarration(value) : setNarration(surfaceChat.loadedId()!, value) } : undefined} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
-        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration={mode()} approvals={approvalsFor(surfaceChat.loadedId())} />}
+        transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} agentThread={agentThread(surfaceChat.loadedId())} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration={mode()} approvals={approvalsFor(surfaceChat.loadedId())} />}
         composer={<Show when={!subagent()}><Composer chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };
@@ -5716,7 +5738,7 @@ function App() {
               catalogue.setProjects((current) => current.map((item) => item.id === project.id
                 ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                 : item));
-              history.pushState({}, "", `/chat/${id}`);
+              history.pushState({}, "", chatPath(id));
               chat.setDraft(prompt);
               await sendFromDashboard();
             }} />
@@ -5757,7 +5779,7 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} profileLabel={label()} projectId={catalogue.projectId()} narration={narrationOf(chat.loadedId())} approvals={approvalsFor(chat.loadedId())} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} agentThread={agentThread(chat.loadedId())} profileLabel={label()} projectId={catalogue.projectId()} narration={narrationOf(chat.loadedId())} approvals={approvalsFor(chat.loadedId())} />}
                 composer={<Composer chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} onStatusChange={setComposerStatus} />} />
             </>;
           }}</Show>
@@ -5782,7 +5804,7 @@ function App() {
               catalogue.setProjects((current) => current.map((item) => item.id === project.id
                 ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                 : item));
-              history.pushState({}, "", `/chat/${id}`);
+              history.pushState({}, "", chatPath(id));
               chat.setDraft(prompt);
               await sendFromDashboard();
             }} />

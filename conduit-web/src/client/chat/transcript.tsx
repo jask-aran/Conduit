@@ -173,6 +173,8 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
 }
 
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
+  /** One of jbot's threads: always there, so an empty one is said to be empty, never welcomed as a new chat. */
+  agentThread?: boolean;
   /** What it does with text said between tool calls (turn-rows.ts `TurnLayout`): `fold` (chats, the default) into the
    *  turn's trace, `show` (the persistent agent's threads) where it was written, with the work between as traces. */
   narration?: Narration;
@@ -1218,7 +1220,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </>}>
-        <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
+        <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}>
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item, index) => {
