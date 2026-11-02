@@ -4624,6 +4624,7 @@ function App() {
   // easing open is unseen until it lands, and mounting a chat inside the click that opened it -- its components, then its
   // first layout and render -- held the panes still ~45 ms before they moved.
   let shownAsSeen = untrack(shownSlots);
+  const shownAsSeenAtLoad = shownAsSeen;
   const heldSlots = new Map<number, { release: () => void; focus?: () => void }>();
   const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
     && !reducedMotion();
@@ -4665,13 +4666,16 @@ function App() {
   };
   createEffect(on(shownSlots, (now, before) => {
     shownAsSeen = now;
-    const added = now.filter((slot) => !(before ?? []).includes(slot));
-    const animated = added.length === 1 && before && animatePanes() ? added[0]! : null;
+    // The first change after load has no previous value (the effect is deferred): it was the row before, empty or
+    // as restored, so the first pane opened eases in like any other. The load itself is not (panesSettled).
+    const previous = before ?? shownAsSeenAtLoad;
+    const added = now.filter((slot) => !previous.includes(slot));
+    const animated = added.length === 1 && animatePanes() ? added[0]! : null;
     for (const [held, hold] of [...heldSlots]) if (held !== animated) hold.release();
-    if (animated === null || !before) return;
+    if (animated === null) return;
     const slot = animated;
     const index = now.indexOf(slot);
-    const start = weightsFor(before.length + 1).slice();
+    const start = weightsFor(previous.length + 1).slice();
     start.splice(index + 1, 0, 0);
     const target = normalized(weightsFor(now.length + 1));
     setWeightOverride(normalized(start));
