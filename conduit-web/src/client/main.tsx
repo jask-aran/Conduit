@@ -578,6 +578,7 @@ function App() {
     commands: commandRegistry,
     environment: browserShortcutEnvironmentProvider.detect(),
     leader: LEADER_STROKE,
+    validate: import.meta.env.DEV,
   });
   const catalogue = createCatalogueStore();
   const [computerLocation, setComputerLocation] = createSignal<ComputerLocation | null>(null);

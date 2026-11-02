@@ -44,6 +44,8 @@ export interface ShortcutManagerOptions {
   storage?: ShortcutStorage | null;
   /** The leader key, which opens the leader menu anywhere, even with nothing in it. */
   leader?: ShortcutStroke;
+  /** Check the commands for duplicate ids and ambiguous defaults (default true; a production build passes false). */
+  validate?: boolean;
 }
 
 export interface RegisterShortcutHandlerOptions {
@@ -86,8 +88,12 @@ export class ShortcutManager {
   constructor(options: ShortcutManagerOptions) {
     this.commands = options.commands;
     this.commandById = new Map(options.commands.map((command) => [command.id, command]));
-    const registryErrors = validateShortcutRegistry(options.commands);
-    if (registryErrors.length) throw new Error(registryErrors.join("\n"));
+    // Every pair of commands against each other: a developer's check. The app's own registry is fixed, and a test
+    // asserts it valid, so a production build skips it (validate: false) rather than spend it on every start.
+    if (options.validate !== false) {
+      const registryErrors = validateShortcutRegistry(options.commands);
+      if (registryErrors.length) throw new Error(registryErrors.join("\n"));
+    }
     this.environment = options.environment;
     this.leader = options.leader ?? null;
     this.storage = options.storage === undefined
