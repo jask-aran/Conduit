@@ -23,6 +23,7 @@ export * from "./shell";
 export * from "./source";
 export * from "./history";
 export * from "./terminal";
+export * from "./web";
 export * from "./file";
 export * from "./viewer";
 export * from "./editor";

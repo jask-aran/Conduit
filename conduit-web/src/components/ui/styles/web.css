@@ -1,0 +1,16 @@
+/* Web: a page in a pane. The bar is a ToolBar; the address its field, as the Files filter is (a mark, then the field on
+   the tint); the screen the rest of the pane, the page drawn whole on the ground, a state said over it in the empty
+   pane's voice. Focus on the screen is the page's (its own caret), so the screen draws none. */
+.ui-web { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.ui-web-address { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
+.ui-web-address > svg { position: absolute; left: var(--space-md); width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); pointer-events: none; }
+.ui-web-address > input { width: 100%; height: var(--control-tool); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); text-overflow: ellipsis; }
+.ui-web-address > input:focus { border-color: var(--ring); }
+.ui-web-address > input::placeholder { color: var(--muted-foreground); font-family: var(--font-sans); }
+.ui-web-screen { position: relative; display: grid; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; touch-action: none; }
+.ui-web-frame { width: 100%; height: 100%; object-fit: contain; object-position: top center; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
+.ui-web-screen[data-live] > .ui-web-frame { opacity: 1; }
+.ui-web-state { position: absolute; inset: 0; display: grid; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
+.ui-web-state[data-tone="error"] { color: var(--destructive); }
+.ui-web-state code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
+@media (prefers-reduced-motion: reduce) { .ui-web-frame { transition: none; } }

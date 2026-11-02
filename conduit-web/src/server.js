@@ -50,6 +50,8 @@ import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { UiControl } from "./server/ui-control.js";
+import { BrowserHost } from "./server/browser-host.js";
+import { registerBrowserRoutes } from "./server/routes/browsers.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
@@ -616,6 +618,9 @@ registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await fi
 registerContextRoutes(app, { contextStore });
 // Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
 const uiControl = new UiControl({ runtimeHub });
+// The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
+const browserHost = lifetime.own("hub browser", new BrowserHost(), (owned) => owned.close());
+registerBrowserRoutes(app, { browserHost });
 registerRuntimeRoutes(app, {
   uiControl,
   attachments,
@@ -720,7 +725,7 @@ await push.load();
 // The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
 // clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
-if (durableAdapter) durableAdapter.runtime.uiControl = uiControl;
+if (durableAdapter) { durableAdapter.runtime.uiControl = uiControl; durableAdapter.runtime.browserHost = browserHost; }
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
 registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {
@@ -979,9 +984,11 @@ const handleUpgrade = async (request, socket, head) => {
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
+  const browserMatch = pathname.match(/^\/v0\/browsers\/([a-z0-9-]{1,32})\/stream$/);
   // A device dialling in proves itself with its pairing key, not a browser session.
   if (pathname === "/v0/nodes/connect") return nodeHub.handleUpgrade(request, socket, head);
-  if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch) return socket.destroy();
+  if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch
+    && (!browserMatch || !browserHost.has(browserMatch[1]) || !browserHost.available)) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
       const ticket = requestUrl.searchParams.get("ticket");
@@ -1001,6 +1008,7 @@ const handleUpgrade = async (request, socket, head) => {
     return socket.destroy();
   }
   if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
+  if (browserMatch) return browserHost.handleUpgrade(browserMatch[1], request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   if (!backends.get(match[1])) return socket.destroy();
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);

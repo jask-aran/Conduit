@@ -24,6 +24,7 @@
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
  *   terminal        TermHeader and its parts, TermState, TermKeys
+ *   web             WebView > (ToolBar, WebAddress), WebScreen: a page in a pane (the hub's browser)
  *   file, viewer    FilesPane > FilesTree; FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
@@ -64,6 +65,7 @@ import "./shell.css";
 import "./source.css";
 import "./history.css";
 import "./terminal.css";
+import "./web.css";
 import "./file.css";
 import "./viewer.css";
 import "./editor.css";

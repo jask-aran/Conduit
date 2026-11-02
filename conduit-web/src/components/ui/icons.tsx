@@ -49,6 +49,7 @@ import {
   GitBranchIcon,
   GitCompareArrowsIcon,
   GlobeIcon,
+  LockIcon,
   HomeIcon,
   ImageIcon,
   KeyboardIcon,
@@ -123,6 +124,7 @@ export const ArrowDownLeft = ArrowDownLeftIcon;
 export const Context = ScrollTextIcon;
 /** Return to the previous view. */
 export const Back = ArrowLeftIcon;
+export const Forward = ArrowRightIcon;
 /** Swap pane or comparison sides. */
 export const Swap = ArrowLeftRightIcon;
 /** Confirm a location or sign in. */
@@ -264,6 +266,7 @@ export const Share = ShareIcon;
 export const Shell = SquareTerminalIcon;
 export const Phone = SmartphoneIcon;
 export const Browser = GlobeIcon;
+export const Lock = LockIcon;
 /** Show or hide the left sidebar. */
 export const Sidebar = PanelLeftIcon;
 /** Show two panes or comparison columns. */

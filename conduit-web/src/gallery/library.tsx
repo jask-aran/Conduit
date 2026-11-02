@@ -42,6 +42,7 @@ import { agentsPage } from "./pages/agents";
 import { assistantPage } from "./pages/assistant";
 import { codeBlockPage } from "./pages/code-block";
 import { transcriptPage } from "./pages/transcript";
+import { webPage } from "./pages/web";
 import { type Page } from "./model";
 
 const piecePages: Page[] = [
@@ -67,6 +68,7 @@ const piecePages: Page[] = [
   dashboardPage,
   panesPage,
   ...filesPages(),
+  webPage,
   headerPage,
   shellPage,
   chatPage,

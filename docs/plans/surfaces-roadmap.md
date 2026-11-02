@@ -114,7 +114,17 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 - [ ] 7. Browser document `browser:<id>`, version 1: a managed Chrome on the hub, always open; person and agent share
   one page by its id; shown by streaming (H.264); evaluate Vercel's agent-browser as the engine; check what v2's
-  existing `ui-browser` family (`browser.css`) covers first.
+  existing `ui-browser` family (`browser.css`) covers first. Built, with two differences to confirm: agent-browser
+  (Apache-2.0, a Rust daemon over CDP) is the engine, and its own viewport stream is the transport -- JPEG frames over
+  a WebSocket with mouse, key and touch input, not H.264 -- proxied through the hub behind Conduit's sign-in
+  (`server/browser-host.js`, `routes/browsers.js`, `/v0/browsers/hub/stream`); and the session starts on first use
+  rather than at boot, then stays open, across a restart of Conduit too. The person opens it from an empty pane
+  (Browser) or an agent with `ui` (`browser:hub`); the pane (`client/browser/browser-pane.tsx`) has back, forward,
+  reload and an address bar, follows the page's URL and title, and sets the page's viewport to its size. Agents share
+  the page through a `browser` tool (one agent-browser command a call: snapshot refs, click, fill, open; close and
+  session flags refused; not in subagents). `ui-browser` is the Computer's file explorer, so the pane is a new v2 family,
+  Web (`WebView`, `WebAddress`, `WebScreen`; gallery Web). agent-browser is found on the hub's PATH (or
+  `CONDUIT_AGENT_BROWSER`), not bundled; without it the pane says how to install it.
 - [ ] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
   security headers kept (frame-ancestors rewritten, the injected script admitted by a CSP nonce); streaming as the
   fallback for sites that refuse framing.
@@ -126,7 +136,7 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   one tab over its runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have a `ui` tool
   (look, open, close, focus; in every profile, from codemode in Coding, not in subagents), and `GET /v0/ui` and
   `POST /v0/ui/commands` are the same for a CLI or MCP server. Left: an MCP server for other harnesses on top of those
-  routes, and the browser (with #7).
+  routes. The browser is reachable too (#7): `ui` opens `browser:hub`, and the `browser` tool works its page.
 - [ ] 12. Add Vercel's agent-desktop for driving desktop apps on devices.
 
 ### Settings

@@ -111,6 +111,7 @@ import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { harnessLabelFor } from "./harness-brand";
 import { createAgentUiBridge } from "./agent-ui";
+import { BrowserPane } from "./browser/browser-pane";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -2560,7 +2561,7 @@ function App() {
   const splitShown = () => shownSlots().length > 0;
   // A tool the dock lends a pane (a whole tool, the legacy file beside, a
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
-  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term):/.test(view));
+  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
   // Pane A can hold the dock's tool too, over its route.
   const toolInPaneA = () => isToolView(paneAOverride());
@@ -3115,6 +3116,7 @@ function App() {
         <RiderActions>
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
           <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
+          <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
         </RiderActions>
         <Show when={recent().length}>
           <Group id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
@@ -3129,6 +3131,12 @@ function App() {
       </PaneHome>
     </>;
   };
+  /* The hub's browser in a pane (browser/browser-pane.tsx): its tab named by the page's title as it learns it. */
+  const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
+  const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
+    <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
+      header={<Header actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></Header>} />
+  </SheetFill>;
   const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
     createEffect(on(id, (shell) => {
@@ -3810,6 +3818,7 @@ function App() {
     const files = parseFileView(view);
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return "Terminal";
+    if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
   /*
@@ -4412,7 +4421,7 @@ function App() {
         await closeDocument(pane); return `Closed what pane ${String(pane)} showed.`;
       }
       const view = command.view;
-      if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use chat:<id>, page:dashboard, page:agent, page:project:<id>, terminal or files.`);
+      if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use chat:<id>, page:dashboard, page:agent, page:project:<id>, browser:hub, terminal or files.`);
       if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
         const slot = await openBeside(view, true);
         // Where it landed: a pane in the row, or the dock when the window has no room for another beside.
@@ -4447,6 +4456,7 @@ function App() {
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
+        <Show when={slotView(slot)?.startsWith("browser:")}>{renderBrowserDocument(slot, slotView(slot)!.slice("browser:".length))}</Show>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
