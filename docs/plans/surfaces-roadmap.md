@@ -132,7 +132,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   memory, disk, network, top processes).
 - [ ] 15. System › Usage: tokens, cost and tools over time, from the ledger.
 - [ ] 16. Services › Browser: where the browser runs, stream or proxy, quality, clear browser data.
-- [ ] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits.
+- [x] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits. Built
+  in `conduit-web/src/client/settings/settings-core.tsx`: a Helper models group under Defaults. Naming keeps its model
+  picker (moved from Defaults) and says it inherits nothing (unset, new chats stay untitled). Summary (compaction) has
+  no model of its own: pi-durable summarizes with the chat's model and effort, shown read-only. Review does not exist
+  yet (the approvals reviewer waits on pi-durable), shown as not available. Giving summary or review their own model is
+  still to decide.
 - [ ] 18. Server switcher: a profile picture in its menu. Account itself stays in Settings.
 
 ### Chat, agents and voice (decided 2026-11-02)

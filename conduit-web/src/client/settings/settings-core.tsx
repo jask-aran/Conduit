@@ -1542,7 +1542,12 @@ export function Settings(props: {
               <Show when={!props.templatesLoading} fallback={<SettingLine plain label="Default profile" state={<>loading…</>}><span /></SettingLine>}>
                 <SettingLine label="Default profile"><Select id="default-profile" value={props.defaultTemplateId} onChange={(event) => defaultProfileAutosave.edit(event.currentTarget.value, "now")}><For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For></Select></SettingLine>
               </Show>
-              <SettingLine plain label="Session naming">
+              <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
+            </SettingGroup>
+            {/* Helper models: the small jobs beside a chat, each saying what it falls back to. Only naming has its own today. */}
+            <SettingGroup title="Helper models">
+              <SettingLine plain label="Naming" state={<>{sessionNameModel() ? "Its own model; inherits nothing" : "Inherits nothing: new chats stay untitled until one is chosen"}</>}
+                title="Titles each new chat from its first message, with the model chosen here.">
                 <ModelSelector
                 models={namingModels()}
                 model={sessionNameModel()}
@@ -1553,7 +1558,14 @@ export function Settings(props: {
                 onManageModels={props.onOpenModelSelector}
               />
               </SettingLine>
-              <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
+              <SettingLine plain label="Summary" state={<>Inherits the chat's model and effort</>}
+                title="When a chat's context fills, its older part is summarized (compaction) by the model and effort the chat itself uses. It has no model of its own.">
+                <SettingValue>Chat's own model</SettingValue>
+              </SettingLine>
+              <SettingLine plain label="Review" state={<>Not available yet</>}
+                title="A helper model that approves or flags tool calls before they ask you. Waiting on pi-durable to support it.">
+                <SettingValue>None</SettingValue>
+              </SettingLine>
             </SettingGroup>
             <SettingGroup title="ChatGPT Web">
               <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
