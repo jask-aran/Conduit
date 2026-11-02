@@ -138,11 +138,13 @@ export const USER_ENTRY = "conduit.user";
  * turn never writes near this many; a model whose own limit is lower keeps it.
  */
 const OUTPUT_CAP = 64_000;
-const cappedOutput = (models) => new Proxy(models, {
+const cappedOutput = (models, onPayload) => new Proxy(models, {
   get(target, key) {
     if (key !== "streamSimple") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
     return (model, context, options = {}) => target.streamSimple(model, context,
-      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP) });
+      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP),
+        // Options pass through the task checkpoint, which keeps no functions: the payload hook is added here.
+        ...(onPayload && !options.onPayload ? { onPayload } : {}) });
   },
 });
 
@@ -293,7 +295,7 @@ export class DurableRuntime {
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.prefixWatch = prefixWatch(path.join(this.dataRoot, "runtime", "prefix-watch.jsonl"));
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: cappedOutput(this.models),
+        models: cappedOutput(this.models, (params, model) => this.prefixWatch(params, model)),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
@@ -309,7 +311,7 @@ export class DurableRuntime {
           // Anthropic; on GPT-5.6 and later "long" is the 30-minute default (a ChatGPT sign-in takes no cache option at
           // all: signed-in accounts keep their cache server-side). The prefix is only ever appended to, so what is cached
           // stays usable.
-          stream: { cacheRetention: "long", onPayload: this.prefixWatch },
+          stream: { cacheRetention: "long" },
           get retry() {
             const retry = runtime.piSettings().retry;
             return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],
