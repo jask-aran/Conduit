@@ -653,6 +653,8 @@ export function registerChatRoutes(app, {
         const context = await findChatContext(request.params.chatId);
         if (!context) return null;
         return lifecycle.withProjects([context.project.id], async () => {
+          // Only a draft is stopped: a chat that has begun (its first reply streaming) keeps its agent; 409 below.
+          if (registry.metadata(context.chat.id)?.status !== "draft") return false;
           await stopSessionProcesses(backends, context.chat);
           return registry.removeEmptyDraft(context.chat.id, context.project);
         });

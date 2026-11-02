@@ -677,6 +677,8 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   runtimeFor,
   runtimeSettings,
   templateForChat,
+  // Bound late: the live-session stream is made below.
+  promptChat: (...args) => liveSessionStream.promptChat(...args),
 });
 registerChatRoutes(app, {
   backends,

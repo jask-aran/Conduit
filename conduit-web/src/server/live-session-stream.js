@@ -562,5 +562,21 @@ export function createLiveSessionStream({
     });
   }
 
-  return { handleUpgrade, submitPrompt, stopGeneration, respondHostUi };
+  /**
+   * A chat's prompt from outside its stream, under the same chat lock and command handling as the socket's: the
+   * browser's first message when the person left the chat before its agent had started (POST /v0/chats/:id/prompt),
+   * so the message is sent rather than dropped with the stream it was waiting for.
+   */
+  async function promptChat(chatId, command) {
+    return lifecycle.run(chatId, async () => {
+      const context = await findChatContext(chatId);
+      if (!context) throw Object.assign(new Error("Chat no longer exists"), { code: "chat_not_found", status: 404 });
+      lifecycle.assertAvailable(chatId, context.project.id);
+      const record = backends.getByChatId(chatId);
+      if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
+      return handleClientCommand(record, { type: "prompt", messageId: command.messageId, message: command.message, attachmentIds: command.attachmentIds });
+    });
+  }
+
+  return { handleUpgrade, submitPrompt, stopGeneration, respondHostUi, promptChat };
 }

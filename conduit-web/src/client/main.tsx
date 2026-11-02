@@ -1396,7 +1396,9 @@ function App() {
     });
   });
 
-  const currentDraftId = () => chat.status() === "draft" ? catalogue.selectedId() : null;
+  // A draft whose first message is on its way (its agent still starting) is not abandoned by leaving it: the message
+  // is handed over (active-chat.ts, send) and the chat becomes a real one.
+  const currentDraftId = () => chat.status() === "draft" && chat.generation() !== "submitting" ? catalogue.selectedId() : null;
 
   // A draft is still selected after it is discarded until something else is,
   // so leaving page after page asks to discard it again: once is enough, and a

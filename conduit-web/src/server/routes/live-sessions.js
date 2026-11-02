@@ -14,6 +14,7 @@ export function registerLiveSessionRoutes(app, {
   runtimeFor,
   runtimeSettings,
   templateForChat,
+  promptChat,
 }) {
   const launchLiveSession = createLiveSessionLauncher({
     backends,
@@ -48,6 +49,27 @@ export function registerLiveSessionRoutes(app, {
       });
       await enforceLiveProcessLimit(backends, saved.maxLiveProcesses);
       response.json(runtimeView());
+    } catch (error) { next(error); }
+  });
+
+  // A first message the browser could not send over the chat's stream: it left the chat while the agent was starting.
+  // Started here if it is not yet (with the composer's model), then sent as the stream would have sent it.
+  app.post("/v0/chats/:chatId/prompt", async (request, response, next) => {
+    try {
+      const chatId = request.params.chatId;
+      const message = typeof request.body?.message === "string" ? request.body.message : "";
+      const attachmentIds = Array.isArray(request.body?.attachmentIds) ? request.body.attachmentIds : [];
+      if (!message.trim() && !attachmentIds.length) return response.status(400).json({ error: "empty_prompt" });
+      if (registry.metadata(chatId)?.status === "subagent") return response.status(409).json({ error: "subagent_read_only" });
+      // The browser's own launch may still be under way: the prompt waits for it rather than racing it with settings
+      // of its own (a launch with other settings is refused while one runs).
+      await lifecycle.launches?.get(chatId)?.promise.catch(() => {});
+      if (!backends.getByChatId(chatId)) {
+        await launchLiveSession({ chatId, requestedProject: request.body?.projectId || "", model: request.body?.model || "",
+          thinkingLevel: request.body?.thinkingLevel || "", forceModel: true });
+      }
+      const generationId = await promptChat(chatId, { messageId: request.body?.messageId, message, attachmentIds });
+      response.status(202).json({ chatId, generationId: generationId || null });
     } catch (error) { next(error); }
   });
 

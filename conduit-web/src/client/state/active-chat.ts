@@ -1205,9 +1205,21 @@ export function createActiveChat(options: ActiveChatOptions) {
     setMessages(placeLocal);
     setGeneration("submitting");
     currentGeneration = null;
+    // Left while its agent was starting: the stream it waited for went with the chat, so the message goes by HTTP
+    // instead of being dropped (a brand-new chat's first message was lost, and the chat with it). The server starts
+    // the agent if it has not, with the composer's choice. An edit forks in place and is not handed over.
+    const ownerProjectId = projectId();
+    const model = models.model();
+    const thinkingLevel = models.effort();
+    const handOver = () => {
+      if (editId || !chatId) return;
+      void api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", body: JSON.stringify({
+        messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, projectId: ownerProjectId, model, thinkingLevel }) })
+        .then(() => { acceptOutboundMessage(prepared); void catalogue.refresh().catch(() => {}); }).catch(onError);
+    };
     if (!live() || live()!.chatId !== selectedId() || !session.isOpen()) {
       try { await requireAgent("prompt"); } catch (error) {
-        if (!current()) return;
+        if (!current()) return handOver();
         stopRequest = null;
         setMessages(previous);
         setDraft(prepared.text);
@@ -1215,7 +1227,7 @@ export function createActiveChat(options: ActiveChatOptions) {
         onError(error);
         return;
       }
-      if (!current()) return;
+      if (!current()) return handOver();
       // A snapshot read while the agent started may not hold it yet.
       setMessages(placeLocal);
     }
