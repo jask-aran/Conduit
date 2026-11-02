@@ -4,7 +4,8 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
 import { MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
-import { ServerControl } from "@/components/ui/connection";
+import { Avatar, ServerControl } from "@/components/ui/connection";
+import { accountName, loadAccount } from "../state/account";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
@@ -54,7 +55,7 @@ export function ServerSwitcher(props: {
   /** The control on one line (a desktop rail's foot). */
   inline?: boolean;
   pwaUpdating: boolean;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: string) => void;
   onUpdatePwa: () => void;
   onAddServer: () => void;
   onLogout: () => void;
@@ -95,6 +96,7 @@ export function ServerSwitcher(props: {
   let giveBack: Element | null | undefined;
   const onOpenChange = (open: boolean) => {
     clearInterval(timer);
+    if (open) void loadAccount();
     if (!open) {
       giveBack = focusBefore;
       focusBefore = null;
@@ -246,6 +248,8 @@ export function ServerSwitcher(props: {
         </Show>
       </MenuSection>
       <MenuSection title="Account">
+        {/* Who is signed in: the account's picture (its name's initials) and name; it is set in Settings › Account. */}
+        <MenuRow icon={<Avatar name={accountName()} />} onSelect={() => props.onOpenSettings("account")}>{accountName() || "Add your name"}</MenuRow>
         <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
         <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
         <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>

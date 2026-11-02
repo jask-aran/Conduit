@@ -10,6 +10,7 @@ import { BlocksSettings, createContextData, PromptsSettings } from "./context-se
 import { createAgentSettings } from "./agent-settings";
 import { ConnectorsGroup } from "./connectors-settings";
 import { ToolsSettings } from "./tools-settings";
+import { AccountSettings } from "./account-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/notifications";
@@ -59,7 +60,7 @@ import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
-  { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
+  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
@@ -70,6 +71,7 @@ type Section = VisibleSection | "workspaces";
  *  as far as the window allows; every other page keeps its width. */
 const WIDE_SECTIONS = new Set<string>(["prompts", "blocks"]);
 const sectionLabels: Record<Section, string> = {
+  account: "Account",
   ui: "Appearance",
   shortcuts: "Shortcuts",
   models: "Models & accounts",
@@ -1303,6 +1305,7 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
           <Show when={section() === "tools"}><ToolsSettings /></Show>
+          <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>

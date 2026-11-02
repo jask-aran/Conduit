@@ -159,6 +159,7 @@ export function paletteGroupOf(command: { id?: string; group?: string; destructi
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
+  { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me"] },
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
   { id: "models", label: "Models & accounts", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },

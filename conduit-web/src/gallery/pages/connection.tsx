@@ -2,7 +2,7 @@ import { HarnessMark } from "@/components/ui";
 import { ConnectionHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { DropdownMenu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
-import { ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
+import { Avatar, ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
 import { CardBody, CardNote } from "@/components/ui/card";
 import { createSignal } from "solid-js";
 import { ConnectionDemo } from "../demos";
@@ -24,11 +24,12 @@ export function ServerMenuDemo(props: { phone?: boolean }) {
       <LiveMenuSection title="Servers"><LiveRadioGroup value="laptop"><LiveRadioItem value="laptop" meta="12 ms">Laptop</LiveRadioItem><LiveRadioItem value="office" away>Office</LiveRadioItem><LiveRadioItem value="offline" disabled>Studio</LiveRadioItem></LiveRadioGroup>
       <LiveSub phone={props.phone}><LiveSubTrigger detailData detail={route()}>Route</LiveSubTrigger><LiveSubContent><Routes /></LiveSubContent></LiveSub></LiveMenuSection>
       <LiveMenuSection title="App"><LiveMenuRow onSelect={() => setAction("Check for updates")} icon={<Icons.Refresh />}>Check for updates</LiveMenuRow></LiveMenuSection>
-      <LiveMenuSection title="Account"><LiveMenuRow onSelect={() => setAction("Connect a device or server")} icon={<Icons.QrCode />}>Connect a device or server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Manage settings")} icon={<Icons.Settings />}>Manage settings</LiveMenuRow><LiveMenuRow destructive onSelect={() => setAction("Sign out")} icon={<Icons.LogOut />}>Sign out</LiveMenuRow></LiveMenuSection>
+      <LiveMenuSection title="Account"><LiveMenuRow onSelect={() => setAction("Settings › Account")} icon={<Avatar name="Ada Lovelace" />}>Ada Lovelace</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Connect a device or server")} icon={<Icons.QrCode />}>Connect a device or server</LiveMenuRow><LiveMenuRow onSelect={() => setAction("Manage settings")} icon={<Icons.Settings />}>Manage settings</LiveMenuRow><LiveMenuRow destructive onSelect={() => setAction("Sign out")} icon={<Icons.LogOut />}>Sign out</LiveMenuRow></LiveMenuSection>
     </LiveMenuContent>
   </LiveMenu><CardNote>{action()}</CardNote></CardBody>;
 }
 const CONNECTIONS = [
+  row("Avatar · sizes", "the account's picture: its name's initials on the surface's tint; sm in a menu row's icon slot, md beside a line, lg as Settings › Account's subject; ? for no name", () => <div style={{ display: "flex", gap: "var(--space-lg)", "align-items": "center" }}><Avatar name="Ada Lovelace" /><Avatar name="Ada Lovelace" size="md" /><Avatar name="Ada Lovelace" size="lg" /><Avatar name="jbot" size="lg" /><Avatar name="" size="lg" /></div>, { code: '<Avatar name={accountName} size="lg" />' }),
   row("browser sign-in", "plain form POST, password-manager autocomplete and autofocus; the same component generates /login without JavaScript", () => <ConnectionScreen embedded><PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/" /></ConnectionScreen>, { source: "components/ui/connection.tsx · components/menus.tsx", code: "ConnectionScreen > PasswordSignIn", surfaces: ["ground"], phone: true }),
   row("incorrect password", "the field identifies and describes the server error; aria-invalid · aria-describedby · role=alert", () => <PasswordSignIn onSubmit={(event) => event.preventDefault()} after="/chat/example" error="Incorrect password." />, { source: "components/ui/connection.tsx · components/menus.tsx", code: "PasswordSignIn error", phone: true }),
   row("address · checking", "the address check is in progress", () => <ConnectionForm onSubmit={(e) => e.preventDefault()}><ConnectionAddress value="laptop.ts.net" state="checking" /><ConnectionStatus state="checking" title="Looking for laptop.ts.net…" /></ConnectionForm>, { source: "components/ui/connection.tsx · components/menus.tsx", code: "ConnectionAddress · ConnectionStatus · ConnectionPassword", phone: true }),

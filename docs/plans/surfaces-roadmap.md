@@ -189,7 +189,10 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   no model of its own: pi-durable summarizes with the chat's model and effort, shown read-only. Review does not exist
   yet (the approvals reviewer waits on pi-durable), shown as not available. Giving summary or review their own model is
   still to decide.
-- [ ] 18. Server switcher: a profile picture in its menu. Account itself stays in Settings.
+- [x] 18. Server switcher: a profile picture in its menu. Account itself stays in Settings. The picture is the hub
+  account's name's initials (decided): v2 `Avatar` (Connection family; initials on the tint, three sizes; gallery
+  Connection › Avatar), leading the switcher's Account section with the name (opening Settings › Account). The name
+  is a hub preference (`accountName`), set in the new Settings › Personal › Account. A photo of one's own is later.
 
 ### Chat, agents and voice (decided 2026-11-02)
 

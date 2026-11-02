@@ -187,6 +187,10 @@ export function registerRuntimeRoutes(app, {
       if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_session_name_thinking_level" });
       }
+      const accountName = request.body?.accountName;
+      if (accountName != null && (typeof accountName !== "string" || accountName.trim().length > 60)) {
+        return response.status(400).json({ error: "invalid_account_name" });
+      }
       const terminalShortcuts = request.body?.terminalShortcuts;
       if (terminalShortcuts != null && !validTerminalShortcuts(terminalShortcuts)) {
         return response.status(400).json({ error: "invalid_terminal_shortcuts" });
@@ -217,6 +221,7 @@ export function registerRuntimeRoutes(app, {
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
+        ...(accountName != null ? { accountName } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
         ...(sidebarPins != null ? { sidebarPins } : {}),
         ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),

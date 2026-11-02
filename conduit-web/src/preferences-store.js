@@ -5,6 +5,7 @@ import path from "node:path";
 const DEFAULTS = {
   defaultTemplateId: "assistant",
   sessionNameModel: "",
+  accountName: "",
   sessionNameThinkingLevel: "off",
   profileModelDefaults: {},
   terminalShortcuts: [],
@@ -237,8 +238,12 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const plainObject = (value) => value && typeof value === "object" && !Array.isArray(value)
     ? structuredClone(value)
     : null;
+  // The hub account's name (Settings › Account), whose initials are its picture in the server switcher.
+  const accountName = typeof input.accountName === "string" ? input.accountName.trim().slice(0, 60)
+    : typeof fallback.accountName === "string" ? fallback.accountName.trim().slice(0, 60) : "";
   return {
     defaultTemplateId,
+    accountName,
     sessionNameModel,
     sessionNameThinkingLevel,
     profileModelDefaults: normalizeProfileModelDefaults(input.profileModelDefaults ?? fallback.profileModelDefaults),

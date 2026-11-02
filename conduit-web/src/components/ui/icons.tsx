@@ -49,6 +49,7 @@ import {
   GitBranchIcon,
   GitCompareArrowsIcon,
   GlobeIcon,
+  CircleUserIcon,
   LockIcon,
   HomeIcon,
   ImageIcon,
@@ -267,6 +268,7 @@ export const Shell = SquareTerminalIcon;
 export const Phone = SmartphoneIcon;
 export const Browser = GlobeIcon;
 export const Lock = LockIcon;
+export const User = CircleUserIcon;
 /** Show or hide the left sidebar. */
 export const Sidebar = PanelLeftIcon;
 /** Show two panes or comparison columns. */

@@ -82,6 +82,20 @@ export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
   </Button>;
 }
 
+/** A name's initials: the first letters of its first and last words, or its first two; "?" for none. */
+export const initialsOf = (name: string) => {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  const letters = words.length > 1 ? [words[0]![0], words.at(-1)![0]] : [...words[0]!].slice(0, 2);
+  return letters.join("").toUpperCase();
+};
+/**
+ * A person's picture (the account signed in to a hub): their initials on the surface's tint -- no hue, as nothing in
+ * Conduit is coloured but state. size: sm in a menu row's icon slot, md beside a line, lg where it is the subject.
+ */
+export const Avatar = (props: { name: string; size?: "sm" | "md" | "lg"; label?: string }) =>
+  <span class="ui-avatar" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>{initialsOf(props.name)}</span>;
+
 export function ConnectionRecovery(props: { title: string; error: string; onRetry: () => void; retryLabel?: string; embedded?: boolean }) {
   return <ConnectionScreen embedded={props.embedded}><section class="ui-connection-recovery"><h1>{props.title}</h1><p role="alert">{props.error}</p><Button onClick={props.onRetry}>{props.retryLabel ?? "Retry"}</Button></section></ConnectionScreen>;
 }

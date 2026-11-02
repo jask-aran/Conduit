@@ -1075,7 +1075,7 @@ export function Sidebar(props: {
 
   const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} inline={!phoneLayout()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
     downloads={installedClientKind === "browser"}
-    onOpenSettings={() => { closeMobile(); props.onOpenSettings(); }}
+    onOpenSettings={(section?: string) => { closeMobile(); props.onOpenSettings(section); }}
     onUpdatePwa={() => props.onUpdatePwa()}
     onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
     onLogout={() => props.onLogout?.()} />;

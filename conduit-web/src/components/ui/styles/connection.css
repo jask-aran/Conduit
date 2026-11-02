@@ -54,3 +54,9 @@
 .ui-connection-password-step { display: grid; gap: var(--space-sm); }
 .ui-connection-password-step[data-reveal] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 @media (prefers-reduced-motion: reduce) { .ui-connection-status, .ui-connection-password-step[data-reveal] { animation: none; } }
+
+/* Avatar: a person's initials on the surface's tint, round; sm fills a menu row's icon slot, md a control's height,
+   lg a large control's. The letters are the strong weight at the size's own text step. */
+.ui-avatar { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; border-radius: var(--radius-round); background: var(--tint); color: var(--foreground); font: var(--weight-strong) var(--text-label)/1 var(--font-sans); letter-spacing: 0; user-select: none; }
+.ui-avatar[data-size="md"] { width: var(--control-sm); height: var(--control-sm); font-size: var(--text-caption); }
+.ui-avatar[data-size="lg"] { width: var(--control-lg); height: var(--control-lg); font-size: var(--text-row); }
