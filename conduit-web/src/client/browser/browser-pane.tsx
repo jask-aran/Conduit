@@ -10,7 +10,7 @@ import { webSocketUrl } from "../api/transport.js";
  * on the screen go back as the page's own input, mapped from the pane to the page; the bar goes to an address, back,
  * forward and reloads; and the page's viewport follows the pane's size.
  */
-type Status = { id: string; available: boolean; running?: boolean; url?: string | null; title?: string | null };
+type Status = { id: string; available: boolean; running?: boolean; url?: string | null; title?: string | null; fps?: number };
 
 const BUTTONS: Record<number, string> = { 0: "left", 1: "middle", 2: "right" };
 const modifiers = (event: KeyboardEvent | MouseEvent) => (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
@@ -65,7 +65,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   const connect = async () => {
     if (closed) return;
     try {
-      const next = new WebSocket(await webSocketUrl(`/v0/browsers/${encodeURIComponent(props.id)}/stream?maxFps=24`));
+      const next = new WebSocket(await webSocketUrl(`/v0/browsers/${encodeURIComponent(props.id)}/stream?maxFps=${status()?.fps || 24}`));
       socket = next;
       next.onmessage = (message) => {
         let event: { type?: string; data?: string; url?: string; message?: string; metadata?: { deviceWidth: number; deviceHeight: number } };
@@ -149,7 +149,13 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     if (screen) observer.observe(screen);
     onCleanup(() => { observer.disconnect(); clearTimeout(sizing); });
   });
-  onCleanup(() => { closed = true; cancelAnimationFrame(moving); socket?.close(); });
+  // Services › Browser changed it: the frame rate is this viewer's own, sent on the open stream; a restart reconnects.
+  const changed = () => void api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`).then((found) => {
+    setStatus(found); name(found);
+    if (found.fps) send({ type: "config", maxFps: found.fps });
+  }).catch(() => {});
+  window.addEventListener("conduit:browser-changed", changed);
+  onCleanup(() => { closed = true; cancelAnimationFrame(moving); socket?.close(); window.removeEventListener("conduit:browser-changed", changed); });
 
   const go = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (event.key === "Escape") { editing = false; setAddress(status()?.url && status()!.url !== "about:blank" ? status()!.url! : ""); event.currentTarget.blur(); return; }

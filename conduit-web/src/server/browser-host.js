@@ -48,8 +48,19 @@ const vendored = () => {
 const WITHHELD = new Set(["agent_browser_close", "agent_browser_tools_profiles"]);
 const MCP_MS = 60_000;
 
+/** Services › Browser: its stream's frame rate (each viewer's, live) and JPEG quality (the browser's, from its start). */
+const DEFAULTS = { fps: 24, quality: 60 };
+const FPS = [10, 24, 30, 60];
+const QUALITY = [30, 60, 85];
+
 export class BrowserHost {
-  constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null } = {}) {
+  constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null, dataRoot = null, onChange = () => {} } = {}) {
+    // Its own profile on the hub: sites signed in to stay signed in across restarts; clearing its data is a new one.
+    this.profile = dataRoot ? path.join(dataRoot, "browser", "profile") : null;
+    this.settingsFile = dataRoot ? path.join(dataRoot, "browser", "settings.json") : null;
+    this.settings = { ...DEFAULTS };
+    try { if (this.settingsFile) this.settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(this.settingsFile, "utf8")) }; } catch { /* defaults */ }
+    this.onChange = onChange;
     this.binary = binary || vendored() || which(process.platform === "win32" ? "agent-browser.exe" : "agent-browser");
     this.mcp = null;
     this.port = null;
@@ -65,7 +76,7 @@ export class BrowserHost {
     if (!this.binary) return Promise.reject(Object.assign(new Error("agent-browser is not installed on this hub"), { status: 503, code: "browser_unavailable" }));
     return new Promise((resolve, reject) => execFile(this.binary, ["--session", SESSION, ...args], {
       timeout, maxBuffer: 4 * 1024 * 1024,
-      env: process.env,
+      env: { ...process.env, ...this.env() },
     }, (error, stdout, stderr) => error
       ? reject(Object.assign(new Error((stderr || stdout || error.message).trim().split("\n").slice(-3).join(" ")), { status: 502 }))
       : resolve(stdout.trim())));
@@ -94,11 +105,11 @@ export class BrowserHost {
 
   async status() {
     if (!this.available) return { id: "hub", available: false };
-    if (!this.starting) return { id: "hub", available: true, running: false };
+    if (!this.starting) return { id: "hub", available: true, running: false, fps: this.settings.fps };
     await this.start();
     const url = await this.run(["get", "url"]).catch(() => null);
     const title = await this.run(["get", "title"]).catch(() => null);
-    return { id: "hub", available: true, running: true, url, title };
+    return { id: "hub", available: true, running: true, url, title, fps: this.settings.fps };
   }
 
   /** What the pane's bar does: go to an address, back, forward, reload; and its size, as the page's viewport. */
@@ -106,6 +117,7 @@ export class BrowserHost {
     await this.start();
     if (action === "open") return this.run(["open", String(value)], { timeout: 60_000 });
     if (action === "back" || action === "forward" || action === "reload") return this.run([action]);
+    if (action === "restart" || action === "clear") return this.restart({ clear: action === "clear" });
     if (action === "viewport") {
       const width = Math.max(320, Math.min(3840, Math.round(Number(value?.width) || 0)));
       const height = Math.max(240, Math.min(2160, Math.round(Number(value?.height) || 0)));
@@ -138,9 +150,49 @@ export class BrowserHost {
     });
   }
 
-  /** agent-browser's MCP server for a harness to start: on the shared session, the core tools. */
+  /** What the session starts with, whoever starts it (the pane, an agent's MCP server): its profile, its stream. */
+  env() {
+    return { AGENT_BROWSER_SESSION: SESSION, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality),
+      ...(this.profile ? { AGENT_BROWSER_PROFILE: this.profile } : {}) };
+  }
+
+  /** agent-browser's MCP server for a harness to start: on the shared session (and its profile), the core tools. */
   mcpServer() {
-    return this.binary ? { command: this.binary, args: ["mcp"], env: { AGENT_BROWSER_SESSION: SESSION } } : null;
+    return this.binary ? { command: this.binary, args: ["mcp"], env: this.env() } : null;
+  }
+
+  /** Services › Browser's settings, and what it shows of the browser. */
+  async describe() {
+    const version = this.binary ? await new Promise((resolve) => execFile(this.binary, ["--version"], { timeout: 5000 }, (error, stdout) => resolve(error ? null : stdout.trim().replace(/^agent-browser\s*/, "")))) : null;
+    return { ...(await this.status()), engine: "Chrome", version, runsOn: "hub", profile: Boolean(this.profile), settings: this.settings, choices: { fps: FPS, quality: QUALITY } };
+  }
+
+  async configure(patch) {
+    const next = { ...this.settings };
+    if (patch?.fps !== undefined) { if (!FPS.includes(Number(patch.fps))) throw Object.assign(new Error("Frame rate is one of " + FPS.join(", ")), { status: 400 }); next.fps = Number(patch.fps); }
+    if (patch?.quality !== undefined) { if (!QUALITY.includes(Number(patch.quality))) throw Object.assign(new Error("Quality is one of " + QUALITY.join(", ")), { status: 400 }); next.quality = Number(patch.quality); }
+    const restart = next.quality !== this.settings.quality;
+    this.settings = next;
+    if (this.settingsFile) {
+      await fs.promises.mkdir(path.dirname(this.settingsFile), { recursive: true });
+      await fs.promises.writeFile(this.settingsFile, `${JSON.stringify(next, null, 2)}\n`);
+    }
+    // Quality is the browser's from its start: a running one starts again, on the page it was on.
+    if (restart && this.starting) await this.restart();
+    this.onChange();
+    return this.describe();
+  }
+
+  /** Closed and started again, back on the page it showed (its profile keeps what it was signed in to). */
+  async restart({ clear = false } = {}) {
+    const url = this.starting ? await this.run(["get", "url"]).catch(() => null) : null;
+    await this.run(["close"]).catch(() => {});
+    this.starting = null;
+    if (clear && this.profile) await fs.promises.rm(this.profile, { recursive: true, force: true });
+    await this.start();
+    if (url && url !== "about:blank" && !clear) await this.run(["open", url], { timeout: 60_000 }).catch(() => {});
+    this.onChange();
+    return this.describe();
   }
 
   /**

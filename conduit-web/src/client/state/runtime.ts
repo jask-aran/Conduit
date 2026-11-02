@@ -143,6 +143,8 @@ export function createRuntimeStore() {
         window.dispatchEvent(new CustomEvent("conduit:workspace-changed", { detail: event.projectIds }));
       } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
+      } else if (event.type === "browser_changed") {
+        window.dispatchEvent(new CustomEvent("conduit:browser-changed", { detail: event }));
       } else if (event.type === "ui_command") {
         // An agent asking one tab to open, close or focus a pane (agent-ui.ts takes it if it is that tab's).
         window.dispatchEvent(new CustomEvent("conduit:ui-command", { detail: event }));

@@ -630,7 +630,9 @@ registerContextRoutes(app, { contextStore });
 const uiControl = new UiControl({ runtimeHub });
 mcpRuntime.uiControl = uiControl;
 // The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
-const browserHost = lifetime.own("hub browser", new BrowserHost(), (owned) => owned.close());
+const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
+  // Its settings changed or it started again: every Browser pane takes its frame rate again and reconnects if it must.
+  onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
 registerBrowserRoutes(app, { browserHost });
 registerRuntimeRoutes(app, {

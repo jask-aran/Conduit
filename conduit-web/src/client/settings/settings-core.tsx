@@ -11,6 +11,7 @@ import { createAgentSettings } from "./agent-settings";
 import { ConnectorsGroup } from "./connectors-settings";
 import { ToolsSettings } from "./tools-settings";
 import { AccountSettings } from "./account-settings";
+import { BrowserSettings } from "./browser-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/notifications";
@@ -63,7 +64,7 @@ const sectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
-  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
 type Section = VisibleSection | "workspaces";
@@ -85,6 +86,7 @@ const sectionLabels: Record<Section, string> = {
   workspaces: "Workspace profile",
   voice: "Voice",
   search: "Web search",
+  browser: "Browser",
 };
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
 interface RuntimeSettings {
@@ -1306,6 +1308,7 @@ export function Settings(props: {
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
           <Show when={section() === "tools"}><ToolsSettings /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
+          <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>

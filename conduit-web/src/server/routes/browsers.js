@@ -5,6 +5,17 @@ export function registerBrowserRoutes(app, { browserHost }) {
     try { response.json(await browserHost.status()); }
     catch (error) { response.status(error.status || 500).json({ error: error.message }); }
   });
+  // Services › Browser: what runs, its stream's settings (frame rate, quality), restart and clear (actions below).
+  app.get("/v0/browsers/:id/settings", async (request, response) => {
+    if (!browserHost.has(request.params.id)) return response.status(404).json({ error: "browser_not_found" });
+    try { response.json(await browserHost.describe()); }
+    catch (error) { response.status(error.status || 500).json({ error: error.message }); }
+  });
+  app.put("/v0/browsers/:id/settings", async (request, response) => {
+    if (!browserHost.has(request.params.id)) return response.status(404).json({ error: "browser_not_found" });
+    try { response.json(await browserHost.configure(request.body || {})); }
+    catch (error) { response.status(error.status || 500).json({ error: error.message }); }
+  });
   app.post("/v0/browsers/:id/actions", async (request, response) => {
     if (!browserHost.has(request.params.id)) return response.status(404).json({ error: "browser_not_found" });
     const { action, value } = request.body || {};

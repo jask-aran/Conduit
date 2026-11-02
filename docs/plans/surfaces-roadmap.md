@@ -182,7 +182,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   shown in Settings › System › Usage (`client/settings/usage-settings.tsx`): totals, by day, by model, tool calls, for
   7, 30 or 90 days. Only Conduit's own agents are counted, not Codex, Claude Code or ChatGPT Web. No chart yet: v2 has
   none, and adding one needs approval.
-- [ ] 16. Services › Browser: where the browser runs, stream or proxy, quality, clear browser data.
+- [x] 16. Services › Browser: where the browser runs, stream or proxy, quality, clear browser data. Built
+  (`client/settings/browser-settings.tsx`, `GET/PUT /v0/browsers/hub/settings`): status, runs on (this hub; devices
+  later), engine (Chrome · agent-browser's version); stream frame rate (each viewer's, applied to open panes at once)
+  and quality (the browser's, so changing it restarts the browser back on its page); Restart, and Clear data behind
+  a confirm. The browser now keeps its own profile on the hub (`data/browser/profile`), so sites stay signed in
+  across restarts; clearing is a fresh profile. Streaming only (#8's spike): no transport choice.
 - [x] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits. Built
   in `conduit-web/src/client/settings/settings-core.tsx`: a Helper models group under Defaults. Naming keeps its model
   picker (moved from Defaults) and says it inherits nothing (unset, new chats stay untitled). Summary (compaction) has

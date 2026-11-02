@@ -171,6 +171,7 @@ export const SETTINGS_SECTIONS = [
   { id: "devices", label: "Devices", keywords: ["devices", "machine", "cpu", "memory", "disk", "network", "processes", "nodes", "clients"] },
   { id: "usage", label: "Usage", keywords: ["usage", "cost", "spend", "tokens", "billing", "money"] },
   { id: "voice", label: "Voice", keywords: ["dictation", "microphone", "transcription", "speech"] },
+  { id: "browser", label: "Browser", keywords: ["browser", "chrome", "agent-browser", "stream", "frame rate", "quality", "cookies", "clear data"] },
   { id: "search", label: "Web search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },
 ];
 
