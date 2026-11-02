@@ -1,9 +1,10 @@
 {
   // jbot's mailbox (docs/plans/persistent-agent.md, The message log): Email Routing delivers jbot@ here, the Worker keeps
-  // each message in R2, and the hub collects it (list, get, delete) behind one shared secret. It receives only.
+  // each message in R2, and the hub collects it (list, get, delete) behind one shared secret. It sends only to the person's verified addresses.
   "name": "jbot-mail",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  "send_email": [{ "name": "SEND", "allowed_destination_addresses": ["jaskarann.singhh@gmail.com", "jask@jask-aran.com", "hello@jask-aran.com"] }],
   "r2_buckets": [{ "binding": "MAIL", "bucket_name": "jbot-mail" }],
   // The hub to wake when mail lands (its public address); without it the hub collects on its own each minute.
   "vars": { "HUB_URL": "https://localconduit.jask-aran.com" }
