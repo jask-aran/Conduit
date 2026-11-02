@@ -8,7 +8,7 @@ import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { AgentExtension } from "../agent/extension.js";
-import { ApprovedTool, connectorWraps } from "../agent/policy.js";
+import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
@@ -425,10 +425,10 @@ export class DurableRuntime {
     });
   }
 
-  async agentFor(templateId, { roaming = false, fixedVars = null } = {}) {
-    await this.open();
+  /** A profile's tools as a chat of it is given them, without its prompt: `{ template, isAgent, extensions, tools, modelTools }`. */
+  selectionFor(templateId, { roaming = false } = {}) {
     const template = this.templateFor(templateId);
-    if (!template) return {};
+    if (!template) return null;
     const named = (file) => (file.includes("pi-web-access") ? "web" : CODEMODE_ONLY.test(file) ? "codemode" : null);
     // A conversation with no home device picks one per call: the same tools, placed.
     // Delegation comes with the persistent shape (decision 9), or a template that lists `subagent`.
@@ -449,6 +449,41 @@ export class DurableRuntime {
       .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
+    const modelTools = codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
+      : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null;
+    return { template, isAgent, extensions, tools, modelTools };
+  }
+
+  /**
+   * Settings › AI › Tools, read-only: each profile's tools as its chats get them (jbot's threads roam; other profiles
+   * as a chat in a folder), where each comes from, whether the model calls it or only codemode scripts do, and whether
+   * it asks first (`askOf`). A chat that works on any device has its file tools placed per call, plus devices and handoff.
+   */
+  async toolsView() {
+    await this.open();
+    const SOURCES = { web: "extension", codemode: "codemode", connectors: "connector" };
+    const first = (text) => String(text || "").split(/(?<=[.!?])\s/)[0].trim();
+    return this.templates.map((template) => {
+      const selection = this.selectionFor(template.id, { roaming: template.internal && template.id === "agent" });
+      const sourceOf = new Map(selection.extensions.flatMap((extension) => (extension.tools || []).map((tool) => [tool.name, extension.name])));
+      const direct = selection.modelTools ? new Set(selection.modelTools.map((tool) => tool.name)) : null;
+      return {
+        id: template.id, label: template.label || template.id, internal: Boolean(template.internal), agent: selection.isAgent,
+        tools: selection.tools.map((tool) => {
+          const extension = sourceOf.get(tool.name);
+          const source = tool.name.startsWith("pi.codemode.") ? "codemode" : tool.name === "approved" ? "built-in" : SOURCES[extension] || "built-in";
+          return { name: tool.name, description: first(tool.description), source, extension,
+            reach: (!direct || direct.has(tool.name)) && (!tool.callers || tool.callers.includes("model")) ? "model" : "codemode", ...askOf(tool, { guarded: selection.isAgent }) };
+        }),
+      };
+    });
+  }
+
+  async agentFor(templateId, { roaming = false, fixedVars = null } = {}) {
+    await this.open();
+    const selection = this.selectionFor(templateId, { roaming });
+    if (!selection) return {};
+    const { template, isAgent, extensions, tools, modelTools } = selection;
     const vars = isAgent && this.agentVars ? fixedVars || await this.agentVars().catch(() => ({})) : undefined;
     let instructions;
     if (this.contextStore) instructions = await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars });
@@ -456,12 +491,7 @@ export class DurableRuntime {
       const skills = this.skillsFor(template.id);
       instructions = [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(skills.length ? ["# Skills", ...skills.map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");
     }
-    return {
-      extensions, tools,
-      modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
-        : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null,
-      instructions,
-    };
+    return { extensions, tools, modelTools, instructions };
   }
 
   /**

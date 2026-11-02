@@ -162,6 +162,7 @@ export const SETTINGS_SECTIONS = [
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
   { id: "models", label: "Models & accounts", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
+  { id: "tools", label: "Tools", keywords: ["tools", "approval", "ask", "codemode", "connector", "extension", "profile"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
   { id: "voice", label: "Voice", keywords: ["dictation", "microphone", "transcription", "speech"] },
   { id: "search", label: "Web search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },

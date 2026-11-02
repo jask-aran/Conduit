@@ -121,7 +121,13 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 ### Settings
 
-- [ ] 13. AI › Tools: each profile's tools, where each comes from, and whether it asks. Read-only first.
+- [x] 13. AI › Tools: each profile's tools, where each comes from, and whether it asks. Read-only first. Built:
+  `DurableRuntime.selectionFor` (the tool choice `agentFor` made, factored out without the prompt) and `toolsView`
+  (`conduit-web/src/server/durable-runtime.js`), `askOf` in `conduit-web/src/agent/policy.js` (never, always or
+  sometimes, with when), `GET /v0/profiles/tools` (`routes/chats.js`), and Settings › AI › Tools
+  (`client/settings/tools-settings.tsx`, also in the palette): a profile picker, then its tools split into called by the
+  model and called from codemode, each with its source (built-in, extension, connector, codemode) and whether it asks.
+  Built from existing v2 setting pieces; no new component.
 - [ ] 14. System › Devices: each device lists the harnesses it declares, with status, and a machine readout (CPU,
   memory, disk, network, top processes).
 - [ ] 15. System › Usage: tokens, cost and tools over time, from the ledger.

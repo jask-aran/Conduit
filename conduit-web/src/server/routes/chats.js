@@ -210,6 +210,14 @@ export function registerChatRoutes(app, {
     profiles: agentProfiles(config.piTemplates, { available: new Set([...(backends.local || backends.adapters.keys())]) }),
     harnesses: harnessCapabilities(),
   }));
+  // Settings › AI › Tools: each Conduit profile's tools, their source and whether they ask. Read-only.
+  app.get("/v0/profiles/tools", async (_request, response, next) => {
+    try {
+      const runtime = backends.adapters.get("conduit-runtime")?.runtime;
+      if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
+      response.json({ profiles: await runtime.toolsView() });
+    } catch (error) { next(error); }
+  });
   // A place is a project or workspace, or -- for an untracked thread's chat --
   // any folder on the Computer.
   const placeFor = async (id) => {

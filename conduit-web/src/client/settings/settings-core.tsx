@@ -9,6 +9,7 @@ import { DevicesSettingsTile } from "./devices-settings";
 import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
 import { createAgentSettings } from "./agent-settings";
 import { ConnectorsGroup } from "./connectors-settings";
+import { ToolsSettings } from "./tools-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/notifications";
 import { api, readShared } from "../api/client";
@@ -58,7 +59,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
+  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }] },
 ] as const;
@@ -73,6 +74,7 @@ const sectionLabels: Record<Section, string> = {
   models: "Models & accounts",
   prompts: "Prompts",
   blocks: "Blocks",
+  tools: "Tools",
   runtime: "Runtime",
   devices: "Devices",
   agent: "Agent",
@@ -1298,6 +1300,7 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
+          <Show when={section() === "tools"}><ToolsSettings /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>

@@ -166,6 +166,23 @@ const summary = (name, args) => {
 };
 const outward = (name, args) => Boolean((ALWAYS_OUTWARD[name] && (!OUTWARD_ACTIONS[name] || OUTWARD_ACTIONS[name].includes(args?.action)))
   || (PLACED.includes(name) && args?.device));
+/**
+ * Whether a tool asks the person before it runs, said of the tool rather than of one call (Settings › AI › Tools):
+ * `{ asks: "never" | "always" | "sometimes", when? }`. `guarded`: the profile's chats take `policyWraps` (jbot's
+ * threads and runs); a connector's tools take `connectorWraps` wherever they are selected. Mirrors `guard` below.
+ */
+export function askOf(tool, { guarded = false } = {}) {
+  const name = tool?.name || "";
+  if (name.startsWith("mcp__")) {
+    return tool.connectorReadOnly ? { asks: "never", when: "Marked read-only by its connector." }
+      : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
+  }
+  if (!guarded) return { asks: "never" };
+  if (ALWAYS_OUTWARD[name] && OUTWARD_ACTIONS[name]) return { asks: "sometimes", when: `Asks to ${OUTWARD_ACTIONS[name].join(" or ")}; its other actions go ahead.` };
+  if (ALWAYS_OUTWARD[name]) return { asks: "always", when: "Unless a standing rule you set allows it." };
+  if (PLACED.includes(name)) return { asks: "sometimes", when: "Asks when it runs on a device; in jbot's own folder it goes ahead (sandboxed)." };
+  return { asks: "never" };
+}
 const SOURCE_WORDS = { executor: "Executor program", script: "Script in its folder", run: "A model run" };
 
 async function ruleTarget(runtime, name, args) {
