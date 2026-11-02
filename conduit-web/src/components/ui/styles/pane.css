@@ -160,6 +160,20 @@
 .ui-pane-empty strong { color: var(--foreground); }
 .ui-pane-empty p { margin: 0; line-height: var(--leading-text); }
 
+/* An empty pane's Home: a narrow column centred in the pane, everything left-aligned; no boxes or icons. */
+.ui-pane-home { display: grid; flex: 1; min-height: 0; overflow-y: auto; place-items: center; padding: var(--space-xl); }
+.ui-pane-home-column { display: grid; width: min(100%, var(--measure-sm)); justify-items: start; gap: var(--space-2xs); }
+.ui-pane-home-title { margin: 0; color: var(--foreground); font: var(--weight-strong) var(--text-heading)/var(--leading-tight) var(--font-sans); }
+.ui-pane-home-data { margin: 0 0 var(--space-md); color: var(--muted-foreground); font: var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-pane-home-section { display: grid; justify-items: start; gap: var(--space-2xs); margin-top: var(--space-sm); }
+.ui-pane-home-section > h2 { margin: 0 0 var(--space-2xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
+.ui-pane-home-item { display: inline-flex; max-width: 100%; align-items: baseline; gap: var(--space-xs); padding: 0; border: 0; background: none; color: var(--muted-foreground); font: var(--text-row)/var(--leading-row) var(--font-sans); text-align: start; white-space: nowrap; cursor: pointer; }
+.ui-pane-home-item > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-pane-home-item > small { flex: none; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-pane-home-item[data-current] { color: var(--foreground); }
+@media (hover: hover) { .ui-pane-home-item:hover { color: var(--foreground); } }
+.ui-pane-home-item:focus-visible { outline: none; color: var(--foreground); }
+
 /* Phone tool controls retain the reference's finger targets and strip spacing. */
 @media (--conduit-phone-layout) {
   .ui-tool-head { min-height: var(--control-lg); padding: var(--space-xs) var(--space-md) var(--space-xs) var(--space-lg); justify-content: space-between; border-bottom: var(--hairline) solid var(--border); }

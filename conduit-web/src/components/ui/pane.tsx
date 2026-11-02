@@ -108,6 +108,23 @@ export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 
 /** What a tool says while it has nothing to show, or is loading: centred, quiet. */
 export const PaneEmpty = (props: { children: JSX.Element; role?: "status" | "alert" }) => <div class="ui-pane-empty" role={props.role}>{props.children}</div>;
+/**
+ * PaneHome: what an empty pane shows -- a small column, left-aligned, centred in the pane: a greeting, a data line
+ * (the hub, the build), then PaneHomeSections of PaneHomeItems, plain words that open something in the pane.
+ */
+export const PaneHome = (props: { title: string; data?: JSX.Element; children: JSX.Element }) =>
+  <div class="ui-pane-home"><div class="ui-pane-home-column">
+    <h1 class="ui-pane-home-title">{props.title}</h1>
+    <Show when={props.data}><p class="ui-pane-home-data">{props.data}</p></Show>
+    {props.children}
+  </div></div>;
+export const PaneHomeSection = (props: { label: string; children: JSX.Element }) =>
+  <section class="ui-pane-home-section" aria-label={props.label}><h2>{props.label}</h2>{props.children}</section>;
+/** One action: its words, quiet until hovered; `context` after it (a place), `current` brighter (where you were). */
+export const PaneHomeItem = (props: { context?: string; current?: boolean; onClick: () => void; children: JSX.Element }) =>
+  <button type="button" class="ui-pane-home-item" data-current={props.current ? "" : undefined} onClick={() => props.onClick()}>
+    <span>{props.children}</span><Show when={props.context}><small>{props.context}</small></Show>
+  </button>;
 /** Loading, at the corner of what it loads into: a frost capsule with a spinner. */
 export const PaneLoading = (props: { children: JSX.Element }) => <Frost class="ui-pane-loading" role="status">{props.children}</Frost>;
 
