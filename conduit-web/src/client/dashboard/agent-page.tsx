@@ -8,11 +8,14 @@ import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
+import { JbotComposer, JbotMessages, useJbotMessages } from "./jbot-messages";
+import type { MarkdownRendererId } from "../chat/markdown-settings";
 
 /**
- * The hub's persistent agent's page (docs/plans/persistent-agent.md): what needs the person first, then what it is
- * doing and will do, beside its threads; Open thread is where it talks. On the dashboards' split layout,
- * as a place's page is.
+ * The hub's persistent agent's page (docs/plans/persistent-agent.md): its messages with the person (the message log's
+ * app room) and the composer under them; beside them, what needs the person, what it is doing and will do, what came
+ * in, its threads and files. Open thread shows the thread underneath. On the dashboards' split layout, as a place's
+ * page is.
  */
 
 const RUN_KIND: Record<string, string> = {
@@ -60,7 +63,9 @@ export function AgentPage(props: {
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
+  markdownRenderer: MarkdownRendererId;
 }) {
+  const log = useJbotMessages();
   const [now, setNow] = createSignal(Date.now());
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
   const [error, setError] = createSignal("");
@@ -157,7 +162,7 @@ export function AgentPage(props: {
     }
     return [...counts].sort((a, b) => b[1] - a[1]).map(([noun, count]) => `${count} ${count === 1 || noun.endsWith("s") ? noun : `${noun}s`}`).join(" · ");
   };
-  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Inbox" count={unhandled() || null}>
+  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Context inbox" count={unhandled() || null}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inbox()}>{(entry) =>
@@ -273,9 +278,10 @@ export function AgentPage(props: {
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
-          // What it is doing and what waits on the person in the main column; its threads, watches and files beside.
-          stacked list={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}</>}
-          aside={<>{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
+          // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
+          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} onOpenThread={props.onOpenThread} />}
+          composer={<JbotComposer name={name()} onSend={log.send} />}
+          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>
 

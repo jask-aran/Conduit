@@ -42,6 +42,19 @@ export function InboxRow(props: { level: string; headline: string; source: strin
   </div>;
 }
 
+/**
+ * A report jbot sent (a message with a title, docs/plans/persistent-agent.md › The message log): one card in its
+ * stream -- its mark, the title, the first line, when -- opening the whole report in a reader (onOpen). It is still
+ * one message, so it takes its place in the stream as an answer does.
+ */
+export function ReportCard(props: { title: string; line?: string; time?: string; notified?: boolean; onOpen: () => void }) {
+  return <button type="button" class="ui-report-card" onClick={() => props.onOpen()}>
+    <span class="ui-report-mark"><Icons.FileText aria-hidden="true" /></span>
+    <span class="ui-report-text"><b class="ui-report-title">{props.title}</b><Show when={props.line}><span class="ui-report-line">{props.line}</span></Show></span>
+    <span class="ui-report-end"><Show when={props.notified}><Icons.Notification aria-label="Sent to your phone" /></Show><Show when={props.time}><time>{props.time}</time></Show><Icons.ChevronRight aria-hidden="true" /></span>
+  </button>;
+}
+
 export type ClockKind = "heartbeat" | "brief" | "feed" | "checkback" | "schedule";
 const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
   heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, feed: () => <Icons.Feed />, checkback: () => <Icons.Clock />, schedule: () => <Icons.Runtime />,

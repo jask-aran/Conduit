@@ -42,6 +42,11 @@ export class MessageLog {
 
   has(id) { return this.ids.has(id); }
 
+  /** The person's message written here before it reached the thread (log first): the thread's copy of it is this one. */
+  claim(text) {
+    return this.messages.findLast((item) => item.direction === "in" && !item.entryId && item.body === text && Date.now() - Date.parse(item.at) < 10 * 60_000) || null;
+  }
+
   append(message) {
     if (this.ids.has(message.id)) return null;
     const written = { ...APP, notify: "none", delivery: { state: "sent", at: message.at }, ...message };
@@ -105,7 +110,9 @@ export async function mirrorHomeThread(agent, log) {
         const at = entry.data?.timestamp || new Date(entry.createdAt || Date.now()).toISOString();
         if (entry.kind === "conduit.user") {
           const text = String(entry.data?.text || "").trim();
-          if (text && !NOT_SPOKEN.test(text)) log.append({ id: `in:${entry.data?.messageId || entry.id}`, at, direction: "in", sender: "person", body: text, conversationId: home, entryId: entry.id });
+          const claimed = text && log.claim(text);
+          if (claimed) log.update(claimed.id, () => ({ entryId: entry.id, conversationId: home }));
+          else if (text && !NOT_SPOKEN.test(text)) log.append({ id: `in:${entry.data?.messageId || entry.id}`, at, direction: "in", sender: "person", body: text, conversationId: home, entryId: entry.id });
         } else {
           const body = finalText(entry.model?.[0]);
           const stamp = entry.model?.[0]?.timestamp ? new Date(entry.model[0].timestamp).toISOString() : at;

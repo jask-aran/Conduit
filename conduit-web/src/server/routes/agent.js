@@ -32,6 +32,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
+ * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -130,6 +131,22 @@ export function registerAgentRoutes(app, { agent, backends }) {
       if (!enabled(response)) return;
       await agent.connectors.disconnect(request.params.id);
       response.status(204).end();
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/agent/messages", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const log = agent.runtime.messageLog;
+      const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+      if (!log || !text) return response.status(400).json({ error: "Say something", code: "empty_message" });
+      const home = await agent.home();
+      // Logged first, so a busy or slow thread never loses it; the thread's copy is matched back to it (claim).
+      const message = log.append({ id: `in:${crypto.randomUUID()}`, at: new Date().toISOString(), direction: "in", sender: "person", body: text, conversationId: home.conversationId });
+      response.status(201).json({ message });
+      agent.chatHost.say(home.chat.id, text).catch((error) => {
+        log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } }));
+      });
     } catch (error) { next(error); }
   });
 

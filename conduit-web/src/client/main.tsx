@@ -5493,6 +5493,7 @@ function App() {
       onOpenThread={agentView()?.home?.chatId ? openThread : undefined}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
+      markdownRenderer={markdownRenderer()}
       onOpenChat={(id, event) => {
         const beside = Boolean(event?.altKey);
         const tab = Boolean(event && (event.ctrlKey || event.metaKey));

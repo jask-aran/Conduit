@@ -1,5 +1,5 @@
 import { createSignal, For } from "solid-js";
-import { ClockRow, DayStrip, HarnessPrompt, Icons, InboxRow, LevelMark, type ClockKind } from "@/components/ui";
+import { ReportCard, ClockRow, DayStrip, HarnessPrompt, Icons, InboxRow, LevelMark, type ClockKind } from "@/components/ui";
 import { DashIconButton, Group, GroupHeading } from "@/components/ui/dashboard";
 import { row, type Page } from "../model";
 
@@ -54,7 +54,10 @@ export const assistantPage: Page = { title: "Assistant", rail: "Blocks",
     row("DayStrip", "midnight to midnight: quiet hours, the brief, the heartbeat's ticks (none in quiet hours) and now", () => <div class="g-aside">{day()}</div>, { source: "components/ui/assistant.tsx", surfaces: ["ground"], phone: true }),
     row("DayStrip · quiet hours", "now inside them, early morning", () => <div class="g-aside">{day(5 * 60 + 10)}</div>, { surfaces: ["ground"] }),
     row("ClockRow", "next first: the heartbeat, a feed, a check-back, the brief; a failing feed's icon a warning, its reason in the title", () => timed(), { source: "components/ui/assistant.tsx", surfaces: ["ground"], phone: true }),
+    row("ReportCard", "a report jbot sent (a message with a title) in its stream: title, first line, when, the bell when it reached the phone; opens the whole report in a reader", () => <div class="g-stack">
+      <ReportCard title="Morning brief" line="Three things today: the dentist moved to 2pm, a parcel arrives, and rent is due." time="09:00" notified onOpen={() => {}} />
+      <ReportCard title="Ryokan options for March" line="Four places with rooms left, two under ¥30,000 a night." time="14:12" onOpen={() => {}} /></div>, { source: "components/ui/assistant.tsx", surfaces: ["ground"], phone: true }),
     row("Quiet line", "a heartbeat that told no one leaves one line in the home thread, opening its run", () => <HarnessPrompt icon={<Icons.Heartbeat aria-hidden="true" />} onOpen={() => {}}>Heartbeat · 3 handled · 1 check-back set</HarnessPrompt>, { source: "components/ui/transcript.tsx · HarnessPrompt", surfaces: ["ground"] }),
   ],
-  api: ["LevelMark", "InboxRow", "ClockRow", "DayStrip", "HarnessPrompt"],
+  api: ["LevelMark", "InboxRow", "ClockRow", "DayStrip", "ReportCard", "HarnessPrompt"],
 };
