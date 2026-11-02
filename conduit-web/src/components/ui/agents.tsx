@@ -1,6 +1,6 @@
 import * as Icons from "./icons";
 import { cn } from "@/lib/utils";
-import { createSignal, Match, Show, Switch, type JSX } from "solid-js";
+import { children, createSignal, Match, Show, Switch, type JSX } from "solid-js";
 import { Button, Spinner, StopGlyph } from "./controls";
 import { Expand } from "./expand";
 import { Rider } from "./rider";
@@ -61,20 +61,22 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
  *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
 function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; keys?: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
+  // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).
+  const body = children(() => props.children);
   return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? (props.keys || props.ids).join(" ") : undefined}
     data-open={open() ? "" : undefined} data-quiet={props.quiet ? "" : undefined} {...motionOf(props.motion)}>
     <div class="ui-agent-row" data-state={props.failed ? "failed" : undefined}>
-      <button type="button" class="ui-agent-open" disabled={!props.children && !props.onOpen} aria-expanded={props.children ? open() : undefined}
-        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => props.children ? setOpen(!open()) : props.onOpen?.()}>
+      <button type="button" class="ui-agent-open" disabled={!body() && !props.onOpen} aria-expanded={body() ? open() : undefined}
+        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => body() ? setOpen(!open()) : props.onOpen?.()}>
         <span class="ui-agent-mark">{props.icon || <Icons.Agent />}</span>
         <span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
           <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>
         <Show when={props.status}><span class={props.kind === "run" ? "ui-agent-run-status ui-agent-status" : "ui-agent-line ui-agent-status"}>{props.status}</span></Show>
-        <Show when={props.children}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
+        <Show when={body()}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
       </button>
       <Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>
     </div>
-    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{props.children}</ul></Expand>
+    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{body()}</ul></Expand>
   </li>;
 }
 

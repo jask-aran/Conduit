@@ -14,9 +14,13 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
   title?: string; body: string; notify: "none" | "push" | "urgent"; delivery?: { state: string; error?: string };
+  pushed?: { to: string[]; missed: string[] };
   native?: { from?: Party | null; to?: Array<Party | string>; date?: string };
 }
 type Party = { name?: string; address?: string };
+/** Where a message was pushed besides the app: the devices it reached, by name. */
+const sentTo = (message: LogMessage) => message.notify === "none" ? undefined
+  : message.pushed?.to.length ? `Sent to ${message.pushed.to.join(", ")}` : message.pushed ? "No device took the push" : "Sent to your devices";
 const partyName = (party?: Party | string | null) => typeof party === "string" ? party : party?.name || party?.address || "";
 /** A row of the stream: one message of the app room, or a run of another room's messages, folded (RoomRow). */
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
@@ -92,7 +96,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                   <ReportCard title={message.title!} line={firstLine(message.body)} time={clock(message.at)} notified={message.notify !== "none"} onOpen={() => setReading(message)} />
                 </Match>
                 <Match when={true}>
-                  <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={message.notify !== "none"} /></Turn>
+                  <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)} /></Turn>
                 </Match>
               </Switch>
             </TranscriptRow>; })()}

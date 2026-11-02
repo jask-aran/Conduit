@@ -154,9 +154,10 @@ export function Disclosure(props: { header: JSX.Element; open?: boolean; onToggl
 }
 /** A message's action row: its time first, muted and tabular, then its actions (icon-xs ghost buttons). status: how
  *  the answer ended when it did not finish (Interrupted, Stopping…), after the time. */
-/** The message's action row; `notified`: it also reached the person's phone (a bell, before the time, always shown). */
-export const MessageFoot = (props: { time?: string; dateTime?: string; title?: string; status?: string; notified?: boolean; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
-  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.notified}><span class="ui-message-bell" title="Sent to your phone"><Icons.Notification aria-label="Sent to your phone" /></span></Show><Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
+/** The message's action row; `notified`: where it was pushed besides ("Sent to Phone"), a bell and those words before
+ *  the time, always shown. */
+export const MessageFoot = (props: { time?: string; dateTime?: string; title?: string; status?: string; notified?: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
+  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.notified}><span class="ui-message-bell"><Icons.Notification aria-hidden="true" />{props.notified}</span></Show><Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
 /** In an answer's place, one stopped before writing any: the stop mark, Interrupted, and when. */
 export const StopLine = (props: { detail: string }) =>
   <div class="ui-stop-line" role="status"><Icons.Stop aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;

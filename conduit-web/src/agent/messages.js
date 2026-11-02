@@ -173,10 +173,14 @@ export function MessageTools(runtime) {
       const id = `tool:${api.taskId}`;
       // A replay finds it written (the id is its key) and neither writes nor pushes it again.
       const written = log.append({ id, at, channel, room, direction: "out", sender: "jbot", ...(title ? { title } : {}), body: text, notify, conversationId: api.conversationId });
+      let pushed = null;
       if (written && notify !== "none") {
-        runtime.agentNotify?.({ kind: "report", conversationId: api.conversationId, title: title || headlineOf(text, 60), text, level: notify === "urgent" ? "urgent" : "attention", key: id, path: "/jbot" });
+        // Which devices it reached, kept on the message for the app to say ("Sent to Phone").
+        pushed = await runtime.agentNotify?.({ kind: "report", conversationId: api.conversationId, title: title || headlineOf(text, 60), text, level: notify === "urgent" ? "urgent" : "attention", key: id, path: "/jbot" }) || null;
+        if (pushed) log.update(id, () => ({ pushed }));
       }
-      const said = title ? `Sent the report "${title}"${notify !== "none" ? " to the app and their phone" : ""}.` : `Sent${notify !== "none" ? ", and pushed to their phone" : ""}.`;
+      const reached = pushed?.to.length ? ` and to ${pushed.to.join(", ")}` : notify !== "none" ? " (no device took the push)" : "";
+      const said = title ? `Sent the report "${title}" in the app${reached}.` : `Sent in the app${reached}.`;
       return last ? { ...result(said), control: { terminate: true } } : result(said);
     },
   });

@@ -13,13 +13,14 @@ const line = (text, max) => {
 
 /** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId }) {
-  return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0, path = null }) => void (async () => {
+  // Resolves to the devices it reached and missed, by label (`{ to, missed }`), or null when nothing was sent.
+  return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0, path = null }) => (async () => {
     // The agent's threads, and any chat whose profile reaches the person's accounts (an approval it is waiting on).
     const thread = await agent.threadOf(conversationId);
-    if (!thread?.chatId || thread.role === "run") return;
+    if (!thread?.chatId || thread.role === "run") return null;
     const chat = thread.role === "chat";
-    if (!chat && !agent.enabled()) return;
-    if (chat && kind !== "approval") return;
+    if (!chat && !agent.enabled()) return null;
+    if (chat && kind !== "approval") return null;
     const name = chat ? thread.title || "A chat" : agent.settings().name;
     const urgent = level === "urgent";
     const approval = kind === "approval";
@@ -27,11 +28,12 @@ export function agentNotifier({ agent, push, hubId }) {
     // Nowhere to send it: say so where the person will look, once a day, rather than drop it without a word.
     if (!push.list().length) {
       const today = agent.today();
-      if ((await agent.state()).notices.some((notice) => notice.kind === "push" && agent.today(Date.parse(notice.at)) === today)) return;
+      if ((await agent.state()).notices.some((notice) => notice.kind === "push" && agent.today(Date.parse(notice.at)) === today)) return null;
       await agent.notice("push", "A notification reached no device: turn notifications on in Settings on your phone.");
-      return;
+      return null;
     }
-    await push.send({
+    const devices = push.list();
+    const results = await push.send({
       v: 1,
       title: approval ? `${name} needs your approval` : `${title && !line(text, 240).startsWith(line(title, 60).replace(/…$/, "")) ? `${name}: ${line(title, 60)}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,
       body: line(text, 240),
@@ -44,5 +46,7 @@ export function agentNotifier({ agent, push, hubId }) {
       ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });
-  })().catch((error) => console.warn("[agent] push:", error?.message || error));
+    const label = (id) => devices.find((device) => device.id === id)?.label || "a device";
+    return { to: results.filter((result) => result.ok).map((result) => label(result.id)), missed: results.filter((result) => !result.ok).map((result) => label(result.id)) };
+  })().catch((error) => { console.warn("[agent] push:", error?.message || error); return null; });
 }
