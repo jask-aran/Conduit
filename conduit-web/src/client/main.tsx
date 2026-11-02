@@ -3150,7 +3150,8 @@ function App() {
       <Show when={record()} fallback={<Show when={record() === null}>
         <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><PaneEmpty>This terminal has ended.</PaneEmpty>
       </Show>}>{(found) =>
-        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)} onClose={() => void closeDocument(pane)} />
+        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)}
+          onClose={inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
       }</Show>
     </SheetFill>;
   };
@@ -4334,6 +4335,9 @@ function App() {
     : <PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} /></PaneTabs>;
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
+    // The slide-over dock never shows an empty pane: a document closed there closes its docked pane, as the dock's
+    // own Close does (and with it the dock, when it was showing it).
+    if (inDock(pane)) return await closeSlot(pane as number);
     // A chat's pane is wider than an empty one may be: held at the shares it has now, then eased to the row's own, so
     // the room it gives back glides to the panes beside rather than jumping in one frame.
     const held = splitShown() && animatePanes() ? paneShares() : null;

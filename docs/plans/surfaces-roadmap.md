@@ -96,7 +96,9 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [x] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×. Kept the
   header (it holds the shell, shortcuts and sessions) and gave it a document's ×: v2's `TermIdentity` takes `onClose`,
   a × after the terminal's name drawn as a lit tab's, closing the document as any is (`closeDocument`: the pane
-  stays, empty; the shell runs on). Gallery: Panes › TermIdentity · onClose.
+  stays, empty; the shell runs on). Gallery: Panes › TermIdentity · onClose. The slide-over dock keeps its own
+  behaviour: its Terminal tool and a terminal moved into it show the dock's controls (Move to a pane, Close) and no
+  second ×, and any document closed in the dock closes its docked pane rather than leaving an empty one there.
 - [ ] 3. Merge the branch into `main` and restart :4310 (`--force` while the stuck "Slow Spawn Narration" test chat
   still waits).
 
