@@ -209,6 +209,67 @@ plus fields for the USER.md front-matter values.
 
 Not now: conditions beyond the gate, routines chained into pipelines (an inbox-arrival trigger covers it).
 
+## Talking to the person: the jbot message log (decided 2026-11-02)
+
+jbot's thread is its own working record: runs, reports, tools, notices, all of it, open to inspect but not where
+the person looks. What the person and jbot say to each other is the **jbot message log**: a Conduit store, apart
+from the thread, that every way of reaching jbot reads and writes. The app is face to face; SMS, email, a call,
+a notification reply are other ways to reach the same assistant. The person never manages jbot's context: there
+is one jbot, one thread underneath, one log.
+
+```
+ person ──(app, SMS, email, …)──▶ message log ──▶ prompt in jbot's thread ("via SMS · room …")
+ jbot's thread ──(final text │ message tool)──▶ message log ──▶ that channel (+ notify)
+                                                    │
+                    app (/jbot): every room, the app's in full, others folded
+                    SMS / email / …: only their own rooms, both directions
+```
+
+### Structures
+
+- **Message**: one entry in the log, either direction: id, channel, room, sender, title (makes it a report),
+  body (Markdown), notify (none / quiet / push), time, the thread entry it came from or went into.
+- **Channel**: a way of reaching jbot: `app` first; push is how a message notifies, not a channel; SMS, email,
+  WhatsApp, voice later. A standard Conduit chat talking to jbot would be one more channel, if ever.
+- **Room** (proposed name): one conversation within a channel. The app has exactly one room, always. Other
+  channels can have many: an email thread is a room, an SMS line with the person is a room, a group chat jbot was
+  added to is another. A room has participants; the person is one, others may be anyone (anyone can email jbot).
+  What a non-person participant sends is untrusted content (as tool output is: data, never instructions), and
+  anything jbot sends to a room with others in it is an outward action under the approvals policy.
+- **Report**: a message with a title. In the app, a card (title, one line, Open) that opens the full Markdown in a
+  reader; it is still one message, so the person can reply to it. Later it moves onto Conduit's artifact system,
+  built for jbot and the rest of the app.
+
+### How messages flow
+
+- **In**: a message from the person (or another participant) is written to the log, then given to jbot's thread
+  as a prompt marked with its channel, room and sender.
+- **Out, final text**: every turn's final text is a message, to the room the turn came from; a turn no person
+  started (a run's report, a notice) goes to the app room. No suppression: a heartbeat with nothing to say must
+  not wake jbot in the first place (its gate and level do that), rather than waking it and being filtered.
+  Models are trained to put what the user reads there; Conduit does not fight that.
+- **Out, the `message` tool**: for everything final text cannot say: speak first, another room or channel (texted,
+  but the full report goes to the app; a new email), a report (title), and whether to notify. Final text never
+  notifies by itself; notifying is always jbot's choice, guided by the proactivity dial and each routine's document
+  (the morning brief's says always push).
+- **Views**: each channel shows only its own rooms, both directions (SMS shows SMS: that is the medium). The app
+  shows everything: its own room in full, and each run of another room's messages folded into one quiet row built
+  by Conduit from the log (`Over SMS · 4 messages · "Moved the dentist to Thursday"`), which expands and never
+  notifies (it already reached the person there). Nothing depends on jbot remembering to leave notes.
+
+### The context inbox
+
+The inbox routines fill for the heartbeat (`AgentDoc.inbox`) is the **context inbox** from here on, in UI and docs,
+so it is never confused with messages. Code names follow when it is next touched.
+
+### /jbot
+
+The message log's app view, newest at the bottom, with the composer back under it. Reports as cards opening the
+reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. The raw thread stays one Open away.
+
+Open: how folded other-room rows look and sit in the stream; whether the app can reply into another room (answer
+an email thread from the app) or only jbot can; retention of the log.
+
 ## What the products converged on
 
 | | Duet (Anthropic, 2026-10-21) | Muse (Meta) | Instinct | Dots (OpenAI) |
