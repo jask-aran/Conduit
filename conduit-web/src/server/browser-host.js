@@ -3,19 +3,22 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
+import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
-import { defineTool } from "@earendil-works/pi-durable";
+import { McpClient, StdioTransport, toLlmContent } from "@earendil-works/pi-mcp";
 
 /*
  * The browser document, version 1 (roadmap #7): a Chrome on the hub that the person and Conduit's agents share, one
  * page by its id (`browser:hub`). Its engine is Vercel's agent-browser (Apache-2.0): a native daemon over CDP whose
  * session streams its viewport over a WebSocket (JPEG frames, the page's URL) and takes mouse, key and touch input --
  * its "pair browsing". The person sees and drives it through a pane (the stream, proxied here behind Conduit's
- * sign-in); an agent through the `browser` tool, the same session's commands (snapshot, click @ref, fill, open...).
+ * sign-in); an agent through agent-browser's own MCP server on the same session (AGENT_BROWSER_SESSION): Conduit's
+ * agents load its tools into codemode (`tools()`), other harnesses are given the server itself (`mcpServer()`), so
+ * the engine can be swapped for another (Browser Use, a cloud browser) without a tool of Conduit's own in between.
  *
- * agent-browser is found, not bundled: CONDUIT_AGENT_BROWSER, else `agent-browser` on the PATH (npm i -g
- * agent-browser; it finds an installed Chrome, Playwright's included, or `agent-browser install` fetches one). Without
- * it the pane says how to add it. The session starts on first use and stays open while the server runs.
+ * agent-browser is vendored (a dependency: its native binaries come in the package); CONDUIT_AGENT_BROWSER names
+ * another, and one on the PATH is the last resort. It finds an installed Chrome, Playwright's included, or
+ * `agent-browser install` fetches one. The session starts on first use and stays open, across restarts of Conduit.
  */
 const SESSION = "conduit-hub";
 const IDS = new Set(["hub"]);
@@ -34,9 +37,21 @@ const freePort = () => new Promise((resolve, reject) => {
   server.listen(0, "127.0.0.1", () => { const { port } = server.address(); server.close(() => resolve(port)); });
 });
 
+/** The vendored binary for this machine (agent-browser ships one per platform in its package). */
+const vendored = () => {
+  const name = `agent-browser-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`;
+  const file = fileURLToPath(new URL(`../../node_modules/agent-browser/bin/${name}`, import.meta.url));
+  try { fs.accessSync(file, fs.constants.X_OK); return file; } catch { return null; }
+};
+// Its MCP tools the shared page must not lose to an agent (closing the session ends the person's page too), or that
+// only describe the server itself.
+const WITHHELD = new Set(["agent_browser_close", "agent_browser_tools_profiles"]);
+const MCP_MS = 60_000;
+
 export class BrowserHost {
   constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null } = {}) {
-    this.binary = binary || which(process.platform === "win32" ? "agent-browser.exe" : "agent-browser");
+    this.binary = binary || vendored() || which(process.platform === "win32" ? "agent-browser.exe" : "agent-browser");
+    this.mcp = null;
     this.port = null;
     this.starting = null;
     this.sockets = new WebSocketServer({ noServer: true });
@@ -62,7 +77,11 @@ export class BrowserHost {
    */
   start() {
     return this.starting ??= (async () => {
-      let status = await this.run(["stream", "status"], { timeout: 60_000 });
+      let status = await this.run(["stream", "status"], { timeout: 60_000 }).catch((error) => {
+        // agent-browser is here but found no Chrome: say what fixes it.
+        throw /chrome|browser.*not found|executable/i.test(error.message)
+          ? Object.assign(new Error(`The hub has no Chrome for its browser. On the hub, run: ${this.binary} install`), { status: 503 }) : error;
+      });
       if (!/127\.0\.0\.1:\d+/.test(status)) {
         await this.run(["stream", "enable", "--port", String(await freePort())]);
         status = await this.run(["stream", "status"]);
@@ -119,41 +138,45 @@ export class BrowserHost {
     });
   }
 
-  /** This server going: its streams close; the browser stays open, found again as it was when the server returns. */
+  /** agent-browser's MCP server for a harness to start: on the shared session, the core tools. */
+  mcpServer() {
+    return this.binary ? { command: this.binary, args: ["mcp"], env: { AGENT_BROWSER_SESSION: SESSION } } : null;
+  }
+
+  /**
+   * agent-browser's MCP tools as Conduit's agents call them (from codemode: `tools.agent_browser_open(...)`), through
+   * one long-lived stdio server on the shared session; started again if it goes.
+   */
+  async tools() {
+    if (!this.binary) return [];
+    const client = await this.client();
+    return (await client.listTools()).filter((tool) => !WITHHELD.has(tool.name)).map((tool) => ({
+      name: tool.name, label: tool.title || tool.name, description: tool.description || tool.name,
+      parameters: Type.Unsafe({ ...tool.inputSchema, type: "object", properties: tool.inputSchema?.properties || {} }),
+      replay: tool.annotations?.readOnlyHint === true ? "safe" : "unsafe",
+      execute: async (args, api) => {
+        try {
+          const result = await (await this.client()).callTool(tool.name, args, { signal: api?.signal, timeoutMs: MCP_MS });
+          return { output: toLlmContent(result), isError: result.isError === true };
+        } catch (error) { return { output: [{ type: "text", text: `The browser did not answer: ${String(error?.message || error).slice(0, 200)}` }], isError: true }; }
+      },
+    }));
+  }
+
+  client() {
+    return this.mcp ??= (async () => {
+      const server = this.mcpServer();
+      const client = new McpClient({ name: "Conduit", version: "1.0.0", requestTimeoutMs: MCP_MS });
+      await client.connect(new StdioTransport({ command: server.command, args: server.args, env: { ...process.env, ...server.env } }));
+      client.onClose(() => { this.mcp = null; });
+      return client;
+    })().catch((error) => { this.mcp = null; throw error; });
+  }
+
+  /** This server going: its streams and MCP client close; the browser stays open, found again as it was. */
   close() {
     this.sockets.close();
+    void this.mcp?.then((client) => client.close()).catch(() => {});
   }
 }
 
-/** Words of a command line, quotes kept together: `fill @e3 "two words"`. */
-const words = (line) => [...String(line).matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)].map((match) => match[1]?.replace(/\\(.)/g, "$1") ?? match[2] ?? match[3]);
-// What would take the shared page away or point the tool elsewhere.
-const REFUSED = new Set(["close", "quit", "connect", "install", "upgrade", "doctor", "dashboard", "chat", "session"]);
-
-/** Conduit's agents on the hub's browser: the page the person sees in a Browser pane (`browser:hub`). */
-export function BrowserTool(runtime) {
-  const text = (value, isError = false) => ({ output: [{ type: "text", text: value }], ...(isError ? { isError: true } : {}) });
-  return defineTool({
-    name: "browser",
-    description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane, and what they "
-      + "do you see. One agent-browser command per call: open <url>; snapshot -i (the page's interactive elements with refs "
-      + "such as @e1); click @e2; fill @e3 \"text\"; press Enter; get text @e1; get url; scroll down; back; screenshot. "
-      + "Act through snapshot refs rather than coordinates. To have the person watch, open browser:hub with the ui tool.",
-    parameters: Type.Object({ command: Type.String({ description: "The command and its arguments, as agent-browser takes them (without the program's name)." }) }),
-    replay: "unsafe",
-    execute: async ({ command }) => {
-      const host = runtime.browserHost;
-      if (!host?.available) return text("The hub has no browser: agent-browser is not installed there.", true);
-      const args = words(command);
-      if (!args.length) return text("Give a command, such as open https://example.com or snapshot -i.", true);
-      if (REFUSED.has(args[0]) || args.some((arg) => /^--(session|cdp|profile|config|provider|auto-connect)\b/.test(arg))) {
-        return text(`"${args[0]}" is not for the shared browser: it stays open on its own session.`, true);
-      }
-      try {
-        await host.start();
-        const out = await host.run(args, { timeout: 60_000 });
-        return text(out.length > 30_000 ? `${out.slice(0, 30_000)}\n[cut at 30,000 of ${out.length} characters]` : out || "Done.");
-      } catch (error) { return text(error.message, true); }
-    },
-  });
-}

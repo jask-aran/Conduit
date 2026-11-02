@@ -9,7 +9,6 @@ import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { UsageLedger } from "./usage-ledger.js";
 import { UiTool } from "./ui-control.js";
-import { BrowserTool } from "./browser-host.js";
 import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -251,7 +250,7 @@ export class DurableRuntime {
       const registry = createRegistry();
       // Every extension a template may select, by name; a conversation selects its template's.
       this.extensions = new Map();
-      const install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
+      const install = this.install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
       install(Conduit(this));
       // Images read or attached are resized and converted to fit the model
       // (pi-durable's Photon processor, in a worker), unless Pi's settings turn
@@ -262,11 +261,12 @@ export class DurableRuntime {
       install(DeviceTools(this, coding));
       install(Subagents(this));
       install(Handoff);
-      install(defineExtension({ name: "ui", tools: [UiTool(this), BrowserTool(this)] }));
+      install(defineExtension({ name: "ui", tools: [UiTool(this)] }));
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
-        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }] }));
+        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with ui, view browser:hub)",
+        instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] }));
       this.refreshConnectors = () => {
         const tools = this.agent?.connectors.tools() || [];
         // A connector's tools ask before they write, and `approved` runs what was allowed, in whichever chat selects them.
@@ -274,6 +274,9 @@ export class DurableRuntime {
         install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
       };
       this.refreshConnectors();
+      // The hub's browser (browser-host.js): agent-browser's own MCP tools, from codemode, once its server answers.
+      install(defineExtension({ name: "browser", tools: [] }));
+      void this.loadBrowserTools();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
@@ -434,6 +437,13 @@ export class DurableRuntime {
     });
   }
 
+  /** agent-browser's tools into the `browser` extension; again whenever the host is set or its server returns. */
+  async loadBrowserTools() {
+    if (!this.extensions || !this.browserHost?.available) return;
+    try { this.install(defineExtension({ name: "browser", tools: await this.browserHost.tools() })); }
+    catch (error) { console.warn("[browser] agent-browser's tools could not be loaded:", error?.message || error); }
+  }
+
   /** A profile's tools as a chat of it is given them, without its prompt: `{ template, isAgent, extensions, tools, modelTools }`. */
   selectionFor(templateId, { roaming = false } = {}) {
     const template = this.templateFor(templateId);
@@ -449,17 +459,19 @@ export class DurableRuntime {
     // Codemode comes with the connected accounts, or with a template that lists it.
     const codes = connects || template.tools.includes("codemode");
     const extensions = [...new Set(["conduit", "ui", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
-      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
+      ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode", "browser"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, "ui", "browser", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
+    const wanted = new Set([...ALWAYS, "ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
       ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
-      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && tool.name.startsWith("pi.codemode.")) || (connects && tool.name.startsWith("mcp__")));
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && (tool.name.startsWith("pi.codemode.") || tool.name.startsWith("agent_browser_"))) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
+    // A connector's tools and the browser's are many and large: codemode reaches them (its namespaces), the model does not.
+    const behindCodemode = (tool) => tool.name.startsWith("mcp__") || tool.name.startsWith("agent_browser_");
     const modelTools = codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
-      : connects ? tools.filter((tool) => !tool.name.startsWith("mcp__")) : null;
+      : codes ? tools.filter((tool) => !behindCodemode(tool)) : null;
     return { template, isAgent, extensions, tools, modelTools };
   }
 
@@ -470,7 +482,7 @@ export class DurableRuntime {
    */
   async toolsView() {
     await this.open();
-    const SOURCES = { web: "extension", codemode: "codemode", connectors: "connector" };
+    const SOURCES = { web: "extension", browser: "extension", codemode: "codemode", connectors: "connector" };
     const first = (text) => String(text || "").split(/(?<=[.!?])\s/)[0].trim();
     return this.templates.map((template) => {
       const selection = this.selectionFor(template.id, { roaming: template.internal && template.id === "agent" });

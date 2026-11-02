@@ -126,7 +126,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     void api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`).then((found) => {
       setStatus(found);
       if (!found.available) {
-        setState({ tone: "error", text: <span>The hub has no browser yet. On the hub, install agent-browser: <code>npm i -g agent-browser</code>, then <code>agent-browser install</code> if it finds no Chrome.</span> });
+        setState({ tone: "error", text: <span>The hub's browser is not available: Conduit's agent-browser is missing for this machine. Reinstall Conduit, or set <code>CONDUIT_AGENT_BROWSER</code> to an agent-browser binary.</span> });
         return;
       }
       if (found.url && found.url !== "about:blank") setAddress(found.url);

@@ -95,7 +95,7 @@ export function UiTool(runtime) {
     name: "ui",
     description: "See and arrange what the person has open in Conduit. look: each open Conduit tab or app (the one in use first) "
       + "with its panes, what each shows and which has the keyboard. open: show something -- chat:<id>, page:dashboard, "
-      + "page:agent, page:project:<id>, browser:hub (the hub's browser, shared with you through the browser tool), terminal or files -- in a pane (pane: main or a number; default the one with the "
+      + "page:agent, page:project:<id>, browser:hub (the hub's browser, which you work through the agent_browser tools), terminal or files -- in a pane (pane: main or a number; default the one with the "
       + "keyboard) or beside it (beside: true). close: empty a pane (pane required). focus: give a pane the keyboard. Commands go to the tab "
       + "in use unless client names one. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
     parameters: Type.Object({

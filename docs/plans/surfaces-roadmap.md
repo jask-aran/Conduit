@@ -128,10 +128,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   rather than at boot, then stays open, across a restart of Conduit too. The person opens it from an empty pane
   (Browser) or an agent with `ui` (`browser:hub`); the pane (`client/browser/browser-pane.tsx`) has back, forward,
   reload and an address bar, follows the page's URL and title, and sets the page's viewport to its size. Agents share
-  the page through a `browser` tool (one agent-browser command a call: snapshot refs, click, fill, open; close and
-  session flags refused; not in subagents). `ui-browser` is the Computer's file explorer, so the pane is a new v2 family,
-  Web (`WebView`, `WebAddress`, `WebScreen`; gallery Web). agent-browser is found on the hub's PATH (or
-  `CONDUIT_AGENT_BROWSER`), not bundled; without it the pane says how to install it.
+  the page through agent-browser's own MCP server on the same session, not a tool of Conduit's, so the engine can be
+  swapped (Browser Use, a cloud browser) later: Conduit's agents load its tools into codemode (a `browser` namespace;
+  about 20k tokens of schema, so never in the model's direct list; `close` withheld; not in subagents), and harnesses
+  are given the server itself. `ui-browser` is the Computer's file explorer, so the pane is a new v2 family,
+  Web (`WebView`, `WebAddress`, `WebScreen`; gallery Web). agent-browser is vendored (a dependency, 0.41.1; its native
+  binaries come in the package, about 54 MB); `CONDUIT_AGENT_BROWSER` names another.
 - [ ] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
   security headers kept (frame-ancestors rewritten, the injected script admitted by a CSP nonce); streaming as the
   fallback for sites that refuse framing. Spiked (`docs/plans/browser-proxy-spike.md`,
@@ -145,10 +147,11 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   open, close and focus panes; use the browser. Every open tab tells the server its panes (what each shows, which has
   the keyboard, whether the tab is in use; `client/agent-ui.ts`), and the server sends a command to one tab over its
   runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have `ui` (look, open, close,
-  focus) and `browser` (the hub's shared page, #7) in every profile, from codemode in Coding, not in subagents. Other
-  harnesses get the same two tools from Conduit's MCP endpoint (`server/mcp-endpoint.js`, `/v0/mcp`, Streamable HTTP;
-  a Conduit session or the hub's token, `data/mcp-token`): Claude Code chats Conduit starts on the hub are given it;
-  Codex and other MCP clients take a config entry copied from Settings › AI › Tools. Not yet: Claude Code running on a
+  focus) in every profile, from codemode in Coding, not in subagents, and the browser through agent-browser's tools
+  (#7). Other harnesses get `ui` from the conduit-ui MCP server (`server/mcp-endpoint.js`, `/v0/mcp/ui`, Streamable
+  HTTP; a Conduit session or the hub's token, `data/mcp-token`) and the browser from agent-browser's own MCP server on
+  the shared session: Claude Code chats Conduit starts on the hub are given both; Codex and other MCP clients take
+  an entry for each copied from Settings › AI › Tools. Not yet: Claude Code running on a
   device (it cannot reach the hub's loopback).
 - [ ] 12. Add Vercel's agent-desktop for driving desktop apps on devices.
 

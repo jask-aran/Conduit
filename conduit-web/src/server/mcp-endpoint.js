@@ -2,14 +2,15 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
-import { BrowserTool } from "./browser-host.js";
 import { UiTool } from "./ui-control.js";
 import { mcpAccess } from "./mcp-access.js";
 
 /*
- * Conduit as an MCP server (roadmap #11): the `ui` and `browser` tools Conduit's own agents have, for every other
- * harness -- Claude Code (given it when Conduit starts one on the hub), Codex and any MCP client (added by hand, from
- * Settings › AI › Tools). Streamable HTTP, stateless: each POST is one JSON-RPC message answered as JSON; there is no
+ * conduit-ui, Conduit as an MCP server (roadmap #11): the `ui` tool Conduit's own agents have -- what the person has
+ * open, and opening, closing and focusing panes -- for every other harness: Claude Code (given it when Conduit starts
+ * one on the hub), Codex and any MCP client (added by hand, from Settings › AI › Tools). The hub's browser is not here:
+ * harnesses are given agent-browser's own MCP server on the shared session (browser-host.js), so its engine can change
+ * without a server of Conduit's in between. Streamable HTTP, stateless: each POST is one JSON-RPC message answered as JSON; there is no
  * server-sent stream, so GET is refused.
  *
  * Who may call it: a Conduit session, as for any route; or the hub's MCP token as a bearer, so a harness need not hold
@@ -38,7 +39,7 @@ const safeEqual = (a, b) => {
  * `afterAuth`: the same endpoint for a signed-in caller.
  */
 export function createMcpEndpoint({ runtime, token, version = "" }) {
-  const tools = () => [UiTool(runtime), BrowserTool(runtime)];
+  const tools = () => [UiTool(runtime)];
   const reply = (id, result) => ({ jsonrpc: "2.0", id, result });
   const fail = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
@@ -46,8 +47,8 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
     const { id, method, params } = message || {};
     if (method === "initialize") {
       return reply(id, { protocolVersion: typeof params?.protocolVersion === "string" ? params.protocolVersion : PROTOCOL,
-        capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit", title: "Conduit", version },
-        instructions: "Conduit, the workspace the person is using: see and arrange their panes (ui) and work the hub's browser they share with you (browser)." });
+        capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit-ui", title: "Conduit UI", version },
+        instructions: "Conduit, the workspace the person is using: see what they have open and arrange their panes (ui). The hub's browser they share with you is agent-browser's own server (its pane is browser:hub)." });
     }
     if (method === "ping") return reply(id, {});
     if (method === "tools/list") {
@@ -76,22 +77,30 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
 
   const json = express.json({ limit: "256kb" });
   const beforeAuth = express.Router();
-  beforeAuth.get("/v0/mcp", (request, response, next) => {
+  beforeAuth.get("/v0/mcp/ui", (request, response, next) => {
     const bearer = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     return bearer && safeEqual(bearer, token) ? refuseGet(request, response) : next();
   });
-  beforeAuth.post("/v0/mcp", (request, response, next) => {
+  beforeAuth.post("/v0/mcp/ui", (request, response, next) => {
     const bearer = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     if (!bearer || !safeEqual(bearer, token)) return next();
     json(request, response, (error) => error ? response.status(400).json(fail(null, -32700, "Parse error")) : void handle(request, response));
   });
   const afterAuth = express.Router();
-  afterAuth.get("/v0/mcp", refuseGet);
-  afterAuth.post("/v0/mcp", (request, response) => void handle(request, response));
+  afterAuth.get("/v0/mcp/ui", refuseGet);
+  afterAuth.post("/v0/mcp/ui", (request, response) => void handle(request, response));
   // For a signed-in person adding it to another harness (Settings › AI › Tools): where it is, and Codex's entry.
-  afterAuth.get("/v0/mcp/access", (_request, response) => response.set("Cache-Control", "no-store").json({
-    url: mcpAccess.url,
-    codex: `[mcp_servers.conduit]\nurl = "${mcpAccess.url}"\nhttp_headers = { "Authorization" = "Bearer ${mcpAccess.token}" }\n`,
-  }));
+  // For a signed-in person adding them to another harness (Settings › AI › Tools): conduit-ui, and agent-browser on the
+  // shared session, as Codex's config.toml takes them.
+  afterAuth.get("/v0/mcp/ui/access", (_request, response) => {
+    const browser = mcpAccess.browser;
+    const toml = (value) => JSON.stringify(value);
+    response.set("Cache-Control", "no-store").json({
+      url: mcpAccess.url, browser: Boolean(browser),
+      codex: [`[mcp_servers.conduit-ui]`, `url = ${toml(mcpAccess.url)}`, `http_headers = { "Authorization" = ${toml(`Bearer ${mcpAccess.token}`)} }`, "",
+        ...(browser ? [`[mcp_servers.agent-browser]`, `command = ${toml(browser.command)}`, `args = ${toml(browser.args)}`,
+          `env = { ${Object.entries(browser.env).map(([key, value]) => `${key} = ${toml(value)}`).join(", ")} }`, ""] : [])].join("\n"),
+    });
+  });
   return { beforeAuth, afterAuth };
 }

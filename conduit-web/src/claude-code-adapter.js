@@ -503,7 +503,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
       thinking: { type: "adaptive", display: "summarized" },
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
       // Conduit's own tools (mcp-endpoint.js: its panes, the hub's browser) when it runs on the hub, which reaches them.
-      ...(mcpAccess.url && !this.processes(record).sdkSpawn ? { mcpServers: { conduit: { type: "http", url: mcpAccess.url, headers: { Authorization: `Bearer ${mcpAccess.token}` } } } } : {}),
+      ...(mcpAccess.url && !this.processes(record).sdkSpawn ? { mcpServers: {
+        "conduit-ui": { type: "http", url: mcpAccess.url, headers: { Authorization: `Bearer ${mcpAccess.token}` } },
+        // The hub's browser: agent-browser's own server, on the page the person shares (browser-host.js).
+        ...(mcpAccess.browser ? { "agent-browser": { type: "stdio", ...mcpAccess.browser } } : {}),
+      } } : {}),
       stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
       // Where the chat runs: the SDK spawns its own process here, a device runs its own install.
       ...(() => {

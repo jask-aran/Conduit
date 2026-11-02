@@ -547,7 +547,7 @@ app.get("/client-bundle/:build.zip", async (request, response, next) => {
 // Conduit as an MCP server (mcp-endpoint.js): the hub's token lets a harness in ahead of the sign-in check; a signed-in
 // caller reaches the same endpoint below. Its tools find the UI and the browser on `mcpRuntime`, filled in once made.
 const mcpRuntime = {};
-Object.assign(mcpAccess, { url: `http://127.0.0.1:${config.port}/v0/mcp`, token: mcpToken(config.dataRoot) });
+Object.assign(mcpAccess, { url: `http://127.0.0.1:${config.port}/v0/mcp/ui`, token: mcpToken(config.dataRoot) });
 const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
 app.use(mcp.beforeAuth);
 
@@ -631,7 +631,7 @@ const uiControl = new UiControl({ runtimeHub });
 mcpRuntime.uiControl = uiControl;
 // The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
 const browserHost = lifetime.own("hub browser", new BrowserHost(), (owned) => owned.close());
-mcpRuntime.browserHost = browserHost;
+mcpAccess.browser = browserHost.mcpServer();
 registerBrowserRoutes(app, { browserHost });
 registerRuntimeRoutes(app, {
   uiControl,
@@ -737,7 +737,11 @@ await push.load();
 // The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
 // clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
-if (durableAdapter) { durableAdapter.runtime.uiControl = uiControl; durableAdapter.runtime.browserHost = browserHost; }
+if (durableAdapter) {
+  durableAdapter.runtime.uiControl = uiControl;
+  durableAdapter.runtime.browserHost = browserHost;
+  void durableAdapter.runtime.loadBrowserTools();
+}
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
 registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {
@@ -1160,6 +1164,6 @@ front.listen(config.port, config.host, () => {
   // an address nothing listens on is worse than no advertisement at all.
   lanAdvertisement.start(front.address().port);
   // The port it really listens on, for the harnesses given the MCP endpoint.
-  mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp`;
+  mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp/ui`;
   void warmModelCatalogue();
 });

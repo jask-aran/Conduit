@@ -78,19 +78,19 @@ export function ToolsSettings() {
  * the entry, never shown.
  */
 function McpAccess() {
-  const [access, setAccess] = createSignal<{ url: string; codex: string } | null>(null);
+  const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
   const [copied, setCopied] = createSignal("");
-  onMount(() => void api<{ url: string; codex: string }>("/v0/mcp/access").then(setAccess).catch(() => {}));
+  onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/ui/access").then(setAccess).catch(() => {}));
   const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
     .catch(() => setCopied("Copying was not allowed here"));
   return <Show when={access()}>{(found) => <SettingGroup title="Other harnesses">
-    <SettingLine plain label="MCP endpoint" title="Conduit's ui and browser tools over MCP (Streamable HTTP). A signed-in session or the hub's token may call it.">
+    <SettingLine plain label="conduit-ui" mono title="Conduit's ui tool over MCP (Streamable HTTP): what the person has open, and opening, closing and focusing panes. A signed-in session or the hub's token may call it.">
       <SettingValue mono>{found().url}</SettingValue>
     </SettingLine>
-    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="An [mcp_servers.conduit] entry with the hub's token as its Authorization header.">
+    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="[mcp_servers.conduit-ui] with the hub's token as its Authorization header, and [mcp_servers.agent-browser] on the shared page.">
       <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
     </SettingLine>
     <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
-    <SettingNote>Claude Code chats Conduit starts on the hub have these tools already, as mcp__conduit__ui and mcp__conduit__browser.</SettingNote>
+    <SettingNote>The hub's browser is agent-browser's own MCP server on the page you share{found().browser ? "" : " (not installed on this hub)"}. Claude Code chats Conduit starts on the hub have both already.</SettingNote>
   </SettingGroup>}</Show>;
 }
