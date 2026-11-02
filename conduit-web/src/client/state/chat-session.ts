@@ -78,6 +78,9 @@ export function createChatSession(options: {
   const switchProfile = async (id: string) => {
     const chatId = chat.loadedId();
     if (!chatId) return;
+    // Chosen for a new chat, it is the place's from now on (a project, a workspace, Chat itself): the next new chat
+    // there opens with it.
+    const remember = chat.status() === "draft";
     const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
       method: "PATCH",
       body: JSON.stringify({ profileId: id }),
@@ -88,6 +91,7 @@ export function createChatSession(options: {
     // it. Re-enter the normal selection lifecycle instead of maintaining a
     // second, incomplete list of stores to refresh here.
     options.catalogue.patchChat(chatId, payload);
+    if (remember && project.defaultTemplateId !== id) void options.saveWorkspaceDefault(project.id, id).catch(() => {});
     await chat.initialize(payload, project, undefined, { warm: true });
   };
   return {
