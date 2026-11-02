@@ -69,6 +69,7 @@ import { createChatHost } from "./agent/chat-host.js";
 import { startEvents } from "./agent/events.js";
 import { seedSchedules } from "./agent/schedule.js";
 import { agentNotifier } from "./agent/notify.js";
+import { MessageLog, mirrorHomeThread } from "./agent/messages.js";
 import { PushService } from "./push/push-service.js";
 import { registerPushRoutes } from "./server/routes/push.js";
 import { createHostUi } from "./server/host-ui.js";
@@ -720,6 +721,11 @@ if (persistentAgent) {
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
   durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
+  // What jbot and the person say to each other, apart from its thread (agent/messages.js); it outlives a reset.
+  const messageLog = await new MessageLog(path.join(config.dataRoot, "agent", "messages.jsonl")).load();
+  durableAdapter.runtime.messageLog = messageLog;
+  void mirrorHomeThread(persistentAgent, messageLog).then((unsubscribe) => lifetime.own("jbot message log", { stop: unsubscribe }, (owned) => owned.stop()))
+    .catch((error) => console.error("[agent] message log mirror did not start", error));
   registerAgentRoutes(app, { agent: persistentAgent, backends });
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());

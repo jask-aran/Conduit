@@ -30,6 +30,7 @@
     "nothing_to_report",
     "run_failed",
     "notify",
+    "message",
     "routine"
   ],
   "models": [

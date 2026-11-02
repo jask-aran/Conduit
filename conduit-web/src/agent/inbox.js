@@ -171,6 +171,9 @@ export function InboxTools(runtime) {
     execute: async ({ title, text, urgent }, api, context) => {
       if (await runOnly(api)) return result("A run does not notify: report, and jbot decides.", true);
       const key = await api.memo("notify", `note-${api.conversationId}-${Date.now()}`, context);
+      // What it notifies of is what it just said: the message log records that it reached their phone.
+      const said = runtime.messageLog?.latestOut(api.conversationId);
+      if (said && said.notify === "none") runtime.messageLog.update(said.id, () => ({ notify: urgent ? "urgent" : "push" }));
       runtime.agentNotify?.({ kind: "report", conversationId: api.conversationId, title, text, level: urgent ? "urgent" : "attention", key });
       // The report is written before it; another model call after it only ever produced an empty message.
       return { ...result("Sent to their devices."), control: { terminate: true } };

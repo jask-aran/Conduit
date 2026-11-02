@@ -31,6 +31,7 @@ import { backgroundSubagents } from "../subagents.js";
  * GET  /v0/agent/routines            its routine files (routines/*.md) with their cursors and last firing
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
+ * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -130,6 +131,12 @@ export function registerAgentRoutes(app, { agent, backends }) {
       await agent.connectors.disconnect(request.params.id);
       response.status(204).end();
     } catch (error) { next(error); }
+  });
+
+  app.get("/v0/agent/messages", (request, response) => {
+    const log = agent.runtime.messageLog;
+    const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
+    response.json({ messages: log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [] });
   });
 
   app.get("/v0/agent", async (request, response, next) => {

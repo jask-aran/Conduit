@@ -9,6 +9,7 @@ import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
+import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
@@ -60,12 +61,13 @@ export const DURABLE_CAPABILITIES = Object.freeze({
 const TOOL_KINDS = {
   bash: "command", read: "read", write: "edit", edit: "edit", ask_user: "other",
   web_search: "search", source_check: "search", fetch_content: "fetch", get_search_content: "fetch",
-  codemode: "script", subagent: "agent", notify: "message",
+  codemode: "script", subagent: "agent", notify: "message", message: "message",
 };
 const subjectOf = (name, args = {}) => toolSubject(
   name === "subagent" ? (args.action === "list" ? "Background agents" : args.id || subagentTitle(args.task))
     : name === "codemode" ? null
     : name === "notify" ? args.title
+    : name === "message" ? args.title || headlineOf(args.text, 80)
     : name === "get_search_content" ? "saved search results"
     : name.startsWith("mcp__") ? connectorSubject(name, args)
     : name === "bash" ? args.command
