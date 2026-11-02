@@ -30,3 +30,6 @@ working-files/.venv/
 .hero-tools/
 .smoke-tools/
 .worktrees/
+
+# Private design references (third-party UI captures and code pointers; not ours to publish)
+/references/
