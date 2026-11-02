@@ -4,5 +4,7 @@
   "name": "jbot-mail",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
-  "r2_buckets": [{ "binding": "MAIL", "bucket_name": "jbot-mail" }]
+  "r2_buckets": [{ "binding": "MAIL", "bucket_name": "jbot-mail" }],
+  // The hub to wake when mail lands (its public address); without it the hub collects on its own each minute.
+  "vars": { "HUB_URL": "https://localconduit.jask-aran.com" }
 }

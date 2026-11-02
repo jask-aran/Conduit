@@ -96,6 +96,8 @@ export function isAllowlistedPath(method, pathname) {
   if (method === "GET" && /^\/v0\/agent\/connectors\/[A-Za-z0-9_-]+\/callback$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/agent\/hooks\/[A-Za-z0-9_-]{43,}$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/push\/answer\/[A-Za-z0-9_-]{43}$/.test(pathname)) return true;
+  // jbot's mailbox Worker saying mail has landed: it carries the mailbox's shared secret, and says nothing but "collect".
+  if (method === "POST" && pathname === "/v0/agent/email/wake") return true;
   if (method !== "GET") return method === "POST" && ["/v0/auth/login", "/v0/auth/native-login", "/v0/auth/native-pair", "/v0/server/prove"].includes(pathname);
   if (pathname === "/v0/auth/handoff") return true;
   if (UNAUTHENTICATED_EXACT.has(pathname)) return true;

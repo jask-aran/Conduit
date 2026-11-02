@@ -52,6 +52,12 @@ export class EmailChannel {
     return this;
   }
 
+  /** Whether a bearer header carries the mailbox's shared secret (compared in constant time). */
+  authorizes(header) {
+    const given = Buffer.from(String(header || "")), wanted = Buffer.from(`Bearer ${this.config?.secret || ""}`);
+    return Boolean(this.config?.secret) && given.length === wanted.length && crypto.timingSafeEqual(given, wanted);
+  }
+
   get ready() { return Boolean(this.config?.address && this.config?.worker && this.config?.secret); }
   /** Whether jbot sends mail at all (`send: true`); off, an email is answered in the app. */
   get sends() { return this.ready && this.config?.send === true; }

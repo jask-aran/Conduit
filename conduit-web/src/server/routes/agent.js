@@ -150,6 +150,15 @@ export function registerAgentRoutes(app, { agent, backends }) {
     } catch (error) { next(error); }
   });
 
+  // jbot's mailbox has mail (workers/jbot-mail): collect it now rather than at the next minute. The Worker proves itself
+  // with the shared secret; the call carries no mail, so a wrong or replayed one costs a poll at most.
+  app.post("/v0/agent/email/wake", (request, response) => {
+    const email = agent.runtime.messageLog?.channels.email;
+    if (!email?.ready || !email.authorizes(request.headers.authorization)) return response.status(404).json({ error: "not_found" });
+    void email.poll().catch((error) => console.error("[agent] email collection failed", error?.message || error));
+    response.status(202).json({ collecting: true });
+  });
+
   app.get("/v0/agent/messages", (request, response) => {
     const log = agent.runtime.messageLog;
     const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));

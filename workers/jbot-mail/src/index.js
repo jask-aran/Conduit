@@ -13,6 +13,8 @@ export default {
     const raw = await new Response(message.raw).arrayBuffer();
     const key = `inbox/${new Date().toISOString()}-${crypto.randomUUID()}.eml`;
     await env.MAIL.put(key, raw, { customMetadata: { from: message.from, to: message.to } });
+    // Tell the hub, if it can be reached, to collect now; if not, its minute's poll will.
+    if (env.HUB_URL) await fetch(`${env.HUB_URL}/v0/agent/email/wake`, { method: "POST", headers: { authorization: `Bearer ${env.HUB_SECRET}` } }).catch(() => {});
   },
 
   async fetch(request, env) {
