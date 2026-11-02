@@ -1,9 +1,11 @@
 /*
  * jbot's mailbox. Email Routing hands each message for jbot@ to `email`, which keeps it whole in R2 (inbox/<time>-<id>.eml)
  * until the hub collects it: the hub may be asleep or on another network, so nothing is pushed to it. The hub, holding
- * the shared secret (HUB_SECRET), lists, reads and deletes what waits. Receiving only: it sends nothing, and mail over
- * MAX_BYTES is refused at the door, so the bucket never holds much.
+ * the shared secret (HUB_SECRET), lists, reads and deletes what waits, and hands it mail to send (POST /send). Sending
+ * goes through the send_email binding, which reaches only the account's verified destination addresses (free); mail
+ * over MAX_BYTES is refused at the door, so the bucket never holds much.
  */
+import { EmailMessage } from "cloudflare:email";
 const MAX_BYTES = 10 * 1024 * 1024;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -30,6 +32,16 @@ export default {
     if (request.method === "GET" && key) {
       const object = await env.MAIL.get(key);
       return object ? new Response(object.body, { headers: { "content-type": "message/rfc822" } }) : json({ error: "not_found" }, 404);
+    }
+    // POST /send {from, to: [...], raw}: one message per recipient; the binding refuses an unverified one.
+    if (request.method === "POST" && url.pathname === "/send") {
+      const { from, to = [], raw } = await request.json();
+      const sent = [], failed = [];
+      for (const address of to) {
+        try { await env.SEND.send(new EmailMessage(from, address, raw)); sent.push(address); }
+        catch (error) { failed.push({ address, error: String(error?.message || error) }); }
+      }
+      return json({ sent, failed });
     }
     // DELETE /mail/<key>: collected.
     if (request.method === "DELETE" && key) { await env.MAIL.delete(key); return json({ deleted: key }); }

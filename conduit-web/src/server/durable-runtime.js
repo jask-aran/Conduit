@@ -3,6 +3,7 @@ import { SCRIPTED_MODELS, scriptedProvider } from "./scripted-model.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prefixWatch } from "./prefix-watch.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
@@ -13,7 +14,7 @@ import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
-import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
+import { createRegistry, defineDoc, defineExtension, defineTool, Harness, ProviderDoc, section } from "@earendil-works/pi-durable";
 import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools, createCodingTools } from "@earendil-works/pi-durable/tools";
@@ -139,11 +140,13 @@ export const USER_ENTRY = "conduit.user";
  * turn never writes near this many; a model whose own limit is lower keeps it.
  */
 const OUTPUT_CAP = 64_000;
-const cappedOutput = (models) => new Proxy(models, {
+const cappedOutput = (models, onPayload) => new Proxy(models, {
   get(target, key) {
     if (key !== "streamSimple") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
     return (model, context, options = {}) => target.streamSimple(model, context,
-      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP) });
+      { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP),
+        // Options pass through the task checkpoint, which keeps no functions: the payload hook is added here.
+        ...(onPayload && !options.onPayload ? { onPayload } : {}) });
   },
 });
 
@@ -218,6 +221,24 @@ export class DurableRuntime {
   notify(conversationId, notice) { this.notices?.get(conversationId)?.(notice); }
 
   /** A prompt a Pi extension sends its conversation (`sendUserMessage`), after what it is doing. */
+  /**
+   * Warm the provider's prompt cache for a conversation about to be woken (a run that will report to it has started):
+   * its last request sent again for a handful of output tokens, so the wake reads its prefix from cache instead of
+   * paying for it while the person waits. Skipped when it ran in the last 5 minutes (still warm) or has never run.
+   */
+  async warmCache(conversationId) {
+    try {
+      const provider = await this.harness.snapshot(ProviderDoc, conversationId);
+      const saved = provider && this.prefixWatch.last(provider.sessionId);
+      if (!saved || Date.now() - saved.at < 5 * 60_000) return false;
+      saved.at = Date.now();
+      const events = this.models.streamSimple(saved.model, { messages: [] }, { sessionId: provider.sessionId, cacheRetention: "long",
+        onPayload: () => this.prefixWatch({ ...saved.params, __warm: true, max_output_tokens: 16 }, saved.model) });
+      for await (const event of events) if (event?.type === "error") console.warn("[cache] warm failed", event.error?.errorMessage || "");
+      return true;
+    } catch (error) { console.warn("[cache] warm failed", error?.message || error); return false; }
+  }
+
   async say(conversationId, content, whenBusy, context) {
     const conversation = await this.harness.conversation(conversationId, context);
     const messageId = randomUUID();
@@ -268,7 +289,12 @@ export class DurableRuntime {
         instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with ui, view browser:hub)",
         instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] }));
       this.refreshConnectors = () => {
-        const tools = this.agent?.connectors.tools() || [];
+        // In name order, and only when something about them changed: a reconnect that lists the same tools in another
+        // order, or the same tools again, would otherwise re-declare them and break every thread's prompt cache (pi#11529).
+        const tools = [...(this.agent?.connectors.tools() || [])].sort((a, b) => a.name.localeCompare(b.name));
+        const shape = JSON.stringify(tools.map((tool) => [tool.name, tool.description, tool.parameters]));
+        if (shape === this.connectorShape) return;
+        this.connectorShape = shape;
         // A connector's tools ask before they write, and `approved` runs what was allowed, in whichever chat selects them.
         install(defineExtension({ name: "connectors", tools: [...tools, ApprovedTool(this)], wraps: connectorWraps(this, tools) }));
         install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
@@ -279,8 +305,9 @@ export class DurableRuntime {
       void this.loadBrowserTools();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
+      this.prefixWatch = prefixWatch(path.join(this.dataRoot, "runtime", "prefix-watch.jsonl"));
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: cappedOutput(this.models),
+        models: cappedOutput(this.models, (params, model) => this.prefixWatch(params, model)),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
