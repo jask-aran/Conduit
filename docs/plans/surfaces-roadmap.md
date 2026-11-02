@@ -109,7 +109,11 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   `POST /v0/chats/:id/prompt` instead (`client/state/active-chat.ts`, `routes/live-sessions.js`,
   `live-session-stream.js` `promptChat`), waiting for the browser's own launch; and the empty-draft delete no longer
   stops the processes of a chat that is not a draft (`routes/chats.js`).
-- [ ] 5. Pane corners and a sideways shift after closing a chat back to the empty pane. Parked.
+- [x] 5. Pane corners and a sideways shift after closing a chat back to the empty pane. Parked. Measured in a headless
+  browser: the corners hold; the shift was the split jumping in one frame (two panes at 1280px: 528/400 to 464/464), a
+  chat pane's 528px minimum ending as it emptied. Decided: ease to equal shares. `closeDocument` (`client/main.tsx`)
+  holds the panes at their shares while the document goes, then eases them to the row's own (`easePaneWeights`): a
+  glide of about 240ms, frame by frame.
 - [ ] 6. The body of commit `9ed79305`'s message names the studied product. Reword before pushing `main`, with the
   other session idle.
 

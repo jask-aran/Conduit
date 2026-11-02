@@ -4334,7 +4334,13 @@ function App() {
     : <PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} /></PaneTabs>;
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
+    // A chat's pane is wider than an empty one may be: held at the shares it has now, then eased to the row's own, so
+    // the room it gives back glides to the panes beside rather than jumping in one frame.
+    const held = splitShown() && animatePanes() ? paneShares() : null;
+    if (held) setWeightOverride(held);
     if (await setPaneView(pane, "home")) focusAnyPane(pane);
+    if (!held) return;
+    requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(panesShown().length)), () => setWeightOverride(null)));
   };
   // An empty pane beside the one with the keyboard, its Home offering what to open there.
   const openEmptyPane = () => {
