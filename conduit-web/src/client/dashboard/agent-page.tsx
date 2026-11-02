@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
+import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -276,7 +276,7 @@ export function AgentPage(props: {
     <Show when={view()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <SplitDashboard page="Agent" label={`${name()}'s page`}
-          header={<SplitHeader title={name()} kind="Agent" glyph={<Icons.Agent />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
+          header={<SplitHeader title={name()} kind="Agent" glyph={<AgentAvatar />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },

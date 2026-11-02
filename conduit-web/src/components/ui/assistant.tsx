@@ -75,6 +75,11 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
   </div>;
 }
 
+/** jbot's picture: the Conduit app icon (the same asset the app installs with) until jbot has a look of its own. Sized by
+ *  its place, like an icon (1em square, rounded as the icon is). */
+export const AgentAvatar = (props: { class?: string; label?: string }) =>
+  <img class={`ui-agent-avatar${props.class ? ` ${props.class}` : ""}`} src="/pwa-192x192.png" alt={props.label || ""} aria-hidden={props.label ? undefined : "true"} draggable={false} />;
+
 export type ClockKind = "heartbeat" | "brief" | "feed" | "checkback" | "schedule";
 const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
   heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, feed: () => <Icons.Feed />, checkback: () => <Icons.Clock />, schedule: () => <Icons.Runtime />,

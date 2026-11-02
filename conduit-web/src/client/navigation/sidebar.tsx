@@ -1,6 +1,6 @@
 import { reducedMotion } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
-import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
+import { AgentAvatar, HarnessMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
@@ -1135,7 +1135,7 @@ export function Sidebar(props: {
         </Show>
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
-          <Show when={agentView()?.enabled}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><Icons.Agent /></RailAction></Show>
+          <Show when={agentView()?.enabled}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><AgentAvatar /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={railFolders().length}>
             <NavRailSection>
@@ -1188,7 +1188,7 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "conduit"}>
         <NavRow icon={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
-        <Show when={agentView()?.enabled}><NavRow icon={<Icons.Agent />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</NavRow></Show>
+        <Show when={agentView()?.enabled}><NavRow icon={<AgentAvatar />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</NavRow></Show>
         <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</NavRow>
         <Show when={pinnedItems().length}>
           <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>

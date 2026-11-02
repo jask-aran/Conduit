@@ -71,3 +71,6 @@
 .ui-room-fold { width: var(--icon-sm); height: var(--icon-sm); flex: none; transition: rotate var(--duration-quick) var(--ease-change); }
 .ui-room[data-open] .ui-room-fold { rotate: 180deg; }
 .ui-room-body { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-sm) 0 var(--space-xs) calc(var(--icon-sm) + var(--space-sm)); }
+
+/* jbot's picture, in an icon's place: its box, the app icon's own rounding. */
+.ui-agent-avatar { display: block; width: 1em; height: 1em; flex: none; object-fit: contain; }
