@@ -378,16 +378,20 @@ export function Subagents(runtime) {
       + "Use background:true only when the work should outlive your turn; it returns an id immediately and reports the answer "
       + "back to you while you can go idle; parent Esc leaves it running. Children cannot delegate or ask the user. "
       + "Manage your background children with action:list, message (id, task, mode:steer or followUp), wait (id), or stop (id). "
-      + "Message sends new work and returns immediately; wait returns the latest delivery. stop ends the child and its reporters.",
+      + "Message sends new work and returns immediately; wait returns the latest delivery. stop ends the child and its reporters. "
+      + "Give each spawn a short name (2-4 words, such as Ryokan research) so the person can tell your agents apart.",
     parameters: Type.Object({
       task: Type.Optional(Type.String({ description: "The whole task or message: goal, context, constraints, and what to report back." })),
+      name: Type.Optional(Type.String({ description: "On spawn: what the person sees this agent called, 2-4 words." })),
       background: Type.Optional(Type.Boolean()),
       action: Type.Optional(Type.Union(["spawn", "list", "message", "wait", "stop"].map((value) => Type.Literal(value)))),
       id: Type.Optional(Type.String({ description: "This conversation's background subagent id, such as bg-3." })),
       mode: Type.Optional(Type.Union([Type.Literal("steer"), Type.Literal("followUp")])),
     }),
     replay: "safe",
-    execute: async ({ task, background = false, action = "spawn", id, mode = "followUp" }, api, context) => {
+    execute: async ({ task, name, background = false, action = "spawn", id, mode = "followUp" }, api, context) => {
+      // Its name: the one the model gave it, else the task's first words.
+      const titled = () => typeof name === "string" && name.trim() ? name.trim().slice(0, 60) : subagentTitle(task);
       if (action === "list") {
         const roster = await api.snapshot(SubagentRoster, api.conversationId, context);
         return textResult(Object.entries(roster?.children || {}).map(([key, item]) => `${key}: ${item.status}: ${item.title}`).join("\n") || "No background subagents.");
@@ -419,7 +423,7 @@ export function Subagents(runtime) {
           roster.foreground[created.id] = agentId;
           return { child: created.id, agentId };
         }, context);
-        const title = subagentTitle(task);
+        const title = titled();
         const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
         await api.details({ conversationId: child, subagentId: agentId, title, startedAt }, context);
         const noteNested = async (fields) => {
@@ -457,7 +461,7 @@ export function Subagents(runtime) {
           const existing = Object.values(roster.children).find((value) => value.spawn === api.taskId);
           if (existing) return JSON.parse(JSON.stringify(existing));
           id = `bg-${roster.next++}`;
-          const title = subagentTitle(task);
+          const title = titled();
           const sinceEntry = (await tx.scanEntries({ conversationId: api.conversationId }, 1)).items[0]?.id || 0;
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
           const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
