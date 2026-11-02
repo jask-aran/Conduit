@@ -126,7 +126,6 @@ export const Readout = (props: { label: JSX.Element; value?: JSX.Element }) => <
 /** A rule between groups of a menu's rows, where it has no sections. */
 export const Rule = () => <hr class="ui-rule" />;
 /** A row's meta: muted, after its label (a value, a latency). */
-export const Meta = (props: { children: JSX.Element }) => <span class="ui-meta">{props.children}</span>;
 
 /** A behavior engine can supply focus, selection and keyboard attributes. */
 export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-row ui-menu-action" />;

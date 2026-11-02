@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { SearchList } from "@/components/menus";
 import { Show } from "solid-js";
 import { createSignal, For } from "solid-js";
-import { Match, Meta, MenuNote, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
+import { Match, MenuNote, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
 import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, SearchSection, Section, Slider } from "@/components/ui";
 import { PlaceGlyph } from "../../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "../seed";
@@ -77,8 +77,8 @@ import { Icons } from "@/components/ui";
     row("Notices", "Neutral hint and an error in their menu", () => <Menu><MenuNote>No active terminals in Japan.</MenuNote><MenuNote error>Could not connect to Desktop-Dev.</MenuNote></Menu>, { surfaces: ["ground"], phone: true, code: "<MenuNote /> · <MenuNote error />" }),
     row("Action shell", "Adapter content with a separate metadata slot", () => {
           const [copied, setCopied] = createSignal(false);
-          return <Menu><MenuAction role="menuitem" tabIndex={0} onClick={() => setCopied(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setCopied(true); } }}>{copied() ? "Link copied" : "Copy workspace link"}<Meta>Japan</Meta></MenuAction></Menu>;
-        }, { surfaces: ["ground"], phone: true, code: '<MenuAction role="menuitem"><Meta /></MenuAction>' }),
+          return <Menu><MenuAction role="menuitem" tabIndex={0} onClick={() => setCopied(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setCopied(true); } }}>{copied() ? "Link copied" : "Copy workspace link"}<small>Japan</small></MenuAction></Menu>;
+        }, { surfaces: ["ground"], phone: true, code: '<MenuAction role="menuitem"><small /></MenuAction>' }),
     row("Panel and parent", "Dimmed parent while the submenu is open", () => {
           const [open, setOpen] = createSignal(false);
           return <><Button variant="ghost" outline size="sm" onClick={() => setOpen(!open())}>{open() ? "Back to servers" : "Open routes"}</Button><MenuParent under={open()}><Menu><Section><Item opens onClick={() => setOpen(true)}>Route</Item></Section></Menu></MenuParent><Show when={open()}><MenuPanel width="sm" height="sm"><Section><Item checked>Automatic</Item><Item checked={false} onClick={() => setOpen(false)}>Local network</Item></Section></MenuPanel></Show></>;

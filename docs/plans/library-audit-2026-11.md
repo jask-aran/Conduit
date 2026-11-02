@@ -14,7 +14,7 @@ named with its file, how many app files use it, and what it would become. The sh
 |---|---|
 | Component exports (not counting icons) | 407, in 57 files |
 | Used by exactly one app file | 268 |
-| Used by no app file | 36 (13 of them only inside the library) |
+| Used by no app file | 8 (an early count of 36 missed components passed as `as={…}` or renamed on import) |
 | Not drawn on any gallery page | 14 |
 | Library CSS | 3,810 lines in `styles/` |
 | Font sizes, radii, spacing written as literals | none: all `var(--…)` |
@@ -64,11 +64,11 @@ Together: about 130 components become about 20 building blocks plus thin composi
 
 ## Unused
 
-No app file uses these. Remove them, or wire them where they were meant to go:
-
-InboxRow, BrowserGrid, BrowserEntry, BrowserPlace, BrowserMachine, Picker, ServerControl, SelectTrigger, FileView,
-FileMore, NavLine, ClientFact, ClientAdd, ChainHead, Scrim, PillGroup, RowAction, Meta, MenuAction, MenuPanel,
-CommitRow, TraceError, Disclosure.
+Removed 2026-11-02 (Fittings step 1): Meta, Disclosure, InboxRow, NavLine, ChainHead, PillGroup, ClientFact and
+ClientAdd, the components nothing referenced but the gallery. The first count (23) looked only for `<Name` in JSX
+and missed components used another way: passed to Kobalte as `as={MenuAction}`, imported under another name
+(`TraceError as LibraryTraceError`), or rendered by name in a dashboard (BrowserGrid, BrowserEntry, CommitRow,
+FileView, Picker, ServerControl, SelectTrigger, Scrim, RowAction, MenuPanel). Those stay.
 
 Used only inside the library (fine, but not public): Field, SliderValue, Swatch, Counts, SearchBar, SearchField,
 SearchActions, Frost, OverlayHead, Aura, Menu, TraceHeader, Bubble.

@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
-import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, PillGroup, Section, Toolbar } from "@/components/ui";
+import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, NavRow, Overlay, OverlayBar, PillButton, PillField, Section, Toolbar } from "@/components/ui";
 import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
@@ -144,14 +144,13 @@ const ICON_MARKS: Part[] = [
   { selector: ".ui-row[data-checked] .ui-icon svg", name: "a current row's", does: "the heavier stroke", from: icon },
   { selector: ".ui-nav-row svg", name: "the sidebar's icon", does: "sized with its row", from: icon },
   { selector: ".ui-toolbar svg", name: "the composer toolbar's icon", does: "sized with its controls", from: icon },
-  { selector: ".ui-pill:not([data-solo]) svg", name: "a pill group's", does: "--pill-icon, a touch larger", from: icon },
-  { selector: ".ui-pill[data-solo] svg", name: "a lone pill's", does: "the same", from: icon },
+  { selector: ".ui-pill[data-solo] svg", name: "a pill's", does: "--pill-icon, a touch larger", from: icon },
 ];
 const iconScene = () => <div class="g-scene-stack">
   <Menu><Section><Item icon={<PaperclipIcon />}>At rest</Item><Item icon={<MonitorIcon />} checked>Current</Item></Section></Menu>
   <div class="g-ground"><NavRow icon={<SettingsIcon />}>Sidebar</NavRow></div>
   <Frost class="g-entry"><Toolbar start={<Button variant="ghost" size="icon-sm" aria-label="Attach"><PlusIcon /></Button>} end={<><Button variant="ghost" size="icon-sm" aria-label="Voice"><MicIcon /></Button><Button variant="ghost" size="icon-sm" aria-label="Send"><ArrowUpIcon /></Button></>} /></Frost>
-  <div class="g-scene-row"><PillGroup actions={[{ label: "Attach", icon: <PlusIcon /> }, { label: "Camera", icon: <CameraIcon /> }]} /><PillButton label="Voice" icon={<MicIcon />} /></div>
+  <div class="g-scene-row"><PillButton label="Attach" icon={<PlusIcon />} /><PillButton label="Camera" icon={<CameraIcon />} /><PillButton label="Voice" icon={<MicIcon />} /></div>
 </div>;
 
 const swatch = (name: string) => () => <i class="g-swatch-chip" style={{ background: `var(${name})` }} />;

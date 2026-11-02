@@ -1,12 +1,11 @@
 import * as Icons from "./icons";
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { Button } from "./controls";
 import { DashRow } from "./dashboard";
 import { Expand } from "./expand";
 
 /*
- * Assistant: the pieces of an agent that keeps going on its own (docs/plans/persistent-agent.md): what its runs
- * reported (InboxRow, under a LevelMark), what runs it on a clock (ClockRow) and its day (DayStrip: quiet hours,
+ * Assistant: the pieces of an agent that keeps going on its own (docs/plans/persistent-agent.md): how a report
+ * reads (LevelMark), what runs it on a clock (ClockRow) and its day (DayStrip: quiet hours,
  * the brief, the heartbeat's ticks, now). Rows are the dashboard's, so they sit in a page's groups and take its
  * cursor; the heartbeat's quiet line in its thread is a HarnessPrompt with Icons.Heartbeat.
  */
@@ -22,25 +21,6 @@ export const LevelMark = (props: { level: string; handled?: boolean }) =>
     <Show when={props.handled} fallback={<i />}><Icons.Check /></Show>
   </span>;
 
-/**
- * What a run reported: its mark, its headline, where it came from (the run or the feed) and when, on one line; it
- * opens in place (open, onToggle) to the whole report, what became of it (outcome, or that it waits) and Open run.
- */
-export function InboxRow(props: { level: string; headline: string; source: string; time?: string; handled?: boolean; outcome?: string; body?: string; open?: boolean; onToggle?: () => void; onOpenRun?: () => void }) {
-  return <div class="ui-inbox-entry" data-open={props.open ? "" : undefined} data-handled={props.handled ? "" : undefined}>
-    <DashRow element="button" type="button" aria-expanded={props.open ? "true" : "false"} onClick={() => props.onToggle?.()}
-      lead={<LevelMark level={props.level} handled={props.handled} />} primary={props.headline} context={props.source} trailing={props.time} />
-    <Expand open={Boolean(props.open)}>
-      <div class="ui-inbox-report">
-        <Show when={props.body && props.body !== props.headline}><p class="ui-inbox-body">{props.body}</p></Show>
-        <div class="ui-inbox-foot">
-          <span class="ui-inbox-outcome">{props.handled ? `Handled${props.outcome ? ` · ${props.outcome}` : ""}` : "Waiting for the heartbeat"}</span>
-          <Show when={props.onOpenRun}><Button variant="ghost" size="sm" onClick={() => props.onOpenRun?.()}>Open run <Icons.ChevronRight /></Button></Show>
-        </div>
-      </div>
-    </Expand>
-  </div>;
-}
 
 /**
  * A report jbot sent (a message with a title, docs/plans/persistent-agent.md › The message log): one card in its

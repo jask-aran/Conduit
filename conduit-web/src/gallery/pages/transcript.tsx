@@ -1,6 +1,5 @@
 import { Icons } from "@/components/ui";
-import { createSignal } from "solid-js";
-import { Welcome, ANSWER_MARKDOWN, Disclosure, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, ConduitAdded, Inbound, Outbound, Changes, LoadingEarlier, TraceHeader, Trail, Step, StepDiff, Answer, CodeBlock, MessageFoot, StopLine, Orb, Button, Read } from "@/components/ui";
+import { Welcome, ANSWER_MARKDOWN, Transcript, TranscriptRow, Message, Turn, Failure, HarnessPrompt, ConduitAdded, Inbound, Outbound, Changes, LoadingEarlier, TraceHeader, Trail, Step, StepDiff, Answer, CodeBlock, MessageFoot, StopLine, Orb, Button, Read } from "@/components/ui";
 import { px, fg, Replay } from "../specs";
 import katex from "katex";
 import { orb, typeOf } from "../demos";
@@ -35,10 +34,6 @@ export const narratedScene = () => <Transcript>{ask()}
   <TranscriptRow flow="turn"><Message time="14:26">and where is it made?</Message></TranscriptRow>
 </Transcript>;
 
-export function DisclosureDemo() {
-  const [open, setOpen] = createSignal(true);
-  return <Disclosure header={<span>The second paragraph has four sentences</span>} open={open()} onToggle={() => setOpen(!open())}><Answer html={"<p>Keep the first two; they carry the point.</p>"} /></Disclosure>;
-}
 export const conversation = () => <Transcript>
   <Message time="22:14" actions={<Button variant="ghost" size="icon-xs" aria-label="Edit"><Icons.Edit /></Button>}>write a .txt file in this folder that contains lorem ipsum text</Message>
   <Turn><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit" latest="Edited lorem_ipsum.txt" opens /><Answer html={"<p>Created <code>lorem_ipsum.txt</code> in this folder with lorem ipsum text.</p>"} /><MessageFoot time="22:16">{copyRetry()}</MessageFoot></Turn>
@@ -83,7 +78,6 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     row("done", "settled; the orb turns slowly", () => <Read class="g-read"><TraceHeader orb={orb(true)} status="Done" time="2m 00s" work="1 edit · 2 reads" latest="Edited lorem_ipsum.txt" opens /></Read>, { phone: true }),
     row("interrupted", "stopped by the reader; the orb sputters in --destructive", () => <Read class="g-read"><TraceHeader orb={orb(false)} status="Interrupted" time="41s" work="2 commands" opens /></Read>, { phone: true }),
     row("no trail", "no thinking or tools: the first line alone, nothing to open; not a button you can press", () => <Read class="g-read"><TraceHeader orb={orb(true)} status="Done" time="3s" /></Read>, { phone: true, code: "<TraceHeader> without opens" }),
-    row("disclosure", "anything that folds: a header, one turning chevron, a body (the caller animates it); Row role, muted · chevron icon-sm, turns 180°", () => <Read class="g-read"><DisclosureDemo /></Read>, { phone: true, code: "<Disclosure header open onToggle>" }),
     row("steps", "each kind said as itself: a query or a page in prose, a command or a file in mono; the aside (where, how many more) quieter; an edit's lines added and removed; a time only from a second", () => <Read class="g-read"><Trail>
       <Step icon={<Icons.Search />} verb="Searched" face="text" subject={"\u201cYokichi price dinner reservation\u201d"} aside="on shirakawa-go.gr.jp · and 2 more" time="6.3s" />
       <Step icon={<Icons.Fetch />} verb="Fetched" face="text" subject="6 pages" aside="shirakawa-go.gr.jp, gokayama-info.jp +3" time="8.6s" />
@@ -125,7 +119,6 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     row("a step arrives", "rises --space-xs with a fade; --duration-gentle · --ease-arrive", () => <Read class="g-read">{<Replay>{(m) => <Trail><Step icon={<Icons.FileText />} verb="Read" subject="src/main.tsx" time="0.4s" /><Step icon={<Icons.FileText />} verb="Read" subject="src/app.tsx" time="0.2s" motion={m()} /></Trail>}</Replay>}</Read>, { phone: true, code: "<Step motion>" }),
     row("a message lands", "fades in where it lands; --duration-gentle · --ease-arrive", () => <Read class="g-read"><Replay>{(m) => <Message time="22:18" motion={m()}>and make the second paragraph shorter</Message>}</Replay></Read>, { surfaces: ["ground"], phone: true, code: "<Message motion>" }),
     row("the foot", "fades in when the answer is done; --duration-gentle · --ease-arrive", () => <Read class="g-read"><Replay>{(m) => <MessageFoot time="22:19" motion={m()}>{copyRetry()}</MessageFoot>}</Replay></Read>, { phone: true, code: "<MessageFoot motion>" }),
-    row("a disclosure", "unfolds in height; folds away quicker; in: --duration-gentle · --ease-arrive · out: --duration-quick · --ease-leave", () => <Read class="g-read"><DisclosureDemo /></Read>, { phone: true, code: "<Disclosure open onToggle>" })
   ],
   tokens: [{ title: "Rhythm: the room between parts, by how they relate (Space › Flow)", tokens: [
     token("--flow-line", "lines of one block: list items"),
@@ -142,5 +135,5 @@ export const transcriptPage: Page = { title: "Transcript", summary: "What is rea
     token("--icon-sm", "small icons"),
     token("--text-caption", "caption text size")
   ] }],
-  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "ConduitAdded", "Inbound", "Outbound", "Welcome", "Disclosure", "Bubble"],
+  api: ["Transcript", "TranscriptRow", "LoadingEarlier", "Message", "Turn", "Trace", "TraceHeader", "Orb", "Trail", "Step", "Answer", "CodeBlock", "MessageFoot", "Button", "Changes", "StopLine", "Failure", "HarnessPrompt", "ConduitAdded", "Inbound", "Outbound", "Welcome", "Bubble"],
 };

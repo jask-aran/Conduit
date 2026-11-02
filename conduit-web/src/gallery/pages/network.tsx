@@ -1,5 +1,5 @@
 // Props: hub (NetworkHub: name, device, meta), devices (NetworkDevice: id, name, clients of NetworkClient: id, name, headed desktop | phone | browser, meta, online), label.
-import { ChainBreak, ChainGap, ChainHead, ChainLink, ChainMap, Icons, NetworkMap, type NetworkDevice, type NetworkHub } from "@/components/ui";
+import { ChainBreak, ChainGap, ChainLink, ChainMap, NetworkMap, type NetworkDevice, type NetworkHub } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 const hub: NetworkHub = { name: "Desktop-Dev", device: "Desktop", meta: "on Ubuntu" };
@@ -16,8 +16,6 @@ const laptop: NetworkDevice = { id: "laptop", name: "Laptop", clients: [
 
 /* A document's stack under the role it starts (Settings › Prompts). */
 const chain = (run = false) => <ChainMap label="A document">
-  <ChainHead kind={run ? "Run" : "Profile"} name={run ? "Heartbeat" : "Assistant"} meta={run ? "starts each run of it" : "starts each of its chats"} icon={run ? <Icons.Clock /> : <Icons.Profile />} />
-  <ChainGap />
   <ChainLink index={1} name={run ? "Run rules" : "Assistant"} meta={run ? "jbot's file" : "shipped"} size={run ? "640 tok" : "40 tok"} current onSelect={() => {}} />
   <ChainGap />
   <ChainLink index={2} name={run ? "Heartbeat instructions" : "Shared base"} modified meta={run ? "jbot's file" : "shipped"} size={run ? "1.1k tok" : "1.6k tok"} onSelect={() => {}} />
@@ -54,5 +52,5 @@ export const networkPage: Page = {
     token("--measure-xs", "A box's least width"),
     token("--row-min", "A client's line"),
   ] }],
-  api: ["NetworkMap", "ChainMap", "ChainHead", "ChainLink", "ChainGap", "ChainBreak"],
+  api: ["NetworkMap", "ChainMap", "ChainLink", "ChainGap", "ChainBreak"],
 };

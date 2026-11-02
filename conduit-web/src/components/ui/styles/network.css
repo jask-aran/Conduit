@@ -31,17 +31,12 @@
    fit. A card: its head (mark, name in the label's voice, dot), what it says, facts, workspaces, actions at its foot. */
 .ui-client-cards { margin-block: var(--space-xs) var(--space-md); display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--measure-sm), 1fr)); gap: var(--space-sm); }
 .ui-client-card { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-md); font-size: var(--text-caption); }
-.ui-client-card[data-add] { border-style: dashed; }
 .ui-client-head { display: flex; align-items: center; gap: var(--space-sm); }
 .ui-client-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
 .ui-client-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-client-head > h4, .ui-client-card h5 { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: var(--label-case); white-space: nowrap; }
 .ui-client-head > h4 { color: var(--foreground); }
 .ui-client-status { margin: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.ui-client-facts { display: grid; gap: var(--space-2xs); margin: 0; }
-.ui-client-fact { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); }
-.ui-client-fact > dt { min-width: 0; overflow: hidden; color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
-.ui-client-fact > dd { display: inline-flex; flex: none; margin: 0; align-items: center; color: var(--muted-foreground); font-family: var(--font-data); }
 .ui-client-places { display: grid; margin-top: var(--space-xs); }
 .ui-client-places > h5 { margin-bottom: var(--space-2xs); }
 .ui-client-places .ui-nav-row { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
@@ -53,14 +48,11 @@
 .ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
 .ui-chain > :not(.ui-chain-gap) { width: min(100%, var(--measure-lg)); }
 .ui-chain-box { gap: 0; padding-block: var(--space-xs); }
-.ui-chain-box[data-head] { padding-top: var(--space-md); }
-.ui-chain-box[data-head] > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-chain-line { display: flex; min-width: 0; min-height: var(--row-min); flex: 1; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); text-align: left; }
 /* A link is chosen by a click: no wash when pointed at (the chosen one is the only wash), a ring on keyboard focus. */
 button.ui-chain-open { cursor: pointer; }
 button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--muted-foreground); outline-offset: calc(-1 * var(--stroke-thin)); }
 .ui-chain-name { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); white-space: nowrap; }
-.ui-chain-box[data-head] .ui-chain-name { font-weight: var(--weight-strong); }
 .ui-chain-index { flex: none; min-width: var(--icon-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-chain-modified { width: var(--space-xs); height: var(--space-xs); border-radius: 50%; background: var(--status-unread); }
 .ui-chain-size { flex: none; margin-left: auto; padding-left: var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }

@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
 
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
@@ -88,17 +88,6 @@ export function NavRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & RowS
   </button>;
 }
 
-/** A row that is not a button, so it can hold controls of its own at its end: a device's client with its actions,
- *  a setting inside a tree. Laid out as a NavRow, the controls where its end mark would be. */
-export function NavLine(props: JSX.HTMLAttributes<HTMLDivElement> & RowState) {
-  const [local, rest] = splitProps(props, ROW_PARTS);
-  return <div {...rest} class="ui-nav-row ui-nav-line" {...rowData(local)}>
-    <Show when={local.icon}><span class="ui-nav-icon">{local.icon}</span></Show>
-    <span class="ui-nav-text">{local.children}</span>
-    <Show when={local.meta}><small class="ui-nav-meta">{local.meta}</small></Show>
-    <Show when={local.end}><span class="ui-nav-controls">{local.end}</span></Show>
-  </div>;
-}
 
 /** A folder's row: its link (icon, a mark such as unread, the name, a muted meta such as "Cloning…") and the chevron
  *  that opens it. The chevron is out of the tab order: → and ← press it. The row is a div so a menu's trigger can hold both. */
