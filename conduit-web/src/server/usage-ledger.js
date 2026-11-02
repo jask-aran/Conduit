@@ -66,7 +66,10 @@ export class UsageLedger {
       do {
         const page = await this.harness.storage.scanConversations({}, 200, cursor, BACKGROUND_CONTEXT);
         for (const { id } of page.items) {
-          for (const [key, value] of this.totals(await this.harness.snapshot(UsageDoc, id, BACKGROUND_CONTEXT))) this.append({ t: "base", c: String(id), k: key, v: value });
+          for (const [key, value] of this.totals(await this.harness.snapshot(UsageDoc, id, BACKGROUND_CONTEXT))) {
+            // Nothing spent needs no line: a conversation with none starts from zero.
+            if (value.some(Boolean)) this.append({ t: "base", c: String(id), k: key, v: value });
+          }
         }
         cursor = page.next;
       } while (cursor);
