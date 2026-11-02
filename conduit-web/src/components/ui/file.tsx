@@ -31,9 +31,6 @@ export function FileViewer(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (
 }
 
 /** The header: what the file is, then its controls in a fixed order (save, actions, tools, the ⋯, close, the pane's own). */
-export function FileHead(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void }) {
-  return <header {...props} class="ui-file-head" />;
-}
 /** The file's path with its mark; the name's own text is what fitting keeps in view. */
 export const FileName = (props: { path: string; icon: JSX.Element }) =>
   <div class="ui-file-name" title={props.path}>{props.icon}<span>{props.path}</span></div>;

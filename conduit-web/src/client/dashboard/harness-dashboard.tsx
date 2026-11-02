@@ -16,7 +16,7 @@ import { activityLabel } from "../../activity.js";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import { DashDay, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { CardPreview, CardRead } from "@/components/ui/card";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { notifyModelFallback } from "../state/model-settings";
 import type { RuntimeStore } from "../state/runtime";

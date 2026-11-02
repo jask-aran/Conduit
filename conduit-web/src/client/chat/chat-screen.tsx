@@ -3,9 +3,9 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
 
-import { DropdownMenu, MenuContent, MenuControl, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { PaneTabRow } from "@/components/ui/pane";
-import { Expand, Header, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule } from "@/components/ui";
+import { Expand, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule, PaneHeader } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { Narration } from "../turn-rows";
@@ -82,7 +82,7 @@ export function ChatHeader(props: {
   const placeMark = () => props.alone || props.placeLabel ? undefined
     : !props.project || props.project.slug === "chat" ? <HarnessMark id="conduit" />
     : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <Icons.Folder />;
-  return <Header frost={!!props.tabs && tabFrostOn()}
+  return <PaneHeader frost={!!props.tabs && tabFrostOn()}
     lead={<Show when={!props.mobileSidebarOpen}>
       <HeaderButton label="Toggle Sidebar" icon={<Icons.Sidebar />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
       <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} onClick={props.onNewChat} />
@@ -146,7 +146,7 @@ export function ChatHeader(props: {
       {props.actions}
       {/* The pane's own swap and close, at its right edge: they act on the pane. */}
       {props.tabActions}
-    </>}>{crumb()}</Header>;
+    </>}>{crumb()}</PaneHeader>;
 }
 
 /** A chat's transcript with its composer over it: a Conduit chat's and an

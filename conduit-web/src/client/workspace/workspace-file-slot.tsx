@@ -1,14 +1,14 @@
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { FileView, FileHead, FileName, FileGit, FileDirty, FileSuffix, FileMore, StatusBar, StatusText } from "@/components/ui/file";
+import { FileView, FileName, FileGit, FileDirty, FileSuffix, FileMore, StatusBar, StatusText } from "@/components/ui/file";
 import { FileImage, FileMedia, FileCard, FileBody } from "@/components/ui/viewer";
 import { ToolNotice } from "@/components/ui/pane";
-import { Spinner, Empty, Actions, IconButton } from "@/components/ui";
+import { Spinner, Empty, Actions, IconButton, PaneHeader } from "@/components/ui";
 import { Button } from "@/components/ui/controls";
 import { Rule } from "@/components/ui/popover";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import { SaveIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { httpUrl } from "../api/transport";
 
@@ -547,7 +547,7 @@ export default function WorkspaceFileSlot(props: {
       onPointerDown={props.onFocus}
     >
       <Show when={asset()}>{(file) => <>
-        <FileHead>
+        <PaneHeader kind="file">
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <Show when={props.headerTabs} fallback={<FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />}>{props.headerTabs}</Show>
           {gitControls()}
@@ -559,7 +559,7 @@ export default function WorkspaceFileSlot(props: {
             <IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton>
           </Show>
           {props.headerEnd}
-        </FileHead>
+        </PaneHeader>
         <Show when={!file().url && !file().oversize && file().kind !== "binary"}>
           <Empty><span role="status"><Spinner /> Loading {formatKind(file().kind).toLowerCase()}…</span></Empty>
         </Show>
@@ -610,7 +610,7 @@ export default function WorkspaceFileSlot(props: {
       </>}</Show>
       <Show when={!asset()}>
         <Show when={preview()} fallback={<>
-          <Show when={props.headerPrefix}><FileHead>{props.headerPrefix}</FileHead></Show>
+          <Show when={props.headerPrefix}><PaneHeader kind="file">{props.headerPrefix}</PaneHeader></Show>
           <Empty>{props.empty ?? "Select a file to preview it."}</Empty>
         </>}>{(file) => <>
           <Show when={file().readOnly && !file().truncated}>
@@ -657,7 +657,7 @@ export default function WorkspaceFileSlot(props: {
               </Suspense>
             }</Show>
           </FileBody>}>
-            <FileHead>{textHeader()}</FileHead>
+            <PaneHeader kind="file">{textHeader()}</PaneHeader>
             <FileCard>
               <strong>This text file is larger than the 25 MiB preview limit.</strong>
               <span>Download the complete file, or load the first 25 MiB as read-only text.</span>

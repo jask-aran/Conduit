@@ -1,6 +1,6 @@
 import { DefaultMeteorShower } from "@jask-aran/solid-components/meteor-shower";
 import "@jask-aran/solid-components/meteor-shower.css";
-import { AppShell, Dock, DockSurface, Header, HeaderCrumb, PaneEdge, Sheet, SheetFill, ToolContent, ToolHeader } from "@/components/ui";
+import { AppShell, Dock, DockSurface, HeaderCrumb, PaneEdge, Sheet, SheetFill, ToolContent, PaneHeader } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 /* The window's row at a fraction of its height: a sheet's height is the window's, so the scene sets its own. */
@@ -8,11 +8,11 @@ const tall = { height: "calc(20 * var(--u-space))" };
 const scene = (opts: { split?: boolean; dock?: "open" | "overlay" | "expanded" } = {}) =>
   <div class="g-shell" style={{ height: "calc(20 * var(--u-space) + var(--space-xl))", "--workspace-shell-width": "calc(16 * var(--u-space))" }}>
     <AppShell>
-      <Sheet as="main" lead under={opts.dock === "expanded"} style={tall}><Header><HeaderCrumb place="Japan" title="Planning the Kyoto leg" /></Header></Sheet>
-      {opts.split && <Sheet style={{ ...tall, flex: "1 1 0" }}><PaneEdge aria-label="Resize panes" /><div><Header><HeaderCrumb title="Notes.md" /></Header></div></Sheet>}
+      <Sheet as="main" lead under={opts.dock === "expanded"} style={tall}><PaneHeader><HeaderCrumb place="Japan" title="Planning the Kyoto leg" /></PaneHeader></Sheet>
+      {opts.split && <Sheet style={{ ...tall, flex: "1 1 0" }}><PaneEdge aria-label="Resize panes" /><div><PaneHeader><HeaderCrumb title="Notes.md" /></PaneHeader></div></Sheet>}
       {opts.dock && <Dock open overlay={opts.dock === "overlay"} expanded={opts.dock === "expanded"} edge={<PaneEdge dock aria-label="Resize workspace panel" />}
         style={{ ...tall, width: opts.dock === "overlay" ? "0px" : "calc(16 * var(--u-space))", "margin-right": "var(--space-md)" }}>
-        <DockSurface><ToolHeader name="Files" /><ToolContent><SheetFill /></ToolContent></DockSurface>
+        <DockSurface><PaneHeader kind="tool" name="Files" /><ToolContent><SheetFill /></ToolContent></DockSurface>
       </Dock>}
     </AppShell>
   </div>;
@@ -40,7 +40,7 @@ export const shellPage: Page = {
     row("split", "a pane split from the main one", () => scene({ split: true }), { surfaces: ["ground"], source: "main.tsx" }),
     row("dock beside", "the dock taking room in the row", () => scene({ dock: "open" }), { surfaces: ["ground"], code: "<Dock open>", source: "workspace/workspace-panel.tsx" }),
     row("dock over", "the dock floating over the panes", () => scene({ dock: "overlay" }), { surfaces: ["ground"], code: "<Dock open overlay>", source: "workspace/workspace-panel.tsx" }),
-    row("backdrop", "the main pane's ground drawn on: the meteor field, under everything it holds", () => <div class="g-shell" style={{ height: "calc(20 * var(--u-space) + var(--space-xl))" }}><AppShell><Sheet as="main" lead backdrop={<DefaultMeteorShower />} style={tall}><Header><HeaderCrumb title="Conduit" /></Header></Sheet></AppShell></div>, { surfaces: ["ground"], code: "<Sheet lead backdrop={<DefaultMeteorShower />}>", source: "main.tsx" }),
+    row("backdrop", "the main pane's ground drawn on: the meteor field, under everything it holds", () => <div class="g-shell" style={{ height: "calc(20 * var(--u-space) + var(--space-xl))" }}><AppShell><Sheet as="main" lead backdrop={<DefaultMeteorShower />} style={tall}><PaneHeader><HeaderCrumb title="Conduit" /></PaneHeader></Sheet></AppShell></div>, { surfaces: ["ground"], code: "<Sheet lead backdrop={<DefaultMeteorShower />}>", source: "main.tsx" }),
     row("dock expanded", "the dock covering the panes; the main pane under it", () => scene({ dock: "expanded" }), { surfaces: ["ground"], code: "<Dock open expanded> · <Sheet under>" }),
   ],
   tokens: [{ title: "The sheets", tokens: [

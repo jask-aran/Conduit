@@ -1,19 +1,19 @@
 import { FilesPane, FilesTree } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons, Empty, IconButton } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { unitPx } from "@/components/ui/layout";
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
-import { toast } from "@/components/notifications";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { toast } from "@/components/ui/notifications";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { Rule } from "@/components/ui/popover";
-import { Spinner } from "@/components/ui/controls";
+import { LeadInput, Spinner } from "@/components/ui/controls";
 import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { ToolBar, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
+import { ToolBar, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
 
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
@@ -908,7 +908,7 @@ export function FilesView(props: {
         <FilesTree>
           <ToolBar>
             <Show when={!props.navigatorOnly}><IconButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></IconButton></Show>
-            <ToolFilter
+            <LeadInput kind="tool"
                 ref={(element) => { c.elements.filter = element; }}
                 aria-label="Filter loaded files"
                 placeholder="Filter loaded files"

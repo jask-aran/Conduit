@@ -2,7 +2,7 @@ import { HarnessMark, Icons } from "@/components/ui";
 import { createMemo, createSignal, Show } from "solid-js";
 
 import { Button } from "@/components/ui";
-import { Popover, PopoverContent, PopoverTrigger, SearchList } from "@/components/menus";
+import { Popover, PopoverContent, PopoverTrigger, SearchList } from "@/components/ui/menus";
 import type { Project } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 

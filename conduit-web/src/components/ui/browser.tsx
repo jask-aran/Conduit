@@ -6,11 +6,9 @@ export function Browser(props: { compact?: boolean; sidebarWidth: number; childr
 }
 export const BrowserLayout = (props: { children: JSX.Element }) => <section class="ui-browser-layout" aria-label="Computer files">{props.children}</section>;
 export const BrowserSidebar = (props: { children: JSX.Element }) => <aside class="ui-browser-sidebar">{props.children}</aside>;
-export const BrowserHeading = (props: { children: JSX.Element }) => <h2 class="ui-browser-heading">{props.children}</h2>;
 export const BrowserPlaces = (props: { children: JSX.Element }) => <div class="ui-browser-places">{props.children}</div>;
 export const BrowserMain = (props: { children: JSX.Element }) => <div class="ui-browser-main">{props.children}</div>;
 export const BrowserToolbar = (props: { children: JSX.Element }) => <div class="ui-browser-toolbar">{props.children}</div>;
-export const BrowserSearch = (props: { children: JSX.Element }) => <label class="ui-browser-search">{props.children}</label>;
 export const BrowserCount = (props: { children: JSX.Element }) => <span class="ui-browser-count">{props.children}</span>;
 export const BrowserSummary = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-summary" />;
 export const BrowserSpacer = () => <span class="ui-browser-spacer" />;

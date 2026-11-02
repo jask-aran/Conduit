@@ -3,7 +3,7 @@ import { touchOnly } from "./layout";
 /**
  * Haptics: what a touch that changes something feels like on a phone. The kinds are each a piece's own (callers do
  * not fire them):
- * - select: a side chosen in a Segmented or PillSwitch;
+ * - select: a side chosen in a Segmented (a pill one too);
  * - press: a PillButton that acts at once (the mic, Send, Stop: its haptic prop);
  * - hold: a long press opening a context menu;
  * - fold: what an Expand or Disclosure holds opening or shutting;

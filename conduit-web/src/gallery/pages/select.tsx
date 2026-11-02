@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { Field, Icons, Item, Menu, Section, SettingLine } from "@/components/ui";
 import { SelectTrigger } from "@/components/ui";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { row, token, type Page } from "../model";
 
 function ProviderSelect() {
@@ -28,9 +28,9 @@ function SearchSelect() {
 }
 export const selectPage: Page = {
   title: "Select",
-  summary: "one choice from a list: the adapter Select (components/menus.tsx) keeps a native select as the value's owner and draws the library's SelectTrigger opening a Menu of its options. It reads the surface's --tint and --well values.",
+  summary: "one choice from a list: the adapter Select (components/ui/menus.tsx) keeps a native select as the value's owner and draws the library's SelectTrigger opening a Menu of its options. It reads the surface's --tint and --well values.",
   preview: () => <AdapterSelect />,
-  usage: `import { Select } from "@/components/menus";
+  usage: `import { Select } from "@/components/ui/menus";
 
 <Select aria-label="Transcript width" value={width()}
   onChange={(event) => setWidth(event.currentTarget.value)}>
@@ -45,7 +45,7 @@ export const selectPage: Page = {
     row("title", "look=\"title\": the select is the page's title -- what it shows, chosen by pressing it (Settings › Prompts' document); the same popover opens", () => <Select look="title" search="Search documents" aria-label="Document" value="agent"><option value="agent">jbot</option><option value="assistant">Assistant</option><option value="heartbeat">Heartbeat</option></Select>, { code: '<Select look="title" search="…">' }),
     row("icon", "look=\"icon\": a toolbar's icon button opening the choices (swap a block, add one after)", () => <Select look="icon" icon={<Icons.Swap />} search="Search blocks" aria-label="Swap for another block" title="Swap for another block" value=""><option value="">Swap for another block</option><option value="base">Shared base</option><option value="naming">Chat naming</option></Select>, { code: '<Select look="icon" icon={<Icons.Swap />} />' }),
     row("Select", "SelectTrigger bare", () => <div class="g-field"><SelectTrigger value="System default" /><div class="g-row"><span>Provider</span><SelectTrigger bare value="OpenAI" /></div></div>),
-    row("Select · the adapter", "components/menus.tsx Select", () => <AdapterSelect />, { source: "components/menus.tsx Select" }),
+    row("Select · the adapter", "components/ui/menus.tsx Select", () => <AdapterSelect />, { source: "components/ui/menus.tsx Select" }),
     row("choose provider", "Open choices and change the value", () => <ProviderSelect />, { code: "Field > SelectTrigger + Menu" }),
     row("long list", "Its choices under a search; a valueless option is the prompt", () => <SearchSelect />, { code: `<Select search="Search providers">` }),
     row("disabled", "Provider unavailable while connecting", () => <SelectTrigger aria-label="Provider" value="OpenAI" disabled />, { code: "<SelectTrigger disabled>" }),

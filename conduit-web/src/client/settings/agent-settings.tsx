@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { SettingLine } from "@/components/ui/overlay";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";

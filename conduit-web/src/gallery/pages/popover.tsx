@@ -1,6 +1,6 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { SearchList } from "@/components/menus";
+import { SearchList } from "@/components/ui/menus";
 import { Show } from "solid-js";
 import { createSignal, For } from "solid-js";
 import { Match, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";

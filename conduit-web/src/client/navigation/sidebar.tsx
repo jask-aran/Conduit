@@ -2,12 +2,12 @@ import { reducedMotion } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { AgentAvatar, HarnessMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardForm, CardBody, CardRead } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/menus";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -1096,7 +1096,7 @@ export function Sidebar(props: {
         <Show when={!phoneLayout()}><Button variant="ghost" size="icon-sm" aria-label="Toggle Sidebar" aria-expanded={!collapsed()} onClick={toggleSidebar}><Icons.Sidebar /></Button></Show>
         <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
         <Show when={phoneLayout()} fallback={<Segmented icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />}>
-          <PillSwitch label="Sidebar section" value={area()} onChange={setArea} options={areas} />
+          <Segmented pill icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />
         </Show>
       </>}
       foot={phoneLayout() ? undefined : <>

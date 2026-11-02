@@ -4,7 +4,7 @@ import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopCo
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
-import { DropdownMenu, MenuContent } from "@/components/menus";
+import { DropdownMenu, MenuContent } from "@/components/ui/menus";
 import type { BooleanCapability, Project, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
@@ -22,7 +22,7 @@ import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./larg
 import { createVoiceDictationClient, type VoiceDictationState } from "./voice-dictation-client";
 import { ContextGauge } from "./context-gauge";
 import type { AudioSignalLevel } from "./voice-audio";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
 import { createVoiceWaveformController, type VoiceWaveformController } from "./voice-waveform";
 import { MAX_RESPONSIVE_BAR_COUNT } from "@/components/ui/voice-waveform-model";

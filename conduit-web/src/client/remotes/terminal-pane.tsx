@@ -1,14 +1,14 @@
-import { Icons, Note, Actions, IconButton } from "@/components/ui";
-import { TermKeys, TermKey, TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActionLabel, TermState } from "@/components/ui/terminal";
+import { Icons, Note, Actions, IconButton, PaneHeader } from "@/components/ui";
+import { TermKeys, TermKey, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActionLabel, TermState } from "@/components/ui/terminal";
 import { Button as TermButton, Segmented, Switch } from "@/components/ui/controls";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { CardForm } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { UnplugIcon } from "lucide-solid";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 
-import { DropdownMenu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/ui/menus";
 import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { api, readShared } from "../api/client";
@@ -1112,7 +1112,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       </CardForm>
     </Dialog>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
-    <TermHeader actions={<Actions kind="term">
+    <PaneHeader kind="term" actions={<Actions kind="term">
         <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
             <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
@@ -1203,7 +1203,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </MenuContent>
         </DropdownMenu>
       </TermOverflow>
-    </TermHeader>
+    </PaneHeader>
     <div class="terminal-pane-body">
       <div
         ref={host}

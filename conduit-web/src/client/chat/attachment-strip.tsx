@@ -1,6 +1,6 @@
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { Icons } from "@/components/ui";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { Attachments, Attachment } from "@/components/ui/card";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";

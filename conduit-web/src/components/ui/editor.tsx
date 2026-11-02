@@ -34,8 +34,6 @@ export const annotationHostSelector = ".ui-comparison-content, .ui-code-content"
 export const Comparison = (props: JSX.HTMLAttributes<HTMLElement>) => <section {...props} class="ui-comparison" />;
 /** The comparison's positioned code frame and comment overlay. */
 export const ComparisonContent = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-comparison-content" />;
-/** Removed and added line counts, in that order. */
-export const ComparisonCounts = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-comparison-counts" />;
 /** Scope, turn and endpoints in a comparison's status bar. */
 export const ComparisonSource = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-comparison-source" />;
 /** The previous turn, turn picker and next turn in one row. */

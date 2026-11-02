@@ -4,7 +4,7 @@ import {
 } from "solid-js";
 
 import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingRecorder, SettingValue, Group, Note } from "@/components/ui";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";

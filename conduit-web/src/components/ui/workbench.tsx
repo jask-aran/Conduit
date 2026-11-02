@@ -31,5 +31,3 @@ export const WorkbenchFact = (props: { name: string; value?: string; title?: str
  * A TextEditor's head (its `head` slot), here rather than with the editor so a page can draw it without loading
  * CodeMirror: the pane's title -- live: what it shows is filled in as it stands, quieter -- and its actions at the end.
  */
-export const TextEditorTitle = (props: { live?: boolean; children: JSX.Element }) =>
-  <span class="ui-text-editor-title" data-live={props.live ? "" : undefined}>{props.children}</span>;

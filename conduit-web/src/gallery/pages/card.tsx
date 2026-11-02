@@ -1,10 +1,10 @@
 import { Icons } from "@/components/ui";
-import { createDecisionDialogs } from "@/components/decision-dialog";
+import { createDecisionDialogs } from "@/components/ui/decision-dialog";
 import { WorkspaceAppearanceEditor } from "../../client/project/workspace-appearance-editor";
 import { ComputerExplorer } from "../../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../../client/workspace/workspace-excerpt-view";
 import { CameraPreview } from "@/components/ui/connection";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { CardCaption, CardForm, CardBody, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
 import { createSignal, For } from "solid-js";
 import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview, Columns, Group, Note, Actions } from "@/components/ui";

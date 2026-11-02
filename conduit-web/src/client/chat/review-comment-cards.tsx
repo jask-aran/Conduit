@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { CardPreview, CardRead } from "@/components/ui/card";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Button as DialogButton, TextArea as DialogTextArea } from "@/components/ui/controls";
 import { createSignal, For, lazy, Show, Suspense } from "solid-js";
 

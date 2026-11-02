@@ -3,13 +3,13 @@ import { reducedMotion } from "./motion";
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
-import { Segmented, TextArea } from "./controls";
+import { TextArea } from "./controls";
 
 /*
  * Pill: the phone's floating frost controls, one family on shared tokens
  * (--pill-*). The kind decides the shape, never a prop:
  *   PillButton  one action: a circle (stretch: across its row, as the mic)
- *   PillSwitch  a group where one slot is chosen, under a sliding thumb
+ *   (a switch is a Segmented pill: one slot chosen under a sliding thumb)
  *   PillField   a capsule holding text (the phone composer's field)
  *   PillWave    the voice, as bars on the page (a PhoneComposer's track)
  */
@@ -37,9 +37,6 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</Frost>;
   return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
-}
-export function PillSwitch<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon: JSX.Element }>; onChange: (value: T) => void }) {
-  return <Segmented pill icons label={props.label} value={props.value} options={props.options} onChange={props.onChange} />;
 }
 /** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {

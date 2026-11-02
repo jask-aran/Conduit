@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { Button, LiveNote, SettingDetails, SettingLine, SettingValue, Group, Loading, Note } from "@/components/ui";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
 
 /** One tool of a profile (GET /v0/profiles/tools): where it comes from, who calls it, and whether it asks first. */

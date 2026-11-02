@@ -1,14 +1,14 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons, Columns, Note, Empty, Loading, Actions } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
+import { Icons, Columns, Note, Empty, Loading, Actions, Heading } from "@/components/ui";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { harnessStatusLabel } from "../harness-brand";
-import { Button, Input } from "@/components/ui/controls";
+import { Button, Input, LeadInput } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
-import { Select } from "@/components/menus";
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, DropdownMenu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, DropdownMenu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { ComputerLocation, HarnessSummary, Project } from "../api/contracts";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
@@ -193,10 +193,10 @@ export function ComputerDashboard(props: {
   <Browser compact={props.dialog} sidebarWidth={sidebarWidth()}>
     <BrowserLayout>
       <BrowserSidebar>
-        <BrowserHeading>Locations</BrowserHeading>
+        <Heading kind="browser">Locations</Heading>
         <ContextMenu><ContextMenuTrigger as={BrowserPlace} type="button" data-active={props.location?.project.workingRoot === props.location?.home} onClick={() => props.onBrowse()}><Icons.Home /><span>Home</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup><ContextMenuItem onSelect={() => props.onBrowse()}><Icons.Folder />Open</ContextMenuItem><ContextMenuItem onSelect={() => copyPath(props.location?.home || "")}><Icons.Copy />Copy path</ContextMenuItem></ContextMenuGroup></ContextMenuContent></ContextMenu>
         <Show when={!props.dialog}><Button variant="ghost" type="button" onClick={props.onOpenTerminalView}><Icons.Terminal /><span>Terminal</span></Button></Show>
-        <BrowserHeading>Workspaces</BrowserHeading>
+        <Heading kind="browser">Workspaces</Heading>
         <BrowserPlaces><For each={workspaces()}>{(project) =>
           <ContextMenu><ContextMenuTrigger as={BrowserPlace} type="button" data-active={props.location?.project.workingRoot === project.workingRoot} title={project.workingRoot} onClick={() => props.onBrowse(project.workingRoot)}><WorkspaceGlyph appearance={project.workspaceAppearance} /><span>{project.name}</span></ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
             <ContextMenuItem onSelect={() => props.onBrowse(project.workingRoot)}><Icons.Folder />Browse in Computer</ContextMenuItem>
@@ -218,7 +218,7 @@ export function ComputerDashboard(props: {
           <Button variant="ghost" type="button" aria-label="Home folder" title="Home folder" disabled={props.loading} onClick={() => props.onBrowse()}><Icons.Home /></Button>
           <Button variant="ghost" type="button" aria-label="Parent folder" title="Parent folder" disabled={props.loading || !props.location || props.location.parent === props.location.project.workingRoot} onClick={() => props.onBrowse(props.location!.parent)}><Icons.ArrowUp /></Button>
           <BrowserAddress aria-label="Folder path" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } }} />
-          <BrowserSearch><Icons.Search /><Input type="search" aria-label="Search this folder" placeholder="Search" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></BrowserSearch>
+          <LeadInput kind="browser" aria-label="Search this folder" placeholder="Search" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
           <Select aria-label="Order files" value={order()} onChange={(event) => setOrder(event.currentTarget.value as ComputerOrder)}><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="type">Type</option></Select>
           <Button variant="ghost" type="button" aria-label={view() === "tiles" ? "Use details view" : "Use tile view"} title={view() === "tiles" ? "Details view" : "Tile view"} onClick={() => setView((value) => value === "tiles" ? "details" : "tiles")}><Show when={view() === "tiles"} fallback={<Grid2X2Icon />}><ListIcon /></Show></Button>
           <Button variant="ghost" type="button" aria-label="Refresh folder" title="Refresh folder" disabled={refreshing()} onClick={() => void refresh()}><Icons.Refresh /></Button>

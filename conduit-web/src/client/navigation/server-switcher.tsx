@@ -1,7 +1,7 @@
 import { Icons, Note } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
-import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { Spinner } from "@/components/ui/controls";
 import { Avatar, ServerControl } from "@/components/ui/connection";
 import { accountName, loadAccount } from "../state/account";

@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 import { Section, Slider } from "@/components/ui";
-import { DropdownMenu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuPillTrigger, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, MenuSubValue, useMenuBack } from "@/components/ui/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ComposerModels } from "./composer-models";

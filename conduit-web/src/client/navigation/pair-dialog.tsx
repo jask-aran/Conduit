@@ -1,4 +1,4 @@
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { CardCaption, CardQR, CardDetails } from "@/components/ui/card";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";

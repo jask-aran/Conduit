@@ -22,14 +22,14 @@
  *   nav             NavPane > Group > Row, NavFolder, IconButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
- *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
- *                   ToolBar, IconButton, ToolFilter, ToolNotice, Tree > TreeRow
+ *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
+ *                   ToolBar, IconButton, LeadInput, ToolNotice, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
- *   terminal        TermHeader and its parts, TermState, TermKeys
- *   web             WebView > (ToolBar, WebAddress), WebScreen: a page in a pane (the hub's browser)
- *   file, viewer    FilesPane > FilesTree; FileView > FileHead, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
+ *   terminal        PaneHeader and its parts, TermState, TermKeys
+ *   web             WebView > (ToolBar, LeadInput), WebScreen: a page in a pane (the hub's browser)
+ *   file, viewer    FilesPane > FilesTree; FileView > PaneHeader, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
  *   card, toast     Card, Notice; Toast

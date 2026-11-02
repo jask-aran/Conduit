@@ -1,8 +1,8 @@
 import { ComposerDock, Group, GroupHeading, GroupToggle, Empty, IconButton } from "@/components/ui";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
-import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { Counts, DashHeader, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
+import { LineCounts, DashHeader, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 
@@ -281,4 +281,4 @@ export function SplitEmpty(props: { children: JSX.Element }) {
 
 
 /** The workspace panel's line counts: removed, then added. */
-export const SplitCounts = Counts;
+export const SplitCounts = LineCounts;

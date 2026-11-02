@@ -4,12 +4,12 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton } from "@/components/ui";
+import { AppShell, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
-import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
+import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
-import { createDecisionScope, DecisionDialogs } from "@/components/decision-dialog";
-import { Dialog } from "@/components/dialog";
+import { createDecisionScope, DecisionDialogs } from "@/components/ui/decision-dialog";
+import { Dialog } from "@/components/ui/dialog";
 import "./motion-rules";
 import { applyTranscriptFont } from "./preferences/transcript-font";
 applyTranscriptFont();
@@ -25,14 +25,13 @@ import { startPush } from "./platform/push.ts";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";
-import { NotificationToaster, toast } from "@/components/notifications";
+import { NotificationToaster, toast } from "@/components/ui/notifications";
 import { createMeteorField } from "./chat/meteor-field";
 import "@jask-aran/solid-components/meteor-shower.css";
 import { phoneLayerOpen } from "@/components/phone-overlays";
 import { Button, Spinner } from "@/components/ui/controls";
-import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { Header, HeaderCrumb } from "@/components/ui/header";
-import { FileHead } from "@/components/ui/file";
+import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
+import { HeaderCrumb } from "@/components/ui/header";
 import { FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
@@ -432,7 +431,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   };
 
   return <ConnectionForm onSubmit={submit}>
-    <Show when={!props.adding}><ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading></Show>
+    <Show when={!props.adding}><Heading kind="connection" mark={<HarnessMark id="conduit" />}>Connect to your server</Heading></Show>
     {/* One line, and in the dialog only when it says something the title
         and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
     <Show when={!props.adding && !verifiedOrigin()}>
@@ -2932,7 +2931,7 @@ function App() {
       const side = [...column.parentElement!.children].filter((child) => child.classList.contains("ui-file") && !child.classList.contains("ui-file-empty-side")).indexOf(column);
       const own = draggedFileTab?.pane === pane ? draggedFileTab : null;
       const rect = column.getBoundingClientRect();
-      const beside = held.length === 1 && !hasEmptySide(pane) && !event.target.closest(".ui-file-head") && event.clientX > rect.left + rect.width / 2;
+      const beside = held.length === 1 && !hasEmptySide(pane) && !event.target.closest(".ui-pane-header[data-header=file]") && event.clientX > rect.left + rect.width / 2;
       if (beside) return hint(own && (fileTabsOf(pane, own.side)?.entries.length ?? 1) < 2 ? null : { zone: "column", text: "Open in a new column" });
       return hint(own?.side === side ? null : { zone: "side", side, text: "Add as a tab here" });
     }
@@ -3120,7 +3119,7 @@ function App() {
     const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
     return <>
-      <Header actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></Header>
+      <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></PaneHeader>
       <PaneHome label="Empty pane">
         <header><DashHeader title={greeting()} context={[activeServer()?.name || "Hub", buildLabel(clientBuild)]} /></header>
         <Actions kind="rider">
@@ -3145,7 +3144,7 @@ function App() {
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
-      header={<Header actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></Header>} />
+      header={<PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></PaneHeader>} />
   </SheetFill>;
   const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
@@ -3158,7 +3157,7 @@ function App() {
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     return <SheetFill class="pane-terminal">
       <Show when={record()} fallback={<Show when={record() === null}>
-        <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><Empty>This terminal has ended.</Empty>
+        <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></PaneHeader><Empty>This terminal has ended.</Empty>
       </Show>}>{(found) =>
         <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)}
           onClose={inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
@@ -3287,7 +3286,7 @@ function App() {
     // Focusable itself, so an image or PDF side still takes the keyboard (a click, Ctrl+Shift+2).
     return <SheetFill class="file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
-        <Header actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></Header>
+        <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></PaneHeader>
         <Empty kind="file" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</Empty>
       </>}>
         <FileViewer entries={entries()} focused={keyboardPane() === pane ? fileFocus()[String(pane)] ?? 0 : -1} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
@@ -3297,10 +3296,10 @@ function App() {
           splitEmpty={hasEmptySide(pane)} emptyFirst={emptyFirst(pane)}
           emptySide={<Show when={hasEmptySide(pane)}>
             <FileEmptySide tabIndex={-1} style={emptyFirst(pane) ? { order: -1 } : undefined} focused={keyboardPane() === pane && emptyFocused(pane)} onPointerDown={() => { focusFileEntry(pane, 1); setFilePane(pane); }}>
-              <FileHead>
+              <PaneHeader kind="file">
                 <PaneTabRow><PaneTabs><PaneTab none lit title="No file open" closeLabel="Close this side" closeTitle="Close this side" onClose={() => closeEmptySide(pane)} /></PaneTabs></PaneTabRow>
                 <Show when={!emptyFirst(pane)}>{paneTabActions(pane)}</Show>
-              </FileHead>
+              </PaneHeader>
               <Empty kind="file" role="status">Open a file from Files to show it here.</Empty>
             </FileEmptySide>
           </Show>}

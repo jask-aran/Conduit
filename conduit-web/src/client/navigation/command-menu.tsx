@@ -1,7 +1,7 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
 import { Icons, Empty } from "@/components/ui";
-import { Dialog, OverlayDialog } from "@/components/dialog";
+import { Dialog, OverlayDialog } from "@/components/ui/dialog";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import { Crumbs } from "@/components/ui/leader";
 import { StatusDot } from "@/components/ui/nav";

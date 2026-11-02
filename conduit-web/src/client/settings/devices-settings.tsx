@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { api } from "../api/client.ts";
 import { buildHttpUrl } from "../api/transport.js";
 import { nativeBearerToken } from "../api/native-auth-client.ts";
-import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSection } from "@/components/ui/menus";
 import { ServerControl } from "@/components/ui/connection";
 import { activeOrigin, dialOrigin, servers, switchToServer } from "../platform/servers.ts";
 import { createServerHealth, ServerFacts } from "./server-inspect.tsx";

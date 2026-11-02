@@ -1,5 +1,5 @@
 import { createSignal, type Accessor } from "solid-js";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import type { DiffPayload, DirectoryListing } from "./workspace-types";
 

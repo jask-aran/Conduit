@@ -30,9 +30,9 @@
   .ui-search-actions svg { width: var(--icon); height: var(--icon); }
 }
 .ui-comparison { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-.ui-comparison-counts { display: flex; flex: none; gap: var(--space-sm); padding-inline: var(--space-sm); font: inherit; white-space: nowrap; }
-.ui-comparison-counts > :first-child { color: var(--destructive); }
-.ui-comparison-counts > :last-child { color: var(--live); }
+.ui-counts:where([data-counts="bar"]) { display: flex; flex: none; gap: var(--space-sm); padding-inline: var(--space-sm); font: inherit; white-space: nowrap; }
+.ui-counts:where([data-counts="bar"]) > :first-child { color: var(--destructive); }
+.ui-counts:where([data-counts="bar"]) > :last-child { color: var(--live); }
 .ui-comparison-content { position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .ui-code-host[data-comparison] { height: 100%; }
 .ui-comparison-content .cm-mergeView { height: 100%; overflow: auto; }
@@ -72,8 +72,8 @@
 .ui-text-editor-host .cm-scroller { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-text-editor[data-readonly] .cm-cursor { display: none; }
 /* What the pane's head says: the name of what it holds (quiet when Conduit fills it in), then its actions. */
-.ui-text-editor-title { min-width: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-.ui-text-editor-title[data-live] { color: var(--muted-foreground); }
+.ui-heading:where([data-heading="editor"]) { min-width: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.ui-heading:where([data-heading="editor"])[data-live] { color: var(--muted-foreground); }
 .ui-actions:where([data-actions="editor"]) { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
 .ui-text-editor-head .ui-seg { flex: none; }
 /* The marks TextEditor puts in prompt text: the tags it is wrapped in quiet, the slots Conduit fills marked. */

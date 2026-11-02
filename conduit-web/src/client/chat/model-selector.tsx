@@ -2,7 +2,7 @@ import { Icons } from "@/components/ui";
 import { createMemo, For, Show } from "solid-js";
 
 import { Picker, Section, Slider, Spinner, Note } from "@/components/ui";
-import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/ui/menus";
 import type { ModelOption } from "../api/contracts";
 
 const LEVEL_NAMES: Record<string, string> = { xhigh: "Extra high" };

@@ -1,8 +1,8 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import { Dialog } from "./dialog";
-import { CardForm } from "./ui/card";
-import { Button, Input } from "./ui/controls";
-import { Actions } from "@/components/ui/actions";
+import { CardForm } from "./card";
+import { Button, Input } from "./controls";
+import { Actions } from "./actions";
 
 type Options = { confirmLabel?: string; destructive?: boolean; valid?: () => boolean };
 type Request = { message: string; options: Options } & (

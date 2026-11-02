@@ -59,7 +59,7 @@ export function DockSurface(props: JSX.HTMLAttributes<HTMLDivElement> & { docume
 /** Where a pane's document moved into the dock mounts (a portal target). */
 export const DockDocument = (props: { ref?: (element: HTMLDivElement) => void }) => <div ref={props.ref} class="ui-dock-document" />;
 
-/** A tool's body under its ToolHeader, in the dock or a split: it takes the room left and holds the keyboard. */
+/** A tool's body under its PaneHeader, in the dock or a split: it takes the room left and holds the keyboard. */
 export const ToolContent = (props: JSX.HTMLAttributes<HTMLElement>) => {
   const [local, rest] = splitProps(props, ["class"]);
   return <main tabIndex={-1} {...rest} class={cn("ui-tool-content", local.class)} />;

@@ -7,7 +7,6 @@ import { Button, Input, Spinner } from "./controls";
 export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
   return <form {...props} class="ui-connection" />;
 }
-export const ConnectionHeading = (props: { mark: JSX.Element; children: JSX.Element }) => <header class="ui-connection-heading">{props.mark}<h1>{props.children}</h1></header>;
 export const ConnectionChoices = (props: { children: JSX.Element }) => <ul class="ui-connection-choices">{props.children}</ul>;
 export function ConnectionChoice(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; detail?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["icon", "detail", "children"]);

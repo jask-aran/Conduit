@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
-import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, Loading } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, Loading, PaneHeader } from "@/components/ui";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
 import { minMainPaneWidth } from "../layout-geometry";
@@ -9,7 +9,7 @@ import { unitPx } from "@/components/ui/layout";
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
-import { PaneEdge, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
+import { PaneEdge, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import type { Connectivity } from "../state/runtime";
@@ -581,7 +581,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
     // The dock follows places (6d-1): its header says which one it shows.
-    <ToolHeader ref={fitHeader} draggable={!isMobileLayout()}
+    <PaneHeader kind="tool" ref={fitHeader} draggable={!isMobileLayout()}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
       onDragEnd={() => delete document.body.dataset.toolDrag}
       name={viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}

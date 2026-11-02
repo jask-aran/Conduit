@@ -1,41 +1,9 @@
-import { onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 import * as Icons from "./icons";
 
-/** What a header folds when it is too narrow, first to last: the shortcuts into the ⋯, then the actions' labels. */
-const TERM_FOLDS = ["shortcuts", "labels"] as const;
-
-/** A terminal's header: leading controls, identity, shortcuts, overflow, then actions. It folds by measure: while
- *  its content overflows or the identity's title or context is cut, the next fold goes; each comes back once the header is as wide as it
- *  was needed at. A change to what it holds (a shortcut, the running command) measures it again from unfolded. */
-export function TermHeader(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class"> & { actions?: JSX.Element }) {
-  const [local, rest] = splitProps(props, ["children", "actions"]);
-  let header!: HTMLElement;
-  onMount(() => {
-    let folds = 0;
-    const needs: number[] = [];
-    const set = (count: number) => { folds = count; if (count) header.dataset.folded = TERM_FOLDS.slice(0, count).join(" "); else delete header.dataset.folded; };
-    const over = () => {
-      // The identity's title and context truncate rather than overflow: what they cut is what is missing.
-      const parts = [...header.querySelectorAll<HTMLElement>(".ui-term-identity > *")];
-      return Math.max(header.scrollWidth - header.clientWidth, parts.reduce((cut, part) => cut + Math.max(0, part.scrollWidth - part.clientWidth), 0));
-    };
-    const fit = (fresh = false) => {
-      if (!header.clientWidth) return;
-      if (fresh) set(0);
-      while (folds && header.clientWidth >= needs[folds - 1]!) set(folds - 1);
-      for (let cut = over(); cut > 0.5 && folds < TERM_FOLDS.length; cut = over()) { needs[folds] = header.clientWidth + cut; set(folds + 1); }
-    };
-    const resize = new ResizeObserver(() => fit());
-    const content = new MutationObserver(() => fit(true));
-    resize.observe(header);
-    content.observe(header, { childList: true, subtree: true, characterData: true });
-    fit(true);
-    onCleanup(() => { resize.disconnect(); content.disconnect(); });
-  });
-  return <header ref={header} data-surface="ground" {...rest} class="ui-term-header">{local.children}{local.actions}</header>;
-}
+/* A terminal's header is a PaneHeader (kind term, header.tsx), which folds it by measure. */
 /** A terminal's state: a dot or busy ring, with a label when needed. */
 export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { tone: "success" | "busy" | "warn" | "danger" | "muted"; busy?: boolean; label?: string }) {
   const [local, rest] = splitProps(props, ["tone", "busy", "label"]);

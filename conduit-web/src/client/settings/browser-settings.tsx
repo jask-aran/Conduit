@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Button, Segmented, SettingDetails, SettingLine, SettingValue, Spinner, Group, Loading, Note } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
 
 /** GET /v0/browsers/hub/settings (browser-host.js `describe`). */

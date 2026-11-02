@@ -35,7 +35,7 @@ import type { RuntimeStore } from "./runtime";
 import { createClientActiveGenerationStore } from "./active-generation-store.js";
 import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;

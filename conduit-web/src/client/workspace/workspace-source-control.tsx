@@ -1,10 +1,10 @@
 import { SourceOverview, SourcePatch, SourceView } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { Icons, Group, Empty, IconButton } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { CirclePlusIcon, GitCommitHorizontalIcon, SendIcon } from "lucide-solid";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { Spinner } from "@/components/ui/controls";
 import { api } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";

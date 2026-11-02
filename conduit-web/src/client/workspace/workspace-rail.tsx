@@ -1,7 +1,7 @@
 import { Icons, IconButton } from "@/components/ui";
 import { For, Show } from "solid-js";
 import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
-import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 

@@ -1,5 +1,5 @@
-import { Icons, Actions, IconButton } from "@/components/ui";
-import { FileHead, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
+import { Icons, Actions, IconButton, PaneHeader } from "@/components/ui";
+import { StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { CodeSurface, CodeContent, CodeHost } from "@/components/ui/editor";
 import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
@@ -12,7 +12,7 @@ import { dropCursor, EditorView, highlightActiveLine, highlightActiveLineGutter,
 import { codeReadOnlySetup } from "@/components/ui/code-setup";
 import { Redo2Icon } from "lucide-solid";
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/ui/menus";
 import { csvLanguage, isCsvFile } from "./csv-language";
 import { workspaceLanguageForFilename, workspaceLanguageForName, workspaceLanguages } from "./workspace-languages";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
@@ -368,13 +368,13 @@ export default function WorkspaceEditor(props: {
   });
 
   return <CodeSurface editable={editable()}>
-    <FileHead>
+    <PaneHeader kind="file">
       {props.header}
       <Actions kind="tools">
         <IconButton kind="file" data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><Icons.Search /></IconButton>
         <IconButton kind="file" inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><Icons.WrapText /></IconButton>
       </Actions>
-    </FileHead>
+    </PaneHeader>
     <CodeContent>
       <CodeHost ref={(element) => { host = element; }} data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
       <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => setAnnotation(null)} />}</Show>

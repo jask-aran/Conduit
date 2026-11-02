@@ -1,10 +1,10 @@
 import { Icons } from "@/components/ui";
 import { createSignal } from "solid-js";
-import { Button, PillButton, PillField, PillSwitch } from "@/components/ui";
+import { Button, PillButton, PillField, Segmented } from "@/components/ui";
 import { areas, icon } from "../demos";
 import { row, token, type Page } from "../model";
 
-export function Area() { const [value, setValue] = createSignal("dashboard"); return <PillSwitch label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
+export function Area() { const [value, setValue] = createSignal("dashboard"); return <Segmented pill icons label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
 
 export const pillPage: Page = {
   title: "Pill",
@@ -17,7 +17,7 @@ export const pillPage: Page = {
   examples: [
     row("PillButton", "PillButton: one action, a circle · haptic: a press that acts at once (the mic, Send, Stop) is felt on a phone", () => <div class="g-row"><PillButton {...icon("Sidebar", <Icons.Sidebar />)} /><PillButton {...icon("Add", <Icons.Add />)} /></div>, { surfaces: ["ground"], phone: "only" }),
     row("PillButton · stretch", "PillButton stretch: across its row", () => <div class="g-row g-fill"><PillButton stretch {...icon("Dictate", <Icons.Microphone />)} /></div>, { surfaces: ["ground"], phone: "only" }),
-    row("PillSwitch", "PillSwitch: a group where one slot is chosen", () => <Area />, { surfaces: ["ground"], phone: "only" }),
+    row("Segmented · pill", "Segmented pill icons: a group where one slot is chosen", () => <Area />, { surfaces: ["ground"], phone: "only" }),
     row("PillField", "PillField: text in the capsule", () => <div class="g-fill"><PillField placeholder="Send a message…" /></div>, { surfaces: ["ground"], phone: "only" }),
     row("Sidebar · header", "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", () => <div class="g-bar-demo"><Area /></div>, { source: "navigation/sidebar.tsx (the phone's drawer has no toggle: a swipe or the backdrop closes it)", surfaces: ["ground"], phone: "only" }),
     row("Composer · bar layout", "chat/composer.tsx (bar)", () => <div class="g-composer-demo"><PillField placeholder="Send a message…" /><div class="g-bar-demo">
@@ -36,5 +36,5 @@ export const pillPage: Page = {
     token("--pill-icon", "icon size"),
     token("--radius-round", "round corners")
   ] }],
-  api: ["PillButton", "PillSwitch", "PillField", "PillWave"]
+  api: ["PillButton", "Segmented", "PillField", "PillWave"]
 };

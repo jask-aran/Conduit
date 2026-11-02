@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { For, Show, type JSX } from "solid-js";
 import { LoaderCircleIcon } from "lucide-solid";
-import { MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
+import { MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import type { ChatSummary, Project } from "../api/contracts";
 import { isWorkspace, PlaceGlyph } from "../chat/place-picker";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";

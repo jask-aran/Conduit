@@ -1,6 +1,6 @@
 // Web: a page in a pane -- the hub's browser (roadmap #7). The bar, then the live screen in each of its states.
 import { onMount } from "solid-js";
-import { Icons, ToolBar, WebAddress, WebScreen, WebView, IconButton } from "@/components/ui";
+import { Icons, ToolBar, LeadInput, WebScreen, WebView, IconButton } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 /** A stand-in frame, drawn as the stream would: a light page with a heading, a field and a link. */
@@ -24,7 +24,7 @@ function Demo(props: { live?: boolean; state?: string; tone?: "error"; address?:
         <IconButton label="Back"><Icons.Back /></IconButton>
         <IconButton label="Forward"><Icons.Forward /></IconButton>
         <IconButton label="Reload"><Icons.Refresh /></IconButton>
-        <WebAddress aria-label="Address" placeholder="Search or type an address" value={props.address ?? ""} secure={(props.address ?? "").startsWith("https://")} />
+        <LeadInput kind="web" aria-label="Address" placeholder="Search or type an address" value={props.address ?? ""} lead={(props.address ?? "").startsWith("https://") ? <Icons.Lock /> : <Icons.Browser />} />
       </ToolBar>
       <WebScreen canvas={(element) => { canvas = element; }} live={props.live} state={props.state} tone={props.tone} aria-label="Page" />
     </WebView>
@@ -33,30 +33,30 @@ function Demo(props: { live?: boolean; state?: string; tone?: "error"; address?:
 
 export const webPage: Page = {
   title: "Web",
-  summary: "A web page in a pane: the hub's browser, shared by the person and Conduit's agents. Its bar is the Pane family's ToolBar (back, forward, reload as ToolButtons) with the WebAddress -- the address in the data face, a lock when it is https -- and under it the WebScreen, the page drawn live onto its canvas, whole and from the top, taking the pointer and the keys once focused. While there is no frame it says why over the ground: starting, reconnecting, or (error) that the hub has no browser.",
+  summary: "A web page in a pane: the hub's browser, shared by the person and Conduit's agents. Its bar is the Pane family's ToolBar (back, forward, reload as IconButtons) with the address, a LeadInput kind web -- the address in the data face, a lock when it is https -- and under it the WebScreen, the page drawn live onto its canvas, whole and from the top, taking the pointer and the keys once focused. While there is no frame it says why over the ground: starting, reconnecting, or (error) that the hub has no browser.",
   preview: () => <Demo live address="https://www.japan-guide.com/e/e5950.html" />,
-  usage: `import { ToolBar, IconButton, WebAddress, WebScreen, WebView } from "@/components/ui";
+  usage: `import { ToolBar, IconButton, LeadInput, WebScreen, WebView } from "@/components/ui";
 
 <WebView label="Hub browser">
-  <ToolBar><IconButton label="Back"><Icons.Back /></IconButton>…<WebAddress value={url} secure onKeyDown={go} /></ToolBar>
+  <ToolBar><IconButton label="Back"><Icons.Back /></IconButton>…<LeadInput kind="web" value={url} lead={<Icons.Lock />} onKeyDown={go} /></ToolBar>
   <WebScreen canvas={(element) => canvas = element} live={live()} state={why()} tone="error" onPointerDown… />
 </WebView>`,
   anatomy: { scene: () => <Demo live address="https://www.japan-guide.com/e/e5950.html" />, parts: [
     { selector: ".ui-tool-bar", name: "Bar", does: "back, forward, reload and the address", from: "ToolBar, IconButton" },
-    { selector: ".ui-web-address", name: "Address", does: "where the page is; edited in place, Enter goes there", from: "WebAddress secure" },
+    { selector: ".ui-lead-input", name: "Address", does: "where the page is; edited in place, Enter goes there", from: "LeadInput kind web, lead" },
     { selector: ".ui-web-screen", name: "Screen", does: "the page drawn live; takes the pointer and the keys", from: "WebScreen canvas live", side: "below" },
   ] },
   examples: [
     row("WebScreen · live", "A frame drawn: the page whole, from the top, on the pane's ground.", () => <Demo live address="https://www.japan-guide.com/e/e5950.html" />),
     row("WebScreen · starting", "No frame yet: the screen says so, quiet, over the ground.", () => <Demo state="Starting the hub's browser…" />, { code: '<WebScreen state="Starting the hub\'s browser…" />' }),
     row("WebScreen · unavailable", "The hub has no browser: tone error, with what to run.", () => <Demo tone="error" state="The hub has no browser yet. On the hub, install agent-browser: npm i -g agent-browser." />, { code: '<WebScreen tone="error" state={why} />' }),
-    row("WebAddress · plain and secure", "A globe for an address that is not https; a lock for one that is.", () => <div style={{ display: "grid", gap: "var(--space-md)", width: "calc(28 * var(--u-space))" }}>
-      <WebAddress aria-label="Address" value="http://127.0.0.1:4310/healthz" /><WebAddress aria-label="Address" value="https://example.com/" secure /><WebAddress aria-label="Address" placeholder="Search or type an address" value="" />
+    row("LeadInput · web · plain and secure", "A globe for an address that is not https; a lock for one that is.", () => <div style={{ display: "grid", gap: "var(--space-md)", width: "calc(28 * var(--u-space))" }}>
+      <LeadInput kind="web" aria-label="Address" value="http://127.0.0.1:4310/healthz" lead={<Icons.Browser />} /><LeadInput kind="web" aria-label="Address" value="https://example.com/" lead={<Icons.Lock />} /><LeadInput kind="web" aria-label="Address" placeholder="Search or type an address" value="" lead={<Icons.Browser />} />
     </div>),
   ],
   tokens: [
     { title: "Address", tokens: [token("--control-tool", "Field height"), token("--tint", "Field fill"), token("--font-data", "Address face"), token("--ring", "Focused hairline")] },
     { title: "Screen", tokens: [token("--background", "Ground behind the page"), token("--duration-quick", "First frame's fade in"), token("--destructive", "Unavailable")] },
   ],
-  api: ["WebView", "WebAddress", "WebScreen"],
+  api: ["WebView", "LeadInput", "WebScreen"],
 };

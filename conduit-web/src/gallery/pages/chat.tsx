@@ -1,4 +1,4 @@
-import { ChatEmpty, ChatScroller, ChatView, ComposerDock, ComposerField, DesktopComposer, Header, HeaderCrumb, Sheet, TextArea, Toolbar, Welcome } from "@/components/ui";
+import { ChatEmpty, ChatScroller, ChatView, ComposerDock, ComposerField, DesktopComposer, HeaderCrumb, Sheet, TextArea, Toolbar, Welcome, PaneHeader } from "@/components/ui";
 import { row, token, type Page } from "../model";
 import { conversation } from "./transcript";
 import { send, toolbarEnd, toolbarStart } from "./desktop-composer";
@@ -7,7 +7,7 @@ import { send, toolbarEnd, toolbarStart } from "./desktop-composer";
 const composer = () => <DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer>;
 const scene = (opts: { empty?: boolean } = {}) => <div class="g-shell" style={{ height: "calc(36 * var(--u-space) + var(--space-xl))" }}>
   <Sheet as="main" lead style={{ height: "calc(36 * var(--u-space))" }}>
-    <Header><HeaderCrumb place="Japan" title={opts.empty ? "New chat" : "Lorem ipsum file"} /></Header>
+    <PaneHeader><HeaderCrumb place="Japan" title={opts.empty ? "New chat" : "Lorem ipsum file"} /></PaneHeader>
     <ChatView empty={opts.empty}>
       <ChatScroller>{opts.empty ? <ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty> : conversation()}</ChatScroller>
       <ComposerDock>{composer()}</ComposerDock>

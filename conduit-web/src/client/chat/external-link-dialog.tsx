@@ -1,4 +1,4 @@
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
 import type { Accessor } from "solid-js";
 import { CardRead } from "@/components/ui/card";

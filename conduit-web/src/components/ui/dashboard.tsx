@@ -126,14 +126,19 @@ export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement
   const [local, rest] = splitProps(props, ["icon", "name", "directory", "added", "removed", "status", "statusTitle", "conflict", "selected"]);
   return <Row element="button" density="list" bare {...(rest as unknown as RowProps)} data-change-row="" selected={local.selected}>
     {local.icon}<span class="ui-change-name">{local.name}</span><span class="ui-change-directory">{local.directory}</span>
-    <Show when={local.added != null} fallback={<span class="ui-counts" aria-label="Counts unknown">—</span>}><Counts added={local.added ?? 0} removed={local.removed ?? 0} /></Show>
+    <Show when={local.added != null} fallback={<span class="ui-counts" data-counts="list" aria-label="Counts unknown">—</span>}><LineCounts added={local.added ?? 0} removed={local.removed ?? 0} /></Show>
     <code class="ui-change-status" data-status={local.status} data-conflict={local.conflict ? "" : undefined} title={local.statusTitle}>{local.status}</code>
   </Row>;
 }
 
-/** Line counts: removed, then added. */
-export function Counts(props: { added: number | null; removed: number | null }) {
-  return <span class="ui-counts" aria-label={`${props.added ?? 0} added, ${props.removed ?? 0} removed`}>
+/**
+ * LineCounts: lines removed, then added, each in its change colour. The kind is where it sits (under
+ * .ui-counts[data-counts]): list (a change row's, a group's heading: data's voice, light, said whole to assistive tech),
+ * bar (a comparison's status bar: the bar's voice). title: what the counts are (approximate, say).
+ */
+export function LineCounts(props: { kind?: "list" | "bar"; added: number | null; removed: number | null; title?: string }) {
+  const bar = () => props.kind === "bar";
+  return <span class="ui-counts" data-counts={bar() ? "bar" : "list"} title={props.title} aria-label={bar() ? undefined : `${props.added ?? 0} added, ${props.removed ?? 0} removed`}>
     <span data-change="removed">−{props.removed ?? 0}</span><span data-change="added">+{props.added ?? 0}</span>
   </span>;
 }

@@ -1,5 +1,5 @@
 import { CameraPreview } from "@/components/ui/connection";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { onCleanup, onMount, createSignal } from "solid-js";
 import { buildHttpUrl, normalizeServerOrigin } from "../api/transport";
 import { publishTrustedIdentities } from "./certificate-pins";

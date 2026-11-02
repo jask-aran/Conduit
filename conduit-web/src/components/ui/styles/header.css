@@ -1,9 +1,9 @@
 /* Header: a pane's top line, drawn by Header (header.tsx). It reserves its own height in the pane's flow and
    paints over what runs beneath it, fading into it; a tab row's strip may be frost instead (frost). */
 :root { --header-height: calc(var(--control-lg) + 2 * var(--space-md)); }
-.ui-header { position: relative; z-index: 2; display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg);
+.ui-pane-header:where([data-header="pane"]) { position: relative; z-index: 2; display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg);
   background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
-.ui-header[data-frost] { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
+.ui-pane-header:where([data-header="pane"])[data-frost] { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
 .ui-header-title { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; overflow: hidden; }
 .ui-header-title:has(> nav[aria-label="Tabs"]) { flex: 1 1 auto; align-self: stretch; }
 .ui-header-group { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
@@ -27,7 +27,7 @@ button.ui-header-place { cursor: pointer; }
   font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: var(--leading-tight); overflow-wrap: anywhere; }
 
 /* A control drawn on one layout alone. */
-.ui-header [data-only="phone"] { display: none; }
+.ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: none; }
 
 /* The note: a capsule of frost, its action a smaller one inside it. */
 .ui-header-note { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-round);
@@ -41,7 +41,7 @@ button.ui-header-place { cursor: pointer; }
 @media (--conduit-phone-layout) {
   /* The pills sit at the overlay inset inside the safe area; the strip's fade gives way so the transcript runs under them. */
   :root { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
-  .ui-header { width: 100%; padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs);
+  .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs);
     background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); }
   .ui-header-title { display: none; }
   /* The name pill sits between the groups, centred in the room they leave: its place's mark, then its title, which
@@ -54,8 +54,8 @@ button.ui-header-place { cursor: pointer; }
   button.ui-header-pill { cursor: pointer; }
   /* Pressed, or its menu open: the frost takes the wash over it. */
   button.ui-header-pill:is(:active, [data-expanded]) { background-image: linear-gradient(var(--tint), var(--tint)); }
-  .ui-header [data-only="phone"] { display: inline-grid; }
-  .ui-header [data-only="desktop"] { display: none; }
+  .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: inline-grid; }
+  .ui-pane-header:where([data-header="pane"]) [data-only="desktop"] { display: none; }
   /* The groups are pills (Pill): frost capsules whose buttons are capsules narrower than tall, concentric with them. */
   .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
   .ui-header-group, .ui-header-pill { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);

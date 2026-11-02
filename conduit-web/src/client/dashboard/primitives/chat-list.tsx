@@ -2,7 +2,7 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 
-import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/ui/menus";
 import { DashDay, GroupAction, GroupCompactHeading } from "@/components/ui/dashboard";
 
 import { SplitGroupMore, watchFold } from "./split";

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 import { api, apiWhenServed, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 import { preferredThinkingLevel } from "./thinking-levels";

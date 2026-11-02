@@ -571,7 +571,7 @@ const vocabulary: [keyof typeof Icons, string, number][] = [
 ];
 
 const KINDS: { kind: Haptic; what: string; pieces: string; strength: string }[] = [
-  { kind: "select", what: "a side chosen", pieces: "Segmented, PillSwitch", strength: "light" },
+  { kind: "select", what: "a side chosen", pieces: "Segmented (pill)", strength: "light" },
   { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop", strength: "light" },
   { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen", strength: "medium" },
   { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure", strength: "light" },

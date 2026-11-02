@@ -1,8 +1,8 @@
-import { Header, HeaderButton, HeaderCrumb, HeaderNote, Icons } from "@/components/ui";
+import { HeaderButton, HeaderCrumb, HeaderNote, Icons, PaneHeader } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
-const chat = () => <div style={{ width: "100%" }}><Header actions={<HeaderButton label="Copy Tailscale chat link" icon={<Icons.Share />} />}
-  after={<HeaderNote label="Not in Conduit" action={{ label: "Track", onClick: () => {} }} />}><HeaderCrumb place="Codex" onPlace={() => {}} title="Fix the flaky upload test" /></Header></div>;
+const chat = () => <div style={{ width: "100%" }}><PaneHeader actions={<HeaderButton label="Copy Tailscale chat link" icon={<Icons.Share />} />}
+  after={<HeaderNote label="Not in Conduit" action={{ label: "Track", onClick: () => {} }} />}><HeaderCrumb place="Codex" onPlace={() => {}} title="Fix the flaky upload test" /></PaneHeader></div>;
 
 export const headerPage: Page = {
   title: "Header", rail: "Blocks",
@@ -35,5 +35,5 @@ export const headerPage: Page = {
     token("--text-row", "the title's size"),
     token("--muted-foreground", "the place and the note's label"),
   ] }],
-  api: ["Header", "HeaderCrumb", "HeaderNote", "HeaderButton", "HeaderPill"],
+  api: ["PaneHeader", "HeaderCrumb", "HeaderNote", "HeaderButton", "HeaderPill"],
 };

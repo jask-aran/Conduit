@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
 import { Answer, DashConversation, EmailItem, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
-import { Dialog } from "@/components/dialog";
+import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";

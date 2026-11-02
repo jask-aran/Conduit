@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Button, Icons, Input, LiveNote, SettingLine, SettingValue, Switch, Group, Loading, Note } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
 
 /** GET /v0/skills (skill-store.js `list`). */

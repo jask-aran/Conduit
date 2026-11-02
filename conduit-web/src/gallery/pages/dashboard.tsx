@@ -4,7 +4,7 @@ import { GroupCompactHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Segmented } from "@/components/ui";
 import { Row, Group, GroupHeading, GroupToggle, Empty, Note, IconButton } from "@/components/ui";
-import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, Counts, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, LineCounts, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { row, token, type Page } from "../model";
 
 const dashboardScene = () => {
@@ -68,7 +68,7 @@ import { Icons } from "@/components/ui";
           <DashMore count={12} onClick={() => {}}>Show more</DashMore>
         </Group>;
 }, { phone: true, code: "<Group labelled section heading actions> · <DashDay> · <Row> (list) · <DashMore count>" }),
-    row("Row · ChangeRow · Counts", "modified and added files with line counts", () => <div><ChangeRow icon={<Icons.FileCode />} name="dashboard.tsx" directory="components/ui" added={24} removed={8} status="M" /><ChangeRow icon={<Icons.FileText />} name="notes.md" directory="docs" added={12} removed={0} status="A" /><Counts added={36} removed={8} /></div>, { phone: true, code: "<ChangeRow icon name directory added removed status> · <Counts added removed>" }),
+    row("Row · ChangeRow · LineCounts", "modified and added files with line counts", () => <div><ChangeRow icon={<Icons.FileCode />} name="dashboard.tsx" directory="components/ui" added={24} removed={8} status="M" /><ChangeRow icon={<Icons.FileText />} name="notes.md" directory="docs" added={12} removed={0} status="A" /><LineCounts added={36} removed={8} /></div>, { phone: true, code: "<ChangeRow icon name directory added removed status> · <LineCounts added removed>" }),
     row("DashPath · Rest", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={false} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("DashPath · Copied", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={true} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("Empty · Note", "an empty list, a note and an error", () => <div><Empty kind="dash">No chats</Empty><Note kind="dash">Choose a project to start.</Note><Note kind="dash" tone="error">Could not load projects.</Note></div>, { phone: true, code: "<Empty> · <Note error>" }),
@@ -82,5 +82,5 @@ import { Icons } from "@/components/ui";
     token("--muted-foreground", "Context text"),
     token("--border", "Section rules")
   ] }],
-  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "IconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "Counts", "DashMore", "Empty", "Note", "FolderShelf", "FolderTile"],
+  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "IconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "LineCounts", "DashMore", "Empty", "Note", "FolderShelf", "FolderTile"],
 };

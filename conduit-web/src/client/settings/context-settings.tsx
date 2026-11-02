@@ -1,14 +1,15 @@
 import { createEffect, createMemo, createSignal, For, lazy, Show, type JSX } from "solid-js";
 import { api } from "../api/client.ts";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { TextEditorTitle, Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { StatusText } from "@/components/ui/file";
 import { Group } from "@/components/ui/group";
 import { Loading, Note } from "@/components/ui/state";
 import { Actions, IconButton } from "@/components/ui/actions";
+import { Heading } from "@/components/ui/header";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import type { ModelOption } from "../api/contracts";
@@ -150,7 +151,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
     return <TextEditor fill readOnly label={`${block().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`} value={shown()}
       head={<>
-        <TextEditorTitle live={live()}>{block().label}</TextEditorTitle>
+        <Heading kind="editor" live={live()}>{block().label}</Heading>
         <Show when={live() && block().preview && block().preview !== block().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
@@ -257,7 +258,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       value={live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "") : draft()}
       onChange={(value) => { setDraft(value); setState("idle"); }} onSave={save}
       head={<>
-        <TextEditorTitle live={live()}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</TextEditorTitle>
+        <Heading kind="editor" live={live()}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</Heading>
         <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>

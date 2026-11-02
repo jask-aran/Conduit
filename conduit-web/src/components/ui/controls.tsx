@@ -57,6 +57,27 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...rest} class={cn("ui-input", local.class)} />;
 }
 
+/**
+ * LeadInput: a field led by its mark, the mark inside the field's start. The kind is where it sits, which sets its
+ * size and its voice (each kind's look in its family's stylesheet, under .ui-lead-input[data-lead-input]):
+ *
+ *   tool      a ToolBar's filter (the Files tree's): a search on the tint
+ *   web       a web page's address in its bar: the address in data's voice; lead: a lock when the page is https
+ *   browser   the file browser's search in its toolbar: the mark beside a standard field
+ *
+ * lead: the mark (search when given none).
+ */
+export type LeadInputKind = "tool" | "web" | "browser";
+
+export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { kind?: LeadInputKind; lead?: JSX.Element; ref?: (element: HTMLInputElement) => void }) {
+  const [local, rest] = splitProps(props, ["kind", "lead"]);
+  const kind = () => local.kind ?? "tool";
+  const field = () => kind() === "web"
+    ? <input type="text" spellcheck={false} autocomplete="off" {...rest} />
+    : kind() === "browser" ? <Input type="search" {...rest} /> : <input type="search" {...rest} />;
+  return <label class="ui-lead-input" data-lead-input={kind()}>{local.lead ?? <Icons.Search />}{field()}</label>;
+}
+
 /** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
 /** A select's trigger. look: field (the value in a field, or bare: the value quiet), title (the value as a page's title,
  *  what the page is showing, its chevron saying it can be changed), icon (an icon button for a toolbar, the value or

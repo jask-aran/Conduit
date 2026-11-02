@@ -81,16 +81,6 @@ export const LayoutGlyph = (props: { weights: number[] }) =>
 /** A tool's header in the dock or a pane: its name, the place it shows (the dock follows places), its modes
  *  (a Segmented), and its controls. compact: the app measured it short -- "labels" drops the modes' words, "name"
  *  the name too. The header is the tool's drag handle. */
-export function ToolHeader(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void; name: string; nameTitle?: string; place?: string; placeTitle?: string; modes?: JSX.Element; views?: JSX.Element; actions?: JSX.Element; draggable?: boolean }) {
-  const [local, rest] = splitProps(props, ["name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children"]);
-  return <header {...rest} class="ui-tool-head">
-    <strong title={local.nameTitle}>{local.name}</strong>
-    <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>
-    {local.modes}
-    {local.views}
-    <div class="ui-tool-actions">{local.actions}</div>
-  </header>;
-}
 
 /** A phone's strip of the dock's views (it has no rail): each an icon and its name; the names go when they do not fit (iconsOnly). */
 export function ToolViews(props: { ref?: (element: HTMLDivElement) => void; iconsOnly?: boolean; children: JSX.Element }) {
@@ -115,10 +105,6 @@ export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (ele
   return <div {...rest} class="ui-tool-bar" data-edge={local.edge ?? "bottom"} data-vertical={local.vertical ? "" : undefined} />;
 }
 /** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
-/** A filter field in a ToolBar: the search mark, then the field. */
-export function ToolFilter(props: JSX.InputHTMLAttributes<HTMLInputElement> & { ref?: (element: HTMLInputElement) => void }) {
-  return <label class="ui-tool-filter"><Icons.Search /><input type="search" {...props} /></label>;
-}
 /** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
 export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) {
   return <div class="ui-tool-notice" data-tone={props.tone} role={props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}>

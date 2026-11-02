@@ -241,11 +241,11 @@ await scenario("split opens an empty column; narrowing folds actions in order in
   const after = await shares();
   check("divider resizes the columns", after[0] < before[0] - 100, `${before} -> ${after}`);
   await page.waitForTimeout(300);
-  const folded = await page.evaluate(() => document.querySelector(".ui-file-viewer > .ui-file .ui-file-head")?.dataset.foldedActions ?? "");
+  const folded = await page.evaluate(() => document.querySelector(".ui-file-viewer > .ui-file .ui-pane-header[data-header=file]")?.dataset.foldedActions ?? "");
   const order = folded.split(",").filter(Boolean).map(Number);
   check("some actions folded", order.length > 0, folded);
   check("folded lowest priority first", order.every((value, index) => index === 0 || value > order[index - 1]) && order[0] === 0, folded);
-  check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer .ui-file-head")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
+  check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer .ui-pane-header[data-header=file]")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
   await page.locator(".ui-file-viewer .ui-icon-button[data-icon-button=file][data-more]").first().click();
   const items = await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim()));
   for (const want of ["Wrap lines", "Copy contents", "Copy path"]) check(`⋯ lists ${want}`, items.some((item) => item.startsWith(want)), items.join(" | "));
@@ -268,7 +268,7 @@ await scenario("focus: Alt+] steps tabs across columns; Ctrl+Shift+2 steps panes
   check("Ctrl+Shift+2 leaves the viewer for pane A", await until(page, () => !document.activeElement?.closest("[data-pane-slot]")), await focusIn(page));
   await page.keyboard.press("Control+Shift+Digit2");
   check("Ctrl+Shift+2 comes back to the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer")), await focusIn(page));
-  const place = () => page.evaluate(() => document.querySelector('[data-region="workspace-panel"] .ui-tool-head')?.textContent?.trim().slice(0, 60));
+  const place = () => page.evaluate(() => document.querySelector('[data-region="workspace-panel"] .ui-pane-header[data-header=tool]')?.textContent?.trim().slice(0, 60));
   const viewerPlace = await place();
   await page.locator("[data-pane-slot] [aria-label='Close this pane']").first().click();
   check("closing returns focus to pane A", await until(page, () => !document.querySelector("[data-pane-slot] .ui-file-viewer") && !document.activeElement?.closest(".workspace-panel")), await focusIn(page));

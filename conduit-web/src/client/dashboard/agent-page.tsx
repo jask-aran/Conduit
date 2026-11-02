@@ -1,8 +1,8 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
 import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
-import { Dialog } from "@/components/dialog";
-import { MenuRow } from "@/components/menus";
+import { Dialog } from "@/components/ui/dialog";
+import { MenuRow } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";

@@ -2,13 +2,13 @@
 .ui-file { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 .ui-file:focus { outline: none; }
 
-.ui-file-head { position: relative; display: flex; min-height: var(--control); flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), var(--tint) 24%); font: var(--text-label)/1.45 var(--font-sans); }
-.ui-file[data-focused] > .ui-file-head { background: color-mix(in oklch, var(--background), var(--tint) 48%); }
-.ui-file-head > .ui-tabs-row { flex: 1 1 auto; min-width: 0; }
+.ui-pane-header:where([data-header="file"]) { position: relative; display: flex; min-height: var(--control); flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), var(--tint) 24%); font: var(--text-label)/1.45 var(--font-sans); }
+.ui-file[data-focused] > .ui-pane-header:where([data-header="file"]) { background: color-mix(in oklch, var(--background), var(--tint) 48%); }
+.ui-pane-header:where([data-header="file"]) > .ui-tabs-row { flex: 1 1 auto; min-width: 0; }
 .ui-file-name { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-sm); }
 .ui-file-name > svg, .ui-file-name > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-file-name > span { overflow: hidden; color: var(--foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
-.ui-file-head small { flex: none; color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
+.ui-pane-header:where([data-header="file"]) small { flex: none; color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
 .ui-file-git { flex: none; color: var(--change-modified); font: var(--text-caption) var(--font-data); }
 .ui-file-git:is([data-status="U"], [data-status="A"]) { color: var(--change-added); }
 .ui-file-git[data-status="D"] { color: var(--change-removed); }
@@ -16,14 +16,14 @@
 .ui-file-dirty[data-dirty] { opacity: 1; transform: scale(1); }
 
 /* The controls keep one order whatever the markup: save, actions, tools, the ⋯, close, the pane's own. */
-.ui-file-head > .ui-icon-button:where([data-icon-button="file"]) { order: 2; }
+.ui-pane-header:where([data-header="file"]) > .ui-icon-button:where([data-icon-button="file"]) { order: 2; }
 .ui-actions:where([data-actions="file"]), .ui-actions:where([data-actions="tools"]) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-actions:where([data-actions="file"]) { order: 4; }
 .ui-actions:where([data-actions="tools"]) { order: 5; }
 .ui-file-suffix { display: contents; }
-.ui-file-head > .ui-icon-button:where([data-icon-button="file"])[data-more] { order: 9; }
-.ui-file-head > .ui-icon-button:where([data-icon-button="file"])[data-close] { order: 10; }
-.ui-file-head > .ui-actions:where([data-actions="pane"]) { order: 11; }
+.ui-pane-header:where([data-header="file"]) > .ui-icon-button:where([data-icon-button="file"])[data-more] { order: 9; }
+.ui-pane-header:where([data-header="file"]) > .ui-icon-button:where([data-icon-button="file"])[data-close] { order: 10; }
+.ui-pane-header:where([data-header="file"]) > .ui-actions:where([data-actions="pane"]) { order: 11; }
 
 .ui-icon-button:where([data-icon-button="file"]) { display: inline-flex; min-width: var(--control-xs); height: var(--control-xs); flex: none; align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: inherit; }
 .ui-icon-button:where([data-icon-button="file"])[data-wide] { padding-inline: var(--space-sm); }
@@ -34,17 +34,17 @@
 .ui-icon-button:where([data-icon-button="file"]) > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 
 /* File headers retain the workbench's controls; tabs keep their own close targets. */
-.ui-file-head :is(.ui-icon-button:where([data-icon-button="file"]), .ui-icon-button:where([data-icon-button="pane"])):not(.ui-pane-tabs *) { min-width: var(--control-tool); height: var(--control-tool); gap: var(--space-xs); padding: 0 var(--space-sm); font: inherit; }
-.ui-file-head :is(.ui-icon-button:where([data-icon-button="file"]), .ui-icon-button:where([data-icon-button="pane"])):not(.ui-pane-tabs *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-file-head .ui-icon-button:where([data-icon-button="file"])[data-more] { width: var(--control-sm); min-width: 0; height: var(--control-sm); padding: 0; }
-.ui-file-head .ui-icon-button:where([data-icon-button="file"])[data-more] > svg { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-pane-header:where([data-header="file"]) :is(.ui-icon-button:where([data-icon-button="file"]), .ui-icon-button:where([data-icon-button="pane"])):not(.ui-pane-tabs *) { min-width: var(--control-tool); height: var(--control-tool); gap: var(--space-xs); padding: 0 var(--space-sm); font: inherit; }
+.ui-pane-header:where([data-header="file"]) :is(.ui-icon-button:where([data-icon-button="file"]), .ui-icon-button:where([data-icon-button="pane"])):not(.ui-pane-tabs *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"])[data-more] { width: var(--control-sm); min-width: 0; height: var(--control-sm); padding: 0; }
+.ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"])[data-more] > svg { width: var(--icon-lg); height: var(--icon-lg); }
 
 /* Fitting hides what folded (data-folded); the ⋯ that holds it is the pane viewer's (below). */
-.ui-file-head .ui-icon-button:where([data-icon-button="file"])[data-more] { display: none; }
-.ui-file-head [data-folded] { display: none; }
+.ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"])[data-more] { display: none; }
+.ui-pane-header:where([data-header="file"]) [data-folded] { display: none; }
 /* In a pane's viewer the ⋯ is always there, and what it holds is not repeated beside it. */
-.ui-file-viewer .ui-file-head .ui-icon-button:where([data-icon-button="file"])[data-more] { display: inline-flex; }
-.ui-file-viewer .ui-file-head .ui-icon-button:where([data-icon-button="file"])[data-in-menu] { display: none; }
+.ui-file-viewer .ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"])[data-more] { display: inline-flex; }
+.ui-file-viewer .ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"])[data-in-menu] { display: none; }
 
 .ui-file-viewer { position: relative; display: flex; min-height: 0; flex: 1; flex-direction: row; }
 .ui-file-viewer > .ui-file { flex: var(--side-a, 1) 1 0; }
@@ -67,8 +67,8 @@
 
 /* A phone's controls are touch targets. */
 @media (--conduit-phone-layout) {
-  .ui-file-head { min-height: var(--control-lg); }
-  .ui-file-head .ui-icon-button:where([data-icon-button="file"]), .ui-status-bar .ui-icon-button:where([data-icon-button="file"]), .ui-status-picker { min-width: var(--control-sm); height: var(--control-sm); }
+  .ui-pane-header:where([data-header="file"]) { min-height: var(--control-lg); }
+  .ui-pane-header:where([data-header="file"]) .ui-icon-button:where([data-icon-button="file"]), .ui-status-bar .ui-icon-button:where([data-icon-button="file"]), .ui-status-picker { min-width: var(--control-sm); height: var(--control-sm); }
   .ui-icon-button:where([data-icon-button="file"]) > svg { width: var(--icon); height: var(--icon); }
 }
 

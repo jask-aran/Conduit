@@ -1,7 +1,8 @@
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons, Empty, Actions, IconButton } from "@/components/ui";
-import { FileHead, FileName, StatusBar, StatusText } from "@/components/ui/file";
-import { CodeHost, Comparison, ComparisonContent, ComparisonCounts } from "@/components/ui/editor";
+import { Icons, Empty, Actions, IconButton, PaneHeader } from "@/components/ui";
+import { FileName, StatusBar, StatusText } from "@/components/ui/file";
+import { CodeHost, Comparison, ComparisonContent } from "@/components/ui/editor";
+import { LineCounts } from "@/components/ui/dashboard";
 import { MergeView, getChunks } from "@codemirror/merge";
 import { inlineLineNumbers, inlineRowsOf, setInlineRows, workspaceInlineDiff, workspaceMergeView } from "./workspace-diff-setup";
 import { buildInlineDiff, inlineDocLine, inlineRowNumber, unchangedRuns, type InlineDiff } from "./workspace-inline-diff";
@@ -291,7 +292,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
   });
 
   return <Comparison>
-    <FileHead>
+    <PaneHeader kind="file">
       <Show when={props.headerTabs} fallback={<FileName path={props.comparison.path} icon={<FileTypeIcon name={props.comparison.path} />} />}>{props.headerTabs}</Show>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
@@ -302,14 +303,14 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
         </Actions>
       </Show>
       {props.headerEnd}
-    </FileHead>
+    </PaneHeader>
     <Show when={props.comparison.kind === "text"} fallback={<Empty>{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</Empty>}>
       <ComparisonContent data-layout={layout()}>
         <CodeHost ref={(element) => { host = element; }} comparison />
         <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => selectAnnotation(null)} />}</Show>
       </ComparisonContent>
       <StatusBar commands={props.comparisonSource}>
-        <ComparisonCounts title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></ComparisonCounts>
+        <LineCounts kind="bar" title={summary().precise ? "Changed lines" : "Approximate changed lines"} removed={summary().removed} added={summary().added} />
         <IconButton kind="file" wide aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</IconButton>
         <StatusText>{languageName()} · Read-only</StatusText>
       </StatusBar>

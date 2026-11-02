@@ -51,7 +51,7 @@ should stay itself.
 5. **Action rows and toolbars** (sheet `bars`): 16 → `Actions` (a run of controls: start or end, wrapping or folding
    into ⋯) and `ToolBar` (a hairlined strip). The composer's Toolbar and the file StatusBar stay.
 6. **Groups and sections** (sheet `groups`): 12 → `Group` (built 2026-11-02 as `Group`, not `Section`: the menu's
-   `Section` keeps its name, and `components/menus.tsx` already has a `MenuSection`) with a kind for each family
+   `Section` keeps its name, and `components/ui/menus.tsx` already has a `MenuSection`) with a kind for each family
    (setting, column, nav, workbench, card, agent, dash, change), and `Columns`.
 7. **Search and address fields** (sheet `fields`): 9 → `Input` with a lead slot and a state (none, checking, ok,
    failed), and one `SearchField`. OverlayBar, the palette's whole top, stays.
@@ -76,10 +76,10 @@ SearchActions, Frost, OverlayHead, Aura, Menu, TraceHeader, Bubble.
 
 ## Outside the library
 
-`src/components/menus.tsx` (32 importers) and `dialog.tsx` (14) are the Kobalte-backed menus and dialogs, still
-outside `ui/`; `decision-dialog.tsx` and `notifications.tsx` likewise. They belong in the library as the behaviour
-layer under its menus and cards. `src/client/dashboard/primitives/split.tsx` is the dashboards' own layer over
-`dashboard.tsx` (SplitGroup, SplitRow); it folds into `Section` and `Row`.
+The Kobalte-backed menus and dialogs (`menus.tsx`, `dialog.tsx`, `decision-dialog.tsx`, `notifications.tsx` and
+their `portal.ts`) now live in `src/components/ui/` as the behaviour layer under its menus and cards (step 5); they are
+imported by path, not through the index. `src/client/dashboard/primitives/split.tsx` is the dashboards' own layer over
+`dashboard.tsx` (SplitGroup, SplitRow); it folds into `Group` and `Row`.
 
 ## Order
 

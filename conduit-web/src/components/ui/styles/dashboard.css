@@ -104,7 +104,7 @@
 @media (hover: hover) { .ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-group-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-group-action small { margin-left: auto; padding-left: var(--space-lg); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-group-actions:where([data-group="dash"] *) > .ui-counts { padding-inline: var(--space-md); font-size: var(--text-caption); }
+.ui-group-actions:where([data-group="dash"] *) > .ui-counts:where([data-counts="list"]) { padding-inline: var(--space-md); font-size: var(--text-caption); }
 
 /* Rows: the sidebar's, at a page. */
 /* A page has room for a taller row than the sidebar: two units at least, the sidebar's where that is taller (a phone). */
@@ -146,13 +146,13 @@
 .ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--change-modified); }
 .ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--change-added); }
 .ui-change-status[data-status="D"] { color: var(--change-removed); }
-.ui-counts { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-counts [data-change="removed"] { color: var(--change-removed); }
-.ui-counts [data-change="added"] { color: var(--change-added); }
+.ui-counts:where([data-counts="list"]) { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-counts:where([data-counts="list"]) [data-change="removed"] { color: var(--change-removed); }
+.ui-counts:where([data-counts="list"]) [data-change="added"] { color: var(--change-added); }
 /* Compact: under the muted chats, changes keep their colour only as a hint. */
 .ui-dash[data-compact] .ui-row:where([data-density="list"])[data-change-row] > svg { opacity: var(--opacity-rest); filter: grayscale(1); }
 .ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
-.ui-dash[data-compact] :is(.ui-row:where([data-density="list"])[data-change-row] .ui-counts [data-change], .ui-change-status) { color: var(--muted-foreground); }
+.ui-dash[data-compact] :is(.ui-row:where([data-density="list"])[data-change-row] .ui-counts:where([data-counts="list"]) [data-change], .ui-change-status) { color: var(--muted-foreground); }
 
 /* The folder shelf: project folders as folders, no box, the wash as cursor; two rows until all. */
 .ui-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--dash-folder), 1fr)); gap: var(--space-2xs); }

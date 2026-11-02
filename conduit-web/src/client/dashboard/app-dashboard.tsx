@@ -4,8 +4,8 @@ import { Icons } from "@/components/ui";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
-import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection } from "@/components/menus";
-import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection } from "@/components/ui/menus";
+import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/ui/menus";
 import { ChatMenuFor, PlaceMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api, projectPath } from "../api/client";
 import type { ChatSummary, Project, Template } from "../api/contracts";

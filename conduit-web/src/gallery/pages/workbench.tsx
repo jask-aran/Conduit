@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
-import { Button, Icons, StatusText, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle, Row, Group, Note, Actions, IconButton } from "@/components/ui";
-import { Select } from "@/components/menus";
+import { Button, Icons, StatusText, Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle, Row, Group, Note, Actions, IconButton, Heading } from "@/components/ui";
+import { Select } from "@/components/ui/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
 import { documentChain } from "./network";
@@ -15,7 +15,7 @@ function PromptsBench() {
       title={<Select look="title" search="Search documents" aria-label="Document" value={doc()} onChange={(event) => setDoc(event.currentTarget.value)}><option value="assistant">Assistant</option><option value="agent">jbot</option><option value="heartbeat">Heartbeat</option></Select>}
       actions={<Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" disabled><Icons.Reset /></Button>} />
     <WorkbenchSplit side={documentChain()} main={<TextEditor fill readOnly label="Assistant text" value={TEXT}
-      head={<><TextEditorTitle>Assistant</TextEditorTitle><Actions kind="editor">
+      head={<><Heading kind="editor">Assistant</Heading><Actions kind="editor">
         <IconButton kind="file" label="Edit"><Icons.Edit /></IconButton><IconButton kind="file" label="Move up" disabled><Icons.ArrowUp /></IconButton><IconButton kind="file" label="Move down"><Icons.ArrowDown /></IconButton>
         <Select look="icon" icon={<Icons.Swap />} search="Search blocks" aria-label="Swap for another block" title="Swap for another block" value=""><option value="">Swap</option><option value="naming">Chat naming</option></Select>
         <IconButton kind="file" label="Remove"><Icons.Close /></IconButton></Actions></>}
@@ -34,7 +34,7 @@ function BlocksBench() {
       <Group kind="workbench" title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></Group>
       <Group kind="workbench" title="Conduit then adds"><Note kind="workbench">The run's routine, then what woke it.</Note></Group>
     </>} main={<TextEditor fill label="Run rules text" value={text()} onChange={setText}
-      head={<><TextEditorTitle>Text</TextEditorTitle><Actions kind="editor"><Button variant="primary" size="sm">Save</Button><IconButton kind="file" label="Reset"><Icons.Reset /></IconButton></Actions></>}
+      head={<><Heading kind="editor">Text</Heading><Actions kind="editor"><Button variant="primary" size="sm">Save</Button><IconButton kind="file" label="Reset"><Icons.Reset /></IconButton></Actions></>}
       status={<><StatusText>{`${Math.round(text().length / 4)} tok`}</StatusText><StatusText>jbot's file: jbot can change it too</StatusText></>} />} />
   </Workbench></div>;
 }
@@ -43,7 +43,7 @@ export const workbenchPage: Page = {
   title: "Workbench",
   summary: "A page that works on one thing at a time: its title is the thing (pressing it chooses another), the split below fills the page's height -- a side column that scrolls on its own, and one pane filling the main column with its actions in its bar and its facts in its foot -- so the page never scrolls.",
   preview: () => <BlocksBench />,
-  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, Group, WorkbenchFact, Note, TextEditorTitle, Actions } from "@/components/ui";
+  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, Group, WorkbenchFact, Note, Heading, Actions } from "@/components/ui";
 import { TextEditor } from "@/components/ui/text-editor"; // CodeMirror: imported on its own, never from the barrel
 
 <Workbench label="Blocks">

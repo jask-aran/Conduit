@@ -73,7 +73,7 @@ still tested but the v2 markup is not; build first to cover the page itself. For
 Chrome CLI `emulate --viewport '412x860x2.625,mobile,touch'`; window resizing
 alone does not set the coarse-pointer layout. Check opening-tap consumption,
 Escape back to the parent, disabled choices, keyboard focus and selection.
-Desktop and phone use the same `MenuSub` adapter in `components/menus.tsx`;
+Desktop and phone use the same `MenuSub` adapter in `components/ui/menus.tsx`;
 `phone` changes panel placement and Back handling. Keyboard opening must focus
 the first available child. Pointer opening must focus inside the child without
 selecting a choice. Tapping the dimmed parent must return without acting on a

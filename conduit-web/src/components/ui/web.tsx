@@ -2,19 +2,13 @@ import { Show, splitProps, type JSX } from "solid-js";
 import * as Icons from "./icons";
 
 /*
- * Web: a web page in a pane (the hub's browser, roadmap #7) -- its bar (a ToolBar of ToolButtons and the WebAddress)
+ * Web: a web page in a pane (the hub's browser, roadmap #7) -- its bar (a ToolBar of IconButtons and a LeadInput kind web)
  * over its WebScreen, the page drawn live. Shapes only: the stream, the input it sends and what the bar does are the
  * caller's (client/browser/browser-pane.tsx).
  */
 
 /** The page's column: the bar, then the screen taking the rest of the pane. */
 export const WebView = (props: { label: string; children: JSX.Element }) => <section class="ui-web" aria-label={props.label}>{props.children}</section>;
-
-/** The page's address in the bar, edited in place (Enter goes there): a globe, or a lock when the page is https. */
-export function WebAddress(props: JSX.InputHTMLAttributes<HTMLInputElement> & { secure?: boolean; ref?: (element: HTMLInputElement) => void }) {
-  const [local, rest] = splitProps(props, ["secure"]);
-  return <label class="ui-web-address">{local.secure ? <Icons.Lock /> : <Icons.Browser />}<input type="text" spellcheck={false} autocomplete="off" {...rest} /></label>;
-}
 
 /**
  * The live page: a canvas the caller draws each frame into (`canvas`), shown whole in the pane on the ground, taking

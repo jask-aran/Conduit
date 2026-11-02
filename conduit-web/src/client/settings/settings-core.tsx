@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
@@ -15,7 +15,7 @@ import { BrowserSettings } from "./browser-settings";
 import { SkillsSettings } from "./skills-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
@@ -54,9 +54,9 @@ import {
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
 import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/components/ui/controls";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
-import { OverlayDialog } from "@/components/dialog";
+import { OverlayDialog } from "@/components/ui/dialog";
 import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";

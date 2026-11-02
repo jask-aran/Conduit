@@ -1,7 +1,6 @@
 import { HarnessMark } from "@/components/ui";
-import { ConnectionHeading } from "@/components/ui";
-import { Icons, Note } from "@/components/ui";
-import { DropdownMenu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/menus";
+import { Icons, Note, Heading } from "@/components/ui";
+import { DropdownMenu as LiveMenu, MenuContent as LiveMenuContent, MenuSection as LiveMenuSection, MenuRow as LiveMenuRow, MenuRadioGroup as LiveRadioGroup, MenuRadioItem as LiveRadioItem, MenuSub as LiveSub, MenuSubTrigger as LiveSubTrigger, MenuSubContent as LiveSubContent } from "@/components/ui/menus";
 import { Avatar, ConnectionScreen, PasswordSignIn, ServerControl, ConnectionRecovery, ConnectionForm, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
 import { CardBody } from "@/components/ui/card";
 import { createSignal } from "solid-js";
@@ -49,12 +48,12 @@ export const connectionPage: Page = {
   title: "Connection", rail: "Blocks",
   summary: "Sign-in, first connection, server selection and recovery. Shared v2 markup and tokens in the app and the server-rendered login page.",
   preview: CONNECTIONS[0]!.render,
-  usage: `import { ConnectionScreen, ConnectionForm, ConnectionHeading, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
+  usage: `import { ConnectionScreen, ConnectionForm, Heading, ConnectionAddress, ConnectionStatus, ConnectionPassword } from "@/components/ui/connection";
 import { HarnessMark } from "@/components/ui";
 
 <ConnectionScreen>
   <ConnectionForm onSubmit={connect}>
-    <ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading>
+    <Heading mark={<HarnessMark id="conduit" />}>Connect to your server</Heading>
     <ConnectionAddress value={address()} onInput={(event) => setAddress(event.currentTarget.value)} state="found" />
     <ConnectionStatus state="found" title="Laptop" detail="laptop.ts.net" />
     <ConnectionPassword value={password()} onInput={(event) => setPassword(event.currentTarget.value)} />
@@ -66,7 +65,7 @@ import { HarnessMark } from "@/components/ui";
     {selector: ".ui-connection-password",name: "Password",does: "accepts the password and submits the form",from: "ConnectionPassword"},
   ] },
   examples: [
-    row("ConnectionHeading", "Conduit's mark, then what the screen asks", () => <ConnectionHeading mark={<HarnessMark id="conduit" />}>Connect to your server</ConnectionHeading>, { source: "components/ui/connection.tsx · client/main.tsx", phone: true, code: "<ConnectionHeading mark>title</ConnectionHeading>" }),
+    row("Heading", "Conduit's mark, then what the screen asks", () => <Heading kind="connection" mark={<HarnessMark id="conduit" />}>Connect to your server</Heading>, { source: "components/ui/connection.tsx · client/main.tsx", phone: true, code: "<Heading mark>title</Heading>" }),
     ...CONNECTIONS,
   ],
   tokens: [{ title: "Its surface", tokens: [
@@ -75,5 +74,5 @@ import { HarnessMark } from "@/components/ui";
     token("--text-caption", "Status and detail text"),
     token("--space-sm", "Space between fields")
   ] }],
-  api: ["ConnectionScreen", "ConnectionHeading", "HarnessMark", "PasswordSignIn", "ConnectionForm", "ConnectionChoices", "ConnectionChoice", "ConnectionGroup", "ConnectionAddress", "ConnectionStatus", "ConnectionPassword", "ConnectionRecovery", "ServerControl", "StatusDot", "Spinner", "Input", "Button", "CardBody", "Note", "Menu", "Section", "Item", "MenuPanel", "MenuParent", "CameraPreview"],
+  api: ["ConnectionScreen", "Heading", "HarnessMark", "PasswordSignIn", "ConnectionForm", "ConnectionChoices", "ConnectionChoice", "ConnectionGroup", "ConnectionAddress", "ConnectionStatus", "ConnectionPassword", "ConnectionRecovery", "ServerControl", "StatusDot", "Spinner", "Input", "Button", "CardBody", "Note", "Menu", "Section", "Item", "MenuPanel", "MenuParent", "CameraPreview"],
 };

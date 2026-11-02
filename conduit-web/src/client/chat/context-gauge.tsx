@@ -1,7 +1,7 @@
 import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { Button, Gauge, Meter, Reading, ReadingFoot, ReadingPart, ReadingParts, ReadingStat, ReadingStats, ReadingTotal } from "@/components/ui";
 import { ShrinkIcon } from "lucide-solid";
-import { Popover, PopoverContent } from "@/components/menus";
+import { Popover, PopoverContent } from "@/components/ui/menus";
 import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import type { ActiveChatStore } from "../state/active-chat";
 import type { ContextCategory } from "../api/contracts";

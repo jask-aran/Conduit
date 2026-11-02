@@ -1,5 +1,5 @@
 import { Toaster as SonnerToaster, toast as sonner } from "solid-sonner";
-import { Toast, Toaster, type ToastKind } from "./ui/toast";
+import { Toast, Toaster, type ToastKind } from "./toast";
 
 type Options = {
   id?: string | number;

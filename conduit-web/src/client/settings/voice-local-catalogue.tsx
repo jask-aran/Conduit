@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import { Button, Progress, Switch } from "@/components/ui/controls";
-import { Select } from "@/components/menus";
+import { Select } from "@/components/ui/menus";
 import { SettingLine, SettingWide } from "@/components/ui/overlay";
 import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
 import { Note } from "@/components/ui/state";

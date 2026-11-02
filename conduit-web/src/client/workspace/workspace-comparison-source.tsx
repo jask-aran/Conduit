@@ -3,7 +3,7 @@ import { StatusText, StatusPicker } from "@/components/ui/file";
 import { ComparisonSource, TurnNavigation } from "@/components/ui/editor";
 import { For, Show } from "solid-js";
 
-import { DropdownMenu, MenuContent, MenuRow, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/menus";
+import { DropdownMenu, MenuContent, MenuRow, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/ui/menus";
 import { Spinner } from "@/components/ui/controls";
 import { createWorkspaceReview, diffScopes, isDiffScope, type DiffScope } from "./workspace-review-source";
 

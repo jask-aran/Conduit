@@ -2,9 +2,9 @@ import * as KDialog from "@kobalte/core/dialog";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
 import { createFullscreenPortalMount } from "./portal";
-import { Card } from "./ui/card";
-import { haptic } from "./ui/haptics";
-import { Overlay, Scrim } from "./ui/overlay";
+import { Card } from "./card";
+import { haptic } from "./haptics";
+import { Overlay, Scrim } from "./overlay";
 
 /** Kobalte owns modality and focus; Card and Scrim own every part of the surface. */
 export function Dialog(props: {

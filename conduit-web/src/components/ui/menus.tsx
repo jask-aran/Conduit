@@ -3,9 +3,9 @@ import { Popover as KPopover } from "@kobalte/core/popover";
 import { ContextMenu as KContextMenu } from "@kobalte/core/context-menu";
 import type { FocusOutsideEvent } from "@kobalte/core";
 import { createContext, createEffect, Index, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
-import { haptic } from "./ui/haptics";
+import { haptic } from "./haptics";
 import { createFullscreenPortalMount } from "./portal";
-import { Note } from "@/components/ui/state";
+import { Note } from "./state";
 
 /*
  * Row menus wait for the first open to have been shown. Every chat, folder and project row carries a context menu, and
@@ -16,9 +16,9 @@ import { Note } from "@/components/ui/state";
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
-import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, SearchSection } from "./ui/popover";
-import { Button, SelectTrigger, SliderValue } from "./ui/controls";
-import { PillButton } from "./ui/pill";
+import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, SearchSection } from "./popover";
+import { Button, SelectTrigger, SliderValue } from "./controls";
+import { PillButton } from "./pill";
 // Both are measured once and kept until the window or the Interface size changes: Kobalte reads them on every position
 // update, and a probe each time laid the page out again before floating-ui measured.
 let edges: unknown, gapPx: number | undefined;

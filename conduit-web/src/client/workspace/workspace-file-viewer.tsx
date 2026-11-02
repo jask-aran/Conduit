@@ -1,12 +1,12 @@
 import { Icons, Empty, IconButton } from "@/components/ui";
-import { createDecisionScope } from "@/components/decision-dialog";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 
-import { MenuRow } from "@/components/menus";
+import { MenuRow } from "@/components/ui/menus";
 import { FileViewer as Viewer } from "@/components/ui/file";
 import { FileDivider, FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
-import { toast } from "@/components/notifications";
+import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import type { FileEntry } from "./file-documents";
 import type { ComparisonPayload } from "./workspace-comparison";
@@ -146,7 +146,7 @@ export default function FileViewer(props: {
   // has, then gathers the rest into its overflow menu, before the file's name
   // goes -- measured, not a width.
   let root: HTMLDivElement | undefined;
-  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".ui-file-head").forEach((header) => {
+  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".ui-pane-header[data-header=file]").forEach((header) => {
     header.removeAttribute("data-compact");
     // The name needs room for at least the file's own name, measured from its text.
     const name = header.querySelector<HTMLElement>(".ui-file-name > span");
