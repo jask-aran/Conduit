@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
-import { Answer, DashConversation, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { splitQuoted } from "../../email-quote.js";
+import { Answer, DashConversation, EmailItem, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { api } from "../api/client";
 import { ChatMarkdown } from "../chat/lazy-markdown";
@@ -13,7 +14,10 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
   title?: string; body: string; notify: "none" | "push" | "urgent"; delivery?: { state: string; error?: string };
+  native?: { from?: Party | null; to?: Array<Party | string>; date?: string };
 }
+type Party = { name?: string; address?: string };
+const partyName = (party?: Party | string | null) => typeof party === "string" ? party : party?.name || party?.address || "";
 /** A row of the stream: one message of the app room, or a run of another room's messages, folded (RoomRow). */
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
@@ -60,6 +64,13 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
     : <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined} /></Turn>;
+  // An email in its room: from and to as its headers say; its own words, what it quotes folded.
+  const email = (message: LogMessage) => {
+    const { own, quoted } = splitQuoted(message.body);
+    const from = message.direction === "out" ? props.name : partyName(message.native?.from) || "Someone";
+    const to = (message.native?.to || []).map(partyName).filter(Boolean).join(", ");
+    return <EmailItem from={from} to={to || undefined} time={clock(message.at)} dateTime={message.at} quoted={quoted || undefined}>{markdown(own || message.body)}</EmailItem>;
+  };
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
@@ -68,8 +79,8 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
           <For each={rows()}>{(row, index) => row.kind === "room"
             ? <TranscriptRow flow={flowAt(index())}>
               <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
-                room={roomName(row.room)} count={row.messages.length} last={firstLine(row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
-                <For each={row.messages}>{one}</For>
+                room={roomName(row.room)} count={row.messages.length} last={firstLine(splitQuoted(row.messages.at(-1)!.body).own || row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
+                <For each={row.messages}>{(message) => row.channel === "email" ? email(message) : one(message)}</For>
               </RoomRow>
             </TranscriptRow>
             : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id}>

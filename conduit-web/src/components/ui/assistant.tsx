@@ -80,6 +80,23 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
 export const AgentAvatar = (props: { class?: string; label?: string }) =>
   <img class={`ui-agent-avatar${props.class ? ` ${props.class}` : ""}`} src="/pwa-192x192.png" alt={props.label || ""} aria-hidden={props.label ? undefined : "true"} draggable={false} />;
 
+/**
+ * One email of a room, as a mail client shows a thread: who from and to whom, when, its own words, and what it quotes
+ * folded behind "···" (an email carries the whole thread below it).
+ */
+export function EmailItem(props: { from: string; to?: string; time?: string; dateTime?: string; quoted?: string; children: JSX.Element }) {
+  const [shown, setShown] = createSignal(false);
+  return <article class="ui-email">
+    <header class="ui-email-head"><b class="ui-email-from">{props.from}</b><Show when={props.to}><span class="ui-email-to">to {props.to}</span></Show>
+      <Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></header>
+    <div class="ui-email-body">{props.children}</div>
+    <Show when={props.quoted}>
+      <button type="button" class="ui-email-more" aria-expanded={shown()} aria-label={shown() ? "Hide quoted text" : "Show quoted text"} onClick={() => setShown(!shown())}>···</button>
+      <Expand open={shown()}><pre class="ui-email-quoted">{props.quoted}</pre></Expand>
+    </Show>
+  </article>;
+}
+
 export type ClockKind = "heartbeat" | "brief" | "feed" | "checkback" | "schedule";
 const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
   heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, feed: () => <Icons.Feed />, checkback: () => <Icons.Clock />, schedule: () => <Icons.Runtime />,
