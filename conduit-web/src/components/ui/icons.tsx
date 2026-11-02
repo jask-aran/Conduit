@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  MailIcon,
   AlarmClockIcon,
   HeartPulseIcon,
   InboxIcon,
@@ -289,3 +290,4 @@ export const Narration = ListCollapseIcon;
 export const Tool = WrenchIcon;
 /** A file-writing tool. */
 export const WriteFile = FilePenLineIcon;
+export const Mail = MailIcon;

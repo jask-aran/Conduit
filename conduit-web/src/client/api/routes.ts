@@ -5,7 +5,19 @@
  * tested -- without a fetch, a transport or a native bridge behind it.
  */
 
+/** jbot's home thread has a path of its own; its chat is known once the agent's view loads, and kept for a reload. */
+export const JBOT_THREAD_PATH = "/jbot/thread";
+const JBOT_HOME_KEY = "conduit.jbot.home";
+let jbotHome: string | null = (() => { try { return localStorage.getItem(JBOT_HOME_KEY); } catch { return null; } })();
+export function setJbotHome(id: string | null) {
+  jbotHome = id;
+  try { if (id) localStorage.setItem(JBOT_HOME_KEY, id); else localStorage.removeItem(JBOT_HOME_KEY); } catch { /* a reload looks it up again */ }
+}
+/** A chat's address: jbot's home thread's is /jbot/thread, every other chat's its id. */
+export const chatPath = (id: string) => id === jbotHome ? JBOT_THREAD_PATH : `/chat/${id}`;
+
 export function pathChatId(pathname = location.pathname): string | null {
+  if (pathname === JBOT_THREAD_PATH) return jbotHome;
   return pathname.match(/^\/chat\/([a-zA-Z0-9_-]{8,128})$/)?.[1] || null;
 }
 

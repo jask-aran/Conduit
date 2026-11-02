@@ -1,0 +1,8 @@
+{
+  // jbot's mailbox (docs/plans/persistent-agent.md, The message log): Email Routing delivers jbot@ here, the Worker keeps
+  // each message in R2, and the hub collects it (list, get, delete) behind one shared secret. It receives only.
+  "name": "jbot-mail",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-01",
+  "r2_buckets": [{ "binding": "MAIL", "bucket_name": "jbot-mail" }]
+}

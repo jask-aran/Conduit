@@ -150,9 +150,15 @@ function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
 }
 /** What the turn sent the person (a `message` tool): a notification as it reached their devices. */
 function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
-  const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown };
-  const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent" : "to your devices";
-  return <Outbound shut icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta={[state(), input().urgent === true && "urgent"].filter(Boolean).join(" · ")}
+  const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown; notify?: unknown };
+  // `message` writes to the message log (the app room), reaching the phone only when it asks; `notify` is the phone.
+  const message = () => props.tool.name === "message";
+  const pushed = () => message() ? input().notify === "push" || input().notify === "urgent" : true;
+  const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent"
+    : message() ? (pushed() ? "in the app and to your devices" : "in the app") : "to your devices";
+  const urgent = () => input().urgent === true || input().notify === "urgent";
+  return <Outbound shut icon={message() && !pushed() ? <Icons.Chat aria-hidden="true" /> : <Icons.Notification aria-hidden="true" />}
+    from={message() ? (typeof input().title === "string" ? "Report" : "Message") : "Notification"} meta={[state(), urgent() && "urgent"].filter(Boolean).join(" · ")}
     time={clock(props.tool.completedAt || props.tool.timestamp)} dateTime={props.tool.completedAt || props.tool.timestamp} title={props.tool.timestamp ? fullDateTime(props.tool.timestamp) : undefined}>
     <ChatText renderer={props.renderer} text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
   </Outbound>;
@@ -167,6 +173,8 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
 }
 
 export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
+  /** One of jbot's threads: always there, so an empty one is said to be empty, never welcomed as a new chat. */
+  agentThread?: boolean;
   /** What it does with text said between tool calls (turn-rows.ts `TurnLayout`): `fold` (chats, the default) into the
    *  turn's trace, `show` (the persistent agent's threads) where it was written, with the work between as traces. */
   narration?: Narration;
@@ -1212,7 +1220,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </>}>
-        <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
+        <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}>
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item, index) => {

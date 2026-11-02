@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
+import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
@@ -8,7 +8,7 @@ import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
-import { JbotComposer, JbotMessages, useJbotMessages } from "./jbot-messages";
+import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 
 /**
@@ -64,8 +64,13 @@ export function AgentPage(props: {
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
   markdownRenderer: MarkdownRendererId;
+  /** The home thread's composer: what the person says in the app room, with every composer feature. */
+  composer?: JSX.Element;
+  /** The home thread at work, and a key that moves with what it says: the stream follows both. */
+  working?: boolean;
+  threadChanged?: unknown;
 }) {
-  const log = useJbotMessages();
+  const log = useJbotMessages(() => props.threadChanged);
   const [now, setNow] = createSignal(Date.now());
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
   const [error, setError] = createSignal("");
@@ -156,7 +161,7 @@ export function AgentPage(props: {
   const tally = (entries: AgentInboxEntry[]) => {
     const counts = new Map<string, number>();
     for (const entry of entries) {
-      const noun = entry.kind === "feed" ? (entry.title || "item").toLowerCase() : "report";
+      const noun = entry.kind === "feed" ? (entry.title || "item").toLowerCase() : entry.kind === "email" ? "email" : "report";
       const count = entry.count ?? Number(/^(\d+) new:/.exec(entry.headline || "")?.[1] || 1);
       counts.set(noun, (counts.get(noun) ?? 0) + count);
     }
@@ -271,7 +276,7 @@ export function AgentPage(props: {
     <Show when={view()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <SplitDashboard page="Agent" label={`${name()}'s page`}
-          header={<SplitHeader title={name()} kind="Agent" glyph={<Icons.Agent />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
+          header={<SplitHeader title={name()} kind="Agent" glyph={<AgentAvatar />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
@@ -279,8 +284,8 @@ export function AgentPage(props: {
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
-          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} onOpenThread={props.onOpenThread} />}
-          composer={<JbotComposer name={name()} onSend={log.send} />}
+          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
+          composer={props.composer}
           aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>

@@ -284,6 +284,22 @@ reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. Th
   has no delete API; what is really wanted is archival or compression of finished work, asked of upstream rather
   than written against its storage.
 
+### Email, built (2026-11-02)
+
+- **Mailbox**: Email Routing sends `jbot@jask-aran.com` to the `jbot-mail` Worker (`workers/jbot-mail`), which keeps
+  each message whole in R2 until the hub collects it (each minute; the hub may sleep or move networks). The hub holds
+  only the Worker's URL and a shared secret (`data/agent/email.json`), and sends through it (the Email Service send
+  binding: free to verified addresses such as the person's own; to anyone else needs Workers Paid).
+- **Rooms**: one per email thread, followed by Message-ID, In-Reply-To and References. A message keeps its native form
+  (headers, and the original, HTML and attachments saved in jbot's folder under `mail/`); jbot is given the text,
+  the HTML turned to Markdown when there is no text part.
+- **Who wakes jbot**: only the person's addresses (`person`) and senders they allow (`allow`: addresses or `@domains`).
+  Anyone else's email is logged (held) and filed in the context inbox for the heartbeat: spam costs nothing until
+  something there is worth a turn. A classifier (Jev) can later sit in front of the inbox for what is worth filing.
+- **Replies**: the final text of a turn an email of the person's started goes back as email in its thread (Markdown
+  as text and HTML, threading headers set); `message` with an email room replies there, `room: email` starts a new
+  email to the person. A room with anyone else in it is never written to without approval (not yet askable).
+
 ### From the precedent review (2026-11-02)
 
 A review of Duet, Muse, Grok Bot, Open Muse and OpenBot (`references/jbot/message-log-precedent.md`, gitignored,

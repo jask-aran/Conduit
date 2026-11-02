@@ -70,6 +70,7 @@ import { startEvents } from "./agent/events.js";
 import { seedSchedules } from "./agent/schedule.js";
 import { agentNotifier } from "./agent/notify.js";
 import { MessageLog, mirrorHomeThread } from "./agent/messages.js";
+import { EmailChannel } from "./agent/email.js";
 import { PushService } from "./push/push-service.js";
 import { registerPushRoutes } from "./server/routes/push.js";
 import { createHostUi } from "./server/host-ui.js";
@@ -724,6 +725,11 @@ if (persistentAgent) {
   // What jbot and the person say to each other, apart from its thread (agent/messages.js); it outlives a reset.
   const messageLog = await new MessageLog(path.join(config.dataRoot, "agent", "messages.jsonl")).load();
   durableAdapter.runtime.messageLog = messageLog;
+  // jbot's email (agent/email.js): its mailbox Worker collected each minute, replies sent through it.
+  const emailChannel = await new EmailChannel({ file: path.join(config.dataRoot, "agent", "email.json"), agent: persistentAgent, log: messageLog }).load();
+  messageLog.channels.email = emailChannel;
+  emailChannel.start();
+  lifetime.own("jbot email", emailChannel, (owned) => owned.stop());
   void mirrorHomeThread(persistentAgent, messageLog).then((unsubscribe) => lifetime.own("jbot message log", { stop: unsubscribe }, (owned) => owned.stop()))
     .catch((error) => console.error("[agent] message log mirror did not start", error));
   registerAgentRoutes(app, { agent: persistentAgent, backends });
