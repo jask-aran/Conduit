@@ -3,6 +3,7 @@ import { SCRIPTED_MODELS, scriptedProvider } from "./scripted-model.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { prefixWatch } from "./prefix-watch.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
@@ -11,7 +12,7 @@ import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
-import { createRegistry, defineDoc, defineExtension, defineTool, Harness, section } from "@earendil-works/pi-durable";
+import { createRegistry, defineDoc, defineExtension, defineTool, Harness, ProviderDoc, section } from "@earendil-works/pi-durable";
 import { answerTo, isDismissal, questionRequest } from "../harnesses/questions.js";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools, createCodingTools } from "@earendil-works/pi-durable/tools";
@@ -216,6 +217,24 @@ export class DurableRuntime {
   notify(conversationId, notice) { this.notices?.get(conversationId)?.(notice); }
 
   /** A prompt a Pi extension sends its conversation (`sendUserMessage`), after what it is doing. */
+  /**
+   * Warm the provider's prompt cache for a conversation about to be woken (a run that will report to it has started):
+   * its last request sent again for a handful of output tokens, so the wake reads its prefix from cache instead of
+   * paying for it while the person waits. Skipped when it ran in the last 5 minutes (still warm) or has never run.
+   */
+  async warmCache(conversationId) {
+    try {
+      const provider = await this.harness.snapshot(ProviderDoc, conversationId);
+      const saved = provider && this.prefixWatch.last(provider.sessionId);
+      if (!saved || Date.now() - saved.at < 5 * 60_000) return false;
+      saved.at = Date.now();
+      const events = this.models.streamSimple(saved.model, { messages: [] }, { sessionId: provider.sessionId, cacheRetention: "long",
+        onPayload: () => this.prefixWatch({ ...saved.params, __warm: true, max_output_tokens: 16 }, saved.model) });
+      for await (const event of events) if (event?.type === "error") console.warn("[cache] warm failed", event.error?.errorMessage || "");
+      return true;
+    } catch (error) { console.warn("[cache] warm failed", error?.message || error); return false; }
+  }
+
   async say(conversationId, content, whenBusy, context) {
     const conversation = await this.harness.conversation(conversationId, context);
     const messageId = randomUUID();
@@ -272,6 +291,7 @@ export class DurableRuntime {
       this.refreshConnectors();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
+      this.prefixWatch = prefixWatch(path.join(this.dataRoot, "runtime", "prefix-watch.jsonl"));
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
         models: cappedOutput(this.models),
         registry,
@@ -289,7 +309,7 @@ export class DurableRuntime {
           // Anthropic; on GPT-5.6 and later "long" is the 30-minute default (a ChatGPT sign-in takes no cache option at
           // all: signed-in accounts keep their cache server-side). The prefix is only ever appended to, so what is cached
           // stays usable.
-          stream: { cacheRetention: "long" },
+          stream: { cacheRetention: "long", onPayload: this.prefixWatch },
           get retry() {
             const retry = runtime.piSettings().retry;
             return Object.fromEntries([["enabled", retry?.enabled], ["maxRetries", retry?.maxRetries],

@@ -563,6 +563,8 @@ export function Subagents(runtime) {
     roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
       status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
       ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
+    // The parent will be woken by this run's report: warm its prompt cache while the run works (after this commit).
+    if (gate) setTimeout(() => void runtime.warmCache?.(conversationId), 1000);
     return JSON.parse(JSON.stringify(roster.children[id]));
   };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });
