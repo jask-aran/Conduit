@@ -4504,13 +4504,11 @@ function App() {
       <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></PaneAction>
     </PaneActions>
   </Show>;
-  // A lone pane offers only New pane; a split adds dock, swap and close.
-  const paneRowActions = (pane: PaneKey) => <Show when={splitShown() || (!isMobileLayout() && dockAvailable())}>
+  const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
     <PaneActions>
-      <Show when={splitShown() && canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
-      <Show when={splitShown() && swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
-      <PaneAction label="New pane" onClick={openEmptyPane}><Icons.Add /></PaneAction>
-      <Show when={splitShown() && (pane !== "main" || shownSlots()[0] !== undefined)}><PaneAction aria-label={viewOf(pane) === "home" ? "Close this pane" : "Close this document"} title="Close" onClick={() => void closeDocument(pane)}><Icons.Close /></PaneAction></Show>
+      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
+      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label={viewOf(pane) === "home" ? "Close this pane" : "Close this document"} title="Close" onClick={() => void closeDocument(pane)}><Icons.Close /></PaneAction></Show>
     </PaneActions>
   </Show>;
   /*
@@ -5686,7 +5684,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}

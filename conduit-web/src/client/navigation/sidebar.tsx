@@ -123,6 +123,8 @@ export function Sidebar(props: {
   openIds?: string[];
   /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
   onOpenChatBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
+  /** Open an empty pane beside the one with the keyboard; absent where there are no panes (a phone). */
+  onNewPane?: () => void;
   navigatingId?: string | null;
   dashboard: boolean;
   agent: boolean;
@@ -1137,6 +1139,7 @@ export function Sidebar(props: {
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
           <Show when={agentView()?.enabled}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><Icons.Agent /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
+          <Show when={props.onNewPane}><RailAction label="New pane" onClick={() => props.onNewPane?.()}><Icons.Split /></RailAction></Show>
           <Show when={railFolders().length}>
             <NavRailSection>
               <For each={railFolders()}>{(project) => <RailAction
@@ -1190,6 +1193,7 @@ export function Sidebar(props: {
         <NavRow icon={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</NavRow>
         <Show when={agentView()?.enabled}><NavRow icon={<Icons.Agent />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</NavRow></Show>
         <NavRow icon={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</NavRow>
+        <Show when={props.onNewPane}><NavRow icon={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</NavRow></Show>
         <Show when={pinnedItems().length}>
           <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>
         </Show>
