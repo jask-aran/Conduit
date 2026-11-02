@@ -92,10 +92,10 @@ export function AgentReport(props: { ids: string[]; title?: string; status?: str
     jump={props.onBack ? { label: "Started", up: true, onClick: props.onBack } : undefined}>{props.children}</AgentLine>;
 }
 
-/** Foreground agents a turn handed work to and waits for, the same line as Started: "Delegated 3 agents in this turn"
- *  (the task, for one), how they are doing, dropping down an AgentRow line each. The turn's own: no ids, no report. */
-export function AgentDelegate(props: { count: number; title?: string; status?: string; motion?: Motion; children?: JSX.Element }) {
-  return <AgentLine kind="delegate" verb="Delegated" ids={[]} count={props.title ? undefined : `${props.count} agents`} title={props.title}
+/** Foreground agents a turn handed work to and waits for, the same line as Started: "Delegated 3 agents in this turn",
+ *  how they are doing, dropping down an AgentRow line each (what each was given). The turn's own: no ids, no report. */
+export function AgentDelegate(props: { count: number; status?: string; motion?: Motion; children?: JSX.Element }) {
+  return <AgentLine kind="delegate" verb="Delegated" ids={[]} count={`${props.count} ${props.count === 1 ? "agent" : "agents"}`}
     where="in this turn" status={props.status} motion={props.motion}>{props.children}</AgentLine>;
 }
 

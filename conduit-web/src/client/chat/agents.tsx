@@ -103,7 +103,7 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   return <Show when={all().length}>
     <AgentRows>
       <Show when={rows().length}>
-        <AgentDelegate count={rows().length} title={rows().length === 1 ? rows()[0]!.title : undefined} status={together(rows().map((row) => row.state))}>
+        <AgentDelegate count={rows().length} status={together(rows().map((row) => row.state))}>
           <Index each={rows()}>{(row) => <AgentRow line id={row().id} title={row().title} state={row().state} activity={row().activity} usage={row().usage}
             time={span(row().startedAt, row().endedAt, now())} onOpen={row().chatId ? () => openAgentChat(row().chatId!) : undefined} />}</Index>
         </AgentDelegate>
