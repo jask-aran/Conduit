@@ -26,8 +26,8 @@ export const headlineOf = (text, max = 160) => {
   return first.length > max ? `${first.slice(0, max - 1)}…` : first;
 };
 
-export async function renderWaitingInbox(agent) {
-    const state = await agent.state();
+export async function renderWaitingInbox(agent, state = null) {
+    state ||= await agent.state();
     const items = listInbox(state, { unhandled: true });
     // Whether a report reaches the person's phone is jbot's call (`message` with notify), weighed against how often they want it.
     const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
@@ -154,8 +154,9 @@ export function InboxTools(runtime) {
   const waiting = section("agent-inbox", async (input) => {
     const agent = runtime.agent;
     if (!agent?.enabled()) return undefined;
-    if ((await agent.state()).home?.conversationId !== input.conversationId) return undefined;
-    return renderWaitingInbox(agent);
+    const state = await agent.state();
+    if (state.home?.conversationId !== input.conversationId) return undefined;
+    return renderWaitingInbox(agent, state);
   });
   return { tools: [quiet, failed, inbox], sections: [waiting] };
 }

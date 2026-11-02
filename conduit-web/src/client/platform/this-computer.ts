@@ -16,9 +16,12 @@ const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((devi
 async function paired() {
   const app = desktopShell!;
   const pairing = pairingWith(await app.companion.status(), (await nodes()).map((node) => node.id));
-  const target = pairing?.nodeId && pairing.mainUrl ? { nodeId: pairing.nodeId, mainUrl: pairing.mainUrl } : await pairThisComputer(await app.companion.status());
-  const settings = await app.settings();
-  if (!settings.serveAsDevice) await app.saveSettings({ ...settings, serveAsDevice: true });
+  const existing = pairing?.nodeId && pairing.mainUrl ? { nodeId: pairing.nodeId, mainUrl: pairing.mainUrl } : null;
+  const target = existing || await pairThisComputer(await app.companion.status());
+  if (existing) {
+    const settings = await app.settings();
+    if (!settings.serveAsDevice) await app.saveSettings({ ...settings, serveAsDevice: true });
+  }
   return target;
 }
 

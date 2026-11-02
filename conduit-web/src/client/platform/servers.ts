@@ -572,14 +572,22 @@ export function learnIdentity(
 /** A remote server's loopback is a candidate until it proves the same identity. */
 async function discoverLoopback(origin: string, id: string, publicKey: string, paths: ServerPath[]) {
   const { proveServer } = await import("./server-proof.ts");
-  for (const path of paths.filter((path) => scopeOf(path.origin) === "loopback")) {
-    if (!(await proveServer(path.origin, id, publicKey)).ok) continue;
-    const list = serverList();
-    const entry = list.find((entry) => entry.origin === origin && entry.id === id && entry.publicKey === publicKey);
-    if (!entry) return;
-    const next = list.map((item) => item === entry
-      ? { ...item, paths: readPaths([...(item.paths ?? []), path], origin) } : item);
-    if (!sameList(next, list)) persist(next, active());
+  const loopback = paths.filter((path) => scopeOf(path.origin) === "loopback");
+  for (let start = 0; start < loopback.length; start += 4) {
+    const batch = loopback.slice(start, start + 4);
+    const proofs = batch.map((path) => proveServer(path.origin, id, publicKey));
+    for (const proof of proofs) void proof.catch(() => {});
+    for (const [index, request] of proofs.entries()) {
+      const proof = await request;
+      if (!proof.ok) continue;
+      const path = batch[index]!;
+      const list = serverList();
+      const entry = list.find((entry) => entry.origin === origin && entry.id === id && entry.publicKey === publicKey);
+      if (!entry) return;
+      const next = list.map((item) => item === entry
+        ? { ...item, paths: readPaths([...(item.paths ?? []), path], origin) } : item);
+      if (!sameList(next, list)) persist(next, active());
+    }
   }
 }
 

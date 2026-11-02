@@ -5137,6 +5137,8 @@ function App() {
       }
       window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));
     };
+    const serverIdentityRequest = apiWhenServed<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server")
+      .catch(() => null);
     void readShared<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
       // Every server keeps the directory, and every client that reaches one
@@ -5150,15 +5152,15 @@ function App() {
       // may be believed about identity: an open endpoint saying "I am the
       // server you hold a token for" is the thing worth being unable to say.
       // A server too old to answer leaves the list exactly as it was.
-      void api<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server")
-        .then((identity) => {
-          const origin = activeOrigin();
-          if (!origin) return;
-          // The identity key learned over this authenticated connection is
-          // what the shell will let vouch for this server's TLS certificate.
-          learnIdentity(origin, identity);
-          void publishTrustedIdentities(trustedIdentities());
-        })
+      void serverIdentityRequest.then((identity) => {
+        if (!identity) return;
+        const origin = activeOrigin();
+        if (!origin) return;
+        // The identity key learned over this authenticated connection is
+        // what the shell will let vouch for this server's TLS certificate.
+        learnIdentity(origin, identity);
+        void publishTrustedIdentities(trustedIdentities());
+      })
         .catch(() => { /* an older server has no identity, and needs none */ });
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
