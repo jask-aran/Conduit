@@ -5,7 +5,7 @@ import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { NavRow } from "@/components/ui/nav";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { Workbench, WorkbenchFact, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { FileButton, StatusText } from "@/components/ui/file";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
@@ -148,11 +148,11 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
     return <TextEditor fill readOnly label={`${block().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`} value={shown()}
       head={<>
-        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{block().label}</span>
+        <TextEditorTitle live={live()}>{block().label}</TextEditorTitle>
         <Show when={live() && block().preview && block().preview !== block().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
-        <span class="ui-text-editor-actions">
+        <TextEditorActions>
           <FileButton label={live() ? "Where it is used" : `Edit ${block().label}`} onClick={() => props.onEditBlock(block().id)}>{live() ? <Icons.Preview /> : <Icons.Edit />}</FileButton>
           <Show when={own(block().id)}>
             <FileButton label="Move up" disabled={busy() || at() <= 0} onClick={() => move(at() - 1)}><Icons.ArrowUp /></FileButton>
@@ -161,7 +161,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
             <BlockPicker title="Add a block after this one" icon={<Icons.Add />} onPick={insert} />
             <FileButton label="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></FileButton>
           </Show>
-        </span>
+        </TextEditorActions>
       </>}
       status={<>
         <StatusText>{tokens(live() ? shown().length : block().chars)}</StatusText>
@@ -254,15 +254,15 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       value={live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "") : draft()}
       onChange={(value) => { setDraft(value); setState("idle"); }} onSave={save}
       head={<>
-        <span class="ui-text-editor-title" data-live={live() ? "" : undefined}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</span>
+        <TextEditorTitle live={live()}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</TextEditorTitle>
         <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
-        <Show when={!live()}><span class="ui-text-editor-actions">
+        <Show when={!live()}><TextEditorActions>
           <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || state() === "saving"} title="Save (Ctrl+S)" onClick={save}>{state() === "saving" ? "Saving…" : dirty() ? "Save" : "Saved"}</Button>
           <FileButton label="Reset to the shipped text" disabled={!loaded().resettable || !loaded().modified || state() === "saving"} onClick={() => void reset()}><Icons.Reset /></FileButton>
           <Show when={loaded().source === "custom"}><FileButton label={loaded().usedBy.length ? "Remove it from every document to delete it" : "Delete block"} disabled={loaded().usedBy.length > 0 || state() === "saving"} onClick={() => void remove()}><Icons.Delete /></FileButton></Show>
-        </span></Show>
+        </TextEditorActions></Show>
       </>}
       status={<>
         <StatusText>{tokens(live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "").length : draft().length)}</StatusText>
@@ -281,7 +281,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
           <WorkbenchSection title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></WorkbenchSection>
         </Show>
         <WorkbenchSection title="Used in">
-          <Show when={block().usedBy.length} fallback={<p class="ui-workbench-meta">In no document yet: add it to one from Prompts.</p>}>
+          <Show when={block().usedBy.length} fallback={<WorkbenchNote>In no document yet: add it to one from Prompts.</WorkbenchNote>}>
             <For each={block().usedBy}>{(id) => <NavRow icon={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</NavRow>}</For>
           </Show>
         </WorkbenchSection>
@@ -291,7 +291,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
           </WorkbenchSection>
         </Show>
         <Show when={block().appendix}>
-          <WorkbenchSection title="Conduit then adds"><p class="ui-workbench-meta">{block().appendix}</p></WorkbenchSection>
+          <WorkbenchSection title="Conduit then adds"><WorkbenchNote>{block().appendix}</WorkbenchNote></WorkbenchSection>
         </Show>
       </>} />
     </Workbench>}</Show>

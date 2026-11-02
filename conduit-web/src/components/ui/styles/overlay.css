@@ -136,6 +136,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-details :is(ol, p) { margin: var(--space-xs) 0 0; }
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
+/* A command or a name in a note (set a password with …): the data face, as in details. */
+.ui-setting-note code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
 /* Source text (a prompt): in the code face, so its own line breaks read as meant, and a measure tall at most, scrolling
    inside itself rather than making the page as long as the text. */

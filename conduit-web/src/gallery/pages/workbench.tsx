@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { Button, FileButton, Icons, NavRow, StatusText, Workbench, WorkbenchFact, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui";
+import { Button, FileButton, Icons, NavRow, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
@@ -15,10 +15,10 @@ function PromptsBench() {
       title={<Select look="title" search="Search documents" aria-label="Document" value={doc()} onChange={(event) => setDoc(event.currentTarget.value)}><option value="assistant">Assistant</option><option value="agent">jbot</option><option value="heartbeat">Heartbeat</option></Select>}
       actions={<Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" disabled><Icons.Reset /></Button>} />
     <WorkbenchSplit side={documentChain()} main={<TextEditor fill readOnly label="Assistant text" value={TEXT}
-      head={<><span class="ui-text-editor-title">Assistant</span><span class="ui-text-editor-actions">
+      head={<><TextEditorTitle>Assistant</TextEditorTitle><TextEditorActions>
         <FileButton label="Edit"><Icons.Edit /></FileButton><FileButton label="Move up" disabled><Icons.ArrowUp /></FileButton><FileButton label="Move down"><Icons.ArrowDown /></FileButton>
         <Select look="icon" icon={<Icons.Swap />} search="Search blocks" aria-label="Swap for another block" title="Swap for another block" value=""><option value="">Swap</option><option value="naming">Chat naming</option></Select>
-        <FileButton label="Remove"><Icons.Close /></FileButton></span></>}
+        <FileButton label="Remove"><Icons.Close /></FileButton></TextEditorActions></>}
       status={<StatusText>40 tok</StatusText>} />} />
   </Workbench></div>;
 }
@@ -32,8 +32,9 @@ function BlocksBench() {
     <WorkbenchSplit side={<>
       <WorkbenchSection title="Used in"><NavRow icon={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</NavRow><NavRow icon={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</NavRow></WorkbenchSection>
       <WorkbenchSection title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></WorkbenchSection>
+      <WorkbenchSection title="Conduit then adds"><WorkbenchNote>The run's routine, then what woke it.</WorkbenchNote></WorkbenchSection>
     </>} main={<TextEditor fill label="Run rules text" value={text()} onChange={setText}
-      head={<><span class="ui-text-editor-title">Text</span><span class="ui-text-editor-actions"><Button variant="primary" size="sm">Save</Button><FileButton label="Reset"><Icons.Reset /></FileButton></span></>}
+      head={<><TextEditorTitle>Text</TextEditorTitle><TextEditorActions><Button variant="primary" size="sm">Save</Button><FileButton label="Reset"><Icons.Reset /></FileButton></TextEditorActions></>}
       status={<><StatusText>{`${Math.round(text().length / 4)} tok`}</StatusText><StatusText>jbot's file: jbot can change it too</StatusText></>} />} />
   </Workbench></div>;
 }
@@ -42,7 +43,7 @@ export const workbenchPage: Page = {
   title: "Workbench",
   summary: "A page that works on one thing at a time: its title is the thing (pressing it chooses another), the split below fills the page's height -- a side column that scrolls on its own, and one pane filling the main column with its actions in its bar and its facts in its foot -- so the page never scrolls.",
   preview: () => <BlocksBench />,
-  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, WorkbenchSection, WorkbenchFact } from "@/components/ui";
+  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, WorkbenchSection, WorkbenchFact, WorkbenchNote, TextEditorTitle, TextEditorActions } from "@/components/ui";
 import { TextEditor } from "@/components/ui/text-editor"; // CodeMirror: imported on its own, never from the barrel
 
 <Workbench label="Blocks">

@@ -24,3 +24,14 @@ export const WorkbenchSection = (props: { title: string; children: JSX.Element }
 export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) => <div class="ui-workbench-fact" title={props.title}>
   {props.code ? <code>{props.name}</code> : <span>{props.name}</span>}<Show when={props.value}><span class="ui-workbench-fact-value">{props.value}</span></Show>{props.children}
 </div>;
+
+/** A quiet line in a WorkbenchSection or under a title: what there is none of, or what follows (Conduit then adds…). */
+export const WorkbenchNote = (props: { children: JSX.Element }) => <p class="ui-workbench-meta">{props.children}</p>;
+
+/*
+ * A TextEditor's head (its `head` slot), here rather than with the editor so a page can draw it without loading
+ * CodeMirror: the pane's title -- live: what it shows is filled in as it stands, quieter -- and its actions at the end.
+ */
+export const TextEditorTitle = (props: { live?: boolean; children: JSX.Element }) =>
+  <span class="ui-text-editor-title" data-live={props.live ? "" : undefined}>{props.children}</span>;
+export const TextEditorActions = (props: { children: JSX.Element }) => <span class="ui-text-editor-actions">{props.children}</span>;

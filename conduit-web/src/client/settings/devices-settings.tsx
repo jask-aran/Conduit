@@ -170,7 +170,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     return <>
       <SettingColumns>
         <SettingColumn title="Clients">
-          <For each={together(device.clients)}>{(shown) => <SettingLine label={<>{shown.part.name}<Show when={shown.part.meta}><small>{shown.part.meta}</small></Show></>}>
+          <For each={together(device.clients)}>{(shown) => <SettingLine label={shown.part.name} state={shown.part.meta}>
             <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
           </SettingLine>}</For>
           <Show when={companion && paired()}>
@@ -198,7 +198,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
         </SettingColumn>
         <SettingColumn title="Workspaces">
           <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<SettingNote>None mounted</SettingNote>}>
-            <div><For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For></div>
+            <For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For>
           </Show>
         </SettingColumn>
       </SettingColumns>
@@ -319,7 +319,7 @@ function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
   };
   const copy = async () => { try { await navigator.clipboard.writeText(command()); setCopied(true); } catch { setCopied(false); } };
   return <>
-    <SettingLine label={<>Pair an environment<small>A WSL distro or a container here, with no app of its own</small></>}>
+    <SettingLine label="Pair an environment" title="A WSL distro or a container here, with no app of its own: it pairs with the command shown, run there.">
       <Input aria-label="Environment name" placeholder="Ubuntu" value={name()} onInput={(event) => setName(event.currentTarget.value)} />
       <Button variant="ghost" size="sm" onClick={() => void pair()}><Icons.Add /> Pair</Button>
     </SettingLine>
