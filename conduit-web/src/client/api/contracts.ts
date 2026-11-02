@@ -283,6 +283,30 @@ export interface TurnTiming {
 export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
 /** The subagent a spawn or a report is about: its id (bg-3 in the background, fg-3 for a turn's own; sa-3 in older chats) and its conversation. */
 export interface AgentRef { id: string | null; conversationId: number | string | null }
+/**
+ * A run: a subagent Conduit started -- a routine's schedule, the heartbeat, a webhook, a check-back -- not a turn of
+ * the thread. Owned by the app, it enters the thread from outside: its report is a prompt to the thread's agent
+ * (`woke`), or, when the gate kept it back, a quiet line written without a turn.
+ */
+export interface RunInfo {
+  /** The routine it ran for (the origin's kind): "heartbeat", "brief", "check-back", "webhook", ... */
+  routine: string;
+  /** The routine's name as shown: "Heartbeat", "Morning brief". */
+  label: string;
+  /** Its number among this thread's runs of that routine: Heartbeat #14. */
+  number: number;
+  /** What started it, said short: "Scheduled 09:00", "Hourly", "Webhook", "3 new in inbox". */
+  trigger?: string | null;
+  /** Its report reached the thread's agent as a prompt; false: quiet, written for the record only. */
+  woke: boolean;
+  status: "running" | "finished" | "failed" | "stopped";
+  startedAt?: string | null;
+  endedAt?: string | null;
+  /** The run's own transcript. */
+  conversationId?: number | string | null;
+  /** A quiet run's one line: "nothing new", "handled 3 · set 1 check-back". */
+  summary?: string | null;
+}
 /** One of a chat's subagents (GET /v0/chats/:chatId/agents): chatId is its transcript, a chat of its own. */
 export interface AgentSummary {
   id: string | null;
@@ -297,6 +321,8 @@ export interface AgentSummary {
   activity: string | null;
   /** The codemode script call that spawned it, when a script did: its row is drawn under that call. */
   via?: string;
+  /** Present when Conduit started it (a run), not a turn: the rider lists it under Runs. */
+  run?: RunInfo;
   /** `context`: what its last request held, as a chat's context pane says; `tokens`: summed over its requests. */
   usage: { tokens: number; context?: number | null; cost: number };
 }
@@ -382,6 +408,8 @@ export interface Message {
   origin?: "harness";
   /** A run reporting back: who sent it (its title, the routine it ran for, how it ended). */
   sender?: { name: string; routine?: string; status?: string };
+  /** A run's row: its report as a prompt (`woke`), or its quiet line. */
+  run?: RunInfo;
   /** What Conduit added to a prompt it delivered for the agent (the decision it asks for): shown apart, never hidden. */
   appended?: string;
   attachments?: Attachment[];
