@@ -410,8 +410,9 @@ export function createFiles(options: {
   const refreshFiles = async () => {
     unread = false;
     const loaded = Object.keys(directories());
-    for (const directory of loaded.length ? loaded : [""]) await loadDirectory(directory, true);
-    await Promise.all(openSlotHandles().map((handle) => handle.reload()));
+    // Each directory is its own request, and the open files theirs: one round trip for all, not one after another.
+    await Promise.all([...(loaded.length ? loaded : [""]).map((directory) => loadDirectory(directory, true)),
+      ...openSlotHandles().map((handle) => handle.reload())]);
   };
   const changedDirectory = (directory: string, changedPath: string) => {
     const parent = changedPath.slice(0, Math.max(0, changedPath.lastIndexOf("/")));
@@ -425,17 +426,15 @@ export function createFiles(options: {
     const directoriesToRefresh = changedPaths === null
       ? visibleDirectories
       : visibleDirectories.filter((directory) => changedPaths.some((changedPath) => changedDirectory(directory, changedPath)));
-    let treeChanged = false;
-    for (const directory of directoriesToRefresh) {
-      if (await loadDirectory(directory, true)) treeChanged = true;
-    }
     const slotsToRefresh = changedPaths === null
       ? openSlotHandles()
       : [...slotHandles.entries()]
         .filter(([slot]) => changedPaths.some((changedPath) => changedFile(openPaths()[slot], changedPath)))
         .map(([, handle]) => handle);
-    await Promise.all(slotsToRefresh.map((handle) => handle.reload()));
-    return treeChanged;
+    // The directories and the open files a change touched, all at once: each is its own request.
+    const [changed] = await Promise.all([Promise.all(directoriesToRefresh.map((directory) => loadDirectory(directory, true))),
+      Promise.all(slotsToRefresh.map((handle) => handle.reload()))]);
+    return changed.some(Boolean);
   };
 
   function entryMatchesFilter(entry: TreeEntry, query: string): boolean {
