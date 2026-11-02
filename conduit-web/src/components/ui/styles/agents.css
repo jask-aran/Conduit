@@ -64,6 +64,14 @@ span.ui-agent-stop { width: var(--control-sm); }
 .ui-agent-rider .ui-agent-row { border-radius: var(--cmp-slot-radius); }
 .ui-agent-rider .ui-agent-open { width: auto; margin-left: 0; padding-left: calc(var(--space-lg) - var(--space-xs)); }
 .ui-agent-rider .ui-agent-open:focus-visible { background: transparent; }
+/* A rider row reads mark, time, who, then what it is doing against the stop (which lines up with the composer's send):
+   the time leads, as a turn's header's does, and the row itself opens the run (no chevron). */
+.ui-agent-rider .ui-agent-row[data-line] .ui-agent-time { order: -1; min-width: calc(3 * var(--text-caption)); }
+.ui-agent-rider .ui-agent-row[data-line] .ui-agent-mark { order: -2; }
+.ui-agent-rider .ui-agent-row[data-line] .ui-agent-head { flex: 1 1 auto; }
+.ui-agent-rider .ui-agent-row[data-line] .ui-agent-line { flex: 0 1 auto; max-width: 50%; margin-left: auto; text-align: right; }
+.ui-agent-rider .ui-agent-chevron { display: none; }
+.ui-agent-rider .ui-agent-row[data-line] .ui-agent-stop { margin-right: var(--space-xs); }
 .ui-agent-rider .ui-agent-row:focus-within { background: var(--tint); }
 @media (hover: hover) { .ui-agent-rider .ui-agent-open:not(:disabled):hover { background: transparent; } .ui-agent-rider .ui-agent-row:hover { background: var(--tint); } }
 /* The rider's lists, Foreground then Background, each under its Paper Mono label; five rows show, then it scrolls. */

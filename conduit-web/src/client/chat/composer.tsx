@@ -229,7 +229,8 @@ export function Composer(props: {
   const canSend = createMemo(() => hasPayload() && props.serverOnline && interactive() && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const sentPrompts = createMemo(() => props.chat.messages()
-    .filter((message) => message.role === "user" && !message.pending && Boolean(message.content?.trim()))
+    // What the person wrote: a report or a run's line (a prompt the harness made, `origin`) is not theirs to recall.
+    .filter((message) => message.role === "user" && message.origin !== "harness" && !message.pending && Boolean(message.content?.trim()))
     .map((message) => parseReviewComments(message.content!).text)
     .filter(Boolean));
   const slashCommandOptions = () => ({

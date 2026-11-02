@@ -157,7 +157,7 @@ export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: str
         <AgentRiderGroup label={mode === "foreground" ? "Foreground" : mode === "background" ? "Background" : "Runs"} going={keysOf(mode).every(list.leaving)}>
           <For each={keysOf(mode)}>{(key) => {
             const agent = () => list.get(key)!;
-            return <AgentRow line id={mode === "runs" ? undefined : agent().id || undefined} title={agent().run ? `${agent().run!.label} #${agent().run!.number}` : agent().title} state={agent().status} activity={agent().activity || undefined}
+            return <AgentRow line id={agent().id || undefined} title={agent().run ? `${agent().run!.label} #${agent().run!.number}` : agent().title} state={agent().status} activity={agent().activity || undefined}
               motion={list.leaving(key) ? "leaving" : undefined} time={span(agent().startedAt, agent().endedAt, now())}
               onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
               onStop={mode !== "foreground" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;

@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { cn } from "@/lib/utils";
 import { createSignal, Match, Show, Switch, type JSX } from "solid-js";
-import { Button, Spinner } from "./controls";
+import { Button, Spinner, StopGlyph } from "./controls";
 import { Expand } from "./expand";
 import { Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
@@ -52,7 +52,7 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
     {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column; `stopRoom` keeps
         it on a row that has none (a foreground agent beside background ones). */}
     <Show when={props.state === "running" && props.onStop} fallback={props.line && (props.onStop || props.stopRoom) ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>
-      <Button variant="ghost" size="icon-sm" class="ui-agent-stop" aria-label={`Stop ${props.id || props.title}`} title="Stop" onClick={() => props.onStop?.()}><Icons.Stop /></Button>
+      <Button variant="ghost" size="icon-sm" class="ui-agent-stop" aria-label={`Stop ${props.id || props.title}`} title="Stop" onClick={() => props.onStop?.()}><StopGlyph /></Button>
     </Show>
   </li>;
 }
@@ -109,8 +109,8 @@ export function AgentDelegate(props: { count: number; status?: string; motion?: 
 }
 
 /** A run enters from outside the thread, with its report or its quiet summary. */
-export function RunLine(props: { icon: JSX.Element; label: string; number: number; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; onOpen?: () => void; children?: JSX.Element }) {
-  return <AgentLine kind="run" icon={props.icon} verb={`${props.label} #${props.number}`} ids={[]} where={[props.trigger, props.time].filter(Boolean).join(" · ")}
+export function RunLine(props: { icon: JSX.Element; label: string; number: number; id?: string; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; onOpen?: () => void; children?: JSX.Element }) {
+  return <AgentLine kind="run" icon={props.icon} verb={`${props.label} #${props.number}`} ids={props.id ? [props.id] : []} where={[props.trigger, props.time].filter(Boolean).join(" · ")}
     title={!props.woke ? props.summary : undefined} status={[props.status, props.woke ? props.outcome || "Woke the agent" : "Not woken"].filter(Boolean).join(" · ")}
     failed={props.status?.toLowerCase() === "failed"} quiet={!props.woke} onOpen={!props.woke ? props.onOpen : undefined}>
     {props.woke && (props.children || props.onOpen) ? <li class="ui-agent-said ui-agent-run-body">{props.children}

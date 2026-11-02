@@ -17,6 +17,11 @@
    and the orb keeps its own place. */
 .ui-transcript { --mark-reach: calc(var(--icon-sm) + var(--row-gap));
   --mark-hang: clamp(0px, ((100cqw - 100%) / 2 - var(--icon-xl) - 2 * var(--row-gap) - var(--mark-reach) - var(--space-xs)) * 1000, var(--mark-reach)); }
+/* Narrated has no orb: its marks hang wherever the room beside the column holds them, and its turns never step in,
+   so their text starts where the composer does. */
+.ui-transcript[data-narration="show"] { --mark-hang: clamp(0px, ((100cqw - 100%) / 2 - var(--mark-reach) - var(--space-xs)) * 1000, var(--mark-reach)); }
+.ui-transcript[data-narration="show"] .ui-turn { --turn-step: 0px; }
+:is(.ui-transcript, .ui-transcript-row)[data-narration="show"] > .ui-envelope, .ui-transcript[data-narration="show"] .ui-transcript-row > .ui-envelope { margin-left: calc(-1 * var(--mark-hang)); }
 @media (--conduit-phone-layout) { .ui-transcript:not([data-density="desktop"] *) { --mark-hang: 0px; } }
 [data-density="phone"] .ui-transcript { --mark-hang: 0px; }
 .ui-turn > :is(.ui-trail, .ui-agent-rows) { margin-left: calc(-1 * var(--mark-hang)); }

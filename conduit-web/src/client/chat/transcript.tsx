@@ -1213,7 +1213,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </>}>
         <Show when={empty()}><ChatEmpty><Welcome title="How can I help you today?" /></ChatEmpty></Show>
-        <LibraryTranscript ref={thread} data-slot="message-scroller-content">
+        <LibraryTranscript ref={thread} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}>
         <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item, index) => {
           const flow = () => flowAt(index());
@@ -1245,7 +1245,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             };
             const child = () => props.chat.agents?.().find((agent) => run().conversationId != null && String(agent.conversationId) === String(run().conversationId))?.chatId;
             return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value.id} flow={flow()}><Turn><AgentRows>
-              <RunLine icon={<RoutineIcon routine={run().routine} />} label={run().label} number={run().number} trigger={run().trigger || undefined} time={time()} woke={run().woke}
+              <RunLine icon={<RoutineIcon routine={run().routine} />} label={run().label} number={run().number} id={item.value.agent?.id || undefined} trigger={run().trigger || undefined} time={time()} woke={run().woke}
                 outcome={props.profileLabel ? `Woke ${props.profileLabel}` : undefined} status={run().status === "finished" ? undefined : run().status[0]!.toUpperCase() + run().status.slice(1)}
                 summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : undefined}>
                 {/* What the agent was given, all of it: the report, then what Conduit added to it (nothing hidden). */}
