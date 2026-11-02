@@ -29,7 +29,10 @@
 .ui-trace-fold { gap: var(--space-2xs); }
 .ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
 .ui-step-item { gap: 0; }
-.ui-step { display: flex; width: calc(100% + var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
+/* A line's last glyph ends on the column's edge, as the bubble's and the answer's do: the wash bleeds past the column
+   by its padding at both ends, and the chevron, shown on hover or open, takes the place of what ends the line (its
+   time), which steps aside for it -- the line never keeps room for something hidden. */
+.ui-step { position: relative; display: flex; width: calc(100% + 2 * var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-inline: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
 button.ui-step { cursor: pointer; }
 button.ui-step:is(:focus-visible) { background: var(--tint); }
 @media (hover: hover) { button.ui-step:is(:hover, :focus-visible) { background: var(--tint); } }
@@ -63,9 +66,13 @@ button.ui-step:is(:focus-visible) { background: var(--tint); }
 .ui-step-flag { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
 /* The chevron is there when it is wanted: on the cursor, or open. */
-.ui-step > .ui-disclosure-chevron { margin-left: 0; opacity: 0; }
+.ui-step > .ui-disclosure-chevron { position: absolute; top: 50%; right: var(--space-sm); margin: calc(-0.5 * var(--icon-sm)) 0 0; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change), rotate var(--duration-quick) var(--ease-change); }
+button.ui-step .ui-step-meta { min-width: var(--icon-sm); justify-content: flex-end; }
+.ui-step-meta > :last-child { transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-step:is(:focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
-@media (hover: hover) { .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; } }
+button.ui-step:is(:focus-visible, [aria-expanded="true"]) .ui-step-meta > :last-child { opacity: 0; }
+@media (hover: hover) { .ui-step:is(:hover, :focus-visible, [aria-expanded="true"]) > .ui-disclosure-chevron { opacity: 1; }
+  button.ui-step:hover .ui-step-meta > :last-child { opacity: 0; } }
 .ui-step-body { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-step-item[data-open="true"] > .ui-step-body { padding-block: var(--space-2xs) var(--space-sm); }
 .ui-step-output { max-height: var(--measure-md); margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }

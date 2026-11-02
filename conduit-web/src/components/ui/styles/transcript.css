@@ -33,6 +33,8 @@
 .ui-transcript > .ui-turn + .ui-turn, .ui-transcript-row[data-flow="step"] { margin-top: var(--flow-step); }
 .ui-transcript-row[data-flow="turn"] { margin-top: var(--flow-turn); }
 .ui-transcript-row[data-flow="attached"] { margin-top: var(--flow-attached); }
+.ui-transcript-row[data-flow="work"] { margin-top: var(--flow-work); }
+.ui-transcript-row[data-flow="answer"] { margin-top: var(--flow-answer); }
 /* A failed request: its head in destructive, its facts in the data face, what the provider said in a code box. */
 .ui-failure { display: grid; gap: var(--space-xs); font-size: var(--text-row); }
 .ui-failure-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }

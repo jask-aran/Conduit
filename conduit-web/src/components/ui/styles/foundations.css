@@ -194,6 +194,9 @@
      within a turn, a message to its reply, one exchange to the next. */
   --flow-line: var(--space-2xs); --flow-attached: var(--space-sm); --flow-block: var(--space-lg);
   --flow-step: var(--space-xl); --flow-exchange: var(--space-2xl); --flow-turn: var(--space-4xl);
+  /* Lines of work in rows of their own (a trace, then reports that landed) keep the trail's gap; the answer stands
+     clear of the work it came from, twice a step. */
+  --flow-work: var(--space-2xs); --flow-answer: var(--space-4xl);
   /* Icons: five sizes -- a × in a tiny control, a chevron, the icon, a pill's, a ring -- and a dot (a status, recording). */
   --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.5 * var(--u-icon));
   /* Controls: six heights (an icon button is as wide as it is tall); 2xs is a keycap, a slider thumb; tool is a workspace tool's

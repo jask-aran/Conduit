@@ -19,7 +19,7 @@
    transcript following the bottom -- while the rider fades in, rising a little with it. Going, the rider slides down
    and fades as it goes, and the room closes behind it, the composer following it back down (it is never squeezed). */
 .ui-composer-slot > .ui-composer-under { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); padding-top: var(--cmp-rider-gap);
-  height: auto; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-arrive), padding-top var(--duration-gentle) var(--ease-arrive); }
+  height: auto; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-room), padding-top var(--duration-gentle) var(--ease-room); }
 @starting-style { .ui-composer-slot > .ui-composer-under { height: 0; padding-top: 0; } }
 /* Closing is even (--ease-room): a curve that sped into its end, or out of its start, moved a following transcript
    most in one frame. */

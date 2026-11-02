@@ -190,7 +190,7 @@ export const LoadingEarlier = () => <div class="ui-loading-earlier" role="status
 /** How a row relates to the row above it, which sets the room between them (--flow-*, DESIGN Transcript › Rhythm):
  *  attached (belongs to it), step (the next part of one reply), exchange (the reply to a message), turn (the next
  *  exchange). */
-export type TranscriptFlow = "attached" | "step" | "exchange" | "turn";
+export type TranscriptFlow = "work" | "attached" | "step" | "answer" | "exchange" | "turn";
 /** A row of a Transcript drawn row by row: a message, or a turn's trace or answer. flow: how it relates to the row
  *  above (none for the first). */
 export function TranscriptRow(props: JSX.HTMLAttributes<HTMLDivElement> & { flow?: TranscriptFlow }) {

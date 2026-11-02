@@ -235,15 +235,20 @@ The room above a part is set by how it relates to the part above it, never by wh
 | Token | Relation | Example | Units |
 |---|---|---|---|
 | `--flow-line` | lines of one block | list items | 0.125 |
+| `--flow-work` | lines of work in rows of their own | reports that landed under the trace before them | 0.125 (the trail's gap) |
 | `--flow-attached` | belongs to the part above | a foot under its answer or bubble, an approval under its trace | 0.375 |
 | `--flow-block` | blocks of one text | paragraphs, headings, tables (`--answer-gap`) | 0.75 |
 | `--flow-step` | the next part of one reply | text to a trace, a trace to text, the answer under its trace | 1 |
+| `--flow-answer` | an answer under the work it came from | "While that ran…" under Reported; Folded's answer under a trace that did something | 2 |
 | `--flow-exchange` | a reply under its message | the first row of a reply | 1.25 |
 | `--flow-turn` | one exchange to the next | a reply's foot to the next message | 2 |
 
 - Parts carry no outer margin; the transcript gives the room. Drawn row by row, each row says its relation
   (`TranscriptRow flow`, worked out from the row above: a message -- the person's or one the harness sent -- is a
-  `turn`, the row after one an `exchange`, anything else in a reply a `step`). Composed of parts, the parts do.
+  `turn`, the row after one an `exchange`; reports under work are `work`, an answer (not commentary) under work is
+  `answer`; anything else in a reply a `step`). Composed of parts, the parts do.
+- A line's last glyph ends on the column's edge, as the bubble's and the answer's do: a line's wash bleeds past the
+  column by its padding at both ends, and a step's chevron (hover, open) takes the place of its time, which steps aside.
 - Folded and Narrated share it: Folded's answer is a step under its trace; Narrated's every change between text and
   work is a step.
 - The tokens are in the unit, so they follow `--scale-transcript`; phone and desktop are the same rhythm.

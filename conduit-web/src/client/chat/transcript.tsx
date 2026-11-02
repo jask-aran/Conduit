@@ -297,10 +297,17 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // that is the next step of the same reply.
   // Reports start no exchange of the person's: they sit a step from what is around them.
   const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && !isAgentReport(row.value);
+  // Work is a trace that did something, or reports that landed: lines of work in rows of their own keep the trail's
+  // gap (`work`), and the answer under work stands clear of it (`answer`, twice a step).
+  const isWork = (row: TurnRow | undefined) => row?.type === "reports" || (row?.type === "trace" && row.value.segments.length > 0);
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
-    if (fromPerson(timeline[index])) return "turn";
-    return fromPerson(timeline[index - 1]) ? "exchange" : "step";
+    const row = timeline[index], above = timeline[index - 1];
+    if (fromPerson(row)) return "turn";
+    if (fromPerson(above)) return "exchange";
+    if (row?.type === "reports" && isWork(above)) return "work";
+    if (row?.type === "message" && row.value.role !== "user" && row.value.interim !== true && isWork(above)) return "answer";
+    return "step";
   };
   // The latest exchange -- the person's last message and the last answer -- keeps its message foot shown; older ones
   // show theirs on hover (transcript.css).
