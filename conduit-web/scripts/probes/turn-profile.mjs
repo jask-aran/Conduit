@@ -45,7 +45,8 @@ const traced = new Promise((r) => cdp.once("Tracing.tracingComplete", r));
 await cdp.send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "toplevel", "blink.user_timing", "disabled-by-default-devtools.timeline.frame"] } }); await ps.send("Profiler.start");
 await page.evaluate(() => document.querySelector(".composer-keyboard-trigger, [aria-label='Type a message']")?.click());
 const ta = page.locator(".chat-main textarea").first(); await ta.fill(prompt); await ta.press("Enter");
-await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(window.__state ?? ""), null, { timeout: 240_000, polling: 500 });
+// A settled turn reads "Worked" or its work now, not "Done": finished is also an answer settled (Regenerate, Copy) with no Stop left.
+await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(window.__state ?? "") || (Boolean(document.querySelector('[aria-label="Regenerate response"], [aria-label="Copy response"]')) && !document.querySelector('[aria-label="Stop response"]')), null, { timeout: 240_000, polling: 500 });
 await page.waitForTimeout(3000); await page.evaluate(() => performance.mark("state end"));
 const { profile } = await ps.send("Profiler.stop"); await cdp.send("Tracing.end"); await traced;
 await page.close(); await api(`/v0/sessions/${id}`, "DELETE"); await tmp.close(); await b.close();

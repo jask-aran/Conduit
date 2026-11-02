@@ -25,7 +25,7 @@ try {
     requestAnimationFrame(grab);
   });
   await ta.fill(prompt); await ta.press("Enter");
-  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: Number(process.env.WAIT ?? 45000), polling: 100 }).catch(async (e) => {
+  await page.waitForFunction(() => Boolean(document.querySelector('[aria-label="Regenerate response"], [aria-label="Copy response"]')) && !document.querySelector('[aria-label="Stop response"]'), null, { timeout: Number(process.env.WAIT ?? 45000), polling: 100 }).catch(async (e) => {
     await page.screenshot({ path: out + "-stuck.png" }); console.log("url", page.url()); console.log("stuck:", JSON.stringify(await page.evaluate(() => ({ trace: document.querySelector(".ui-trace-line")?.textContent, answer: document.querySelector(".ui-answer")?.textContent?.length, assistants: document.querySelectorAll(".message-assistant").length, user: document.querySelectorAll(".ui-message").length, draft: document.querySelector(".chat-main textarea")?.value?.slice(0, 40) }))));
     throw e; });
   await page.waitForFunction(() => document.querySelector(".chat-markdown[data-settled]"), null, { timeout: 10000, polling: 100 }).catch(() => {});

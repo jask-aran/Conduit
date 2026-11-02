@@ -105,7 +105,7 @@ try {
   await phase("scroll to latest"); await page.evaluate(() => document.querySelector(".message-scroller-button")?.click());
   await page.waitForTimeout(3000);
   await phase("follow again");
-  await page.waitForFunction(() => /^(Done|Interrupted|Failed)/.test(document.querySelector(".ui-trace-line")?.textContent ?? ""), null, { timeout: 300_000, polling: 500 });
+  await page.waitForFunction(() => Boolean(document.querySelector('[aria-label="Regenerate response"], [aria-label="Copy response"]')) && !document.querySelector('[aria-label="Stop response"]'), null, { timeout: 300_000, polling: 500 });
   await phase("settling"); await page.waitForTimeout(2500);
   await phase("settled: top"); await page.evaluate(() => { document.querySelector(".ui-chat-viewport").scrollTop = 0; }); await page.waitForTimeout(1000);
   await phase("settled: wheel down"); await wheel(350, 60, 30);
