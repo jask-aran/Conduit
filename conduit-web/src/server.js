@@ -50,6 +50,8 @@ import { buildProjectDashboard } from "./project-dashboard.js";
 import { PtyManager } from "./pty-manager.js";
 import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { UiControl } from "./server/ui-control.js";
+import { createMcpEndpoint, mcpToken } from "./server/mcp-endpoint.js";
+import { mcpAccess } from "./server/mcp-access.js";
 import { BrowserHost } from "./server/browser-host.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
@@ -542,6 +544,13 @@ app.get("/client-bundle/:build.zip", async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+// Conduit as an MCP server (mcp-endpoint.js): the hub's token lets a harness in ahead of the sign-in check; a signed-in
+// caller reaches the same endpoint below. Its tools find the UI and the browser on `mcpRuntime`, filled in once made.
+const mcpRuntime = {};
+Object.assign(mcpAccess, { url: `http://127.0.0.1:${config.port}/v0/mcp`, token: mcpToken(config.dataRoot) });
+const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
+app.use(mcp.beforeAuth);
+
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
 
@@ -562,6 +571,7 @@ registerAttachmentRoutes(app, { attachments, findChatContext });
 app.use("/v0/context", express.json({ limit: "256kb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
+app.use(mcp.afterAuth);
 
 app.get("/v0/chatgpt-web/status", async (_request, response, next) => {
   try { response.json(await requireChatgptWeb().health()); } catch (error) { next(error); }
@@ -618,8 +628,10 @@ registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await fi
 registerContextRoutes(app, { contextStore });
 // Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
 const uiControl = new UiControl({ runtimeHub });
+mcpRuntime.uiControl = uiControl;
 // The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
 const browserHost = lifetime.own("hub browser", new BrowserHost(), (owned) => owned.close());
+mcpRuntime.browserHost = browserHost;
 registerBrowserRoutes(app, { browserHost });
 registerRuntimeRoutes(app, {
   uiControl,
@@ -1147,5 +1159,7 @@ front.listen(config.port, config.host, () => {
   // kernel handed over: with CONDUIT_PORT=0 the requested port is a zero, and
   // an address nothing listens on is worse than no advertisement at all.
   lanAdvertisement.start(front.address().port);
+  // The port it really listens on, for the harnesses given the MCP endpoint.
+  mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp`;
   void warmModelCatalogue();
 });

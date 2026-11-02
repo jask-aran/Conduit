@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { Button, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue } from "@/components/ui";
+import { Button, LiveNote, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 
@@ -59,6 +59,7 @@ export function ToolsSettings() {
       </SettingGroup>
       <Show when={direct().length}><SettingGroup title="Called by the model"><For each={direct()}>{line}</For></SettingGroup></Show>
       <Show when={scripted().length}><SettingGroup title="Called from codemode"><For each={scripted()}>{line}</For></SettingGroup></Show>
+      <McpAccess />
       <SettingGroup title="About this list">
         <SettingDetails summary="Where tools come from">
           <SettingNote>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
@@ -69,4 +70,27 @@ export function ToolsSettings() {
       </SettingGroup>
     </>}
   </Show>;
+}
+
+/**
+ * Conduit's tools for other harnesses: the hub's MCP endpoint (ui and browser). Claude Code started by Conduit on the
+ * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
+ * the entry, never shown.
+ */
+function McpAccess() {
+  const [access, setAccess] = createSignal<{ url: string; codex: string } | null>(null);
+  const [copied, setCopied] = createSignal("");
+  onMount(() => void api<{ url: string; codex: string }>("/v0/mcp/access").then(setAccess).catch(() => {}));
+  const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
+    .catch(() => setCopied("Copying was not allowed here"));
+  return <Show when={access()}>{(found) => <SettingGroup title="Other harnesses">
+    <SettingLine plain label="MCP endpoint" title="Conduit's ui and browser tools over MCP (Streamable HTTP). A signed-in session or the hub's token may call it.">
+      <SettingValue mono>{found().url}</SettingValue>
+    </SettingLine>
+    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="An [mcp_servers.conduit] entry with the hub's token as its Authorization header.">
+      <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
+    </SettingLine>
+    <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
+    <SettingNote>Claude Code chats Conduit starts on the hub have these tools already, as mcp__conduit__ui and mcp__conduit__browser.</SettingNote>
+  </SettingGroup>}</Show>;
 }

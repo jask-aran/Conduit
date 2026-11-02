@@ -130,13 +130,15 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   fallback for sites that refuse framing.
 - [ ] 9. Browsers on client devices, reachable from any other client through the hub.
 - [ ] 10. Acting as you: jbot uses your browser on a device you choose.
-- [ ] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
-  open, close and focus panes; use the browser. Partly built: every open tab tells the server its panes (what each
-  shows, which has the keyboard, whether the tab is in use; `client/agent-ui.ts`), and the server sends a command to
-  one tab over its runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have a `ui` tool
-  (look, open, close, focus; in every profile, from codemode in Coding, not in subagents), and `GET /v0/ui` and
-  `POST /v0/ui/commands` are the same for a CLI or MCP server. Left: an MCP server for other harnesses on top of those
-  routes. The browser is reachable too (#7): `ui` opens `browser:hub`, and the `browser` tool works its page.
+- [x] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
+  open, close and focus panes; use the browser. Every open tab tells the server its panes (what each shows, which has
+  the keyboard, whether the tab is in use; `client/agent-ui.ts`), and the server sends a command to one tab over its
+  runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have `ui` (look, open, close,
+  focus) and `browser` (the hub's shared page, #7) in every profile, from codemode in Coding, not in subagents. Other
+  harnesses get the same two tools from Conduit's MCP endpoint (`server/mcp-endpoint.js`, `/v0/mcp`, Streamable HTTP;
+  a Conduit session or the hub's token, `data/mcp-token`): Claude Code chats Conduit starts on the hub are given it;
+  Codex and other MCP clients take a config entry copied from Settings › AI › Tools. Not yet: Claude Code running on a
+  device (it cannot reach the hub's loopback).
 - [ ] 12. Add Vercel's agent-desktop for driving desktop apps on devices.
 
 ### Settings

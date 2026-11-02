@@ -17,6 +17,7 @@ import { within } from "./server/effect-concurrency.js";
 import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { opaqueSessionOf } from "./nodes/remote-spawn.js";
 import { placeProcesses } from "./nodes/place-processes.js";
+import { mcpAccess } from "./server/mcp-access.js";
 import { claudeSession } from "./nodes/node-harnesses.js";
 
 // Claude Code's tools, by what they do.
@@ -501,6 +502,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
       includePartialMessages: true,
       thinking: { type: "adaptive", display: "summarized" },
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
+      // Conduit's own tools (mcp-endpoint.js: its panes, the hub's browser) when it runs on the hub, which reaches them.
+      ...(mcpAccess.url && !this.processes(record).sdkSpawn ? { mcpServers: { conduit: { type: "http", url: mcpAccess.url, headers: { Authorization: `Bearer ${mcpAccess.token}` } } } } : {}),
       stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
       // Where the chat runs: the SDK spawns its own process here, a device runs its own install.
       ...(() => {
