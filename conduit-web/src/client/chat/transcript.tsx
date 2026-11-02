@@ -1322,7 +1322,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               {/* Held empty while it streams, so the foot arriving moves nothing. */}
               {/* A turn that speaks more than once has one foot, under the message that carries its orb. */}
               <Show when={!narrated() || item.orb}>
-                <Show when={actionsShown()} fallback={<MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+                {/* Narrated, the orb's row changes as the turn works: an empty foot held under it would leave each row it
+                    leaves, pulling a transcript that follows the bottom down. The foot comes when it settles. */}
+                <Show when={actionsShown()} fallback={narrated() ? undefined : <MessageFoot />}><AnswerFoot message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
               </Show>
             </Turn>}>
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's

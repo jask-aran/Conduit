@@ -49,12 +49,14 @@ type TrailItem =
   | { type: "hidden" };
 
 // Running too: while its agents work they are the rows that say so, and a "Delegating" line beside them said it twice.
-const spawnsOnly = (tool: ToolItem) => tool.kind === "script" && !tool.isError
-  && Boolean(tool.calls?.some((call) => call.name === "subagent")) && tool.calls!.every((call) => call.earlier || call.name === "subagent");
+// It gives way only once its agents are listed (`drawn`, the scripts TurnAgents has rows for): the step and the agent
+// line swap in one frame, where hiding it sooner left the turn empty a moment and pulled the transcript down.
+const spawnsOnly = (tool: ToolItem, drawn: Set<string>) => tool.kind === "script" && !tool.isError && drawn.has(tool.toolCallId)
+  && (!tool.calls?.length || tool.calls.every((call) => call.earlier || call.name === "subagent"));
 /* The segments as the trail's lines: a run of tools of one kind becomes a
    group, anything else its own line. A subagent's spawn is not a line: it is
    pinned under the head (TurnAgents), where the fold does not hide it. */
-function trailOf(segments: TraceSegment[]): TrailItem[] {
+function trailOf(segments: TraceSegment[], drawn: Set<string> = new Set()): TrailItem[] {
   const items: TrailItem[] = [];
   let run: ToolItem[] = [];
   const flush = () => {
@@ -79,7 +81,7 @@ function trailOf(segments: TraceSegment[]): TrailItem[] {
     if (segment.kind === "context") { flush(); items.push({ type: "context", message: segment.message }); continue; }
     if (segment.kind === "tool") {
       // A script that only spawned subagents is its agent rows (TurnAgents), as a direct spawn is.
-      if (spawned(segment.tool) || spawnsOnly(segment.tool)) continue;
+      if (spawned(segment.tool) || spawnsOnly(segment.tool, drawn)) continue;
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
       run.push(segment.tool);
       continue;
@@ -465,7 +467,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
-  const trail = createMemo(() => trailOf(props.trace.segments));
+  // The scripts whose spawned agents the chat lists (drawn by TurnAgents, under the head).
+  const drawn = createMemo(() => new Set((props.agents ?? []).flatMap((agent) => agent.via ? [agent.via] : [])));
+  const trail = createMemo(() => trailOf(props.trace.segments, drawn()));
   const spawns = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && spawned(segment.tool) ? [segment.tool] : []));
   // Its codemode scripts' call ids: an agent a script spawned is drawn with the turn's own spawns.
   const scripts = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && segment.tool.kind === "script" ? [segment.tool.toolCallId] : []));

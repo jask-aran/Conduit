@@ -42,7 +42,7 @@ const textOf = (message) => typeof message?.content === "string" ? message.conte
 
 // The context is the state machine: every completed call advances one step.
 const promptOf = (message) => parseAttachmentEnvelope(textOf(message).trim()).message.trim();
-const reportText = (prompt) => /^(?:sa-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt);
+const reportText = (prompt) => /^(?:(?:sa|bg)-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt);
 const noticeText = (prompt) => !prompt || /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i.test(prompt);
 const finalAnswer = (message) => message.role === "assistant" && !(message.content || []).some((part) => part.type === "toolCall");
 /** Which agent sent the report at `index`: it holds only the child's answer, "ping" or "pingN", the word its task asked
@@ -56,7 +56,7 @@ function reporter(messages, index) {
       ? part.name === "codemode" && String(part.arguments?.code || "").includes(`word ping${word[1]}.`)
       : part.name === "subagent" && part.arguments?.background));
   const started = starter && textOf(before.find((message) => message.role === "toolResult" && message.toolCallId === starter.id));
-  return promptOf(messages[index]).match(/^sa-\d+\b/)?.[0] || started?.match(/\bsa-\d+\b/g)?.[word?.[1] ? Number(word[1]) - 1 : 0] || "A subagent";
+  return promptOf(messages[index]).match(/^(?:sa|bg)-\d+\b/)?.[0] || started?.match(/\b(?:sa|bg)-\d+\b/g)?.[word?.[1] ? Number(word[1]) - 1 : 0] || "A subagent";
 }
 
 export function scriptedStep(context) {

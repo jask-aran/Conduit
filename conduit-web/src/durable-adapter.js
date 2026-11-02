@@ -1573,7 +1573,7 @@ export class DurableAdapter extends EventEmitter {
           endedAt = owner.endedAt ? new Date(owner.endedAt).toISOString() : null;
         }
       }
-      agents.push({ id: null, conversationId: item.conversationId, title: item.title, mode: "foreground", via: item.via,
+      agents.push({ id: item.id ?? null, conversationId: item.conversationId, title: item.title, mode: "foreground", via: item.via,
         status, startedAt: item.startedAt || null, endedAt });
     }
     for (const entry of entries) {
@@ -1587,7 +1587,7 @@ export class DurableAdapter extends EventEmitter {
         const details = result?.details || slot?.details;
         if (!details?.conversationId) continue;
         const running = slot && slot.status !== "done";
-        agents.push({ id: null, conversationId: details.conversationId, title: details?.title || subagentTitle(call.arguments?.task),
+        agents.push({ id: details.subagentId ?? null, conversationId: details.conversationId, title: details?.title || subagentTitle(call.arguments?.task),
           mode: "foreground", status: running ? "running" : abortedResult(resultEntry) ? "stopped" : details.status || (result?.isError || !result ? "failed" : "finished"),
           startedAt: details.startedAt || (entry.model?.[0]?.timestamp ? new Date(entry.model[0].timestamp).toISOString() : null),
           endedAt: running ? null : details.endedAt || (result?.timestamp ? new Date(result.timestamp).toISOString() : null) });

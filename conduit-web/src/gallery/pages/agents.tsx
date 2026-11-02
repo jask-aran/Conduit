@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
@@ -9,21 +9,22 @@ import { row, type Page } from "../model";
 const ROWS: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string }[] = [
   { title: "Research gassho house pricing in Shirakawa-go", state: "running", activity: "reading booking.com/hotel/jp/shirakawa-go-gassho", time: "12s" },
   { title: "Check train times from Takayama", state: "finished", time: "34s", usage: "8.2k tokens" },
-  { id: "sa-3", title: "Draft a two-day itinerary", state: "running", activity: "answering", time: "1m 12s" },
-  { id: "sa-2", title: "Compare ryokan cancellation policies", state: "failed", time: "9s" },
-  { id: "sa-4", title: "Summarise reviews of Kanbe-e", state: "stopped", time: "41s" },
+  { id: "bg-3", title: "Draft a two-day itinerary", state: "running", activity: "answering", time: "1m 12s" },
+  { id: "bg-2", title: "Compare ryokan cancellation policies", state: "failed", time: "9s" },
+  { id: "bg-4", title: "Summarise reviews of Kanbe-e", state: "stopped", time: "41s" },
 ];
 const turn = (rows: typeof ROWS, live = true): JSX.Element =>
   <Trace orb={live ? <Orb state="working" /> : orb(true)} status={live ? "Delegating" : "Done"} time={live ? "1m 12s" : "1m 40s"} work={rows.length === 1 ? "1 agent" : `${rows.length} agents`}
     pinned={<AgentRows><For each={rows}>{(agent) => <AgentRow {...agent} onOpen={() => {}} onStop={agent.id ? () => {} : undefined} />}</For></AgentRows>} />;
 const STRIP: { id: string; title: string; state: AgentState; activity?: string; usage?: string; time: string }[] = [
-  { id: "sa-1", title: "Research gassho house pricing", state: "running", activity: "fetching booking.com/hotel/jp/shirakawa-go-gassho", time: "1m 12s" },
-  { id: "sa-2", title: "Check train times", state: "finished", usage: "8.2k tokens", time: "34s" },
-  { id: "sa-3", title: "Draft a two-day itinerary with rest stops", state: "running", activity: "answering", time: "22s" },
-  { id: "sa-4", title: "Compare ryokan cancellation policies", state: "failed", time: "9s" },
+  { id: "bg-1", title: "Research gassho house pricing", state: "running", activity: "fetching booking.com/hotel/jp/shirakawa-go-gassho", time: "1m 12s" },
+  { id: "bg-2", title: "Check train times", state: "finished", usage: "8.2k tokens", time: "34s" },
+  { id: "bg-3", title: "Draft a two-day itinerary with rest stops", state: "running", activity: "answering", time: "22s" },
+  { id: "bg-4", title: "Compare ryokan cancellation policies", state: "failed", time: "9s" },
 ];
 const strip = (rows: typeof STRIP) => <div class="g-composer"><AgentRider>
-  <For each={rows}>{(row) => <AgentRow line {...row} onOpen={() => {}} onStop={() => {}} />}</For>
+  <AgentRiderGroup label="Foreground"><AgentRow line id="fg-1" title="Look over the itinerary draft" state="running" activity="read itinerary.md" time="06s" onOpen={() => {}} stopRoom /></AgentRiderGroup>
+  <AgentRiderGroup label="Background"><For each={rows}>{(row) => <AgentRow line {...row} onOpen={() => {}} onStop={() => {}} />}</For></AgentRiderGroup>
 </AgentRider></div>;
 function StripCycle() {
   const [shown, setShown] = createSignal(STRIP.slice(0, 1));
@@ -40,7 +41,8 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
 </AgentRows>
 
 <AgentRider>
-  <AgentRow line id="sa-1" title="Research pricing" state="running" activity="answering" time="1m 12s" onOpen={open} onStop={stop} />
+  <AgentRiderGroup label="Foreground"><AgentRow line id="fg-1" title="Look over the draft" state="running" activity="read draft.md" time="6s" onOpen={open} stopRoom /></AgentRiderGroup>
+  <AgentRiderGroup label="Background"><AgentRow line id="bg-1" title="Research pricing" state="running" activity="answering" time="1m 12s" onOpen={open} onStop={stop} /></AgentRiderGroup>
 </AgentRider>`,
   anatomy: { scene: () => turn(ROWS.slice(0, 1)), parts: [
     { selector: ".ui-agent-mark", name: "Mark", does: "a spinner while it works; the agent's glyph, or a warning, after", from: "Spinner · Icons.Agent" },
@@ -68,5 +70,5 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     row("Beside the queued rider", "riders stack on the composer; the agents sit above what waits to be sent", () => <div class="g-stack">{strip(STRIP.slice(0, 2))}<div class="g-composer">{queued()}</div></div>, { surfaces: ["ground"] }),
   ],
   motion: [row("An agent arrives", "each new agent's line fades into the rider", () => <StripCycle />, { surfaces: ["ground"] })],
-  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentReport", "AgentReportItem", "AgentDelegate", "AgentRider", "Inbound", "Trace", "HarnessPrompt"],
+  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentReport", "AgentReportItem", "AgentDelegate", "AgentRider", "AgentRiderGroup", "Inbound", "Trace", "HarnessPrompt"],
 };

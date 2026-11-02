@@ -15,7 +15,7 @@ import type { ServiceLevelSettings } from "../state/service-level-settings";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { isMobileLayout, KEYBOARD_HIDDEN_EVENT, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import { QueuedMessages } from "./queued-messages";
-import { BackgroundAgents } from "./agents";
+import { RunningAgents } from "./agents";
 import { AttachmentStrip } from "./attachment-strip";
 import { composerSlashCommands } from "./composer-slash-commands";
 import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
@@ -776,7 +776,7 @@ export function Composer(props: {
   </>;
   // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the
   // keyboard and the home bar have the bottom edge.
-  const agents = () => <Show when={props.chat.agents().length}><BackgroundAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
+  const agents = () => <Show when={props.chat.agents().length}><RunningAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
   const riders = () => <>
     <QueuedMessages messages={props.chat.pendingMessages()} busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
     <Show when={comments().length}><Rider label="File references"><ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} /></Rider></Show>

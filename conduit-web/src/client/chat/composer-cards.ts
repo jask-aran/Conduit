@@ -17,7 +17,7 @@ export type CardExit = "drop" | "fade" | "none";
  * the last present value for the length of the exit and says it is leaving;
  * the card draws that value as its Rider's motion (riderMotion), and the library plays the exit.
  */
-export function createLeaving<T>(source: () => T, present: (value: T) => boolean, exit: () => CardExit = () => "drop") {
+export function createLeaving<T>(source: () => T, present: (value: T) => boolean, exit: () => CardExit = () => "drop", hold: `--duration-${string}` = "--duration-quick") {
   const [held, setHeld] = createSignal<T>(source());
   const [leaving, setLeaving] = createSignal<Exclude<CardExit, "none"> | null>(null);
   createEffect(() => {
@@ -26,10 +26,48 @@ export function createLeaving<T>(source: () => T, present: (value: T) => boolean
     const style = untrack(exit);
     if (style === "none" || reducedMotion() || !present(untrack(held))) { setLeaving(null); setHeld(() => next); return; }
     setLeaving(style);
-    const done = setTimeout(() => { setLeaving(null); setHeld(() => next); }, duration("--duration-quick"));
+    const done = setTimeout(() => { setLeaving(null); setHeld(() => next); }, duration(hold));
     onCleanup(() => clearTimeout(done));
   });
   return { value: held, leaving };
+}
+
+/**
+ * A list whose items leave as a card does: one gone from `source` is kept, marked leaving, for the length of its exit
+ * (`hold`), where it was, so its row can close its room instead of vanishing. Items are named by `key`: `keys` is the
+ * list to draw (stable strings, so rows keep their identity), `get` an item's latest value, `leaving` whether it is going.
+ */
+export function createLeavingList<T>(source: () => T[], key: (item: T) => string, hold: `--duration-${string}` = "--duration-gentle") {
+  const [keys, setKeys] = createSignal<string[]>([]);
+  const [values, setValues] = createSignal(new Map<string, T>());
+  const [going, setGoing] = createSignal(new Set<string>());
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  createEffect(() => {
+    const next = source();
+    const present = new Map(next.map((item) => [key(item), item] as const));
+    const was = untrack(keys);
+    const leaving = new Set(untrack(going));
+    const stay = reducedMotion();
+    const order = [...was];
+    for (const k of was) {
+      if (present.has(k)) { leaving.delete(k); const timer = timers.get(k); if (timer) { clearTimeout(timer); timers.delete(k); } continue; }
+      if (stay) continue;
+      if (!leaving.has(k)) {
+        leaving.add(k);
+        timers.set(k, setTimeout(() => {
+          timers.delete(k);
+          setKeys((list) => list.filter((item) => item !== k));
+          setGoing((set) => { const copy = new Set(set); copy.delete(k); return copy; });
+        }, duration(hold)));
+      }
+    }
+    for (const k of present.keys()) if (!order.includes(k)) order.push(k);
+    setValues((map) => { const copy = new Map(map); for (const [k, item] of present) copy.set(k, item); return copy; });
+    setGoing(leaving);
+    setKeys(stay ? order.filter((k) => present.has(k)) : order);
+  });
+  onCleanup(() => { for (const timer of timers.values()) clearTimeout(timer); });
+  return { keys, get: (k: string) => values().get(k), leaving: (k: string) => going().has(k) };
 }
 
 /** A leaving card's Rider motion: dropping back into the composer, or removed (faded in place); else it rises in. */

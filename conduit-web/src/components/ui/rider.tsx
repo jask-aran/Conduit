@@ -13,7 +13,8 @@ import { type Motion, motionOf, moveCursor } from "./shared";
  */
 export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
-  return <Frost role="group" {...rest} class={cn("ui-rider", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
+  // `ui-rider-going` as it leaves: what holds it (the composer's under row) closes its room by it, a class for :has().
+  return <Frost role="group" {...rest} class={cn("ui-rider", (local.motion === "leaving" || local.motion === "removing") && "ui-rider-going", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
 }
 /** A card rider's title (RiderTop); title: what it means, on hover. */
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;

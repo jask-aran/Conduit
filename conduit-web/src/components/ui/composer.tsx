@@ -1,11 +1,12 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { children, createEffect, createSignal, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
 import { Aura, PillWave } from "./pill";
 import { Rider } from "./rider";
+import { reducedMotion } from "./motion";
 import type { Motion } from "./shared";
 
 /*
@@ -23,8 +24,41 @@ import type { Motion } from "./shared";
 export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Element; takeover?: JSX.Element; opening?: boolean; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
   const under = children(() => props.under);
-  return <div class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
-    <div class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}
+  let slot!: HTMLDivElement;
+  let stack!: HTMLDivElement;
+  // A takeover taller than the composer gave the slot its height; when it goes, that room closes gently (a transcript
+  // following the bottom glides back down with it) instead of in one frame.
+  let held = 0;
+  let watch: ResizeObserver | undefined;
+  createEffect((was: boolean) => {
+    const now = Boolean(takeover());
+    if (now) requestAnimationFrame(() => {
+      const card = [...slot.children].find((child) => child !== stack && !child.classList.contains("ui-composer-under")) as HTMLElement | undefined;
+      watch?.disconnect();
+      if (!card) return;
+      watch = new ResizeObserver(() => { held = Math.max(card.offsetHeight, stack.offsetHeight); });
+      watch.observe(card);
+    });
+    else if (was) {
+      watch?.disconnect();
+      const to = stack.offsetHeight;
+      if (held > to + 1 && !reducedMotion()) {
+        slot.style.gridTemplateRows = `${held}px`;
+        void slot.offsetHeight;
+        slot.style.transition = "grid-template-rows var(--duration-gentle) var(--ease-room)";
+        slot.style.gridTemplateRows = `${to}px`;
+        const done = () => { slot.style.gridTemplateRows = ""; slot.style.transition = ""; slot.removeEventListener("transitionend", ended); };
+        const ended = (event: TransitionEvent) => { if (event.target === slot) done(); };
+        slot.addEventListener("transitionend", ended);
+        setTimeout(done, 600);
+      }
+      held = 0;
+    }
+    return now;
+  }, false);
+  onCleanup(() => watch?.disconnect());
+  return <div ref={slot} class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
+    <div ref={stack} class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}
     <Show when={under.toArray().length}><div class="ui-composer-under">{under()}</div></Show></div>;
 }
 /** The voice while dictating, riding just over the composer: a PillWave across a wave Rider, an Aura glowing under it

@@ -1,7 +1,7 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, Show } from "solid-js";
-import { Picker, Gauge, Swatch, Completion, VoiceRider, Spinner, StopGlyph, Choices, Button, Choice, ComposerField, DesktopComposer, TextArea, Rider, RiderTitle, Toolbar, AgentRider, AgentRow } from "@/components/ui";
+import { Picker, Gauge, Swatch, Completion, VoiceRider, Spinner, StopGlyph, Choices, Button, Choice, ComposerField, DesktopComposer, TextArea, Rider, RiderTitle, Toolbar, AgentRider, AgentRiderGroup, AgentRow } from "@/components/ui";
 import { Replay } from "../specs";
 import { COMPOSER_SIZES } from "../foundations";
 import { ghost, queued, speech, attachments } from "../demos";
@@ -20,8 +20,11 @@ function UnderScene() {
     <Choices><Choice n={1} label="First" active onPick={() => setAsking(false)} /><Choice n={2} label="Second" onPick={() => setAsking(false)} /></Choices></Rider></Show>;
   return <div class="g-composer g-stack"><Button variant="ghost" size="sm" onClick={() => setAsking(!asking())}>{asking() ? "Answer the question" : "Ask a question"}</Button>
     <DesktopComposer takeover={question()} under={<AgentRider motion="entering">
-      <AgentRow line id="sa-1" title="Research gassho house pricing" state="running" activity="fetch_content booking.com" time="14s" onOpen={() => {}} onStop={() => {}} />
-      <AgentRow line id="sa-2" title="Check Shirakawa-go bus times" state="running" activity="web_search nohi bus" time="09s" onOpen={() => {}} onStop={() => {}} />
+      <AgentRiderGroup label="Foreground"><AgentRow line id="fg-1" title="Look over the itinerary draft" state="running" activity="read itinerary.md" time="06s" onOpen={() => {}} stopRoom /></AgentRiderGroup>
+      <AgentRiderGroup label="Background">
+        <AgentRow line id="bg-1" title="Research gassho house pricing" state="running" activity="fetch_content booking.com" time="14s" onOpen={() => {}} onStop={() => {}} />
+        <AgentRow line id="bg-2" title="Check Shirakawa-go bus times" state="running" activity="web_search nohi bus" time="09s" onOpen={() => {}} onStop={() => {}} />
+      </AgentRiderGroup>
     </AgentRider>}><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>;
 }
 

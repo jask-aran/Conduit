@@ -61,4 +61,13 @@ span.ui-agent-stop { width: var(--control-sm); }
 .ui-agent-rider .ui-agent-open:focus-visible { background: transparent; }
 .ui-agent-rider .ui-agent-row:focus-within { background: var(--tint); }
 @media (hover: hover) { .ui-agent-rider .ui-agent-open:not(:disabled):hover { background: transparent; } .ui-agent-rider .ui-agent-row:hover { background: var(--tint); } }
-.ui-agent-rider > .ui-agent-rows { min-width: 0; max-height: calc(5 * (var(--leading-row) * var(--text-row) + 2 * var(--space-2xs)) + 4 * var(--space-2xs)); flex: 1; margin: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* The rider's lists, Foreground then Background, each under its Paper Mono label; five rows show, then it scrolls. */
+.ui-agent-groups { display: grid; min-width: 0; max-height: calc(6 * (var(--leading-row) * var(--text-row) + 2 * var(--space-2xs)) + 4 * var(--space-2xs)); flex: 1; gap: var(--space-xs); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.ui-agent-group { display: grid; min-width: 0; gap: var(--space-2xs); }
+.ui-agent-group > h4 { margin: 0; padding: var(--space-2xs) 0 0 calc(var(--space-lg) - var(--space-xs)); color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
+.ui-agent-group > .ui-agent-rows { min-width: 0; margin: 0; }
+/* Under way, then not: a row whose agent has ended, or a list left empty, closes its room as it fades (the rider
+   shrinks gently, a transcript following the bottom with it) -- unless the whole rider is going, which it does as one. */
+.ui-agent-rider .ui-agent-row, .ui-agent-group { height: auto; interpolate-size: allow-keywords;
+  transition: height var(--duration-gentle) var(--ease-room), opacity var(--duration-gentle) var(--ease-leave); }
+.ui-agent-rider:not(.ui-rider-going) :is(.ui-agent-row[data-leaving], .ui-agent-group-going) { height: 0; overflow: clip; opacity: 0; pointer-events: none; }

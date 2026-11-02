@@ -1,4 +1,5 @@
 import * as Icons from "./icons";
+import { cn } from "@/lib/utils";
 import { createSignal, Show, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { Expand } from "./expand";
@@ -29,7 +30,7 @@ export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
  * The row opens its transcript (onOpen); onStop: stops it while it works, for one the turn does not own (a
  * background agent; a turn's own stops with the turn).
  */
-export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; motion?: Motion }) {
+export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
   const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
     <button type="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.id ? `${props.id}, ` : ""}${props.title}`} onClick={() => props.onOpen?.()}>
@@ -41,8 +42,9 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
       <Show when={props.time}><span class="ui-agent-time">{props.time}</span></Show>
       <Show when={props.onOpen}><Icons.ChevronRight class="ui-agent-chevron" /></Show>
     </button>
-    {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column. */}
-    <Show when={props.state === "running" && props.onStop} fallback={props.line && props.onStop ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>
+    {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column; `stopRoom` keeps
+        it on a row that has none (a foreground agent beside background ones). */}
+    <Show when={props.state === "running" && props.onStop} fallback={props.line && (props.onStop || props.stopRoom) ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>
       <Button variant="ghost" size="icon-sm" class="ui-agent-stop" aria-label={`Stop ${props.id || props.title}`} title="Stop" onClick={() => props.onStop?.()}><Icons.Stop /></Button>
     </Show>
   </li>;
@@ -108,7 +110,15 @@ export function AgentReportItem(props: { id: string; title: string; state: Agent
 /** A chat's background agents on its composer: their AgentRows, each on one line (AgentRow line). No title: each row
  *  carries its agent's mark. A long list scrolls in place of growing over the transcript. */
 export function AgentRider(props: { motion?: Motion; children: JSX.Element }) {
-  return <Rider class="ui-agent-rider" label="Background agents" motion={props.motion}>
-    <AgentRows label="Background agents">{props.children}</AgentRows>
+  return <Rider class="ui-agent-rider" label="Agents" motion={props.motion}>
+    <div class="ui-agent-groups">{props.children}</div>
   </Rider>;
+}
+
+/** One list in an AgentRider, under its label: Foreground (the agents a turn waits for) or Background. */
+export function AgentRiderGroup(props: { label: string; going?: boolean; children: JSX.Element }) {
+  return <section class={cn("ui-agent-group", props.going && "ui-agent-group-going")} aria-label={props.label}>
+    <h4>{props.label}</h4>
+    <AgentRows label={props.label}>{props.children}</AgentRows>
+  </section>;
 }

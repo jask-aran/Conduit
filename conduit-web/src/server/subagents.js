@@ -346,7 +346,7 @@ export function Subagents(runtime) {
       task: Type.Optional(Type.String({ description: "The whole task or message: goal, context, constraints, and what to report back." })),
       background: Type.Optional(Type.Boolean()),
       action: Type.Optional(Type.Union(["spawn", "list", "message", "wait", "stop"].map((value) => Type.Literal(value)))),
-      id: Type.Optional(Type.String({ description: "This conversation's background subagent id, such as sa-3." })),
+      id: Type.Optional(Type.String({ description: "This conversation's background subagent id, such as bg-3." })),
       mode: Type.Optional(Type.Union([Type.Literal("steer"), Type.Literal("followUp")])),
     }),
     replay: "safe",
@@ -366,30 +366,37 @@ export function Subagents(runtime) {
       const childSettings = action !== "spawn" ? null : (await api.memo("childSettings", context)
         ?? await api.memo("childSettings", { value: await runtime.subagentSettings?.(api.conversationId, context) || null }, context)).value;
       if (action === "spawn" && !background) {
-        const child = await api.commit(async (tx) => {
+        // A foreground agent has an id too (fg-1, as background ones are bg-1), so every agent is named in one place;
+        // the model never addresses it: its turn waits for the answer.
+        const { child, agentId } = await api.commit(async (tx) => {
+          const roster = await tx.doc(SubagentRoster, api.conversationId);
+          roster.foreground ||= {};
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];
-          if (existing !== undefined) return existing.id;
+          if (existing !== undefined) return { child: existing.id, agentId: roster.foreground[existing.id] ?? null };
           const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
           await stripTools(tx, created.id);
           if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
           if (childSettings) await configure(tx, created.id, childSettings);
-          return created.id;
+          roster.nextForeground = (roster.nextForeground || 1);
+          const agentId = `fg-${roster.nextForeground++}`;
+          roster.foreground[created.id] = agentId;
+          return { child: created.id, agentId };
         }, context);
         const title = subagentTitle(task);
         const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
-        await api.details({ conversationId: child, subagentId: null, title, startedAt }, context);
+        await api.details({ conversationId: child, subagentId: agentId, title, startedAt }, context);
         const noteNested = async (fields) => {
           if (!via) return;
           await api.commit(async (tx) => {
             const roster = await tx.doc(SubagentRoster, api.conversationId);
             roster.nested ||= {};
-            roster.nested[child] = { ...roster.nested[child], conversationId: child, title, via, startedAt, ...fields };
+            roster.nested[child] = { ...roster.nested[child], id: agentId, conversationId: child, title, via, startedAt, ...fields };
             return undefined;
           }, context);
           runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: fields.status });
         };
         await noteNested({ status: "running", endedAt: null });
-        await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: null, title });
+        await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: agentId, title });
         const unobserve = await observe(api.conversationId, child, api, context, true);
         try {
           const handle = await api.conversation(child, context);
@@ -397,7 +404,7 @@ export function Subagents(runtime) {
           const settled = await (await handle.submit({ type: "input", content: task, requestId,
             entry: { kind: "conduit.user", data: { messageId: requestId, text: task, timestamp: new Date().toISOString() } } }, context)).wait(context);
           const ended = { status: settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed", endedAt: new Date().toISOString() };
-          await api.details({ conversationId: child, subagentId: null, title, startedAt, ...ended }, context);
+          await api.details({ conversationId: child, subagentId: agentId, title, startedAt, ...ended }, context);
           await noteNested(ended);
           const answer = await runtime.lastAnswer(child);
           const usage = totalUsage(await api.snapshot(UsageDoc, child, context));
@@ -412,7 +419,7 @@ export function Subagents(runtime) {
         if (action === "spawn") {
           const existing = Object.values(roster.children).find((value) => value.spawn === api.taskId);
           if (existing) return JSON.parse(JSON.stringify(existing));
-          id = `sa-${roster.next++}`;
+          id = `bg-${roster.next++}`;
           const title = subagentTitle(task);
           const sinceEntry = (await tx.scanEntries({ conversationId: api.conversationId }, 1)).items[0]?.id || 0;
           const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
@@ -467,7 +474,7 @@ export function Subagents(runtime) {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
-    const id = `sa-${roster.next++}`;
+    const id = `bg-${roster.next++}`;
     const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
     const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });

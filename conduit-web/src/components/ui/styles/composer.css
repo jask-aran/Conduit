@@ -14,10 +14,18 @@
    Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
 .ui-composer-slot { display: grid; grid-template-columns: minmax(0, 1fr); }
 .ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
-/* Under: the state riders, a row of their own below the composer and its takeover, so neither moves them. They come
-   out of the composer's bottom edge, down, and go back up into it (--rise turned over). */
-.ui-composer-slot > .ui-composer-under { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--cmp-rider-gap); margin-top: var(--cmp-rider-gap); }
-.ui-composer-under > .ui-rider { --rise: calc(-1 * var(--space-md)); }
+/* Under: the state riders, a row of their own below the composer and its takeover, so neither moves them. The row
+   opens its room as a rider comes (height and the gap above, as a disclosure body opens), lifting the composer -- and a
+   transcript following the bottom -- while the rider fades in, rising a little with it. Going, the rider slides down
+   and fades as it goes, and the room closes behind it, the composer following it back down (it is never squeezed). */
+.ui-composer-slot > .ui-composer-under { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); padding-top: var(--cmp-rider-gap);
+  height: auto; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-arrive), padding-top var(--duration-gentle) var(--ease-arrive); }
+@starting-style { .ui-composer-slot > .ui-composer-under { height: 0; padding-top: 0; } }
+/* Closing is even (--ease-room): a curve that sped into its end, or out of its start, moved a following transcript
+   most in one frame. */
+.ui-composer-slot > .ui-composer-under:has(> .ui-rider-going) { height: 0; padding-top: 0; transition-timing-function: var(--ease-room); }
+.ui-composer-under > .ui-rider { --rise: var(--space-md); }
+.ui-composer-under > .ui-rider[data-leaving] { --rise: 100%; animation-duration: var(--duration-gentle); }
 /* The stack only moves; its frosts (riders, composer) fade themselves (6). */
 .ui-composer-slot > .ui-composer-stack { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
   transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }

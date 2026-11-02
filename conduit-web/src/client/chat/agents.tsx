@@ -1,8 +1,8 @@
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, type JSX } from "solid-js";
 
 import type { AgentSummary, Message, ToolItem } from "../api/contracts";
-import { createLeaving, riderMotion } from "./composer-cards";
+import { createLeaving, createLeavingList, riderMotion } from "./composer-cards";
 import { elapsed } from "./tool-card";
 
 /*
@@ -47,7 +47,8 @@ type Row = { id?: string; title: string; state: AgentState; activity?: string; s
 function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
   const ref = tool.agent!;
   const listed = agents.find((agent) => ref.id ? agent.id === ref.id : ref.conversationId != null && String(agent.conversationId) === String(ref.conversationId));
-  const background = Boolean(ref.id) || listed?.mode === "background";
+  // fg-N is a turn's own (sa-N, older, and bg-N are background): the listing says, once it has arrived.
+  const background = listed ? listed.mode === "background" : Boolean(ref.id) && !ref.id!.startsWith("fg-");
   const own: AgentState = !tool.done ? "running" : tool.cancelled ? "stopped" : tool.isError ? "failed" : "finished";
   // A background spawn's call returns at once: until the chat's agents arrive, a spawn that took is still working.
   const state = background ? listed?.status ?? (own === "finished" ? "running" : own) : own;
@@ -94,7 +95,7 @@ const jumpToReport = (ids: string[]) => scrollToRow(ids.map((id) => `[data-repor
 export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; scripts?: string[]; onStop?: (id: string) => void }) {
   const all = createMemo(() => [...props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)),
     ...(props.scripts?.length ? props.agents.filter((agent) => agent.via && props.scripts!.includes(agent.via)).map(rowOfAgent) : [])]);
-  const rows = createMemo(() => all().filter((row) => !(row.background && row.id)));
+  const rows = createMemo(() => all().filter((row) => !row.background));
   const started = createMemo(() => all().filter((row) => row.background && row.id));
   const now = useNow(() => all().some((row) => row.state === "running"));
   const reported = () => started().filter((row) => row.state !== "running").map((row) => row.id!);
@@ -136,18 +137,29 @@ export function TurnReports(props: { reports: Message[]; agents: AgentSummary[];
   </AgentReport></AgentRows>;
 }
 
-/** A chat's background agents on its composer, while they work: a rider is what is under way, not a history -- one
- *  that has ended is in the transcript as its report, and on its turn's Started line. */
-export function BackgroundAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
-  const running = createMemo(() => props.agents.filter((agent) => agent.mode === "background" && agent.id && agent.status === "running"));
-  // The rider rises in and, when the last has ended, drops back into the composer (the riders' motion), its rows held
-  // for the drop.
-  const rider = createLeaving(running, (list) => list.length > 0);
-  const shown = () => rider.value();
+/** A chat's agents on its composer, while they work, in two lists: Foreground (what the turn waits for) and Background.
+ *  A rider is what is under way, not a history -- one that has ended is in the transcript (its Delegated or Started line,
+ *  a background one's report). */
+export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
+  const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.mode === "foreground" || agent.id)));
+  // An agent that ends keeps its row while the row closes its room; the rider, when the last has ended, drops back into
+  // the composer (the riders' motion, its room closing as it goes: composer.css), held as long.
+  const list = createLeavingList(running, (agent) => agent.id || `child:${agent.conversationId}`);
+  const rider = createLeaving(running, (agents) => agents.length > 0, undefined, "--duration-gentle");
   const now = useNow(() => running().length > 0);
-  return <Show when={shown().length}>
-    <AgentRider motion={riderMotion(rider.leaving())}><Index each={shown()}>{(agent) => <AgentRow line id={agent().id!} title={agent().title} state={agent().status} activity={agent().activity || undefined}
-      usage={agent().status !== "running" && agent().usage.context ? context(agent().usage.context!) : undefined} time={span(agent().startedAt, agent().endedAt, now())}
-      onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined} onStop={props.onStop ? () => props.onStop!(agent().id!) : undefined} />}</Index></AgentRider>
+  const keysOf = (mode: AgentSummary["mode"]) => list.keys().filter((key) => list.get(key)?.mode === mode);
+  return <Show when={list.keys().length}>
+    <AgentRider motion={riderMotion(rider.leaving())}>
+      <For each={(["foreground", "background"] as const).filter((mode) => keysOf(mode).length)}>{(mode) =>
+        <AgentRiderGroup label={mode === "foreground" ? "Foreground" : "Background"} going={keysOf(mode).every(list.leaving)}>
+          <For each={keysOf(mode)}>{(key) => {
+            const agent = () => list.get(key)!;
+            return <AgentRow line id={agent().id || undefined} title={agent().title} state={agent().status} activity={agent().activity || undefined}
+              motion={list.leaving(key) ? "leaving" : undefined} time={span(agent().startedAt, agent().endedAt, now())}
+              onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
+              onStop={mode === "background" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;
+          }}</For>
+        </AgentRiderGroup>}</For>
+    </AgentRider>
   </Show>;
 }

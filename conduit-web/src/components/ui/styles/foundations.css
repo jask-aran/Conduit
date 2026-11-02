@@ -44,6 +44,9 @@
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
+  /* Room that closes under something following it (a transcript following the bottom as the composer's room goes):
+     even at both ends, so no frame carries much of the move -- leave sped into its end, arrive out of its start. */
+  --ease-room: cubic-bezier(.45, 0, .55, 1);
   /* The page's stack, bottom to top. A piece's own stacking (1, 2, -1 inside it) stays local and is not a layer.
      The sidebar's pane over what slides under its edge; the dock over the panes when it floats, and its edge with it. */
   --layer-nav: 20;
@@ -112,7 +115,7 @@
 @keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
-  .ui-disclosure-body, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
+  .ui-disclosure-body, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-under, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*
  * Scale: everything is drawn from a few numbers. A density gives its unit (16px on desktop and on a

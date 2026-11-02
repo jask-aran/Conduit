@@ -281,7 +281,7 @@ export interface TurnTiming {
 /** What a tool did, stated by the harness adapter from its own tool names. */
 /** `message`: the agent sending the person something outside the thread (a notification), drawn as what it sent. */
 export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
-/** The subagent a spawn or a report is about: its background id (sa-3; none for a turn's own) and its conversation. */
+/** The subagent a spawn or a report is about: its id (bg-3 in the background, fg-3 for a turn's own; sa-3 in older chats) and its conversation. */
 export interface AgentRef { id: string | null; conversationId: number | string | null }
 /** One of a chat's subagents (GET /v0/chats/:chatId/agents): chatId is its transcript, a chat of its own. */
 export interface AgentSummary {
