@@ -185,22 +185,20 @@ const attachmentSummary = (attachments = []) => attachments.map((item) => ({
  * text file is given inline and anything else is said to be out of reach.
  */
 async function promptInput(message, attachments = [], { onDevice = false, processor = null } = {}) {
-  const images = [];
-  const files = [];
-  for (const attachment of attachments) {
+  // Each attachment read (and an image fitted) at once, kept in the order they were attached.
+  const parts = await Promise.all(attachments.map(async (attachment) => {
     const type = String(attachment.mimeType || attachment.type || "");
     if (type.startsWith("image/") && type !== "image/svg+xml") {
       // Fitted to the model as `read` fits one (the runtime's processor):
       // sent as it was, a large screenshot was refused by the provider.
       const bytes = await fs.readFile(attachment.path);
       const prepared = processor ? await processor.prepare(new Uint8Array(bytes), type, DEFAULT_IMAGE_LIMITS).catch(() => undefined) : undefined;
-      images.push({ type: "image", data: prepared?.data ?? bytes.toString("base64"), mimeType: prepared?.mimeType ?? type });
-    } else if (!onDevice) {
-      files.push(`Attached file: ${attachment.path}`);
-    } else {
-      files.push(await attachmentForDevice(attachment));
+      return { image: { type: "image", data: prepared?.data ?? bytes.toString("base64"), mimeType: prepared?.mimeType ?? type } };
     }
-  }
+    return { file: !onDevice ? `Attached file: ${attachment.path}` : await attachmentForDevice(attachment) };
+  }));
+  const images = parts.flatMap((part) => part.image ? [part.image] : []);
+  const files = parts.flatMap((part) => "file" in part ? [part.file] : []);
   const text = [message, ...files].filter(Boolean).join("\n\n");
   return images.length ? [{ type: "text", text }, ...images] : text;
 }

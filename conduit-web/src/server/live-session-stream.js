@@ -240,6 +240,13 @@ export function createLiveSessionStream({
     if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await adapter.setThinkingLevel(record.id, thinkingLevel);
   }
 
+  /** The prompt `preparing` (its chat and attachments, only read) once the composer's model is checked and set as
+   *  well: the two are independent, so neither waits on the other. */
+  async function withComposerModel(record, command, preparing) {
+    const [, prepared] = await Promise.all([applyComposerModel(record, command), preparing]);
+    return prepared;
+  }
+
   /**
    * Say where the history now ends.
    *
@@ -363,11 +370,10 @@ export function createLiveSessionStream({
       await adapter.cancel(record.id, cancelledGenerationId);
       const interrupted = interruptedPromptInput(taken, command.message, command.attachmentIds);
       if (!interrupted.message) return null;
-      await applyComposerModel(record, command);
-      const prepared = await promptForChat(record, {
+      const prepared = await withComposerModel(record, command, promptForChat(record, {
         ...command,
         attachmentIds: interrupted.attachmentIds,
-      }, interrupted.message);
+      }, interrupted.message));
       return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "stop_generation" || command.type === "abort") {
@@ -389,8 +395,7 @@ export function createLiveSessionStream({
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
-      await applyComposerModel(record, command);
-      const prepared = await promptForChat(record, command, String(command.message || ""));
+      const prepared = await withComposerModel(record, command, promptForChat(record, command, String(command.message || "")));
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId: offeredMessageId(command.messageId) });
     }
     if (command.type === "regenerate") {
@@ -402,8 +407,7 @@ export function createLiveSessionStream({
       const forked = await adapter.fork(record.id, { nodeId: entryId });
       announceTruncation(record, command.entryId, { keep: true });
       await syncForkedChat(record, forked);
-      await applyComposerModel(record, command);
-      const prepared = await promptForChat(record, command, forked.sourceMessage?.text || forked.text);
+      const prepared = await withComposerModel(record, command, promptForChat(record, command, forked.sourceMessage?.text || forked.text));
       const messageId = CLIENT_MESSAGE_ID.test(String(command.entryId || "")) ? command.entryId : null;
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
     }
@@ -435,8 +439,7 @@ export function createLiveSessionStream({
       lifecycle.assertAvailable(chatId, context.project.id);
       const record = backends.getByChatId(chatId);
       if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
-      await applyComposerModel(record, { model, thinkingLevel });
-      const prepared = await promptForChat(record, { attachmentIds: [] }, String(message || ""));
+      const prepared = await withComposerModel(record, { model, thinkingLevel }, promptForChat(record, { attachmentIds: [] }, String(message || "")));
       return sendPrompt(record, prepared, { notice });
     });
   }

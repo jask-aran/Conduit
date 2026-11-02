@@ -272,12 +272,12 @@ export class ContextStore {
     const catalog = loadedCatalog || await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);
     if (!doc) throw fail("Unknown document", 404);
     const sections = []; let previousSkill = false;
-    for (const key of doc.blocks) {
-      // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
-      // fatal: a role must still start.
-      const item = catalog.get(key);
-      if (!item || item.kind !== "text") continue;
-      let text = await this.content(item);
+    // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
+    // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
+    const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text");
+    const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
+    for (const [index, { key, item }] of blocks.entries()) {
+      let text = contents[index];
       if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
       else if (item.skill) text = `${previousSkill ? "" : "# Skills\n\n"}## Skill: ${skillName(text, item.skill)}\n\n${skillBody(text)}`;
