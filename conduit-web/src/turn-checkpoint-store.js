@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceHost } from "./workspace-inspector.js";
+import { mapLimit } from "./server/effect-concurrency.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024;
@@ -181,14 +182,15 @@ export class TurnCheckpointStore {
       const changed = await git(["diff", checkpoint.head, ...(target ? [target] : []), "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
       for (const relativePath of changed.stdout.split("\0").filter(Boolean)) paths.add(relativePath);
     }
-    const files = [];
-    for (const relativePath of [...paths].sort()) {
+    // Each path's comparison (a Git read or two) and stat are its own: a few at once, kept in the paths' order.
+    const compared = await mapLimit([...paths].sort(), 8, async (relativePath) => {
       const comparison = await this.#compare(workspace, checkpoint, relativePath, baseline === "turn" ? "turn" : "session", targetCheckpoint);
-      if (comparison.kind === "text" && comparison.original === comparison.modified) continue;
-      if (comparison.kind === "unavailable" && comparison.reason === "unchanged") continue;
+      if (comparison.kind === "text" && comparison.original === comparison.modified) return null;
+      if (comparison.kind === "unavailable" && comparison.reason === "unchanged") return null;
       const stat = safeRelative(relativePath) ? await workspace.host.stat(relativePath).catch(() => null) : null;
-      files.push({ path: relativePath, status: comparison.status, available: comparison.kind === "text", changedAt: stat?.mtimeMs || Date.parse(checkpoint.createdAt) });
-    }
+      return { path: relativePath, status: comparison.status, available: comparison.kind === "text", changedAt: stat?.mtimeMs || Date.parse(checkpoint.createdAt) };
+    });
+    const files = compared.filter(Boolean);
     files.sort((left, right) => right.changedAt - left.changedAt || left.path.localeCompare(right.path));
     return { id: checkpoint.id, createdAt: checkpoint.createdAt, files };
   }
@@ -230,20 +232,27 @@ export class TurnCheckpointStore {
     const entries = source ? structuredClone(source.entries) : {};
     let byteLength = 0;
     if (paths.length) await workspace.ready();
-    for (const relativePath of paths) {
-      if (!safeRelative(relativePath)) continue;
-      const stat = await host.lstat(relativePath);
-      if (!stat) { entries[relativePath] = { kind: "missing" }; continue; }
-      if (!stat.isFile()) { entries[relativePath] = { kind: "unsupported" }; continue; }
+    // Awaited before the turn starts, so each file's stat and read are asked at once (a device's are a round trip
+    // each), a few at a time; the byte budget is still spent in the paths' order, as one after another spent it.
+    const safe = paths.filter((relativePath) => safeRelative(relativePath));
+    const stats = await mapLimit(safe, 16, (relativePath) => host.lstat(relativePath));
+    const wanted = [];
+    safe.forEach((relativePath, index) => {
+      const stat = stats[index];
+      if (!stat) { entries[relativePath] = { kind: "missing" }; return; }
+      if (!stat.isFile()) { entries[relativePath] = { kind: "unsupported" }; return; }
       if (stat.size > MAX_FILE_BYTES || byteLength + stat.size > MAX_CHECKPOINT_BYTES) {
         entries[relativePath] = { kind: "unavailable", size: stat.size, modifiedAt: stat.mtimeMs };
-        continue;
+        return;
       }
-      const content = await host.read(relativePath);
-      byteLength += content.byteLength;
+      byteLength += stat.size;
+      wanted.push({ relativePath, stat });
+    });
+    const contents = await mapLimit(wanted, 8, ({ relativePath }) => host.read(relativePath));
+    wanted.forEach(({ relativePath, stat }, index) => {
       // A device's stat carries no mode; the digest then reads it as 0 on both sides.
-      entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: content.toString("base64") };
-    }
+      entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: contents[index].toString("base64") };
+    });
     const createdAt = new Date().toISOString();
     const id = crypto.randomUUID();
     const directory = path.join(this.root, chatKey);
@@ -251,15 +260,19 @@ export class TurnCheckpointStore {
     await fs.mkdir(directory, { recursive: true });
     const existing = (await fs.readdir(directory).catch(() => [])).filter((name) => name.endsWith(".json")).sort();
     const previousFile = existing.at(-1) ? path.join(directory, existing.at(-1)) : null;
-    const previous = previousFile
-      ? await fs.readFile(previousFile, "utf8").then(JSON.parse, () => null)
-      : null;
-    const digest = digestOf({ repository, head, entries });
-    const sequence = (previous?.sequence ?? existing.length) + 1;
+    // Only its sequence is wanted: from the parsed copy when one is held, else the file (every file's content in it).
+    const previousSequence = async () => {
+      if (!previousFile) return null;
+      const held = this.parsed.get(previousFile)?.checkpoint;
+      if (held) return held.sequence ?? null;
+      return fs.readFile(previousFile, "utf8").then((text) => JSON.parse(text).sequence ?? null, () => null);
+    };
     // The transcript entry this turn will hang under: the user message Pi is
     // about to write becomes its child, which is what ties a checkpoint to the
     // exchange that produced it.
-    const anchorEntryId = await this.#anchor(sessionFile);
+    const [previous, anchorEntryId] = await Promise.all([previousSequence(), this.#anchor(sessionFile)]);
+    const digest = digestOf({ repository, head, entries });
+    const sequence = (previous ?? existing.length) + 1;
     await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, sessionFile: sessionFile ? path.resolve(sessionFile) : null, sourceCheckpointId: source?.id ?? null, head, digest, entries });
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
     await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
@@ -531,23 +544,29 @@ export class TurnCheckpointStore {
   async #checkpoints(chatId) {
     const directory = path.join(this.root, keyFor(chatId));
     const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
-    const checkpoints = [];
-    for (const name of names.filter((item) => item.endsWith(".json")).sort()) {
+    // Each file stat'd (and read, when it changed) at once: a chat's fifty, one after another, were fifty round trips.
+    const read = await Promise.all(names.filter((item) => item.endsWith(".json")).sort().map(async (name) => {
       try {
         const file = path.join(directory, name);
         const stat = await fs.stat(file);
         const stamp = `${stat.size}:${stat.mtimeMs}`;
-        let checkpoint = this.parsed.get(file)?.stamp === stamp ? this.parsed.get(file).checkpoint : null;
-        if (!checkpoint) {
-          checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
-          checkpoint[FILE] = file;
-          this.parsed.delete(file);
-          this.parsed.set(file, { stamp, checkpoint });
-          while (this.parsed.size > 32) this.parsed.delete(this.parsed.keys().next().value);
-        }
-        checkpoints.push(checkpoint);
+        const held = this.parsed.get(file);
+        if (held?.stamp === stamp) return { file, held };
+        const checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
+        checkpoint[FILE] = file;
+        return { file, held: { stamp, checkpoint } };
       }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
+      catch (error) { if (error.code !== "ENOENT") throw error; return null; }
+    }));
+    const checkpoints = [];
+    for (const item of read) {
+      if (!item) continue;
+      // Kept most recent last; room for two chats' worth, as one chat's (MAX_CHECKPOINTS_PER_CHAT) read in order
+      // through a smaller cache evicted each file just before it was wanted again, and every read parsed them all.
+      this.parsed.delete(item.file);
+      this.parsed.set(item.file, item.held);
+      while (this.parsed.size > MAX_CHECKPOINTS_PER_CHAT * 2) this.parsed.delete(this.parsed.keys().next().value);
+      checkpoints.push(item.held.checkpoint);
     }
     return checkpoints;
   }
