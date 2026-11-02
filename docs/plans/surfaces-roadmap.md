@@ -154,8 +154,13 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [ ] 23. Notification destinations. jbot-only for now.
 - [ ] 24. Compaction made visible in the transcript, building on the compaction summary row. No settings page.
 - [ ] 25. A new-chat screen instead of the dashboard. Deferred.
-- [ ] 26. jbot message log (`persistent-agent.md`): add a delivery lifecycle per message: pending, sent, failed or
-  uncertain, an idempotency key, the destination snapshotted. The user's call.
+- [x] 26. jbot message log (`persistent-agent.md`): add a delivery lifecycle per message: pending, sent, failed or
+  uncertain, an idempotency key, the destination snapshotted. The user's call. Already there: `delivery.state`
+  pending, sent and failed (and `held` for email from someone who does not wake jbot), and ids as idempotency keys.
+  Added in `conduit-web/src/agent/messages.js` and `email.js`: a message still pending when the log loads becomes
+  uncertain (the send was cut off; never resent on its own), and an outgoing email's `destination` (recipients,
+  subject, the message it answers) is worked out as it is written and kept on it, so `send` uses that and a later
+  settings change cannot redirect it. The app does not show delivery states yet.
 
 Decided not to build: a compaction settings page, a harness-first page, users and roles, an OpenAI-compatible
 gateway, notification targets beyond jbot, recursive splits in any direction, theming (import and export), image

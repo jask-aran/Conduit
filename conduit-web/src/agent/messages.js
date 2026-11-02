@@ -11,11 +11,15 @@ import { headlineOf } from "./inbox.js";
  * room exists yet.
  *
  * A message: `{ id, at, channel, room, direction: "in" | "out", sender: "person" | "jbot", title?, body,
- * notify: "none" | "push" | "urgent", delivery: { state: "pending" | "sent" | "failed" | "uncertain", at },
- * conversationId, entryId?, native? }`. `native` is the message in its channel's own form (an email's headers, HTML
- * and attachments), so a room never flattens what its channel can say. Ids are idempotency keys: a replayed tool or a
- * republished entry writes nothing twice.
- * The app room is delivered the moment it is written.
+ * notify: "none" | "push" | "urgent", delivery: { state: "pending" | "sent" | "failed" | "uncertain" | "held", at,
+ * error? }, destination?, conversationId, entryId?, native? }`. `native` is the message in its channel's own form (an
+ * email's headers, HTML and attachments), so a room never flattens what its channel can say. Ids are idempotency keys:
+ * a replayed tool or a republished entry writes nothing twice.
+ * The app room is delivered the moment it is written. A message out to another channel is written pending, with its
+ * `destination` worked out then and kept (an email's recipients, subject and the message it answers), so what it was
+ * sent to never depends on settings or a room changed after it was written; carried, it is sent or failed. One still
+ * pending when the log loads was being carried when the hub stopped: it may or may not have gone, so it is uncertain,
+ * never sent again on its own. `held`: an email in from someone who does not wake jbot (email.js).
  */
 const APP = { channel: "app", room: "app" };
 // Prompts Conduit writes into the thread in the person's name that are not the person speaking.
@@ -35,6 +39,10 @@ export class MessageLog {
     const text = await fs.promises.readFile(this.file, "utf8").catch((error) => error.code === "ENOENT" ? "" : Promise.reject(error));
     this.messages = text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
     this.ids = new Set(this.messages.map((message) => message.id));
+    // Pending across a restart: the send was cut off at an unknown point, so whether it arrived is not known.
+    const cut = this.messages.filter((message) => message.delivery?.state === "pending");
+    for (const message of cut) message.delivery = { ...message.delivery, state: "uncertain", at: new Date().toISOString(), since: message.delivery.at };
+    if (cut.length) this.persist();
     return this;
   }
 
@@ -63,15 +71,22 @@ export class MessageLog {
   append(message) {
     if (this.ids.has(message.id)) return null;
     const away = message.direction === "out" && message.channel && message.channel !== "app";
-    const written = { ...APP, notify: "none", delivery: { state: away ? "pending" : "sent", at: message.at }, ...message };
+    const channel = away ? this.channels[message.channel] : null;
+    // Where it goes, decided as it is written; a destination that cannot be named fails it at once.
+    let destination = null;
+    let unsent = null;
+    if (away && !message.destination) {
+      try { destination = channel ? channel.destination?.(message) || null : null; }
+      catch (error) { unsent = error; }
+    }
+    const written = { ...APP, notify: "none", delivery: { state: away ? "pending" : "sent", at: message.at }, ...(destination ? { destination } : {}), ...message };
     this.messages.push(written);
     this.ids.add(written.id);
     this.persist();
     for (const listener of this.listeners) listener({ type: "message", message: written });
     // Out to another channel: written first (pending), then carried; what came of it is its delivery.
     if (away) {
-      const channel = this.channels[written.channel];
-      void (channel ? channel.send(written) : Promise.reject(new Error(`No ${written.channel} channel`)))
+      void (unsent ? Promise.reject(unsent) : channel ? channel.send(written) : Promise.reject(new Error(`No ${written.channel} channel`)))
         .then((native) => this.update(written.id, () => ({ native, delivery: { state: "sent", at: new Date().toISOString() } })))
         .catch((error) => this.update(written.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } })));
     }

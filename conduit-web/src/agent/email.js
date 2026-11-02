@@ -163,23 +163,33 @@ export class EmailChannel {
         .every((party) => this.isPerson(party.address) || lower(party.address) === lower(this.config.address)));
   }
 
-  /** A message of jbot's out as real mail: a reply in its room's thread, or (room "email") a new thread to the person. */
-  async send(message) {
-    if (!this.sends) throw new Error("jbot does not send email: it answers in the app");
+  /**
+   * Where a message of jbot's goes as mail, worked out once as it is written (the log keeps it on the message): a reply
+   * to the sender of its room's last email, in that thread, or (room "email") a new thread to the person.
+   */
+  destination(message) {
+    if (!this.sends) return null;
     const last = message.room === "email" ? null : this.log.messages.findLast((item) => item.channel === "email" && item.room === message.room && item.direction === "in");
     if (message.room !== "email" && !last) throw new Error(`No email in room ${message.room} to reply to`);
-    const to = last ? [last.native?.from?.address].filter(Boolean) : [(this.config.person || [])[0]].filter(Boolean);
+    const to = last ? [last.native?.from?.address].filter(Boolean) : [(this.config?.person || [])[0]].filter(Boolean);
     if (!to.length) throw new Error("No one to send it to");
     const subject = last ? (/^re:/i.test(last.native?.subject || "") ? last.native.subject : `Re: ${last.native?.subject || last.title}`) : (message.title || message.body.split("\n")[0].slice(0, 80));
-    const messageId = `<${crypto.randomUUID()}@${this.config.address.split("@")[1]}>`;
     const references = last ? [...(last.native?.references || []), last.native?.messageId].filter(Boolean) : [];
+    return { to, subject, inReplyTo: last?.native?.messageId || null, references };
+  }
+
+  /** A message of jbot's out as real mail, to its snapshotted `destination` (worked out now for one written without). */
+  async send(message) {
+    if (!this.sends) throw new Error("jbot does not send email: it answers in the app");
+    const { to, subject, inReplyTo, references } = message.destination || this.destination(message);
+    const messageId = `<${crypto.randomUUID()}@${this.config.address.split("@")[1]}>`;
     const html = `<!doctype html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;max-width:640px">${marked.parse(message.body)}</body></html>`;
     const boundary = `conduit-${crypto.randomUUID()}`;
     const name = this.agent.settings?.().name || "jbot";
     const raw = [
       `From: ${header(name)} <${this.config.address}>`, `To: ${to.join(", ")}`, `Subject: ${header(subject)}`,
       `Date: ${new Date().toUTCString()}`, `Message-ID: ${messageId}`,
-      ...(last?.native?.messageId ? [`In-Reply-To: ${last.native.messageId}`, `References: ${references.join(" ")}`] : []),
+      ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${references.join(" ")}`] : []),
       "MIME-Version: 1.0", `Content-Type: multipart/alternative; boundary="${boundary}"`, "",
       `--${boundary}`, "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", base64(message.body), "",
       `--${boundary}`, "Content-Type: text/html; charset=utf-8", "Content-Transfer-Encoding: base64", "", base64(html), "",
