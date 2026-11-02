@@ -7,6 +7,7 @@ import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
+import { UsageLedger } from "./usage-ledger.js";
 import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -316,8 +317,13 @@ export class DurableRuntime {
         }))(this),
         onReport: (error) => console.warn("[conduit-runtime]", error?.message || error),
       }, this.context);
+      // What its agents spend, per day (usage-ledger.js): following commits from before anything resumes.
+      try { this.usage = await UsageLedger.open({ file: path.join(this.dataRoot, "usage", "ledger.jsonl"), harness: this.harness }); }
+      catch (error) { console.error("[usage] ledger not opened", error); this.usage = null; }
       this.harness.closed.then((end) => {
         if (end.reason === "failed") console.error("[conduit-runtime] closed after a storage failure", end.error);
+        this.usage?.close();
+        this.usage = null;
         this.harness = null;
         this.opening = null;
       });

@@ -135,7 +135,16 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   Built from existing v2 setting pieces; no new component.
 - [ ] 14. System › Devices: each device lists the harnesses it declares, with status, and a machine readout (CPU,
   memory, disk, network, top processes).
-- [ ] 15. System › Usage: tokens, cost and tools over time, from the ledger.
+- [x] 15. System › Usage: tokens, cost and tools over time, from the ledger. pi-durable's `pi.usage` holds only
+  running totals per conversation, so a dated record was added: `conduit-web/src/server/usage-ledger.js`, an
+  append-only `data/usage/ledger.jsonl` that follows commits and appends each conversation's increase per model (and
+  per tool that calls a model) with the hub's local day, plus a line per reply with its tool calls. Dollars are what
+  pi-ai priced each call at when made (API list price; subscriptions carry the API's price; free tiers and token plans
+  are $0), stored rather than rates, so later price changes never move past days. Exact and self-healing: totals only
+  grow, so a line lost to a crash is caught at that conversation's next change. Served by `GET /v0/usage?days=` and
+  shown in Settings › System › Usage (`client/settings/usage-settings.tsx`): totals, by day, by model, tool calls, for
+  7, 30 or 90 days. Only Conduit's own agents are counted, not Codex, Claude Code or ChatGPT Web. No chart yet: v2 has
+  none, and adding one needs approval.
 - [ ] 16. Services › Browser: where the browser runs, stream or proxy, quality, clear browser data.
 - [x] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits. Built
   in `conduit-web/src/client/settings/settings-core.tsx`: a Helper models group under Defaults. Naming keeps its model

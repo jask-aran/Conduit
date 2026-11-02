@@ -210,6 +210,17 @@ export function registerChatRoutes(app, {
     profiles: agentProfiles(config.piTemplates, { available: new Set([...(backends.local || backends.adapters.keys())]) }),
     harnesses: harnessCapabilities(),
   }));
+  // Settings › System › Usage: Conduit's agents' spend per day (usage-ledger.js), the last `days` (default 30).
+  app.get("/v0/usage", async (request, response, next) => {
+    try {
+      const runtime = backends.adapters.get("conduit-runtime")?.runtime;
+      if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
+      await runtime.open();
+      if (!runtime.usage) return response.status(503).json({ error: "usage_unavailable" });
+      const days = Math.min(366, Math.max(1, Number.parseInt(String(request.query.days || "30"), 10) || 30));
+      response.json(runtime.usage.view(days));
+    } catch (error) { next(error); }
+  });
   // Settings › AI › Tools: each Conduit profile's tools, their source and whether they ask. Read-only.
   app.get("/v0/profiles/tools", async (_request, response, next) => {
     try {

@@ -164,6 +164,7 @@ export const SETTINGS_SECTIONS = [
   { id: "models", label: "Models & accounts", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
   { id: "tools", label: "Tools", keywords: ["tools", "approval", "ask", "codemode", "connector", "extension", "profile"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
+  { id: "usage", label: "Usage", keywords: ["usage", "cost", "spend", "tokens", "billing", "money"] },
   { id: "voice", label: "Voice", keywords: ["dictation", "microphone", "transcription", "speech"] },
   { id: "search", label: "Web search", keywords: ["web", "brave", "exa", "research", "provider", "api key"] },
 ];
