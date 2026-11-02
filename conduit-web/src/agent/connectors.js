@@ -91,7 +91,8 @@ export class Connectors {
             replay: tool.annotations?.readOnlyHint === true ? "safe" : "unsafe",
             execute: async (args, api) => {
               try {
-                const result = await client.callTool(tool.name, args, { signal: api.signal, timeoutMs: CALL_MS });
+                // The live connection, not this one: a reconnect with the same tools keeps these declarations.
+                const result = await (entry.client || client).callTool(tool.name, args, { signal: api.signal, timeoutMs: CALL_MS });
                 return { output: toLlmContent(result), isError: result.isError === true };
               } catch (error) { return { output: [{ type: "text", text: `Connector call failed: ${String(error?.message || error).slice(0, 200)}` }], isError: true }; }
             } };
