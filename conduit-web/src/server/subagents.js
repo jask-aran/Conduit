@@ -52,6 +52,24 @@ const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
 const textResult = (text) => ({ output: [{ type: "text", text }] });
 /**
+ * What the `subagent` tool lets one conversation start (roadmap #28), generous so that only a runaway meets them:
+ * foreground agents at once (a codemode Promise.all included), background agents running at once, model turns per
+ * task given to a child, and characters of an answer handed back. `runtime.subagentLimits` overrides any of them.
+ * Runs the persistent agent starts (`spawnBackground`) are the app's, not the model's: they meet the turn and output
+ * limits but never count toward, or are refused by, the two concurrency limits.
+ */
+export const SUBAGENT_LIMITS = Object.freeze({ concurrent: 16, background: 10, iterations: 400, outputChars: 100000 });
+export class SubagentLimitError extends Error {
+  constructor(limit, message) { super(message); this.name = "SubagentLimitError"; this.limit = limit; }
+}
+/** An answer cut to `max` characters, saying it was. */
+export const capOutput = (text, max) => {
+  const value = String(text ?? "");
+  if (!(max > 0) || value.length <= max) return value;
+  return `${value.slice(0, max)}\n\n[Subagent output limit: showing ${max} of ${value.length} characters.]`;
+};
+const iterationStop = (max) => `The subagent was stopped: it reached the iteration limit (${max} model turns for one task).`;
+/**
  * How much a run's report matters, from its answer's first word (templates/agent/SYSTEM.md): NOTHING (or OpenClaw's
  * HEARTBEAT_OK) is none, then FYI, ATTENTION and URGENT; an answer that says none of them is ATTENTION.
  */
@@ -121,8 +139,15 @@ export async function stopBackgroundSubagent(harness, conversationId, id, contex
  * the chat's totals add (`backgroundSubagents`): pi-durable's ledger is its own.
  */
 export function Subagents(runtime) {
-  const observe = async (parent, child, api, context, foreground = false) => {
+  const limits = () => ({ ...SUBAGENT_LIMITS, ...runtime.subagentLimits });
+  // Foreground calls running per conversation, by call task id (a replayed call is the same one, so is counted once).
+  const foregroundRuns = new Map();
+  // `onLimit`: the child began more model turns for this task than `iterations` allows; it is stopped, and told once.
+  // Counted while observed, so a restart counts afresh: the limit catches a runaway, it is not an exact budget.
+  const observe = async (parent, child, api, context, foreground = false, onLimit = null) => {
     const signal = context.abortSignal;
+    const maxTurns = limits().iterations;
+    let turns = 0;
     const stream = await watchEvents(runtime.harness, child, context);
     runtime.subagentObservers ||= new Map();
     const observers = runtime.subagentObservers.get(child) || new Set();
@@ -141,6 +166,13 @@ export function Subagents(runtime) {
     };
     const step = (event) => {
       if (stopped || signal?.aborted) return;
+      if (event.type === "turn_start" && onLimit && maxTurns > 0 && ++turns > maxTurns) {
+        const tell = onLimit;
+        onLimit = null;
+        tell(maxTurns);
+        void runtime.harness.conversation(child, context).then((conversation) => conversation.abort(context)).catch(() => {});
+        return;
+      }
       const line = runtime.subagentStep?.(event);
       if (!line) return;
       runtime.subagentActivity ||= new Map();
@@ -232,17 +264,19 @@ export function Subagents(runtime) {
       const handle = await api.conversation(child, context);
       const requestId = `subagent-message:${child}:${number}`;
       let unobserve = async () => {};
+      let limited = null;
       try {
-        unobserve = await observe(api.conversationId, child, api, context);
+        unobserve = await observe(api.conversationId, child, api, context, false, (max) => { limited = max; });
         const settled = await (await submitWithNotes(runtime, await runtime.harness.conversation(child, context), { type: "input", content, whenBusy: mode, requestId,
           entry: { kind: "conduit.user", data: { messageId: requestId, text: content, timestamp: new Date().toISOString() } } }, context, { opensWithTime: Boolean(task.input.gate), admit: (input) => handle.submit(input, context) })).wait(context);
         const conversation = await runtime.harness.conversation(child, context);
         const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
-        const answer = (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("")
+        const answer = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("")
           || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
-        const report = await api.memo("report", { answer, status: settled.status === "done" ? "finished" : "failed" }, context);
+        const report = await api.memo("report", { answer: capOutput(answer, limits().outputChars),
+          status: settled.status === "done" && !limited ? "finished" : "failed" }, context);
         const endedAt = task.input.gate ? await api.memo("endedAt", new Date().toISOString(), context) : null;
         let stopped = false;
         let changed = false;
@@ -406,7 +440,9 @@ export function Subagents(runtime) {
       + "back to you while you can go idle; parent Esc leaves it running. Children cannot delegate or ask the user. "
       + "Manage your background children with action:list, message (id, task, mode:steer or followUp), wait (id), or stop (id). "
       + "Message sends new work and returns immediately; wait returns the latest delivery. stop ends the child and its reporters. "
-      + "Give each spawn a short name (2-4 words, such as Ryokan research) so the person can tell your agents apart.",
+      + "Give each spawn a short name (2-4 words, such as Ryokan research) so the person can tell your agents apart. "
+      + "Limits (a refusal names the one hit): concurrent foreground agents, background agents running at once, "
+      + "model turns per task, and answer length.",
     parameters: Type.Object({
       task: Type.Optional(Type.String({ description: "The whole task or message: goal, context, constraints, and what to report back." })),
       name: Type.Optional(Type.String({ description: "On spawn: what the person sees this agent called, 2-4 words." })),
@@ -436,11 +472,19 @@ export function Subagents(runtime) {
       if (action === "spawn" && !background) {
         // A foreground agent has an id too (fg-1, as background ones are bg-1), so every agent is named in one place;
         // the model never addresses it: its turn waits for the answer.
+        const running = foregroundRuns.get(api.conversationId) || new Set();
+        foregroundRuns.set(api.conversationId, running);
         const { child, agentId } = await api.commit(async (tx) => {
           const roster = await tx.doc(SubagentRoster, api.conversationId);
           roster.foreground ||= {};
           const existing = (await tx.scanConversations({ ownerTaskId: api.taskId }, 1)).items[0];
-          if (existing !== undefined) return { child: existing.id, agentId: roster.foreground[existing.id] ?? null };
+          if (existing !== undefined) { running.add(api.taskId); return { child: existing.id, agentId: roster.foreground[existing.id] ?? null }; }
+          const { concurrent } = limits();
+          if (!running.has(api.taskId) && running.size >= concurrent) {
+            throw new SubagentLimitError("concurrent", `Subagent limit reached: concurrent foreground subagents (${concurrent}). `
+              + `${running.size} are already running in this conversation; wait for them to finish, then spawn the rest.`);
+          }
+          running.add(api.taskId);
           const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
           await stripTools(tx, created.id);
           if (runPrompt) await configure(tx, created.id, { instructions: runPrompt });
@@ -448,44 +492,66 @@ export function Subagents(runtime) {
           const agentId = nextLabel(roster, "fg");
           roster.foreground[created.id] = agentId;
           return { child: created.id, agentId };
-        }, context);
-        const title = titled();
-        const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
-        await api.details({ conversationId: child, subagentId: agentId, title, startedAt }, context);
-        const noteNested = async (fields) => {
-          if (!via) return;
-          await api.commit(async (tx) => {
-            const roster = await tx.doc(SubagentRoster, api.conversationId);
-            roster.nested ||= {};
-            roster.nested[child] = { ...roster.nested[child], id: agentId, conversationId: child, title, via, startedAt, ...fields };
-            return undefined;
-          }, context);
-          runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: fields.status });
-        };
-        await noteNested({ status: "running", endedAt: null });
-        await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: agentId, title });
-        const unobserve = await observe(api.conversationId, child, api, context, true);
+        }, context).catch((error) => {
+          running.delete(api.taskId);
+          throw error;
+        });
+        let limited = null;
+        let unobserve = async () => {};
         try {
+          const title = titled();
+          const startedAt = await api.memo("startedAt", new Date().toISOString(), context);
+          await api.details({ conversationId: child, subagentId: agentId, title, startedAt }, context);
+          const noteNested = async (fields) => {
+            if (!via) return;
+            await api.commit(async (tx) => {
+              const roster = await tx.doc(SubagentRoster, api.conversationId);
+              roster.nested ||= {};
+              roster.nested[child] = { ...roster.nested[child], id: agentId, conversationId: child, title, via, startedAt, ...fields };
+              return undefined;
+            }, context);
+            runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: fields.status });
+          };
+          await noteNested({ status: "running", endedAt: null });
+          await runtime.ensureSubagent?.(api.conversationId, { conversationId: child, id: agentId, title });
+          unobserve = await observe(api.conversationId, child, api, context, true, (max) => { limited = max; });
           const handle = await api.conversation(child, context);
           const requestId = `subagent:${api.taskId}`;
           const settled = await (await handle.submit({ type: "input", content: task, requestId,
             entry: { kind: "conduit.user", data: { messageId: requestId, text: task, timestamp: new Date().toISOString() } } }, context)).wait(context);
-          const ended = { status: settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed", endedAt: new Date().toISOString() };
+          const ended = { status: limited ? "failed" : settled.status === "done" ? "finished" : settled.reason === "aborted" ? "stopped" : "failed", endedAt: new Date().toISOString() };
           await api.details({ conversationId: child, subagentId: agentId, title, startedAt, ...ended }, context);
           await noteNested(ended);
           const answer = await runtime.lastAnswer(child);
           const usage = totalUsage(await api.snapshot(UsageDoc, child, context));
+          const { outputChars } = limits();
+          if (limited) {
+            return { ...textResult(capOutput(answer ? `${iterationStop(limited)} Its last reply:\n\n${answer}` : iterationStop(limited), outputChars)), isError: true, usage };
+          }
           if (settled.status !== "done" && !answer) {
             return { ...textResult(`The subagent did not finish (${settled.status}).`), isError: true, usage };
           }
-          return { ...textResult(answer || "(The subagent finished without a reply.)"), usage };
-        } finally { await unobserve(); }
+          return { ...textResult(capOutput(answer || "(The subagent finished without a reply.)", outputChars)), usage };
+        } finally {
+          running.delete(api.taskId);
+          await unobserve();
+        }
       }
       const item = await api.commit(async (tx) => {
         const roster = await tx.doc(SubagentRoster, api.conversationId);
+        // Background agents at once: a spawn, or a message that sets an idle one working again, waits for room.
+        const room = (verb) => {
+          const { background } = limits();
+          const busy = Object.values(roster.children).filter((value) => value.status === "running").length;
+          if (busy >= background) {
+            throw new SubagentLimitError("background", `Subagent limit reached: background subagents running at once (${background}). `
+              + `${busy} are running in this conversation; wait for one (action:wait) or stop one (action:stop) before you ${verb}.`);
+          }
+        };
         if (action === "spawn") {
           const existing = Object.values(roster.children).find((value) => value.spawn === api.taskId);
           if (existing) return JSON.parse(JSON.stringify(existing));
+          room("spawn another");
           const label = nextLabel(roster, "bg");
           id = nextKey(roster);
           const title = titled();
@@ -506,6 +572,7 @@ export function Subagents(runtime) {
         if (action === "spawn" || action === "message") {
           if (held.status === "stopped") throw new Error(`Subagent ${id} is stopped.`);
           if (!held.deliveries[api.taskId]) {
+            if (action === "message" && held.status !== "running") room(`message ${held.id}`);
             const delivery = await tx.createTask(reporter, { id, child: held.child, title: held.title, content: task,
               mode, number: ++held.number, sinceEntry: held.sinceEntry || 0 }, { ownership: { kind: "task", taskId: held.anchor } });
             held.deliveries[api.taskId] = delivery;
@@ -529,7 +596,7 @@ export function Subagents(runtime) {
       }
       if (action === "wait") {
         const settled = await api.waitForTask(item.reporter, context);
-        return textResult(settled.state.outcome.result?.answer || `Subagent ${item.id}: ${item.status}`);
+        return textResult(capOutput(settled.state.outcome.result?.answer || `Subagent ${item.id}: ${item.status}`, limits().outputChars));
       }
       return textResult(`${action === "spawn" ? "Started" : "Messaged"} subagent ${item.id}: ${item.title}`);
     },

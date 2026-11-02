@@ -133,8 +133,12 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 - [ ] 27. Message queue: rework what a message sent mid-turn does (queue, steer, interrupt); the current behaviour
   is not what the user wants. Design first.
-- [ ] 28. Sub-agent limits: extend the `subagent` tool with limits (concurrent and background runs, iterations,
-  output size).
+- [x] 28. Sub-agent limits: extend the `subagent` tool with limits (concurrent and background runs, iterations,
+  output size). Built in `conduit-web/src/server/subagents.js` (`SUBAGENT_LIMITS`, overridable by
+  `runtime.subagentLimits`): 16 foreground agents at once per conversation, 10 background agents running at once
+  (a spawn, or a message that wakes an idle one), 400 model turns per task (the child is stopped and the call or
+  report says so), 100,000 characters of answer (cut, with a note). A refusal names the limit hit. jbot's own runs
+  (`spawnBackground`) meet the turn and output limits but not the concurrency ones.
 - [ ] 29. Voice: extend Settings › Voice beyond dictation with text-to-speech (reading replies aloud) and voice memos.
 - [ ] 30. jbot channels: messaging apps (Telegram, Discord, Slack, WhatsApp, Signal, SMS, email) as jbot's channels,
   grown through the jbot message log (`persistent-agent.md`). Worth keeping from the study: a conversation in a
