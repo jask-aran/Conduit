@@ -5,6 +5,7 @@ import {
 
 import { Button, Input, Keycap, Switch, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
 import { Select } from "@/components/menus";
+import { api } from "../api/client";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
@@ -236,6 +237,15 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     return `${conflict.owner} may use this shortcut for ${conflict.action} before Conduit receives it.`;
   };
 
+  // The hub's keybindings.json: where it is, and what in it could not be read (read again when it changes there).
+  const [file, setFile] = createSignal<{ path: string; errors: string[] } | null>(null);
+  const readFile = () => void api<{ keybindings?: { path: string; errors: string[] } }>("/v0/preferences")
+    .then((preferences) => setFile(preferences.keybindings || null)).catch(() => {});
+  readFile();
+  const onFileChanged = () => readFile();
+  window.addEventListener("conduit:keybindings-changed", onFileChanged);
+  onCleanup(() => window.removeEventListener("conduit:keybindings-changed", onFileChanged));
+
   return <>
     <SettingGroup title="Keyboard">
       <SettingLine plain label="Keys for" state={shortcutEnvironmentLabel(props.manager.environment)}>
@@ -247,6 +257,10 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       </SettingLine>
       <SettingLine label="Find"><Input type="search" aria-label="Search shortcuts" placeholder="Commands, contexts or keys" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></SettingLine>
       <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>
+      <Show when={file()}>{(held) => <>
+        <SettingLine plain mono label="File" state="on the hub, editable by hand or by an agent" title={held().path}><SettingValue mono>{held().path}</SettingValue></SettingLine>
+        <For each={held().errors}>{(error) => <SettingNote tone="error">Not applied: {error}</SettingNote>}</For>
+      </>}</Show>
       {/* Inside the group: between groups it would part their hairline. */}
       <LiveNote>{status()}</LiveNote>
     </SettingGroup>

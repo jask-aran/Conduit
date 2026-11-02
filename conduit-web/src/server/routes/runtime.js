@@ -170,7 +170,8 @@ export function registerRuntimeRoutes(app, {
   });
 
   app.get("/v0/preferences", (_request, response) => {
-    response.json(preferences.get());
+    // The shortcuts file's path and anything in it that could not be read ride along, for Settings › Shortcuts.
+    response.json({ ...preferences.get(), keybindings: preferences.keybindings() });
   });
 
   app.patch("/v0/preferences", async (request, response, next) => {

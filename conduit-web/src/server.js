@@ -266,6 +266,8 @@ const requireChatgptWeb = () => {
   return chatgptWeb;
 };
 const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list(), listDevices: () => nodeHub.availability() }), (owned) => owned.close());
+// keybindings.json edited outside Conduit (by hand, by an agent): every client takes the new shortcuts at once.
+lifetime.own("keybindings watch", preferences.watchKeybindings((overrides) => runtimeHub.publish({ type: "keybindings_changed", overrides })), (stop) => stop());
 // A device coming or going is every client's to know at once: its workspaces and their chats come and go with it.
 {
   let pending = null;

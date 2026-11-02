@@ -94,7 +94,8 @@ import { createSideChat, type SideChat } from "./state/side-chat";
 import { connectionId, createRuntimeStore, deviceLabel, deviceStates } from "./state/runtime";
 import { browserShortcutEnvironmentProvider } from "./shortcuts/shortcut-environment";
 import { ShortcutManager } from "./shortcuts/shortcut-manager";
-import { isShortcutRegion } from "./shortcuts/shortcut-types";
+import { isShortcutRegion, type ShortcutBinding } from "./shortcuts/shortcut-types";
+import { normalizeStoredBinding } from "./shortcuts/shortcut-normalize";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
 import { EMPTY_FILE_VIEW, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
@@ -579,6 +580,14 @@ function App() {
     environment: browserShortcutEnvironmentProvider.detect(),
     leader: LEADER_STROKE,
     validate: import.meta.env.DEV,
+  });
+  // The hub's keybindings.json, changed outside Conduit: the shortcuts as it now has them, each binding as stored.
+  window.addEventListener("conduit:keybindings-changed", (event) => {
+    const overrides = (event as CustomEvent<Record<string, unknown>>).detail || {};
+    shortcutManager.replaceOverrides(Object.fromEntries(Object.entries(overrides).flatMap(([commandId, bindings]) => {
+      const normalized = Array.isArray(bindings) ? bindings.map(normalizeStoredBinding) : [];
+      return Array.isArray(bindings) && normalized.every(Boolean) ? [[commandId, normalized as ShortcutBinding[]]] : [];
+    })));
   });
   const catalogue = createCatalogueStore();
   const [computerLocation, setComputerLocation] = createSignal<ComputerLocation | null>(null);

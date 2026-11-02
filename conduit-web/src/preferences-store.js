@@ -1,6 +1,8 @@
 import { LOOPBACK_HOST, PRIVATE_HOST } from "./network-hosts.js";
 import fs from "node:fs/promises";
+import { watch } from "node:fs";
 import path from "node:path";
+import { formatKeybindings, parseKeybindings } from "./keybindings.js";
 
 const DEFAULTS = {
   defaultTemplateId: "assistant",
@@ -275,34 +277,96 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
 }
 
 export class PreferencesStore {
-  constructor(filePath, seed = DEFAULTS, { knownTemplateIds = null } = {}) {
+  constructor(filePath, seed = DEFAULTS, { knownTemplateIds = null, keybindingsFile = null } = {}) {
     this.filePath = filePath;
     this.knownTemplateIds = knownTemplateIds;
     this.preferences = normalizePreferences(seed, DEFAULTS, knownTemplateIds);
+    // The shortcut overrides' own file (keybindings.js), beside this one: readable, and edited in place by a person or
+    // an agent. They are served in `shortcutOverrides` as before; preferences.json no longer holds them.
+    this.keybindingsFile = keybindingsFile || path.join(path.dirname(filePath), "keybindings.json");
+    this.keybindingErrors = [];
   }
 
   get() {
     return { ...this.preferences };
   }
 
+  /** Where the shortcuts file is and what in it could not be read, for Settings › Shortcuts. */
+  keybindings() {
+    return { path: this.keybindingsFile, errors: [...this.keybindingErrors] };
+  }
+
   async load() {
+    let stored = null;
     try {
       const raw = JSON.parse(await fs.readFile(this.filePath, "utf8"));
+      stored = raw?.shortcutOverrides ?? null;
       this.preferences = normalizePreferences(raw, this.preferences, this.knownTemplateIds);
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }
+    const read = await this.readKeybindings();
+    // Overrides saved before the file: moved into it, and out of preferences.json (the file, when there is one, wins).
+    if (!read && this.preferences.shortcutOverrides) await this.save({ shortcutOverrides: this.preferences.shortcutOverrides });
+    else if (stored) await this.save({});
     return this.get();
+  }
+
+  /** The file's overrides into the preferences; false when there is no file. A file that is not JSON keeps the last. */
+  async readKeybindings() {
+    let text;
+    try { text = await fs.readFile(this.keybindingsFile, "utf8"); }
+    catch (error) { if (error?.code === "ENOENT") { this.keybindingErrors = []; return false; } throw error; }
+    const { overrides, errors } = parseKeybindings(text);
+    this.keybindingErrors = errors;
+    // A file, even an empty one, is the hub's answer: {} (none), never null, as null tells a client the hub has nothing
+    // and it uploads its own copy, which would bring back shortcuts reset on another device.
+    if (overrides) this.preferences.shortcutOverrides = overrides;
+    return true;
+  }
+
+  /**
+   * Watch the shortcuts file for edits made outside Conduit; `onChange` has the overrides when they changed. The
+   * folder is watched, as a save replaces the file (a rename) and a watch on the file itself would go with it.
+   */
+  watchKeybindings(onChange) {
+    let timer = null;
+    let watcher = null;
+    const reread = () => {
+      timer = null;
+      const before = JSON.stringify(this.preferences.shortcutOverrides ?? null);
+      void this.readKeybindings().then(() => {
+        const after = this.preferences.shortcutOverrides ?? null;
+        if (JSON.stringify(after) !== before) onChange(after || {});
+      }).catch((error) => console.warn("Could not read keybindings.json", error.message));
+    };
+    try {
+      watcher = watch(path.dirname(this.keybindingsFile), (_event, name) => {
+        if (name && String(name) !== path.basename(this.keybindingsFile)) return;
+        clearTimeout(timer);
+        timer = setTimeout(reread, 100);
+      });
+      watcher.on("error", () => {});
+    } catch (error) { console.warn("Could not watch keybindings.json", error.message); }
+    return () => { clearTimeout(timer); watcher?.close(); };
   }
 
   async save(patch = {}) {
     this.preferences = normalizePreferences({ ...this.preferences, ...patch }, this.preferences, this.knownTemplateIds);
+    // The file is written only when the overrides change: another preference's save leaves a hand edit as it was.
+    const keybindings = Object.hasOwn(patch, "shortcutOverrides");
     // One write at a time, each of the state as it then is: two saves at once shared the temporary file, and the
     // second rename found it gone.
     const write = (this.writing || Promise.resolve()).then(async () => {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+      if (keybindings && (this.preferences.shortcutOverrides || await exists(this.keybindingsFile))) {
+        const temp = `${this.keybindingsFile}.${process.pid}.tmp`;
+        await fs.writeFile(temp, formatKeybindings(this.preferences.shortcutOverrides || {}), "utf8");
+        await fs.rename(temp, this.keybindingsFile);
+        this.keybindingErrors = [];
+      }
       const temp = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temp, `${JSON.stringify(this.preferences, null, 2)}\n`, "utf8");
+      await fs.writeFile(temp, `${JSON.stringify({ ...this.preferences, shortcutOverrides: undefined }, null, 2)}\n`, "utf8");
       await fs.rename(temp, this.filePath);
     });
     this.writing = write.catch(() => {});
@@ -310,3 +374,5 @@ export class PreferencesStore {
     return this.get();
   }
 }
+
+const exists = (file) => fs.access(file).then(() => true, () => false);

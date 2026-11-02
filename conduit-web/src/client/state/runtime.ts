@@ -143,6 +143,9 @@ export function createRuntimeStore() {
         window.dispatchEvent(new CustomEvent("conduit:workspace-changed", { detail: event.projectIds }));
       } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
+      } else if (event.type === "keybindings_changed" && event.overrides && typeof event.overrides === "object") {
+        // keybindings.json edited on the hub (by hand, by an agent): main.tsx gives it to the shortcut manager.
+        window.dispatchEvent(new CustomEvent("conduit:keybindings-changed", { detail: event.overrides }));
       } else if (event.type === "browser_changed") {
         window.dispatchEvent(new CustomEvent("conduit:browser-changed", { detail: event }));
       } else if (event.type === "ui_command") {

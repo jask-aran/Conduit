@@ -231,7 +231,8 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
 - [ ] 22. Commit message drafting with its own model.
 - [ ] 23. Notification destinations. jbot-only for now.
-- [ ] 24. Compaction made visible in the transcript, building on the compaction summary row. No settings page.
+- [x] 24. Compaction made visible in the transcript, building on the compaction summary row. No settings page.
+  Already built (confirmed 2026-11-02).
 - [ ] 25. A new-chat screen instead of the dashboard. Deferred.
 - [x] 26. jbot message log (`persistent-agent.md`): add a delivery lifecycle per message: pending, sent, failed or
   uncertain, an idempotency key, the destination snapshotted. The user's call. Already there: `delivery.state`
