@@ -1,4 +1,4 @@
-import { Icons } from "@/components/ui";
+import { AgentRows, Icons, RoutineIcon, RunLine } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
 import { unitPx } from "@/components/ui/layout";
 import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
@@ -52,6 +52,7 @@ import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
+import { elapsed } from "./tool-card";
 
 
 /**
@@ -143,10 +144,6 @@ const approvalMeta = (text: string) => {
   const ask = /\(ask ([^)]+)\)/.exec(body)?.[1];
   return [body.startsWith("Allowed") ? "an approval allowed" : body.startsWith("Not allowed") ? "an approval declined" : "an approval", ask].filter(Boolean).join(" · ");
 };
-// A run's mark: its routine's (DESIGN Assistant, ClockRow), else an agent's.
-const senderIcon = (routine?: string) => routine === "heartbeat" ? <Icons.Heartbeat aria-hidden="true" />
-  : routine === "brief" || routine === "morning-brief" ? <Icons.Brief aria-hidden="true" />
-    : routine === "feed" ? <Icons.Feed aria-hidden="true" /> : <Icons.Agent aria-hidden="true" />;
 /** Text in a message in or out: the answer's Markdown, settled (it arrives whole). */
 function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
   return <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{props.text}</ChatMarkdown></Suspense></Answer>;
@@ -296,13 +293,15 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   // harness sent on its own -- starts an exchange; the first row of the reply to it is the exchange's; anything after
   // that is the next step of the same reply.
   // Reports start no exchange of the person's: they sit a step from what is around them.
-  const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && !isAgentReport(row.value);
+  const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && row.value.run?.woke !== false && !isAgentReport(row.value);
   // Work is a trace that did something, or reports that landed: lines of work in rows of their own keep the trail's
   // gap (`work`), and the answer under work stands clear of it (`answer`, twice a step).
   const isWork = (row: TurnRow | undefined) => row?.type === "reports" || (row?.type === "trace" && row.value.segments.length > 0);
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
     const row = timeline[index], above = timeline[index - 1];
+    // A quiet run arrives on its own, without starting an exchange.
+    if (row?.type === "message" && row.value.run?.woke === false) return "step";
     if (fromPerson(row)) return "turn";
     if (fromPerson(above)) return "exchange";
     if (row?.type === "reports" && isWork(above)) return "work";
@@ -1237,6 +1236,27 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           if (item.type === "reports") return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value[0]!.id} data-report={item.value.map((message) => message.agent?.id).join(" ")} flow={flow()}>
             <Turn><TurnReports reports={item.value} agents={props.chat.agents?.() || []} text={(message) => <ChatText renderer={markdownRenderer()} text={message.content || ""} />} /></Turn>
           </TranscriptRow>;
+          if (item.type === "message" && item.value.run) {
+            const run = () => item.value.run!;
+            const time = () => {
+              const start = run().startedAt ? Date.parse(run().startedAt!) : NaN;
+              const end = run().endedAt ? Date.parse(run().endedAt!) : NaN;
+              return Number.isFinite(start) && Number.isFinite(end) && end >= start ? elapsed(end - start) : undefined;
+            };
+            const child = () => props.chat.agents?.().find((agent) => run().conversationId != null && String(agent.conversationId) === String(run().conversationId))?.chatId;
+            return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value.id} flow={flow()}><Turn><AgentRows>
+              <RunLine icon={<RoutineIcon routine={run().routine} />} label={run().label} number={run().number} trigger={run().trigger || undefined} time={time()} woke={run().woke}
+                outcome={props.profileLabel ? `Woke ${props.profileLabel}` : undefined} status={run().status === "finished" ? undefined : run().status[0]!.toUpperCase() + run().status.slice(1)}
+                summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : undefined}>
+                {/* What the agent was given, all of it: the report, then what Conduit added to it (nothing hidden). */}
+                {run().woke ? <><ChatText renderer={markdownRenderer()} text={item.value.content || ""} /><Show when={item.value.appended}><ConduitAdded text={item.value.appended!} /></Show></> : undefined}
+              </RunLine>
+            </AgentRows>
+              <Show when={item.value.agent?.conversationId != null && asksAt(`run:${item.value.agent!.conversationId}`).length}>
+                <For each={asksAt(`run:${item.value.agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
+              </Show>
+            </Turn></TranscriptRow>;
+          }
           if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} renderer={markdownRenderer()} /></TranscriptRow>;
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
@@ -1283,7 +1303,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
             return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-report={message().agent?.id || undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
-                <Inbound shut icon={senderIcon(message().sender?.routine)} from={message().sender?.name || message().agent?.id || "Background agent"}
+                <Inbound shut icon={<RoutineIcon routine={message().sender?.routine} />} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
                   onBack={message().agent?.id && !message().sender?.routine ? () => jumpToSpawn(message().agent!.id!) : undefined} backLabel="Started"

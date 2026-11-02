@@ -31,6 +31,7 @@ const help = `| Keyword | Turn |
 | script | Run read and bash in codemode |
 | spawn | Spawn a foreground subagent |
 | background | Spawn a background subagent |
+| run heartbeat, run brief, run check-back | Start a Conduit run; add quiet or urgent to choose its report level |
 | fan out, 3 spawns | That many foreground subagents in parallel, from one codemode script (fan out: 3) |
 | 3 backgrounds | That many background subagents, from one codemode script |
 | ask | Ask a question with two options |
@@ -42,7 +43,8 @@ const textOf = (message) => typeof message?.content === "string" ? message.conte
 
 // The context is the state machine: every completed call advances one step.
 const promptOf = (message) => parseAttachmentEnvelope(textOf(message).trim()).message.trim();
-const reportText = (prompt) => /^(?:(?:sa|bg)-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt);
+const reportText = (prompt) => /^(?:(?:sa|bg)-\d+\b|that was your .+ run's report\b)/i.test(prompt) || /^ping\d*[.!]?$/i.test(prompt)
+  || /\n---\nThat was your .+ run's report\b/i.test(prompt);
 const noticeText = (prompt) => !prompt || /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i.test(prompt);
 const finalAnswer = (message) => message.role === "assistant" && !(message.content || []).some((part) => part.type === "toolCall");
 /** Which agent sent the report at `index`: it holds only the child's answer, "ping" or "pingN", the word its task asked
@@ -90,9 +92,11 @@ export function scriptedStep(context) {
   const isNotice = noticeText(prompt);
   if (isReport) {
     const id = reporter(messages, at);
-    return fauxAssistantMessage(`${id} reported: ${prompt.replace(/\s+/g, " ").replace(/[.!]?$/, ".")}`);
+    return fauxAssistantMessage(`${id} reported: ${prompt.split(/\n-{3}\n/)[0].replace(/\s+/g, " ").replace(/[.!]?$/, ".")}`);
   }
   if (isNotice) return fauxAssistantMessage("Notice received.");
+  const run = prompt.match(/^run (heartbeat|brief|check-back)(?: (quiet|urgent))?$/);
+  if (run) return fauxAssistantMessage(`Conduit is starting a ${run[1]} run.`);
   const cwd = systemMessage?.sections?.cwd?.match(/<cwd>\s*([\s\S]*?)\s*<\/cwd>/)?.[1];
   let file = "README.md";
   try { file = fs.readdirSync(cwd, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name).sort()[0] || file; } catch {}

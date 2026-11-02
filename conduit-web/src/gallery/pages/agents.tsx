@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, Trace, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, RoutineIcon, RunLine, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
@@ -25,6 +25,7 @@ const STRIP: { id: string; title: string; state: AgentState; activity?: string; 
 const strip = (rows: typeof STRIP) => <div class="g-composer"><AgentRider>
   <AgentRiderGroup label="Foreground"><AgentRow line id="fg-1" title="Look over the itinerary draft" state="running" activity="read itinerary.md" time="06s" onOpen={() => {}} stopRoom /></AgentRiderGroup>
   <AgentRiderGroup label="Background"><For each={rows}>{(row) => <AgentRow line {...row} onOpen={() => {}} onStop={() => {}} />}</For></AgentRiderGroup>
+  <AgentRiderGroup label="Runs"><AgentRow line title="Heartbeat #14" state="running" activity="checking inbox" time="24s" onOpen={() => {}} onStop={() => {}} /></AgentRiderGroup>
 </AgentRider></div>;
 function StripCycle() {
   const [shown, setShown] = createSignal(STRIP.slice(0, 1));
@@ -66,9 +67,14 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     row("AgentDelegate", "a turn's foreground fan-out: several agents the turn waits for, one line (Delegated · 3 agents) dropping down an AgentRow each; one foreground agent stays its own AgentRow", () =>
       <AgentRows><AgentDelegate count={3} status="1 of 3 running"><For each={STRIP.slice(0, 3)}>{(row) => <AgentRow line {...row} id={undefined} onOpen={() => {}} />}</For></AgentDelegate></AgentRows>,
       { source: "client/chat/agents.tsx · TurnAgents", surfaces: ["ground"], phone: true }),
+    row("RunLine", "a run enters from outside: its report opens under the line, or a quiet summary stays on it", () =>
+      <AgentRows><RunLine icon={<RoutineIcon routine="heartbeat" />} label="Heartbeat" number={14} trigger="Scheduled 09:00" time="24s" woke onOpen={() => {}}>Three new messages need your attention.</RunLine>
+        <RunLine icon={<RoutineIcon routine="heartbeat" />} label="Heartbeat" number={15} trigger="Hourly" time="8s" woke={false} summary="nothing new" onOpen={() => {}} />
+        <RunLine icon={<RoutineIcon routine="brief" />} label="Morning brief" number={3} time="9s" woke={false} status="Failed" summary="could not check inbox" onOpen={() => {}} /></AgentRows>,
+      { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("Report", "a background agent's report arrives as the harness's own line, and opens the subagent's transcript", () => <HarnessPrompt onOpen={() => {}}>sa-1 finished: Research gassho house pricing</HarnessPrompt>, { source: "components/ui/transcript.tsx · HarnessPrompt", surfaces: ["ground"] }),
     row("Beside the queued rider", "riders stack on the composer; the agents sit above what waits to be sent", () => <div class="g-stack">{strip(STRIP.slice(0, 2))}<div class="g-composer">{queued()}</div></div>, { surfaces: ["ground"] }),
   ],
   motion: [row("An agent arrives", "each new agent's line fades into the rider", () => <StripCycle />, { surfaces: ["ground"] })],
-  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentReport", "AgentReportItem", "AgentDelegate", "AgentRider", "AgentRiderGroup", "Inbound", "Trace", "HarnessPrompt"],
+  api: ["AgentRows", "AgentRow", "AgentSpawn", "AgentReport", "AgentReportItem", "AgentDelegate", "RunLine", "RoutineIcon", "AgentRider", "AgentRiderGroup", "Inbound", "Trace", "HarnessPrompt"],
 };

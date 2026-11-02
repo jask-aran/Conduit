@@ -1,6 +1,6 @@
 import * as Icons from "./icons";
 import { cn } from "@/lib/utils";
-import { createSignal, Show, type JSX } from "solid-js";
+import { createSignal, Match, Show, Switch, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { Expand } from "./expand";
 import { Rider } from "./rider";
@@ -14,6 +14,13 @@ import { type Motion, motionOf, moveCursor } from "./shared";
  */
 export type AgentState = "running" | "finished" | "failed" | "stopped";
 const ENDED: Record<Exclude<AgentState, "running">, string> = { finished: "Finished", failed: "Failed", stopped: "Stopped" };
+
+/** A routine's mark, or an agent's when the routine has no mark of its own. */
+export const RoutineIcon = (props: { routine?: string }) => <Switch fallback={<Icons.Agent aria-hidden="true" />}>
+  <Match when={props.routine === "heartbeat"}><Icons.Heartbeat aria-hidden="true" /></Match>
+  <Match when={props.routine === "brief" || props.routine === "morning-brief"}><Icons.Brief aria-hidden="true" /></Match>
+  <Match when={props.routine === "feed"}><Icons.Feed aria-hidden="true" /></Match>
+</Switch>;
 
 /** A state's mark: a spinner while it works, the agent's glyph once it has finished, a warning when it failed. */
 const Mark = (props: { state: AgentState }) => <span class="ui-agent-mark">
@@ -52,17 +59,17 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
 
 /** One quiet line for agents taken together, a disclosure of what it holds (Expand under it): the verb, the ids, the
  *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
-function AgentLine(props: { kind: "spawn" | "report" | "delegate"; verb: string; ids: string[]; count?: string; title?: string; where?: string; status?: string; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
+function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
   return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? props.ids.join(" ") : undefined}
-    data-open={open() ? "" : undefined} {...motionOf(props.motion)}>
-    <div class="ui-agent-row">
-      <button type="button" class="ui-agent-open" disabled={!props.children} aria-expanded={props.children ? open() : undefined}
-        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => setOpen(!open())}>
-        <span class="ui-agent-mark"><Icons.Agent /></span>
+    data-open={open() ? "" : undefined} data-quiet={props.quiet ? "" : undefined} {...motionOf(props.motion)}>
+    <div class="ui-agent-row" data-state={props.failed ? "failed" : undefined}>
+      <button type="button" class="ui-agent-open" disabled={!props.children && !props.onOpen} aria-expanded={props.children ? open() : undefined}
+        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => props.children ? setOpen(!open()) : props.onOpen?.()}>
+        <span class="ui-agent-mark">{props.icon || <Icons.Agent />}</span>
         <span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
           <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>
-        <Show when={props.status}><span class="ui-agent-line ui-agent-status">{props.status}</span></Show>
+        <Show when={props.status}><span class={props.kind === "run" ? "ui-agent-run-status ui-agent-status" : "ui-agent-line ui-agent-status"}>{props.status}</span></Show>
         <Show when={props.children}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
       </button>
       <Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>
@@ -99,6 +106,16 @@ export function AgentReport(props: { ids: string[]; title?: string; status?: str
 export function AgentDelegate(props: { count: number; status?: string; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="delegate" verb="Delegated" ids={[]} count={`${props.count} ${props.count === 1 ? "agent" : "agents"}`}
     where="in this turn" status={props.status} motion={props.motion}>{props.children}</AgentLine>;
+}
+
+/** A run enters from outside the thread, with its report or its quiet summary. */
+export function RunLine(props: { icon: JSX.Element; label: string; number: number; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; onOpen?: () => void; children?: JSX.Element }) {
+  return <AgentLine kind="run" icon={props.icon} verb={`${props.label} #${props.number}`} ids={[]} where={[props.trigger, props.time].filter(Boolean).join(" · ")}
+    title={!props.woke ? props.summary : undefined} status={[props.status, props.woke ? props.outcome || "Woke the agent" : "Not woken"].filter(Boolean).join(" · ")}
+    failed={props.status?.toLowerCase() === "failed"} quiet={!props.woke} onOpen={!props.woke ? props.onOpen : undefined}>
+    {props.woke && (props.children || props.onOpen) ? <li class="ui-agent-said ui-agent-run-body">{props.children}
+      <Show when={props.onOpen}><Button variant="ghost" size="sm" onClick={() => props.onOpen?.()}>Open run</Button></Show></li> : undefined}
+  </AgentLine>;
 }
 
 /** One agent's report in an AgentReport: its line (an AgentRow, which opens its run), then what it said under its task. */

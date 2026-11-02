@@ -82,6 +82,8 @@ export function applyTranscriptOp(messages, event) {
         // Who sent it (a run, by name), and what Conduit added to it for the agent: drawn apart, both shown.
         ...(incoming.sender ? { sender: incoming.sender } : {}),
         ...(incoming.appended ? { appended: incoming.appended } : {}),
+        // A run's row (Conduit started it, not a turn): its report as a prompt, or its quiet line.
+        ...(incoming.run ? { run: incoming.run } : {}),
       },
     event.after ?? null);
   }

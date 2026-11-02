@@ -32,10 +32,13 @@
 .ui-agent-started > .ui-agent-rows { margin: 0 0 var(--space-xs); padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-agent-spawn .ui-agent-title { color: var(--muted-foreground); }
 .ui-agent-status { flex: none; }
+.ui-agent-run-status { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-agent-spawn[data-quiet] { color: var(--muted-foreground); }
 /* What kind of agents a line holds (in this turn, in the background): after them, quiet. */
 .ui-agent-where { flex: none; color: var(--muted-foreground); font-size: var(--text-caption); opacity: var(--opacity-muted); }
 /* What an agent said, under its line in an AgentReport: under its task, muted, at the answer's reading size. */
-.ui-agent-said { --foreground: var(--muted-foreground); min-width: 0; margin: 0 0 var(--space-xs); padding-left: calc(var(--icon-sm) + var(--row-gap)); color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-text); }
+.ui-agent-said { --foreground: var(--muted-foreground); min-width: 0; margin: 0 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-text); }
+.ui-agent-said:not(.ui-agent-run-body) { padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-agent-said > .ui-answer { font-size: inherit; line-height: inherit; }
 .ui-agent-said > :first-child { margin-top: 0; } .ui-agent-said > :last-child { margin-bottom: 0; }
 .ui-agent-verb { flex: none; font-weight: var(--weight-lift); }

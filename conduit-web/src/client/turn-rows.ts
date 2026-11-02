@@ -849,7 +849,7 @@ export function projectPersistedTurns(
  */
 /** A background agent's report (not a run's, which has its routine, nor a heartbeat's quiet line). */
 export const isAgentReport = (message: Message) => message.role === "user" && message.origin === "harness" && Boolean(message.agent?.id)
-  && !message.sender?.routine && !message.id.startsWith("beat:");
+  && !message.run && !message.sender?.routine && !message.id.startsWith("beat:");
 /** Reports that came in one after another are one row, as their agents started on one line. */
 export function groupReports(rows: TurnRow[]): TurnRow[] {
   if (!rows.some((row) => row.type === "message" && isAgentReport(row.value))) return rows;

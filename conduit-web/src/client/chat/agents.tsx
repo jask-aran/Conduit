@@ -137,27 +137,30 @@ export function TurnReports(props: { reports: Message[]; agents: AgentSummary[];
   </AgentReport></AgentRows>;
 }
 
-/** A chat's agents on its composer, while they work, in two lists: Foreground (what the turn waits for) and Background.
+/** A chat's agents on its composer, while they work: Foreground, Background and Runs.
  *  A rider is what is under way, not a history -- one that has ended is in the transcript (its Delegated or Started line,
  *  a background one's report). */
 export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
-  const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.mode === "foreground" || agent.id)));
+  const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.run || agent.mode === "foreground" || agent.id)));
   // An agent that ends keeps its row while the row closes its room; the rider, when the last has ended, drops back into
   // the composer (the riders' motion, its room closing as it goes: composer.css), held as long.
   const list = createLeavingList(running, (agent) => agent.id || `child:${agent.conversationId}`);
   const rider = createLeaving(running, (agents) => agents.length > 0, undefined, "--duration-gentle");
   const now = useNow(() => running().length > 0);
-  const keysOf = (mode: AgentSummary["mode"]) => list.keys().filter((key) => list.get(key)?.mode === mode);
+  const keysOf = (mode: AgentSummary["mode"] | "runs") => list.keys().filter((key) => {
+    const agent = list.get(key);
+    return mode === "runs" ? Boolean(agent?.run) : !agent?.run && agent?.mode === mode;
+  });
   return <Show when={list.keys().length}>
     <AgentRider motion={riderMotion(rider.leaving())}>
-      <For each={(["foreground", "background"] as const).filter((mode) => keysOf(mode).length)}>{(mode) =>
-        <AgentRiderGroup label={mode === "foreground" ? "Foreground" : "Background"} going={keysOf(mode).every(list.leaving)}>
+      <For each={(["foreground", "background", "runs"] as const).filter((mode) => keysOf(mode).length)}>{(mode) =>
+        <AgentRiderGroup label={mode === "foreground" ? "Foreground" : mode === "background" ? "Background" : "Runs"} going={keysOf(mode).every(list.leaving)}>
           <For each={keysOf(mode)}>{(key) => {
             const agent = () => list.get(key)!;
-            return <AgentRow line id={agent().id || undefined} title={agent().title} state={agent().status} activity={agent().activity || undefined}
+            return <AgentRow line id={mode === "runs" ? undefined : agent().id || undefined} title={agent().run ? `${agent().run!.label} #${agent().run!.number}` : agent().title} state={agent().status} activity={agent().activity || undefined}
               motion={list.leaving(key) ? "leaving" : undefined} time={span(agent().startedAt, agent().endedAt, now())}
               onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
-              onStop={mode === "background" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;
+              onStop={mode !== "foreground" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;
           }}</For>
         </AgentRiderGroup>}</For>
     </AgentRider>

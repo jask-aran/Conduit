@@ -52,8 +52,9 @@ const editOnly = (name, args) => {
   const paths = connectorActions(name, args);
   return Boolean(paths?.length) && paths.every((path) => isReadAction(path) || editAction(path));
 };
-/** The prompts a turn can start from: the person's (a message, an approval's answer), a run's report, the heartbeat's line. */
-const TRIGGERS = new Set(["conduit.user", "conduit.subagent-report", "conduit.agent-beat"]);
+/** The prompts a turn can start from: the person's (a message, an approval's answer), a run's report, a run's quiet line
+ *  (the heartbeat's, before runs had their own). */
+const TRIGGERS = new Set(["conduit.user", "conduit.subagent-report", "conduit.agent-beat", "conduit.run-quiet"]);
 async function personStarted(api, context) {
   return api.commit(async (tx) => {
     let cursor;

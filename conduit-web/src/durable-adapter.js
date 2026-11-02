@@ -361,6 +361,7 @@ const reportMessage = (entry, child) => {
     : text.lastIndexOf(`${APPENDED_RULE}That was your `);
   const content = cut >= 0 ? text.slice(0, cut).replace(/\n*-{3}\n*$/, "").trimEnd() : text;
   return { role: "user", origin: "harness", agent: { id: data.subagentId, conversationId: child },
+    ...(data.run ? { run: { ...data.run, woke: true, status: data.status, conversationId: child } } : {}),
     content: typeof data.report === "string" ? withoutNote(data.report).content : content || `${data.subagentId} ${data.status}: ${data.title}`,
     ...(given.notes !== undefined ? { notes: given.notes } : {}),
     ...(cut >= 0 ? { appended: text.slice(cut).replace(/^\s*-{3}\s*/, "") } : {}),
@@ -374,6 +375,14 @@ const beatOps = (entry) => {
   return [messageOpen({ id, role: "user", origin: "harness", unseen: true, content: beatLine(data),
     agent: { id: data.subagentId, conversationId: data.conversationId ?? null }, ...(data.timestamp ? { timestamp: data.timestamp } : {}) }),
   turnSettle({ promptId: id, outcome: "complete" })];
+};
+
+const quietRunOps = (entry) => {
+  const data = entry.data || {};
+  const id = data.messageId || `q${entry.conversationId}-${entry.id}`;
+  return [messageOpen({ id, role: "user", origin: "harness", unseen: true, content: data.run?.summary,
+    agent: { id: data.subagentId, conversationId: data.conversationId ?? null }, run: { ...data.run, conversationId: data.conversationId ?? null },
+    ...(data.timestamp ? { timestamp: data.timestamp } : {}) }), turnSettle({ promptId: id, outcome: "complete" })];
 };
 
 export function entriesToOps(entries, ids = {}, runningTools = []) {
@@ -413,6 +422,8 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
     } else if (entry.kind === "conduit.agent-beat") {
       // Its own settled line: not a prompt, so a turn around it goes on as it was.
       ops.push(...beatOps(entry));
+    } else if (entry.kind === "conduit.run-quiet") {
+      ops.push(...quietRunOps(entry));
     } else if (entry.kind === "pi.assistant") {
       const message = entry.model?.[0];
       if (!message) continue;
@@ -456,8 +467,9 @@ export class DurableAdapter extends EventEmitter {
         if (Date.now() - (this.agentHeartbeats.get(conversationId) || 0) < 2000) return;
       } else {
         const key = `${conversationId}:${change.conversationId}`;
-        if (this.agentStates.get(key) === change.status) return;
-        this.agentStates.set(key, change.status);
+        const state = change.woke === undefined ? change.status : `${change.status}:${change.woke}`;
+        if (this.agentStates.get(key) === state) return;
+        this.agentStates.set(key, state);
       }
       this.agentHeartbeats.set(conversationId, Date.now());
       const record = [...this.records.values()].find((record) => record.conversationId === conversationId);
@@ -825,6 +837,13 @@ export class DurableAdapter extends EventEmitter {
     record.prompts.set(submission.id, messageId);
     record.texts.set(messageId, text);
     if (whenBusy) record.modes.set(messageId, whenBusy);
+    const run = record.templateId === "test" && !isNotice && typeof text === "string"
+      ? text.match(/^run (heartbeat|brief|check-back)(?: (quiet|urgent))?$/) : null;
+    if (run) await record.conversation.commit((tx) => this.runtime.spawnBackground(tx, record.conversationId, {
+      key: `test-run:${messageId}`, title: run[1], origin: { kind: run[1], test: true, trigger: "Test" }, gate: true,
+      instructions: "You are a subagent working for another agent.",
+      task: `First take 3 slow steps. Reply with the single word ${run[2] === "quiet" ? "NOTHING" : run[2] === "urgent" ? "URGENT" : "ATTENTION"}.`,
+    }), this.context);
     return submission;
   }
 
@@ -911,6 +930,7 @@ export class DurableAdapter extends EventEmitter {
       return;
     }
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
+    if (entry?.kind === "conduit.run-quiet") { for (const op of quietRunOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
       // Reports have no browser prompt; open them at placement, as the agent was given them.
@@ -1553,10 +1573,11 @@ export class DurableAdapter extends EventEmitter {
     for (const item of await backgroundSubagents(harness, conversationId, this.context)) {
       const task = item.reporter ? await harness.getTask(item.reporter, this.context) : null;
       const failed = task?.state.status === "terminal" && task.state.outcome.status !== "completed";
+      const status = item.status === "running" && failed ? "failed" : item.status;
+      const startedAt = item.startedAt || (task?.startedAt ? new Date(task.startedAt).toISOString() : null);
+      const endedAt = item.endedAt || (task?.endedAt ? new Date(task.endedAt).toISOString() : null);
       agents.push({ id: item.id, conversationId: item.child, title: item.title, mode: "background", ...(item.via ? { via: item.via } : {}),
-        status: item.status === "running" && failed ? "failed" : item.status,
-        startedAt: item.startedAt || (task?.startedAt ? new Date(task.startedAt).toISOString() : null),
-        endedAt: item.endedAt || (task?.endedAt ? new Date(task.endedAt).toISOString() : null) });
+        status, startedAt, endedAt, ...(item.run ? { run: { ...item.run, woke: Boolean(item.heard), status, startedAt, endedAt, conversationId: item.child } } : {}) });
     }
     // A codemode script's foreground spawns, under the script's call (`via`).
     for (const item of await nestedSubagents(harness, conversationId, this.context)) {

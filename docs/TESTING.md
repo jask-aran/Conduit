@@ -316,6 +316,7 @@ the single word X" with X, and a report gets one line back.
 | `script` | read and bash from one codemode script |
 | `spawn` | a foreground subagent |
 | `background` | a background subagent |
+| `run heartbeat`, `run brief`, `run check-back` | a Conduit-owned run; append `quiet` or `urgent` to choose its report level |
 | `fan out`, `3 spawns` | that many foreground subagents in parallel from one script (`fan out`: 3) |
 | `3 backgrounds` | that many background subagents from one script |
 | `ask` | a question card with two options |

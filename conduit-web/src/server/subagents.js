@@ -8,6 +8,16 @@ const SubagentRoster = defineDoc({
   kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
   initial: () => ({ next: 1, children: {} }),
 });
+const runLabel = (kind) => ({ heartbeat: "Heartbeat", brief: "Morning brief", "morning-brief": "Morning brief",
+  "check-back": "Check-back", checkback: "Check-back", webhook: "Webhook", manual: "Run" })[kind]
+  || kind.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const nextRun = (roster, origin, trigger = null) => {
+  if (!origin?.kind) return null;
+  const kind = origin.kind;
+  const number = (roster.runs?.[kind] || 0) + 1;
+  roster.runs = { ...roster.runs, [kind]: number };
+  return { routine: kind, label: runLabel(kind), number, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null) };
+};
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 const addUsage = (total, usage) => {
@@ -206,18 +216,25 @@ export function Subagents(runtime) {
           || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
         const report = await api.memo("report", { answer, status: settled.status === "done" ? "finished" : "failed" }, context);
+        const endedAt = task.input.gate ? await api.memo("endedAt", new Date().toISOString(), context) : null;
         let stopped = false;
         let changed = false;
         await api.commit(async (tx) => {
-          const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+          const roster = await tx.doc(SubagentRoster, api.conversationId);
+          const item = roster.children[id];
+          if (task.input.gate && !item.run) item.run = nextRun(roster, task.input.origin);
           stopped = item.status === "stopped";
-          if (!stopped && item.number === number) { changed = item.status !== report.status; item.status = report.status; item.endedAt = new Date().toISOString(); }
+          if (!stopped && item.number === number) {
+            changed = item.status !== report.status;
+            item.status = report.status;
+            item.endedAt = task.input.gate ? item.endedAt || endedAt : new Date().toISOString();
+          }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
         // The agent's runs: what they spent counts toward its day, and what they found goes to its inbox (inbox.js).
         const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
         const level = task.input.gate ? runLevel(report, end) : null;
-        if (task.input.gate) {
+        if (task.input.gate && !task.input.origin?.test) {
           const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
           const day = await api.memo("day", runtime.agentDay?.() || new Date().toISOString().slice(0, 10), context);
           await api.commit(async (tx) => {
@@ -236,12 +253,12 @@ export function Subagents(runtime) {
         // Where its report goes: a routine says (output jbot, inbox or both); before routines, by kind.
         const output = task.input.origin?.output;
         const asked = (output ? output !== "inbox" : ["brief", "manual", "heartbeat"].includes(kind)) && level !== "none";
-        const waiting = task.input.gate ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
+        const waiting = task.input.gate && !task.input.origin?.test ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
-        const heard = !task.input.gate || (level !== "none" && (asked || waiting > 0 || level === "urgent"));
+        const heard = !task.input.gate || await api.memo("heard", level !== "none" && (asked || waiting > 0 || level === "urgent"), context);
         // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
         // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
-        if (task.input.gate && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
+        if (task.input.gate && !task.input.origin?.test && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
             appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: id, conversationId: child, level,
@@ -249,20 +266,34 @@ export function Subagents(runtime) {
               status: "unhandled" }, Date.parse(at));
           }, context);
         }
-        // A heartbeat that told no one leaves a quiet line in the home thread of what it did (no turn, display only).
-        if (task.input.gate && kind === "heartbeat" && !heard) {
-          const snapshot = await api.snapshot(AgentDoc, context);
+        if (task.input.gate && !heard && !stopped) {
+          const snapshot = kind === "heartbeat" && !task.input.origin?.test ? await api.snapshot(AgentDoc, context) : null;
           const counts = await api.memo("beat", {
             handled: Object.values(snapshot?.inbox || {}).filter((item) => String(item.handledBy) === String(child)).length,
             set: Object.values(snapshot?.schedules || {}).filter((item) => String(item.by) === String(child)).length,
             at: new Date().toISOString(),
           }, context);
-          if (counts.handled || counts.set) await api.commit(async (tx) => {
-            const doc = await tx.doc(AgentDoc);
-            if (doc.beatLine === child) return;
-            doc.beatLine = child;
-            await tx.appendEntry(api.conversationId, { kind: "conduit.agent-beat", data: { messageId: `beat:${child}`, subagentId: id,
-              conversationId: child, handled: counts.handled, set: counts.set, timestamp: counts.at } });
+          await api.commit(async (tx) => {
+            const item = (await tx.doc(SubagentRoster, api.conversationId)).children[id];
+            if (item.status === "stopped" || item.quietLine) return;
+            let cursor;
+            do {
+              const page = await tx.scanEntries({ conversationId: api.conversationId, minEntryId: (task.input.sinceEntry || 0) + 1 }, 100, cursor);
+              if (page.items.some((entry) => entry.kind === "pi.reset")) return;
+              if (page.items.some((entry) => entry.kind === "conduit.agent-beat" && String(entry.data?.conversationId) === String(child))) {
+                item.quietLine = true;
+                return;
+              }
+              cursor = page.next;
+            } while (cursor);
+            item.quietLine = true;
+            const reason = end?.reason || (report.status === "failed" ? headlineOf(report.answer) : null);
+            const summary = level === "failed" ? `failed${reason ? `: ${reason}` : ""}`
+              : counts.handled || counts.set ? [counts.handled && `handled ${counts.handled}`, counts.set && `set ${counts.set}`].filter(Boolean).join(" · ")
+              : level === "none" ? "nothing new" : headlineOf(report.answer);
+            await tx.appendEntry(api.conversationId, { kind: "conduit.run-quiet", data: { messageId: `run-quiet:${child}:${item.run?.number ?? number}`, subagentId: id,
+              conversationId: child, title, run: { ...item.run, woke: false, status: report.status, startedAt: item.startedAt, endedAt: item.endedAt, summary },
+              level, timestamp: counts.at } });
           }, context);
         }
         const parent = await runtime.harness.conversation(api.conversationId, context);
@@ -274,7 +305,9 @@ export function Subagents(runtime) {
           const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: report.answer, title });
           const at = content.indexOf(report.answer);
           const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
+          const item = (await api.snapshot(SubagentRoster, api.conversationId, context)).children[id];
           const data = { subagentId: id, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
+            ...(item.run ? { run: { ...item.run, startedAt: item.startedAt, endedAt: item.endedAt } } : {}),
             ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
           // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is kept
           // -- written to the thread without a turn, for the next turn to read -- whether it waited in the stopped turn
@@ -286,6 +319,10 @@ export function Subagents(runtime) {
           if (!quiet) {
             const submitted = await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
               content, entry: { kind: "conduit.subagent-report", data } }, context, { admit: (input) => handle.submit(input, context) });
+            if (item.run) {
+              await api.commit(async (tx) => { (await tx.doc(SubagentRoster, api.conversationId)).children[id].heard = true; }, context);
+              runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status, woke: true });
+            }
             // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
             runtime.wakeChat?.(api.conversationId);
             const settled = await submitted.wait(context);
@@ -312,7 +349,7 @@ export function Subagents(runtime) {
           if (item.number === number && item.status !== "stopped") {
             changed = item.status !== "failed";
             item.status = "failed";
-            item.endedAt = new Date().toISOString();
+            if (!task.input.gate || !item.endedAt) item.endedAt = new Date().toISOString();
           }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: "failed" });
@@ -470,10 +507,11 @@ export function Subagents(runtime) {
    * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
    * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
    */
-  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, gate = false, mode = "followUp", model = null, thinkingLevel = null, instructions = null }) => {
+  runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, trigger = null, gate = false, mode = "followUp", model = null, thinkingLevel = null, instructions = null }) => {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
+    const run = nextRun(roster, origin, trigger);
     const id = `bg-${roster.next++}`;
     const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
@@ -490,7 +528,7 @@ export function Subagents(runtime) {
       gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
     roster.children[id] = { id, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
       status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
-      ...(origin ? { origin } : {}) };
+      ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
     return JSON.parse(JSON.stringify(roster.children[id]));
   };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });
