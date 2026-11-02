@@ -247,8 +247,8 @@ export function RoutineTools(runtime) {
       if (!agent?.enabled()) return toolResult("The agent is not enabled.", true);
       try {
         if (action === "list") {
-          const state = await agent.state();
-          return toolResult((await listRoutines(agent.folder)).map((item) => item.error ? `${item.name}: invalid (${item.error})`
+          const [state, routines] = await Promise.all([agent.state(), listRoutines(agent.folder)]);
+          return toolResult(routines.map((item) => item.error ? `${item.name}: invalid (${item.error})`
             : `${item.name}: ${item.title} — ${triggerWords(item.trigger)}, gate ${item.gate}, to ${item.output}${item.enabled ? "" : ", off"}`
               + `${state.routineState?.[item.name]?.lastError ? `; last failed: ${state.routineState[item.name].lastError}` : ""}`).join("\n") || "No routines.");
         }

@@ -223,10 +223,13 @@ export class NodeHub extends EventEmitter {
     // A WSL distro is named as one: it shares its device with Windows, which pairs as its own environment.
     // From the kernel, not WSL_DISTRO_NAME: a service started by systemd does not carry it.
     const wsl = process.platform === "linux" && /microsoft/i.test(os.release());
-    const platform = wsl ? await distroName() : { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux";
+    const [platform, roots] = await Promise.all([
+      wsl ? distroName() : { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux",
+      this.hub.roots(),
+    ]);
     return { id: this.hub.nodeId, deviceId: this.hub.deviceId, name: platform, platform: process.platform, local: true,
       // Its own terminal is the "computer" one this server always offers.
-      online: true, roots: await this.hub.roots(), harnesses: this.hub.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
+      online: true, roots, harnesses: this.hub.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
   }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */

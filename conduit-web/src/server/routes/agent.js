@@ -63,8 +63,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
     const waiting = threads.flatMap((chatId) => (backends.getByChatId(chatId)?.hostUiRequests || [])
       .map((request) => ({ kind: "question", chatId, requestId: request.id, title: request.title || "A question" })));
     // A run waits on no one (it cannot ask); a thread whose chat is not live may still have a question pending.
-    for (const conversationId of agent.runtime.askerWaits?.keys() || []) {
-      const thread = await agent.describe(conversationId);
+    for (const thread of await Promise.all([...agent.runtime.askerWaits?.keys() || []].map((conversationId) => agent.describe(conversationId)))) {
       if (thread?.chatId && !waiting.some((item) => item.chatId === thread.chatId)) waiting.push({ kind: "question", chatId: thread.chatId, requestId: null, title: "A question" });
     }
     return {

@@ -45,14 +45,13 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
     await atomic(configFile, `${JSON.stringify(settings, null, 2)}\n`);
   }
   async function certificates() {
-    const found = {};
-    for (const [kind, prefix] of [["hub", "lan"], ["nodes", "nodes"]]) {
+    const found = await Promise.all([["hub", "lan"], ["nodes", "nodes"]].map(async ([kind, prefix]) => {
       try {
         const cert = new crypto.X509Certificate(await fs.readFile(path.join(tlsDir, `${prefix}-cert.pem`)));
-        found[kind] = { names: cert.subjectAltName?.split(", ").filter((name) => name.startsWith("DNS:")).map((name) => name.slice(4)) || [], validTo: cert.validTo };
-      } catch {}
-    }
-    return found;
+        return [kind, { names: cert.subjectAltName?.split(", ").filter((name) => name.startsWith("DNS:")).map((name) => name.slice(4)) || [], validTo: cert.validTo }];
+      } catch { return null; }
+    }));
+    return Object.fromEntries(found.filter(Boolean));
   }
   async function cliStatus() {
     if (cfCache && Date.now() - cfCache.at < 60_000) return cfCache.value;
