@@ -87,3 +87,7 @@ Open <http://127.0.0.1:4310>. Connect a model provider in **Settings > Auth**.
 Start with the [web runtime and API](conduit-web/README.md), [install, clients and operations](docs/DEPLOYMENT.md), [testing](docs/TESTING.md) and [contributing](CONTRIBUTING.md).
 
 See what shipped recently in [release notes](docs/releases/) and [GitHub Releases](https://github.com/jask-aran/Conduit/releases).
+
+## License
+
+Copyright (C) 2026 Jaskaran Singh. Licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`): you may use, modify and share it freely, and anyone who runs a modified version as a network service must offer its users the source.
