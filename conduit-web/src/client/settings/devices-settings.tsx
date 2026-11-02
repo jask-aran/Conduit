@@ -19,6 +19,7 @@ import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShel
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
 import { MachineReadout } from "./machine-readout.tsx";
+import { harnessLabelFor } from "../harness-brand";
 import { createPushControl } from "../platform/push.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
@@ -270,6 +271,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       </Reading></Show>
       {/* The machine it runs on, read while open; only the server this client is on can be asked. */}
       <Show when={active()}><MachineReadout open={open().has("server")} /></Show>
+      <Show when={hubNode()}>{(node) => <DeviceHarnesses node={node()} />}</Show>
       <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
       </NavFolder>
     </SettingGroup>
@@ -287,6 +289,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
             {device.name}
           </NavFolderRow>}>
           <ClientCards label={device.name}><For each={device.clients}>{(shown) => card(shown)}</For></ClientCards>
+          <DeviceDetails nodes={device.clients.flatMap((shown) => shown.node ? [shown.node] : [])} open={open().has(device.id)} />
         </NavFolder>}</For>
       </SettingGroup>
     </Show>
@@ -411,4 +414,31 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
     else list.push({ id: `client:${key}`, name: form === "phone" ? "Phone" : form === "browser" ? "This browser" : client.platform || "Computer", paired: false, clients: [shown] });
   }
   return browsers.clients.length ? [...list, browsers] : list;
+}
+
+/**
+ * What a device's environments declare (roadmap #14): the harnesses each runs for this network (found there when it
+ * shares a folder with the shell grant) -- ready while it is connected, offline while it is away -- and, while the
+ * device's folder is open, each connected environment's machine readout, asked of its node.
+ */
+function DeviceDetails(props: { nodes: Node[]; open: boolean }) {
+  return <For each={props.nodes}>{(node) => <>
+    <DeviceHarnesses node={node} named={props.nodes.length > 1} />
+    <Show when={node.online}><MachineReadout open={props.open} url={`/v0/nodes/${encodeURIComponent(node.id)}/machine`} title={`Machine · ${node.name}`} /></Show>
+  </>}</For>;
+}
+
+/** One environment's declared harnesses, a line each with its status; none declared is said so. */
+function DeviceHarnesses(props: { node: Node; named?: boolean }) {
+  const harnesses = () => props.node.harnesses || [];
+  return <SettingColumn title={props.named ? `Harnesses · ${props.node.name}` : "Harnesses"}>
+    <Show when={harnesses().length} fallback={<SettingNote>{props.node.name} declares none. A device offers its harnesses (Claude Code, Codex, OpenCode) once it shares a folder that may run commands.</SettingNote>}>
+      <For each={harnesses()}>{(id) =>
+        <SettingLine plain label={harnessLabelFor(id) || id} state={props.node.name} title={`${harnessLabelFor(id) || id}, installed on ${props.node.name}; chats on its folders can run it there.`}>
+          <StatusDot label={props.node.online ? "Ready" : "Offline"} tone={props.node.online ? "success" : "muted"} />
+          <SettingValue>{props.node.online ? "Ready" : "Offline"}</SettingValue>
+        </SettingLine>}
+      </For>
+    </Show>
+  </SettingColumn>;
 }

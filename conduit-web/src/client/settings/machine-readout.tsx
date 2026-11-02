@@ -19,22 +19,28 @@ const days = (seconds: number) => seconds >= 86400 ? `${Math.floor(seconds / 864
  * The server machine's readout, inside its folder on Devices: CPU, memory, disk and network as the Reading's tiles,
  * then the busiest processes as data lines. Read every few seconds while `open`, never while folded.
  */
-export function MachineReadout(props: { open: boolean }) {
+export function MachineReadout(props: { open: boolean; url?: string; title?: string }) {
   const [machine, setMachine] = createSignal<Machine | null>(null);
   const [error, setError] = createSignal("");
   createEffect(() => {
     if (!props.open) return;
     let stopped = false;
-    const read = () => api<Machine>("/v0/server/machine").then((value) => { if (!stopped) { setMachine(value); setError(""); } })
-      .catch((failure) => { if (!stopped) setError(failure instanceof Error ? failure.message : String(failure)); });
-    void read();
+    const read = () => api<Machine>(props.url || "/v0/server/machine").then((value) => { if (!stopped) { setMachine(value); setError(""); } })
+      .catch((failure) => {
+        if (stopped) return;
+        // A device whose Conduit predates readouts answers 501: it is told to update, not shown as broken.
+        const older = (failure as { status?: number })?.status === 501;
+        setError(older ? "This device's Conduit is older: update it there to see its readout." : failure instanceof Error ? failure.message : String(failure));
+        if (older) clearInterval(timer);
+      });
     const timer = window.setInterval(read, 3000);
+    void read();
     onCleanup(() => { stopped = true; clearInterval(timer); });
   });
   return <>
     <Show when={machine()}>{(now) => <>
       <Reading>
-        <ReadingStats title={`Machine · ${now().host}`}>
+        <ReadingStats title={props.title || `Machine · ${now().host}`}>
           <ReadingStat label="CPU" value={now().cpu === null ? "–" : percent(now().cpu!)}
             detail={`${now().cores} cores${now().load ? ` · load ${now().load![0]!.toFixed(2)}` : ""}`} />
           <ReadingStat label="Memory" value={percent(now().memory.used / now().memory.total)} detail={`${bytes(now().memory.used)} of ${bytes(now().memory.total)}`} />
@@ -52,6 +58,6 @@ export function MachineReadout(props: { open: boolean }) {
         </SettingColumn>
       </Show>
     </>}</Show>
-    <Show when={error()}><SettingNote tone="error">The machine's readout could not be read: {error()}</SettingNote></Show>
+    <Show when={error()}><SettingNote tone={error().startsWith("This device's Conduit is older") ? "quiet" : "error"}>{error().startsWith("This device's") ? error() : `The machine's readout could not be read: ${error()}`}</SettingNote></Show>
   </>;
 }

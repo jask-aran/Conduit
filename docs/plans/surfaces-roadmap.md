@@ -166,12 +166,14 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   (`client/settings/tools-settings.tsx`, also in the palette): a profile picker, then its tools split into called by the
   model and called from codemode, each with its source (built-in, extension, connector, codemode) and whether it asks.
   Built from existing v2 setting pieces; no new component.
-- [ ] 14. System › Devices: each device lists the harnesses it declares, with status, and a machine readout (CPU,
-  memory, disk, network, top processes). Partly built: the hub's readout (`conduit-web/src/server/machine-readout.js`,
-  `GET /v0/server/machine`; `client/settings/machine-readout.tsx` in the Server folder, read every 3s while open, as
-  the Reading's tiles and the busiest processes as data lines). Rates are since the previous reading, as top's; Linux
-  reads /proc, macOS `ps`, Windows has no process list yet. Left: a node serving its own readout, and each device's
-  declared harnesses, which need paired devices to build against.
+- [x] 14. System › Devices: each device lists the harnesses it declares, with status, and a machine readout (CPU,
+  memory, disk, network, top processes). The readout (`conduit-web/src/server/machine-readout.js`) is the hub's
+  (`GET /v0/server/machine`) and every node's: a node answers a `machine` call with the same module
+  (`nodes/node-agent.js`), the hub asks it through `GET /v0/nodes/:id/machine` (501 from an older node, said as
+  "update it"). Devices shows, in each device's folder and the Server's, each environment's declared harnesses (ready
+  while connected, offline while away) and, while open, its readout (`client/settings/machine-readout.tsx`, every 3s).
+  Rates are since the previous reading, as top's; Linux reads /proc, macOS `ps`, Windows has no process list yet.
+  Checked against a `conduit-node` paired to the hub on the same VM.
 - [x] 15. System › Usage: tokens, cost and tools over time, from the ledger. pi-durable's `pi.usage` holds only
   running totals per conversation, so a dated record was added: `conduit-web/src/server/usage-ledger.js`, an
   append-only `data/usage/ledger.jsonl` that follows commits and appends each conversation's increase per model (and

@@ -6,6 +6,8 @@
  * starts the node role there; main keeps only the key's hash. The list is
  * devices with their nodes: connected or not, and what each shares.
  */
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { createMachineReadout } from "../machine-readout.js";
 import { servedMagicDnsOrigin } from "../../tailscale-share.js";
 
 /**
@@ -22,6 +24,20 @@ export async function hubRoutes({ config, lanNames = () => [] }) {
 }
 
 export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () => false, lanNames = () => [] }) {
+  // A device's machine readout (Settings › Devices): the hub's own read here; another's asked of its node, which an
+  // older Conduit there does not know (then 501, and the page says to update it).
+  const readHub = createMachineReadout({ root: config.dataRoot });
+  app.get("/v0/nodes/:id/machine", async (request, response, next) => {
+    try {
+      if (nodeHub.hub?.nodeId === request.params.id) return response.json(await readHub());
+      if (!await nodeHub.get(request.params.id)) return response.status(404).json({ error: "node_not_found" });
+      const result = await nodeHub.call(request.params.id, { target: "machine", method: "read", args: [], cwd: null },
+        withAbortSignal(AbortSignal.timeout(10_000), BACKGROUND_CONTEXT)).catch((error) => ({ ok: false, error }));
+      if (result?.ok) return response.json(result.value);
+      response.status(result?.error?.code === "not_supported" || /not served/.test(result?.error?.message || "") ? 501 : 503)
+        .json({ error: result?.error?.message || "The device did not answer" });
+    } catch (error) { next(error); }
+  });
   app.get("/v0/nodes", async (_request, response, next) => {
     try { response.json({ devices: await nodeHub.listDevices() }); } catch (error) { next(error); }
   });

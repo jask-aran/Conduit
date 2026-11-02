@@ -15,6 +15,7 @@ import { serveDirect } from "./node-direct.js";
 import { attestedLeaf } from "./find-hub.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
+import { createMachineReadout } from "../server/machine-readout.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 // How often the connection is checked; a ping unanswered by the next check ends it.
@@ -505,12 +506,15 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       return err(new FileError("not_supported", `${method} is not served by this node`));
     }
 
+    let readMachine = null;
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
       if (target === "proc") return runProcess(method, decoded);
       // What a harness saved here, for the sessions main runs on it.
       if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
       if (target === "computer") return computer(method, decoded);
+      // This machine's readout (Settings › Devices, roadmap #14): CPU, memory, its home's disk, network, processes.
+      if (target === "machine" && method === "read") return { ok: true, value: await (readMachine ??= createMachineReadout({ root: os.homedir() }))() };
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
         if (method === "codexRollout" && harnesses.codex) return { ok: true, value: await codexRollout(decoded[0]) };
