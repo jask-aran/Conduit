@@ -6,6 +6,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
 import { McpClient, StdioTransport, toLlmContent } from "@earendil-works/pi-mcp";
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 
 /*
  * The browser document, version 1 (roadmap #7): a Chrome on the hub that the person and Conduit's agents share, one
@@ -20,7 +21,8 @@ import { McpClient, StdioTransport, toLlmContent } from "@earendil-works/pi-mcp"
  * another, and one on the PATH is the last resort. It finds an installed Chrome, Playwright's included, or
  * `agent-browser install` fetches one. The session starts on first use and stays open, across restarts of Conduit.
  */
-const SESSION = "conduit-hub";
+// The hub's own session; a device runs its own (`conduit-device`), so a device that is also a hub keeps them apart.
+const HUB_SESSION = "conduit-hub";
 const IDS = new Set(["hub"]);
 
 const which = (name) => {
@@ -54,7 +56,8 @@ const FPS = [10, 24, 30, 60];
 const QUALITY = [30, 60, 85];
 
 export class BrowserHost {
-  constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null, dataRoot = null, onChange = () => {} } = {}) {
+  constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null, dataRoot = null, session = HUB_SESSION, onChange = () => {} } = {}) {
+    this.session = session;
     // Its own profile on the hub: sites signed in to stay signed in across restarts; clearing its data is a new one.
     this.profile = dataRoot ? path.join(dataRoot, "browser", "profile") : null;
     this.settingsFile = dataRoot ? path.join(dataRoot, "browser", "settings.json") : null;
@@ -74,7 +77,7 @@ export class BrowserHost {
   /** One agent-browser command on the shared session; its printed answer. */
   run(args, { timeout = 30_000 } = {}) {
     if (!this.binary) return Promise.reject(Object.assign(new Error("agent-browser is not installed on this hub"), { status: 503, code: "browser_unavailable" }));
-    return new Promise((resolve, reject) => execFile(this.binary, ["--session", SESSION, ...args], {
+    return new Promise((resolve, reject) => execFile(this.binary, ["--session", this.session, ...args], {
       timeout, maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, ...this.env() },
     }, (error, stdout, stderr) => error
@@ -152,7 +155,7 @@ export class BrowserHost {
 
   /** What the session starts with, whoever starts it (the pane, an agent's MCP server): its profile, its stream. */
   env() {
-    return { AGENT_BROWSER_SESSION: SESSION, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality),
+    return { AGENT_BROWSER_SESSION: this.session, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality),
       ...(this.profile ? { AGENT_BROWSER_PROFILE: this.profile } : {}) };
   }
 
@@ -232,3 +235,77 @@ export class BrowserHost {
   }
 }
 
+
+/**
+ * A device's browser (roadmap #9), as the hub reaches it: the same calls as the hub's own BrowserHost, answered by the
+ * device's node (node-agent.js, its `browser` target), and its stream piped from the device's loopback port through a
+ * tunnel on the node's connection -- so any client signed in to the hub sees and drives it.
+ */
+export class RemoteBrowser {
+  constructor({ nodeHub, nodeId, tunnelTo }) {
+    this.nodeHub = nodeHub;
+    this.nodeId = nodeId;
+    this.tunnelTo = tunnelTo;
+    this.sockets = new WebSocketServer({ noServer: true });
+  }
+
+  get available() { return Boolean(this.nodeHub.live.get(this.nodeId)?.browser); }
+
+  async call(method, args = []) {
+    if (!this.available) throw Object.assign(new Error("That device's browser is not reachable now"), { status: 503 });
+    const result = await this.nodeHub.call(this.nodeId, { target: "browser", method, args, cwd: null },
+      withAbortSignal(AbortSignal.timeout(method === "act" || method === "stream" ? 90_000 : 20_000), BACKGROUND_CONTEXT));
+    if (!result?.ok) throw Object.assign(new Error(result?.error?.message || "The device did not answer"), { status: 502 });
+    return result.value;
+  }
+
+  status() { return this.available ? this.call("status").then((value) => ({ ...value, id: this.nodeId })) : Promise.resolve({ id: this.nodeId, available: false }); }
+  describe() { return this.call("describe").then((value) => ({ ...value, id: this.nodeId, runsOn: "device" })); }
+  configure(patch) { return this.call("configure", [patch]); }
+  act(action, value) { return this.call("act", [action, value]); }
+
+  handleUpgrade(_id, request, socket, head) {
+    this.sockets.handleUpgrade(request, socket, head, (client) => {
+      const held = [];
+      let upstream = null;
+      const closeBoth = () => { try { client.close(); } catch { /* gone */ } try { upstream?.close(); } catch { /* gone */ } };
+      client.on("message", (data, binary) => { if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary }); else held.push(data); });
+      client.on("close", closeBoth);
+      this.call("stream").then(({ port }) => {
+        const query = new URL(request.url, "http://localhost").searchParams;
+        const pass = new URLSearchParams();
+        for (const key of ["maxFps", "pacing"]) if (query.get(key)) pass.set(key, query.get(key));
+        // The device's stream, spoken over a tunnel to its loopback port rather than a socket of our own.
+        upstream = new WebSocket(`ws://127.0.0.1:${port}/${pass.size ? `?${pass}` : ""}`, { createConnection: () => this.tunnelTo(this.nodeHub, this.nodeId, { port }) });
+        upstream.on("open", () => { for (const data of held.splice(0)) upstream.send(data); });
+        upstream.on("message", (data, binary) => { if (client.readyState === WebSocket.OPEN) client.send(data, { binary }); });
+        upstream.on("close", closeBoth);
+        upstream.on("error", () => closeBoth());
+      }).catch((error) => {
+        if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "error", message: error.message }));
+        closeBoth();
+      });
+    });
+  }
+
+  close() { this.sockets.close(); }
+}
+
+/** The browsers clients can open: the hub's (`hub`), and each connected device's that offers one (its node id). */
+export function createBrowsers({ hub, nodeHub, tunnelTo }) {
+  const remote = new Map();
+  return {
+    get(id) {
+      if (id === "hub") return hub;
+      if (!nodeHub?.live.get(id)?.browser) return null;
+      if (!remote.has(id)) remote.set(id, new RemoteBrowser({ nodeHub, nodeId: id, tunnelTo }));
+      return remote.get(id);
+    },
+    async list() {
+      const devices = await nodeHub.listDevices().catch(() => []);
+      return [{ id: "hub", name: "Hub", available: hub.available },
+        ...devices.flatMap((device) => device.nodes.filter((node) => node.browser).map((node) => ({ id: node.id, name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name, available: true })))];
+    },
+    close() { for (const browser of remote.values()) browser.close(); },
+  };
+}

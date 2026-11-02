@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { ToolBar, ToolButton, WebAddress, WebScreen, WebView } from "@/components/ui";
 import * as Icons from "@/components/ui/icons";
 import { api } from "../api/client";
@@ -27,7 +27,9 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   const [status, setStatus] = createSignal<Status | null>(null);
   const [address, setAddress] = createSignal("");
   const [live, setLive] = createSignal(false);
-  const [state, setState] = createSignal<{ text: JSX.Element; tone?: "error" } | null>({ text: "Starting the hub's browser…" });
+  // Whose browser: the hub's, or a device's (roadmap #9), named while it starts and when its page has no name.
+  const [where, setWhere] = createSignal(props.id === "hub" ? "the hub" : "the device");
+  const [state, setState] = createSignal<{ text: JSX.Element; tone?: "error" } | null>({ text: `Starting ${props.id === "hub" ? "the hub" : "the device"}'s browser…` });
   let canvas: HTMLCanvasElement | undefined;
   let screen: HTMLDivElement | undefined;
   let editing = false;
@@ -45,7 +47,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   const name = (found: Pick<Status, "title" | "url">) => {
     let host = "";
     try { host = found.url && found.url !== "about:blank" ? new URL(found.url).host : ""; } catch { /* not a URL */ }
-    props.onTitle?.(found.title?.trim() || host || "Browser");
+    props.onTitle?.(found.title?.trim() || host || (props.id === "hub" ? "Browser" : `Browser · ${where()}`));
   };
   const send = (event: Record<string, unknown>) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event)); };
 
@@ -123,10 +125,16 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   };
 
   onMount(() => {
+    if (props.id !== "hub") void api<{ browsers: { id: string; name: string }[] }>("/v0/browsers").then(({ browsers }) => {
+      const found = browsers.find((item) => item.id === props.id);
+      if (found) { setWhere(found.name); if (!live()) setState({ text: `Starting ${found.name}'s browser…` }); }
+    }).catch(() => {});
     void api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`).then((found) => {
       setStatus(found);
       if (!found.available) {
-        setState({ tone: "error", text: <span>The hub's browser is not available: Conduit's agent-browser is missing for this machine. Reinstall Conduit, or set <code>CONDUIT_AGENT_BROWSER</code> to an agent-browser binary.</span> });
+        setState({ tone: "error", text: props.id === "hub"
+          ? <span>The hub's browser is not available: Conduit's agent-browser is missing for this machine. Reinstall Conduit, or set <code>CONDUIT_AGENT_BROWSER</code> to an agent-browser binary.</span>
+          : <span>{where()}'s browser is not reachable: the device is away, or no longer shares a folder that may run commands.</span> });
         return;
       }
       if (found.url && found.url !== "about:blank") setAddress(found.url);
@@ -136,17 +144,23 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     // The page as big as the pane: its viewport follows the screen's size, settled for a moment first.
     let sizing = 0;
     let sized = "";
+    let measured: { width: number; height: number } | null = null;
+    // The page as big as the pane, once the browser is known to be there: a size measured before that is kept, and
+    // sent when it is (the first measure comes before the status does).
+    const size = () => {
+      if (!measured || measured.width < 50 || measured.height < 50 || !status()?.available) return;
+      const next = `${Math.round(measured.width)}x${Math.round(measured.height)}`;
+      if (next === sized) return;
+      sized = next;
+      void act("viewport", measured);
+    };
     const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry!.contentRect;
+      measured = { width: entry!.contentRect.width, height: entry!.contentRect.height };
       clearTimeout(sizing);
-      sizing = window.setTimeout(() => {
-        const next = `${Math.round(width)}x${Math.round(height)}`;
-        if (next === sized || width < 50 || height < 50 || !status()?.available) return;
-        sized = next;
-        void act("viewport", { width, height });
-      }, 400);
+      sizing = window.setTimeout(size, 400);
     });
     if (screen) observer.observe(screen);
+    createEffect(() => { if (status()?.available) size(); });
     onCleanup(() => { observer.disconnect(); clearTimeout(sizing); });
   });
   // Services › Browser changed it: the frame rate is this viewer's own, sent on the open stream; a restart reconnects.

@@ -180,6 +180,8 @@ export class NodeHub extends EventEmitter {
       online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
       // The device lets this server browse it and share folders it picks (set on the device).
       browse: live ? Boolean(live.browse) : Boolean(record.browse),
+      // It offers its browser to other clients (roadmap #9): only while it is connected.
+      browser: Boolean(live?.browser),
       // A terminal in its home: where any folder is shared with commands (decision 27).
       terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
       // The environment relaying it (decision 25), when it is not dialling itself.
@@ -456,7 +458,7 @@ export class NodeHub extends EventEmitter {
         Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null,
           harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
-          browse: message.browse === true, ready: true,
+          browse: message.browse === true, browser: message.browser === true, ready: true,
           // Where it answers reads itself on its own machine (node-direct.js).
           direct: directOf(message.direct, this.lanNameOf.get(record.id)) });
         void this.offerLanName(node, record);

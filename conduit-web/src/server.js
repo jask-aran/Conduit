@@ -52,7 +52,8 @@ import { createLiveSessionStream } from "./server/live-session-stream.js";
 import { UiControl } from "./server/ui-control.js";
 import { createMcpEndpoint, mcpToken } from "./server/mcp-endpoint.js";
 import { mcpAccess } from "./server/mcp-access.js";
-import { BrowserHost } from "./server/browser-host.js";
+import { BrowserHost, createBrowsers } from "./server/browser-host.js";
+import { tunnelTo } from "./nodes/remote-tunnel.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
 import { createDictationStream } from "./server/dictation-stream.js";
@@ -634,7 +635,9 @@ const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: conf
   // Its settings changed or it started again: every Browser pane takes its frame rate again and reconnects if it must.
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
-registerBrowserRoutes(app, { browserHost });
+// The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
+const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
+registerBrowserRoutes(app, { browsers });
 registerRuntimeRoutes(app, {
   uiControl,
   attachments,
@@ -1002,11 +1005,11 @@ const handleUpgrade = async (request, socket, head) => {
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
-  const browserMatch = pathname.match(/^\/v0\/browsers\/([a-z0-9-]{1,32})\/stream$/);
+  const browserMatch = pathname.match(/^\/v0\/browsers\/([A-Za-z0-9_-]{1,64})\/stream$/);
   // A device dialling in proves itself with its pairing key, not a browser session.
   if (pathname === "/v0/nodes/connect") return nodeHub.handleUpgrade(request, socket, head);
   if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch
-    && (!browserMatch || !browserHost.has(browserMatch[1]) || !browserHost.available)) return socket.destroy();
+    && (!browserMatch || !browsers.get(browserMatch[1])?.available)) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
       const ticket = requestUrl.searchParams.get("ticket");
@@ -1026,7 +1029,7 @@ const handleUpgrade = async (request, socket, head) => {
     return socket.destroy();
   }
   if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
-  if (browserMatch) return browserHost.handleUpgrade(browserMatch[1], request, socket, head);
+  if (browserMatch) return browsers.get(browserMatch[1]).handleUpgrade(browserMatch[1], request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   if (!backends.get(match[1])) return socket.destroy();
   return liveSessionStream.handleUpgrade(match[1], request, socket, head);

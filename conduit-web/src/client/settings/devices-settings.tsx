@@ -23,7 +23,7 @@ import { harnessLabelFor } from "../harness-brand";
 import { createPushControl } from "../platform/push.ts";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
+type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; browser?: boolean; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
 /** A client connected to this server now (runtime-hub.js): its kind, build, and what its user agent says it runs on. */
 /** `machine`: where the server saw it connect from -- "hub" (its own machine) or a tailnet machine's name. */
 type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
@@ -64,6 +64,8 @@ const mountedOn = (projects: Project[], node: Node) => projects.filter((project)
 export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace: AddWorkspace;
   /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
   onOpenTerminal: (node: { id: string; local?: boolean }) => void;
+  /** Its browser, in a pane beside (roadmap #9): a device that offers one. */
+  onOpenBrowser?: (nodeId: string) => void;
   onOpenWorkspace: (project: Project) => void }) {
   const health = createServerHealth();
   // Notifications on this device from the hub it is using (Web Push; UnifiedPush on Android).
@@ -144,6 +146,9 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       actions={<>
         <Show when={shown.node?.online && (shown.node.local || shown.node.terminal)}>
           <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(shown.node!)}><Icons.Terminal /> Terminal</Button>
+        </Show>
+        <Show when={shown.node?.online && shown.node.browser && !shown.node.local && props.onOpenBrowser}>
+          <Button variant="ghost" size="sm" aria-label={`Open ${shown.part.name}'s browser`} onClick={() => props.onOpenBrowser!(shown.node!.id)}><Icons.Browser /> Browser</Button>
         </Show>
         <Show when={shown.node && !shown.node.local}>
           <Button variant="ghost" size="sm" aria-label={`Unpair ${shown.part.name}`} onClick={() => void forget(shown.node!)}>Unpair</Button>

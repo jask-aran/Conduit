@@ -298,6 +298,7 @@ export function Settings(props: {
   /** Adds a folder a paired device shares as a workspace (Devices). */
   onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
   onOpenDeviceTerminal: (node: { id: string; local?: boolean }) => void;
+  onOpenDeviceBrowser?: (nodeId: string) => void;
   /** A workspace from its device's list: Settings closes and the workspace opens. */
   onOpenWorkspace: (project: Project) => void;
   shortcuts: ShortcutManager;
@@ -1310,7 +1311,7 @@ export function Settings(props: {
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
-          <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenWorkspace={props.onOpenWorkspace} /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>

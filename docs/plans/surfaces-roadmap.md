@@ -143,7 +143,14 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   rewritten links, redirects, fetch, WebSocket, cookies), but ports are not cookie boundaries -- Conduit's own session
   cookie reached the proxied site -- so per-site origins need per-site hosts (a wildcard domain the person owns, not
   Tailscale names), and URLs built at runtime escape without a service worker. Recommendation: keep streaming.
-- [ ] 9. Browsers on client devices, reachable from any other client through the hub.
+- [x] 9. Browsers on client devices, reachable from any other client through the hub. A device's node offers its
+  own browser where it offers harnesses (a folder shared with commands, and agent-browser found): its own
+  agent-browser session (`conduit-device`) and profile in the node's home (`nodes/node-agent.js`, a `browser` target:
+  status, describe, configure, act, stream). The hub reaches it as a `RemoteBrowser` (`server/browser-host.js`): the
+  same calls over the node's connection, its stream spoken over a tunnel to the device's loopback port, behind the
+  hub's sign-in. `GET /v0/browsers` lists the hub's and each connected device's; a pane is `browser:<nodeId>`
+  (Devices: a device's card has Browser). Checked with a conduit-node paired on the VM: a client typed into a page in
+  the device's browser through the hub. Its own Services › Browser settings, and agents on it (#10), are not built.
 - [ ] 10. Acting as you: jbot uses your browser on a device you choose.
 - [x] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
   open, close and focus panes; use the browser. Every open tab tells the server its panes (what each shows, which has

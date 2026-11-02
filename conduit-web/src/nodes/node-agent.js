@@ -16,6 +16,7 @@ import { attestedLeaf } from "./find-hub.js";
 import net from "node:net";
 import { claudeSession, codexRollout, findHarnesses, opencodeService, tunnelTarget } from "./node-harnesses.js";
 import { createMachineReadout } from "../server/machine-readout.js";
+import { BrowserHost } from "../server/browser-host.js";
 
 const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 // How often the connection is checked; a ping unanswered by the next check ends it.
@@ -134,6 +135,11 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   };
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
   const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
+  // This device's browser, made on first use; offered where harnesses are (a folder shared with commands).
+  let browserHost = null;
+  const deviceBrowser = () => browserHost ??= new BrowserHost({ session: "conduit-device",
+    dataRoot: path.resolve(process.env.CONDUIT_NODE_HOME || path.join(os.homedir(), ".conduit-node")) });
+  const offersBrowser = () => roots.some((root) => root.shell) && deviceBrowser().available;
   let socket = null;
   let served = null;
   let directPort = null;
@@ -258,7 +264,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
+        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
         roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -509,6 +515,20 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     let readMachine = null;
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
+      // This device's browser (roadmap #9): its own agent-browser session and profile, offered as harnesses are --
+      // only where a folder is shared with commands -- and reached from other clients through the hub. `stream`
+      // answers the loopback port the hub then tunnels to (openTunnel, a port on this device).
+      if (target === "browser") {
+        if (!offersBrowser()) return err(new FileError("permission_denied", "This device does not offer its browser to Conduit"));
+        const [first, second] = decoded;
+        if (method === "status") return { ok: true, value: await deviceBrowser().status() };
+        if (method === "describe") return { ok: true, value: await deviceBrowser().describe() };
+        if (method === "configure") return { ok: true, value: await deviceBrowser().configure(first) };
+        if (method === "act") { await deviceBrowser().act(String(first), second); return { ok: true, value: await deviceBrowser().status() }; }
+        if (method === "stream") { await deviceBrowser().start(); return { ok: true, value: { port: deviceBrowser().port } }; }
+        return err(new FileError("not_supported", `${method} is not served by this node`));
+      }
+
       if (target === "proc") return runProcess(method, decoded);
       // What a harness saved here, for the sessions main runs on it.
       if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
