@@ -10,7 +10,7 @@ import type { TurnArtifactSummary } from "../api/live-events";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
-import { type ContextText, AnswerOrb, TraceOrb, TraceStarting, TurnTrace } from "./turn-trace";
+import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
 import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import { isAgentReport, type Narration, type TurnRow } from "../turn-rows";
@@ -332,14 +332,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     haptic("select");
     setRevealed((current) => current === id ? null : id);
   };
-  // The orb follows generation: only the latest turn shows it, on the row where it is working or its last answer.
-  const latestOrb = createMemo(() => {
-    for (let index = timeline.length - 1; index >= 0; index -= 1) {
-      const row = timeline[index]!;
-      if ((row.type === "message" || row.type === "trace") && row.orb) return row.key;
-    }
-    return null;
-  });
   const placeAsks = (asks: TranscriptAsk[], placed: Map<string, TranscriptAsk[]>) => {
     const rowOf = new Map<string, string>();
     for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
@@ -1231,7 +1223,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn orb={narrated() && item.key === latestOrb() ? <TraceOrb trace={item.value} writing={item.answerless === false} /> : undefined}><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={narrated() ? item.key === latestOrb() : true} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1250,7 +1242,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><Turn><TraceStarting startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
+            return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1311,7 +1303,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
           return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
-            <Show when={user()} fallback={<Turn orb={narrated() && item.orb && item.key === latestOrb() ? <AnswerOrb state={item.orb} /> : undefined}>
+            <Show when={user()} fallback={<Turn>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
@@ -1354,7 +1346,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" flow="exchange"><TraceStarting since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" flow="exchange"><TraceStarting narrated={narrated()} since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
         </LibraryTranscript>
   </ChatScroller>;
 }
