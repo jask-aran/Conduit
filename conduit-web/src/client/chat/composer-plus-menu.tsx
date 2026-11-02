@@ -2,7 +2,7 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Show } from "solid-js";
 
-import { Button, MenuNote, Rule } from "@/components/ui";
+import { Button, Rule, Note } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, useMenuBack } from "@/components/menus";
 import type { Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
@@ -90,7 +90,7 @@ export function ComposerPlusMenu(props: {
           </MenuSubContent>
         </MenuSub>
       </Show>
-      <Show when={has("context") && context() != null}><MenuNote>{Math.round(context()!)}% of context used</MenuNote></Show>
+      <Show when={has("context") && context() != null}><Note kind="menu">{Math.round(context()!)}% of context used</Note></Show>
       <Show when={props.onAttach}>
         <Show when={anyFolded() || props.place}><Rule /></Show>
         <MenuRow icon={<Icons.Attach />} onSelect={() => props.onAttach?.()}>Attach files</MenuRow>

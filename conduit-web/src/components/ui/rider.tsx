@@ -32,7 +32,6 @@ export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> &
     data-hidden={local.hidden ? "" : undefined} aria-hidden={local.hidden ? "true" : undefined} tabIndex={local.hidden ? -1 : undefined}
     aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></Frost>;
 }
-export const RiderActions = (props: { stack?: boolean; children: JSX.Element }) => <div class="ui-rider-actions" data-stack={props.stack ? "" : undefined}>{props.children}</div>;
 /** A line of waiting text, one line until opened; it offers to open only when it is really cut short (measured, not
  *  guessed from its length, since that depends on its width). clipped: decided by the caller instead. */
 export function Line(props: { text: string; clipped?: boolean }) {

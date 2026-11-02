@@ -1,9 +1,11 @@
+import { Actions } from "@/components/ui/actions";
+import { Note } from "@/components/ui/state";
 import { Group } from "@/components/ui/group";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { StatusDot } from "@/components/ui/nav";
-import { SettingActions, SettingLine, SettingLink, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { SettingLine, SettingLink, SettingValue } from "@/components/ui/overlay";
 
 type Certificate = { names: string[]; validTo: string };
 /** What the hub says of its LAN names (src/network/lan-names-service.js). */
@@ -97,7 +99,7 @@ export function NetworkSettings() {
       </Show>
     </SettingLine>
     <Show when={status().state === "failed" && !editing()}>
-      <SettingNote tone="error">{status().error?.message || "The names could not be set up."} <Button variant="ghost" size="sm" disabled={busy()} onClick={retry}>Try again</Button></SettingNote>
+      <Note tone="error">{status().error?.message || "The names could not be set up."} <Button variant="ghost" size="sm" disabled={busy()} onClick={retry}>Try again</Button></Note>
     </Show>
     <Show when={!editing() && status().hubName && status().certificates.hub}>
       <SettingLine plain label="This server" state={`${status().domain} · ${until(status().certificates.hub)}`}>
@@ -119,7 +121,7 @@ export function NetworkSettings() {
         <SettingLine label="API token" state={needsToken() ? undefined : "kept"}>
           <Input type="password" aria-label="Cloudflare API token" autocomplete="off" placeholder={needsToken() ? "Zone · DNS · Edit" : "Unchanged"} value={token()} onInput={(event) => setToken(event.currentTarget.value)} />
         </SettingLine>
-        <SettingNote>In Cloudflare, create a token from the “Edit zone DNS” template for your domain’s zone. It stays on this server. <SettingLink href="https://dash.cloudflare.com/profile/api-tokens">API tokens</SettingLink></SettingNote>
+        <Note>In Cloudflare, create a token from the “Edit zone DNS” template for your domain’s zone. It stays on this server. <SettingLink href="https://dash.cloudflare.com/profile/api-tokens">API tokens</SettingLink></Note>
       </Show>
       <Show when={status().hubAddress}>
         <SettingLine label="Name this server too" state={domain().trim() ? `${domain().trim().toLowerCase()} → ${status().hubAddress}` : undefined}
@@ -127,11 +129,11 @@ export function NetworkSettings() {
           <Switch label="Name this server too" checked={hubName()} onChange={setHubName} />
         </SettingLine>
       </Show>
-      <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
-      <SettingActions>
+      <Show when={error()}><Note tone="error">{error()}</Note></Show>
+      <Actions kind="setting">
         <Button variant="ghost" size="sm" disabled={busy()} onClick={() => setEditing(false)}>Cancel</Button>
         <Button size="sm" disabled={busy() || !ready()} onClick={() => void setUp()}>{busy() ? "Checking…" : "Set up"}</Button>
-      </SettingActions>
+      </Actions>
     </Show>
   </Group>}</Show>;
 }

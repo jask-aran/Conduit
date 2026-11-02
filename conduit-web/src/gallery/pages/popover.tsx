@@ -3,8 +3,8 @@ import { Icons } from "@/components/ui";
 import { SearchList } from "@/components/menus";
 import { Show } from "solid-js";
 import { createSignal, For } from "solid-js";
-import { Match, MenuNote, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
-import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, SearchSection, Section, Slider } from "@/components/ui";
+import { Match, MenuAction, MenuParent, MenuPanel, Button } from "@/components/ui";
+import { RowGroup, RowAction, Rule, Meter, Readout, SliderValue, Item, Menu, SearchSection, Section, Slider, Note } from "@/components/ui";
 import { PlaceGlyph } from "../../client/chat/place-picker";
 import { MODELS, PROFILES, PROJECTS } from "../seed";
 import { Replay, Presence } from "../specs";
@@ -68,13 +68,13 @@ import { Icons } from "@/components/ui";
     row("Leading keys", "Leader key before the action label", () => <Menu><Section><Item keysFirst keys={["W"]}>Open workspace</Item></Section></Menu>, { surfaces: ["ground"], phone: true, code: '<Item keysFirst keys={["W"]}>' }),
     row("Reveal end action", "End control appears on hover or cursor", () => {
           const [removed, setRemoved] = createSignal(false);
-          return <Menu><Section><Show when={!removed()} fallback={<MenuNote>No recent workspaces.</MenuNote>}><Item reveal end={<Button variant="ghost" size="icon-xs" aria-label="Remove Japan from recent workspaces" onClick={() => setRemoved(true)}><Icons.Close /></Button>}>Japan</Item></Show></Section></Menu>;
+          return <Menu><Section><Show when={!removed()} fallback={<Note kind="menu">No recent workspaces.</Note>}><Item reveal end={<Button variant="ghost" size="icon-xs" aria-label="Remove Japan from recent workspaces" onClick={() => setRemoved(true)}><Icons.Close /></Button>}>Japan</Item></Show></Section></Menu>;
         }, { surfaces: ["ground"], phone: true, code: "<Item reveal end={<Button onClick />} />" }),
     row("Cursor and fixed end", "Pointer cursor with an always visible end control", () => {
           const [cursor, setCursor] = createSignal(false), [copied, setCopied] = createSignal(false);
           return <Menu><Section><Item active={cursor()} onCursor={() => setCursor(true)} end={<Button variant="ghost" size="icon-xs" aria-label="Copy workspace path" onClick={() => setCopied(true)}><Icons.Copy /></Button>}>{copied() ? "Workspace path copied" : "Conduit"}</Item><Item onCursor={() => setCursor(false)}>Japan</Item></Section></Menu>;
         }, { surfaces: ["ground"], phone: true, code: "<Item active onCursor end={<Button onClick />} />" }),
-    row("Notices", "Neutral hint and an error in their menu", () => <Menu><MenuNote>No active terminals in Japan.</MenuNote><MenuNote error>Could not connect to Desktop-Dev.</MenuNote></Menu>, { surfaces: ["ground"], phone: true, code: "<MenuNote /> · <MenuNote error />" }),
+    row("Notices", "Neutral hint and an error in their menu", () => <Menu><Note kind="menu">No active terminals in Japan.</Note><Note kind="menu" tone="error">Could not connect to Desktop-Dev.</Note></Menu>, { surfaces: ["ground"], phone: true, code: "<Note /> · <Note error />" }),
     row("Action shell", "Adapter content with a separate metadata slot", () => {
           const [copied, setCopied] = createSignal(false);
           return <Menu><MenuAction role="menuitem" tabIndex={0} onClick={() => setCopied(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setCopied(true); } }}>{copied() ? "Link copied" : "Copy workspace link"}<small>Japan</small></MenuAction></Menu>;
@@ -156,5 +156,5 @@ import { Icons } from "@/components/ui";
     token("--menu-room", "available height"),
     token("--radius-surface", "surface corner")
   ] }],
-  api: ["Menu", "Section", "SearchSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "MenuNote", "MenuAction", "MenuParent", "MenuPanel", "DropdownMenu", "MenuTrigger", "MenuPillTrigger", "MenuContent", "MenuSection", "MenuRow", "MenuItem", "MenuRadioItem", "MenuSub", "MenuSubTrigger", "MenuSubValue", "MenuSubContent", "ContextMenu", "ContextMenuContent", "ContextMenuItem", "Popover", "PopoverContent", "SearchList"]
+  api: ["Menu", "Section", "SearchSection", "RowGroup", "Item", "RowAction", "Match", "Readout", "Rule", "Meta", "Note", "MenuAction", "MenuParent", "MenuPanel", "DropdownMenu", "MenuTrigger", "MenuPillTrigger", "MenuContent", "MenuSection", "MenuRow", "MenuItem", "MenuRadioItem", "MenuSub", "MenuSubTrigger", "MenuSubValue", "MenuSubContent", "ContextMenu", "ContextMenuContent", "ContextMenuItem", "Popover", "PopoverContent", "SearchList"]
 };

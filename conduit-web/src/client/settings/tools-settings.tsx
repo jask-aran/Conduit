@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { Button, LiveNote, SettingDetails, SettingLine, SettingLoading, SettingNote, SettingValue, Group } from "@/components/ui";
+import { Button, LiveNote, SettingDetails, SettingLine, SettingValue, Group, Loading, Note } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 
@@ -42,8 +42,8 @@ export function ToolsSettings() {
       <SettingValue>{SOURCE[tool.source]} · {ASKS[tool.asks]}</SettingValue>
     </SettingLine>;
 
-  return <Show when={profiles()} fallback={<Show when={error()} fallback={<SettingLoading>Loading tools…</SettingLoading>}>
-    <SettingNote tone="error"><span>{error() || "Tools could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
+  return <Show when={profiles()} fallback={<Show when={error()} fallback={<Loading>Loading tools…</Loading>}>
+    <Note tone="error"><span>{error() || "Tools could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
   </Show>}>
     {(list) => <>
       <Group title="Profile">
@@ -53,8 +53,8 @@ export function ToolsSettings() {
           </Select>
         </SettingLine>
         <Show when={profile()}>{(current) =>
-          <SettingNote>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.
-            {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</SettingNote>}
+          <Note>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.
+            {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</Note>}
         </Show>
       </Group>
       <Show when={direct().length}><Group title="Called by the model"><For each={direct()}>{line}</For></Group></Show>
@@ -62,10 +62,10 @@ export function ToolsSettings() {
       <McpAccess />
       <Group title="About this list">
         <SettingDetails summary="Where tools come from">
-          <SettingNote>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
-            connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</SettingNote>
-          <SettingNote>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
-            plus devices and handoff. Connected accounts appear once a connector is connected (Models &amp; accounts).</SettingNote>
+          <Note>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
+            connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</Note>
+          <Note>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
+            plus devices and handoff. Connected accounts appear once a connector is connected (Models &amp; accounts).</Note>
         </SettingDetails>
       </Group>
     </>}
@@ -91,6 +91,6 @@ function McpAccess() {
       <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
     </SettingLine>
     <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
-    <SettingNote>The hub's browser is agent-browser's own MCP server on the page you share{found().browser ? "" : " (not installed on this hub)"}. Claude Code chats Conduit starts on the hub have both already.</SettingNote>
+    <Note>The hub's browser is agent-browser's own MCP server on the page you share{found().browser ? "" : " (not installed on this hub)"}. Claude Code chats Conduit starts on the hub have both already.</Note>
   </Group>}</Show>;
 }

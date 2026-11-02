@@ -1,3 +1,4 @@
+import { Note } from "@/components/ui/state";
 import { duration, reducedMotion } from "@/components/ui/motion";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { splitPage } from "../dashboard/primitives/split-cursor";
@@ -9,7 +10,7 @@ import type { PendingShortcutSequence, ShortcutContext } from "../shortcuts/shor
 import { Keycap } from "../../components/ui/controls";
 import { Crumbs, Leader, Spotlight } from "../../components/ui/leader";
 import { OverlayHints, type Hint } from "../../components/ui/overlay";
-import { Item, MenuNote, Section } from "../../components/ui/popover";
+import { Item, Section } from "../../components/ui/popover";
 
 const CONTEXT_LABELS: Record<string, string> = {
   application: "Conduit",
@@ -149,7 +150,7 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
         end={[[["Esc"], "cancel"]]}
       />}
     >
-      <Show when={rows().length} fallback={<MenuNote>No leader keys here yet.</MenuNote>}>
+      <Show when={rows().length} fallback={<Note kind="menu">No leader keys here yet.</Note>}>
         <Section><For each={rows()}>{(row) =>
           <Item keysFirst keys={row.keys} onClick={() => props.shortcuts.runPendingCommand(row.commandId)}>{row.label}</Item>
         }</For></Section>

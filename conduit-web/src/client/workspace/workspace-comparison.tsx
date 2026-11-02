@@ -1,7 +1,6 @@
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons } from "@/components/ui";
-import { PaneEmpty } from "@/components/ui/pane";
-import { FileButton, FileHead, FileTools, FileName, StatusBar, StatusText } from "@/components/ui/file";
+import { Icons, Empty, Actions, IconButton } from "@/components/ui";
+import { FileHead, FileName, StatusBar, StatusText } from "@/components/ui/file";
 import { CodeHost, Comparison, ComparisonContent, ComparisonCounts } from "@/components/ui/editor";
 import { MergeView, getChunks } from "@codemirror/merge";
 import { inlineLineNumbers, inlineRowsOf, setInlineRows, workspaceInlineDiff, workspaceMergeView } from "./workspace-diff-setup";
@@ -296,22 +295,22 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       <Show when={props.headerTabs} fallback={<FileName path={props.comparison.path} icon={<FileTypeIcon name={props.comparison.path} />} />}>{props.headerTabs}</Show>
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
-        <FileTools>
-          <FileButton aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><Icons.Search /></FileButton>
-          <FileButton aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><Icons.WrapText /></FileButton>
-          <FileButton aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Icons.Split /></FileButton>
-        </FileTools>
+        <Actions kind="tools">
+          <IconButton kind="file" aria-label="Find in comparison" title="Find in comparison (Ctrl+F)" onClick={() => { if (activeView) openSearchPanel(activeView); }}><Icons.Search /></IconButton>
+          <IconButton kind="file" aria-label={wrap() ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={wrap()} title={wrap() ? "Disable line wrapping" : "Enable line wrapping"} onClick={() => setWrap(!wrap())}><Icons.WrapText /></IconButton>
+          <IconButton kind="file" aria-label={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} aria-pressed={layout() === "split"} title={layout() === "split" ? "Show unified diff" : "Show side-by-side diff"} onClick={() => setLayout(layout() === "split" ? "unified" : "split")}><Icons.Split /></IconButton>
+        </Actions>
       </Show>
       {props.headerEnd}
     </FileHead>
-    <Show when={props.comparison.kind === "text"} fallback={<PaneEmpty>{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</PaneEmpty>}>
+    <Show when={props.comparison.kind === "text"} fallback={<Empty>{props.comparison.kind === "unavailable" ? props.comparison.message : ""}</Empty>}>
       <ComparisonContent data-layout={layout()}>
         <CodeHost ref={(element) => { host = element; }} comparison />
         <Show when={annotation()}>{(selection) => <WorkspaceAnnotationPopup selection={selection()} onAdd={(note) => props.onAnnotate?.(selection(), note) ?? false} onDismiss={() => selectAnnotation(null)} />}</Show>
       </ComparisonContent>
       <StatusBar commands={props.comparisonSource}>
         <ComparisonCounts title={summary().precise ? "Changed lines" : "Approximate changed lines"}><span>−{summary().removed}</span><span>+{summary().added}</span></ComparisonCounts>
-        <FileButton wide aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</FileButton>
+        <IconButton kind="file" wide aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => { if (activeView) gotoLine(activeView); }}>{position()}</IconButton>
         <StatusText>{languageName()} · Read-only</StatusText>
       </StatusBar>
     </Show>

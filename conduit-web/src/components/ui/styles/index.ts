@@ -15,12 +15,15 @@
  *   fade            the fade at the foot of content cut short (code, a bubble, a glance)
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
+ *   group           Group, Columns (every titled run of rows; kinds per family)
+ *   states          Empty, Loading, Note (kinds per family)
+ *   actions         IconButton, Actions (kinds per family)
  *   row             Row (nav, list, menu densities: the box and voice every row shares)
- *   nav             NavPane > Group > Row, NavFolder, RailButton
+ *   nav             NavPane > Group > Row, NavFolder, IconButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
- *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
- *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
+ *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
+ *                   ToolBar, IconButton, ToolFilter, ToolNotice, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch

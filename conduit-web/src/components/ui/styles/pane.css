@@ -56,14 +56,14 @@
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close { background: transparent; box-shadow: none; }
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close > svg { display: none; }
 .ui-tab[data-unsaved]:not(:hover) .ui-tab-close::after { width: var(--space-md); height: var(--space-md); border-radius: var(--radius-round); background: currentColor; content: ""; }
-.ui-pane-tabs > .ui-pane-action { margin-left: var(--space-md); }
+.ui-pane-tabs > .ui-icon-button:where([data-icon-button="pane"]) { margin-left: var(--space-md); }
 
 /* A pane's controls after its title: small, quiet, the wash on the pointer. */
-.ui-pane-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); }
-.ui-pane-action { display: inline-grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-pane-action:is(:focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-pane-action:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
-.ui-pane-action > svg { width: var(--icon); height: var(--icon); }
+.ui-actions:where([data-actions="pane"]) { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-2xs); }
+.ui-icon-button:where([data-icon-button="pane"]) { display: inline-grid; width: var(--control-xs); height: var(--control-xs); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-icon-button:where([data-icon-button="pane"]):is(:focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-icon-button:where([data-icon-button="pane"]):is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
+.ui-icon-button:where([data-icon-button="pane"]) > svg { width: var(--icon); height: var(--icon); }
 
 /* An edge: its hit target centred on the frame's gap, the gutter you drag. */
 .ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); cursor: col-resize; touch-action: none; }
@@ -117,19 +117,19 @@
   .ui-tool-head [data-only="desktop"] { display: none; }
 }
 
-.ui-pane-empty { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
-.ui-pane-loading { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
+.ui-empty:where([data-empty="pane"]) { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
+.ui-loading:where([data-loading="pane"]) { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
   padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A tool's strips and its tree: the file tree, its filter and actions, a folded tree's rail. */
 .ui-tool-bar { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-sm); border-bottom: var(--hairline) solid var(--border); }
 .ui-tool-bar[data-edge="top"] { border-top: var(--hairline) solid var(--border); border-bottom: 0; }
 .ui-tool-bar[data-vertical] { min-height: 0; flex-direction: column; padding: var(--space-xs) var(--space-2xs); border: 0; border-right: var(--hairline) solid var(--border); }
-.ui-tool-button { display: inline-grid; width: var(--control-tool); height: var(--control-tool); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-tool-button:is(:focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-tool-button:is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
-.ui-tool-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
-.ui-tool-button > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-icon-button:where([data-icon-button="tool"]) { display: inline-grid; width: var(--control-tool); height: var(--control-tool); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-icon-button:where([data-icon-button="tool"]):is(:focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-icon-button:where([data-icon-button="tool"]):is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
+.ui-icon-button:where([data-icon-button="tool"]):disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
+.ui-icon-button:where([data-icon-button="tool"]) > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-tool-filter { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
 .ui-tool-filter > svg { position: absolute; left: var(--space-md); width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); pointer-events: none; }
 .ui-tool-filter > input { width: 100%; height: var(--control-tool); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font-size: var(--text-caption); }
@@ -155,10 +155,10 @@
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 /* An empty tool with a mark, a title and a line under it. */
-.ui-pane-empty > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
-.ui-pane-empty svg { width: var(--icon-lg); height: var(--icon-lg); }
-.ui-pane-empty strong { color: var(--foreground); }
-.ui-pane-empty p { margin: 0; line-height: var(--leading-text); }
+.ui-empty:where([data-empty="pane"]) > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
+.ui-empty:where([data-empty="pane"]) svg { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-empty:where([data-empty="pane"]) strong { color: var(--foreground); }
+.ui-empty:where([data-empty="pane"]) p { margin: 0; line-height: var(--leading-text); }
 
 /* An empty pane's Home: a column centred in the pane, its pieces (head, actions, groups) the library's own. */
 /* Above the middle, where the eye lands (two parts above, three below); the head's status line in data, the groups
@@ -177,8 +177,8 @@
   .ui-tool-view { min-width: var(--space-4xl); min-height: var(--space-4xl); padding-inline: var(--space-md); font-size: var(--text-caption); }
   .ui-tool-view > svg { width: var(--icon); height: var(--icon); }
   .ui-tool-bar { min-height: var(--control-lg); gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); }
-  .ui-tool-button { width: var(--space-4xl); height: var(--space-4xl); }
-  .ui-tool-button > svg, .ui-tool-filter > svg { width: var(--icon-sm); height: var(--icon-sm); }
+  .ui-icon-button:where([data-icon-button="tool"]) { width: var(--space-4xl); height: var(--space-4xl); }
+  .ui-icon-button:where([data-icon-button="tool"]) > svg, .ui-tool-filter > svg { width: var(--icon-sm); height: var(--icon-sm); }
   .ui-tool-filter > svg { left: var(--space-md); }
   .ui-tool-filter > input { height: var(--space-4xl); padding-left: var(--space-4xl); font-size: var(--text-row); }
   .ui-tool-bar[data-vertical] { gap: var(--space-xs); padding-block: var(--space-sm); }

@@ -1,5 +1,5 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { Avatar, Input, SettingLine, SettingNote, Group } from "@/components/ui";
+import { Avatar, Input, SettingLine, Group, Note } from "@/components/ui";
 import { accountName, loadAccount, saveAccountName } from "../state/account";
 
 /**
@@ -22,6 +22,6 @@ export function AccountSettings() {
       <Input aria-label="Your name" placeholder="Your name" maxLength={60} value={accountName()}
         onChange={(event) => void save(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
     </SettingLine>
-    <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
   </Group>;
 }

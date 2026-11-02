@@ -69,9 +69,6 @@ export function TermLead(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"
 /** The narrow header's shortcut menu container. */
 export const TermOverflow = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-overflow" />;
 /** The terminal's session and focus controls. */
-export function TermActions(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) {
-  return <div {...props} class="ui-term-actions" />;
-}
 /** A focus action's label, hidden on narrow screens. */
 export const TermActionLabel = (props: { children: JSX.Element }) => <span class="ui-term-action-label">{props.children}</span>;
 /** A centred empty or recovery state; the caller supplies icon, text and actions. */
@@ -80,9 +77,6 @@ export function TermState(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class
   return <div {...rest} class="ui-term-state" data-empty={local.empty ? "" : undefined} />;
 }
 /** An error above the terminal's lower corner. */
-export function TermError(props: Omit<JSX.HTMLAttributes<HTMLParagraphElement>, "class">) {
-  return <p role="alert" {...props} class="ui-term-error" />;
-}
 /** TermKeys: a phone's key bar under the terminal, the keys its keyboard lacks in one row that scrolls sideways. A tap
  *  on it never takes the focus from the terminal (so the keyboard stays up). */
 export function TermKeys(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "onMouseDown">) {

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { Button, FileButton, Icons, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSplit, WorkbenchTitle, Row, Group } from "@/components/ui";
+import { Button, Icons, StatusText, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle, Row, Group, Note, Actions, IconButton } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
@@ -15,10 +15,10 @@ function PromptsBench() {
       title={<Select look="title" search="Search documents" aria-label="Document" value={doc()} onChange={(event) => setDoc(event.currentTarget.value)}><option value="assistant">Assistant</option><option value="agent">jbot</option><option value="heartbeat">Heartbeat</option></Select>}
       actions={<Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" disabled><Icons.Reset /></Button>} />
     <WorkbenchSplit side={documentChain()} main={<TextEditor fill readOnly label="Assistant text" value={TEXT}
-      head={<><TextEditorTitle>Assistant</TextEditorTitle><TextEditorActions>
-        <FileButton label="Edit"><Icons.Edit /></FileButton><FileButton label="Move up" disabled><Icons.ArrowUp /></FileButton><FileButton label="Move down"><Icons.ArrowDown /></FileButton>
+      head={<><TextEditorTitle>Assistant</TextEditorTitle><Actions kind="editor">
+        <IconButton kind="file" label="Edit"><Icons.Edit /></IconButton><IconButton kind="file" label="Move up" disabled><Icons.ArrowUp /></IconButton><IconButton kind="file" label="Move down"><Icons.ArrowDown /></IconButton>
         <Select look="icon" icon={<Icons.Swap />} search="Search blocks" aria-label="Swap for another block" title="Swap for another block" value=""><option value="">Swap</option><option value="naming">Chat naming</option></Select>
-        <FileButton label="Remove"><Icons.Close /></FileButton></TextEditorActions></>}
+        <IconButton kind="file" label="Remove"><Icons.Close /></IconButton></Actions></>}
       status={<StatusText>40 tok</StatusText>} />} />
   </Workbench></div>;
 }
@@ -32,9 +32,9 @@ function BlocksBench() {
     <WorkbenchSplit side={<>
       <Group kind="workbench" title="Used in"><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</Row><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</Row></Group>
       <Group kind="workbench" title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></Group>
-      <Group kind="workbench" title="Conduit then adds"><WorkbenchNote>The run's routine, then what woke it.</WorkbenchNote></Group>
+      <Group kind="workbench" title="Conduit then adds"><Note kind="workbench">The run's routine, then what woke it.</Note></Group>
     </>} main={<TextEditor fill label="Run rules text" value={text()} onChange={setText}
-      head={<><TextEditorTitle>Text</TextEditorTitle><TextEditorActions><Button variant="primary" size="sm">Save</Button><FileButton label="Reset"><Icons.Reset /></FileButton></TextEditorActions></>}
+      head={<><TextEditorTitle>Text</TextEditorTitle><Actions kind="editor"><Button variant="primary" size="sm">Save</Button><IconButton kind="file" label="Reset"><Icons.Reset /></IconButton></Actions></>}
       status={<><StatusText>{`${Math.round(text().length / 4)} tok`}</StatusText><StatusText>jbot's file: jbot can change it too</StatusText></>} />} />
   </Workbench></div>;
 }
@@ -43,7 +43,7 @@ export const workbenchPage: Page = {
   title: "Workbench",
   summary: "A page that works on one thing at a time: its title is the thing (pressing it chooses another), the split below fills the page's height -- a side column that scrolls on its own, and one pane filling the main column with its actions in its bar and its facts in its foot -- so the page never scrolls.",
   preview: () => <BlocksBench />,
-  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, Group, WorkbenchFact, WorkbenchNote, TextEditorTitle, TextEditorActions } from "@/components/ui";
+  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, Group, WorkbenchFact, Note, TextEditorTitle, Actions } from "@/components/ui";
 import { TextEditor } from "@/components/ui/text-editor"; // CodeMirror: imported on its own, never from the barrel
 
 <Workbench label="Blocks">

@@ -64,16 +64,16 @@
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
    opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
    its trigger), a row is washed only where a pointer hovers. */
-.ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-rail-button:is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
-@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-rail-button:is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
-.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-icon-button:where([data-icon-button="rail"]):is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
+@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-icon-button:where([data-icon-button="rail"]):is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
+.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-icon-button:where([data-icon-button="rail"])[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-row:where([data-density="nav"])[data-open] { color: var(--foreground); }
 .ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); }
 @media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); } }
-:is(.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-rail-button[aria-current="page"]) svg.lucide { stroke-width: 3; }
+:is(.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-icon-button:where([data-icon-button="rail"])[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */
-@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] :is(.ui-row:where([data-density="nav"]), .ui-rail-button):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; } }
+@media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] :is(.ui-row:where([data-density="nav"]), .ui-icon-button:where([data-icon-button="rail"])):hover:not(:focus-visible, [data-focus-shown], [data-selected], [data-held], [data-held-within]) { background: transparent; } }
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within], [data-open]) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); } }
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-row:where([data-density="nav"]):hover:not(:focus-visible, [data-focus-shown], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--muted-foreground); } }
 
@@ -84,7 +84,7 @@
 .ui-row:where([data-density="nav"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; }
 @media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; } }
-:is(.ui-row-lead:where([data-density="nav"] *), .ui-rail-button) > .ui-harness-mark-tinted { background-color: var(--foreground); }
+:is(.ui-row-lead:where([data-density="nav"] *), .ui-icon-button:where([data-icon-button="rail"])) > .ui-harness-mark-tinted { background-color: var(--foreground); }
 .ui-row-lead:where([data-density="nav"] *) > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
 .ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
@@ -105,7 +105,7 @@
 /* A folder's rows are clipped by the sliding box, and each frame's layout stays inside this folder. */
 .ui-nav-folder-body { contain: layout paint; }
 
-.ui-nav-note { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-note:where([data-note="nav"]) { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 /* Static: nothing here is worth an animation. */
 .ui-nav-skeleton { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
 .ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--border); }
@@ -115,11 +115,11 @@
 /* The rail: shown only while the pane is folded, when the list's other rows are away. */
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.ui-rail-button { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
-.ui-rail-button svg, .ui-rail-button > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
-.ui-rail-button:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
-.ui-rail-button:is([data-open], [aria-pressed="true"]) { color: var(--foreground); }
-.ui-rail-button[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
+.ui-icon-button:where([data-icon-button="rail"]) { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
+.ui-icon-button:where([data-icon-button="rail"]) svg, .ui-icon-button:where([data-icon-button="rail"]) > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-icon-button:where([data-icon-button="rail"]):disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
+.ui-icon-button:where([data-icon-button="rail"]):is([data-open], [aria-pressed="true"]) { color: var(--foreground); }
+.ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
 
 /* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
 .ui-nav-notice { display: flex; align-items: center; gap: var(--row-gap); margin-bottom: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }

@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { createMemo, For, Show } from "solid-js";
 
-import { MenuNote, Picker, Section, Slider, Spinner } from "@/components/ui";
+import { Picker, Section, Slider, Spinner, Note } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubValue } from "@/components/menus";
 import type { ModelOption } from "../api/contracts";
 
@@ -32,7 +32,7 @@ export function ModelMenuItems(props: ModelMenuProps) {
     <Show when={props.onSearchModels}>
       <MenuSection><MenuRow icon={<Icons.Search />} keys={props.searchShortcut?.split(/\s+/)} onSelect={() => props.onSearchModels?.()}>Search all models…</MenuRow></MenuSection>
     </Show>
-    <Show when={!props.onSearchModels && props.notice}><MenuNote>{props.notice}</MenuNote></Show>
+    <Show when={!props.onSearchModels && props.notice}><Note kind="menu">{props.notice}</Note></Show>
     <MenuSection><MenuRadioGroup value={props.model} onChange={props.onModelChange}>
       <For each={selectableModels()}>{(item) => <MenuRadioItem value={item.spec} closeOnSelect={false} title={item.label} meta={item.provider}>{item.label}</MenuRadioItem>}</For>
     </MenuRadioGroup></MenuSection>

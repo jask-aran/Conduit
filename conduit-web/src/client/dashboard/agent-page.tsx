@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark } from "@/components/ui";
+import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
-import { DashIconButton, DashNote } from "@/components/ui/dashboard";
 import { Dialog } from "@/components/dialog";
 import { MenuRow } from "@/components/menus";
 import { api } from "../api/client";
@@ -133,7 +132,7 @@ export function AgentPage(props: {
           lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} label={ask.title} title={ask.lines.map(approvalLineText).join("\n")}
           context="Waiting for your approval · open to see it all"
           meta={<>
-            <DashIconButton aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></DashIconButton>
+            <IconButton kind="dash" aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></IconButton>
           </>} />}
       </For>
       <For each={needs()?.questions}>{(question) =>
@@ -144,13 +143,13 @@ export function AgentPage(props: {
         <Row density="list" lead={<Icons.FileText />} label={proposal.text} title={proposal.text}
           context={`${proposal.op === "remove" ? "Forget" : "Remember"} · ${proposal.file}`}
           meta={<>
-            <DashIconButton aria-label="Keep" title="Keep" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/accept`, { method: "POST" }))}><Icons.Check /></DashIconButton>
-            <DashIconButton aria-label="Discard" title="Discard" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/reject`, { method: "POST" }))}><Icons.Close /></DashIconButton>
+            <IconButton kind="dash" aria-label="Keep" title="Keep" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/accept`, { method: "POST" }))}><Icons.Check /></IconButton>
+            <IconButton kind="dash" aria-label="Discard" title="Discard" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/reject`, { method: "POST" }))}><Icons.Close /></IconButton>
           </>} />}
       </For>
       <For each={needs()?.notices}>{(notice) =>
         <Row density="list" lead={<Icons.Warning />} label={notice.text} title={notice.text} context={age(notice.at, now())}
-          meta={<DashIconButton aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
+          meta={<IconButton kind="dash" aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton>} />}
       </For>
     </Show>
   </SplitGroup>;
@@ -210,10 +209,10 @@ export function AgentPage(props: {
     return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
       actions={<>
-        <DashIconButton aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
-          onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></DashIconButton>
-        {feed ? <DashIconButton aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
-        onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></DashIconButton> : undefined}
+        <IconButton kind="dash" aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
+          onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></IconButton>
+        {feed ? <IconButton kind="dash" aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
+        onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></IconButton> : undefined}
       </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" label="Timed" count={timed().length || null}>
@@ -235,8 +234,8 @@ export function AgentPage(props: {
     <SplitGroup id="agent-rules" label="Allowed" count={view()?.rules?.length}>
       <For each={view()?.rules}>{(rule) =>
         <Row density="list" lead={<Icons.Permissions />} label={rule.label} title={rule.label} context={age(rule.createdAt, now())}
-          meta={<DashIconButton aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
-            onClick={() => act(rule.id, () => api(`/v0/agent/rules/${encodeURIComponent(rule.id)}`, { method: "DELETE" }))}><Icons.Close /></DashIconButton>} />}
+          meta={<IconButton kind="dash" aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
+            onClick={() => act(rule.id, () => api(`/v0/agent/rules/${encodeURIComponent(rule.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton>} />}
       </For>
     </SplitGroup>
   </Show>;
@@ -273,10 +272,10 @@ export function AgentPage(props: {
           <Row density="list" lead={entry.provenance ? <Icons.Agent /> : <Icons.User />} label={entry.text} title={`${entry.text}\n${whereOf(entry)}, ${whoOf(entry)}\n${entry.scope}`}
             context={`${entry.file === "diary" ? "Diary" : entry.section || FILE_LABELS[entry.file] || entry.file} · ${entry.provenance ? age(entry.provenance.at, now()) : "you"}`}
             meta={<><Show when={entry.provenance?.chatId}>{(chatId) =>
-              <DashIconButton aria-label="Open the chat it was learned in" title="Open the chat it was learned in" onClick={(event: MouseEvent) => props.onOpenChat(chatId(), event)}><Icons.Chat /></DashIconButton>}</Show>
-              <DashIconButton aria-label={arming() === entryKey(entry) ? "Forget it: click again" : "Forget"} title={arming() === entryKey(entry) ? "Click again to forget" : "Forget"}
+              <IconButton kind="dash" aria-label="Open the chat it was learned in" title="Open the chat it was learned in" onClick={(event: MouseEvent) => props.onOpenChat(chatId(), event)}><Icons.Chat /></IconButton>}</Show>
+              <IconButton kind="dash" aria-label={arming() === entryKey(entry) ? "Forget it: click again" : "Forget"} title={arming() === entryKey(entry) ? "Click again to forget" : "Forget"}
               disabled={busy() !== null} onClick={() => forget(entry)}>
-              {arming() === entryKey(entry) ? <Icons.Check /> : <Icons.Close />}</DashIconButton></>} />}
+              {arming() === entryKey(entry) ? <Icons.Check /> : <Icons.Close />}</IconButton></>} />}
         </For>
       </Show>
     </SplitGroup>}
@@ -324,7 +323,7 @@ export function AgentPage(props: {
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
-          notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
+          notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer}

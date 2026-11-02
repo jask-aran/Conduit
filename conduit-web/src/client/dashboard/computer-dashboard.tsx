@@ -1,7 +1,7 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons, Columns } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
+import { Icons, Columns, Note, Empty, Loading, Actions } from "@/components/ui";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { harnessStatusLabel } from "../harness-brand";
 import { Button, Input } from "@/components/ui/controls";
@@ -227,7 +227,7 @@ export function ComputerDashboard(props: {
           </Show>
         </BrowserToolbar>
         <Show when={!props.waiting} fallback={props.waiting}>
-        <BrowserActions>
+        <Actions kind="browser">
           <Show when={props.location?.repositoryRoot}><BrowserSummary title={props.location?.repositoryRoot || ""}><Icons.GitBranch />{props.location?.repositoryRoot?.split("/").at(-1)}</BrowserSummary></Show>
           <BrowserSpacer />
           <WorkspaceActions />
@@ -238,9 +238,9 @@ export function ComputerDashboard(props: {
             }</For></MenuGroup></MenuContent></DropdownMenu></Show>
             <Button variant="ghost" type="button" disabled={!props.location?.repository || props.loading} onClick={() => props.onOpenView("diff")}><Icons.GitBranch />Source Control</Button>
           </Show>
-        </BrowserActions>
+        </Actions>
 
-        <Show when={props.error || listingError()}><BrowserError>{props.error || listingError()}</BrowserError></Show>
+        <Show when={props.error || listingError()}><Note kind="browser">{props.error || listingError()}</Note></Show>
         <ContextMenu><ContextMenuTrigger as={BrowserGrid} data-view={view()} aria-busy={props.loading || refreshing()}>
           <Show when={view() === "details"}><Columns kind="browser"><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></Columns></Show>
           <For each={visibleEntries()}>{(entry) =>
@@ -267,7 +267,7 @@ export function ComputerDashboard(props: {
               <ContextMenuItem onSelect={() => copyPath(`${props.location!.project.workingRoot}/${entry.path}`)}><Icons.Copy />Copy path</ContextMenuItem>
             </ContextMenuGroup></ContextMenuContent></ContextMenu>
           }</For>
-          <Show when={!props.loading && !refreshing() && !visibleEntries().length}><BrowserEmpty>{query() ? "No items match this search." : "This folder is empty."}</BrowserEmpty></Show>
+          <Show when={!props.loading && !refreshing() && !visibleEntries().length}><Empty kind="browser">{query() ? "No items match this search." : "This folder is empty."}</Empty></Show>
         </ContextMenuTrigger><ContextMenuContent><ContextMenuGroup>
           <ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onSelectFolder?.() : props.onStartWorkspaceAction("created", props.location!.project.workingRoot)}><Icons.Folder />{props.dialog ? "Select this folder" : "Create workspace folder here"}</ContextMenuItem>
           <Show when={!props.selectOnly}><ContextMenuItem disabled={!props.location} onSelect={() => props.dialog ? props.onCreateFolder?.() : props.onStartWorkspaceAction("cloned", props.location!.project.workingRoot)}><Icons.Add />{props.dialog ? "Create folder here" : "Clone repository here"}</ContextMenuItem></Show>
@@ -277,7 +277,7 @@ export function ComputerDashboard(props: {
           <ContextMenuItem onSelect={() => setShowHidden((value) => !value)}><Icons.Preview />{showHidden() ? "Hide hidden files" : "Show hidden files"}</ContextMenuItem>
           <Show when={!props.device}><ContextMenuItem onSelect={() => props.onOpenView("terminal")}><Icons.Terminal />Terminal here</ContextMenuItem></Show>
         </ContextMenuGroup></ContextMenuContent></ContextMenu>
-        <Show when={props.loading || refreshing()}><BrowserLoading>Loading…</BrowserLoading></Show>
+        <Show when={props.loading || refreshing()}><Loading kind="browser">Loading…</Loading></Show>
         <Show when={cursor()}><Button variant="ghost" type="button" disabled={refreshing()} onClick={() => void refresh(cursor()!)}>Load more</Button></Show>
         </Show>
       </BrowserMain>

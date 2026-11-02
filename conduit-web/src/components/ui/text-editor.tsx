@@ -6,8 +6,9 @@ import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter,
 import { Redo2Icon, Undo2Icon, WrapTextIcon } from "lucide-solid";
 import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { codeReadOnlySetup } from "./code-setup";
-import { FileButton, StatusBar, StatusText } from "./file";
+import { StatusBar, StatusText } from "./file";
 import * as Icons from "./icons";
+import { IconButton } from "./actions";
 
 /*
  * Text edited in a pane of its own (a prompt block, a note): the workspace editor's setup (code-setup.ts: its theme,
@@ -73,12 +74,12 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
     <div class="ui-text-editor-bar">
       <Show when={props.head}><div class="ui-text-editor-head">{props.head}</div></Show>
       <span class="ui-text-editor-tools">
-      <FileButton label="Find and replace (Ctrl+F)" onClick={() => run(openSearchPanel)}><Icons.Search /></FileButton>
+      <IconButton kind="file" label="Find and replace (Ctrl+F)" onClick={() => run(openSearchPanel)}><Icons.Search /></IconButton>
       <Show when={!props.readOnly}>
-        <FileButton label="Undo (Ctrl+Z)" disabled={!depth().undo} onClick={() => run(undo)}><Undo2Icon /></FileButton>
-        <FileButton label="Redo (Ctrl+Shift+Z)" disabled={!depth().redo} onClick={() => run(redo)}><Redo2Icon /></FileButton>
+        <IconButton kind="file" label="Undo (Ctrl+Z)" disabled={!depth().undo} onClick={() => run(undo)}><Undo2Icon /></IconButton>
+        <IconButton kind="file" label="Redo (Ctrl+Shift+Z)" disabled={!depth().redo} onClick={() => run(redo)}><Redo2Icon /></IconButton>
       </Show>
-      <FileButton label={wrap() ? "Don't wrap lines" : "Wrap lines"} aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></FileButton>
+      <IconButton kind="file" label={wrap() ? "Don't wrap lines" : "Wrap lines"} aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></IconButton>
       </span>
     </div>
     <div ref={host} class="ui-text-editor-host" />

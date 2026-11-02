@@ -5,9 +5,9 @@ import { ComputerExplorer } from "../../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../../client/workspace/workspace-excerpt-view";
 import { CameraPreview } from "@/components/ui/connection";
 import { Dialog } from "@/components/dialog";
-import { CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
+import { CardCaption, CardForm, CardBody, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
 import { createSignal, For } from "solid-js";
-import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview, Columns, Group } from "@/components/ui";
+import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview, Columns, Group, Note, Actions } from "@/components/ui";
 import { PROJECTS } from "../seed";
 import { px, rounding, edge, bg, Replay } from "../specs";
 import { typeOf, ConnectionDemo, SwitchDemo } from "../demos";
@@ -38,7 +38,7 @@ export function DecisionDemo() {
       void Promise.all([first, second]).then((values) => setAnswer(JSON.stringify(values)));
     }}>Queue two decisions</Button>
     <Button onClick={async () => { setValid(true); const pending = decisions.confirm("This target expires while open", { valid }); setValid(false); setAnswer(`Expired: ${await pending}`); }}>Try expired target</Button>
-    <CardNote>{answer()}</CardNote><decisions.Host />
+    <Note kind="card">{answer()}</Note><decisions.Host />
   </CardBody>;
 }
 export function ExplorerDemo() {
@@ -51,7 +51,7 @@ export function ExplorerDemo() {
     onPrefetch={() => {}} onMakeWorkspace={() => setResult("Make workspace")} onCreateWorkspace={(path) => setResult(`Create workspace: ${path}`)}
     onOpenWorkspace={(target) => setResult(`Open: ${target.name}`)} onManageWorkspace={(action) => setResult(action)} onStartWorkspaceAction={(action) => setResult(action)}
     onOpenView={(view) => setResult(view)} onOpenFile={(path) => setResult(`Open: ${path}`)} onSelectFolder={() => setResult("Select folder")}
-    onCreateFolder={() => setResult("Create folder")} onCloneRepository={() => setResult("Clone repository")} /><CardNote>{result()}</CardNote></CardBody>;
+    onCreateFolder={() => setResult("Create folder")} onCloneRepository={() => setResult("Clone repository")} /><Note kind="card">{result()}</Note></CardBody>;
 }
 
 /*
@@ -74,12 +74,12 @@ export const cardPage: Page = {
   <CardDetails><dt>Destination</dt><dd>/work/conduit</dd></CardDetails>
   <CardRead>Preparing clone…</CardRead>
 </Card>`,
-  anatomy: { phone: true, spacing: [".ui-card", ".ui-card-actions"], scene: cardScene, parts: [
+  anatomy: { phone: true, spacing: [".ui-card", ".ui-actions[data-actions=card]"], scene: cardScene, parts: [
     { selector: ".ui-card", name: "--card-edge", does: "padding all round, every box meets it (1.25 units)", from: (el) => px(getComputedStyle(el).paddingTop) },
     { selector: ".ui-card > h3", name: "title", does: "the Heading role (--text-body · --weight-strong)", from: typeOf },
     { selector: ".ui-card > p", name: "detail", does: "the Caption role (--text-caption · muted), --card-pair under the title", from: (el) => `${typeOf(el)} · ${px(`${el.getBoundingClientRect().top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} under` },
     { selector: ".ui-card .ui-input", name: "body", does: "the library's Input, its box on the edge, --card-gap from what is above and below", from: (el) => { const card = el.closest<HTMLElement>(".ui-card")!.getBoundingClientRect(); const r = el.getBoundingClientRect(); return `${px(`${r.left - card.left}px`)} / ${px(`${card.right - r.right}px`)} from the sides · ${px(`${r.top - el.previousElementSibling!.getBoundingClientRect().bottom}px`)} gap`; } },
-    { selector: ".ui-card-actions", name: "actions", does: "right-aligned, half a unit apart, each the widest's width", from: (el) => `${px(getComputedStyle(el).columnGap)} apart · ${[...el.children].map((b) => px(`${b.getBoundingClientRect().width}px`)).join(" = ")}` },
+    { selector: ".ui-actions[data-actions=card]", name: "actions", does: "right-aligned, half a unit apart, each the widest's width", from: (el) => `${px(getComputedStyle(el).columnGap)} apart · ${[...el.children].map((b) => px(`${b.getBoundingClientRect().width}px`)).join(" = ")}` },
     { selector: ".ui-card .ui-button[data-variant='ghost']", name: "a secondary action", does: "ghost outline, a --tint hairline", from: edge },
     { selector: ".ui-card .ui-button[data-variant='destructive']", name: "the confirm", does: "destructive, filled red", from: bg },
     { selector: ".ui-card", name: "Corner", does: "--radius-surface; at most 30 units wide (a phone: its width)", from: (el) => `${rounding(el)} · ${px(`${el.getBoundingClientRect().width}px`)} wide` }
@@ -95,7 +95,7 @@ export const cardPage: Page = {
     row("modal", "focus is trapped, Escape or a press on the dim closes; focus returns to the trigger · Kobalte behavior, v2 surface", () => <DialogBehaviorDemo />, { surfaces: ["ground"], phone: true, code: "Dialog > Scrim + Card" }),
     row("modal alert", "a press on the dim does not dismiss a confirmation · Kobalte alert-dialog", () => <DialogBehaviorDemo alert />, { surfaces: ["ground"], phone: true, code: "<Dialog alert>" }),
     row("modal busy", "Escape, the dim and close cannot dismiss while busy; finish releases the dialog · all dismissal paths share the busy guard", () => <DialogBehaviorDemo busy />, { surfaces: ["ground"], phone: true, code: "<Dialog busy>" }),
-    row("shared parts", "forms, actions, notes, paths and previews use the Card's spacing · v2 tokens only", () => <Card title="Shared dialog parts"><CardForm onSubmit={(event) => event.preventDefault()}><CardBody><Field label="Name"><Input value="Example" /></Field><CardRead>src/example.ts</CardRead><CardNote>Supporting text</CardNote><CardPreview><Read>Selected source</Read></CardPreview><CardDetails><dt>Server</dt><dd>Laptop</dd></CardDetails><CardQR svg="" expired /></CardBody><CardActions><Button type="submit">Save</Button></CardActions></CardForm></Card>, { surfaces: ["ground"], phone: true, code: "CardForm · CardBody · CardActions · CardRead · CardNote · CardPreview · CardDetails · CardQR" }),
+    row("shared parts", "forms, actions, notes, paths and previews use the Card's spacing · v2 tokens only", () => <Card title="Shared dialog parts"><CardForm onSubmit={(event) => event.preventDefault()}><CardBody><Field label="Name"><Input value="Example" /></Field><CardRead>src/example.ts</CardRead><Note kind="card">Supporting text</Note><CardPreview><Read>Selected source</Read></CardPreview><CardDetails><dt>Server</dt><dd>Laptop</dd></CardDetails><CardQR svg="" expired /></CardBody><Actions><Button type="submit">Save</Button></Actions></CardForm></Card>, { surfaces: ["ground"], phone: true, code: "CardForm · CardBody · Actions · CardRead · Note · CardPreview · CardDetails · CardQR" }),
     row("title", "a card says what it is about · Heading: --text-body · --weight-strong", () => <Card title="Delete this chat?" />, { surfaces: ["ground"], phone: true, code: "<Card title>" }),
     row("title · detail", "a line --card-pair under the title, only when it asks something of you: never what the title already says · Caption: --text-caption · muted, --card-pair under the title", () => <Card title="Destroy Japan?" detail="Type Japan to confirm." />, { surfaces: ["ground"], phone: true, code: "<Card title detail>" }),
     row("body", "what the card holds: one field, a list, a preview · 1 unit between parts; the Input's well and line are the surface's", () => <Card title="Rename chat"><Input value="Lorem ipsum file" /></Card>, { surfaces: ["ground"], phone: true, code: "<Card title>{children}</Card>" }),
@@ -111,7 +111,7 @@ export const cardPage: Page = {
     row("Attachments", "every file on the draft, opened from the strip: remove one, or all · " + (status()), () => <Card size="wide" title="2 attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><Attachments><For each={files}>{(file) => <Attachment name={file.name} detail={file.detail} icon={file.icon()} onRemove={() => {}} />}</For></Attachments></Card>, { surfaces: ["ground"], phone: true, code: "chat/attachment-strip.tsx" }),
     row("Attachments · tray", "the files a message was sent with, under it in the transcript: each framed, an image a thumbnail, name and detail cut short", () => <Attachments form="tray" label="Attachments"><For each={files}>{(file) => <Attachment name={file.name} detail={file.detail} icon={file.icon()} />}</For></Attachments>, { surfaces: ["ground"], phone: true, code: "chat/attachments.tsx · <Attachments form=\"tray\">" }),
     row("Edit review comment", "the excerpt it is on, and its text · " + (status()), () => <Card size="wide" close title="Edit review comment" detail="src/main.tsx · lines 12–14" actions={<>{cancel()}<Button outline>Save comment</Button></>}><Preview>{"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"}</Preview><TextArea value="This could use the size label helper." /></Card>, { surfaces: ["ground"], phone: true, code: "chat/review-comment-cards.tsx" }),
-    row("Connect", "pair this server as a QR, or add another · " + (status()), () => <Card size="split" close title="Connect"><Columns kind="card"><Group kind="card" title="Pair a device"><div class="g-slot g-qr">QR code</div><CardCaption>laptop.ts.net</CardCaption><CardDetails><dt>Opens on</dt><dd>Tailscale</dd><dt>Code</dt><dd>Single use · 4:52</dd></CardDetails><CardActions><Button variant="ghost">Copy link</Button><Button variant="ghost" outline>New code</Button></CardActions></Group><Group kind="card" title="Add server"><Input aria-label="Server address" placeholder="Address or pair link" /><Button variant="ghost" outline><Icons.QrCode />Scan QR code</Button><Button outline>Connect</Button></Group></Columns></Card>, { surfaces: ["ground"], phone: true, code: "navigation/pair-dialog.tsx · main.tsx (ServerConnectForm)" }),
+    row("Connect", "pair this server as a QR, or add another · " + (status()), () => <Card size="split" close title="Connect"><Columns kind="card"><Group kind="card" title="Pair a device"><div class="g-slot g-qr">QR code</div><CardCaption>laptop.ts.net</CardCaption><CardDetails><dt>Opens on</dt><dd>Tailscale</dd><dt>Code</dt><dd>Single use · 4:52</dd></CardDetails><Actions><Button variant="ghost">Copy link</Button><Button variant="ghost" outline>New code</Button></Actions></Group><Group kind="card" title="Add server"><Input aria-label="Server address" placeholder="Address or pair link" /><Button variant="ghost" outline><Icons.QrCode />Scan QR code</Button><Button outline>Connect</Button></Group></Columns></Card>, { surfaces: ["ground"], phone: true, code: "navigation/pair-dialog.tsx · main.tsx (ServerConnectForm)" }),
     row("Workspace identity", "a short mark or an icon, then its colour · " + (status()), () => <Card size="wide" close title="Workspace identity" actions={<Button outline>Save</Button>}><Segmented label="Kind" value="mark" options={[{ value: "mark", label: "Mark" }, { value: "icon", label: "Icon" }]} onChange={() => {}} /><Field label="Mark"><Input value="JP" /></Field></Card>, { surfaces: ["ground"], phone: true, code: "main.tsx · project/dashboard.tsx (WorkspaceAppearanceEditor)" })
   ],
   motion: [
@@ -123,5 +123,5 @@ export const cardPage: Page = {
     token("--card-pair", "space from title to detail"),
     token("--radius-surface", "card corner")
   ] }],
-  api: ["Card", "Notice", "CardBody", "CardActions", "CardForm", "Columns", "Group", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
+  api: ["Card", "Notice", "CardBody", "Actions", "CardForm", "Columns", "Group", "Note", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
 };

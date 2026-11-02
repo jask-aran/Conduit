@@ -4,10 +4,9 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DashHeader, DropOverlay, Notice, PaneEmpty, RiderActions, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading } from "@/components/ui";
+import { AppShell, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
-import { CardNote as ConnectionNote } from "@/components/ui/card";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/decision-dialog";
 import { Dialog } from "@/components/dialog";
@@ -34,8 +33,8 @@ import { Button, Spinner } from "@/components/ui/controls";
 import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
 import { Header, HeaderCrumb } from "@/components/ui/header";
 import { FileHead } from "@/components/ui/file";
-import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
-import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
+import { FileEmptySide } from "@/components/ui/viewer";
+import { DragPill, DropWash, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
 import { api, apiWhenServed, asList, chatPath, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
@@ -437,8 +436,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     {/* One line, and in the dialog only when it says something the title
         and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
     <Show when={!props.adding && !verifiedOrigin()}>
-      <ConnectionNote>{recordOnly ? "A browser opens another server in a tab of its own."
-        : "HTTPS, unless the server is on this machine or this network."}</ConnectionNote>
+      <Note kind="card">{recordOnly ? "A browser opens another server in a tab of its own."
+        : "HTTPS, unless the server is on this machine or this network."}</Note>
     </Show>
 
     {/*
@@ -458,9 +457,9 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       </ConnectionChoices>
     </Show>
     <Show when={!verifiedOrigin()}>
-      <Show when={canDiscoverServers()} fallback={props.adding ? null : <ConnectionNote>Finding servers on this network needs the Conduit app.</ConnectionNote>}>
+      <Show when={canDiscoverServers()} fallback={props.adding ? null : <Note kind="card">Finding servers on this network needs the Conduit app.</Note>}>
         <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
-        <Show when={found().length} fallback={<Show when={!searching()}><ConnectionNote>Nothing here yet.</ConnectionNote></Show>}>
+        <Show when={found().length} fallback={<Show when={!searching()}><Note kind="card">Nothing here yet.</Note></Show>}>
           <ConnectionChoices>
             <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
           </ConnectionChoices>
@@ -480,7 +479,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       <ConnectionPassword reveal={props.adding} value={password()} onInput={(event) => setPassword(event.currentTarget.value)} busy={submitting()} error={error() || null}
         ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} />
     </Show>
-    <Show when={error() && !(verifiedOrigin() && !recordOnly)}><ConnectionNote error>{error()}</ConnectionNote></Show>
+    <Show when={error() && !(verifiedOrigin() && !recordOnly)}><Note kind="card" tone="error">{error()}</Note></Show>
     <Show when={!verifiedOrigin()}>
       <ConnectionButton type="submit" disabled={submitting() || !address().trim() || check()?.state === "checking"}>
         {submitting() ? "Pairing…" : "Connect"}
@@ -2207,7 +2206,7 @@ function App() {
       const row = [
         ...sidebar.querySelectorAll('[aria-current="page"]'),
         ...sidebar.querySelectorAll("[data-within]"),
-        ...sidebar.querySelectorAll(".ui-row[data-density=nav], .ui-rail-button"),
+        ...sidebar.querySelectorAll(".ui-row[data-density=nav], .ui-icon-button[data-icon-button=rail]"),
       ].find(shown);
       const target = row && (row.matches("button, a") ? row : row.querySelector("button, a"));
       (target as HTMLElement | null | undefined)?.focus({ preventScroll: false });
@@ -3124,11 +3123,11 @@ function App() {
       <Header actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></Header>
       <PaneHome label="Empty pane">
         <header><DashHeader title={greeting()} context={[activeServer()?.name || "Hub", buildLabel(clientBuild)]} /></header>
-        <RiderActions>
+        <Actions kind="rider">
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
           <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
           <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
-        </RiderActions>
+        </Actions>
         <Show when={recent().length}>
           <Group kind="dash" id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
             <For each={recent()}>{(item) => <Row density="list" element="button" lead={<Icons.Chat />} label={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
@@ -3159,7 +3158,7 @@ function App() {
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     return <SheetFill class="pane-terminal">
       <Show when={record()} fallback={<Show when={record() === null}>
-        <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><PaneEmpty>This terminal has ended.</PaneEmpty>
+        <Header actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></Header><Empty>This terminal has ended.</Empty>
       </Show>}>{(found) =>
         <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)}
           onClose={inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
@@ -3289,7 +3288,7 @@ function App() {
     return <SheetFill class="file-viewer-surface" tabIndex={-1}>
       <Show when={entries().length} fallback={<>
         <Header actions={paneTabActions(pane)}><HeaderCrumb title="No file open" /></Header>
-        <FileEmpty role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</FileEmpty>
+        <Empty kind="file" role="status">Open a file from Files, or Ctrl-click one to add it as a tab.</Empty>
       </>}>
         <FileViewer entries={entries()} focused={keyboardPane() === pane ? fileFocus()[String(pane)] ?? 0 : -1} wrap={(side) => sideWrap(pane, side)} onToggleWrap={(side) => toggleSideWrap(pane, side)} commentChatId={focusedChat().loadedId()}
           tabs={(side) => fileSideTabs(pane, side)} paneActions={() => paneTabActions(pane)}
@@ -3302,7 +3301,7 @@ function App() {
                 <PaneTabRow><PaneTabs><PaneTab none lit title="No file open" closeLabel="Close this side" closeTitle="Close this side" onClose={() => closeEmptySide(pane)} /></PaneTabs></PaneTabRow>
                 <Show when={!emptyFirst(pane)}>{paneTabActions(pane)}</Show>
               </FileHead>
-              <FileEmpty role="status">Open a file from Files to show it here.</FileEmpty>
+              <Empty kind="file" role="status">Open a file from Files to show it here.</Empty>
             </FileEmptySide>
           </Show>}
           onFocusEntry={(index) => { focusFileEntry(pane, index); setFilePane(pane); }} onSplit={() => splitFileViewer(pane)} onCloseEntry={async (index) => { const entry = entries()[index]; if (entry) await closeFileTab(pane, index, fileEntryKey(entry)); }}
@@ -4311,7 +4310,7 @@ function App() {
       }}</For>
       <Show when={folded().length}>
         <DropdownMenu modal={false} placement="bottom-end">
-          <MenuControl as={PaneAction} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
+          <MenuControl kind="pane" as={IconButton} label={`${folded().length} more tabs`}><Icons.More /></MenuControl>
           <MenuContent>
             <For each={groups().filter((run) => run.keys.some((key) => folded().includes(key)))}>{(run) =>
               <MenuSection title={options.placeLabel?.(run.keys[0]!)}>
@@ -4508,7 +4507,7 @@ function App() {
                 after that it switches in place, as pane A does -- the surface
                 stays (and keeps focus), its transcript withheld while a live
                 chat opens rather than showing an empty chat's welcome. */}
-            <Show when={mirrorOf(slot)} keyed fallback={<Show when={side.chat.loadedId()} fallback={<PaneEmpty role="status">Loading chat…</PaneEmpty>}>
+            <Show when={mirrorOf(slot)} keyed fallback={<Show when={side.chat.loadedId()} fallback={<Empty role="status">Loading chat…</Empty>}>
             <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project}
               narration={paneNarration(slot)} onNarration={(value) => { const id = slotChatId(slot); if (id) setPaneNarration(slot, id, value); }} {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
@@ -4585,17 +4584,17 @@ function App() {
     showDocked(slot);
   };
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
-    <PaneActions>
-      <Show when={isDocked(pane)}><PaneAction label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></PaneAction></Show>
-      <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></PaneAction>
-    </PaneActions>
+    <Actions kind="pane">
+      <Show when={isDocked(pane)}><IconButton kind="pane" label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></IconButton></Show>
+      <IconButton kind="pane" aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></IconButton>
+    </Actions>
   </Show>;
   const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
-    <PaneActions>
-      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
-      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></PaneAction></Show>
-    </PaneActions>
+    <Actions kind="pane">
+      <Show when={canDock(pane)}><IconButton kind="pane" label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></IconButton></Show>
+      <Show when={swapPartner(pane) !== null}><IconButton kind="pane" aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></IconButton></Show>
+      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><IconButton kind="pane" aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></IconButton></Show>
+    </Actions>
   </Show>;
   /*
    * The URL carries every pane (5f). The path stays pane A's route; `a` is a
@@ -5848,9 +5847,9 @@ function App() {
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
-      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <PaneEmpty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
+      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
-        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : routeKind() === "agent" ? "Loading…" : "Loading chat…"}</PaneEmpty>}>
+        : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : routeKind() === "agent" ? "Loading…" : "Loading chat…"}</Empty>}>
         <Show when={routeKind() === "dashboard"}>
           <AppDashboardPage session={session} place={chatPlace()} tabActions={paneTabActions("main")} tabs={documentTab("main")} keyboardOwner={() => !sideHasKeyboard()} onOpenChat={(target, project) => void openChatFromPage(target, project)}
             onSendDraft={async (prompt) => {

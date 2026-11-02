@@ -2,7 +2,7 @@ import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons } from "@/components/ui";
+import { Icons, Note } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented, Spinner } from "@/components/ui/controls";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
@@ -16,7 +16,7 @@ import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDa
 
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection, MenuRow } from "@/components/menus";
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/menus";
-import { ChangeRow, DashNote, DashPath, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
+import { ChangeRow, DashPath, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { Card, CardDetails, CardRead } from "@/components/ui/card";
 import { Section } from "@/components/ui/popover";
 import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
@@ -473,7 +473,7 @@ export function ProjectDashboard(props: {
           </Card></div>
         </Show>
         <Show when={error() && !cloning()}>
-          <DashNote error><strong>{isWorkspace() ? "This workspace" : "This project"} could not be loaded</strong><span>{error()}</span></DashNote>
+          <Note kind="dash" tone="error"><strong>{isWorkspace() ? "This workspace" : "This project"} could not be loaded</strong><span>{error()}</span></Note>
         </Show>
       </> : undefined}
       composer={cloning() ? undefined : props.composer}

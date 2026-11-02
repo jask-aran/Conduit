@@ -23,7 +23,7 @@
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
-const STOPS = ".ui-rail-button, .ui-row[data-density=nav]:not(.ui-nav-folder), .ui-nav-link";
+const STOPS = ".ui-icon-button[data-icon-button=rail], .ui-row[data-density=nav]:not(.ui-nav-folder), .ui-nav-link";
 // The Conduit / Computer switch in the header, above the rows.
 const SWITCH = ".ui-nav-head .ui-seg button";
 

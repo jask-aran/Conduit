@@ -28,4 +28,3 @@ export function FileEmptySide(props: JSX.HTMLAttributes<HTMLElement> & { focused
   return <section {...rest} class="ui-file ui-file-empty-side" data-focused={local.focused ? "" : undefined} />;
 }
 /** The centred message below an empty side's header. */
-export const FileEmpty = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-file-empty" />;

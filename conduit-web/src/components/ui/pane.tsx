@@ -52,12 +52,7 @@ export function PaneTab(props: {
   </span>;
 }
 
-/** A pane's own controls after its title or tabs (dock, swap, close); a menu's trigger takes PaneAction with `as`. */
-export const PaneActions = (props: { children: JSX.Element }) => <span class="ui-pane-actions">{props.children}</span>;
-export function PaneAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label?: string }) {
-  const [local, rest] = splitProps(props, ["label", "children"]);
-  return <button type="button" tabIndex={-1} aria-label={local.label} title={local.label} {...rest} class="ui-pane-action">{local.children}</button>;
-}
+/** A pane's own controls after its title or tabs (dock, swap, close); a menu's trigger takes IconButton with `as`. */
 
 /** The edge between two panes, or the dock's: a separator you drag (and, for the dock, step with the arrows). */
 export function PaneEdge(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; dock?: boolean; "aria-valuemin"?: number; "aria-valuemax"?: number; "aria-valuenow"?: number }) {
@@ -107,13 +102,11 @@ export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 }
 
 /** What a tool says while it has nothing to show, or is loading: centred, quiet. */
-export const PaneEmpty = (props: { children: JSX.Element; role?: "status" | "alert" }) => <div class="ui-pane-empty" role={props.role}>{props.children}</div>;
 /** PaneHome: what an empty pane shows, centred in it -- a column (a DashHeader, then actions and Groups) holding the
  *  library's own pieces; it only places them. */
 export const PaneHome = (props: { label: string; children: JSX.Element }) =>
   <section class="ui-pane-home" aria-label={props.label}><div class="ui-pane-home-column">{props.children}</div></section>;
 /** Loading, at the corner of what it loads into: a frost capsule with a spinner. */
-export const PaneLoading = (props: { children: JSX.Element }) => <Frost class="ui-pane-loading" role="status">{props.children}</Frost>;
 
 /** A strip of a tool's controls (the file tree's filter, its actions; a folded tree's rail): small icon buttons on a
  *  hairline. edge: which side the hairline is on. vertical: a rail. */
@@ -122,10 +115,6 @@ export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (ele
   return <div {...rest} class="ui-tool-bar" data-edge={local.edge ?? "bottom"} data-vertical={local.vertical ? "" : undefined} />;
 }
 /** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
-export function ToolButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label?: string }) {
-  const [local, rest] = splitProps(props, ["label", "children"]);
-  return <button type="button" aria-label={local.label} title={local.label} {...rest} class="ui-tool-button">{local.children}</button>;
-}
 /** A filter field in a ToolBar: the search mark, then the field. */
 export function ToolFilter(props: JSX.InputHTMLAttributes<HTMLInputElement> & { ref?: (element: HTMLInputElement) => void }) {
   return <label class="ui-tool-filter"><Icons.Search /><input type="search" {...props} /></label>;

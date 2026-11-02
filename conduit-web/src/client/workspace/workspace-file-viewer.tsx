@@ -1,11 +1,10 @@
-import { Icons } from "@/components/ui";
+import { Icons, Empty, IconButton } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 
 import { MenuRow } from "@/components/menus";
-import { FileViewer as Viewer, FileButton } from "@/components/ui/file";
+import { FileViewer as Viewer } from "@/components/ui/file";
 import { FileDivider, FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
-import { PaneEmpty } from "@/components/ui/pane";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { toast } from "@/components/notifications";
 import { api } from "../api/client";
@@ -210,7 +209,7 @@ export default function FileViewer(props: {
     divider.addEventListener("pointercancel", end);
     event.preventDefault();
   };
-  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><FileButton type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></FileButton></Show>;
+  const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><IconButton kind="file" type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></IconButton></Show>;
   return <Viewer ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
@@ -275,14 +274,14 @@ function ChangesEntry(props: {
   props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, reload: async () => { await refetch(); }, edit: () => props.onSetMode(undefined), save: async () => {}, discardChanges: () => {} });
   const other = () => props.mode === "changes" ? (hasStaged(props.status) ? "staged" as const : null) : (hasUnstaged(props.status) ? "changes" as const : null);
   const actions = <>
-    <FileButton type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><Icons.FileText /></FileButton>
-    <Show when={other()}>{(next) => <FileButton type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <Icons.GitCompareArrows /> : <Icons.FileDiff />}</FileButton>}</Show>
+    <IconButton kind="file" type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><Icons.FileText /></IconButton>
+    <Show when={other()}>{(next) => <IconButton kind="file" type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <Icons.GitCompareArrows /> : <Icons.FileDiff />}</IconButton>}</Show>
     {props.split}
-    <Show when={!props.tabs}><FileButton type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><Icons.Close /></FileButton></Show>
+    <Show when={!props.tabs}><IconButton kind="file" type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><Icons.Close /></IconButton></Show>
   </>;
   return <FileChanges tabIndex={-1} focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>
-      <Show when={comparison()} fallback={<PaneEmpty>{comparison.loading ? "Loading changes…" : "No changes to show."}</PaneEmpty>}>{(payload) =>
+      <Show when={comparison()} fallback={<Empty>{comparison.loading ? "Loading changes…" : "No changes to show."}</Empty>}>{(payload) =>
         <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}
           headerAction={<><FileScope>{props.mode === "staged" ? "Staged" : "Changes"}</FileScope>{actions}</>} headerTabs={props.tabs} headerEnd={props.end} />
       }</Show>

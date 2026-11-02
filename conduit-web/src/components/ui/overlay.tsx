@@ -5,6 +5,7 @@ import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
 import { cssTime, type Density, type Motion, motionOf, moveCursor } from "./shared";
+import { Actions } from "./actions";
 
 /*
  * Overlay: raised frost over a dimmed page -- the app's large surfaces (the
@@ -96,7 +97,6 @@ export function OverlayList(props: JSX.HTMLAttributes<HTMLDivElement> & { manage
   return <div role="listbox" {...rest} class="ui-overlay-list" onPointerOver={local.managed ? undefined : moveCursor}>{local.children}</div>;
 }
 /** In place of a list's rows: nothing matched, nothing yet. */
-export const OverlayEmpty = (props: { children: JSX.Element }) => <p class="ui-overlay-empty">{props.children}</p>;
 
 /** A list beside an aside (a preview of what the list has selected). */
 /** aside: optional, so a preview that can be hidden (chat search's Ctrl+P) leaves the list the whole width. */
@@ -117,9 +117,9 @@ export function OverlayHints(props: { start: Hint[]; end?: Hint[]; count?: strin
 
 /** On a phone the keys mean nothing: the hints give way to a bar of the view's actions, as buttons. */
 export type OverlayAction = { label: string; onClick: () => void; disabled?: boolean; destructive?: boolean };
-export const OverlayActions = (props: { actions: OverlayAction[] }) => <div class="ui-overlay-actions">
+export const OverlayActions = (props: { actions: OverlayAction[] }) => <Actions kind="overlay">
   <For each={props.actions}>{(action) => <Button variant={action.destructive ? "destructive" : "ghost"} outline disabled={action.disabled} onClick={() => action.onClick()}>{action.label}</Button>}</For>
-</div>;
+</Actions>;
 
 /** A rail of sections down the side: a title, NavGroups, and a foot. onClose: when it is a screen of its own (a phone's), its close.
  *  The rest goes on the nav: a behaviour's roles and keys (Settings' tablist). */
@@ -198,7 +198,6 @@ export const SettingTitle = (props: { value: string; label: string; editable?: b
 /** A group's lines in columns, as many as the room holds, a hairline between: This device's clients beside its workspaces. */
 /** One column of lines, under a label in the group's voice (so its edge is the lines' edge). */
 /** What can be done with a group's subject, a row of small buttons at the lines' edge, wrapping as they must. */
-export const SettingActions = (props: { children: JSX.Element }) => <div class="ui-setting-actions" role="group">{props.children}</div>;
 
 /** A setting: its name (state that matters muted after it), then its control in the one control column.
  *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
@@ -263,13 +262,11 @@ export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) =
 /** A link out, as a setting's control: Docs, Open sign-in. */
 export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
 /** A line under a setting: what went wrong (error), or a quiet note. */
-export const SettingNote = (props: { tone?: "quiet" | "error"; children: JSX.Element }) => <p class="ui-setting-note" data-tone={props.tone ?? "quiet"} role={props.tone === "error" ? "alert" : undefined}>{props.children}</p>;
 /** More about a setting, folded under it until asked for. */
 export const SettingDetails = (props: { summary: string; children: JSX.Element }) => <details class="ui-setting-details"><summary>{props.summary}</summary>{props.children}</details>;
 /** Something a setting needs the page's width for: a prompt's text, a download's progress. */
 export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-setting-wide">{props.children}</div>;
 /** Waiting on what a page shows. */
-export const SettingLoading = (props: { children: JSX.Element }) => <div class="ui-setting-loading"><Spinner />{props.children}</div>;
 
 /*
  * Glance: what chat search's cursor rests on, told apart without opening it -- a chat's title and
@@ -290,7 +287,6 @@ export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?:
 export const GlanceAnswer = (props: { html?: string; children?: JSX.Element }) => props.html !== undefined
   ? <div class="ui-glance-answer" data-math="" innerHTML={props.html} />
   : <p class="ui-glance-answer">{props.children}</p>;
-export const GlanceEmpty = (props: { children: JSX.Element }) => <p class="ui-glance-empty">{props.children}</p>;
 
 /** An overlay's head without a field: what it is about (the leader's key and path). */
 export const OverlayHead = (props: { children: JSX.Element }) => <div class="ui-overlay-bar" data-head>{props.children}</div>;

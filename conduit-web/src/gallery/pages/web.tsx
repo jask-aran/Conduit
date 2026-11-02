@@ -1,6 +1,6 @@
 // Web: a page in a pane -- the hub's browser (roadmap #7). The bar, then the live screen in each of its states.
 import { onMount } from "solid-js";
-import { Icons, ToolBar, ToolButton, WebAddress, WebScreen, WebView } from "@/components/ui";
+import { Icons, ToolBar, WebAddress, WebScreen, WebView, IconButton } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 /** A stand-in frame, drawn as the stream would: a light page with a heading, a field and a link. */
@@ -21,9 +21,9 @@ function Demo(props: { live?: boolean; state?: string; tone?: "error"; address?:
   return <div style={{ display: "flex", height: "calc(18 * var(--u-space))", width: "min(100%, calc(32 * var(--u-space)))", "border-radius": "var(--radius-surface)", overflow: "hidden", background: "var(--background)" }}>
     <WebView label="Hub browser">
       <ToolBar>
-        <ToolButton label="Back"><Icons.Back /></ToolButton>
-        <ToolButton label="Forward"><Icons.Forward /></ToolButton>
-        <ToolButton label="Reload"><Icons.Refresh /></ToolButton>
+        <IconButton label="Back"><Icons.Back /></IconButton>
+        <IconButton label="Forward"><Icons.Forward /></IconButton>
+        <IconButton label="Reload"><Icons.Refresh /></IconButton>
         <WebAddress aria-label="Address" placeholder="Search or type an address" value={props.address ?? ""} secure={(props.address ?? "").startsWith("https://")} />
       </ToolBar>
       <WebScreen canvas={(element) => { canvas = element; }} live={props.live} state={props.state} tone={props.tone} aria-label="Page" />
@@ -35,14 +35,14 @@ export const webPage: Page = {
   title: "Web",
   summary: "A web page in a pane: the hub's browser, shared by the person and Conduit's agents. Its bar is the Pane family's ToolBar (back, forward, reload as ToolButtons) with the WebAddress -- the address in the data face, a lock when it is https -- and under it the WebScreen, the page drawn live onto its canvas, whole and from the top, taking the pointer and the keys once focused. While there is no frame it says why over the ground: starting, reconnecting, or (error) that the hub has no browser.",
   preview: () => <Demo live address="https://www.japan-guide.com/e/e5950.html" />,
-  usage: `import { ToolBar, ToolButton, WebAddress, WebScreen, WebView } from "@/components/ui";
+  usage: `import { ToolBar, IconButton, WebAddress, WebScreen, WebView } from "@/components/ui";
 
 <WebView label="Hub browser">
-  <ToolBar><ToolButton label="Back"><Icons.Back /></ToolButton>…<WebAddress value={url} secure onKeyDown={go} /></ToolBar>
+  <ToolBar><IconButton label="Back"><Icons.Back /></IconButton>…<WebAddress value={url} secure onKeyDown={go} /></ToolBar>
   <WebScreen canvas={(element) => canvas = element} live={live()} state={why()} tone="error" onPointerDown… />
 </WebView>`,
   anatomy: { scene: () => <Demo live address="https://www.japan-guide.com/e/e5950.html" />, parts: [
-    { selector: ".ui-tool-bar", name: "Bar", does: "back, forward, reload and the address", from: "ToolBar, ToolButton" },
+    { selector: ".ui-tool-bar", name: "Bar", does: "back, forward, reload and the address", from: "ToolBar, IconButton" },
     { selector: ".ui-web-address", name: "Address", does: "where the page is; edited in place, Enter goes there", from: "WebAddress secure" },
     { selector: ".ui-web-screen", name: "Screen", does: "the page drawn live; takes the pointer and the keys", from: "WebScreen canvas live", side: "below" },
   ] },

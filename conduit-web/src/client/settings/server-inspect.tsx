@@ -1,9 +1,9 @@
 import { createSignal, For, onCleanup, Show } from "solid-js";
-import { Icons } from "@/components/ui";
+import { Icons, Note } from "@/components/ui";
 import { buildHttpUrl } from "../api/transport";
 import { api } from "../api/client.ts";
 import { Button, Input, Switch } from "@/components/ui/controls";
-import { SettingLine, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { SettingLine, SettingValue } from "@/components/ui/overlay";
 import { clearNativeBearerToken } from "../api/native-auth-client.ts";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { saveServerDirectory } from "../platform/server-directory.ts";
@@ -121,7 +121,7 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
       <SettingLine label="Name" title="The server's name, for every client and on the network.">
         <Input aria-label={`Name of ${props.entry.name}`} value={props.entry.name} onChange={(event) => void rename(event.currentTarget.value)} />
       </SettingLine>
-      <Show when={renameError()}><SettingNote tone="error">{renameError()}</SettingNote></Show>
+      <Show when={renameError()}><Note tone="error">{renameError()}</Note></Show>
     </Show>
     <SettingLine label="Share with other clients">
       <Switch label={`Share ${props.entry.name} with other clients`} checked={props.entry.shared} onChange={(shared) => void share(shared)} />

@@ -1,8 +1,7 @@
-import { Icons } from "@/components/ui";
+import { Icons, IconButton } from "@/components/ui";
 import { For, Show } from "solid-js";
 import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { RailButton } from "@/components/ui/nav";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
@@ -67,12 +66,12 @@ export function WorkspaceRail(props: {
   onToggleDockOverlay: () => void;
 }) {
   const foot = () => <>
-    <Show when={props.tools}><RailButton tabIndex={-1} aria-pressed={props.dockOverlay} data-open={props.dockOverlay ? "" : undefined}
-      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Icons.Workspace /></RailButton></Show>
+    <Show when={props.tools}><IconButton kind="rail" tabIndex={-1} aria-pressed={props.dockOverlay} data-open={props.dockOverlay ? "" : undefined}
+      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Icons.Workspace /></IconButton></Show>
     <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <>
-      <RailButton tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></RailButton>
+      <IconButton kind="rail" tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></IconButton>
       <DropdownMenu modal={false} placement="left-end">
-        <MenuControl as={RailButton} tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuControl>
+        <MenuControl kind="rail" as={IconButton} tabIndex={-1} aria-label="Pane layouts" title="Pane layouts"><LayoutTemplateIcon /></MenuControl>
         <MenuContent>
           <MenuSection title="Pane widths">
             <For each={layouts()}>{(weights) =>
@@ -92,22 +91,22 @@ export function WorkspaceRail(props: {
       const Icon = WORKSPACE_TOOL_ICONS[tool];
       const disabled = () => tool === "diff" && !props.sourceControlEnabled;
       const label = () => disabled() ? "Source Control is available only for Git workspaces" : WORKSPACE_TOOL_LABELS[tool];
-      return <RailButton tabIndex={-1} data-tool={tool} draggable={!disabled()} data-doc-view={tool === "terminal" ? "tool:terminal" : tool} disabled={disabled()}
+      return <IconButton kind="rail" tabIndex={-1} data-tool={tool} draggable={!disabled()} data-doc-view={tool === "terminal" ? "tool:terminal" : tool} disabled={disabled()}
         aria-label={WORKSPACE_TOOL_LABELS[tool]} title={label()} current={props.current === tool}
         data-open={props.inSplit === tool ? "" : undefined}
-        onClick={() => props.onChoose(tool)}><Icon /></RailButton>;
+        onClick={() => props.onChoose(tool)}><Icon /></IconButton>;
     }}</For>
     <RailRule /></Show>
     <Show when={props.docked.length}>
       <For each={props.docked}>{(doc) => {
         const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : Icons.FileText;
-        return <RailButton tabIndex={-1} draggable={true} data-doc-view={doc.view}
+        return <IconButton kind="rail" tabIndex={-1} draggable={true} data-doc-view={doc.view}
           aria-label={`${doc.name} (docked)`} title={doc.name} current={props.currentDocked === doc.slot}
-          onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></RailButton>;
+          onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></IconButton>;
       }}</For>
       <RailRule />
     </Show>
-    <RailButton tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></RailButton>
-    <RailButton tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></RailButton>
+    <IconButton kind="rail" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></IconButton>
+    <IconButton kind="rail" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></IconButton>
   </ToolRail>;
 }

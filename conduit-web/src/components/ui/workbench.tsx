@@ -1,4 +1,5 @@
 import { Show, type JSX } from "solid-js";
+import { Note } from "./state";
 
 /*
  * A workbench: a page that works on one thing at a time (Settings › Prompts: a document; Blocks: a block). Its title
@@ -11,7 +12,7 @@ export const Workbench = (props: { label: string; children: JSX.Element }) => <d
 /** title: the thing worked on, a Select look="title" to choose another. actions: icon buttons beside it. meta: what it is. */
 export const WorkbenchTitle = (props: { title: JSX.Element; actions?: JSX.Element; meta?: string }) => <header class="ui-workbench-title">
   <div class="ui-workbench-title-line">{props.title}<Show when={props.actions}><span class="ui-workbench-actions">{props.actions}</span></Show></div>
-  <Show when={props.meta}><p class="ui-workbench-meta">{props.meta}</p></Show>
+  <Show when={props.meta}><Note kind="workbench">{props.meta}</Note></Show>
 </header>;
 /** The side column beside the main pane: side by side, one line, each column scrolling on its own. */
 export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element }) => <div class="ui-workbench-split">
@@ -25,7 +26,6 @@ export const WorkbenchFact = (props: { name: string; value?: string; title?: str
 </div>;
 
 /** A quiet line in a Group or under a title: what there is none of, or what follows (Conduit then adds…). */
-export const WorkbenchNote = (props: { children: JSX.Element }) => <p class="ui-workbench-meta">{props.children}</p>;
 
 /*
  * A TextEditor's head (its `head` slot), here rather than with the editor so a page can draw it without loading
@@ -33,4 +33,3 @@ export const WorkbenchNote = (props: { children: JSX.Element }) => <p class="ui-
  */
 export const TextEditorTitle = (props: { live?: boolean; children: JSX.Element }) =>
   <span class="ui-text-editor-title" data-live={props.live ? "" : undefined}>{props.children}</span>;
-export const TextEditorActions = (props: { children: JSX.Element }) => <span class="ui-text-editor-actions">{props.children}</span>;

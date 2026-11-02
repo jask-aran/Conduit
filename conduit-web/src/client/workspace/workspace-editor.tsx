@@ -1,5 +1,5 @@
-import { Icons } from "@/components/ui";
-import { FileButton, FileHead, FileTools, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
+import { Icons, Actions, IconButton } from "@/components/ui";
+import { FileHead, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { CodeSurface, CodeContent, CodeHost } from "@/components/ui/editor";
 import { annotationExtension, commentHighlightsExtension, commentRange, WorkspaceAnnotationPopup, type AnnotationSelection, type CommentHighlight } from "./workspace-annotate";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
@@ -370,10 +370,10 @@ export default function WorkspaceEditor(props: {
   return <CodeSurface editable={editable()}>
     <FileHead>
       {props.header}
-      <FileTools>
-        <FileButton data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><Icons.Search /></FileButton>
-        <FileButton inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><Icons.WrapText /></FileButton>
-      </FileTools>
+      <Actions kind="tools">
+        <IconButton kind="file" data-fold="2" aria-label="Find or replace" title="Find or replace (Ctrl+F)" onClick={() => runCommand(openSearchPanel)}><Icons.Search /></IconButton>
+        <IconButton kind="file" inMenu aria-label={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} aria-pressed={props.wrap} title={props.wrap ? "Disable line wrapping" : "Enable line wrapping"} onClick={props.onToggleWrap}><Icons.WrapText /></IconButton>
+      </Actions>
     </FileHead>
     <CodeContent>
       <CodeHost ref={(element) => { host = element; }} data-markdown={isVisualMarkdownFile(props.path)} data-wrap={props.wrap} />
@@ -386,8 +386,8 @@ export default function WorkspaceEditor(props: {
         </StatusPicker>
       </Show>
       <Show when={editable()}>
-        <FileButton aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Icons.Undo /></FileButton>
-        <FileButton aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></FileButton>
+        <IconButton kind="file" aria-label="Undo" title="Undo" disabled={!canUndo()} onClick={() => runEditCommand(undo)}><Icons.Undo /></IconButton>
+        <IconButton kind="file" aria-label="Redo" title="Redo" disabled={!canRedo()} onClick={() => runEditCommand(redo)}><Redo2Icon /></IconButton>
       </Show>
       <DropdownMenu>
         <MenuControl as={StatusPicker} icon={<Icons.ChevronDown />} aria-label={`Indentation ${indentationLabel(indentation())}`} title="Indentation">
@@ -423,7 +423,7 @@ export default function WorkspaceEditor(props: {
       </DropdownMenu>
     </>}>
       <StatusText><span title={props.statusTitle ?? props.statusText}>{props.statusText}</span></StatusText>
-      <FileButton wide type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</FileButton>
+      <IconButton kind="file" wide type="button" ref={positionLabel} aria-label="Go to line" title="Go to line (Alt+G)" onClick={() => runCommand(gotoLine)}>Ln 1, Col 1</IconButton>
     </StatusBar>
   </CodeSurface>;
 }

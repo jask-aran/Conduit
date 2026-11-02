@@ -1,11 +1,11 @@
 import * as Icons from "./icons";
-import { FileButton } from "./file";
 import { SearchBar, SearchActions, SearchField, searchPanelClass } from "./editor";
 import { SearchQuery, closeSearchPanel, findNext, findPrevious, getSearchQuery, replaceAll, replaceNext, setSearchQuery } from "@codemirror/search";
 import type { EditorView, Panel, ViewUpdate } from "@codemirror/view";
 import { CaseSensitiveIcon, ChevronUpIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
 import { createSignal, Show, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
+import { IconButton } from "./actions";
 
 
 function nextQuery(query: SearchQuery, change: Partial<Pick<SearchQuery, "search" | "replace" | "caseSensitive" | "regexp" | "wholeWord">>) {
@@ -63,16 +63,16 @@ function WorkspaceSearchControls(props: {
       />
     </Show>
     <SearchActions>
-      <FileButton aria-label="Previous match" title="Previous match (Shift+Enter)" onClick={() => run(findPrevious)}><ChevronUpIcon /></FileButton>
-      <FileButton aria-label="Next match" title="Next match (Enter)" onClick={() => run(findNext)}><Icons.ChevronDown /></FileButton>
-      <FileButton aria-label="Match case" title="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></FileButton>
-      <FileButton aria-label="Use regular expression" title="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></FileButton>
-      <FileButton aria-label="Match whole word" title="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></FileButton>
+      <IconButton kind="file" aria-label="Previous match" title="Previous match (Shift+Enter)" onClick={() => run(findPrevious)}><ChevronUpIcon /></IconButton>
+      <IconButton kind="file" aria-label="Next match" title="Next match (Enter)" onClick={() => run(findNext)}><Icons.ChevronDown /></IconButton>
+      <IconButton kind="file" aria-label="Match case" title="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></IconButton>
+      <IconButton kind="file" aria-label="Use regular expression" title="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></IconButton>
+      <IconButton kind="file" aria-label="Match whole word" title="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></IconButton>
       <Show when={props.editable()}>
-        <FileButton aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></FileButton>
-        <FileButton aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></FileButton>
+        <IconButton kind="file" aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></IconButton>
+        <IconButton kind="file" aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></IconButton>
       </Show>
-      <FileButton aria-label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)}><Icons.Close /></FileButton>
+      <IconButton kind="file" aria-label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)}><Icons.Close /></IconButton>
     </SearchActions>
   </SearchBar>;
 }

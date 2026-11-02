@@ -1,8 +1,9 @@
 import { For, Show } from "solid-js";
 import { Button, Progress, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/menus";
-import { SettingLine, SettingNote, SettingWide } from "@/components/ui/overlay";
+import { SettingLine, SettingWide } from "@/components/ui/overlay";
 import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
+import { Note } from "@/components/ui/state";
 
 type CatalogueModel = VoiceExecutionCatalogueView["models"][number];
 type CatalogueArtifact = VoiceExecutionCatalogueView["artifacts"][number];
@@ -144,7 +145,7 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
         </Show>
       </SettingLine>
       <Show when={props.installProgress}>{(progress) => <SettingWide><Progress label="Model files" max={Math.max(1, progress().totalBytes)} value={progress().completedBytes} /></SettingWide>}</Show>
-      <Show when={props.selectedLocalModel?.error}><SettingNote tone="error">{props.selectedLocalModel!.error}</SettingNote></Show>
+      <Show when={props.selectedLocalModel?.error}><Note tone="error">{props.selectedLocalModel!.error}</Note></Show>
     </>}</Show>
   </>;
 }

@@ -1,7 +1,8 @@
 import { createSignal, onCleanup, Show } from "solid-js";
 import { Dialog } from "./dialog";
-import { CardActions, CardForm } from "./ui/card";
+import { CardForm } from "./ui/card";
 import { Button, Input } from "./ui/controls";
+import { Actions } from "@/components/ui/actions";
 
 type Options = { confirmLabel?: string; destructive?: boolean; valid?: () => boolean };
 type Request = { message: string; options: Options } & (
@@ -38,10 +39,10 @@ export function createDecisionDialogs() {
       }} onAfterClose={finish}>
       <CardForm onSubmit={(event) => { event.preventDefault(); close(true); }}>
         <Show when={props.request.kind === "prompt"}><Input aria-label={props.request.message} ref={input} value={value()} onInput={(event) => setValue(event.currentTarget.value)} /></Show>
-        <CardActions>
+        <Actions>
           <Button variant="ghost" outline autofocus={props.request.kind === "confirm"} onClick={() => close(false)}>Cancel</Button>
           <Button type="submit" variant={props.request.options.destructive ? "destructive" : "primary"}>{props.request.options.confirmLabel ?? (props.request.kind === "prompt" ? "Save" : "Continue")}</Button>
-        </CardActions>
+        </Actions>
       </CardForm>
     </Dialog>;
   }

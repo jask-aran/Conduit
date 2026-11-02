@@ -91,5 +91,5 @@ export const desktopComposerPage: Page = {
             <ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>}</Replay>, { surfaces: ["ground"], code: "<DesktopComposer takeover>" }),
   ],
   tokens: COMPOSER_SIZES.map((group) => ({ title: group.title, tokens: group.rows })),
-  api: ["DesktopComposer", "Rider", "RiderTitle", "Lines", "Line", "RiderActions", "Chips", "Chip", "VoiceRider", "ComposerField", "TextArea", "Completion", "Toolbar", "Button", "Gauge", "Picker", "HarnessMark", "Spinner", "StopGlyph", "Swatch", "Choices", "Choice"],
+  api: ["DesktopComposer", "Rider", "RiderTitle", "Lines", "Line", "Actions", "Chips", "Chip", "VoiceRider", "ComposerField", "TextArea", "Completion", "Toolbar", "Button", "Gauge", "Picker", "HarnessMark", "Spinner", "StopGlyph", "Swatch", "Choices", "Choice"],
 };

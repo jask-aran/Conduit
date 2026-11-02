@@ -64,7 +64,6 @@ export function NavFolder(props: { open: boolean; row: JSX.Element; children: JS
 export const NavLead = (props: { server: JSX.Element; actions: JSX.Element; children?: JSX.Element }) =>
   <div class="ui-nav-lead"><div class="ui-nav-lead-line">{props.server}<div class="ui-nav-lead-actions">{props.actions}</div></div>{props.children}</div>;
 
-export const NavNote = (props: { children: JSX.Element }) => <div class="ui-nav-note">{props.children}</div>;
 
 /** Rows that have not arrived: the shape of a list, still. */
 export const NavSkeleton = (props: { rows: number }) => <div class="ui-nav-skeleton" role="status" aria-label="Loading">
@@ -75,10 +74,6 @@ export const NavSkeleton = (props: { rows: number }) => <div class="ui-nav-skele
 export const NavRail = (props: { label: string; children: JSX.Element }) => <div class="ui-nav-rail" aria-label={props.label}>{props.children}</div>;
 export const NavRailSection = (props: { children: JSX.Element }) => <div class="ui-nav-rail-section">{props.children}</div>;
 /** One of the rail's buttons: an icon; current as a row is; live: a dot at its corner (something works there). */
-export function RailButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { current?: boolean; live?: boolean }) {
-  const [local, rest] = splitProps(props, ["current", "live", "class"]);
-  return <button type="button" {...rest} class="ui-rail-button" aria-current={local.current ? "page" : undefined} data-live={local.live ? "" : undefined} />;
-}
 
 /** A state the app is in about itself, above the foot's server (an update): an icon, a line, one action. ready: it waits on a person, so it reads at full strength. */
 export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void; quiet?: boolean }; children: JSX.Element }) {

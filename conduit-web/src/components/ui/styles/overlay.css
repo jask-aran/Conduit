@@ -47,9 +47,9 @@
 .ui-overlay-hints button:is(:focus-visible) { outline: none; background: var(--tint); }
 @media (hover: hover) { .ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); } }
 .ui-overlay-hints > b { color: var(--foreground); font-weight: var(--weight-strong); white-space: nowrap; }
-.ui-overlay-empty { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
+.ui-empty:where([data-empty="overlay"]) { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
 /* The phone's bar of actions, in the hints' place: a desktop has the hints. */
-.ui-overlay-actions { display: none; }
+.ui-actions:where([data-actions="overlay"]) { display: none; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
 /* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
@@ -82,8 +82,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-columns:where([data-group="setting"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
 .ui-group:where([data-group="column"]) { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
 .ui-group:where([data-group="column"]) + .ui-group:where([data-group="column"])::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
-.ui-setting-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
-.ui-setting-actions > .ui-button { white-space: nowrap; }
+.ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
+.ui-actions:where([data-actions="setting"]) > .ui-button { white-space: nowrap; }
 .ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
@@ -126,8 +126,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-link { white-space: nowrap; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
 .ui-setting-link:is(:focus-visible) { outline: none; color: var(--foreground); }
 @media (hover: hover) { .ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
-.ui-setting-note { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-setting-note[data-tone="error"] { color: var(--destructive); }
+.ui-note:where([data-note="setting"]) { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-note:where([data-note="setting"])[data-tone="error"] { color: var(--destructive); }
 .ui-setting-details { padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
 .ui-setting-details > summary { width: fit-content; list-style: none; cursor: pointer; }
 .ui-setting-details > summary::-webkit-details-marker { display: none; }
@@ -137,13 +137,13 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
 /* A command or a name in a note (set a password with …): the data face, as in details. */
-.ui-setting-note code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
+.ui-note:where([data-note="setting"]) code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
 /* Source text (a prompt): in the code face, so its own line breaks read as meant, and a measure tall at most, scrolling
    inside itself rather than making the page as long as the text. */
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
-.ui-setting-loading { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-loading:where([data-loading="setting"]) { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 /* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
 .ui-overlay-page-head > .ui-overlay-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-overlay-status { display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-row); }
@@ -161,8 +161,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 [data-density="phone"] .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
 [data-density="phone"] .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
 [data-density="phone"] .ui-overlay-hints { display: none; }
-[data-density="phone"] .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
-[data-density="phone"] .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
+[data-density="phone"] .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
+[data-density="phone"] .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
 /* The app's phone: a palette's dialog (pinned to the top) fills the screen inside the safe area; a centred one keeps its inset. */
 @media (--conduit-phone-layout) {
   .ui-scrim[data-dialog][data-placement="top"] { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
@@ -174,8 +174,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
   .ui-scrim .ui-setting-line { column-gap: var(--space-lg); }
   .ui-scrim .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
   .ui-scrim .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
-  .ui-scrim .ui-overlay-actions { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
-  .ui-scrim .ui-overlay-actions > .ui-button { min-height: var(--control-lg); flex: 1; }
+  .ui-scrim .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
+  .ui-scrim .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
 }
 
 /* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
@@ -196,7 +196,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
-.ui-glance-empty { margin: 0; padding-top: var(--space-4xl); text-align: center; }
+.ui-empty:where([data-empty="glance"]) { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
 
 /* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */

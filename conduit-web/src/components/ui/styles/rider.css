@@ -19,12 +19,12 @@
 .ui-frost.ui-rider[data-layout="card"] { display: grid; width: 100%; gap: var(--space-sm); margin-inline: auto; padding: var(--space-md); outline: 0; }
 .ui-rider-mark { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-rider-mark > svg { width: 100%; height: 100%; }
-.ui-rider-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-rider-actions[data-stack] { flex-direction: column; }
-:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
-:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
-@media (hover: hover) { :is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); } }
-:is(.ui-rider-actions, .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
+.ui-actions:where([data-actions="rider"]) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-actions:where([data-actions="rider"])[data-stack] { flex-direction: column; }
+:is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
+:is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
+@media (hover: hover) { :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); } }
+:is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
 
 /* Lines: text that waits (the queued messages), one line each until opened. */
 .ui-lines { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }

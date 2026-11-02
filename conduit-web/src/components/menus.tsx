@@ -5,6 +5,7 @@ import type { FocusOutsideEvent } from "@kobalte/core";
 import { createContext, createEffect, Index, Show, type ValidComponent, createMemo, createSignal, createUniqueId, For, on, onCleanup, onMount, splitProps, useContext, type ComponentProps, type JSX, type ParentProps } from "solid-js";
 import { haptic } from "./ui/haptics";
 import { createFullscreenPortalMount } from "./portal";
+import { Note } from "@/components/ui/state";
 
 /*
  * Row menus wait for the first open to have been shown. Every chat, folder and project row carries a context menu, and
@@ -15,7 +16,7 @@ import { createFullscreenPortalMount } from "./portal";
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
-import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, MenuNote, SearchSection } from "./ui/popover";
+import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, SearchSection } from "./ui/popover";
 import { Button, SelectTrigger, SliderValue } from "./ui/controls";
 import { PillButton } from "./ui/pill";
 // Both are measured once and kept until the window or the Interface size changes: Kobalte reads them on every position
@@ -253,7 +254,7 @@ export function SearchList<T>(props: {
     <SearchSection placeholder={props.placeholder} value={query()} onInput={setQuery}
       field={{ role: "combobox", "aria-expanded": true, "aria-controls": `${id}-list`, "aria-activedescendant": active() >= 0 ? `${id}-${active()}` : undefined, onKeyDown, autofocus: true }} />
     <Section id={`${id}-list`} role="listbox" ref={list} scroll>
-      <For each={rows()} fallback={<MenuNote>{props.empty ?? "No matches."}</MenuNote>}>{(item, index) => {
+      <For each={rows()} fallback={<Note kind="menu">{props.empty ?? "No matches."}</Note>}>{(item, index) => {
         const row = props.row(item);
         return <Item role="option" id={`${id}-${index()}`} tabIndex={-1} aria-selected={active() === index()} active={active() === index()} checked={props.isCurrent?.(item) || undefined}
           icon={row.icon} meta={row.meta} title={row.title} onCursor={() => setActive(index())} onClick={() => props.onChoose(item)}>{row.label}</Item>;

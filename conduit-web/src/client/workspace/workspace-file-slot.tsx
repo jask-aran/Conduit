@@ -1,9 +1,9 @@
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { FileView, FileHead, FileName, FileGit, FileDirty, FileActions, FileSuffix, FileButton, FileMore, StatusBar, StatusText } from "@/components/ui/file";
+import { FileView, FileHead, FileName, FileGit, FileDirty, FileSuffix, FileMore, StatusBar, StatusText } from "@/components/ui/file";
 import { FileImage, FileMedia, FileCard, FileBody } from "@/components/ui/viewer";
-import { PaneEmpty, ToolNotice } from "@/components/ui/pane";
-import { Spinner } from "@/components/ui";
+import { ToolNotice } from "@/components/ui/pane";
+import { Spinner, Empty, Actions, IconButton } from "@/components/ui";
 import { Button } from "@/components/ui/controls";
 import { Rule } from "@/components/ui/popover";
 import { batch, createEffect, createSignal, lazy, on, onCleanup, Show, Suspense, type JSX } from "solid-js";
@@ -485,13 +485,13 @@ export default function WorkspaceFileSlot(props: {
   });
   const pressHidden = (label: string, from: Element | null | undefined) => from?.closest("header")?.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.click();
   let moreAnchor: HTMLElement | undefined;
-  const fileActions = () => <FileActions ref={watchFolds}>
-    <Show when={hasChanges()}><FileButton type="button" data-fold="4" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><Icons.FileDiff /></FileButton></Show>
-    <Show when={hasStaged()}><FileButton type="button" data-fold="3" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><Icons.GitCompareArrows /></FileButton></Show>
-    <FileButton type="button" inMenu aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><Icons.Copy /></FileButton>
-    <FileButton type="button" inMenu aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><Icons.FileCode /></FileButton>
-    <FileButton type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><Icons.Download /></FileButton>
-  </FileActions>;
+  const fileActions = () => <Actions kind="file" ref={watchFolds}>
+    <Show when={hasChanges()}><IconButton kind="file" type="button" data-fold="4" aria-label="Review unstaged changes" title="Review unstaged changes" onClick={(event) => props.onShowDiff?.(false, event.altKey)}><Icons.FileDiff /></IconButton></Show>
+    <Show when={hasStaged()}><IconButton kind="file" type="button" data-fold="3" aria-label="Review staged changes" title="Review staged changes" onClick={(event) => props.onShowDiff?.(true, event.altKey)}><Icons.GitCompareArrows /></IconButton></Show>
+    <IconButton kind="file" type="button" inMenu aria-label="Copy contents" title="Copy contents" onClick={() => copy(currentText())}><Icons.Copy /></IconButton>
+    <IconButton kind="file" type="button" inMenu aria-label="Copy path" title="Copy path" onClick={() => copy(props.path ?? "")}><Icons.FileCode /></IconButton>
+    <IconButton kind="file" type="button" data-fold="0" aria-label="Download working file" title="Download working file" onClick={() => void download()}><Icons.Download /></IconButton>
+  </Actions>;
   const moreMenu = (text: boolean) => <DropdownMenu modal={false}>
     <MenuControl as={FileMore} aria-label="More file actions" title="More file actions" ref={moreAnchor} />
     <MenuContent>
@@ -514,13 +514,13 @@ export default function WorkspaceFileSlot(props: {
     {gitControls()}
     <Show when={!props.headerTabs}><FileDirty dirty={hasUnsavedChanges()} /></Show>
     <Show when={hasUnsavedChanges()}>
-      <FileButton wide type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</FileButton>
+      <IconButton kind="file" wide type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</IconButton>
     </Show>
     {fileActions()}
     <FileSuffix>{props.headerSuffix}</FileSuffix>
     {/* A header too narrow for its actions keeps them here, and the file's name in view. */}
     {moreMenu(true)}
-    <Show when={props.closable && !props.headerTabs}><FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></FileButton></Show>
+    <Show when={props.closable && !props.headerTabs}><IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton></Show>
     {props.headerEnd}
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <StatusBar commands={
@@ -551,23 +551,23 @@ export default function WorkspaceFileSlot(props: {
           <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <Show when={props.headerTabs} fallback={<FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />}>{props.headerTabs}</Show>
           {gitControls()}
-          <FileButton type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><Icons.Download /></FileButton>
-          <FileButton type="button" inMenu aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><Icons.Copy /></FileButton>
+          <IconButton kind="file" type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><Icons.Download /></IconButton>
+          <IconButton kind="file" type="button" inMenu aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><Icons.Copy /></IconButton>
           {props.headerSuffix}
           <Show when={props.headerTabs}>{moreMenu(false)}</Show>
           <Show when={props.closable && !props.headerTabs}>
-            <FileButton type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></FileButton>
+            <IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton>
           </Show>
           {props.headerEnd}
         </FileHead>
         <Show when={!file().url && !file().oversize && file().kind !== "binary"}>
-          <PaneEmpty><span role="status"><Spinner /> Loading {formatKind(file().kind).toLowerCase()}…</span></PaneEmpty>
+          <Empty><span role="status"><Spinner /> Loading {formatKind(file().kind).toLowerCase()}…</span></Empty>
         </Show>
         <Show when={file().url || file().oversize || file().kind === "binary"}>
         <Show when={file().kind === "image"}>
           <Show
             when={!file().oversize}
-            fallback={<PaneEmpty>This image is {formatFileSize(file().size)}, past the {formatFileSize(MAX_INLINE_IMAGE_BYTES)} preview limit. Download it to view.</PaneEmpty>}
+            fallback={<Empty>This image is {formatFileSize(file().size)}, past the {formatFileSize(MAX_INLINE_IMAGE_BYTES)} preview limit. Download it to view.</Empty>}
           >
             <FileImage>
               <img
@@ -579,7 +579,7 @@ export default function WorkspaceFileSlot(props: {
           </Show>
         </Show>
         <Show when={file().kind !== "image" && file().kind !== "binary"}>
-          <Show when={!file().oversize} fallback={<PaneEmpty>This file exceeds the 100 MiB preview limit. Download it to open.</PaneEmpty>}>
+          <Show when={!file().oversize} fallback={<Empty>This file exceeds the 100 MiB preview limit. Download it to open.</Empty>}>
             <FileMedia>
               <Show when={file().kind === "audio"}>
                 <audio controls preload="metadata" src={file().url} aria-label={file().path} onError={() => props.onError("This browser cannot play this audio file. Download it to open in another player.")} />
@@ -611,14 +611,14 @@ export default function WorkspaceFileSlot(props: {
       <Show when={!asset()}>
         <Show when={preview()} fallback={<>
           <Show when={props.headerPrefix}><FileHead>{props.headerPrefix}</FileHead></Show>
-          <PaneEmpty>{props.empty ?? "Select a file to preview it."}</PaneEmpty>
+          <Empty>{props.empty ?? "Select a file to preview it."}</Empty>
         </>}>{(file) => <>
           <Show when={file().readOnly && !file().truncated}>
             <ToolNotice tone="warn">Opened as text. Editing is disabled.</ToolNotice>
           </Show>
           <Show when={file().truncated} fallback={<FileBody editing={editing()} wrap={props.wrap}>
             <Show when={file().path}>{(path) =>
-              <Suspense fallback={<PaneEmpty>Loading preview…</PaneEmpty>}>
+              <Suspense fallback={<Empty>Loading preview…</Empty>}>
                 <WorkspaceEditor
                   projectId={documentProjectId()}
                   header={textHeader()}

@@ -1,14 +1,13 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
-import { CardNote } from "@/components/ui/card";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";
-import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot, Group } from "@/components/ui";
+import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot, Group, Note, Loading, Actions } from "@/components/ui";
 import katex from "katex";
 
 export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
@@ -57,9 +56,9 @@ export const speech = (on: () => boolean) => {
 export const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
 /** The app's riders, as components v2 builds them. */
 export const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><Chips><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<Icons.FileText />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<Icons.FileText />} status="uploading" progress={60} /></Chips>
-  <RiderActions stack>{ghost("Show all attachments", <Icons.Maximize />)}{ghost("Remove all attachments", <Icons.Delete />)}</RiderActions></Rider>;
+  <Actions kind="rider" stack>{ghost("Show all attachments", <Icons.Maximize />)}{ghost("Remove all attachments", <Icons.Delete />)}</Actions></Rider>;
 export const queued = (motion?: Motion) => <Rider label="Queued" motion={motion}><RiderMark icon={<Icons.Steer />} label="Steering" title="Steering: sent when the current step finishes" /><Lines><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></Lines>
-  <RiderActions>{ghost("Interrupt and send now", <Icons.Send />)}{ghost("Edit", <Icons.Edit />)}{ghost("Discard", <Icons.Close />)}</RiderActions></Rider>;
+  <Actions kind="rider">{ghost("Interrupt and send now", <Icons.Send />)}{ghost("Edit", <Icons.Edit />)}{ghost("Discard", <Icons.Close />)}</Actions></Rider>;
 // Overlay: the app's large surfaces, drawn from the library's pieces.
 // The command prompt's ">" is a mark like search's, drawn the same.
 export const glyph = () => <Icons.ChevronRight />;
@@ -111,7 +110,7 @@ export const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: bo
   shortcuts: { status: "Saved", body: () => <Shortcuts /> },
   models: { status: "Not saved", failed: true, why: "The server answered 502.", body: () => <>
     <Group title="Accounts"><SettingLine label="OpenAI" plain><SettingValue>Signed in</SettingValue><Button variant="ghost" size="sm">Sign out</Button></SettingLine><SettingLine label="Anthropic" plain><SettingLink href="#">Open sign-in</SettingLink></SettingLine>
-      <SettingLine label="OpenRouter key"><Input value="sk-or-••••••••3f2a" /></SettingLine><SettingNote tone="error">That key was turned down (401). Check it has credit.</SettingNote>
+      <SettingLine label="OpenRouter key"><Input value="sk-or-••••••••3f2a" /></SettingLine><Note tone="error">That key was turned down (401). Check it has credit.</Note>
       <SettingDetails summary="Where to find them"><ol><li>Open openrouter.ai/keys</li><li>Create a key, then paste it here</li></ol><p>Keys stay on this server, in <code>~/.conduit/data</code>.</p></SettingDetails></Group>
     <Group title="Providers"><SettingLine label="Gemini" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Default model"><SelectTrigger value="GPT-6 Luna" bare /></SettingLine></Group>
   </> },
@@ -119,12 +118,12 @@ export const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: bo
     <SettingWide><TextArea value={"You are Conduit's assistant. Answer briefly, then offer to go further.\nPrefer the user's own words for things."} /></SettingWide></Group> },
   runtime: { body: () => <>
     <Group title="Processes"><SettingLine label="Running" plain><SettingValue mono>3 of 8</SettingValue></SettingLine><SettingLine label="Idle timeout"><SelectTrigger value="10 minutes" bare /></SettingLine></Group>
-    <Group title="Harnesses"><SettingLoading>Loading runtime settings…</SettingLoading></Group>
+    <Group title="Harnesses"><Loading>Loading runtime settings…</Loading></Group>
   </> },
   servers: { body: () => <>
     <Group title="This server"><SettingLine label="Name" plain><SettingValue>Desktop-Dev</SettingValue></SettingLine><SettingLine label="Address" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine></Group>
     <Group title="Others"><SettingLine label="Laptop" state="9 ms" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine>
-      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><SettingNote tone="error">Couldn't reach VPS: the connection timed out.</SettingNote></Group>
+      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><Note tone="error">Couldn't reach VPS: the connection timed out.</Note></Group>
   </> },
   voice: { status: "Saved", body: () => <>
     <Group title="Dictation"><SettingLine label="Shortcut"><Input value="Ctrl+Space" readOnly title="Focus and press a shortcut" /></SettingLine><SettingLine label="Engine"><SelectTrigger value="Local" bare /></SettingLine><SettingLine label="Live captions"><SwitchDemo /></SettingLine></Group>
@@ -234,7 +233,7 @@ export function ConnectionDemo() {
     }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); check(); } }} />
     <Show when={state()}>{(current) => <ConnectionStatus state={current()} title={current() === "checking" ? `Looking for ${address()}…` : current() === "found" ? "Laptop" : "Nothing answered"} detail={current() === "found" ? "laptop.ts.net · 0.8.1" : current() === "missing" ? address() : undefined} />}</Show>
     <Show when={state() === "found"}><Show when={!signedIn()} fallback={<ConnectionStatus state="found" title="Signed in" />}><ConnectionPassword reveal busy={busy()} error={error()} value={password()} disabled={busy()} onInput={(event) => setPassword(event.currentTarget.value)} /></Show></Show>
-    <Show when={cameraError()}><CardNote error>Camera unavailable. Paste the pairing link.</CardNote></Show>
+    <Show when={cameraError()}><Note kind="card" tone="error">Camera unavailable. Paste the pairing link.</Note></Show>
   </ConnectionForm>;
 }
 /** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */

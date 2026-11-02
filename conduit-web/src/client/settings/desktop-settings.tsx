@@ -1,8 +1,9 @@
 import { createSignal, onMount, Show } from "solid-js";
 import { Switch } from "@/components/ui/controls";
-import { SettingLine, SettingLoading, SettingNote } from "@/components/ui/overlay";
+import { SettingLine } from "@/components/ui/overlay";
 import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { Group } from "@/components/ui/group";
+import { Loading, Note } from "@/components/ui/state";
 
 /**
  * The window behaviour the shell owns, shown where every other preference is.
@@ -35,7 +36,7 @@ export function DesktopSettingsTile() {
     </SettingLine>;
 
   return <Group title="Desktop">
-    <Show when={settings()} fallback={<SettingLoading>Reading the shell's settings…</SettingLoading>}>
+    <Show when={settings()} fallback={<Loading>Reading the shell's settings…</Loading>}>
       {(current) => <>
         {row("desktop-tray", "Keep running in tray", current().keepRunningInTray, false,
           (on) => ({ keepRunningInTray: on }))}
@@ -44,7 +45,7 @@ export function DesktopSettingsTile() {
         {/* Starting hidden is only a question for a launch nobody asked for. */}
         {row("desktop-start-hidden", "Start hidden", current().startHidden, !current().launchAtLogin,
           (on) => ({ startHidden: on }))}
-        <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+        <Show when={error()}><Note tone="error">{error()}</Note></Show>
       </>}
     </Show>
   </Group>;

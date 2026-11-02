@@ -3,15 +3,15 @@ import { createUniqueId } from "solid-js";
 import { GroupCompactHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Segmented } from "@/components/ui";
-import { Row, Group, GroupHeading, GroupToggle } from "@/components/ui";
-import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, Counts, DashEmpty, DashNote, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { Row, Group, GroupHeading, GroupToggle, Empty, Note, IconButton } from "@/components/ui";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, Counts, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { row, token, type Page } from "../model";
 
 const dashboardScene = () => {
   const id = createUniqueId();
   return <div style={{ width: "1100px", height: "640px", display: "flex" }}><Dashboard label="Conduit"
         head={<DashHeader title="Conduit" context={["Nothing running"]} />}
-        actions={<QuickActions><QuickAction icon={<Icons.Terminal />} label="Terminal" onClick={() => {}} /><QuickMore keep><DashIconButton aria-label="More" /></QuickMore></QuickActions>}
+        actions={<QuickActions><QuickAction icon={<Icons.Terminal />} label="Terminal" onClick={() => {}} /><QuickMore keep><IconButton kind="dash" aria-label="More" /></QuickMore></QuickActions>}
         composer={<div class="g-slot">Composer</div>}
         list={<Group kind="dash" id={`${id}-g-page-chats`} labelled section="chats" order="list" heading={<GroupSwitches><span id={`${id}-g-page-chats`}><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 6 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
           <DashDay>Today</DashDay>
@@ -71,7 +71,7 @@ import { Icons } from "@/components/ui";
     row("Row · ChangeRow · Counts", "modified and added files with line counts", () => <div><ChangeRow icon={<Icons.FileCode />} name="dashboard.tsx" directory="components/ui" added={24} removed={8} status="M" /><ChangeRow icon={<Icons.FileText />} name="notes.md" directory="docs" added={12} removed={0} status="A" /><Counts added={36} removed={8} /></div>, { phone: true, code: "<ChangeRow icon name directory added removed status> · <Counts added removed>" }),
     row("DashPath · Rest", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={false} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
     row("DashPath · Copied", "a place's working path in its header's context: a tap copies it, and it says Copied for a moment; --font-data --text-caption · brightens on hover or focus", () => <DashPath path="~/Conduit" copied={true} onCopy={() => {}} />, { phone: true, code: "<DashPath path copied onCopy />" }),
-    row("DashEmpty · DashNote", "an empty list, a note and an error", () => <div><DashEmpty>No chats</DashEmpty><DashNote>Choose a project to start.</DashNote><DashNote error>Could not load projects.</DashNote></div>, { phone: true, code: "<DashEmpty> · <DashNote error>" }),
+    row("Empty · Note", "an empty list, a note and an error", () => <div><Empty kind="dash">No chats</Empty><Note kind="dash">Choose a project to start.</Note><Note kind="dash" tone="error">Could not load projects.</Note></div>, { phone: true, code: "<Empty> · <Note error>" }),
     row("FolderTile · mark", "a thing's own mark in its colours in place of the folder: the hub's harnesses", () => <FolderShelf all><FolderTile name="Codex" meta="Ready" mark={<HarnessMark id="codex" artwork />} /><FolderTile name="Claude Code" meta="Ready" mark={<HarnessMark id="claude-code" artwork />} /><FolderTile name="ChatGPT Web" meta="Sign-in required" mark={<HarnessMark id="chatgpt-web" artwork />} /></FolderShelf>, { code: '<FolderTile name="Codex" meta="Ready" mark={<HarnessMark id="codex" artwork />} />' }),
     row("FolderShelf · FolderTile", "four projects, one live, and a new project action", () => <FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<Icons.NewFolder />} /></FolderShelf>, { phone: true, code: "<FolderShelf all> · <FolderTile name meta live icon>" }),
     row("Dashboard · a page", "dashboard/primitives/split.tsx", dashboardScene, { source: "dashboard/primitives/split.tsx", surfaces: ["ground"] }),
@@ -82,5 +82,5 @@ import { Icons } from "@/components/ui";
     token("--muted-foreground", "Context text"),
     token("--border", "Section rules")
   ] }],
-  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "DashIconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "Counts", "DashMore", "DashEmpty", "DashNote", "FolderShelf", "FolderTile"],
+  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "IconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "Counts", "DashMore", "Empty", "Note", "FolderShelf", "FolderTile"],
 };

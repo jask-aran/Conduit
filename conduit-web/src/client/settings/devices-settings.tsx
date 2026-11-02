@@ -13,7 +13,7 @@ import { NavFolder, NavFolderRow, StatusDot } from "@/components/ui/nav";
 import { ClientCard, ClientCards, ClientPlaces, NetworkMap, type NetworkClient } from "@/components/ui/network";
 import { Reading, ReadingStat, ReadingStats } from "@/components/ui/reading";
 import { connectionId } from "../state/runtime.ts";
-import { LiveNote, SettingActions, SettingLine, SettingNote, SettingTitle, SettingValue } from "@/components/ui/overlay";
+import { LiveNote, SettingLine, SettingTitle, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, isInstalledClient, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
@@ -23,6 +23,8 @@ import { harnessLabelFor } from "../harness-brand";
 import { createPushControl } from "../platform/push.ts";
 import { Row } from "@/components/ui/row";
 import { Columns, Group } from "@/components/ui/group";
+import { Note } from "@/components/ui/state";
+import { Actions } from "@/components/ui/actions";
 
 type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
 type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; browser?: boolean; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
@@ -204,13 +206,13 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
           </Show>
         </Group>
         <Group kind="column" title="Workspaces">
-          <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<SettingNote>None mounted</SettingNote>}>
+          <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<Note>None mounted</Note>}>
             <For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For>
           </Show>
         </Group>
       </Columns>
       {/* What can be done here, under both: a terminal on each client that has one, mounting a folder of this app's. */}
-      <SettingActions>
+      <Actions kind="setting">
         <Show when={notifications.on()}>
           <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.test()}><Icons.Notification /> Send a test</Button>
         </Show>
@@ -224,7 +226,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
             <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(pairing().mainUrl, pairing().nodeId)}>Unpair</Button>
           </>}</Show>
         </Show>
-      </SettingActions>
+      </Actions>
       {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
       <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
     </>;
@@ -248,7 +250,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
         <Button variant="ghost" size="sm" onClick={() => switchToServer(entry()!.origin, isInstalledClient())}>Switch to {entry()!.name}</Button>
       </Show>
     </SettingLine>
-    <Show when={!readable()}><SettingNote tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</SettingNote></Show>
+    <Show when={!readable()}><Note tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</Note></Show>
 
     <Show when={devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: together(device.clients).map((shown) => shown.part) }))} /></Show>
@@ -257,8 +259,8 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
       {/* Its name, large: what the network calls this device, renamed here only. */}
       <SettingTitle label="This device's name" value={device().name} editable={device().paired} onChange={(name) => rename(device(), name)} />
       {here(device())}
-      <Show when={companion?.error()}><SettingNote tone="error">{companion!.error()}</SettingNote></Show>
-      <Show when={notifications.problem()}>{(problem) => <SettingNote tone={problem().distributors ? "quiet" : "error"}>{problem().text}</SettingNote>}</Show>
+      <Show when={companion?.error()}><Note tone="error">{companion!.error()}</Note></Show>
+      <Show when={notifications.problem()}>{(problem) => <Note tone={problem().distributors ? "quiet" : "error"}>{problem().text}</Note>}</Show>
     </Group>}</Show>
 
     <Group title="Server">
@@ -300,7 +302,7 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
         </NavFolder>}</For>
       </Group>
     </Show>
-    <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
   </>;
 }
 
@@ -332,10 +334,10 @@ function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
     </SettingLine>
     <Show when={command()}>
       <SettingLine label={<SettingValue mono>{command()}</SettingValue>}><Button variant="ghost" size="sm" onClick={() => void copy()}><Icons.Copy /> Copy command</Button></SettingLine>
-      <SettingNote>Run it there, then mount a folder with “conduit-node share” and start it with “conduit-node run”. The key is shown once.</SettingNote>
+      <Note>Run it there, then mount a folder with “conduit-node share” and start it with “conduit-node run”. The key is shown once.</Note>
       <Show when={copied()}><LiveNote>Copied</LiveNote></Show>
     </Show>
-    <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
   </>;
 }
 
@@ -439,7 +441,7 @@ function DeviceDetails(props: { nodes: Node[]; open: boolean }) {
 function DeviceHarnesses(props: { node: Node; named?: boolean }) {
   const harnesses = () => props.node.harnesses || [];
   return <Group kind="column" title={props.named ? `Harnesses · ${props.node.name}` : "Harnesses"}>
-    <Show when={harnesses().length} fallback={<SettingNote>{props.node.name} declares none. A device offers its harnesses (Claude Code, Codex, OpenCode) once it shares a folder that may run commands.</SettingNote>}>
+    <Show when={harnesses().length} fallback={<Note>{props.node.name} declares none. A device offers its harnesses (Claude Code, Codex, OpenCode) once it shares a folder that may run commands.</Note>}>
       <For each={harnesses()}>{(id) =>
         <SettingLine plain label={harnessLabelFor(id) || id} state={props.node.name} title={`${harnessLabelFor(id) || id}, installed on ${props.node.name}; chats on its folders can run it there.`}>
           <StatusDot label={props.node.online ? "Ready" : "Offline"} tone={props.node.online ? "success" : "muted"} />

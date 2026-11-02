@@ -1,6 +1,6 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
-import { Icons, GroupHeading } from "@/components/ui";
+import { Icons, GroupHeading, Note, Empty, IconButton } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { api } from "../api/client";
@@ -14,7 +14,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 import { Button, Input, Segmented } from "@/components/ui/controls";
-import { DashDay, DashEmpty, DashIconButton, DashNote, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
+import { DashDay, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { CardPreview, CardRead } from "@/components/ui/card";
 import { Dialog } from "@/components/dialog";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -277,7 +277,7 @@ export function HarnessDashboard(props: {
           context={[scope() ? null : group.display, group.repository?.branch, group.missing ? "Folder is gone" : null].filter(Boolean).join(" · ")}
           meta={shortAge(sortTime(thread), now())} />}
       </DayGroups>
-      <Show when={truncated() && outside().length <= limit()}><DashNote>Older threads are not shown.</DashNote></Show>
+      <Show when={truncated() && outside().length <= limit()}><Note kind="dash">Older threads are not shown.</Note></Show>
     </Show>
   </Show>;
   const keptRows = () => <Show when={kept().length} fallback={<SplitEmpty>{query() ? "No chats match this search." : `No Conduit chats on ${label()} ${scope() ? "in this folder" : "yet"}.`}</SplitEmpty>}>
@@ -297,9 +297,9 @@ export function HarnessDashboard(props: {
     { value: "conduit", label: "In Conduit", detail: kept().length },
     { value: "outside", label: "Not in Conduit", detail: loading() ? undefined : outside().length },
   ] });
-  const search = () => <Show when={searching()} fallback={<DashIconButton aria-label="Search threads" title="Search threads" onClick={() => setSearching(true)}><Icons.Search /></DashIconButton>}>
+  const search = () => <Show when={searching()} fallback={<IconButton kind="dash" aria-label="Search threads" title="Search threads" onClick={() => setSearching(true)}><Icons.Search /></IconButton>}>
     <Input type="search" aria-label="Search threads" placeholder="Search" autofocus value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Escape") { setQuery(""); setSearching(false); } }} />
-    <DashIconButton aria-label="Close search" title="Close search" onClick={() => { setQuery(""); setSearching(false); }}><Icons.Close /></DashIconButton>
+    <IconButton kind="dash" aria-label="Close search" title="Close search" onClick={() => { setQuery(""); setSearching(false); }}><Icons.Close /></IconButton>
   </Show>;
   const threadsGroup = () => <SplitGroup id="harness-threads" order="list" busy={loading()}
     heading={<GroupSwitches><Show when={discovers()} fallback={<GroupHeading id="harness-threads" count={kept().length}>Chats</GroupHeading>}>
@@ -325,7 +325,7 @@ export function HarnessDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  return <Show when={harness()} fallback={<DashEmpty>{harnessLoaded() ? "This harness is unavailable." : "Loading harness…"}</DashEmpty>}>{(current) => <>
+  return <Show when={harness()} fallback={<Empty kind="dash">{harnessLoaded() ? "This harness is unavailable." : "Loading harness…"}</Empty>}>{(current) => <>
     <SplitDashboard page="Harness" label={`${current().label} dashboard`}
       header={<SplitHeader title={current().label} kind="Harness" glyph={<HarnessMark id={current().id} />} context={[
         <span title={scope() || undefined}>{scope() || "All folders"}</span>,
@@ -333,7 +333,7 @@ export function HarnessDashboard(props: {
         current().version ? (/^\d/.test(current().version!) ? `v${current().version}` : current().version) : null,
         running() ? `${running()} running` : null,
       ]} />}
-      notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
+      notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
       composer={current().drive ? props.composer?.({ models: catalog, get loading() { return catalogLoading(); }, permissions, folder, get choices() { return { model: catalogModel(), thinkingLevel: catalogEffort(), permissionMode: permissionMode() }; }, launch }) : undefined}
       list={threadsGroup()}
       aside={foldersGroup()} />
@@ -350,7 +350,7 @@ export function HarnessDashboard(props: {
           <Row density="list" element="button" type="button" lead={<Icons.ArrowUp />} label="Up" context={location().parent} onClick={() => void browse(location().parent)} />
         </Show>
         <For each={pickerDirectories()}>{(entry) => <Row density="list" element="button" type="button" lead={<Icons.Folder />} label={entry.name} onClick={() => void browse(`${location().project.workingRoot}/${entry.path}`)} />}</For>
-        <Show when={!pickerDirectories().length}><DashEmpty>No folders here.</DashEmpty></Show>
+        <Show when={!pickerDirectories().length}><Empty kind="dash">No folders here.</Empty></Show>
         <Show when={launchFolders().length}>
           <DashDay>Recent</DashDay>
           <For each={launchFolders()}>{(row) => <Row density="list" element="button" type="button" lead={<Icons.Folder />} label={row.label} context={row.path} title={row.path} onClick={() => void browse(row.path)} />}</For>

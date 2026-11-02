@@ -1,11 +1,11 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
-import { Icons } from "@/components/ui";
+import { Icons, Empty } from "@/components/ui";
 import { Dialog, OverlayDialog } from "@/components/dialog";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import { Crumbs } from "@/components/ui/leader";
 import { StatusDot } from "@/components/ui/nav";
-import { OverlayActions, OverlayBar, OverlayChip, OverlayEmpty, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
+import { OverlayActions, OverlayBar, OverlayChip, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
 import { Item, Match, Section } from "@/components/ui/popover";
 import { Expand } from "@/components/ui/expand";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
@@ -1026,7 +1026,7 @@ export function CommandMenu(props: {
         <OverlayList managed id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"}
           aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1}
           onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} onKeyDown={keydown}>
-          <Show when={selectable().length} fallback={<OverlayEmpty>{emptyMessage()}</OverlayEmpty>}>
+          <Show when={selectable().length} fallback={<Empty kind="overlay">{emptyMessage()}</Empty>}>
             <For each={sections().map((section) => section.key)}>{(key) => {
               const section = () => sectionsByKey().get(key);
               return <Show when={section()}><Section title={section()!.label || undefined}>

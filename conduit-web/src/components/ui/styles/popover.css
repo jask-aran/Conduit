@@ -110,8 +110,8 @@
 .ui-menu-parent[data-under] { filter: var(--dim-under); }
 .ui-menu-parent[data-under] > * { pointer-events: none; }
 .ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-popover) + 1); width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
-.ui-menu-note { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
-.ui-menu-note[data-error] { color: var(--destructive); }
+.ui-note:where([data-note="menu"]) { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
+.ui-note:where([data-note="menu"])[data-error] { color: var(--destructive); }
 .ui-row:where([data-density="menu"]) > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) { .ui-menu-parent { transition: none; } }

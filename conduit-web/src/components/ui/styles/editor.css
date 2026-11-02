@@ -26,7 +26,7 @@
   .ui-search-bar { --find-min: calc(9.375 * var(--u-space)); min-height: calc(var(--control) + 2 * var(--space-md)); gap: var(--space-xs); padding: var(--space-xs) var(--space-md); }
   .ui-search-bar .ui-search-field > .ui-input { height: var(--control-sm); flex-basis: var(--find-min); border-radius: var(--radius-control); padding-inline: var(--space-md); font-size: var(--text-row); }
   .ui-search-actions { height: var(--control-sm); gap: var(--space-xs); }
-  .ui-search-actions .ui-file-button { width: var(--control-sm); height: var(--control-sm); min-width: var(--control-sm); border-radius: var(--radius-control); }
+  .ui-search-actions .ui-icon-button:where([data-icon-button="file"]) { width: var(--control-sm); height: var(--control-sm); min-width: var(--control-sm); border-radius: var(--radius-control); }
   .ui-search-actions svg { width: var(--icon); height: var(--icon); }
 }
 .ui-comparison { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
@@ -66,7 +66,7 @@
 .ui-text-editor-tools { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: auto; }
 /* Its foot reads as the file viewer's, on the pane's own ground (frost or a page), not the workspace's darker one. */
 .ui-text-editor > .ui-status-bar { min-height: var(--control-sm); border-top-color: var(--tint); background: transparent; padding-block: var(--space-2xs); }
-.ui-text-editor-bar .ui-file-button[aria-pressed="true"] { color: var(--foreground); }
+.ui-text-editor-bar .ui-icon-button:where([data-icon-button="file"])[aria-pressed="true"] { color: var(--foreground); }
 .ui-text-editor-host { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: var(--text-caption); }
 .ui-text-editor-host .cm-editor { height: 100%; }
 .ui-text-editor-host .cm-scroller { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
@@ -74,7 +74,7 @@
 /* What the pane's head says: the name of what it holds (quiet when Conduit fills it in), then its actions. */
 .ui-text-editor-title { min-width: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-text-editor-title[data-live] { color: var(--muted-foreground); }
-.ui-text-editor-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
+.ui-actions:where([data-actions="editor"]) { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
 .ui-text-editor-head .ui-seg { flex: none; }
 /* The marks TextEditor puts in prompt text: the tags it is wrapped in quiet, the slots Conduit fills marked. */
 .ui-prompt-tag { color: var(--muted-foreground); }

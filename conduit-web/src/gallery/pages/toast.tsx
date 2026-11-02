@@ -1,9 +1,8 @@
 import { NotificationToaster, toast } from "@/components/notifications";
-import { CardNote } from "@/components/ui/card";
 import { Show } from "solid-js";
 import { createSignal, createUniqueId, onCleanup } from "solid-js";
 import { Frost } from "@/components/ui";
-import { Toast, Toaster, Button } from "@/components/ui";
+import { Toast, Toaster, Button, Note } from "@/components/ui";
 import { px, rounding, fg, Replay } from "../specs";
 import { typeOf } from "../demos";
 import { row, token, type Page } from "../model";
@@ -24,7 +23,7 @@ export function LiveNotifications() {
   return <div class="g-stack">
     <div class="g-row"><Button onClick={() => show("success")}>Show success toast</Button><Button variant="ghost" outline onClick={() => show("error")}>Show error toast</Button></div>
     <div class="g-row"><Button variant="ghost" outline onClick={() => show("info", true)}>Repeat same toast</Button><Button variant="ghost" outline onClick={() => emitted.forEach((id) => toast.dismiss(id))}>Dismiss demo toasts</Button></div>
-    <CardNote>Actions run: {actions()}. Hover to pause; use × or swipe to dismiss. Each notification lasts eight seconds.</CardNote>
+    <Note kind="card">Actions run: {actions()}. Hover to pause; use × or swipe to dismiss. Each notification lasts eight seconds.</Note>
     <NotificationToaster id={toasterId} />
   </div>;
 }

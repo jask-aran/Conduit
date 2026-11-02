@@ -4,12 +4,13 @@ import { Select } from "@/components/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
-import { FileButton, StatusText } from "@/components/ui/file";
+import { TextEditorTitle, Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { StatusText } from "@/components/ui/file";
 import { Group } from "@/components/ui/group";
+import { Loading, Note } from "@/components/ui/state";
+import { Actions, IconButton } from "@/components/ui/actions";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
-import { SettingLoading, SettingNote } from "@/components/ui/overlay";
 import type { ModelOption } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
 import { Row } from "@/components/ui/row";
@@ -144,7 +145,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
     return <ChainLink index={index} live={block()?.kind === "live"} notice={block()?.kind === "notice"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : block()!.kind === "notice" && block()!.modified ? "changed" : undefined : SOURCE[block()!.source]) : "missing"}
       size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); }} />; };
-  const Detail = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(block) => {
+  const Detail = () => <Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(block) => {
     const live = () => block().kind === "live";
     const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
     return <TextEditor fill readOnly label={`${block().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`} value={shown()}
@@ -153,16 +154,16 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         <Show when={live() && block().preview && block().preview !== block().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
-        <TextEditorActions>
-          <FileButton label={live() ? "Where it is used" : `Edit ${block().label}`} onClick={() => props.onEditBlock(block().id)}>{live() ? <Icons.Preview /> : <Icons.Edit />}</FileButton>
+        <Actions kind="editor">
+          <IconButton kind="file" label={live() ? "Where it is used" : `Edit ${block().label}`} onClick={() => props.onEditBlock(block().id)}>{live() ? <Icons.Preview /> : <Icons.Edit />}</IconButton>
           <Show when={own(block().id)}>
-            <FileButton label="Move up" disabled={busy() || at() <= 0} onClick={() => move(at() - 1)}><Icons.ArrowUp /></FileButton>
-            <FileButton label="Move down" disabled={busy() || at() >= current()!.blocks.length - 1} onClick={() => move(at() + 1)}><Icons.ArrowDown /></FileButton>
+            <IconButton kind="file" label="Move up" disabled={busy() || at() <= 0} onClick={() => move(at() - 1)}><Icons.ArrowUp /></IconButton>
+            <IconButton kind="file" label="Move down" disabled={busy() || at() >= current()!.blocks.length - 1} onClick={() => move(at() + 1)}><Icons.ArrowDown /></IconButton>
             <BlockPicker title={`Swap ${block().label} for another block`} icon={<Icons.Swap />} onPick={swap} />
             <BlockPicker title="Add a block after this one" icon={<Icons.Add />} onPick={insert} />
-            <FileButton label="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></FileButton>
+            <IconButton kind="file" label="Remove from this document" disabled={busy() || current()!.blocks.length < 2} onClick={remove}><Icons.Close /></IconButton>
           </Show>
-        </TextEditorActions>
+        </Actions>
       </>}
       status={<>
         <StatusText>{tokens(live() ? shown().length : block().chars)}</StatusText>
@@ -173,14 +174,14 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
           <StatusText>{block().tag ? `<${block().tag}> · filled in by Conduit` : "filled in by Conduit"}</StatusText>
         </Show>
       </>} />; }}</Show>;
-  return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading documents…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
+  return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<Loading>Loading documents…</Loading>}><Note tone="error">{props.context.error()}</Note></Show>}>
     <Show when={current()}>{(doc) => <Workbench label="Prompts">
       <WorkbenchTitle meta={`${ROLE_KIND[doc().role.kind]} · ${ROLE_STARTS[doc().role.kind]}${doc().modified ? " · changed" : ""}`}
         title={<Select look="title" id="context-document" search="Search documents" aria-label="Document" title="Choose a document" value={doc().id} onChange={(event) => props.onDocument(event.currentTarget.value)}>
           <For each={documents()}>{(item) => <option value={item.id}>{item.role.label}</option>}</For>
         </Select>}
         actions={<><Children /><Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button></>} />
-      <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
+      <Show when={failure()}><Note tone="error">{failure()}</Note></Show>
       <WorkbenchSplit main={<Detail />} side={<ChainMap label={`${doc().role.label}'s document`}>
         <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>
         <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
@@ -250,7 +251,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
     if (block.kind === "notice") return (block.slots ?? []).map((slot) => ({ ...slot, value: vars.find((item) => item.name === slot.name)?.value }));
     return block.kind === "text" && block.usedBy.some((id) => id === "agent" || id.startsWith("run:")) ? vars.filter((item) => item.scope !== "current") : [];
   };
-  const Main = () => <Show when={detail()} fallback={<SettingLoading>Loading…</SettingLoading>}>{(loaded) => {
+  const Main = () => <Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(loaded) => {
     const live = () => loaded().kind === "live";
     return <TextEditor fill readOnly={live()} label={`${loaded().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`}
       value={live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "") : draft()}
@@ -260,30 +261,30 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
         <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
-        <Show when={!live()}><TextEditorActions>
+        <Show when={!live()}><Actions kind="editor">
           <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || state() === "saving"} title="Save (Ctrl+S)" onClick={save}>{state() === "saving" ? "Saving…" : dirty() ? "Save" : "Saved"}</Button>
-          <FileButton label="Reset to the shipped text" disabled={!loaded().resettable || !loaded().modified || state() === "saving"} onClick={() => void reset()}><Icons.Reset /></FileButton>
-          <Show when={loaded().source === "custom"}><FileButton label={loaded().usedBy.length ? "Remove it from every document to delete it" : "Delete block"} disabled={loaded().usedBy.length > 0 || state() === "saving"} onClick={() => void remove()}><Icons.Delete /></FileButton></Show>
-        </TextEditorActions></Show>
+          <IconButton kind="file" label="Reset to the shipped text" disabled={!loaded().resettable || !loaded().modified || state() === "saving"} onClick={() => void reset()}><Icons.Reset /></IconButton>
+          <Show when={loaded().source === "custom"}><IconButton kind="file" label={loaded().usedBy.length ? "Remove it from every document to delete it" : "Delete block"} disabled={loaded().usedBy.length > 0 || state() === "saving"} onClick={() => void remove()}><Icons.Delete /></IconButton></Show>
+        </Actions></Show>
       </>}
       status={<>
         <StatusText>{tokens(live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "").length : draft().length)}</StatusText>
         <StatusText>{live() ? loaded().tag ? `<${loaded().tag}> · filled in by Conduit` : "filled in by Conduit" : loaded().kind === "notice" ? "notice: Conduit writes it into the thread" : loaded().source === "jbot" ? "jbot's file: jbot can change it too" : SOURCE[loaded().source]}</StatusText>
       </>} />; }}</Show>;
-  return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<SettingLoading>Loading blocks…</SettingLoading>}><SettingNote tone="error">{props.context.error()}</SettingNote></Show>}>
+  return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<Loading>Loading blocks…</Loading>}><Note tone="error">{props.context.error()}</Note></Show>}>
     <Show when={current()}>{(block) => <Workbench label="Blocks">
       <WorkbenchTitle meta={`${block().kind === "live" || block().kind === "notice" ? block().description ?? SOURCE.conduit : SOURCE[block().source]}${block().modified ? " · changed" : ""}`}
         title={<Select look="title" id="context-block" search="Search blocks" aria-label="Block" title="Choose a block" value={block().id} onChange={(event) => props.onBlock(event.currentTarget.value)}>
           <For each={groups()}>{(group) => <For each={group.items}>{(item) => <option value={item.id}>{item.label}</option>}</For>}</For>
         </Select>}
         actions={<Button variant="ghost" size="icon-sm" aria-label="New block" title="New block" disabled={state() === "saving"} onClick={() => void create()}><Icons.Add /></Button>} />
-      <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
+      <Show when={failure()}><Note tone="error">{failure()}</Note></Show>
       <WorkbenchSplit main={<Main />} side={<>
         <Show when={block().source === "custom"}>
           <Group kind="workbench" title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></Group>
         </Show>
         <Group kind="workbench" title="Used in">
-          <Show when={block().usedBy.length} fallback={<WorkbenchNote>In no document yet: add it to one from Prompts.</WorkbenchNote>}>
+          <Show when={block().usedBy.length} fallback={<Note kind="workbench">In no document yet: add it to one from Prompts.</Note>}>
             <For each={block().usedBy}>{(id) => <Row density="nav" element="button" lead={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</Row>}</For>
           </Show>
         </Group>
@@ -293,7 +294,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
           </Group>
         </Show>
         <Show when={block().appendix}>
-          <Group kind="workbench" title="Conduit then adds"><WorkbenchNote>{block().appendix}</WorkbenchNote></Group>
+          <Group kind="workbench" title="Conduit then adds"><Note kind="workbench">{block().appendix}</Note></Group>
         </Show>
       </>} />
     </Workbench>}</Show>

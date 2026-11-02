@@ -3,7 +3,7 @@
 .ui-workbench-title { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-workbench-title-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-workbench-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-workbench-meta { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-note:where([data-note="workbench"]) { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); }
 /* One line, never wrapping (a wrapping line is as tall as its tallest content, which would push the pane's foot off
    the page): the side scrolls in its column, the main pane scrolls inside itself. */
 .ui-workbench-split { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-xl); }
@@ -13,7 +13,7 @@
 .ui-workbench-side > .ui-chain > :not(.ui-chain-gap) { width: 100%; }
 .ui-group:where([data-group="workbench"]) { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-group:where([data-group="workbench"]) > .ui-title { margin: 0 0 var(--space-2xs); padding-inline: var(--row-inset); }
-.ui-group:where([data-group="workbench"]) > .ui-workbench-meta { padding-inline: var(--row-inset); }
+.ui-group:where([data-group="workbench"]) > .ui-note:where([data-note="workbench"]) { padding-inline: var(--row-inset); }
 .ui-workbench-fact { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); padding: var(--space-2xs) var(--row-inset); font-size: var(--text-row); }
 .ui-workbench-fact > code { flex: none; font: var(--text-caption) var(--font-data); }
 .ui-workbench-fact-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }

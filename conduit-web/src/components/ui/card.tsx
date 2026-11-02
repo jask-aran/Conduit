@@ -5,6 +5,7 @@ import { createSignal, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
 import { type Density, type Motion, motionOf } from "./shared";
+import { Actions } from "./actions";
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
 export function Card(props: { title: JSX.Element; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
@@ -13,15 +14,13 @@ export function Card(props: { title: JSX.Element; detail?: JSX.Element; descript
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
     <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label={props.closeLabel ?? "Close"} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()}><Icons.Close /></Button></Show>
     {props.children}
-    <Show when={props.actions}><CardActions>{props.actions}</CardActions></Show>
+    <Show when={props.actions}><Actions>{props.actions}</Actions></Show>
   </Frost>;
 }
 
-export const CardActions = (props: { children: JSX.Element }) => <div class="ui-card-actions">{props.children}</div>;
 export const CardForm = (props: JSX.FormHTMLAttributes<HTMLFormElement>) => <form {...props} class="ui-card-form" />;
 /** Two sides of one task (pair this server, or add another): side by side while each keeps a QR's width, stacked when it cannot. Use with size="split". */
 export const CardBody = (props: { children: JSX.Element }) => <div class="ui-card-body">{props.children}</div>;
-export const CardNote = (props: { children: JSX.Element; error?: boolean }) => <p class="ui-card-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;
 export const CardRead = (props: { children: JSX.Element }) => <code class="ui-card-read">{props.children}</code>;
 export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-card-details">{props.children}</dl>;
 /** reveal: on a phone the code waits behind Show QR code -- a phone is likelier the one scanning than the one scanned. */

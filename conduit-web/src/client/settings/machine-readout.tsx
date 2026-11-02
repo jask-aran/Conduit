@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { Reading, ReadingStat, ReadingStats, SettingLine, SettingNote, SettingValue, Group } from "@/components/ui";
+import { Reading, ReadingStat, ReadingStats, SettingLine, SettingValue, Group, Note } from "@/components/ui";
 import { api } from "../api/client";
 
 /** GET /v0/server/machine (machine-readout.js): rates are since the previous reading; null where the platform cannot say. */
@@ -58,6 +58,6 @@ export function MachineReadout(props: { open: boolean; url?: string; title?: str
         </Group>
       </Show>
     </>}</Show>
-    <Show when={error()}><SettingNote tone={error().startsWith("This device's Conduit is older") ? "quiet" : "error"}>{error().startsWith("This device's") ? error() : `The machine's readout could not be read: ${error()}`}</SettingNote></Show>
+    <Show when={error()}><Note tone={error().startsWith("This device's Conduit is older") ? "quiet" : "error"}>{error().startsWith("This device's") ? error() : `The machine's readout could not be read: ${error()}`}</Note></Show>
   </>;
 }

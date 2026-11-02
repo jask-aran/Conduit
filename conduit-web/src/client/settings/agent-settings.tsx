@@ -1,13 +1,14 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/menus";
-import { SettingLine, SettingNote } from "@/components/ui/overlay";
+import { SettingLine } from "@/components/ui/overlay";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
 import type { ModelOption } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
 import { createAutosave } from "./autosave";
 import { Group } from "@/components/ui/group";
+import { Note } from "@/components/ui/state";
 
 /**
  * The persistent agent's settings (PATCH /v0/agent): who it is, how much it says and spends, and its routine. Saved
@@ -80,9 +81,9 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
     finally { setEnabling(false); }
   };
 
-  const Page = () => <Show when={agentView()} fallback={<SettingNote>Loading…</SettingNote>}>
+  const Page = () => <Show when={agentView()} fallback={<Note>Loading…</Note>}>
     <Show when={settings()} fallback={<Group title="Agent">
-      <SettingNote>This hub has no agent. One agent per hub works for you in the background, with its own threads and memory.</SettingNote>
+      <Note>This hub has no agent. One agent per hub works for you in the background, with its own threads and memory.</Note>
       <SettingLine label="Give this hub an agent"><Button size="sm" disabled={enabling()} onClick={() => void enable()}>Turn on</Button></SettingLine>
     </Group>}>{(current) => <>
       <Group title="Agent">

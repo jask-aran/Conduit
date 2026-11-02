@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createSignal, createEffect, For, Show } from "solid-js";
-import { Button, Line, Lines, Rider, RiderActions, RiderMark } from "@/components/ui";
+import { Button, Line, Lines, Rider, RiderMark, Actions } from "@/components/ui";
 
 import type { Message } from "../api/contracts";
 import { createLeaving, riderMotion, type CardExit } from "./composer-cards";
@@ -38,13 +38,13 @@ export function QueuedMessages(props: {
     <Rider label="Messages waiting for the agent" motion={riderMotion(shown.leaving())}>
       <RiderMark icon={props.busy ? <Icons.Steer /> : <Icons.Queued />} label={props.busy ? "Steering" : "Queued"} title={`${props.busy ? "Steering" : "Queued"}: ${hint()}`} />
       <Lines><For each={shown.value()}>{(text) => <Line text={text} />}</For></Lines>
-      <RiderActions>
+      <Actions kind="rider">
         <Show when={props.busy && props.canInterrupt}>
           <Button size="icon-sm" variant="ghost" aria-label="Interrupt and send now" title="Interrupt and send now" onClick={props.onInterruptAndSend}><Icons.Send /></Button>
         </Show>
         <Button size="icon-sm" variant="ghost" aria-label="Edit" title="Edit in the composer" onClick={props.onEdit}><Icons.Edit /></Button>
         <Button size="icon-sm" variant="ghost" aria-label="Discard" title="Discard" onClick={() => { setExit("fade"); props.onDiscard(); }}><Icons.Close /></Button>
-      </RiderActions>
+      </Actions>
     </Rider>
   </Show>;
 }

@@ -1,16 +1,15 @@
-import { Icons } from "@/components/ui";
-import { TermKeys, TermKey, TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActions, TermActionLabel, TermState, TermError } from "@/components/ui/terminal";
+import { Icons, Note, Actions, IconButton } from "@/components/ui";
+import { TermKeys, TermKey, TermHeader, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActionLabel, TermState } from "@/components/ui/terminal";
 import { Button as TermButton, Segmented, Switch } from "@/components/ui/controls";
-import { ToolButton } from "@/components/ui/pane";
 import { Dialog } from "@/components/dialog";
-import { CardActions, CardForm } from "@/components/ui/card";
+import { CardForm } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { UnplugIcon } from "lucide-solid";
 import { toast } from "@/components/notifications";
 
 import { DropdownMenu, MenuContent, MenuControl, MenuSection, MenuRow, MenuSub, MenuSubTrigger, MenuSubContent } from "@/components/menus";
-import { Rule, MenuNote } from "@/components/ui/popover";
+import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { api, readShared } from "../api/client";
 import type { Connectivity } from "../state/runtime";
@@ -903,7 +902,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   const isNewShortcut = () => !shortcuts().some((s) => s.id === editingShortcut()?.id);
   const shortcutRows = () => <>
     <MenuSection title="Shortcuts">
-      <Show when={shortcuts().length > 0} fallback={<MenuNote>No shortcuts yet. Add a command you run often.</MenuNote>}>
+      <Show when={shortcuts().length > 0} fallback={<Note kind="menu">No shortcuts yet. Add a command you run often.</Note>}>
         <For each={shortcuts()}>{(shortcut, index) =>
           <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`}
             meta={`${shortcut.target === "new" ? "new" : "this"}${shortcut.onStart ? " · start" : ""}`}
@@ -931,7 +930,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         }</For>
       </Show>
     </MenuSection>
-    <Show when={shortcutError()}><MenuNote error>{shortcutError()}</MenuNote></Show>
+    <Show when={shortcutError()}><Note kind="menu" tone="error">{shortcutError()}</Note></Show>
     <Rule />
     <MenuRow icon={<Icons.Add />} disabled={shortcuts().length >= 12} onSelect={addShortcut}>Add shortcut</MenuRow>
   </>;
@@ -1082,10 +1081,10 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             <DialogInput id="terminal-rename-title" value={renameValue()} maxlength={80} autofocus
               onInput={(event) => setRenameValue(event.currentTarget.value)} />
           </DialogField>
-          <CardActions>
+          <Actions>
             <DialogButton type="button" variant="ghost" outline onClick={() => setRenameSession(null)}>Cancel</DialogButton>
             <DialogButton type="submit" disabled={!renameValue().trim() || Boolean(sessionBusy())}>Rename</DialogButton>
-          </CardActions>
+          </Actions>
         </CardForm>
     </Dialog>
     <Dialog open={Boolean(editingShortcut())} onOpenChange={(open) => { if (!open) setEditingShortcut(null); }} title={isNewShortcut() ? "New shortcut" : "Edit shortcut"} description="A command you run often, one press from the terminal's header.">
@@ -1106,21 +1105,21 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         <DialogField inline label={<>Also run it when /terminal starts or recovers a shell</>}>
           <Switch label="Run on start" checked={editingShortcut()?.onStart === true} onChange={(onStart) => updateEditingShortcut({ onStart })} />
         </DialogField>
-        <CardActions>
+        <Actions>
           <DialogButton type="button" variant="ghost" outline onClick={() => setEditingShortcut(null)}>Cancel</DialogButton>
           <DialogButton type="submit" disabled={shortcutSaving() || !editingShortcut()?.label.trim() || !editingShortcut()?.command.trim()}>{shortcutSaving() ? "Saving…" : "Save"}</DialogButton>
-        </CardActions>
+        </Actions>
       </CardForm>
     </Dialog>
     <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
-    <TermHeader actions={<TermActions>
+    <TermHeader actions={<Actions kind="term">
         <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
           <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
             <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
           </MenuControl>
           <MenuContent>
             <MenuSection title={`Active terminals · ${props.projectName || "Chats"}`}>
-              <Show when={sessions().length > 0} fallback={<MenuNote>No active terminals in {props.projectName || "Chats"}.</MenuNote>}>
+              <Show when={sessions().length > 0} fallback={<Note kind="menu">No active terminals in {props.projectName || "Chats"}.</Note>}>
                 <For each={sessions()}>{(session) => {
                   const name = () => session.title || "Shell";
                   return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detailData detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
@@ -1152,7 +1151,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
             <Icons.Focus /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
           </TermButton>
         </Show>
-      </TermActions>}>
+      </Actions>}>
       <Show when={coarseInput()}>
         <TermLead phone>
           <TermButton variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
@@ -1182,14 +1181,14 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </TermShortcut>
         }</For>
         <DropdownMenu>
-          <MenuControl as={ToolButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
+          <MenuControl as={IconButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
           <MenuContent>{shortcutRows()}</MenuContent>
         </DropdownMenu>
       </TermShortcuts>
       {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
       <TermOverflow>
         <DropdownMenu>
-          <MenuControl as={ToolButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
+          <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
           <MenuContent>
             <MenuSection title="Shortcuts">
               <For each={shortcuts()}>{(shortcut) =>
@@ -1239,7 +1238,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </Show>
         </TermState>}
       </Show>
-      <Show when={error() && !recovery()}><TermError role="alert">{error()}</TermError></Show>
+      <Show when={error() && !recovery()}><Note kind="term" role="alert">{error()}</Note></Show>
     </div>
     <Show when={coarseInput() && mobileKeysVisible()}>
       <TermKeys aria-label="Terminal keys">

@@ -1,6 +1,6 @@
 import { FilesPane, FilesTree } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
-import { Icons } from "@/components/ui";
+import { Icons, Empty, IconButton } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { unitPx } from "@/components/ui/layout";
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
@@ -13,7 +13,7 @@ import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { PaneEmpty, ToolBar, ToolButton, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
+import { ToolBar, ToolFilter, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
 
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
@@ -769,7 +769,7 @@ export function FilesView(props: {
     { id: "refresh", label: () => "Refresh files", title: () => "Refresh files", icon: () => <Icons.Refresh />, disabled: c.filesLoading, run: () => void c.refreshFiles() },
   ];
   const treeActionButton = (action: TreeAction) =>
-    <ToolButton data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</ToolButton>;
+    <IconButton data-tree-action={action.id} aria-label={action.label()} title={action.title()} aria-pressed={action.pressed?.()} disabled={action.disabled?.()} onClick={action.run}>{action.icon()}</IconButton>;
   const [visibleTreeActions, setVisibleTreeActions] = createSignal(treeActions.length);
   // Buttons are uniform, so one measured button plus the row gap is enough to
   // work out how many fit; the cache is invalidated on a height change, which
@@ -907,7 +907,7 @@ export function FilesView(props: {
       >
         <FilesTree>
           <ToolBar>
-            <Show when={!props.navigatorOnly}><ToolButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></ToolButton></Show>
+            <Show when={!props.navigatorOnly}><IconButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></IconButton></Show>
             <ToolFilter
                 ref={(element) => { c.elements.filter = element; }}
                 aria-label="Filter loaded files"
@@ -925,7 +925,7 @@ export function FilesView(props: {
           }} aria-label="Project files" aria-busy={c.filesLoading()} onScroll={c.saveTreeScroll}>
             <Show when={props.onBrowseParent}><TreeRow onClick={props.onBrowseParent} title={`Open parent of ${props.workingRoot}`} icon={<FolderUpIcon />} name=".." /></Show>
             <Tree directory="" />
-            <Show when={c.directories()[""] && !c.directories()[""]?.oversize && c.visibleEntries("").length === 0}><PaneEmpty>{c.fileFilter() ? "No loaded files match this filter." : "No files to show."}</PaneEmpty></Show>
+            <Show when={c.directories()[""] && !c.directories()[""]?.oversize && c.visibleEntries("").length === 0}><Empty>{c.fileFilter() ? "No loaded files match this filter." : "No files to show."}</Empty></Show>
           </TreeList>
           <ToolBar edge="top" role="toolbar" aria-label="File tree actions" ref={(element) => {
             treeActionsRow = element;
@@ -939,7 +939,7 @@ export function FilesView(props: {
             <For each={treeActions}>{(action, index) => <Show when={index() < visibleTreeActions()}>{treeActionButton(action)}</Show>}</For>
             <Show when={visibleTreeActions() < treeActions.length}>
               <DropdownMenu>
-                <MenuControl as={ToolButton} label="More file actions"><Icons.More /></MenuControl>
+                <MenuControl as={IconButton} label="More file actions"><Icons.More /></MenuControl>
                 <MenuContent>
                   <For each={treeActions.slice(visibleTreeActions())}>{(action) =>
                     <MenuRow icon={action.icon()} disabled={action.disabled?.()} onSelect={action.run}>{action.label()}</MenuRow>
@@ -952,7 +952,7 @@ export function FilesView(props: {
         </FilesTree>
         <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
           <ToolBar vertical data-tree-rail="">
-            <ToolButton label="Show file navigator" onClick={c.showFileNavigator}><Icons.ExpandFiles /></ToolButton>
+            <IconButton label="Show file navigator" onClick={c.showFileNavigator}><Icons.ExpandFiles /></IconButton>
             <div role="toolbar" aria-label="File tree actions">
               <For each={treeActions}>{(action) => treeActionButton(action)}</For>
             </div>

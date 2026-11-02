@@ -1,4 +1,3 @@
-import { GroupToggle } from "./group";
 import { For, Show, splitProps, type JSX } from "solid-js";
 import { Button } from "./controls";
 
@@ -44,7 +43,6 @@ export const ChangeList = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {.
 /** A change and its action (stage, unstage), the action shown on the pointer or focus. */
 export const ChangeItem = (props: { action?: JSX.Element; children: JSX.Element }) => <div class="ui-change-item">{props.children}{props.action}</div>;
 /** When a group has nothing: centred and quiet. */
-export const ChangeEmpty = (props: { children: JSX.Element }) => <div class="ui-change-empty">{props.children}</div>;
 
 /** A commit: the graph's column, the subject and its refs (HEAD's lit), the author, the short hash. A context menu's trigger takes it with `as`. */
 export function CommitRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { graph: string; subject: string; refs?: { label: string; current?: boolean; kind?: string }[]; author: string; hash: string }) {

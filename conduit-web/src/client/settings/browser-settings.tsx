@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { Button, Segmented, SettingDetails, SettingLine, SettingLoading, SettingNote, SettingValue, Spinner, Group } from "@/components/ui";
+import { Button, Segmented, SettingDetails, SettingLine, SettingValue, Spinner, Group, Loading, Note } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { api } from "../api/client";
 
@@ -41,8 +41,8 @@ export function BrowserSettings() {
   };
   const host = (url?: string | null) => { try { return url && url !== "about:blank" ? new URL(url).host : ""; } catch { return ""; } };
 
-  return <Show when={found()} fallback={<Show when={error()} fallback={<SettingLoading>Loading the browser…</SettingLoading>}>
-    <SettingNote tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
+  return <Show when={found()} fallback={<Show when={error()} fallback={<Loading>Loading the browser…</Loading>}>
+    <Note tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
   </Show>}>{(browser) => <>
     <Group title="Hub browser">
       <SettingLine plain label="Status" title={browser().url || undefined}>
@@ -70,10 +70,10 @@ export function BrowserSettings() {
         <Button variant="ghost" size="sm" disabled={!!busy() || !browser().available} onClick={() => void act("restart")}>{busy() === "restart" ? <Spinner /> : null}Restart</Button>
         <Button variant="destructive" outline size="sm" disabled={!!busy() || !browser().available} onClick={() => void clear()}>{busy() === "clear" ? <Spinner /> : null}Clear data</Button>
       </SettingLine>
-      <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
+      <Show when={error()}><Note tone="error">{error()}</Note></Show>
       <SettingDetails summary="What the browser is">
-        <SettingNote>One Chrome on the hub, shared: you see and drive it in a Browser pane, and Conduit's agents work the same page through
-          agent-browser's tools (other harnesses through its MCP server, Settings › AI › Tools). Sites see the hub, signed in as whatever it signs in as.</SettingNote>
+        <Note>One Chrome on the hub, shared: you see and drive it in a Browser pane, and Conduit's agents work the same page through
+          agent-browser's tools (other harnesses through its MCP server, Settings › AI › Tools). Sites see the hub, signed in as whatever it signs in as.</Note>
       </SettingDetails>
     </Group>
   </>}</Show>;

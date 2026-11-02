@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { Button, Icons, Input, LiveNote, SettingLine, SettingLoading, SettingNote, SettingValue, Switch, Group } from "@/components/ui";
+import { Button, Icons, Input, LiveNote, SettingLine, SettingValue, Switch, Group, Loading, Note } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { api } from "../api/client";
 
@@ -90,11 +90,11 @@ export function SkillsSettings() {
       <Switch label={`${skill.name} on`} checked={skill.enabled} disabled={!!busy() || skill.missing} onChange={(enabled) => void toggle(skill, enabled)} />
     </SettingLine>;
 
-  return <Show when={skills()} fallback={<Show when={error()} fallback={<SettingLoading>Loading skills…</SettingLoading>}>
-    <SettingNote tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
+  return <Show when={skills()} fallback={<Show when={error()} fallback={<Loading>Loading skills…</Loading>}>
+    <Note tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
   </Show>}>{(list) => <>
     <Group title="Installed">
-      <Show when={list().some((skill) => skill.origin === "installed")} fallback={<SettingNote tone="quiet">None yet: find one below.</SettingNote>}>
+      <Show when={list().some((skill) => skill.origin === "installed")} fallback={<Note tone="quiet">None yet: find one below.</Note>}>
         <For each={list().filter((skill) => skill.origin === "installed")}>{skillLine}</For>
       </Show>
     </Group>
@@ -105,9 +105,9 @@ export function SkillsSettings() {
       <SettingLine label="skills.sh" state={searching() ? "searching…" : undefined}>
         <Input type="search" aria-label="Search skills.sh" placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
       </SettingLine>
-      <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
+      <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
       <Show when={found()}>{(results) =>
-        <Show when={results().length} fallback={<SettingNote tone="quiet">Nothing found for “{query().trim()}”.</SettingNote>}>
+        <Show when={results().length} fallback={<Note tone="quiet">Nothing found for “{query().trim()}”.</Note>}>
           <For each={results()}>{(item) =>
             <SettingLine plain label={item.name} state={[item.source, item.installs != null ? `${count(item.installs)} installs` : ""].filter(Boolean).join(" · ")} title={`${item.source} › ${item.skillId}`}>
               <Show when={!item.installed} fallback={<SettingValue>Installed</SettingValue>}>
@@ -119,7 +119,7 @@ export function SkillsSettings() {
           </For>
         </Show>}
       </Show>
-      <SettingNote tone="quiet">A skill is instructions every profile's model reads, and files it can run: install from sources you trust.</SettingNote>
+      <Note tone="quiet">A skill is instructions every profile's model reads, and files it can run: install from sources you trust.</Note>
       <LiveNote>{status()}</LiveNote>
     </Group>
   </>}</Show>;

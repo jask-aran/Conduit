@@ -137,4 +137,3 @@ export const MenuParent = (props: JSX.HTMLAttributes<HTMLDivElement> & { under: 
   return <div {...rest} class="ui-menu-parent" data-under={local.under ? "" : undefined} />;
 };
 export const MenuPanel = (props: JSX.HTMLAttributes<HTMLDivElement> & { width?: Measure; height?: Measure }) => <Menu {...props} class="ui-menu-panel" />;
-export const MenuNote = (props: { children: JSX.Element; error?: boolean }) => <p class="ui-menu-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;

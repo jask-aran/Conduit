@@ -102,5 +102,5 @@ export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The p
     token("--duration-quick", "exit duration"),
     token("--radius-round", "round capsule corners")
   ] }],
-  api: ["PhoneComposer", "Rider", "RiderTitle", "Lines", "Line", "RiderActions", "Button", "PillField", "PillButton", "PillWave", "Captions"],
+  api: ["PhoneComposer", "Rider", "RiderTitle", "Lines", "Line", "Actions", "Button", "PillField", "PillButton", "PillWave", "Captions"],
 };

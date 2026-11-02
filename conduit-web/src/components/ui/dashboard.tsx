@@ -100,10 +100,6 @@ export function QuickMore(props: { ref?: (element: HTMLSpanElement) => void; kee
   return <span ref={props.ref} class="ui-dash-quick-more" data-fold-more data-fold-keep={props.keep ? "" : undefined} data-folded={props.hidden ? "" : undefined}>{props.children}</span>;
 }
 /** A small icon button in a dashboard's line (the ⋯): a menu's trigger takes it with `as`. */
-export function DashIconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const [local, rest] = splitProps(props, ["children"]);
-  return <button type="button" {...rest} class="ui-dash-icon">{local.children ?? <Icons.More />}</button>;
-}
 
 /** The chats list's heading on a phone: the choice it shows, its count, and where. */
 export function GroupCompactHeading(props: { label: JSX.Element; count?: number | string | null; where?: JSX.Element }) {
@@ -123,9 +119,7 @@ export const DashDay = (props: { children: JSX.Element }) => <div class="ui-dash
 export function DashMore(props: { count?: number | string; onClick: () => void; children: JSX.Element }) {
   return <button type="button" class="ui-dash-more" onClick={() => props.onClick()}>{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button>;
 }
-export const DashEmpty = (props: { children: JSX.Element }) => <div class="ui-dash-empty">{props.children}</div>;
 /** A line of prose in a group (a note, an error). */
-export const DashNote = (props: { error?: boolean; children: JSX.Element }) => <p class="ui-dash-note" role={props.error ? "alert" : undefined} data-error={props.error ? "" : undefined}>{props.children}</p>;
 
 /** A change's row, as the workspace panel draws it: file mark, name, folder, line counts, a status letter. */
 export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children" | "class"> & { icon: JSX.Element; name: string; directory?: string; added?: number | null; removed?: number | null; status: string; statusTitle?: string; conflict?: boolean; selected?: boolean }) {

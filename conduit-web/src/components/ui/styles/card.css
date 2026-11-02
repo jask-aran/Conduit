@@ -32,7 +32,7 @@
 .ui-card .ui-chip-body { width: 100%; }
 .ui-card .ui-chip-copy { max-width: none; text-align: left; }
 /* Actions share one width, the widest's, at the card's right edge. */
-.ui-card-actions { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: var(--space-md); margin-left: auto; }
+.ui-actions:where([data-actions="card"]) { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: var(--space-md); margin-left: auto; }
 
 /* Shared dialog parts: content supplies state and handlers, never surface CSS. */
 .ui-card { min-height: 0; max-height: 100%; overflow-y: auto; color: var(--foreground); font-size: var(--text-row); }
@@ -49,10 +49,10 @@
 .ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
 .ui-card-description { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-card-form, .ui-card-body { display: flex; min-width: 0; flex-direction: column; gap: var(--card-gap); }
-.ui-card-actions { grid-auto-columns: minmax(0, 1fr); max-width: 100%; }
-.ui-card-actions > .ui-button { min-width: 0; min-height: var(--control); height: auto; white-space: normal; }
-.ui-card-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
-.ui-card-note[data-error] { color: var(--destructive); }
+.ui-actions:where([data-actions="card"]) { grid-auto-columns: minmax(0, 1fr); max-width: 100%; }
+.ui-actions:where([data-actions="card"]) > .ui-button { min-width: 0; min-height: var(--control); height: auto; white-space: normal; }
+.ui-note:where([data-note="card"]) { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
+.ui-note:where([data-note="card"])[data-error] { color: var(--destructive); }
 .ui-card-read mark { border-radius: var(--radius-inset); background: var(--tint); color: var(--foreground); }
 .ui-card-read { display: block; max-height: var(--measure-xs); overflow: auto; padding: var(--space-md); border-radius: var(--radius-inset); background: var(--tint); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-card-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm) var(--space-lg); font-size: var(--text-caption); }

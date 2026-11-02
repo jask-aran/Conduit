@@ -1,8 +1,8 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
-import { Icons } from "@/components/ui";
+import { Icons, Empty } from "@/components/ui";
 import { createResource, createSignal, createEffect, For, onCleanup, Show } from "solid-js";
-import { Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, GlanceEmpty } from "@/components/ui/overlay";
+import { Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer } from "@/components/ui/overlay";
 import { Section, Item } from "@/components/ui/popover";
 
 import { WorkspaceGlyph } from "../project/workspace-appearance";
@@ -144,7 +144,7 @@ function FolderPreview(props: { project: Project; active: (chat: ChatSummary) =>
       title={loose() ? "Chats" : props.project.name}
       facts={[where(), standing()]}
     />
-    <Show when={chats().length} fallback={<GlanceEmpty>No chats yet</GlanceEmpty>}>
+    <Show when={chats().length} fallback={<Empty kind="glance">No chats yet</Empty>}>
       <Section>
         <For each={chats().slice(0, 6)}>{(chat) => <Item icon={<ThreadHarnessMark id={chat.harnessId} label={harnessMarkLabelFor(chat.harnessId)} />} meta={dateOf(stampOf(chat))}>
           {chat.title || "Untitled chat"}
@@ -172,7 +172,7 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
   });
 
   return <Glance label={!props.target && props.folder ? "Folder preview" : "Chat preview"}>
-    <Show when={props.target} fallback={<Show when={props.folder} fallback={<GlanceEmpty>Nothing highlighted</GlanceEmpty>}>{(folder) => <FolderPreview project={folder()} active={props.active || (() => false)} />}</Show>}>
+    <Show when={props.target} fallback={<Show when={props.folder} fallback={<Empty kind="glance">Nothing highlighted</Empty>}>{(folder) => <FolderPreview project={folder()} active={props.active || (() => false)} />}</Show>}>
       {(target) => <>
         <GlanceHead mark={<ThreadHarnessMark id={target().chat.harnessId} label={harnessMarkLabelFor(target().chat.harnessId)} />} title={target().chat.title || "Untitled chat"} facts={[`${[...new Set([
           harnessLabelFor(target().chat.harnessId || target().chat.backend?.implementation),
@@ -188,10 +188,10 @@ export function ChatPreview(props: { target: Target | null; folder?: Project | n
             <Show when={seen().answerMath} fallback={<Show when={seen().answer}><GlanceAnswer>{seen().answer}</GlanceAnswer></Show>}>
               {(html) => <GlanceAnswer html={html()} />}
             </Show>
-            <Show when={!seen().prompt}><GlanceEmpty>No messages yet</GlanceEmpty></Show>
+            <Show when={!seen().prompt}><Empty kind="glance">No messages yet</Empty></Show>
           </>}
         </Show>
-        <Show when={read.error && settled()?.chat.id === target().chat.id}><GlanceEmpty>Couldn't read this chat</GlanceEmpty></Show>
+        <Show when={read.error && settled()?.chat.id === target().chat.id}><Empty kind="glance">Couldn't read this chat</Empty></Show>
       </>}
     </Show>
   </Glance>;

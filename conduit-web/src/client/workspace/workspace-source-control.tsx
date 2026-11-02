@@ -1,6 +1,6 @@
 import { SourceOverview, SourcePatch, SourceView } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
-import { Icons, Group } from "@/components/ui";
+import { Icons, Group, Empty, IconButton } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { CirclePlusIcon, GitCommitHorizontalIcon, SendIcon } from "lucide-solid";
@@ -16,9 +16,9 @@ import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
 import { Button, Segmented } from "@/components/ui/controls";
-import { ToolLine, CommitBox, ChangeLedger, ChangeList, ChangeItem, ChangeEmpty, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
+import { ToolLine, CommitBox, ChangeLedger, ChangeList, ChangeItem, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
 import { ChangeRow } from "@/components/ui/dashboard";
-import { ToolBar, ToolButton, ToolNotice, PaneEmpty } from "@/components/ui/pane";
+import { ToolBar, ToolNotice } from "@/components/ui/pane";
 import "./workspace.css";
 
 const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
@@ -257,16 +257,16 @@ export function SourceControlView(props: {
   return <SourceView>
       <ToolBar>
         <small>{c.mode() === "graph" ? `${c.diff()?.commits?.length || 0} recent` : `${c.diff()?.files.length || 0} changed`}</small>
-          <ToolButton aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<Icons.Refresh />}><Spinner /></Show></ToolButton>
-          <ToolButton aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><Icons.Download /></ToolButton>
-          <ToolButton aria-label="Push current branch" title="Push current branch" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("push")}><SendIcon /></ToolButton>
+          <IconButton aria-label="Fetch all remotes" title="Fetch all remotes" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("fetch")}><Show when={c.gitAction() === "fetch"} fallback={<Icons.Refresh />}><Spinner /></Show></IconButton>
+          <IconButton aria-label="Pull current branch" title="Pull current branch (fast-forward only)" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("pull")}><Icons.Download /></IconButton>
+          <IconButton aria-label="Push current branch" title="Push current branch" disabled={!c.diff()?.upstream || Boolean(c.gitAction())} onClick={() => void c.runGitAction("push")}><SendIcon /></IconButton>
       </ToolBar>
       <Show when={c.mode() === "changes"}>
       <SourceOverview>
       <ToolLine icon={<Icons.GitBranch />} title={c.diff() ? c.diff()!.repository ? c.diff()!.branch : "Not a Git repository" : "Loading Git status…"} detail={c.diff()?.upstream} end={<>
         <Show when={c.diff()?.ahead || c.diff()?.behind}><span>↑ {c.diff()?.ahead || 0} ↓ {c.diff()?.behind || 0}</span></Show>
-        <ToolButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><Icons.Copy /></ToolButton>
-        <ToolButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><Icons.Refresh /></ToolButton>
+        <IconButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><Icons.Copy /></IconButton>
+        <IconButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><Icons.Refresh /></IconButton>
       </>} />
       <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
       <Show when={c.diff()?.repository}>
@@ -276,10 +276,10 @@ export function SourceControlView(props: {
           onInput={c.setCommitMessage} onSubmit={() => void c.runGitAction("commit")} />
         <ChangeLedger>
           <Group kind="change" open={c.stagedOpen()} title="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
-            actions={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></ToolButton>}>
-            <Show when={c.stagedFiles().length} fallback={<ChangeEmpty>No staged changes</ChangeEmpty>}>
+            actions={<IconButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></IconButton>}>
+            <Show when={c.stagedFiles().length} fallback={<Empty kind="change">No staged changes</Empty>}>
               <ChangeList><For each={c.stagedFiles()}>{(file) =>
-                <ChangeItem action={<ToolButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></ToolButton>}>
+                <ChangeItem action={<IconButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></IconButton>}>
                   <ChangeRow {...changeDetails(file, true)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true"
                     onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}
                     icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, true).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, true).name} />} />
@@ -288,11 +288,11 @@ export function SourceControlView(props: {
             </Show>
           </Group>
           <Group kind="change" open={c.changesOpen()} title="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
-            actions={<ToolButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></ToolButton>}>
+            actions={<IconButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></IconButton>}>
             <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><ToolNotice>Untracked folders are grouped. Staging a folder includes its contents.</ToolNotice></Show>
-            <Show when={c.unstagedFiles().length} fallback={<ChangeEmpty>Working tree clean</ChangeEmpty>}>
+            <Show when={c.unstagedFiles().length} fallback={<Empty kind="change">Working tree clean</Empty>}>
               <ChangeList><For each={c.unstagedFiles()}>{(file) =>
-                <ChangeItem action={<ToolButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></ToolButton>}>
+                <ChangeItem action={<IconButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></IconButton>}>
                   <ChangeRow {...changeDetails(file, false)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="false"
                     onClick={(event) => props.onInspectFile(file.path, false, event.altKey)}
                     icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, false).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, false).name} />} />
@@ -321,8 +321,8 @@ export function SourceControlView(props: {
         onOpenWorkingFile={props.onOpenWorkingFile}
         onViewStateChange={c.review.setViewState}
       /></Show>
-        <Show when={c.mode() === "graph" || c.mode() === "patch"}><Show when={c.mode() === "patch"} fallback={<Show when={Boolean(c.diff()?.commits?.length)} fallback={<PaneEmpty>No commit history available.</PaneEmpty>}><CommitHistory commits={c.diff()?.commits || []} refs={c.diff()?.refs || []} branch={c.diff()?.branch} onCopy={copyText} onInspect={(commit) => void c.inspectCommit(commit)} /></Show>}>
-          <SourcePatch><Show when={c.commitDetailLoading()} fallback={<Show when={c.commitDetail()} fallback={<Show when={c.diff()?.diff} fallback={<PaneEmpty>{c.diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</PaneEmpty>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><PaneEmpty>Loading commit…</PaneEmpty></Show></SourcePatch>
+        <Show when={c.mode() === "graph" || c.mode() === "patch"}><Show when={c.mode() === "patch"} fallback={<Show when={Boolean(c.diff()?.commits?.length)} fallback={<Empty>No commit history available.</Empty>}><CommitHistory commits={c.diff()?.commits || []} refs={c.diff()?.refs || []} branch={c.diff()?.branch} onCopy={copyText} onInspect={(commit) => void c.inspectCommit(commit)} /></Show>}>
+          <SourcePatch><Show when={c.commitDetailLoading()} fallback={<Show when={c.commitDetail()} fallback={<Show when={c.diff()?.diff} fallback={<Empty>{c.diff()?.repository ? "Working tree is clean." : "Diff is available for Git projects."}</Empty>}>{(content) => <PatchView content={content()} />}</Show>}>{(detail) => <PatchView content={detail().content} />}</Show>}><Empty>Loading commit…</Empty></Show></SourcePatch>
         </Show></Show>
     </SourceView>;
 }

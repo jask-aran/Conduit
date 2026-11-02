@@ -1,8 +1,7 @@
-import { Icons } from "@/components/ui";
+import { Icons, Note } from "@/components/ui";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/menus";
-import { MenuNote } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { Avatar, ServerControl } from "@/components/ui/connection";
 import { accountName, loadAccount } from "../state/account";
@@ -232,9 +231,9 @@ export function ServerSwitcher(props: {
           <Show when={activeServerPaths().length > 0}>
             <MenuSub phone={phone()}>
               <MenuSubTrigger detailData detail={routeDetail()} title={inUse()?.origin}>Route</MenuSubTrigger>
-              <MenuSubContent><RouteChoices /><Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show></MenuSubContent>
+              <MenuSubContent><RouteChoices /><Show when={routeError()}><Note kind="menu" tone="error">{routeError()}</Note></Show></MenuSubContent>
             </MenuSub>
-            <Show when={routeError()}><MenuNote error>{routeError()}</MenuNote></Show>
+            <Show when={routeError()}><Note kind="menu" tone="error">{routeError()}</Note></Show>
           </Show>
         </MenuSection>
       </Show>

@@ -78,7 +78,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
-      <Show when={props.messages.length || props.working} fallback={<p class="ui-dash-empty">Nothing said yet. Say something to {props.name}.</p>}>
+      <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         <Transcript>
           <For each={rows()}>{(row, index) => row.kind === "room"
             ? <TranscriptRow flow={flowAt(index())}>

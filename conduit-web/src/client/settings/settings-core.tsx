@@ -57,7 +57,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/component
 import { Select } from "@/components/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/dialog";
-import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, SettingCredential, SettingRecorder, Keycap, Row, Group } from "@/components/ui";
+import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -728,11 +728,11 @@ export function Settings(props: {
           <Show when={current().authUrl}><SettingLink href={current().authUrl!}>Open sign-in</SettingLink></Show>
           <Show when={current().active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
         </SettingLine>
-        <Show when={current().authUrl && current().instructions}><SettingNote tone="quiet">{current().instructions}</SettingNote></Show>
+        <Show when={current().authUrl && current().instructions}><Note tone="quiet">{current().instructions}</Note></Show>
         <Show when={current().deviceCode}><SettingLine plain label="Code" state={<><code>{current().deviceCode!.userCode}</code></>}><SettingLink href={current().deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
         <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
         <Show when={current().prompt && current().prompt!.type !== "select"}><SettingLine plain label={current().prompt!.message}><Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
-        <Show when={current().error}><SettingNote tone="error">{current().error}</SettingNote></Show>
+        <Show when={current().error}><Note tone="error">{current().error}</Note></Show>
       </>}</Show>
     </>;
   };
@@ -1304,7 +1304,7 @@ export function Settings(props: {
               </Group>
               <Group title="Graphics">
                 <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
-                <Show when={gpuRendering() === false}><SettingNote>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</SettingNote></Show>
+                <Show when={gpuRendering() === false}><Note>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</Note></Show>
               </Group>
             </>
           </Show>
@@ -1318,7 +1318,7 @@ export function Settings(props: {
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>
-              <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<SettingLoading>Loading runtime settings…</SettingLoading>}><SettingNote tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></SettingNote></Show>}>
+              <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<Loading>Loading runtime settings…</Loading>}><Note tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></Note></Show>}>
                 <Group title="Agent processes">
                   <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Select id="warm-processes" aria-label="Warm processes" value={runtimeDraft().live} onChange={(event) => editRuntime("live", event.currentTarget.value)}>
                     <For each={countSteps([...RUNTIME_STEPS.live], runtimeDraft().live)}>{(count) => <option value={String(count)}>{count}</option>}</For>
@@ -1328,7 +1328,7 @@ export function Settings(props: {
                   </Select></SettingLine>
                 </Group>
                 <Group title="Running now">
-                  <For each={processes()} fallback={<SettingNote>No agent processes are running.</SettingNote>}>{(process) =>
+                  <For each={processes()} fallback={<Note>No agent processes are running.</Note>}>{(process) =>
                     <SettingLine plain label={(titlesSeen(), chatTitles.get(process.chatId) || "…")} title={`${process.model || ""}${process.createdAt ? ` · since ${new Date(process.createdAt).toLocaleString()}` : ""}`}
                       state={<>{process.generation || (process.activity && process.activity !== "idle") ? "working" : "idle"}{process.model ? ` · ${process.model.split("/").at(-1)}` : ""}</>}>
                       <Button variant="ghost" size="sm" onClick={() => void stopProcess(process.id)}>Stop</Button>
@@ -1339,13 +1339,13 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "workspaces"}>
-            <Show when={!props.templatesLoading} fallback={<SettingLoading>Loading workspace settings…</SettingLoading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<SettingNote>This workspace is not available.</SettingNote>}>{(workspace) => <Group title={workspace().name}><SettingNote>{workspace().workingRoot}</SettingNote><SettingNote>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</SettingNote><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
+            <Show when={!props.templatesLoading} fallback={<Loading>Loading workspace settings…</Loading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<Note>This workspace is not available.</Note>}>{(workspace) => <Group title={workspace().name}><Note>{workspace().workingRoot}</Note><Note>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</Note><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
               </Select></SettingLine></Group>}</Show></Show>
           </Show>
           <Show when={section() === "voice"}>
-            <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<SettingLoading>Loading voice settings…</SettingLoading>}><SettingNote tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></SettingNote></Show>}>
+            <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<Loading>Loading voice settings…</Loading>}><Note tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></Note></Show>}>
               <>
                 <Group title="Transcription">
                   <SettingLine plain label="Source">
@@ -1430,7 +1430,7 @@ export function Settings(props: {
                     {/* The composer's own waveform, so a test looks like dictation will. */}
                     <SettingLine plain label={audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"} state={<>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</>}></SettingLine><SettingWide><VoiceWaveform history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></SettingWide>
                   </Show>
-                  <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <SettingNote tone="error">{message()}</SettingNote>}</Show>
+                  <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <Note tone="error">{message()}</Note>}</Show>
                   <SettingLine plain label="Capture">
                     <Segmented arrows label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
                       { value: "raw", label: "Raw" },
@@ -1467,12 +1467,12 @@ export function Settings(props: {
                   </SettingLine>
                 </Group>
 
-                <Show when={voiceError()}><SettingNote tone="error">{voiceError()}</SettingNote></Show>
+                <Show when={voiceError()}><Note tone="error">{voiceError()}</Note></Show>
               </>
             </Show>
           </Show>
           <Show when={section() === "search"}>
-            <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<SettingLoading>Loading search settings…</SettingLoading>}><SettingNote tone="error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></SettingNote></Show>}>
+            <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<Loading>Loading search settings…</Loading>}><Note tone="error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></Note></Show>}>
               {(settings) => <>
                 <Group title="Search">
                   <SettingLine label="Search with" title="Automatic is pi-web-access's own order: on a ChatGPT model, OpenAI on that sign-in first; otherwise Exa, then every other provider that can search."
@@ -1509,7 +1509,7 @@ export function Settings(props: {
                       <Switch label={tool.label} checked={settings().tools[tool.key]} onChange={(on) => editSearch({ tools: { [tool.key]: on } })} />
                     </SettingLine>
                   }</For>
-                  <SettingNote>Chats pick up tool changes when Conduit next restarts.</SettingNote>
+                  <Note>Chats pick up tool changes when Conduit next restarts.</Note>
                 </Group>
                 <Group title="Reading pages">
                   <For each={SEARCH_FETCHING}>{(item) =>
@@ -1522,7 +1522,7 @@ export function Settings(props: {
                     : CLOUDFLARE_NEEDED}>
                     <Switch label="Read values off pages" disabled={!settings().cloudflare && !settings().fetching.extract} checked={settings().fetching.extract} onChange={(extract) => editSearch({ fetching: { extract } })} />
                   </SettingLine>
-                  <Show when={!settings().cloudflare}><SettingNote>{CLOUDFLARE_NEEDED}</SettingNote></Show>
+                  <Show when={!settings().cloudflare}><Note>{CLOUDFLARE_NEEDED}</Note></Show>
                 </Group>
                 <Group title="Providers">
                   {/* Those that can search now, then the one being added; the rest are a search away. */}
@@ -1543,9 +1543,9 @@ export function Settings(props: {
                       </Select>
                     </SettingLine>
                   </Show>
-                  <Show when={searchError()}><SettingNote tone="error">{searchError()}</SettingNote></Show>
-                  <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
-                  <SettingNote>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></SettingNote>
+                  <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
+                  <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
+                  <Note>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></Note>
                 </Group>
               </>}
             </Show>
@@ -1592,13 +1592,13 @@ export function Settings(props: {
                   <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
                   <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
                 </ol>
-                <SettingNote>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</SettingNote>
+                <Note>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</Note>
               </SettingDetails>
-              <Show when={chatGptError()}><SettingNote tone="error">{chatGptError()}</SettingNote></Show>
+              <Show when={chatGptError()}><Note tone="error">{chatGptError()}</Note></Show>
             </Group>
             <Group title="Provider accounts">
-              <Show when={authUnavailable()}><SettingNote tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</SettingNote></Show>
-              <Show when={authError() && !authUnavailable()}><SettingNote tone="error">{authError()}</SettingNote></Show>
+              <Show when={authUnavailable()}><Note tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</Note></Show>
+              <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
                 <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
                 <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>

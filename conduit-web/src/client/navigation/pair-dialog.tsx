@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/dialog";
-import { CardActions, CardCaption, CardQR, CardNote, CardDetails } from "@/components/ui/card";
+import { CardCaption, CardQR, CardDetails } from "@/components/ui/card";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 
@@ -9,6 +9,8 @@ import { activeServer, pathsOf, serverPathLabel, type ServerPath } from "../plat
 import { shortOrigin } from "./server-switcher";
 import { pairingFragment } from "../platform/pairing";
 import { Columns, Group } from "@/components/ui/group";
+import { Note } from "@/components/ui/state";
+import { Actions } from "@/components/ui/actions";
 
 /*
  * Pair a device from a client that is already signed in: the same one-time,
@@ -72,10 +74,10 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   return <Dialog open={props.open} onOpenChange={props.onOpenChange} title="Connect" close size="split" >
     <Columns kind="card">
       <Group kind="card" title="Pair a device">
-    <Show when={route()} fallback={<CardNote>Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</CardNote>}>
+    <Show when={route()} fallback={<Note kind="card">Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</Note>}>
       <CardQR svg={svg()} expired={expired()} reveal />
       <CardCaption title={route()!.origin}>{shortOrigin(route()!.origin)}</CardCaption>
-      <Show when={error()}><CardNote error>{error()}</CardNote></Show>
+      <Show when={error()}><Note kind="card" tone="error">{error()}</Note></Show>
       {/* The route in the words the menus use; the app takes the nearest
           route that proves it is this server. */}
       <CardDetails>
@@ -84,10 +86,10 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
         <Show when={version()}><dt>Version</dt><dd title={version()}>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
         <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
       </CardDetails>
-      <CardActions>
+      <Actions>
         <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>
         <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
-      </CardActions>
+      </Actions>
     </Show>
       </Group>
       <Group kind="card" title="Add server">{props.addServer}</Group>

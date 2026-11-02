@@ -39,10 +39,10 @@
 .ui-dash-quick-action:is(:focus-visible) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-dash-quick-action:is(:hover, :focus-visible) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-dash-quick-action > svg { display: none; }
-.ui-dash-icon { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
-.ui-dash-icon:is(:focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); }
-@media (hover: hover) { .ui-dash-icon:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); } }
-.ui-dash-icon > svg { width: var(--icon); height: var(--icon); }
+.ui-icon-button:where([data-icon-button="dash"]) { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
+.ui-icon-button:where([data-icon-button="dash"]):is(:focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); }
+@media (hover: hover) { .ui-icon-button:where([data-icon-button="dash"]):is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); } }
+.ui-icon-button:where([data-icon-button="dash"]) > svg { width: var(--icon); height: var(--icon); }
 /* Folding (the app's watchFold): a folded item stays laid out, hidden, so its width is known when room comes back. */
 :is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
 :is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
@@ -134,9 +134,9 @@
 .ui-dash-more:is(:focus-visible, [data-held]) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-dash-more:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-dash-more small { margin-left: var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-dash-empty { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-dash-note { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-dash-note[data-error] { color: var(--destructive); }
+.ui-empty:where([data-empty="dash"]) { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-note:where([data-note="dash"]) { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-note:where([data-note="dash"])[data-error] { color: var(--destructive); }
 
 /* Changes: the workspace panel's rows -- file mark, name, folder, counts, a status letter in its colour. */
 .ui-row:where([data-density="list"])[data-change-row] > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }

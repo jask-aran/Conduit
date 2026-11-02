@@ -1,8 +1,8 @@
-import { ComposerDock, Group, GroupHeading, GroupToggle } from "@/components/ui";
+import { ComposerDock, Group, GroupHeading, GroupToggle, Empty, IconButton } from "@/components/ui";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
+import { Counts, DashHeader, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 
@@ -222,7 +222,7 @@ export function SplitQuickActions(props: { items: Array<SplitQuickAction | false
     <Index each={items()}>{(item, index) => <QuickAction icon={item().icon} label={item().label} folded={index >= fit()} onClick={() => item().onClick()} />}</Index>
     <QuickMore ref={(element) => { more = element; }} keep={Boolean(props.manage)} hidden={!props.manage && !folded().length}>
       <DropdownMenu modal={false}>
-        <MenuControl as={DashIconButton} tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"} />
+        <MenuControl kind="dash" as={IconButton} tabIndex={-1} aria-label={props.label ?? "More"} title={props.label ?? "More"} />
         <MenuContent>
           <Show when={folded().length}><MenuSection><For each={folded()}>{(item) => <MenuRow icon={item.icon} onSelect={() => item.onClick()}>{item.label}</MenuRow>}</For></MenuSection></Show>
           <Show when={props.manage}><MenuSection>{props.manage?.()}</MenuSection></Show>
@@ -276,7 +276,7 @@ export function SplitGroupMore(props: { children: JSX.Element; count?: number | 
 }
 
 export function SplitEmpty(props: { children: JSX.Element }) {
-  return <DashEmpty>{props.children}</DashEmpty>;
+  return <Empty kind="dash">{props.children}</Empty>;
 }
 
 

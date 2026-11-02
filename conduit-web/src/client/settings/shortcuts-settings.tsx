@@ -3,7 +3,7 @@ import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
 
-import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingNote, SettingRecorder, SettingValue, Group } from "@/components/ui";
+import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingRecorder, SettingValue, Group, Note } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 import { desktopShell } from "../platform/installed-client";
@@ -259,13 +259,13 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>
       <Show when={file()}>{(held) => <>
         <SettingLine plain mono label="File" state="on the hub, editable by hand or by an agent" title={held().path}><SettingValue mono>{held().path}</SettingValue></SettingLine>
-        <For each={held().errors}>{(error) => <SettingNote tone="error">Not applied: {error}</SettingNote>}</For>
+        <For each={held().errors}>{(error) => <Note tone="error">Not applied: {error}</Note>}</For>
       </>}</Show>
       {/* Inside the group: between groups it would part their hairline. */}
       <LiveNote>{status()}</LiveNote>
     </Group>
 
-    <Show when={groups().length} fallback={<SettingNote tone="quiet">{query().trim() ? `No shortcuts match “${query()}”.` : "No shortcuts assigned."}</SettingNote>}>
+    <Show when={groups().length} fallback={<Note tone="quiet">{query().trim() ? `No shortcuts match “${query()}”.` : "No shortcuts assigned."}</Note>}>
       <For each={groups()}>{([group, items]) => <Group title={GROUP_LABELS[group] || contextLabel(group)}>
         <For each={items}>{(command) => {
           const bindings = () => {
@@ -289,8 +289,8 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
               <SettingRecorder ref={(element) => { recorder = element; }} label={`Record shortcut for ${command.label}`} onKeyDown={recordKey}
                 keys={candidate() ? [formatShortcutBinding(candidate()!, props.manager.environment)] : undefined}
                 saveDisabled={saveBlocked()} onSave={saveRecording} onCancel={cancelRecording} />
-              <Show when={duplicateBinding()}><SettingNote tone="error">This command already has that shortcut.</SettingNote></Show>
-              <For each={conflicts()}>{(conflict) => <SettingNote tone={conflict.severity === "error" ? "error" : "quiet"}>{conflictMessage(conflict)}</SettingNote>}</For>
+              <Show when={duplicateBinding()}><Note tone="error">This command already has that shortcut.</Note></Show>
+              <For each={conflicts()}>{(conflict) => <Note tone={conflict.severity === "error" ? "error" : "quiet"}>{conflictMessage(conflict)}</Note>}</For>
             </Show>
           </>;
         }}</For>

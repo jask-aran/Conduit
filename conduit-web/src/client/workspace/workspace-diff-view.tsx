@@ -1,7 +1,5 @@
-import { Icons } from "@/components/ui";
-import { FileButton } from "@/components/ui/file";
+import { Icons, Empty, IconButton } from "@/components/ui";
 import { DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
-import { PaneEmpty } from "@/components/ui/pane";
 import { createSignal, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
 
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
@@ -87,7 +85,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
   };
   onCleanup(() => stopResize?.());
   return <DiffShell collapsed={navigatorCollapsed()} width={navigatorWidth()}>
-    <Show when={!navigatorCollapsed()} fallback={<DiffRail><FileButton type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><Icons.ExpandFiles /></FileButton></DiffRail>}>
+    <Show when={!navigatorCollapsed()} fallback={<DiffRail><IconButton kind="file" type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><Icons.ExpandFiles /></IconButton></DiffRail>}>
       <WorkspaceReviewNavigator
       title={props.title}
       files={props.files}
@@ -102,13 +100,13 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       }} />
     </Show>
     <DiffBody>
-      <Show when={props.comparison} fallback={<PaneEmpty>{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</PaneEmpty>}>
-        {(comparison) => <Suspense fallback={<PaneEmpty>Loading comparison…</PaneEmpty>}>
+      <Show when={props.comparison} fallback={<Empty>{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</Empty>}>
+        {(comparison) => <Suspense fallback={<Empty>Loading comparison…</Empty>}>
           <WorkspaceComparison
             comparison={comparison()}
             sourceKey={props.sourceKey}
             viewState={props.viewState}
-            headerAction={<FileButton type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><Icons.Edit /></FileButton>}
+            headerAction={<IconButton kind="file" type="button" aria-label="Open working file" title="Open working file" onClick={() => props.onOpenWorkingFile(comparison().path)}><Icons.Edit /></IconButton>}
             comparisonSource={props.comparisonSource}
             commentHighlights={reviewComments(props.annotationChatId ?? "")
               .filter((comment) => comment.path === comparison().path && comment.scope === comparison().scope)

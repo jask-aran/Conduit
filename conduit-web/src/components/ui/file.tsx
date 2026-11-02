@@ -42,22 +42,15 @@ export const FileGit = (props: { status: string }) => <code class="ui-file-git" 
 /** The unsaved dot: there while the file has changes not saved. */
 export const FileDirty = (props: { dirty: boolean }) => <span class="ui-file-dirty" data-dirty={props.dirty ? "" : undefined} aria-hidden="true" />;
 /** The file's actions (review, copy, download): the ones fitting folds first. */
-export const FileActions = (props: { ref?: (element: HTMLDivElement) => void; children: JSX.Element }) => <div ref={props.ref} class="ui-file-actions">{props.children}</div>;
 /** The editor's tools (find, wrap): they go last, only when the header is bare. */
-export const FileTools = (props: { children: JSX.Element }) => <div class="ui-file-tools">{props.children}</div>;
 /** What a host adds to the header (a comparison's scope); goes with the actions. */
 export const FileSuffix = (props: { children?: JSX.Element }) => <span class="ui-file-suffix">{props.children}</span>;
 
 /** A header or status-bar control: an icon (label is its name and tooltip), or words with an icon (wide).
  *  inMenu: the file's ⋯ has it too, so a pane's viewer leaves it there. close: the header's ×, after everything. */
-export function FileButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label?: string; wide?: boolean; inMenu?: boolean; close?: boolean; "data-fold"?: string }) {
-  const [local, rest] = splitProps(props, ["label", "wide", "inMenu", "close", "children"]);
-  return <button type="button" aria-label={local.label} title={local.label} {...rest} class="ui-file-button"
-    data-wide={local.wide ? "" : undefined} data-in-menu={local.inMenu ? "" : undefined} data-close={local.close ? "" : undefined}>{local.children}</button>;
-}
 /** The header's ⋯: what fitting folded, and what a pane's viewer keeps there. A menu's trigger takes it with `as`. */
 export function FileMore(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { ref?: (element: HTMLButtonElement) => void }) {
-  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-file-button" data-more=""><Icons.More /></button>;
+  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-icon-button" data-icon-button="file" data-more=""><Icons.More /></button>;
 }
 
 /** The status bar at a file's foot: its commands, then its details at the end. Both scroll sideways, never wrap. */

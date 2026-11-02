@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { ToolBar, ToolButton, WebAddress, WebScreen, WebView } from "@/components/ui";
+import { ToolBar, WebAddress, WebScreen, WebView, IconButton } from "@/components/ui";
 import * as Icons from "@/components/ui/icons";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
@@ -187,9 +187,9 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     {props.header}
     <WebView label="Hub browser">
       <ToolBar>
-        <ToolButton label="Back" onClick={() => void act("back")}><Icons.Back /></ToolButton>
-        <ToolButton label="Forward" onClick={() => void act("forward")}><Icons.Forward /></ToolButton>
-        <ToolButton label="Reload" onClick={() => void act("reload")}><Icons.Refresh /></ToolButton>
+        <IconButton label="Back" onClick={() => void act("back")}><Icons.Back /></IconButton>
+        <IconButton label="Forward" onClick={() => void act("forward")}><Icons.Forward /></IconButton>
+        <IconButton label="Reload" onClick={() => void act("reload")}><Icons.Refresh /></IconButton>
         <WebAddress aria-label="Address" placeholder="Search or type an address" value={address()} secure={address().startsWith("https://")}
           onFocus={(event) => { editing = true; event.currentTarget.select(); }} onBlur={() => { editing = false; }}
           onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={go} />

@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { Dock, DockDocument, DockSurface, SheetFill, ToolContent } from "@/components/ui";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, Loading } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
 import { Portal } from "solid-js/web";
@@ -9,7 +9,7 @@ import { unitPx } from "@/components/ui/layout";
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
-import { PaneEdge, PaneLoading, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
+import { PaneEdge, ToolHeader, ToolView, ToolViews } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import type { Connectivity } from "../state/runtime";
@@ -638,7 +638,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     </ToolContent>
     {/* A pane's document moved into the dock draws here, over the tools. */}
     <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
-    <Show when={requests.loading()}><PaneLoading><Spinner /><span>Loading workspace</span></PaneLoading></Show>
+    <Show when={requests.loading()}><Loading kind="pane"><Spinner /><span>Loading workspace</span></Loading></Show>
     </DockSurface>
   </Dock>
     <Show when={props.splitHost?.() && props.splitView?.() && !/^(chat|page|files):/.test(props.splitView()!) && props.splitView()}>{(tool) =>

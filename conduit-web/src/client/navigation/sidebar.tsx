@@ -4,9 +4,9 @@ import { AgentAvatar, HarnessMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
-import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
+import { CardForm, CardBody, CardRead } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot, Row, Group } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -18,7 +18,6 @@ import type { UpdateState } from "../main";
 import { androidShell, desktopShell, installedClientKind } from "../platform/installed-client";
 import { makeFolderAvailable, pairingWith } from "../platform/this-computer";
 import { BrowserMachine } from "@/components/ui/browser";
-import { PaneEmpty } from "@/components/ui/pane";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
@@ -656,7 +655,7 @@ export function Sidebar(props: {
   const railProjectIsActive = (project: Project) => !props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId));
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: JSX.Element }) =>
-    <RailButton aria-label={railProps.label} title={railProps.label} current={railProps.current} live={railProps.live} onClick={railProps.onClick}>{railProps.children}</RailButton>;
+    <IconButton kind="rail" aria-label={railProps.label} title={railProps.label} current={railProps.current} live={railProps.live} onClick={railProps.onClick}>{railProps.children}</IconButton>;
 
   const openNewDialog = (kind: "folder" | "workspace") => {
     if (kind === "workspace") {
@@ -966,7 +965,7 @@ export function Sidebar(props: {
         </ContextMenuContent>
       </ContextMenu>}>
       <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} indent />}</For>
-      <Show when={!blockProps.project.sessions.length}><NavNote>No chats</NavNote></Show>
+      <Show when={!blockProps.project.sessions.length}><Note kind="nav">No chats</Note></Show>
     </NavFolder>;
   };
 
@@ -1063,12 +1062,12 @@ export function Sidebar(props: {
           <Row density="nav" element="button" quiet lead={<Icons.Search />} meta={`${moreChats()} more`} onClick={() => props.onOpenPalette("chat-search", "scope:chats ")}>View all chats</Row>
         </Show>
         <Show when={!allChats().length}>
-          <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={4} />}><NavNote>No chats</NavNote></Show>
+          <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={4} />}><Note kind="nav">No chats</Note></Show>
         </Show>
       </Show>
       <For each={groupProps.projects}>{(project) => <ProjectBlock project={project} workspace={groupProps.workspace} />}</For>
       <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}>
-        <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={2} />}><NavNote>{groupProps.emptyLabel}</NavNote></Show>
+        <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={2} />}><Note kind="nav">{groupProps.emptyLabel}</Note></Show>
       </Show>
     </Group>;
   };
@@ -1177,7 +1176,7 @@ export function Sidebar(props: {
           <ProjectGroup label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
           <Group kind="nav" title="Terminals">
             <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
-            <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
+            <Show when={!terminals().length}><Note kind="nav">No live terminals</Note></Show>
           </Group>
         </>}>
           <For each={byMachine()}>{(group) => <Group kind="nav" title={group.machine.label} away={awayNote(group.machine)}>
@@ -1218,15 +1217,15 @@ export function Sidebar(props: {
               </MenuRadioGroup>
             </MenuSection></MenuContent>
           </DropdownMenu> : undefined}
-          waiting={picking() ? <PaneEmpty role="status"><div>
+          waiting={picking() ? <Empty role="status"><div>
             <Icons.Folder />
             <strong>{picking() === "open" ? "Choose a folder in the window that opened" : "No folder chosen"}</strong>
             <p>{computerPickerError() || (picking() === "open" ? `It is shared with ${hubName()}, with edits and commands, and becomes the workspace.`
               : "Choose one with this computer's picker, or another machine from the menu.")}</p>
-            <Show when={picking() === "dismissed"}><CardActions>
+            <Show when={picking() === "dismissed"}><Actions>
               <DialogButton type="button" onClick={pickOnThisComputer}><Icons.Folder />Choose a folder…</DialogButton>
-            </CardActions></Show>
-          </div></PaneEmpty> : undefined}
+            </Actions></Show>
+          </div></Empty> : undefined}
           projects={props.projects.filter((project) => workspaceOn() ? project.nodeId === workspaceOn() : !project.nodeId || project.nodeId === machines()?.find((machine) => machine.hub)?.id)} location={computerPicker()} loading={computerPickerLoading()} error={computerPickerError()} onBrowse={(target) => void browseComputerPicker(target)} onPrefetch={() => {}} onMakeWorkspace={() => {}} onCreateWorkspace={() => {}} onOpenWorkspace={props.onOpenProject} onManageWorkspace={() => {}} onStartWorkspaceAction={() => {}} onOpenView={() => {}} onOpenFile={() => {}} onSelectFolder={() => { selectWorkspaceMode("linked"); setWorkspaceStep("details"); }} onCreateFolder={() => { selectWorkspaceMode("created"); setWorkspaceStep("details"); }} onCloneRepository={() => { selectWorkspaceMode("cloned"); setWorkspaceStep("details"); }} /></Show>
         <Show when={newKind() === "folder" || workspaceStep() === "details"}>
           <Show when={mode() === "cloned"}><DialogField label={<>GitHub repository or Git URL</>}><DialogInput id="folder-clone" value={cloneUrl()} disabled={submitting()} placeholder="react/react or https://github.com/org/repo.git" onInput={(event) => setCloneUrl(event.currentTarget.value)} /></DialogField></Show>
@@ -1235,12 +1234,12 @@ export function Sidebar(props: {
           <Show when={mode() === "cloned"}><DialogField label={<>Folder name (optional)</>}><DialogInput id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></DialogField></Show>
           {/* Where it will be: the folder, and whose (a client's, shared with the hub; or the hub's own, as the preview says). */}
           <Show when={newKind() === "workspace" && workspaceOn()}><CardBody><CardRead>{path()}</CardRead>
-            <Show when={!tooBroad()} fallback={<CardNote error>That folder is too broad: choose a folder inside it.</CardNote>}>
-              <CardNote>On {chosenMachine()?.label}. {hubName()} gets edits and commands in this folder; chats in it run their tools there.</CardNote>
+            <Show when={!tooBroad()} fallback={<Note kind="card" tone="error">That folder is too broad: choose a folder inside it.</Note>}>
+              <Note kind="card">On {chosenMachine()?.label}. {hubName()} gets edits and commands in this folder; chats in it run their tools there.</Note>
             </Show></CardBody></Show>
-          <Show when={!workspaceOn() ? workspacePreview() : null}>{(preview) => <CardBody><CardRead>{preview().path}</CardRead><CardNote>{preview().ownership}</CardNote></CardBody>}</Show>
-          <Show when={previewError()}><CardNote error>{previewError()}</CardNote></Show>
-          <CardActions><Show when={newKind() === "workspace"}><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</DialogButton></Show><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={closeNewDialog}>Cancel</DialogButton><DialogButton type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</DialogButton></CardActions>
+          <Show when={!workspaceOn() ? workspacePreview() : null}>{(preview) => <CardBody><CardRead>{preview().path}</CardRead><Note kind="card">{preview().ownership}</Note></CardBody>}</Show>
+          <Show when={previewError()}><Note kind="card" tone="error">{previewError()}</Note></Show>
+          <Actions><Show when={newKind() === "workspace"}><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={() => setWorkspaceStep("explore")}>Back</DialogButton></Show><DialogButton type="button" variant="ghost" outline disabled={submitting()} onClick={closeNewDialog}>Cancel</DialogButton><DialogButton type="submit" disabled={!canCreate()}>{submitting() ? (mode() === "cloned" ? "Cloning…" : "Creating…") : mode() === "cloned" ? "Clone workspace" : mode() === "linked" ? "Add workspace" : mode() === "created" ? "Create workspace" : "Create folder"}</DialogButton></Actions>
         </Show>
       </CardBody></CardForm>
     </Dialog>
@@ -1248,7 +1247,7 @@ export function Sidebar(props: {
     <Dialog open={Boolean(rename())} title={rename()?.type === "chat" ? "Rename chat" : rename()?.type === "terminal" ? "Rename terminal" : "Rename folder"}
       description={rename()?.type === "chat" ? "Set the display name stored by Conduit." : rename()?.type === "terminal" ? "Set the terminal session name." : "Change the folder's display name without changing its working-directory path."}
       onOpenChange={(open) => { if (!open) setRename(null); }}>
-      <CardForm onSubmit={submitRename}><DialogField label={<>Name</>}><DialogInput id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></DialogField><CardActions><DialogButton type="button" variant="ghost" outline onClick={() => setRename(null)}>Cancel</DialogButton><DialogButton type="submit" disabled={!renameValue().trim()}>Rename</DialogButton></CardActions></CardForm>
+      <CardForm onSubmit={submitRename}><DialogField label={<>Name</>}><DialogInput id="rename-name" value={renameValue()} onInput={(event) => setRenameValue(event.currentTarget.value)} /></DialogField><Actions><DialogButton type="button" variant="ghost" outline onClick={() => setRename(null)}>Cancel</DialogButton><DialogButton type="submit" disabled={!renameValue().trim()}>Rename</DialogButton></Actions></CardForm>
     </Dialog>
 
     <Dialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
@@ -1261,7 +1260,7 @@ export function Sidebar(props: {
           {(target) => <DialogItem icon={<PlaceGlyph project={target} />} onClick={() => { const current = moving(); if (current) void props.onMoveChat(current.chat, current.project, target); setMoving(null); }}>{target.name}</DialogItem>}
         </For>
         <Show when={!props.projects.some((item) => item.id !== moving()?.project.id)}>
-          <CardNote>No other folders to move this chat to.</CardNote>
+          <Note kind="card">No other folders to move this chat to.</Note>
         </Show>
       </DialogSection>
     </Dialog>

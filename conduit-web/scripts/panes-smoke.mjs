@@ -246,7 +246,7 @@ await scenario("split opens an empty column; narrowing folds actions in order in
   check("some actions folded", order.length > 0, folded);
   check("folded lowest priority first", order.every((value, index) => index === 0 || value > order[index - 1]) && order[0] === 0, folded);
   check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer .ui-file-head")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
-  await page.locator(".ui-file-viewer .ui-file-button[data-more]").first().click();
+  await page.locator(".ui-file-viewer .ui-icon-button[data-icon-button=file][data-more]").first().click();
   const items = await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim()));
   for (const want of ["Wrap lines", "Copy contents", "Copy path"]) check(`⋯ lists ${want}`, items.some((item) => item.startsWith(want)), items.join(" | "));
   check("⋯ lists the folded download", !order.includes(0) || items.some((item) => /download/i.test(item)), items.join(" | "));
