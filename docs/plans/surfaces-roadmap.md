@@ -1,4 +1,4 @@
-# Panes, browser and settings directions
+# Surfaces roadmap: panes, browser, agents and settings
 
 Status: directions and review decisions from 2026-11-02, after studying a comparable self-hosted agent workspace.
 Not all decided; shape into issues before building. Newest last.
@@ -129,6 +129,18 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [ ] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits.
 - [ ] 18. Server switcher: a profile picture in its menu. Account itself stays in Settings.
 
+### Chat, agents and voice (decided 2026-11-02)
+
+- [ ] 27. Message queue: rework what a message sent mid-turn does (queue, steer, interrupt); the current behaviour
+  is not what the user wants. Design first.
+- [ ] 28. Sub-agent limits: extend the `subagent` tool with limits (concurrent and background runs, iterations,
+  output size).
+- [ ] 29. Voice: extend Settings › Voice beyond dictation with text-to-speech (reading replies aloud) and voice memos.
+- [ ] 30. jbot channels: messaging apps (Telegram, Discord, Slack, WhatsApp, Signal, SMS, email) as jbot's channels,
+  grown through the jbot message log (`persistent-agent.md`). Worth keeping from the study: a conversation in a
+  messaging app attaches to a thread, and a command there starts a fresh one.
+- [ ] 31. A single drawer pane from the bottom, later. Not recursive splits.
+
 ### Later or lower priority
 
 - [ ] 19. Memory view with scope and provenance.
@@ -142,4 +154,8 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   uncertain, an idempotency key, the destination snapshotted. The user's call.
 
 Decided not to build: a compaction settings page, a harness-first page, users and roles, an OpenAI-compatible
-gateway, notification targets beyond jbot.
+gateway, notification targets beyond jbot, recursive splits in any direction, theming (import and export), image
+generation settings (models handle it), installed-app share settings, transcript sound effects.
+
+Waiting on pi-durable: an AI reviewer for approvals (a helper model approving or flagging tool calls); not before
+pi-durable itself covers it.
