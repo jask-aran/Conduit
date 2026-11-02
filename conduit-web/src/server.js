@@ -39,6 +39,7 @@ import { PiAuthBroker } from "./pi-auth-broker.js";
 import { ChatLifecycle } from "./chat-lifecycle.js";
 import {
   authStartupViolation,
+  isSecureRequest as secureRequest,
   nativeCors,
   prepareAuthMiddleware,
   validateSession,
@@ -479,6 +480,15 @@ app.use((req, res, next) => {
   if (req.socket.encrypted) { res.setHeader("Strict-Transport-Security", "max-age=31536000"); return next(); }
   res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
 });
+// Every response (issue #53): never sniffed into another type, no full URL in a Referer sent off the hub, and over
+// HTTPS (a LAN name's TLS, or a proxy's that says so) remembered as HTTPS-only, closing the first visit's plain hop.
+// No framing rule: the gallery frames Conduit from another of its own names, and nothing else frames it.
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "same-origin");
+  if (secureRequest(req) && !res.getHeader("Strict-Transport-Security")) res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  next();
+});
 app.use(compression());
 app.use(nativeCors);
 
@@ -584,7 +594,7 @@ app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
   try { response.json(await requireChatgptWeb().removeCredential()); } catch (error) { next(error); }
 });
 
-registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist });
+registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist, throttleFile: path.join(config.dataRoot, "auth", "login-throttle.json") });
 
 let shuttingDown = false;
 function checkpointNativeAdapter(adapter, record, completed = true) {

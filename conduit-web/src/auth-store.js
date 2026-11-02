@@ -2,12 +2,15 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-const SCRYPT_N = 32768;
+// OWASP's current scrypt cost (2^17, r 8, p 1; issue #53). A hash keeps the cost it was made with: an older one still
+// verifies, and is made at this cost when the password is next set.
+const SCRYPT_N = 131072;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_KEYLEN = 64;
 const MAX_SESSIONS = 20;
-const SCRYPT_MAX_MEM = 64 * 1024 * 1024;
+// 128 x N x r bytes: 128 MiB at this cost, with room above it.
+const SCRYPT_MAX_MEM = 192 * 1024 * 1024;
 const TOKEN_BYTES = 32;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const LAST_SEEN_REFRESH_MS = 60 * 1000;

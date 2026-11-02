@@ -1,5 +1,7 @@
 import { PRIVATE_HOST } from "./network-hosts.js";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { installedClientOrigin } from "./native-auth.js";
 
 const COOKIE_NAME = "conduit_session";
@@ -77,6 +79,86 @@ export function createRateLimiter() {
       return now < nextAllowedAt;
     },
   };
+}
+
+/*
+ * Login throttling (issue #53): failures are counted per client, so one client cannot lock everyone out, under a
+ * ceiling across all clients, so attempts spread over many addresses are still slowed. Kept in a file (when given
+ * one), so a restart is no reset. A throttled attempt is refused before any password is checked: the 429 costs nothing.
+ */
+const GLOBAL_THRESHOLD = 50;
+const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+const KEYS_KEPT = 2000;
+const KEY_FORGOTTEN_MS = 24 * 60 * 60 * 1000;
+const backoffAfter = (failures, threshold) => failures < threshold ? 0
+  : Math.min(RATE_LIMIT_CAP_MS, RATE_LIMIT_BASE_MS * 2 ** (failures - threshold));
+
+export function createLoginThrottle({ file = null, now = () => Date.now() } = {}) {
+  const keys = new Map();
+  let recent = [];
+  let globalUntil = 0;
+  if (file) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+      for (const [key, entry] of Object.entries(saved.keys || {})) if (entry && Number.isFinite(entry.lastAt)) keys.set(key, entry);
+      recent = Array.isArray(saved.recent) ? saved.recent.filter(Number.isFinite) : [];
+      globalUntil = Number(saved.globalUntil) || 0;
+    } catch { /* none yet */ }
+  }
+  let writing = Promise.resolve();
+  const save = () => {
+    if (!file) return;
+    const text = JSON.stringify({ keys: Object.fromEntries(keys), recent, globalUntil });
+    writing = writing.then(async () => {
+      await fs.promises.mkdir(path.dirname(file), { recursive: true });
+      await fs.promises.writeFile(`${file}.tmp`, text, { mode: 0o600 });
+      await fs.promises.rename(`${file}.tmp`, file);
+    }).catch(() => {});
+  };
+  const prune = (at) => {
+    recent = recent.filter((time) => at - time < GLOBAL_WINDOW_MS);
+    for (const [key, entry] of keys) if (at - entry.lastAt > KEY_FORGOTTEN_MS && at >= entry.nextAllowedAt) keys.delete(key);
+    while (keys.size > KEYS_KEPT) keys.delete(keys.keys().next().value);
+  };
+  return {
+    /** When this client may try again (ms since the epoch); 0 when it may now. */
+    retryAt(key, at = now()) {
+      const until = Math.max(keys.get(key)?.nextAllowedAt || 0, globalUntil);
+      return until > at ? until : 0;
+    },
+    noteFailure(key, at = now()) {
+      prune(at);
+      const entry = keys.get(key) || { failures: 0, nextAllowedAt: 0, lastAt: at };
+      entry.failures += 1;
+      entry.lastAt = at;
+      entry.nextAllowedAt = at + backoffAfter(entry.failures, RATE_LIMIT_THRESHOLD);
+      keys.delete(key);
+      keys.set(key, entry);
+      recent.push(at);
+      const spread = backoffAfter(recent.length, GLOBAL_THRESHOLD);
+      if (spread) globalUntil = Math.max(globalUntil, at + spread);
+      save();
+    },
+    noteSuccess(key) {
+      if (keys.delete(key)) save();
+    },
+    flush: () => writing,
+  };
+}
+
+/**
+ * Who is trying to sign in, for throttling: behind a proxy on this machine or network (Caddy, a tunnel's connector),
+ * the client it names; otherwise the connection's own address. A name a client could forge only moves its own
+ * attempts to another count -- the ceiling across all clients still holds.
+ */
+export function loginThrottleKey(request) {
+  const socket = String(request.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+  const proxied = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd])/i.test(socket);
+  if (!proxied) return socket || "unknown";
+  const headers = request.headers || {};
+  const named = headers["cf-connecting-ip"] || headers["x-real-ip"]
+    || String(headers["x-forwarded-for"] || "").split(",").map((item) => item.trim()).filter(Boolean).at(-1);
+  return String(named || socket || "unknown").slice(0, 64);
 }
 
 function isBrowserNavigation(request) {

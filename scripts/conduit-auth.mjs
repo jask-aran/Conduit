@@ -114,6 +114,12 @@ async function setPassword() {
     }
     password = first;
   }
+  // Either way in, a password with nothing in it is refused (issue #53: --stdin let an empty one through).
+  if (!password || !password.trim()) {
+    console.error("Password cannot be empty.");
+    process.exitCode = 1;
+    return;
+  }
   await ensureDataDir();
   const store = new AuthStore(authFile);
   await store.setPassword(password);
