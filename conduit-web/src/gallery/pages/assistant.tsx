@@ -1,5 +1,5 @@
 import { createSignal, For } from "solid-js";
-import { ReportCard, ClockRow, DayStrip, HarnessPrompt, Icons, InboxRow, LevelMark, type ClockKind } from "@/components/ui";
+import { ReportCard, RoomRow, ClockRow, DayStrip, HarnessPrompt, Icons, InboxRow, LevelMark, type ClockKind } from "@/components/ui";
 import { DashIconButton, Group, GroupHeading } from "@/components/ui/dashboard";
 import { row, type Page } from "../model";
 
@@ -57,7 +57,10 @@ export const assistantPage: Page = { title: "Assistant", rail: "Blocks",
     row("ReportCard", "a report jbot sent (a message with a title) in its stream: title, first line, when, the bell when it reached the phone; opens the whole report in a reader", () => <div class="g-stack">
       <ReportCard title="Morning brief" line="Three things today: the dentist moved to 2pm, a parcel arrives, and rent is due." time="09:00" notified onOpen={() => {}} />
       <ReportCard title="Ryokan options for March" line="Four places with rooms left, two under ¥30,000 a night." time="14:12" onOpen={() => {}} /></div>, { source: "components/ui/assistant.tsx", surfaces: ["ground"], phone: true }),
+    row("RoomRow", "another room's messages in jbot's stream (an email thread), folded to one quiet line: over which channel, the room, how many, the last line; opens in place to the exchange", () => <div class="g-stack">
+      <RoomRow icon={<Icons.Mail aria-hidden="true" />} channel="email" room="Dentist booking" count={3} last="Thursday at 2pm works, see you then." time="11:02" />
+      <RoomRow icon={<Icons.Mail aria-hidden="true" />} channel="email" room="70% off everything this weekend" count={1} last="Huge sale" time="09:14" /></div>, { source: "components/ui/assistant.tsx", surfaces: ["ground"], phone: true }),
     row("Quiet line", "a heartbeat that told no one leaves one line in the home thread, opening its run", () => <HarnessPrompt icon={<Icons.Heartbeat aria-hidden="true" />} onOpen={() => {}}>Heartbeat · 3 handled · 1 check-back set</HarnessPrompt>, { source: "components/ui/transcript.tsx · HarnessPrompt", surfaces: ["ground"] }),
   ],
-  api: ["LevelMark", "InboxRow", "ClockRow", "DayStrip", "ReportCard", "HarnessPrompt"],
+  api: ["LevelMark", "InboxRow", "ClockRow", "DayStrip", "ReportCard", "RoomRow", "HarnessPrompt"],
 };

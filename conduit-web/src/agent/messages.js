@@ -27,6 +27,8 @@ export class MessageLog {
     this.messages = [];
     this.ids = new Set();
     this.listeners = new Set();
+    // What carries a message to a channel's room (email: EmailChannel.send); the app room is delivered by being written.
+    this.channels = {};
   }
 
   async load() {
@@ -46,16 +48,32 @@ export class MessageLog {
 
   /** The person's message written here before it reached the thread (log first): the thread's copy of it is this one. */
   claim(text) {
-    return this.messages.findLast((item) => item.direction === "in" && !item.entryId && item.body === text && Date.now() - Date.parse(item.at) < 10 * 60_000) || null;
+    return this.messages.findLast((item) => item.direction === "in" && !item.entryId && (item.prompt === text || item.body === text) && Date.now() - Date.parse(item.at) < 10 * 60_000) || null;
+  }
+
+  /** The room a turn's answer goes back to: the room of the last message the person (or anyone) put in this thread
+   *  before `entryId`, when its channel can be written to without asking; else the app's. */
+  replyRoom(conversationId, entryId) {
+    const origin = this.messages.findLast((item) => item.direction === "in" && item.entryId != null && item.entryId < entryId && String(item.conversationId) === String(conversationId));
+    if (!origin || origin.channel === "app") return APP;
+    return this.channels[origin.channel]?.personOnly?.(origin.room) ? { channel: origin.channel, room: origin.room } : APP;
   }
 
   append(message) {
     if (this.ids.has(message.id)) return null;
-    const written = { ...APP, notify: "none", delivery: { state: "sent", at: message.at }, ...message };
+    const away = message.direction === "out" && message.channel && message.channel !== "app";
+    const written = { ...APP, notify: "none", delivery: { state: away ? "pending" : "sent", at: message.at }, ...message };
     this.messages.push(written);
     this.ids.add(written.id);
     this.persist();
     for (const listener of this.listeners) listener({ type: "message", message: written });
+    // Out to another channel: written first (pending), then carried; what came of it is its delivery.
+    if (away) {
+      const channel = this.channels[written.channel];
+      void (channel ? channel.send(written) : Promise.reject(new Error(`No ${written.channel} channel`)))
+        .then((native) => this.update(written.id, () => ({ native, delivery: { state: "sent", at: new Date().toISOString() } })))
+        .catch((error) => this.update(written.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } })));
+    }
     return written;
   }
 
@@ -112,7 +130,8 @@ export async function mirrorHomeThread(agent, log) {
         } else {
           const body = finalText(entry.model?.[0]);
           const stamp = entry.model?.[0]?.timestamp ? new Date(entry.model[0].timestamp).toISOString() : at;
-          if (body) log.append({ id: `final:${entry.id}`, at: stamp, direction: "out", sender: "jbot", body, conversationId: home, entryId: entry.id });
+          // Back where the turn came from: an email of the person's is answered by email; anything else in the app.
+          if (body) log.append({ id: `final:${entry.id}`, at: stamp, ...log.replyRoom(home, entry.id), direction: "out", sender: "jbot", body, conversationId: home, entryId: entry.id });
         }
       }
     }).catch((error) => console.error("[agent] message log mirror", error));
@@ -120,9 +139,6 @@ export async function mirrorHomeThread(agent, log) {
 }
 
 const result = (text, isError = false) => ({ content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
-
-/** The rooms jbot can write to: the app's, always; a channel's own once it has one (email: docs, The message log). */
-const ROOMS = new Set(["app"]);
 
 /** The `message` tool: jbot speaking to the person beyond its final text. */
 export function MessageTools(runtime) {
@@ -137,20 +153,25 @@ export function MessageTools(runtime) {
       title: Type.Optional(Type.String({ description: "Makes it a report: a few words naming it." })),
       notify: Type.Optional(Type.Union([Type.Literal("none"), Type.Literal("push"), Type.Literal("urgent")], { description: "Reach their phone too: push, or urgent for what cannot wait." })),
       last: Type.Optional(Type.Boolean({ description: "This message is your answer and ends your turn (default true); false to keep working." })),
-      room: Type.Optional(Type.String({ description: "Where it goes: app (the default), the conversation the person reads." })),
+      room: Type.Optional(Type.String({ description: "Where it goes: app (the default); an email room (email:…, given with each email) to reply in it; email for a new email to the person." })),
     }),
     replay: "unsafe",
     execute: async ({ text, title, notify = "none", last = true, room = "app" }, api, context) => {
       const role = (await runtime.agent?.describe(api.conversationId))?.role;
       if (role !== "home") return result("Only jbot's home thread messages the person; a run reports to jbot.", true);
-      if (!ROOMS.has(room)) return result(`No room "${room}": write to the app room.`, true);
       if (!String(text || "").trim()) return result("Say something: the message is empty.", true);
       const log = runtime.messageLog;
       if (!log) return result("The message log is not ready; say it as your final text instead.", true);
+      const email = log.channels.email;
+      const channel = room === "app" ? "app" : room === "email" || room.startsWith("email:") ? "email" : null;
+      if (!channel) return result(`No room "${room}": write to app, an email room, or email.`, true);
+      if (channel === "email" && !email?.ready) return result("jbot has no email address set up.", true);
+      if (room.startsWith("email:") && !log.messages.some((item) => item.room === room)) return result(`No email room ${room}.`, true);
+      if (room.startsWith("email:") && !email.personOnly(room)) return result("That email has someone other than the person in it: replying needs their approval, which cannot be asked yet. Tell the person in the app instead.", true);
       const at = await api.memo("at", new Date().toISOString(), context);
       const id = `tool:${api.taskId}`;
       // A replay finds it written (the id is its key) and neither writes nor pushes it again.
-      const written = log.append({ id, at, channel: "app", room, direction: "out", sender: "jbot", ...(title ? { title } : {}), body: text, notify, conversationId: api.conversationId });
+      const written = log.append({ id, at, channel, room, direction: "out", sender: "jbot", ...(title ? { title } : {}), body: text, notify, conversationId: api.conversationId });
       if (written && notify !== "none") {
         runtime.agentNotify?.({ kind: "report", conversationId: api.conversationId, title: title || headlineOf(text, 60), text, level: notify === "urgent" ? "urgent" : "attention", key: id, path: "/jbot" });
       }

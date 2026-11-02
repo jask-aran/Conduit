@@ -1,0 +1,8 @@
+{
+  "name": "jbot-mail",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.156.1"
+  }
+}

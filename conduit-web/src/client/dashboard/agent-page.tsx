@@ -161,7 +161,7 @@ export function AgentPage(props: {
   const tally = (entries: AgentInboxEntry[]) => {
     const counts = new Map<string, number>();
     for (const entry of entries) {
-      const noun = entry.kind === "feed" ? (entry.title || "item").toLowerCase() : "report";
+      const noun = entry.kind === "feed" ? (entry.title || "item").toLowerCase() : entry.kind === "email" ? "email" : "report";
       const count = entry.count ?? Number(/^(\d+) new:/.exec(entry.headline || "")?.[1] || 1);
       counts.set(noun, (counts.get(noun) ?? 0) + count);
     }

@@ -1,5 +1,5 @@
-import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
-import { Answer, DashConversation, Message, MessageFoot, ReportCard, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
+import { Answer, DashConversation, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { api } from "../api/client";
 import { ChatMarkdown } from "../chat/lazy-markdown";
@@ -14,6 +14,9 @@ export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
   title?: string; body: string; notify: "none" | "push" | "urgent"; delivery?: { state: string; error?: string };
 }
+/** A row of the stream: one message of the app room, or a run of another room's messages, folded (RoomRow). */
+type StreamRow = { kind: "message"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
+const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
 const clock = (at: string) => { const date = new Date(at); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; };
 const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
@@ -34,19 +37,42 @@ export function useJbotMessages(changed: () => unknown) {
 
 export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
-  // The person's message starts an exchange; jbot's reply to it is the exchange's; what jbot says next, a step on.
+  // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
+  // rooms interleave.
+  const rows = createMemo(() => props.messages.reduce<StreamRow[]>((list, message) => {
+    if (message.channel === "app") { list.push({ kind: "message", message }); return list; }
+    const since = list.findLastIndex((row) => row.kind === "message") + 1;
+    const room = list.slice(since).find((row) => row.kind === "room" && row.room === message.room);
+    if (room?.kind === "room") room.messages.push(message);
+    else list.push({ kind: "room", room: message.room, channel: message.channel, messages: [message] });
+    return list;
+  }, []));
+  // A room's name: its subject, from whichever of its messages carries one.
+  const roomName = (room: string) => props.messages.find((message) => message.room === room && message.title)?.title || room;
+  // The person's message starts an exchange; jbot's reply to it is the exchange's; what jbot says next, a step on. A
+  // folded room arrived on its own: a step from what is around it.
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
-    const row = props.messages[index]!, above = props.messages[index - 1]!;
-    return row.direction === "in" ? "turn" : above.direction === "in" ? "exchange" : "step";
+    const row = rows()[index]!, above = rows()[index - 1]!;
+    if (row.kind === "room" || above.kind === "room") return "turn";
+    return row.message.direction === "in" ? "turn" : above.message.direction === "in" ? "exchange" : "step";
   };
+  const one = (message: LogMessage) => message.direction === "in"
+    ? <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
+    : <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined} /></Turn>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
       <Show when={props.messages.length || props.working} fallback={<p class="ui-dash-empty">Nothing said yet. Say something to {props.name}.</p>}>
         <Transcript>
-          <For each={props.messages}>{(message, index) =>
-            <TranscriptRow flow={flowAt(index())} data-message-id={message.id}>
+          <For each={rows()}>{(row, index) => row.kind === "room"
+            ? <TranscriptRow flow={flowAt(index())}>
+              <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
+                room={roomName(row.room)} count={row.messages.length} last={firstLine(row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
+                <For each={row.messages}>{one}</For>
+              </RoomRow>
+            </TranscriptRow>
+            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id}>
               <Switch>
                 <Match when={message.direction === "in"}>
                   <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
@@ -58,7 +84,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                   <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.notify !== "none" ? "Sent to your phone" : undefined} /></Turn>
                 </Match>
               </Switch>
-            </TranscriptRow>}
+            </TranscriptRow>; })()}
           </For>
           {/* While a turn runs: the thread is at work; what it says arrives as messages. */}
           <Show when={props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}><Turn><Trail><Step state="running" verb={`${props.name} is working`} /></Trail></Turn></TranscriptRow></Show>

@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { For, Show, type JSX } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import { Button } from "./controls";
 import { DashRow } from "./dashboard";
 import { Expand } from "./expand";
@@ -53,6 +53,26 @@ export function ReportCard(props: { title: string; line?: string; time?: string;
     <span class="ui-report-text"><b class="ui-report-title">{props.title}</b><Show when={props.line}><span class="ui-report-line">{props.line}</span></Show></span>
     <span class="ui-report-end"><Show when={props.notified}><Icons.Notification aria-label="Sent to your phone" /></Show><Show when={props.time}><time>{props.time}</time></Show><Icons.ChevronRight aria-hidden="true" /></span>
   </button>;
+}
+
+/**
+ * Messages in another room of jbot's (an email thread, later a text conversation), folded into one quiet line in the
+ * app's stream: the channel's mark, "Over email", the room, how many, the last line and when. It opens in place to the
+ * exchange (children); it never notifies, having reached the person there already.
+ */
+export function RoomRow(props: { icon: JSX.Element; channel: string; room: string; count: number; last?: string; time?: string; children?: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  return <div class="ui-room" data-open={open() ? "" : undefined}>
+    <button type="button" class="ui-room-row" aria-expanded={open()} onClick={() => setOpen(!open())}>
+      <span class="ui-room-mark">{props.icon}</span>
+      <span class="ui-room-head"><span class="ui-room-where">Over {props.channel}</span><b class="ui-room-name">{props.room}</b>
+        <span class="ui-room-count">{props.count} {props.count === 1 ? "message" : "messages"}</span>
+        <Show when={props.last}><span class="ui-room-last">{props.last}</span></Show></span>
+      <Show when={props.time}><time class="ui-room-time">{props.time}</time></Show>
+      <Icons.ChevronDown class="ui-room-fold" aria-hidden="true" />
+    </button>
+    <Expand open={open()}><div class="ui-room-body">{props.children}</div></Expand>
+  </div>;
 }
 
 export type ClockKind = "heartbeat" | "brief" | "feed" | "checkback" | "schedule";
