@@ -8,7 +8,7 @@ import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions, SplitRow } from "./primitives/split";
-import { JbotComposer, JbotMessages, useJbotMessages } from "./jbot-messages";
+import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 
 /**
@@ -64,6 +64,8 @@ export function AgentPage(props: {
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
   markdownRenderer: MarkdownRendererId;
+  /** The home thread's composer: what the person says in the app room, with every composer feature. */
+  composer?: JSX.Element;
 }) {
   const log = useJbotMessages();
   const [now, setNow] = createSignal(Date.now());
@@ -279,8 +281,8 @@ export function AgentPage(props: {
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
-          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} onOpenThread={props.onOpenThread} />}
-          composer={<JbotComposer name={name()} onSend={log.send} />}
+          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} />}
+          composer={props.composer}
           aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>

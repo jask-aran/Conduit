@@ -150,9 +150,15 @@ function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
 }
 /** What the turn sent the person (a `message` tool): a notification as it reached their devices. */
 function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
-  const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown };
-  const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent" : "to your devices";
-  return <Outbound shut icon={<Icons.Notification aria-hidden="true" />} from="Notification" meta={[state(), input().urgent === true && "urgent"].filter(Boolean).join(" · ")}
+  const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown; notify?: unknown };
+  // `message` writes to the message log (the app room), reaching the phone only when it asks; `notify` is the phone.
+  const message = () => props.tool.name === "message";
+  const pushed = () => message() ? input().notify === "push" || input().notify === "urgent" : true;
+  const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent"
+    : message() ? (pushed() ? "in the app and to your devices" : "in the app") : "to your devices";
+  const urgent = () => input().urgent === true || input().notify === "urgent";
+  return <Outbound shut icon={message() && !pushed() ? <Icons.Chat aria-hidden="true" /> : <Icons.Notification aria-hidden="true" />}
+    from={message() ? (typeof input().title === "string" ? "Report" : "Message") : "Notification"} meta={[state(), urgent() && "urgent"].filter(Boolean).join(" · ")}
     time={clock(props.tool.completedAt || props.tool.timestamp)} dateTime={props.tool.completedAt || props.tool.timestamp} title={props.tool.timestamp ? fullDateTime(props.tool.timestamp) : undefined}>
     <ChatText renderer={props.renderer} text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
   </Outbound>;

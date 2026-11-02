@@ -5453,7 +5453,8 @@ function App() {
    * composer is the page's unsent chat, and sending makes it that pane's chat
    * (docs/design/panes-and-rail.md, stage 5d).
    */
-  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft: (prompt: string) => Promise<void> }) => {
+  // onSendDraft: a page whose composer starts a chat; without it the session's loaded chat is sent to (jbot's page).
+  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void> }) => {
     const current = props.session;
     return <Composer
       chat={current.chat}
@@ -5482,7 +5483,12 @@ function App() {
   };
   const renderAgent = (slot: number | "main") => {
     const current = slot === "main" ? session : paneSlot(slot).session;
+    const owns = slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
     onMount(() => { void refreshAgent(); });
+    // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
+    createEffect(on(() => agentView()?.home?.chatId, (id) => {
+      if (id && untrack(current.chat.loadedId) !== id) void agentChat(id).then((target) => current.chat.select(target.chat, target.project, { history: "none" })).catch(showError);
+    }));
     // The page shows none of the thread: it is a tap away (Open thread).
     const openThread = () => {
       const id = agentView()?.home?.chatId;
@@ -5494,6 +5500,8 @@ function App() {
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       markdownRenderer={markdownRenderer()}
+      composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
+        <PageComposer session={current} keyboardOwner={owns} /></Show>}
       onOpenChat={(id, event) => {
         const beside = Boolean(event?.altKey);
         const tab = Boolean(event && (event.ctrlKey || event.metaKey));
