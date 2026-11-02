@@ -18,7 +18,7 @@ const KEPT_MAX = 200;
 const LEVEL_WORD = /^\s*(?:[*_`#>\s]*)(?:URGENT|ATTENTION|FYI|NOTHING)\b[*_`]*\s*[:.-]?\s*/i;
 
 /** How a run ended, if it said so with a tool: `{ outcome: "quiet" | "failed", reason?, at }`. */
-export const RunEnd = defineDoc({ kind: "conduit.agent.run-end", version: 1, scope: "conversation", initial: () => ({ end: null }) });
+export const RunEnd = defineDoc({ checkpointWhen: () => false, kind: "conduit.agent.run-end", version: 1, scope: "conversation", initial: () => ({ end: null }) });
 
 /** A report's first line, without its level word, as the inbox and the home thread show it. */
 export const headlineOf = (text, max = 160) => {

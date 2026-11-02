@@ -19,7 +19,7 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `next`: the counter every part numbers its ids from (`sc-3`, `w-4`, `p-5`).
  */
 export const AgentDoc = defineDoc({
-  kind: "conduit.agent",
+  checkpointWhen: () => false, kind: "conduit.agent",
   version: 1,
   scope: "session",
   initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, asks: {}, inbox: {}, next: 1 }),

@@ -12,7 +12,7 @@ export async function notice(store, name, vars = {}) {
 /** A fork starts without its parent's pending notes; placed entries retain what that branch was told. */
 const initialNotes = () => ({ prompt: null, told: null, time: null, pending: [], lastEntry: 0 });
 export const ConduitNotices = defineDoc({
-  kind: "conduit.notices", version: 1, scope: "conversation", history: "latest", fork: "initial",
+  checkpointWhen: () => false, kind: "conduit.notices", version: 1, scope: "conversation", history: "latest", fork: "initial",
   initial: initialNotes,
 });
 

@@ -5,7 +5,7 @@ import { AgentDoc } from "../agent/agent-doc.js";
 import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
 const SubagentRoster = defineDoc({
-  kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
+  checkpointWhen: () => false, kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
   initial: () => ({ next: 1, children: {} }),
 });
 const runLabel = (kind) => ({ heartbeat: "Heartbeat", brief: "Morning brief", "morning-brief": "Morning brief",
@@ -183,7 +183,12 @@ export function Subagents(runtime) {
       try {
         const parent = await harness.conversation(api.conversationId, context);
         if (await resetSince(parent, task.input.sinceEntry || 0, context)) stop();
-        await api.sleep(api.now() + 86400000, context);
+        // Held, not asleep: a durable sleep would end the phase and with it the watch for a reset. A day, then again.
+        await new Promise((resolve) => {
+          const disarm = api.setTimer(resolve, 86400000);
+          api.signal.addEventListener("abort", () => { disarm(); resolve(undefined); }, { once: true });
+        });
+        if (api.signal.aborted) return;
         await api.commit(() => ({ status: "pending", checkpoint: { phase: "hold" } }), context);
       } finally { unsubscribe(); }
     } },

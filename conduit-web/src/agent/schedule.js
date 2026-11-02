@@ -82,9 +82,15 @@ function makeClock(runtime) {
           waiting = true;
         }, context);
         if (!waiting) return;
-        // In steps against the wall clock: a timer does not count time the machine sleeps, so one long wait set at
-        // night fired hours late after the computer woke.
-        while (api.now() < next) await api.sleep(Math.min(next, api.now() + 60_000), context);
+        await api.commit(() => ({ status: "running", checkpoint: { phase: "sleep", slot } }), context);
+      },
+      // Asleep until the slot (a durable sleep: no process held, survives restarts), in steps of a minute against the
+      // wall clock: a timer does not count time the machine sleeps, so one long wait set at night fired hours late
+      // after the computer woke.
+      sleep: async (task, api, context) => {
+        const slot = task.state.checkpoint.slot;
+        const next = Date.parse(slot);
+        if (api.now() < next) { await api.sleepUntil(Math.min(next, api.now() + 60_000), { phase: "sleep", slot }, context); return; }
         await api.commit(() => ({ status: "running", checkpoint: { phase: "fire", slot } }), context);
       },
       fire: async (task, api, context) => {

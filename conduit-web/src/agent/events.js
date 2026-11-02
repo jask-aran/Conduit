@@ -7,7 +7,7 @@ import { AgentDoc, nextId } from "./agent-doc.js";
 const EVENTS = ["chat_finished", "chat_failed", "device_online", "device_offline", "workspace_changed"];
 // Keep the result with the tool task so replay cannot recreate a removed watch.
 const WatchCall = defineDoc({
-  kind: "conduit.agent.watch-call", version: 1, scope: "task", initial: () => ({ text: null }),
+  checkpointWhen: () => false, kind: "conduit.agent.watch-call", version: 1, scope: "task", initial: () => ({ text: null }),
 });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 

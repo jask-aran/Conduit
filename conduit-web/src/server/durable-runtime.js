@@ -105,7 +105,7 @@ const Conduit = (runtime) => defineExtension({
 
 /** The message ids Conduit gave a conversation's entries, which pi-durable numbers only once they commit. */
 export const ConduitIds = defineDoc({
-  kind: "conduit.ids",
+  checkpointWhen: () => false, kind: "conduit.ids",
   version: 1,
   scope: "conversation",
   history: "latest",
@@ -118,7 +118,7 @@ export const ConduitIds = defineDoc({
 
 /** Which paired device a conversation's tools run on: `null` is this server. */
 export const ConduitWorkspace = defineDoc({
-  kind: "conduit.workspace",
+  checkpointWhen: () => false, kind: "conduit.workspace",
   version: 1,
   scope: "conversation",
   history: "latest",
