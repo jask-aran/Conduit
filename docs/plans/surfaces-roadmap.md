@@ -134,7 +134,11 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   `CONDUIT_AGENT_BROWSER`), not bundled; without it the pane says how to install it.
 - [ ] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
   security headers kept (frame-ancestors rewritten, the injected script admitted by a CSP nonce); streaming as the
-  fallback for sites that refuse framing.
+  fallback for sites that refuse framing. Spiked (`docs/plans/browser-proxy-spike.md`,
+  `conduit-web/scripts/spikes/browser-proxy-spike.mjs`): the header surgery works (framing, a nonce'd injected script,
+  rewritten links, redirects, fetch, WebSocket, cookies), but ports are not cookie boundaries -- Conduit's own session
+  cookie reached the proxied site -- so per-site origins need per-site hosts (a wildcard domain the person owns, not
+  Tailscale names), and URLs built at runtime escape without a service worker. Recommendation: keep streaming.
 - [ ] 9. Browsers on client devices, reachable from any other client through the hub.
 - [ ] 10. Acting as you: jbot uses your browser on a device you choose.
 - [x] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
