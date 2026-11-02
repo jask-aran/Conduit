@@ -4,7 +4,7 @@
   "name": "jbot-mail",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
-  "send_email": [{ "name": "SEND", "allowed_destination_addresses": ["jaskarann.singhh@gmail.com", "jask@jask-aran.com", "hello@jask-aran.com"] }],
+  "send_email": [{ "name": "SEND", "allowed_destination_addresses": ["jaskarann.singhh@gmail.com"] }],
   "r2_buckets": [{ "binding": "MAIL", "bucket_name": "jbot-mail" }],
   // The hub to wake when mail lands (its public address); without it the hub collects on its own each minute.
   "vars": { "HUB_URL": "https://localconduit.jask-aran.com" }
