@@ -4,7 +4,8 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
+import { AppShell, DashHeader, DashRow, Dashboard, DropOverlay, Group, GroupHeading, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
+import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -2538,7 +2539,7 @@ function App() {
   const splitShown = () => shownSlots().length > 0;
   // A tool the dock lends a pane (a whole tool, the legacy file beside, a
   // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
-  const isToolView = (view: SplitView | null) => Boolean(view && !isPaneView(view) && !/^(files|term):/.test(view));
+  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
   // Pane A can hold the dock's tool too, over its route.
   const toolInPaneA = () => isToolView(paneAOverride());
@@ -3073,6 +3074,39 @@ function App() {
     document.removeEventListener("dragend", endDocDrag);
   });
   // Not remounted when the shell changes: the terminal switches shells itself.
+  /*
+   * An empty pane's Home: a greeting, the hub and this interface's build, and
+   * what to open in this pane -- a new chat (the dashboard's composer), a
+   * terminal, a workspace, a recent chat. Whatever is picked fills the pane.
+   */
+  const renderHome = (pane: PaneKey) => {
+    const fill = async (view: SplitView) => { if (await setPaneView(pane, view)) focusAnyPane(pane); };
+    const terminal = async () => { const id = await pickShell(); if (id) await fill(`term:${id}`); else toast.info("Open a workspace first: a terminal starts in one."); };
+    const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; };
+    const workspaces = () => catalogue.projects().filter((project) => project.slug !== "chat").slice(0, 5);
+    const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
+      .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
+    return <>
+      <Header actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></Header>
+      <Dashboard label="Empty pane" page="Home" oneColumn stacked head={<DashHeader title={greeting()} context={[activeServer()?.name || "Hub", buildLabel(clientBuild)]} />}
+        list={<>
+          <Group id="Start" heading={<GroupHeading>Start</GroupHeading>}>
+            <DashRow element="button" lead={<Icons.NewChat />} primary="New chat" onClick={() => void fill("page:dashboard")} />
+            <DashRow element="button" lead={<Icons.Terminal />} primary="New terminal" onClick={() => void terminal()} />
+          </Group>
+          <Show when={workspaces().length}>
+            <Group id="Workspaces" heading={<GroupHeading>Workspaces</GroupHeading>}>
+              <For each={workspaces()}>{(project) => <DashRow element="button" lead={<Icons.Folder />} primary={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
+            </Group>
+          </Show>
+          <Show when={recent().length}>
+            <Group id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
+              <For each={recent()}>{(item) => <DashRow element="button" lead={<Icons.Chat />} primary={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
+            </Group>
+          </Show>
+        </>} />
+    </>;
+  };
   const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
     createEffect(on(id, (shell) => {
@@ -3744,6 +3778,7 @@ function App() {
       const found = catalogue.projects().flatMap((project) => project.sessions).find((item) => item.id === id) || hiddenChats().get(id)?.chat;
       return found?.title || "New chat";
     }
+    if (view === "home") return "Empty pane";
     if (view === "page:dashboard") return "Conduit Dashboard";
     if (view === "page:agent") return agentView()?.settings?.name || "Agent";
     if (view === "page:computer") return activeServer()?.name || "Hub";
@@ -3885,7 +3920,7 @@ function App() {
   };
   const closeTab = async (pane: PaneKey, id: string) => {
     const tabs = tabsOf(pane);
-    if (!tabs || tabs.ids.length < 2) return await closePane(pane);
+    if (!tabs || tabs.ids.length < 2) return await closeDocument(pane);
     if (activeChatOf(pane) === id) {
       await switchTab(pane, tabs.used.find((item) => item !== id && tabs.ids.includes(item)) ?? tabs.ids.find((item) => item !== id)!);
     }
@@ -4262,6 +4297,19 @@ function App() {
     });
     return { get tabs() { return row(); } };
   };
+  /*
+   * A pane's close: its document goes and the pane stays, empty (Home); an
+   * empty pane's close closes the pane. Pane A alone has nothing to close.
+   */
+  const closeDocument = async (pane: PaneKey) => {
+    if (viewOf(pane) === "home") return await closePane(pane);
+    if (await setPaneView(pane, "home")) focusAnyPane(pane);
+  };
+  // An empty pane beside the one with the keyboard, its Home offering what to open there.
+  const openEmptyPane = () => {
+    if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
+    void openBeside("home", true, true);
+  };
   // Pane A's close hands it the next pane's chat or page.
   const closePane = async (pane: PaneKey) => {
     if (pane !== "main") return await closeSlot(pane);
@@ -4344,6 +4392,7 @@ function App() {
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
+        <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
         </Show>
@@ -4455,11 +4504,13 @@ function App() {
       <PaneAction aria-label="Close this pane" title="Close" onClick={() => closeSlot(pane as number)}><Icons.Close /></PaneAction>
     </PaneActions>
   </Show>;
-  const paneRowActions = (pane: PaneKey) => <Show when={splitShown()}>
+  // A lone pane offers only New pane; a split adds dock, swap and close.
+  const paneRowActions = (pane: PaneKey) => <Show when={splitShown() || (!isMobileLayout() && dockAvailable())}>
     <PaneActions>
-      <Show when={canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
-      <Show when={swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
-      <Show when={pane !== "main" || shownSlots()[0] !== undefined}><PaneAction aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></PaneAction></Show>
+      <Show when={splitShown() && canDock(pane)}><PaneAction label="Move to dock" onClick={() => dockPane(pane)}><Icons.Workspace /></PaneAction></Show>
+      <Show when={splitShown() && swapPartner(pane) !== null}><PaneAction aria-label="Swap with the pane beside" title="Swap" onPointerDown={() => { keyboardBeforePress = keyboardPane(); }} onClick={(event) => { const target = swapTarget(pane); keyboardBeforePress = null; if (target !== null) void swapPanes(pane, event.shiftKey, target, true, paneBeforePress ?? keyboardPane()); }}><Icons.Swap /></PaneAction></Show>
+      <PaneAction label="New pane" onClick={openEmptyPane}><Icons.Add /></PaneAction>
+      <Show when={splitShown() && (pane !== "main" || shownSlots()[0] !== undefined)}><PaneAction aria-label={viewOf(pane) === "home" ? "Close this pane" : "Close this document"} title="Close" onClick={() => void closeDocument(pane)}><Icons.Close /></PaneAction></Show>
     </PaneActions>
   </Show>;
   /*
@@ -5187,6 +5238,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.nextTab, "application", () => stepTab(1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
+      shortcutManager.registerHandler(COMMAND_IDS.newPane, "application", () => openEmptyPane(), { when: () => !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
@@ -5690,6 +5742,7 @@ function App() {
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
+      <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <PaneEmpty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")

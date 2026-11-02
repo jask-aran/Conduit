@@ -18,11 +18,12 @@ export type PanelTab = "files" | "diff" | "chat" | "terminal";
  * What the main pane's split holds: a tool moved out of the dock, the file
  * opened beside ("file", the path is Files' second slot), or one terminal
  * opened beside ("shell:<id>"), or a second chat ("chat:<id>") or page
- * ("page:dashboard", "page:project:<id>"), which the main pane draws itself.
+ * ("page:dashboard", "page:project:<id>"), which the main pane draws itself,
+ * or nothing yet ("home": an empty pane, showing what can be opened in it).
  */
-export type SplitView = PanelTab | "file" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}`;
+export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}`;
 export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal";
-export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || (typeof value === "string" && /^(shell|chat|page|files|term):./.test(value));
+export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term):./.test(value));
 export type ChatMode = "history" | "changes";
 // `discarded`: the harness kept this step in its tree but builds every later
 // request without it -- an answer it was interrupted writing. The row is shown
