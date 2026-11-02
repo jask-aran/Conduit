@@ -56,7 +56,8 @@ export class MessageLog {
   replyRoom(conversationId, entryId) {
     const origin = this.messages.findLast((item) => item.direction === "in" && item.entryId != null && item.entryId < entryId && String(item.conversationId) === String(conversationId));
     if (!origin || origin.channel === "app") return APP;
-    return this.channels[origin.channel]?.personOnly?.(origin.room) ? { channel: origin.channel, room: origin.room } : APP;
+    const channel = this.channels[origin.channel];
+    return channel?.sends && channel.personOnly?.(origin.room) ? { channel: origin.channel, room: origin.room } : APP;
   }
 
   append(message) {
@@ -165,7 +166,7 @@ export function MessageTools(runtime) {
       const email = log.channels.email;
       const channel = room === "app" ? "app" : room === "email" || room.startsWith("email:") ? "email" : null;
       if (!channel) return result(`No room "${room}": write to app, an email room, or email.`, true);
-      if (channel === "email" && !email?.ready) return result("jbot has no email address set up.", true);
+      if (channel === "email" && !email?.sends) return result("You do not send email: say it in the app (room app) instead.", true);
       if (room.startsWith("email:") && !log.messages.some((item) => item.room === room)) return result(`No email room ${room}.`, true);
       if (room.startsWith("email:") && !email.personOnly(room)) return result("That email has someone other than the person in it: replying needs their approval, which cannot be asked yet. Tell the person in the app instead.", true);
       const at = await api.memo("at", new Date().toISOString(), context);

@@ -17,7 +17,8 @@ import { appendEntry, headlineOf } from "./inbox.js";
  * senders they allow (`allow`) start a turn. Anyone else's email is logged and filed in the context inbox, where the
  * heartbeat weighs it with everything else -- spam costs nothing until something there is worth a turn.
  *
- * Its settings are data/agent/email.json: `{ address, worker, secret, person: [...], allow: [...] }`. The secret is the
+ * Its settings are data/agent/email.json: `{ address, worker, secret, person: [...], allow: [...], send? }`; sending is off
+ * unless `send` is true, and the mailbox Worker as deployed now receives only. The secret is the
  * Worker's (HUB_SECRET); nothing else of Cloudflare's is held here.
  */
 const POLL_MS = 60_000;
@@ -51,6 +52,8 @@ export class EmailChannel {
   }
 
   get ready() { return Boolean(this.config?.address && this.config?.worker && this.config?.secret); }
+  /** Whether jbot sends mail at all (`send: true`); off, an email is answered in the app. */
+  get sends() { return this.ready && this.config?.send === true; }
   isPerson(address) { return (this.config?.person || []).map(lower).includes(lower(address)); }
   /** A sender whose email starts a turn: the person, or one they allowed (an address, or @domain). */
   wakes(address) {
@@ -151,7 +154,7 @@ export class EmailChannel {
 
   /** A message of jbot's out as real mail: a reply in its room's thread, or (room "email") a new thread to the person. */
   async send(message) {
-    if (!this.ready) throw new Error("jbot has no email address set up");
+    if (!this.sends) throw new Error("jbot does not send email: it answers in the app");
     const last = message.room === "email" ? null : this.log.messages.findLast((item) => item.channel === "email" && item.room === message.room && item.direction === "in");
     if (message.room !== "email" && !last) throw new Error(`No email in room ${message.room} to reply to`);
     const to = last ? [last.native?.from?.address].filter(Boolean) : [(this.config.person || [])[0]].filter(Boolean);

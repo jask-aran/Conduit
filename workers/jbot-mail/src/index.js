@@ -1,14 +1,15 @@
-import { EmailMessage } from "cloudflare:email";
-
 /*
  * jbot's mailbox. Email Routing hands each message for jbot@ to `email`, which keeps it whole in R2 (inbox/<time>-<id>.eml)
  * until the hub collects it: the hub may be asleep or on another network, so nothing is pushed to it. The hub, holding
- * the shared secret (HUB_SECRET), lists, reads and deletes what waits, and sends a whole MIME message through `SEND`.
+ * the shared secret (HUB_SECRET), lists, reads and deletes what waits. Receiving only: it sends nothing, and mail over
+ * MAX_BYTES is refused at the door, so the bucket never holds much.
  */
+const MAX_BYTES = 10 * 1024 * 1024;
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 export default {
   async email(message, env) {
+    if (message.rawSize > MAX_BYTES) { message.setReject("Message too large"); return; }
     const raw = await new Response(message.raw).arrayBuffer();
     const key = `inbox/${new Date().toISOString()}-${crypto.randomUUID()}.eml`;
     await env.MAIL.put(key, raw, { customMetadata: { from: message.from, to: message.to } });
@@ -30,17 +31,6 @@ export default {
     }
     // DELETE /mail/<key>: collected.
     if (request.method === "DELETE" && key) { await env.MAIL.delete(key); return json({ deleted: key }); }
-    // POST /send { from, to: [...], raw }: a whole MIME message, to each recipient.
-    if (request.method === "POST" && url.pathname === "/send") {
-      const { from, to, raw } = await request.json();
-      if (!from || !Array.isArray(to) || !to.length || !raw) return json({ error: "from, to and raw are required" }, 400);
-      const sent = [], failed = [];
-      for (const recipient of to) {
-        try { await env.SEND.send(new EmailMessage(from, recipient, raw)); sent.push(recipient); }
-        catch (error) { failed.push({ recipient, error: String(error?.message || error) }); }
-      }
-      return json({ sent, failed }, failed.length && !sent.length ? 502 : 200);
-    }
     return json({ error: "not_found" }, 404);
   },
 };
