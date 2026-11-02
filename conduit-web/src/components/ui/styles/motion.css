@@ -1,0 +1,47 @@
+/*
+ * Moves: the library's named moves, on Foundations' timing tokens and variables (foundations.css, Motion). A part makes
+ * one, named in data-move; each move's base rule names every property it moves (invariant 2), on the part's own timing
+ * variables, and is its in; data-out is its out (not shown), data-folded its room given. What decides a part's state is
+ * its piece's (a MoveScope from what holds it, motion.ts); how it moves is only here. Last in the cascade: a move's
+ * state is drawn over a family's resting geometry.
+ *
+ *   fade      comes and goes where it stands: in over the gentle duration from its first frame, out over the quick one
+ *   fold      a circle in a row folds to nothing, its gap with it: in, its room opens and it fades into it; out, it fades,
+ *             then gives the room back -- never seen squeezed
+ *   tuck      a part in a row that goes keeps its size and slides under its neighbour (--tuck-size, --tuck-gap) as it
+ *             fades, its room going with the fade, so a neighbour that takes the room grows in the same move
+ *   collapse  a holder gives its room once what it holds has faded (each a fade of its own), and takes it at once
+ *   wipe      revealed by a clip opening from its end over the gentle duration (shown at once); out, it fades over the
+ *             quick one as the clip closes (--wipe-radius rounds the clip)
+ *   give      room handed between neighbours by grow: whatever takes it grows as the other gives it
+ *
+ * And the move a menu's opener makes on what it opened from: under (data-under), the rest dims at once (the families'
+ * own filter rules, as the fade lists carry filter at the quick duration).
+ */
+[data-move="fade"] { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s;
+  transition: opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
+[data-move="fade"][data-out] { opacity: 0; pointer-events: none; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
+
+[data-move="fold"], [data-move="tuck"] {
+  transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
+    margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
+    opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
+[data-move="fold"] { --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: var(--duration-quick); --fold-delay: 0s; }
+[data-move="fold"][data-out] { opacity: 0; pointer-events: none; --fade-ease: var(--ease-leave); --fade-delay: 0s; --fold-delay: var(--duration-quick); }
+/* Its width is its two borders, as drawn, so it never pops and a move between two widths it is drawn at never meets a clamp. */
+[data-move="fold"][data-folded] { width: calc(2 * var(--hairline)); min-width: 0; margin-inline-start: calc(-1 * var(--space-md) - 2 * var(--hairline)); overflow: clip; }
+[data-move="tuck"] { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
+[data-move="tuck"][data-out] { opacity: 0; pointer-events: none; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
+[data-move="tuck"][data-folded] { min-width: var(--tuck-size, var(--pill-size)); margin-inline-start: calc(-1 * (var(--tuck-size, var(--pill-size)) + var(--tuck-gap, var(--space-md)))); overflow: clip; }
+
+/* max-height none to 0 is discrete: allow-discrete holds it until the fade is done. */
+[data-move="collapse"] { --fold-delay: 0s; transition: max-height 0s var(--fold-delay) allow-discrete, margin 0s var(--fold-delay); }
+[data-move="collapse"][data-out] { max-height: 0; margin-block-end: calc(-1 * var(--collapse-gap, 0px)); overflow: hidden; pointer-events: none; --fold-delay: var(--duration-quick); }
+
+[data-move="wipe"] { clip-path: inset(0 round var(--wipe-radius, 0)); --fade: 0s; --fade-ease: var(--ease-leave);
+  transition: opacity var(--fade) var(--fade-ease), clip-path var(--duration-gentle) var(--ease-arrive); }
+[data-move="wipe"][data-out] { opacity: 0; pointer-events: none; clip-path: inset(0 0 0 100% round var(--wipe-radius, 0)); --fade: var(--duration-quick); }
+
+[data-move="give"] { transition: flex-grow var(--duration-gentle) var(--ease-arrive); }
+
+@media (prefers-reduced-motion: reduce) { [data-move] { transition: none !important; } }

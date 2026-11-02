@@ -51,6 +51,8 @@
  *   browser         the computer's file browser
  *   marks           harness and file-type marks
  *   voice           VoiceWaveform monitor and compact input levels
+ *   motion          the named moves (fade, fold, tuck, collapse, wipe, give) a part makes by data-move: last, so a
+ *                   move's state is drawn over a family's resting geometry
  */
 import "./reset.css";
 import "./palettes.css";
@@ -100,3 +102,4 @@ import "./browser.css";
 
 import "./marks.css";
 import "./voice.css";
+import "./motion.css";

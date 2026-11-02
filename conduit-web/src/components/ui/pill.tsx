@@ -1,5 +1,5 @@
 import { Frost } from "./frost";
-import { reducedMotion } from "./motion";
+import { reducedMotion, useMoveScope } from "./motion";
 import { createSignal, For, mergeProps, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
@@ -28,19 +28,28 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: Pi
 /** haptic: a press that acts at once (the mic, Send, Stop) is felt on a phone (see haptics.ts). */
 export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; haptic?: Haptic; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
+  // Its moves (styles/motion.css): its scope's (fold alone, tuck in a PhoneComposer's row); out when folded, or when its
+  // scope's parts are out and it is not a voice control (they stay while listening); dimmed under its scope's menu
+  // unless it opened it.
+  const scope = useMoveScope();
+  const out = () => !!props.folded || (!(props.voice || mic) && !!scope.out?.());
   // The caller's attributes stay live on the one button (merged lazily, so a change never rebuilds it).
   const attrs = mergeProps(() => ({ tabIndex: props.folded ? -1 : undefined }), () => props.button ?? {}, () => props.haptic ? {
     onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
   } : {}) as PillAttrs;
   const pill = <Frost class="ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
+    data-move={scope.move ?? "fold"} data-out={out() ? "" : undefined} data-under={scope.under?.() && !props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</Frost>;
-  return mic && props.stretch ? <><span class="ui-pill-room" />{pill}</> : pill;
+  // Stretched, the mic gives its grow to the room before it to become an orb pill at the row's end (a give).
+  return mic && props.stretch ? <><span class="ui-pill-room" data-move="give" />{pill}</> : pill;
 }
-/** Its own textarea, or the caller's field as children (the composer's, with its behaviour). */
+/** Its own textarea, or the caller's field as children (the composer's, with its behaviour). It fades itself, out and
+ *  under as its scope says. */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
-  return <Frost class={cn("ui-pill ui-pill-field", props.class)}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
+  const scope = useMoveScope();
+  return <Frost class={cn("ui-pill ui-pill-field", props.class)} data-move="fade" data-out={scope.out?.() ? "" : undefined} data-under={scope.under?.() ? "" : undefined}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
 }
 
 /**
@@ -69,6 +78,8 @@ function oklchToRgb(l: number, a: number, b: number): [number, number, number] {
   return [gamma(4.0767416621 * L - 3.3077115913 * M + .2309699292 * S), gamma(-1.2684380046 * L + 2.6097574011 * M - .3413193965 * S), gamma(-.0041960863 * L - .7034186147 * M + 1.707614701 * S)];
 }
 export function Aura(props: { on?: boolean; level?: number; strength?: number }) {
+  // On: its own say, or its scope's voice (a PhoneComposer listening lights the mic's and the track's).
+  const scope = useMoveScope();
   let box!: HTMLSpanElement, canvas!: HTMLCanvasElement;
   onMount(() => {
     const ctx = canvas.getContext("2d")!;
@@ -128,7 +139,7 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
     resize.observe(box); view.observe(box); start();
     onCleanup(() => { cancelAnimationFrame(frame); resize.disconnect(); view.disconnect(); shows.disconnect(); box.removeEventListener("transitionstart", start); });
   });
-  return <span ref={box} class="ui-aura" data-on={props.on ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
+  return <span ref={box} class="ui-aura" data-on={props.on || scope.voice?.() ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
 }
 
 /**
@@ -137,6 +148,8 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
  * flat); silence is a dotted line. gain: how much a level is lifted before it is drawn (speech sits low).
  */
 export function PillWave(props: { levels: number[]; gain?: number }) {
+  // In a scope that says when it is out (a surface composer's track), it fades itself.
+  const scope = useMoveScope();
   let box!: HTMLDivElement;
   const [count, setCount] = createSignal(0);
   onMount(() => {
@@ -147,5 +160,5 @@ export function PillWave(props: { levels: number[]; gain?: number }) {
     watch.observe(box); onCleanup(() => watch.disconnect());
   });
   const bars = () => { const n = count(), last = props.levels.slice(-n); return [...Array<number>(Math.max(0, n - last.length)).fill(0), ...last]; };
-  return <div ref={box} class="ui-pill-wave" aria-hidden="true"><For each={bars()}>{(level) => <i style={{ height: `${7 + Math.min(1, Math.max(0, level * (props.gain ?? 1))) * 93}%` }} />}</For></div>;
+  return <div ref={box} class="ui-pill-wave" aria-hidden="true" data-move={scope.out ? "fade" : undefined} data-out={scope.out?.() ? "" : undefined}><For each={bars()}>{(level) => <i style={{ height: `${7 + Math.min(1, Math.max(0, level * (props.gain ?? 1))) * 93}%` }} />}</For></div>;
 }

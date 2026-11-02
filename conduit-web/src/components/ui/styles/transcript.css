@@ -192,8 +192,7 @@
    opacity fade gives every word mid-fade a compositor layer, and a few dozen of them cost more than a frame); backwards
    only, so a finished fade is not an animation still in effect. A formula's new parts fade their opacity instead: a
    colour is inherited, and fading it restyled every span of the formula each frame. */
-.ui-answer-word { animation: ui-answer-word var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
-@keyframes ui-answer-word { from { color: transparent; } }
+.ui-answer-word { animation: ui-word-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer-math-in { animation: ui-fade-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer th { font-weight: var(--weight-strong); }
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its

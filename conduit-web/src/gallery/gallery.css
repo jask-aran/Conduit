@@ -75,6 +75,8 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-tokens dd { margin: 0; overflow-wrap: anywhere; }
 .g-fill { width: 260px; }
 .g-bar-demo { display: flex; width: 380px; align-items: center; justify-content: space-between; gap: 8px; }
+/* Foundations · Motion: a stretched pill takes the room a folding one gives, as the composer's mic does. */
+.g-moves > .ui-frost.ui-pill[data-stretch] { flex: 1 1 auto; }
 .g-composer-demo { display: grid; width: 380px; gap: 8px; }
 .g-slot { border: 1px dashed #d99a2299; border-radius: 6px; padding: 14px; color: var(--muted-foreground); text-align: center; }
 .g-composer { width: 460px; max-width: 100%; }

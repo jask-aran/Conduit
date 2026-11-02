@@ -7,6 +7,7 @@ import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
 import { haptic, type Haptic } from "@/components/ui/haptics";
+import { MoveContext } from "@/components/ui/motion";
 import { palettePages } from "./palettes";
 import { row, token, type Page, type Part } from "./model";
 
@@ -661,11 +662,44 @@ export const depthPage: Page = {
   tokens: [...DEPTH.map((group) => ({ title: group.title, tokens: group.rows }))],
 };
 
+/** The library's named moves (styles/motion.css): what each does and who makes it, each with a part to send out and back. */
+const MOVES: { move: string; what: string; who: string }[] = [
+  { move: "fade", what: "comes and goes where it stands: in over --duration-gentle from its first frame, out over --duration-quick", who: "PillField, the edit pills, a surface composer's waveform" },
+  { move: "fold", what: "a circle in a row folds to nothing, its gap with it: in, its room opens and it fades into it; out, it fades, then gives the room back", who: "PillButton folded, on its own" },
+  { move: "tuck", what: "keeps its size and slides under its neighbour as it fades, its room going with the fade, so a neighbour that takes the room grows in the same move", who: "PillButton in a PhoneComposer's row (Send, Scroll to latest)" },
+  { move: "collapse", what: "a holder gives its room once what it holds has faded, and takes it at once", who: "PhoneComposer's field" },
+  { move: "wipe", what: "revealed by a clip opening from its end over --duration-gentle; out, it fades over --duration-quick as the clip closes", who: "PhoneComposer's voice track" },
+  { move: "give", what: "room handed between neighbours by grow, in one move", who: "the mic and the room before it (the mic becoming an orb pill)" },
+];
+function MoveDemo(props: { move: string }) {
+  const [out, setOut] = createSignal(false);
+  const o = () => out() ? "" : undefined;
+  const pills = (scope?: "tuck") => <MoveContext.Provider value={{ move: scope }}><div class="g-row g-moves" style={{ gap: "var(--space-md)", "flex-wrap": "nowrap", width: "calc(18 * var(--u-space))", "--tuck-gap": "var(--space-md)" }}>
+    <PillButton label="Add" icon={<PlusIcon />} /><PillButton stretch label="Dictate" icon={<MicIcon />} /><PillButton folded={out()} label="Send" icon={<ArrowUpIcon />} />
+  </div></MoveContext.Provider>;
+  const body = (): JSX.Element => {
+    switch (props.move) {
+      case "fold": return pills();
+      case "tuck": return pills("tuck");
+      case "collapse": return <div style={{ display: "flex", "flex-direction": "column", gap: "var(--space-md)", width: "calc(18 * var(--u-space))" }}>
+        <div data-move="collapse" data-out={o()} style={{ "--collapse-gap": "var(--space-md)" }}><MoveContext.Provider value={{ out }}><PillField placeholder="Its room goes once this has faded" /></MoveContext.Provider></div>
+        <PillButton stretch label="Dictate" icon={<MicIcon />} /></div>;
+      case "wipe": return <div data-move="wipe" data-out={o()} style={{ "--wipe-radius": "var(--radius-round)", width: "calc(18 * var(--u-space))", height: "var(--pill-size)", "border-radius": "var(--radius-round)", background: "var(--tint)" }} />;
+      case "give": return <div style={{ display: "flex", gap: "var(--space-md)", width: "calc(18 * var(--u-space))" }}>
+        <span data-move="give" style={{ "flex-grow": out() ? 1 : 0, "border-radius": "var(--radius-round)", background: "var(--tint)" }} />
+        <Frost class="ui-pill" data-move="give" style={{ "flex-grow": out() ? 0 : 1, "min-width": "var(--pill-size)" }} /></div>;
+      default: return <Frost class="ui-pill" data-move="fade" data-out={o()} style={{ width: "calc(18 * var(--u-space))" }} />;
+    }
+  };
+  return <div class="g-stack"><div class="g-row"><Button size="sm" variant="ghost" outline onClick={() => setOut(!out())}>{out() ? "In" : "Out"}</Button></div>{body()}</div>;
+}
+
 export const motionPage: Page = {
   title: "Motion", rail: "Foundations",
-  summary: "Motion explains a change of place: quick out, gentle in; a change in place is quick and plain. It uses transform and opacity, except for folds the reader opens, with tokens and four shapes: fade in, fade out, rise and drop back. Each piece owns its moves, and reduced motion keeps the end state.",
+  summary: "Motion explains a change of place: quick out, gentle in; a change in place is quick and plain. It uses transform and opacity, except for folds the reader opens, with tokens and four shapes: fade in, fade out, rise and drop back. A part that comes and goes makes one of the library's named moves (data-move: fade, fold, tuck, collapse, wipe, give; styles/motion.css), its holder saying when it is out (MoveScope). Each piece owns its moves, and reduced motion keeps the end state.",
   preview: () => <PageMoves />,
-  motion: [row("The page", "First open fades everything but the composer; a route change fades the reading out quick and the new one in gentle. motion-rules.ts applies these at the port.", () => <PageMoves />, { surfaces: ["ground"] })],
+  motion: [row("The page", "First open fades everything but the composer; a route change fades the reading out quick and the new one in gentle. motion-rules.ts applies these at the port.", () => <PageMoves />, { surfaces: ["ground"] }),
+    ...MOVES.map((m) => row(`Move · ${m.move}`, `${m.what}. Made by ${m.who}.`, () => <MoveDemo move={m.move} />, { surfaces: ["ground"], code: `data-move="${m.move}" data-out`, source: "styles/motion.css · motion.ts (MoveScope)" }))],
   tokens: [...MOTION.map((group) => ({ title: group.title, tokens: group.rows }))],
 };
 

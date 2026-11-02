@@ -95,6 +95,20 @@ imported by path, not through the index. `src/client/dashboard/primitives/split.
    duration and easing tokens, applied through `motionOf`), then move the composer and the other animated pieces
    onto them. Nothing it does today may be lost: checked frame by frame before and after (`scripts/motion-check`).
 
+### Where it stands (2026-11-02)
+
+Steps 1 to 7 are done, each checked against captures of every gallery demo and 22 app screens (identical but for
+known noise and text anti-aliasing). Step 5 took LineCounts (list, bar), LeadInput (tool, web, browser) and PillSwitch
+into Segmented; the remaining marks (StatusDot, TermStatus, LevelMark) and tabs stay separate for now. Step 7 is the
+moves in `styles/motion.css` (fade, fold, tuck, collapse, wipe, give; a holder's `MoveScope` in `motion.ts`), the
+shared `ui-word-in` keyframe and `glide`; the phone composer is built from them, and every move between its seven
+gallery states in both layouts, frozen every 50ms to 550ms (1008 frames), draws identically before and after.
+
+Left for later: the three ways a header folds its controls (TermHeader's fold steps, the file header's measured
+`data-fold`, the dashboards' fold into a ⋯) are one behaviour drawn three ways; unifying them changes behaviour, so it
+wants its own step with the panes smoke. The composer's arrival and leaving as a whole and the desktop composer's
+riders are the next pieces to move onto the named moves.
+
 Each step: the gallery page for the new building block first, the old components as compositions of it (so screens
 keep working), then the callers moved and the old names removed. DESIGN.md's catalogue changes with each.
 
