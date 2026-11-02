@@ -4,7 +4,7 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DropOverlay, Notice, PaneEmpty, Sheet, SheetFill } from "@/components/ui";
+import { AppShell, DashHeader, DashRow, DropOverlay, Group, GroupHeading, Notice, PaneEmpty, RiderActions, RiderButton, Sheet, SheetFill } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionHeading, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { CardNote as ConnectionNote } from "@/components/ui/card";
@@ -35,7 +35,7 @@ import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSe
 import { Header, HeaderCrumb } from "@/components/ui/header";
 import { FileHead } from "@/components/ui/file";
 import { FileEmpty, FileEmptySide } from "@/components/ui/viewer";
-import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneHome, PaneHomeItem, PaneHomeSection, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
+import { DragPill, DropWash, PaneAction, PaneActions, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
 import { api, apiWhenServed, asList, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
@@ -3088,20 +3088,21 @@ function App() {
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
     return <>
       <Header actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></Header>
-      <PaneHome title={greeting()} data={`${activeServer()?.name || "Hub"} · ${buildLabel(clientBuild)}`}>
-        <PaneHomeSection label="Start">
-          <PaneHomeItem onClick={() => void fill("page:dashboard")}>New chat</PaneHomeItem>
-          <PaneHomeItem onClick={() => void terminal()}>New terminal</PaneHomeItem>
-        </PaneHomeSection>
-        <Show when={workspaces().length}>
-          <PaneHomeSection label="Workspaces">
-            <For each={workspaces()}>{(project) => <PaneHomeItem onClick={() => void fill(`page:project:${project.id}`)}>{project.name || project.slug}</PaneHomeItem>}</For>
-          </PaneHomeSection>
-        </Show>
+      <PaneHome label="Empty pane">
+        <header><DashHeader title={greeting()} context={[activeServer()?.name || "Hub", buildLabel(clientBuild)]} /></header>
+        <RiderActions>
+          <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
+          <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
+        </RiderActions>
         <Show when={recent().length}>
-          <PaneHomeSection label="Continue">
-            <For each={recent()}>{(item, index) => <PaneHomeItem current={index() === 0} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)}>{item.chat.title || "New chat"}</PaneHomeItem>}</For>
-          </PaneHomeSection>
+          <Group id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
+            <For each={recent()}>{(item) => <DashRow element="button" lead={<Icons.Chat />} primary={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
+          </Group>
+        </Show>
+        <Show when={workspaces().length}>
+          <Group id="Workspaces" heading={<GroupHeading>Workspaces</GroupHeading>}>
+            <For each={workspaces()}>{(project) => <DashRow element="button" lead={<Icons.Folder />} primary={project.name || project.slug} onClick={() => void fill(`page:project:${project.id}`)} />}</For>
+          </Group>
         </Show>
       </PaneHome>
     </>;
