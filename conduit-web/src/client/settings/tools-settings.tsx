@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { Button, LiveNote, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue } from "@/components/ui";
+import { Button, LiveNote, SettingDetails, SettingLine, SettingLoading, SettingNote, SettingValue, Group } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 
@@ -46,7 +46,7 @@ export function ToolsSettings() {
     <SettingNote tone="error"><span>{error() || "Tools could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
   </Show>}>
     {(list) => <>
-      <SettingGroup title="Profile">
+      <Group title="Profile">
         <SettingLine label="Show tools of">
           <Select id="tools-profile" aria-label="Profile" value={selected()} onChange={(event) => setSelected(event.currentTarget.value)}>
             <For each={list()}>{(item) => <option value={item.id}>{nameOf(item)}</option>}</For>
@@ -56,18 +56,18 @@ export function ToolsSettings() {
           <SettingNote>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.
             {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</SettingNote>}
         </Show>
-      </SettingGroup>
-      <Show when={direct().length}><SettingGroup title="Called by the model"><For each={direct()}>{line}</For></SettingGroup></Show>
-      <Show when={scripted().length}><SettingGroup title="Called from codemode"><For each={scripted()}>{line}</For></SettingGroup></Show>
+      </Group>
+      <Show when={direct().length}><Group title="Called by the model"><For each={direct()}>{line}</For></Group></Show>
+      <Show when={scripted().length}><Group title="Called from codemode"><For each={scripted()}>{line}</For></Group></Show>
       <McpAccess />
-      <SettingGroup title="About this list">
+      <Group title="About this list">
         <SettingDetails summary="Where tools come from">
           <SettingNote>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
             connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</SettingNote>
           <SettingNote>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
             plus devices and handoff. Connected accounts appear once a connector is connected (Models &amp; accounts).</SettingNote>
         </SettingDetails>
-      </SettingGroup>
+      </Group>
     </>}
   </Show>;
 }
@@ -83,7 +83,7 @@ function McpAccess() {
   onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/ui/access").then(setAccess).catch(() => {}));
   const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
     .catch(() => setCopied("Copying was not allowed here"));
-  return <Show when={access()}>{(found) => <SettingGroup title="Other harnesses">
+  return <Show when={access()}>{(found) => <Group title="Other harnesses">
     <SettingLine plain label="conduit-ui" mono title="Conduit's ui tool over MCP (Streamable HTTP): what the person has open, and opening, closing and focusing panes. A signed-in session or the hub's token may call it.">
       <SettingValue mono>{found().url}</SettingValue>
     </SettingLine>
@@ -92,5 +92,5 @@ function McpAccess() {
     </SettingLine>
     <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
     <SettingNote>The hub's browser is agent-browser's own MCP server on the page you share{found().browser ? "" : " (not installed on this hub)"}. Claude Code chats Conduit starts on the hub have both already.</SettingNote>
-  </SettingGroup>}</Show>;
+  </Group>}</Show>;
 }

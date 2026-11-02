@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { ServerControl } from "@/components/ui/connection";
-import { NavPane, NavBrand, NavLead, NavGroup as GNavGroup, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton, Row } from "@/components/ui";
+import { NavPane, NavBrand, NavLead, NavFolder, NavFolderRow, NavNote, NavSkeleton, NavNotice, NavRail, NavRailSection, RailButton, Segmented as GSegmented, Button as GButton, Row, Group } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 const navScene = (folded = false) => <div class="g-nav-stage"><NavPane collapsed={folded} folded={folded}
@@ -8,24 +8,24 @@ const navScene = (folded = false) => <div class="g-nav-stage"><NavPane collapsed
         foot={<NavNotice icon={<Icons.Check />}>Conduit is up to date</NavNotice>}>
         <NavRail label="Quick navigation"><RailButton aria-label="Dashboard" current><Icons.Dashboard /></RailButton><RailButton aria-label="New project"><Icons.NewFolder /></RailButton><NavRailSection><RailButton aria-label="Japan" live><Icons.Folder /></RailButton></NavRailSection></NavRail>
         <Row density="nav" element="button" lead={<Icons.Dashboard />} current>Conduit Dashboard</Row><Row density="nav" element="button" lead={<Icons.NewFolder />}>New project</Row>
-        <GNavGroup label="Projects"><NavFolder open row={<NavFolderRow icon={<Icons.Folder />} open within link={{}} toggle={{ "aria-label": "Collapse" }}>Japan</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Plan the trip</Row></NavFolder></GNavGroup>
-        <GNavGroup label="Chats"><Row density="nav" element="button" lead={<Icons.Chat />}>Fix the build</Row><Row density="nav" element="button" quiet lead={<Icons.Search />} meta="7 more">View all chats</Row></GNavGroup>
+        <Group kind="nav" title="Projects"><NavFolder open row={<NavFolderRow icon={<Icons.Folder />} open within link={{}} toggle={{ "aria-label": "Collapse" }}>Japan</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Plan the trip</Row></NavFolder></Group>
+        <Group kind="nav" title="Chats"><Row density="nav" element="button" lead={<Icons.Chat />}>Fix the build</Row><Row density="nav" element="button" quiet lead={<Icons.Search />} meta="7 more">View all chats</Row></Group>
       </NavPane></div>;
 
 export const navPage: Page = {
   title: "Nav", rail: "Blocks",
   summary: "The sidebar on the frame: a NavPane (head, list, foot) of NavGroups, Rows (density nav) and NavFolders, and the rail it folds to. Rows rest grey; the cursor is the wash and white; current is white at the current weight with no fill, and so is the folder holding it. The keys are the app's (navigation/sidebar-cursor.ts).",
   preview: navScene,
-  usage: `import { NavPane, NavBrand, NavLead, NavGroup, NavFolder, NavFolderRow, Row, Button, Icons } from "@/components/ui";
+  usage: `import { NavPane, NavBrand, NavLead, Group, NavFolder, NavFolderRow, Row, Button, Icons } from "@/components/ui";
 import { ServerControl } from "@/components/ui/connection";
 
 <NavPane head={<NavBrand name="Conduit" />} foot={<ServerControl name="Laptop" connectivity="online" />}>
   <NavLead server={<ServerControl name="Laptop" connectivity="online" />} actions={<Button onClick={newChat}>New chat</Button>} />
-  <NavGroup label="Projects">
+  <Group kind="nav" title="Projects">
     <NavFolder open={open()} row={<NavFolderRow icon={<Icons.Folder />} open={open()} link={{ onClick: openProject, children: "Conduit" }} toggle={{ onClick: toggleFolder, "aria-label": "Toggle Conduit" }} />}>
       <Row density="nav" element="button" indent current lead={<Icons.Chat />} onClick={openChat}>Fix the build</Row>
     </NavFolder>
-  </NavGroup>
+  </Group>
 </NavPane>`,
   anatomy: { scene: navScene, parts: [
     {selector: ".ui-nav-head",name: "Head",does: "holds the brand and section choice",from: "NavPane head"},
@@ -35,7 +35,7 @@ import { ServerControl } from "@/components/ui/connection";
   examples: [
     row("Row", "rest, current, within (holds current), open beside, selected", () => <div data-surface="frame" class="g-nav-frame"><Row density="nav" element="button" lead={<Icons.Chat />}>Rest</Row><Row density="nav" element="button" lead={<Icons.Chat />} current>Current</Row><Row density="nav" element="button" lead={<Icons.Folder />} within>Within</Row><Row density="nav" element="button" lead={<Icons.Chat />} open>Open beside</Row><Row density="nav" element="button" lead={<Icons.Chat />} selected>Selected</Row></div>, { phone: true, surfaces: ["ground"], code: "<Row (nav) current | within | open | selected>" }),
     row("Row (nav) · indent, detail, meta, end, quiet", "a chat in its folder, a terminal, View all, a link out", () => <div data-surface="frame" class="g-nav-frame"><Row density="nav" element="button" indent lead={<Icons.Chat />}>In a folder</Row><Row density="nav" element="button" lead={<Icons.Terminal />} detail="Japan · zsh · Active now">Shell</Row><Row density="nav" element="button" quiet lead={<Icons.Search />} meta="7 more">View all chats</Row><Row density="nav" element="button" lead={<Icons.Terminal />} end={<Icons.ExternalLink />}>Terminal View</Row></div>, { phone: true, surfaces: ["ground"], code: "<Row (nav) indent detail meta end quiet>" }),
-    row("NavGroup · away", "a client's section while it is offline: said after its label, its rows faint but still open", () => <div data-surface="frame" class="g-nav-frame"><GNavGroup label="Jask · Windows" away="Offline since 14:02"><NavFolder open={false} row={<NavFolderRow icon={<Icons.Workspace />} open={false} link={{}} toggle={{ "aria-label": "Expand" }}>Screenshots</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Casual greeting</Row></NavFolder></GNavGroup></div>, { code: '<NavGroup label="Jask · Windows" away="Offline since 14:02">' }),
+    row("Group · away", "a client's section while it is offline: said after its label, its rows faint but still open", () => <div data-surface="frame" class="g-nav-frame"><Group kind="nav" title="Jask · Windows" away="Offline since 14:02"><NavFolder open={false} row={<NavFolderRow icon={<Icons.Workspace />} open={false} link={{}} toggle={{ "aria-label": "Expand" }}>Screenshots</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Casual greeting</Row></NavFolder></Group></div>, { code: '<Group label="Jask · Windows" away="Offline since 14:02">' }),
     row("NavFolder · Open", "its row (link and chevron, out of the tab order) and its rows, which slide; --duration-fold", () => <div data-surface="frame" class="g-nav-frame"><NavFolder open={true} row={<NavFolderRow icon={<Icons.Folder />} open={true} link={{}} toggle={{ "aria-label": "Toggle" }}>Japan</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Plan the trip</Row><Row density="nav" element="button" indent lead={<Icons.Chat />}>Gassho houses</Row></NavFolder></div>, { phone: true, surfaces: ["ground"], code: "<NavFolder open row={<NavFolderRow …>}>" }),
     row("NavFolder · Shut", "its row (link and chevron, out of the tab order) and its rows, which slide; --duration-fold", () => <div data-surface="frame" class="g-nav-frame"><NavFolder open={false} row={<NavFolderRow icon={<Icons.Folder />} open={false} link={{}} toggle={{ "aria-label": "Toggle" }}>Japan</NavFolderRow>}><Row density="nav" element="button" indent lead={<Icons.Chat />}>Plan the trip</Row><Row density="nav" element="button" indent lead={<Icons.Chat />}>Gassho houses</Row></NavFolder></div>, { phone: true, surfaces: ["ground"], code: "<NavFolder open row={<NavFolderRow …>}>" }),
     row("NavNote · NavSkeleton", "nothing here; not arrived yet", () => <div data-surface="frame" class="g-nav-frame"><NavNote>No chats</NavNote><NavSkeleton rows={3} /></div>, { phone: true, surfaces: ["ground"], code: "<NavNote> · <NavSkeleton rows>" }),
@@ -50,5 +50,5 @@ import { ServerControl } from "@/components/ui/connection";
     token("--muted-foreground", "Rows at rest"),
     token("--duration-quick", "Row and folder changes")
   ] }],
-  api: ["NavPane", "NavBrand", "NavLead", "ServerControl", "NavGroup", "NavFolder", "NavFolderRow", "Row", "NavNote", "NavSkeleton", "NavNotice", "NavRail", "NavRailSection", "RailButton", "Segmented", "Button"],
+  api: ["NavPane", "NavBrand", "NavLead", "ServerControl", "Group", "NavFolder", "NavFolderRow", "Row", "NavNote", "NavSkeleton", "NavNotice", "NavRail", "NavRailSection", "RailButton", "Segmented", "Button"],
 };

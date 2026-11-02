@@ -101,7 +101,7 @@ const IN_THE_APP: { title: string; summary: string; rows: string[] }[] = [
     rows: ["ModelSelector", "ComposerPlusMenu", "ContextGauge › breakdown", "ComposerPlusMenu › Profile", "Sidebar › ChatMenu", "ServerSwitcher",
       "MobileComposerOptions", "MobileComposerOptions › models", "MobileComposerOptions › profiles", "MobileComposerOptions › effort", "MobileComposerOptions › places", "ChatHeader › menu"] },
   { title: "Palette and Settings", summary: "The app's large overlays, built from Overlay's parts: the command palette, chat search and Settings, on desktop and on a phone.",
-    rows: ["SettingGroup · SettingLine · every kind", "CommandMenu", "CommandMenu · chat search", "Settings", "Settings · recording a shortcut", "Settings · sections", "Settings · a section"] },
+    rows: ["Group · SettingLine · every kind", "CommandMenu", "CommandMenu · chat search", "Settings", "Settings · recording a shortcut", "Settings · sections", "Settings · a section"] },
   { title: "Phone chrome", summary: "The phone's own head: the chat's pills and the sidebar's, built from Pills.", rows: ["ChatHeader · the phone's pills", "Sidebar · header"] },
 ];
 function withAppPages(pages: Page[]): Page[] {

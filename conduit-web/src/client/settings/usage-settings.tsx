@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { Button, Segmented, Series, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue, SettingWide } from "@/components/ui";
+import { Button, Segmented, Series, SettingDetails, SettingLine, SettingLoading, SettingNote, SettingValue, SettingWide, Group } from "@/components/ui";
 import { api } from "../api/client";
 
 /** A day of GET /v0/usage: Conduit's agents' spend, in API-equivalent dollars fixed when spent (usage-ledger.js). */
@@ -46,7 +46,7 @@ export function UsageSettings() {
   return <Show when={usage()} fallback={<Show when={error()} fallback={<SettingLoading>Loading usage…</SettingLoading>}>
     <SettingNote tone="error"><span>{error() || "Usage could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
   </Show>}>
-    <SettingGroup title="Spend">
+    <Group title="Spend">
       <SettingLine plain label="Period">
         <Segmented label="Period" size="sm" value={String(range())} options={RANGES.map((days) => ({ value: String(days), label: `${days} days` }))}
           onChange={(value) => { setRange(Number(value)); void load(); }} />
@@ -58,16 +58,16 @@ export function UsageSettings() {
       <SettingLine plain label="Tokens"><SettingValue mono>{count(total().tokens)}</SettingValue></SettingLine>
       <SettingLine plain label="Replies"><SettingValue mono>{count(total().replies)}</SettingValue></SettingLine>
       <Show when={!total().replies && !total().tokens}><SettingNote>Nothing spent in this period{since() ? `; counting began ${since()}` : ""}.</SettingNote></Show>
-    </SettingGroup>
-    <Show when={models().length}><SettingGroup title="By model">
+    </Group>
+    <Show when={models().length}><Group title="By model">
       <For each={models()}>{(row) =>
         <SettingLine plain mono label={modelLabel(row.key)} state={`${count(row.tokens)} tokens`}><SettingValue mono>{money(row.cost)}</SettingValue></SettingLine>}
       </For>
-    </SettingGroup></Show>
-    <Show when={tools().length}><SettingGroup title="Tool calls">
+    </Group></Show>
+    <Show when={tools().length}><Group title="Tool calls">
       <For each={tools()}>{([name, calls]) => <SettingLine plain mono label={name}><SettingValue mono>{count(calls)}</SettingValue></SettingLine>}</For>
-    </SettingGroup></Show>
-    <SettingGroup title="About these numbers">
+    </Group></Show>
+    <Group title="About these numbers">
       <SettingDetails summary="How spend is counted">
         <SettingNote>Each call is priced when it is made, at its model's API list price (subscriptions such as ChatGPT or Copilot at
           the API's price for the same model), and that dollar amount is kept: later price changes do not move past days.
@@ -75,6 +75,6 @@ export function UsageSettings() {
         <SettingNote>Counted: Conduit's own agents, their subagents, compaction summaries and failed attempts. Not counted: chats in other
           harnesses (Codex, Claude Code, ChatGPT Web).{since() ? ` Counting began ${since()}.` : ""}</SettingNote>
       </SettingDetails>
-    </SettingGroup>
+    </Group>
   </Show>;
 }

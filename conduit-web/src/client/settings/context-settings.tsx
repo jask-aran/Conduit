@@ -4,8 +4,9 @@ import { Select } from "@/components/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { FileButton, StatusText } from "@/components/ui/file";
+import { Group } from "@/components/ui/group";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import { SettingLoading, SettingNote } from "@/components/ui/overlay";
@@ -279,20 +280,20 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       <Show when={failure()}><SettingNote tone="error">{failure()}</SettingNote></Show>
       <WorkbenchSplit main={<Main />} side={<>
         <Show when={block().source === "custom"}>
-          <WorkbenchSection title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></WorkbenchSection>
+          <Group kind="workbench" title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></Group>
         </Show>
-        <WorkbenchSection title="Used in">
+        <Group kind="workbench" title="Used in">
           <Show when={block().usedBy.length} fallback={<WorkbenchNote>In no document yet: add it to one from Prompts.</WorkbenchNote>}>
             <For each={block().usedBy}>{(id) => <Row density="nav" element="button" lead={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</Row>}</For>
           </Show>
-        </WorkbenchSection>
+        </Group>
         <Show when={slotsOf(block()).length}>
-          <WorkbenchSection title="Slots it can use">
+          <Group kind="workbench" title="Slots it can use">
             <For each={slotsOf(block())}>{(slot) => <WorkbenchFact code name={`{{${slot.name}}}`} value={slot.value || (block().kind === "notice" ? slot.description : undefined)} title={slot.description} />}</For>
-          </WorkbenchSection>
+          </Group>
         </Show>
         <Show when={block().appendix}>
-          <WorkbenchSection title="Conduit then adds"><WorkbenchNote>{block().appendix}</WorkbenchNote></WorkbenchSection>
+          <Group kind="workbench" title="Conduit then adds"><WorkbenchNote>{block().appendix}</WorkbenchNote></Group>
         </Show>
       </>} />
     </Workbench>}</Show>

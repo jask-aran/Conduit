@@ -16,16 +16,16 @@
 
 .ui-change-ledger { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .ui-change-ledger > div { display: flex; min-height: 0; flex: 1; flex-direction: column; }
-.ui-change-section { display: flex; min-height: calc(3 * var(--row-min)); flex: 1; flex-direction: column; border-bottom: var(--hairline) solid var(--border); }
-.ui-change-section:first-child { max-height: 38%; }
-.ui-change-section:not([data-open]) { min-height: 0; flex: none; }
-.ui-change-section > header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); }
-.ui-change-section > header > .ui-group-heading { min-width: 0; flex: 1; }
+.ui-group:where([data-group="change"]) { display: flex; min-height: calc(3 * var(--row-min)); flex: 1; flex-direction: column; border-bottom: var(--hairline) solid var(--border); }
+.ui-group:where([data-group="change"]):first-child { max-height: 38%; }
+.ui-group:where([data-group="change"]):not([data-open]) { min-height: 0; flex: none; }
+.ui-group:where([data-group="change"]) > header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); }
+.ui-group:where([data-group="change"]) > header > .ui-group-heading { min-width: 0; flex: 1; }
 /* Two groups side by side once each has room for a row's name, folder and counts. */
 @container (min-width: 32.5rem) {
   .ui-change-ledger > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ui-change-section { min-width: 0; }
-  .ui-change-section:first-child { max-height: none; border-right: var(--hairline) solid var(--border); }
+  .ui-group:where([data-group="change"]) { min-width: 0; }
+  .ui-group:where([data-group="change"]):first-child { max-height: none; border-right: var(--hairline) solid var(--border); }
 }
 .ui-change-list { min-height: 0; overflow: auto; padding: var(--space-2xs) var(--space-sm) var(--space-sm); }
 .ui-change-item { display: flex; min-width: 0; align-items: center; border-radius: var(--radius-control); }

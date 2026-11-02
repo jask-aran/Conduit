@@ -6,7 +6,7 @@ import { Dialog } from "@/components/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardActions, CardForm, CardBody, CardRead, CardNote } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavGroup, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot, Row } from "@/components/ui";
+import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNote, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, PillSwitch, RailButton, Segmented, StatusDot, Row, Group } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -1045,7 +1045,7 @@ export function Sidebar(props: {
     </ContextMenuContent>
   </ContextMenu>;
 
-  const Group = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string }) => {
+  const ProjectGroup = (groupProps: { label: string; projects: Project[]; chatRoot?: Project; workspace?: boolean; emptyLabel?: string }) => {
     const allChats = () => sortChats(groupProps.chatRoot?.sessions.filter((chat) => chat.status !== "draft" || chat.id !== props.selectedId || chat.pinned || Boolean(props.runtime.getProcess(chat.id))) || [], chatSort());
     const visibleChats = () => {
       const chats = allChats();
@@ -1056,7 +1056,7 @@ export function Sidebar(props: {
       return [...first.slice(0, Math.max(0, props.chatLimit - 1)), selected];
     };
     const moreChats = () => Math.max(0, allChats().length - visibleChats().length);
-    return <NavGroup label={groupProps.label}>
+    return <Group kind="nav" title={groupProps.label}>
       <Show when={groupProps.chatRoot}>
         <For each={visibleChats()}>{(chat) => <ChatMenu chat={chat} project={groupProps.chatRoot!} />}</For>
         <Show when={moreChats() > 0}>
@@ -1070,7 +1070,7 @@ export function Sidebar(props: {
       <Show when={!groupProps.chatRoot && !groupProps.projects.length && groupProps.emptyLabel}>
         <Show when={props.catalogueLoaded} fallback={<NavSkeleton rows={2} />}><NavNote>{groupProps.emptyLabel}</NavNote></Show>
       </Show>
-    </NavGroup>;
+    </Group>;
   };
 
   const serverSwitcher = () => <ServerSwitcher compact={!phoneLayout() && visualCollapsed()} inline={!phoneLayout()} connectivity={props.connectivity} pwaUpdating={props.pwaUpdating}
@@ -1174,19 +1174,19 @@ export function Sidebar(props: {
         {/* By machine once the server has said which it has; until then, as one list. */}
         <Show when={machines()?.length} fallback={<>
           {hubRow()}
-          <Group label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
-          <NavGroup label="Terminals">
+          <ProjectGroup label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
+          <Group kind="nav" title="Terminals">
             <For each={terminals()}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
             <Show when={!terminals().length}><NavNote>No live terminals</NavNote></Show>
-          </NavGroup>
+          </Group>
         </>}>
-          <For each={byMachine()}>{(group) => <NavGroup label={group.machine.label} away={awayNote(group.machine)}>
+          <For each={byMachine()}>{(group) => <Group kind="nav" title={group.machine.label} away={awayNote(group.machine)}>
             {/* The hub's machine is a client like any other, and the hub besides: its page (its harnesses, its files) first. */}
             <Show when={group.machine.hub} fallback={environmentRow(group.machine)}>{hubRow()}</Show>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
             <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
 
-          </NavGroup>}</For>
+          </Group>}</For>
         </Show>
       </Show>
       <Show when={area() === "conduit"}>
@@ -1195,10 +1195,10 @@ export function Sidebar(props: {
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>
         <Show when={props.onNewPane}><Row density="nav" element="button" lead={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</Row></Show>
         <Show when={pinnedItems().length}>
-          <NavGroup label="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></NavGroup>
+          <Group kind="nav" title="Pinned"><For each={pinnedItems()}>{(item) => <PinnedRow item={item} />}</For></Group>
         </Show>
-        <Group label="Projects" projects={folders()} emptyLabel="No projects" />
-        <Group label="Chats" projects={[]} chatRoot={chats()} />
+        <ProjectGroup label="Projects" projects={folders()} emptyLabel="No projects" />
+        <ProjectGroup label="Chats" projects={[]} chatRoot={chats()} />
       </Show>
     </NavPane>
 

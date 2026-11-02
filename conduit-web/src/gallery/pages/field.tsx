@@ -36,5 +36,5 @@ export const fieldPage: Page = {
     token("--text-caption", "Label or value size"),
     token("--weight-lift", "Label weight"),
   ] }],
-  api: ["Field","Input","Switch","Segmented"],
+  api: ["Field", "Input", "Switch", "Segmented"],
 };

@@ -5,9 +5,9 @@ import { ComputerExplorer } from "../../client/dashboard/computer-dashboard";
 import WorkspaceExcerptView from "../../client/workspace/workspace-excerpt-view";
 import { CameraPreview } from "@/components/ui/connection";
 import { Dialog } from "@/components/dialog";
-import { CardColumns, CardColumn, CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
+import { CardCaption, CardActions, CardForm, CardBody, CardNote, CardRead, CardDetails, CardQR, CardPreview, Attachments, Attachment, Notice } from "@/components/ui/card";
 import { createSignal, For } from "solid-js";
-import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview } from "@/components/ui";
+import { Field, Segmented, Button, Card, TextArea, Input, Read, Preview, Columns, Group } from "@/components/ui";
 import { PROJECTS } from "../seed";
 import { px, rounding, edge, bg, Replay } from "../specs";
 import { typeOf, ConnectionDemo, SwitchDemo } from "../demos";
@@ -111,7 +111,7 @@ export const cardPage: Page = {
     row("Attachments", "every file on the draft, opened from the strip: remove one, or all · " + (status()), () => <Card size="wide" title="2 attachments" actions={<><Button variant="ghost" outline>Remove all</Button><Button outline>Done</Button></>}><Attachments><For each={files}>{(file) => <Attachment name={file.name} detail={file.detail} icon={file.icon()} onRemove={() => {}} />}</For></Attachments></Card>, { surfaces: ["ground"], phone: true, code: "chat/attachment-strip.tsx" }),
     row("Attachments · tray", "the files a message was sent with, under it in the transcript: each framed, an image a thumbnail, name and detail cut short", () => <Attachments form="tray" label="Attachments"><For each={files}>{(file) => <Attachment name={file.name} detail={file.detail} icon={file.icon()} />}</For></Attachments>, { surfaces: ["ground"], phone: true, code: "chat/attachments.tsx · <Attachments form=\"tray\">" }),
     row("Edit review comment", "the excerpt it is on, and its text · " + (status()), () => <Card size="wide" close title="Edit review comment" detail="src/main.tsx · lines 12–14" actions={<>{cancel()}<Button outline>Save comment</Button></>}><Preview>{"const total = items.reduce(\n  (sum, item) => sum + item.size, 0);"}</Preview><TextArea value="This could use the size label helper." /></Card>, { surfaces: ["ground"], phone: true, code: "chat/review-comment-cards.tsx" }),
-    row("Connect", "pair this server as a QR, or add another · " + (status()), () => <Card size="split" close title="Connect"><CardColumns><CardColumn title="Pair a device"><div class="g-slot g-qr">QR code</div><CardCaption>laptop.ts.net</CardCaption><CardDetails><dt>Opens on</dt><dd>Tailscale</dd><dt>Code</dt><dd>Single use · 4:52</dd></CardDetails><CardActions><Button variant="ghost">Copy link</Button><Button variant="ghost" outline>New code</Button></CardActions></CardColumn><CardColumn title="Add server"><Input aria-label="Server address" placeholder="Address or pair link" /><Button variant="ghost" outline><Icons.QrCode />Scan QR code</Button><Button outline>Connect</Button></CardColumn></CardColumns></Card>, { surfaces: ["ground"], phone: true, code: "navigation/pair-dialog.tsx · main.tsx (ServerConnectForm)" }),
+    row("Connect", "pair this server as a QR, or add another · " + (status()), () => <Card size="split" close title="Connect"><Columns kind="card"><Group kind="card" title="Pair a device"><div class="g-slot g-qr">QR code</div><CardCaption>laptop.ts.net</CardCaption><CardDetails><dt>Opens on</dt><dd>Tailscale</dd><dt>Code</dt><dd>Single use · 4:52</dd></CardDetails><CardActions><Button variant="ghost">Copy link</Button><Button variant="ghost" outline>New code</Button></CardActions></Group><Group kind="card" title="Add server"><Input aria-label="Server address" placeholder="Address or pair link" /><Button variant="ghost" outline><Icons.QrCode />Scan QR code</Button><Button outline>Connect</Button></Group></Columns></Card>, { surfaces: ["ground"], phone: true, code: "navigation/pair-dialog.tsx · main.tsx (ServerConnectForm)" }),
     row("Workspace identity", "a short mark or an icon, then its colour · " + (status()), () => <Card size="wide" close title="Workspace identity" actions={<Button outline>Save</Button>}><Segmented label="Kind" value="mark" options={[{ value: "mark", label: "Mark" }, { value: "icon", label: "Icon" }]} onChange={() => {}} /><Field label="Mark"><Input value="JP" /></Field></Card>, { surfaces: ["ground"], phone: true, code: "main.tsx · project/dashboard.tsx (WorkspaceAppearanceEditor)" })
   ],
   motion: [
@@ -123,5 +123,5 @@ export const cardPage: Page = {
     token("--card-pair", "space from title to detail"),
     token("--radius-surface", "card corner")
   ] }],
-  api: ["Card", "Notice", "CardBody", "CardActions", "CardForm", "CardColumns", "CardColumn", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
+  api: ["Card", "Notice", "CardBody", "CardActions", "CardForm", "Columns", "Group", "CardNote", "CardRead", "CardDetails", "CardQR", "CardCaption", "CardPreview", "Attachments", "Attachment", "IdentityEditor", "Dialog", "OverlayDialog"]
 };

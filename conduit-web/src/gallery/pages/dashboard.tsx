@@ -3,8 +3,8 @@ import { createUniqueId } from "solid-js";
 import { GroupCompactHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Segmented } from "@/components/ui";
-import { NavGroup as GNavGroup, Row } from "@/components/ui";
-import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupHeading, GroupToggle, GroupSwitches, Group, GroupAction, DashDay, DashMore, ChangeRow, Counts, DashEmpty, DashNote, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { Row, Group, GroupHeading, GroupToggle } from "@/components/ui";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, DashIconButton, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, Counts, DashEmpty, DashNote, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { row, token, type Page } from "../model";
 
 const dashboardScene = () => {
@@ -13,7 +13,7 @@ const dashboardScene = () => {
         head={<DashHeader title="Conduit" context={["Nothing running"]} />}
         actions={<QuickActions><QuickAction icon={<Icons.Terminal />} label="Terminal" onClick={() => {}} /><QuickMore keep><DashIconButton aria-label="More" /></QuickMore></QuickActions>}
         composer={<div class="g-slot">Composer</div>}
-        list={<Group id={`${id}-g-page-chats`} labelled section="chats" order="list" heading={<GroupSwitches><span id={`${id}-g-page-chats`}><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 6 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
+        list={<Group kind="dash" id={`${id}-g-page-chats`} labelled section="chats" order="list" heading={<GroupSwitches><span id={`${id}-g-page-chats`}><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 6 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
           <DashDay>Today</DashDay>
           <Row density="list" element="button" lead={<Icons.Chat />} label="Plan the trip" context="Japan" meta="2d" />
           <Row density="list" element="button" lead={<Icons.Chat />} label="Fix the build" context="Conduit" meta="3d" />
@@ -24,8 +24,8 @@ const dashboardScene = () => {
           <Row density="list" element="button" lead={<Icons.Chat />} label="Collect ideas" context="Notes" meta="7d" />
           <DashMore count={12} onClick={() => {}}>Show more</DashMore>
         </Group>}
-        aside={<><Group id={`${id}-g-page-projects`} labelled section="projects" heading={<GroupHeading id={`${id}-g-page-projects`} count={4}>Projects</GroupHeading>}><FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<Icons.NewFolder />} /></FolderShelf></Group>
-          <Group id={`${id}-g-page-workspaces`} labelled section="workspaces" heading={<GroupHeading id={`${id}-g-page-workspaces`} count={2}>Workspaces</GroupHeading>}><Row density="list" element="button" lead={<Icons.Folder />} label="Main" context="Conduit" meta="2d" /><Row density="list" element="button" lead={<Icons.Folder />} label="Travel" context="Japan" meta="3d" /></Group></>}
+        aside={<><Group kind="dash" id={`${id}-g-page-projects`} labelled section="projects" heading={<GroupHeading id={`${id}-g-page-projects`} count={4}>Projects</GroupHeading>}><FolderShelf all><FolderTile name="Conduit" meta="3 chats" live /><FolderTile name="Japan" meta="2 chats" /><FolderTile name="Website" meta="1 chat" /><FolderTile name="Notes" meta="No chats" /><FolderTile name="New project" icon={<Icons.NewFolder />} /></FolderShelf></Group>
+          <Group kind="dash" id={`${id}-g-page-workspaces`} labelled section="workspaces" heading={<GroupHeading id={`${id}-g-page-workspaces`} count={2}>Workspaces</GroupHeading>}><Row density="list" element="button" lead={<Icons.Folder />} label="Main" context="Conduit" meta="2d" /><Row density="list" element="button" lead={<Icons.Folder />} label="Travel" context="Japan" meta="3d" /></Group></>}
       /></div>;
 };
 
@@ -49,18 +49,18 @@ import { Icons } from "@/components/ui";
   anatomy: { scene: dashboardScene, parts: [
     {selector: ".ui-dash-head",name: "Header",does: "names the place and holds quick actions",from: "DashHeader · QuickActions"},
     {selector: ".ui-dash-composer",name: "Composer",does: "holds the message composer",from: "Dashboard composer"},
-    {selector: ".ui-dash-main > .ui-dash-group",name: "Chats",does: "lists chats by day",from: "Group · DashDay · Row"},
+    {selector: ".ui-dash-main > .ui-group[data-group=dash]",name: "Chats",does: "lists chats by day",from: "Group · DashDay · Row"},
     {selector: ".ui-dash-aside",name: "Places",does: "holds projects and workspaces",from: "Dashboard aside"},
   ] },
   examples: [
     row("GroupCompactHeading", "label, count and where", () => <GroupCompactHeading label="Unread" count={3} where="in Japan" />, { source: "components/ui/dashboard.tsx · dashboard/primitives/chat-list.tsx", phone: "only", code: "<GroupCompactHeading label count where />" }),
     row("GroupCompactHeading · label only", "no count, no place", () => <GroupCompactHeading label="All chats" />, { phone: "only", code: "<GroupCompactHeading label />" }),
-    row("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><GNavGroup label="Projects"><Row density="nav" element="button" lead={<Icons.Folder />}>Japan</Row></GNavGroup></div>, { phone: true, code: "<GroupHeading count> · <NavGroup label>" }),
+    row("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><Group kind="nav" title="Projects"><Row density="nav" element="button" lead={<Icons.Folder />}>Japan</Row></Group></div>, { phone: true, code: "<GroupHeading count> · <Group label>" }),
     row("GroupToggle · Open", "open and shut", () => <GroupToggle open={true} count={4} onClick={() => {}}>Projects</GroupToggle>, { phone: true, code: "<GroupToggle open count onClick>" }),
     row("GroupToggle · Shut", "open and shut", () => <GroupToggle open={false} count={4} onClick={() => {}}>Projects</GroupToggle>, { phone: true, code: "<GroupToggle open count onClick>" }),
     row("Group", "switches and actions above chats, with a day and more below", () => {
   const id = createUniqueId();
-  return <Group id={`${id}-g-chats`} labelled section="chats" heading={<GroupSwitches><span id={`${id}-g-chats`}><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 3 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
+  return <Group kind="dash" id={`${id}-g-chats`} labelled section="chats" heading={<GroupSwitches><span id={`${id}-g-chats`}><Segmented label="Show" value="all" onChange={() => {}} options={[{ value: "all", label: "All", count: 3 }, { value: "unread", label: "Unread", count: 0 }]} /></span></GroupSwitches>} actions={<GroupAction>Filters</GroupAction>}>
           <DashDay>Today</DashDay>
           <Row density="list" element="button" lead={<Icons.Chat />} label="Plan the trip" context="Japan" meta="2d" />
           <Row density="list" element="button" lead={<Icons.Chat />} label="Fix the build" context="Conduit" meta="3d" />
@@ -82,5 +82,5 @@ import { Icons } from "@/components/ui";
     token("--muted-foreground", "Context text"),
     token("--border", "Section rules")
   ] }],
-  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "DashIconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "Counts", "DashMore", "DashEmpty", "DashNote", "FolderShelf", "FolderTile", "NavGroup"],
+  api: ["Dashboard", "DashHeader", "DashPath", "QuickActions", "QuickAction", "QuickMore", "DashIconButton", "Group", "GroupHeading", "GroupCompactHeading", "GroupToggle", "GroupSwitches", "Segmented", "GroupAction", "DashDay", "Row", "ChangeRow", "Counts", "DashMore", "DashEmpty", "DashNote", "FolderShelf", "FolderTile"],
 };

@@ -1,12 +1,13 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/menus";
-import { SettingGroup, SettingLine, SettingNote } from "@/components/ui/overlay";
+import { SettingLine, SettingNote } from "@/components/ui/overlay";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
 import type { ModelOption } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
 import { createAutosave } from "./autosave";
+import { Group } from "@/components/ui/group";
 
 /**
  * The persistent agent's settings (PATCH /v0/agent): who it is, how much it says and spends, and its routine. Saved
@@ -80,11 +81,11 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
   };
 
   const Page = () => <Show when={agentView()} fallback={<SettingNote>Loading…</SettingNote>}>
-    <Show when={settings()} fallback={<SettingGroup title="Agent">
+    <Show when={settings()} fallback={<Group title="Agent">
       <SettingNote>This hub has no agent. One agent per hub works for you in the background, with its own threads and memory.</SettingNote>
       <SettingLine label="Give this hub an agent"><Button size="sm" disabled={enabling()} onClick={() => void enable()}>Turn on</Button></SettingLine>
-    </SettingGroup>}>{(current) => <>
-      <SettingGroup title="Agent">
+    </Group>}>{(current) => <>
+      <Group title="Agent">
         <SettingLine label="Name" title="What it is called, here and in its notifications. Its home thread takes the name too." state={nameError() || undefined}>
           <Input id="agent-name" value={draft().name} maxLength={60} onInput={(event) => editName(event.currentTarget.value)} />
         </SettingLine>
@@ -99,13 +100,13 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
             <For each={zones.includes(current().timezone) ? zones : [current().timezone, ...zones]}>{(zone) => <option value={zone}>{zone.replace(/_/g, " ")}</option>}</For>
           </Select>
         </SettingLine>
-      </SettingGroup>
-      <SettingGroup title="Approvals">
+      </Group>
+      <Group title="Approvals">
         <SettingLine label="What you ask, it does" title="When you ask it for something, edits to your own data (completing a task, moving an event, labelling mail) go ahead without an approval. Sending as you, deleting, and anything it starts on its own still ask.">
           <Switch label="What you ask, it does" checked={current().youAsk !== false} onChange={(youAsk) => set({ youAsk })} />
         </SettingLine>
-      </SettingGroup>
-      <SettingGroup title="Routine">
+      </Group>
+      <Group title="Routine">
         <SettingLine label="Morning brief" title="A short brief in its home thread each morning: what happened, what is coming, what waits on you.">
           <Switch label="Morning brief" checked={current().brief.enabled} onChange={(enabled) => set({ brief: { ...current().brief, enabled } })} />
         </SettingLine>
@@ -138,7 +139,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           </SettingLine>
         </Show>
         <Work kind="other" label="Other runs" title="The model for check-backs it schedules, events, webhooks and tasks you run by hand." />
-      </SettingGroup>
+      </Group>
     </>}</Show>
   </Show>;
 

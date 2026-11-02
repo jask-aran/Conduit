@@ -32,12 +32,12 @@
 .ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
 .ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--border); }
 
-.ui-nav-group { display: flex; flex-direction: column; gap: var(--hairline); }
-.ui-nav-list > .ui-nav-group { margin-top: var(--space-lg); }
+.ui-group:where([data-group="nav"]) { display: flex; flex-direction: column; gap: var(--hairline); }
+.ui-nav-list > .ui-group:where([data-group="nav"]) { margin-top: var(--space-lg); }
 .ui-nav-label { align-self: flex-start; padding: var(--nav-label-pad); }
 .ui-nav-away { margin-left: var(--space-sm); text-transform: none; letter-spacing: normal; }
 .ui-nav-away::before { margin-right: var(--space-sm); content: "·"; }
-.ui-nav-group[data-away] > :not(.ui-nav-label) { opacity: var(--opacity-muted); }
+.ui-group:where([data-group="nav"])[data-away] > :not(.ui-nav-label) { opacity: var(--opacity-muted); }
 
 /* A row. A folder's row is a row holding its link and its chevron. */
 .ui-row:where([data-density="nav"]) { min-width: 0; padding: var(--space-2xs) var(--row-inset); line-height: var(--leading-text); }

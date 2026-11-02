@@ -19,13 +19,12 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element }) 
   <section class="ui-workbench-main">{props.main}</section>
 </div>;
 /** A titled group in the side column (Used in, Slots). */
-export const WorkbenchSection = (props: { title: string; children: JSX.Element }) => <section class="ui-workbench-section"><h4 class="ui-title">{props.title}</h4>{props.children}</section>;
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
 export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) => <div class="ui-workbench-fact" title={props.title}>
   {props.code ? <code>{props.name}</code> : <span>{props.name}</span>}<Show when={props.value}><span class="ui-workbench-fact-value">{props.value}</span></Show>{props.children}
 </div>;
 
-/** A quiet line in a WorkbenchSection or under a title: what there is none of, or what follows (Conduit then adds…). */
+/** A quiet line in a Group or under a title: what there is none of, or what follows (Conduit then adds…). */
 export const WorkbenchNote = (props: { children: JSX.Element }) => <p class="ui-workbench-meta">{props.children}</p>;
 
 /*

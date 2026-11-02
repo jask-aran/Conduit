@@ -1,6 +1,6 @@
 import { SourceOverview, SourcePatch, SourceView } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
-import { Icons } from "@/components/ui";
+import { Icons, Group } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { CirclePlusIcon, GitCommitHorizontalIcon, SendIcon } from "lucide-solid";
@@ -16,7 +16,7 @@ import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
 import { Button, Segmented } from "@/components/ui/controls";
-import { ToolLine, CommitBox, ChangeLedger, ChangeSection, ChangeList, ChangeItem, ChangeEmpty, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
+import { ToolLine, CommitBox, ChangeLedger, ChangeList, ChangeItem, ChangeEmpty, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
 import { ChangeRow } from "@/components/ui/dashboard";
 import { ToolBar, ToolButton, ToolNotice, PaneEmpty } from "@/components/ui/pane";
 import "./workspace.css";
@@ -275,8 +275,8 @@ export function SourceControlView(props: {
           disabled={!c.commitMessage().trim() || !c.stagedFiles().length || Boolean(c.gitAction())}
           onInput={c.setCommitMessage} onSubmit={() => void c.runGitAction("commit")} />
         <ChangeLedger>
-          <ChangeSection open={c.stagedOpen()} label="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
-            action={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></ToolButton>}>
+          <Group kind="change" open={c.stagedOpen()} title="Staged changes" count={c.stagedFiles().length} onToggle={() => c.setStagedOpen((open) => !open)}
+            actions={<ToolButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></ToolButton>}>
             <Show when={c.stagedFiles().length} fallback={<ChangeEmpty>No staged changes</ChangeEmpty>}>
               <ChangeList><For each={c.stagedFiles()}>{(file) =>
                 <ChangeItem action={<ToolButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></ToolButton>}>
@@ -286,9 +286,9 @@ export function SourceControlView(props: {
                 </ChangeItem>
               }</For></ChangeList>
             </Show>
-          </ChangeSection>
-          <ChangeSection open={c.changesOpen()} label="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
-            action={<ToolButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></ToolButton>}>
+          </Group>
+          <Group kind="change" open={c.changesOpen()} title="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
+            actions={<ToolButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></ToolButton>}>
             <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><ToolNotice>Untracked folders are grouped. Staging a folder includes its contents.</ToolNotice></Show>
             <Show when={c.unstagedFiles().length} fallback={<ChangeEmpty>Working tree clean</ChangeEmpty>}>
               <ChangeList><For each={c.unstagedFiles()}>{(file) =>
@@ -299,7 +299,7 @@ export function SourceControlView(props: {
                 </ChangeItem>
               }</For></ChangeList>
             </Show>
-          </ChangeSection>
+          </Group>
         </ChangeLedger>
       </Show>
       </SourceOverview>

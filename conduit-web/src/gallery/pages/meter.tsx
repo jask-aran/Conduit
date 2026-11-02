@@ -1,6 +1,6 @@
 // One page for the three ways the library shows how much of something there is.
 import { createSignal, Show } from "solid-js";
-import { Button, Gauge, Meter, Progress, Reading, ReadingTotal, Series, SettingGroup, SettingLine, SettingValue, SettingWide } from "@/components/ui";
+import { Button, Gauge, Meter, Progress, Reading, ReadingTotal, Series, SettingLine, SettingValue, SettingWide, Group } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 /** A month of a hub's spend, as Settings › Usage draws it: quiet days, a busy week, today current. */
@@ -48,7 +48,7 @@ export const meterPage: Page = {
     row("Meter · parts", "Messages use 42%; the remaining 58% is free.", () => <Meter parts={[{ value: 42, colour: "var(--foreground)" }, { value: 58, colour: "transparent" }]} />),
     row("Meter · named threshold", "Context compacts at the named 85% threshold.", () => <Meter parts={[{ value: 42, colour: "var(--foreground)" }, { value: 58, colour: "transparent" }]} mark={{ at: 85, label: "compacts at 85%" }} />),
     row("Meter · quiet threshold", "The threshold rule has a title and no label below it.", () => <Meter parts={[{ value: 42, colour: "var(--foreground)" }, { value: 58, colour: "transparent" }]} mark={{ at: 85, label: "compacts at 85%", quiet: true }} />),
-    row("Series · in a setting group", "Settings › Usage: a month of spend under its total; each column's title is the day's reading.", () => <div style={{ width: "calc(36 * var(--u-space))" }}><SettingGroup title="Spend"><SettingLine plain label="Last 30 days" state="API-equivalent"><SettingValue>$28.65</SettingValue></SettingLine><SettingWide><Series label="Spend, last 30 days" points={SPEND} ends={["Oct 4", "Today"]} /></SettingWide></SettingGroup></div>, { code: '<SettingWide><Series label points={days} ends={["Oct 4", "Today"]} /></SettingWide>' }),
+    row("Series · in a setting group", "Settings › Usage: a month of spend under its total; each column's title is the day's reading.", () => <div style={{ width: "calc(36 * var(--u-space))" }}><Group title="Spend"><SettingLine plain label="Last 30 days" state="API-equivalent"><SettingValue>$28.65</SettingValue></SettingLine><SettingWide><Series label="Spend, last 30 days" points={SPEND} ends={["Oct 4", "Today"]} /></SettingWide></Group></div>, { code: '<SettingWide><Series label points={days} ends={["Oct 4", "Today"]} /></SettingWide>' }),
     row("Series · a week", "Seven periods, wide columns; the last is current.", () => <div style={{ width: "calc(20 * var(--u-space))" }}><Series label="Spend, last 7 days" points={SPEND.slice(-7)} /></div>),
     row("Series · nothing yet", "Every period empty: the ground alone.", () => <div style={{ width: "calc(20 * var(--u-space))" }}><Series label="No spend in 30 days" points={SPEND.map((point) => ({ ...point, value: 0 }))} ends={["Oct 4", "Today"]} /></div>),
     row("Series · 90 days", "Narrow columns keep a stroke apart.", () => <div style={{ width: "calc(36 * var(--u-space))" }}><Series label="Spend, last 90 days" points={[...SPEND, ...SPEND, ...SPEND].map((point, index) => ({ ...point, current: index === 89 }))} ends={["Aug 5", "Today"]} /></div>),

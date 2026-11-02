@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { Button, FileButton, Icons, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSection, WorkbenchSplit, WorkbenchTitle, Row } from "@/components/ui";
+import { Button, FileButton, Icons, StatusText, TextEditorActions, TextEditorTitle, Workbench, WorkbenchFact, WorkbenchNote, WorkbenchSplit, WorkbenchTitle, Row, Group } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";
@@ -30,9 +30,9 @@ function BlocksBench() {
       title={<Select look="title" search="Search blocks" aria-label="Block" value="run"><option value="run">Run rules</option><option value="base">Shared base</option></Select>}
       actions={<Button variant="ghost" size="icon-sm" aria-label="New block"><Icons.Add /></Button>} />
     <WorkbenchSplit side={<>
-      <WorkbenchSection title="Used in"><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</Row><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</Row></WorkbenchSection>
-      <WorkbenchSection title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></WorkbenchSection>
-      <WorkbenchSection title="Conduit then adds"><WorkbenchNote>The run's routine, then what woke it.</WorkbenchNote></WorkbenchSection>
+      <Group kind="workbench" title="Used in"><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Heartbeat</Row><Row density="nav" element="button" lead={<Icons.Clock />} end={<Icons.ChevronRight />}>Morning brief</Row></Group>
+      <Group kind="workbench" title="Slots it can use"><WorkbenchFact code name="{{person.name}}" value="Jask" /><WorkbenchFact code name="{{timezone}}" value="Australia/Sydney" /></Group>
+      <Group kind="workbench" title="Conduit then adds"><WorkbenchNote>The run's routine, then what woke it.</WorkbenchNote></Group>
     </>} main={<TextEditor fill label="Run rules text" value={text()} onChange={setText}
       head={<><TextEditorTitle>Text</TextEditorTitle><TextEditorActions><Button variant="primary" size="sm">Save</Button><FileButton label="Reset"><Icons.Reset /></FileButton></TextEditorActions></>}
       status={<><StatusText>{`${Math.round(text().length / 4)} tok`}</StatusText><StatusText>jbot's file: jbot can change it too</StatusText></>} />} />
@@ -43,12 +43,12 @@ export const workbenchPage: Page = {
   title: "Workbench",
   summary: "A page that works on one thing at a time: its title is the thing (pressing it chooses another), the split below fills the page's height -- a side column that scrolls on its own, and one pane filling the main column with its actions in its bar and its facts in its foot -- so the page never scrolls.",
   preview: () => <BlocksBench />,
-  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, WorkbenchSection, WorkbenchFact, WorkbenchNote, TextEditorTitle, TextEditorActions } from "@/components/ui";
+  usage: `import { Workbench, WorkbenchTitle, WorkbenchSplit, Group, WorkbenchFact, WorkbenchNote, TextEditorTitle, TextEditorActions } from "@/components/ui";
 import { TextEditor } from "@/components/ui/text-editor"; // CodeMirror: imported on its own, never from the barrel
 
 <Workbench label="Blocks">
   <WorkbenchTitle title={<Select look="title" …/>} actions={…} meta="shipped" />
-  <WorkbenchSplit side={<WorkbenchSection title="Used in">…</WorkbenchSection>}
+  <WorkbenchSplit side={<Group kind="workbench" title="Used in">…</Group>}
     main={<TextEditor fill head={…} status={…} … />} />
 </Workbench>`,
   examples: [
@@ -61,5 +61,5 @@ import { TextEditor } from "@/components/ui/text-editor"; // CodeMirror: importe
     token("--space-xl", "Between the columns"),
     token("--text-heading", "The title select's size"),
   ] }],
-  api: ["Workbench", "WorkbenchTitle", "WorkbenchSplit", "WorkbenchSection", "WorkbenchFact"],
+  api: ["Workbench", "WorkbenchTitle", "WorkbenchSplit", "Group", "WorkbenchFact"],
 };

@@ -6,9 +6,9 @@ import { FileImage, FileCard, FileBody, FileDivider, FileSwap, FileEmptySide, Fi
 import { CodeSurface, CodeHost, CodeContent, SearchBar, SearchField, SearchActions, AnnotationPopup, AnnotationInput, AnnotationButton, ComparisonCounts, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
 import { Button, Input } from "@/components/ui/controls";
 import { PaneEmpty } from "@/components/ui/pane";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserEmpty, BrowserLoading, BrowserError, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserEmpty, BrowserLoading, BrowserError, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
-import { HarnessMark } from "@/components/ui";
+import { HarnessMark, Columns } from "@/components/ui";
 import { ListIcon } from "lucide-solid";
 import type { JSX } from "solid-js";
 
@@ -78,7 +78,7 @@ const Entries = (props: { details?: boolean; entries?: Entry[] }) => <>{(props.e
   {props.details ? <><small>{entry.folder ? "Folder" : "File"}</small><small>{entry.size ?? "—"}</small><small>12 Oct 2026</small><small>20 Oct 2026</small></> : null}
 </BrowserEntry>)}</>;
 const Grid = (props: { details?: boolean; children?: JSX.Element }) => <BrowserGrid data-view={props.details ? "details" : "tiles"}>
-  {props.details ? <BrowserColumns><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></BrowserColumns> : null}
+  {props.details ? <Columns kind="browser"><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></Columns> : null}
   {props.children ?? <Entries details={props.details} />}
 </BrowserGrid>;
 const Toolbar = () => <BrowserToolbar>
@@ -233,7 +233,7 @@ import { Icons } from "@/components/ui";
     </BrowserToolbar></div>, { phone: true, code: "<BrowserToolbar><DropdownMenu.Trigger as={BrowserMachine}><Icon /><span /><Icons.ChevronDown /></DropdownMenu.Trigger>…</BrowserToolbar>" }),
     row("BrowserActions · BrowserSummary · BrowserSpacer", "the repository this folder is in, a spacer, then what opens here", () => <div style={box(45)}><Actions /></div>, { phone: true, code: "<BrowserActions><BrowserSummary /><BrowserSpacer /><Button /></BrowserActions>" }),
     row("BrowserGrid tiles · BrowserEntry · BrowserMark", "folders first, then files; Conduit is a workspace (the mark)", () => <Pane><Grid /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="tiles"><BrowserEntry><Icon /><span /><BrowserMark /></BrowserEntry></BrowserGrid>' }),
-    row("BrowserGrid details · BrowserColumns", "the same entries with type, size and dates under column names", () => <Pane><Grid details /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="details"><BrowserColumns /><BrowserEntry>…<small /></BrowserEntry></BrowserGrid>' }),
+    row("BrowserGrid details · Columns", "the same entries with type, size and dates under column names", () => <Pane><Grid details /></Pane>, { surfaces: ["ground"], phone: true, code: '<BrowserGrid data-view="details"><Columns /><BrowserEntry>…<small /></BrowserEntry></BrowserGrid>' }),
     row("BrowserEmpty", "nothing in the folder, or nothing matches the search", () => <Pane><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserGrid><BrowserEmpty /></BrowserGrid>" }),
     row("BrowserLoading", "the listing on its way (the grid is busy under it)", () => <Pane><BrowserGrid data-view="tiles" aria-busy="true" /><BrowserLoading>Loading…</BrowserLoading></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserLoading />" }),
     row("BrowserError", "the folder could not be listed; above the entries", () => <Pane><BrowserError>Permission denied: /root</BrowserError><Grid><BrowserEmpty>This folder is empty.</BrowserEmpty></Grid></Pane>, { surfaces: ["ground"], phone: true, code: "<BrowserError />" })
@@ -246,7 +246,7 @@ import { Icons } from "@/components/ui";
     token("--text-caption", "caption text size"),
     token("--measure-xs", "spacing and size")
   ] }],
-  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserShelf", "BrowserToolbar", "BrowserMachine", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "BrowserColumns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
+  api: ["Browser", "BrowserLayout", "BrowserSidebar", "BrowserHeading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserShelf", "BrowserToolbar", "BrowserMachine", "Button", "BrowserAddress", "BrowserSearch", "Input", "BrowserCount", "BrowserActions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "Columns", "BrowserEntry", "BrowserMark", "BrowserEmpty", "BrowserLoading", "BrowserError"],
 };
 
 export const filesPages = (): Page[] => [filesPage, editorPage, browserPage];

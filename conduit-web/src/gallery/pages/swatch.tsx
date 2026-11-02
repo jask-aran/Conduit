@@ -31,5 +31,5 @@ export const swatchPage: Page = {
     token("--hairline", "Fine line width"),
     token("--muted-foreground", "Quiet text or stroke colour"),
   ] }],
-  api: ["Swatch","Button"],
+  api: ["Swatch", "Button"],
 };

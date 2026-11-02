@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { children, createSignal, Match, Show, Switch, type JSX } from "solid-js";
 import { Button, Spinner, StopGlyph } from "./controls";
 import { Expand } from "./expand";
+import { Group } from "./group";
 import { Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
@@ -136,8 +137,5 @@ export function AgentRider(props: { motion?: Motion; children: JSX.Element }) {
 
 /** One list in an AgentRider, under its label: Foreground (the agents a turn waits for) or Background. */
 export function AgentRiderGroup(props: { label: string; going?: boolean; children: JSX.Element }) {
-  return <section class={cn("ui-agent-group", props.going && "ui-agent-group-going")} aria-label={props.label}>
-    <h4>{props.label}</h4>
-    <AgentRows label={props.label}>{props.children}</AgentRows>
-  </section>;
+  return <Group kind="agent" title={props.label} going={props.going}><AgentRows label={props.label}>{props.children}</AgentRows></Group>;
 }

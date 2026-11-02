@@ -1,5 +1,5 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { Avatar, Input, SettingGroup, SettingLine, SettingNote } from "@/components/ui";
+import { Avatar, Input, SettingLine, SettingNote, Group } from "@/components/ui";
 import { accountName, loadAccount, saveAccountName } from "../state/account";
 
 /**
@@ -14,7 +14,7 @@ export function AccountSettings() {
     if (value.trim() === accountName()) return;
     try { await saveAccountName(value); } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   };
-  return <SettingGroup title="Account">
+  return <Group title="Account">
     <SettingLine plain label="Picture" state="your name's initials" title="Shown in the server switcher's menu. A photo of your own comes later.">
       <Avatar name={accountName()} size="lg" label={`${accountName() || "No name"}'s picture`} />
     </SettingLine>
@@ -23,5 +23,5 @@ export function AccountSettings() {
         onChange={(event) => void save(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
     </SettingLine>
     <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
-  </SettingGroup>;
+  </Group>;
 }

@@ -55,7 +55,7 @@
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
 .ui-overlay-rail > .ui-overlay-page-head { margin-bottom: var(--space-md); }
 .ui-overlay-title:focus { outline: none; }
-.ui-overlay-rail .ui-nav-group + .ui-nav-group { margin-top: var(--space-md); }
+.ui-overlay-rail .ui-group:where([data-group="nav"]) + .ui-group:where([data-group="nav"]) { margin-top: var(--space-md); }
 /* The current section is white and bold with no fill; the wash is only the cursor. */
 .ui-overlay .ui-row:where([data-density="nav"]):is(:focus-visible) { background: var(--tint); }
 @media (hover: hover) { .ui-overlay .ui-row:where([data-density="nav"]):is(:hover, :focus-visible) { background: var(--tint); } }
@@ -74,17 +74,17 @@
    the frame clips it, as a pane's document does (shell.css .ui-sheet[data-moving]). */
 .ui-overlay[data-settling] > .ui-overlay-page { width: var(--overlay-page-width, auto); flex: none; }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
-.ui-setting-group { display: flex; flex-direction: column; gap: var(--hairline); }
+.ui-group:where([data-group="setting"]) { display: flex; flex-direction: column; gap: var(--hairline); }
 .ui-setting-title { box-sizing: border-box; width: 100%; margin: 0 0 var(--space-sm); padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-heading)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
 input.ui-setting-title { outline: none; }
 input.ui-setting-title:focus-visible { border-color: var(--ring); background: var(--tint); }
 @media (hover: hover) { input.ui-setting-title:hover { background: var(--tint); } }
-.ui-setting-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
-.ui-setting-column { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
-.ui-setting-column + .ui-setting-column::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-columns:where([data-group="setting"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
+.ui-group:where([data-group="column"]) { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
+.ui-group:where([data-group="column"]) + .ui-group:where([data-group="column"])::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-setting-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
 .ui-setting-actions > .ui-button { white-space: nowrap; }
-.ui-setting-group + .ui-setting-group { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
+.ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* At least a row's height: a finger's on a phone, as every row is there. */
 /* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
 :root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }

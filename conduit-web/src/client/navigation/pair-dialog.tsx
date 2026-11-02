@@ -1,5 +1,5 @@
 import { Dialog } from "@/components/dialog";
-import { CardActions, CardCaption, CardQR, CardNote, CardDetails, CardColumns, CardColumn } from "@/components/ui/card";
+import { CardActions, CardCaption, CardQR, CardNote, CardDetails } from "@/components/ui/card";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 
@@ -8,6 +8,7 @@ import { httpUrl } from "../api/transport";
 import { activeServer, pathsOf, serverPathLabel, type ServerPath } from "../platform/servers.ts";
 import { shortOrigin } from "./server-switcher";
 import { pairingFragment } from "../platform/pairing";
+import { Columns, Group } from "@/components/ui/group";
 
 /*
  * Pair a device from a client that is already signed in: the same one-time,
@@ -69,8 +70,8 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   const expired = () => Boolean(svg()) && left() === 0;
 
   return <Dialog open={props.open} onOpenChange={props.onOpenChange} title="Connect" close size="split" >
-    <CardColumns>
-      <CardColumn title="Pair a device">
+    <Columns kind="card">
+      <Group kind="card" title="Pair a device">
     <Show when={route()} fallback={<CardNote>Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</CardNote>}>
       <CardQR svg={svg()} expired={expired()} reveal />
       <CardCaption title={route()!.origin}>{shortOrigin(route()!.origin)}</CardCaption>
@@ -88,8 +89,8 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
         <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
       </CardActions>
     </Show>
-      </CardColumn>
-      <CardColumn title="Add server">{props.addServer}</CardColumn>
-    </CardColumns>
+      </Group>
+      <Group kind="card" title="Add server">{props.addServer}</Group>
+    </Columns>
   </Dialog>;
 }

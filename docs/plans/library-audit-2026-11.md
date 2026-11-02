@@ -50,8 +50,9 @@ should stay itself.
    at different sizes; GroupAction is a small link Button. Pill, Rider and Quick actions stay.
 5. **Action rows and toolbars** (sheet `bars`): 16 → `Actions` (a run of controls: start or end, wrapping or folding
    into ⋯) and `ToolBar` (a hairlined strip). The composer's Toolbar and the file StatusBar stay.
-6. **Groups and sections** (sheet `groups`): 12 → `Section` (its label in one of two voices, a count, an action,
-   collapsible, ruled off) and `Columns`.
+6. **Groups and sections** (sheet `groups`): 12 → `Group` (built 2026-11-02 as `Group`, not `Section`: the menu's
+   `Section` keeps its name, and `components/menus.tsx` already has a `MenuSection`) with a kind for each family
+   (setting, column, nav, workbench, card, agent, dash, change), and `Columns`.
 7. **Search and address fields** (sheet `fields`): 9 → `Input` with a lead slot and a state (none, checking, ok,
    failed), and one `SearchField`. OverlayBar, the palette's whole top, stays.
 8. **Status, facts and counts** (sheet `marks`): 11 → `StatusDot` (tones, hollow, spinning, a label) taking in
@@ -83,12 +84,16 @@ layer under its menus and cards. `src/client/dashboard/primitives/split.tsx` is 
 ## Order
 
 1. Remove the unused (one commit; no screen changes).
-2. `Row` and `Section` first: they are the most repeated, and the Settings, nav, dashboard and menu screens all
+2. `Row` and `Group` (the audit's `Section`) first: they are the most repeated, and the Settings, nav, dashboard and menu screens all
    change at once, which the gallery shows side by side.
 3. `Empty` / `Loading` / `Note`, then `IconButton` and `Actions`.
 4. `PaneHeader`, which is behaviour (the folding by measure) more than looks, with the panes smoke.
 5. Fields, marks and tabs.
 6. Move menus and dialogs into the library.
+7. Motion: catalogue every animation the phone's pill composer plays (the composer arriving and leaving, each pill
+   and part coming and going) and formalise them as named, generic motion primitives in the library (keyframes,
+   duration and easing tokens, applied through `motionOf`), then move the composer and the other animated pieces
+   onto them. Nothing it does today may be lost: checked frame by frame before and after (`scripts/motion-check`).
 
 Each step: the gallery page for the new building block first, the old components as compositions of it (so screens
 keep working), then the callers moved and the old names removed. DESIGN.md's catalogue changes with each.

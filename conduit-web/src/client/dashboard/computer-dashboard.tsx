@@ -1,7 +1,7 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
-import { Icons } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserColumns, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
+import { Icons, Columns } from "@/components/ui";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserHeading, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserActions, BrowserSearch, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserEmpty, BrowserLoading, BrowserError, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { harnessStatusLabel } from "../harness-brand";
 import { Button, Input } from "@/components/ui/controls";
@@ -242,7 +242,7 @@ export function ComputerDashboard(props: {
 
         <Show when={props.error || listingError()}><BrowserError>{props.error || listingError()}</BrowserError></Show>
         <ContextMenu><ContextMenuTrigger as={BrowserGrid} data-view={view()} aria-busy={props.loading || refreshing()}>
-          <Show when={view() === "details"}><BrowserColumns><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></BrowserColumns></Show>
+          <Show when={view() === "details"}><Columns kind="browser"><span>Name</span><span>Type</span><span>Size</span><span>Created</span><span>Modified</span></Columns></Show>
           <For each={visibleEntries()}>{(entry) =>
             <ContextMenu><ContextMenuTrigger as={BrowserEntry} type="button" disabled={entry.type === "other" || props.loading} title={entry.name} onPointerEnter={() => entry.type === "directory" && props.onPrefetch(entry.path)} onFocus={() => entry.type === "directory" && props.onPrefetch(entry.path)} onClick={() => openEntry(entry)}>
               <Show when={entry.type === "directory"} fallback={<FileTypeIcon name={entry.name} />}><Icons.Folder /></Show>

@@ -105,16 +105,6 @@ export function DashIconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement
   return <button type="button" {...rest} class="ui-dash-icon">{local.children ?? <Icons.More />}</button>;
 }
 
-/** A section's name, the strong one: Geist at the strong weight, sentence case, an optional count in data. The quiet
- *  section label (menus, Settings, the sidebar) is the other role. */
-export function GroupHeading(props: { id?: string; count?: number | string | null; children: JSX.Element }) {
-  return <h2 id={props.id} class="ui-group-heading">{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></h2>;
-}
-/** A heading that folds its group: the chevron turns as it opens. */
-export function GroupToggle(props: { id?: string; open: boolean; count?: number | string | null; onClick: () => void; children: JSX.Element }) {
-  return <h2 id={props.id} class="ui-group-heading"><button type="button" class="ui-group-toggle" aria-expanded={props.open} onClick={() => props.onClick()}>
-    <Icons.ChevronRight />{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button></h2>;
-}
 /** The chats list's heading on a phone: the choice it shows, its count, and where. */
 export function GroupCompactHeading(props: { label: JSX.Element; count?: number | string | null; where?: JSX.Element }) {
   return <h2 class="ui-group-heading" data-compact="">{props.label}<Show when={props.count != null}><small>{props.count}</small></Show><Show when={props.where}><span>{props.where}</span></Show></h2>;
@@ -122,26 +112,6 @@ export function GroupCompactHeading(props: { label: JSX.Element; count?: number 
 /** Switches in a heading's place (the chats list's All · Unread, Conduit · Computer): one line, never squeezed. */
 export const GroupSwitches = (props: { children: JSX.Element }) => <div class="ui-group-switches">{props.children}</div>;
 
-export function Group(props: {
-  /** The heading's id when it has one; otherwise the group's name for assistive tech. */
-  id: string;
-  labelled?: boolean;
-  /** What the leader calls it (chats, projects, workspaces, terminals, changes, files, folders). */
-  section?: string;
-  order?: Order;
-  folded?: boolean;
-  busy?: boolean;
-  heading: JSX.Element;
-  actions?: JSX.Element;
-  children: JSX.Element;
-  more?: JSX.Element;
-}) {
-  return <section class="ui-dash-group" data-folded={props.folded ? "" : undefined} data-section={props.section} data-order={props.order ?? "rest"}
-    aria-labelledby={props.labelled ? props.id : undefined} aria-label={props.labelled ? undefined : props.id} aria-busy={props.busy || undefined}>
-    <header class="ui-dash-group-head">{props.heading}<Show when={props.actions}><div class="ui-dash-group-actions">{props.actions}</div></Show></header>
-    <div class="ui-dash-group-rows" hidden={props.folded}>{props.children}{props.more}</div>
-  </section>;
-}
 
 /** A text action at a heading's right (Open, New, Filters ⌄); a menu's trigger takes it with `as`. */
 export function GroupAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {

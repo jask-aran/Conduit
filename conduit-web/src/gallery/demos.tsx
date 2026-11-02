@@ -4,11 +4,11 @@ import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, C
 import { CardNote } from "@/components/ui/card";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingGroup, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, NavGroup, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingNote, SettingDetails, SettingWide, SettingLoading, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderActions, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";
-import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot } from "@/components/ui";
+import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot, Group } from "@/components/ui";
 import katex from "katex";
 
 export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
@@ -105,32 +105,32 @@ export function Theme() { const [value, setValue] = createSignal("dark"); return
 export const reset = () => <Button variant="ghost" size="icon-sm" aria-label="Reset to default"><Icons.Refresh /></Button>;
 export const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: boolean; failed?: boolean; why?: string; body: () => JSX.Element }> = {
   appearance: { status: "Saved", body: () => <>
-    <SettingGroup title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></SettingGroup>
-    <SettingGroup title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></SettingGroup>
+    <Group title="Interface"><SettingLine label="Theme"><Theme /></SettingLine><SettingLine label="Interface size"><ScaleSetting /></SettingLine><SettingLine label="Sidebar chats"><Input value="20" /></SettingLine><SettingLine label="Tab row"><SwitchDemo /></SettingLine><SettingLine label="Streaming" state="paused while hidden"><SelectTrigger value="Adaptive" bare /></SettingLine></Group>
+    <Group title="Reading"><SettingLine label="Transcript width"><SelectTrigger value="Compact" bare /></SettingLine><SettingLine label="Wide blocks"><SelectTrigger value="Off" bare /></SettingLine><SettingLine label="Terminal font"><SelectTrigger value="Meslo" bare /></SettingLine></Group>
   </> },
   shortcuts: { status: "Saved", body: () => <Shortcuts /> },
   models: { status: "Not saved", failed: true, why: "The server answered 502.", body: () => <>
-    <SettingGroup title="Accounts"><SettingLine label="OpenAI" plain><SettingValue>Signed in</SettingValue><Button variant="ghost" size="sm">Sign out</Button></SettingLine><SettingLine label="Anthropic" plain><SettingLink href="#">Open sign-in</SettingLink></SettingLine>
+    <Group title="Accounts"><SettingLine label="OpenAI" plain><SettingValue>Signed in</SettingValue><Button variant="ghost" size="sm">Sign out</Button></SettingLine><SettingLine label="Anthropic" plain><SettingLink href="#">Open sign-in</SettingLink></SettingLine>
       <SettingLine label="OpenRouter key"><Input value="sk-or-••••••••3f2a" /></SettingLine><SettingNote tone="error">That key was turned down (401). Check it has credit.</SettingNote>
-      <SettingDetails summary="Where to find them"><ol><li>Open openrouter.ai/keys</li><li>Create a key, then paste it here</li></ol><p>Keys stay on this server, in <code>~/.conduit/data</code>.</p></SettingDetails></SettingGroup>
-    <SettingGroup title="Providers"><SettingLine label="Gemini" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Default model"><SelectTrigger value="GPT-6 Luna" bare /></SettingLine></SettingGroup>
+      <SettingDetails summary="Where to find them"><ol><li>Open openrouter.ai/keys</li><li>Create a key, then paste it here</li></ol><p>Keys stay on this server, in <code>~/.conduit/data</code>.</p></SettingDetails></Group>
+    <Group title="Providers"><SettingLine label="Gemini" plain><SettingLink href="#">Docs</SettingLink></SettingLine><SettingLine label="Default model"><SelectTrigger value="GPT-6 Luna" bare /></SettingLine></Group>
   </> },
-  prompts: { status: "Saving", busy: true, body: () => <SettingGroup title="System prompt"><SettingLine label="Assistant" state="edited" plain>{reset()}</SettingLine>
-    <SettingWide><TextArea value={"You are Conduit's assistant. Answer briefly, then offer to go further.\nPrefer the user's own words for things."} /></SettingWide></SettingGroup> },
+  prompts: { status: "Saving", busy: true, body: () => <Group title="System prompt"><SettingLine label="Assistant" state="edited" plain>{reset()}</SettingLine>
+    <SettingWide><TextArea value={"You are Conduit's assistant. Answer briefly, then offer to go further.\nPrefer the user's own words for things."} /></SettingWide></Group> },
   runtime: { body: () => <>
-    <SettingGroup title="Processes"><SettingLine label="Running" plain><SettingValue mono>3 of 8</SettingValue></SettingLine><SettingLine label="Idle timeout"><SelectTrigger value="10 minutes" bare /></SettingLine></SettingGroup>
-    <SettingGroup title="Harnesses"><SettingLoading>Loading runtime settings…</SettingLoading></SettingGroup>
+    <Group title="Processes"><SettingLine label="Running" plain><SettingValue mono>3 of 8</SettingValue></SettingLine><SettingLine label="Idle timeout"><SelectTrigger value="10 minutes" bare /></SettingLine></Group>
+    <Group title="Harnesses"><SettingLoading>Loading runtime settings…</SettingLoading></Group>
   </> },
   servers: { body: () => <>
-    <SettingGroup title="This server"><SettingLine label="Name" plain><SettingValue>Desktop-Dev</SettingValue></SettingLine><SettingLine label="Address" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine></SettingGroup>
-    <SettingGroup title="Others"><SettingLine label="Laptop" state="9 ms" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine>
-      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><SettingNote tone="error">Couldn't reach VPS: the connection timed out.</SettingNote></SettingGroup>
+    <Group title="This server"><SettingLine label="Name" plain><SettingValue>Desktop-Dev</SettingValue></SettingLine><SettingLine label="Address" plain><SettingValue mono>a91f03c2 · TLS verified</SettingValue></SettingLine></Group>
+    <Group title="Others"><SettingLine label="Laptop" state="9 ms" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine>
+      <SettingLine label="VPS" state="offline" plain><Button variant="ghost" size="sm">Switch to</Button><Button variant="destructive" outline size="sm">Forget</Button></SettingLine><SettingNote tone="error">Couldn't reach VPS: the connection timed out.</SettingNote></Group>
   </> },
   voice: { status: "Saved", body: () => <>
-    <SettingGroup title="Dictation"><SettingLine label="Shortcut"><Input value="Ctrl+Space" readOnly title="Focus and press a shortcut" /></SettingLine><SettingLine label="Engine"><SelectTrigger value="Local" bare /></SettingLine><SettingLine label="Live captions"><SwitchDemo /></SettingLine></SettingGroup>
-    <SettingGroup title="Local model"><SettingLine label="Parakeet v3" state="downloading" plain><SettingValue mono>1.2 / 3.1 GB</SettingValue></SettingLine><SettingWide><Progress label="Download" value={1.2} max={3.1} /></SettingWide></SettingGroup>
+    <Group title="Dictation"><SettingLine label="Shortcut"><Input value="Ctrl+Space" readOnly title="Focus and press a shortcut" /></SettingLine><SettingLine label="Engine"><SelectTrigger value="Local" bare /></SettingLine><SettingLine label="Live captions"><SwitchDemo /></SettingLine></Group>
+    <Group title="Local model"><SettingLine label="Parakeet v3" state="downloading" plain><SettingValue mono>1.2 / 3.1 GB</SettingValue></SettingLine><SettingWide><Progress label="Download" value={1.2} max={3.1} /></SettingWide></Group>
   </> },
-  web: { body: () => <SettingGroup title="Search"><SettingLine label="Web search"><SwitchDemo /></SettingLine><SettingLine label="Provider"><SelectTrigger value="Brave" bare /></SettingLine><SettingLine label="Brave" plain><SettingLink href="#">Docs</SettingLink></SettingLine></SettingGroup> },
+  web: { body: () => <Group title="Search"><SettingLine label="Web search"><SwitchDemo /></SettingLine><SettingLine label="Provider"><SelectTrigger value="Brave" bare /></SettingLine><SettingLine label="Brave" plain><SettingLink href="#">Docs</SettingLink></SettingLine></Group> },
 };
 /** Settings · Shortcuts: a command per line, its chords as keycaps that can be pressed to record another and cleared, and + to add one. */
 export function Shortcuts() {
@@ -151,14 +151,14 @@ export function Shortcuts() {
   };
   onMount(() => { addEventListener("keydown", listen); onCleanup(() => removeEventListener("keydown", listen)); });
   return <>
-    <SettingGroup title="Keyboard"><SettingLine label="Keys for" state="Chrome · Windows · Browser tab" plain><Button variant="ghost" size="sm"><Icons.Refresh />Reset all</Button></SettingLine>
+    <Group title="Keyboard"><SettingLine label="Keys for" state="Chrome · Windows · Browser tab" plain><Button variant="ghost" size="sm"><Icons.Refresh />Reset all</Button></SettingLine>
       <SettingLine label="Leader menu" state="Ctrl G"><SelectTrigger value="After a pause" bare /></SettingLine>
-      <Input placeholder="Search commands, contexts, or keys…" /></SettingGroup>
-    <SettingGroup title="Application"><For each={Object.keys(bound())}>{(command) => <><SettingLine label={command} plain>
+      <Input placeholder="Search commands, contexts, or keys…" /></Group>
+    <Group title="Application"><For each={Object.keys(bound())}>{(command) => <><SettingLine label={command} plain>
       <Show when={bound()[command]!.length} fallback={<SettingValue>Not assigned</SettingValue>}>
         <For each={bound()[command]}>{(chord) => <Keycap label={`${command}: ${chord}`} onClick={() => {}} onRemove={() => clear(command, chord)}>{chord}</Keycap>}</For>
       </Show>{add(command)}</SettingLine>
-      <Show when={recording() === command}><SettingRecorder keys={heard()} onCancel={() => setRecording(null)} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></SettingGroup>
+      <Show when={recording() === command}><SettingRecorder keys={heard()} onCancel={() => setRecording(null)} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></Group>
   </>;
 }
 /** The Interface size as a setting: the app's Appearance sets it; here it moves the whole gallery. */
@@ -172,8 +172,8 @@ export function ScaleSetting() {
 export function Settings(props: { close: () => void; phone?: boolean; start?: SettingsSection | null }) {
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
   const rail = () => <OverlayRail title="Settings" foot={<OverlayFacts title="About"><OverlayFact label="Interface" value="0.8.1-dev.20261020063706.abb9a10" /><OverlayFact label="Running as" value="Browser tab" /><OverlayFact label="Server" value="0.8.1-dev.20261020063706.abb9a10 · modified" /></OverlayFacts>} onClose={props.phone ? props.close : undefined}>
-    <For each={SETTINGS}>{(group) => <NavGroup label={group.label}><For each={group.sections}>{([id, label, glyph]) =>
-      <Row density="nav" element="button" lead={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</Row>}</For></NavGroup>}</For>
+    <For each={SETTINGS}>{(group) => <Group kind="nav" title={group.label}><For each={group.sections}>{([id, label, glyph]) =>
+      <Row density="nav" element="button" lead={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</Row>}</For></Group>}</For>
   </OverlayRail>;
   const page = (id: SettingsSection) => { const view = SETTING_PAGES[id]; return <OverlayPage title={titleOf(id)} status={view.status} busy={view.busy} failed={view.failed} why={view.why} onRetry={view.failed ? () => {} : undefined} onBack={props.phone ? () => setSection(null) : undefined} onClose={props.close}>{view.body()}</OverlayPage>; };
   return <Overlay label="Settings" layout="rail" style={props.phone ? undefined : { "--overlay-width": "calc(70.3125 * var(--u-space))", "--overlay-height": "560px" }}>

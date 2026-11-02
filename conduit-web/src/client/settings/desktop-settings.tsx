@@ -1,7 +1,8 @@
 import { createSignal, onMount, Show } from "solid-js";
 import { Switch } from "@/components/ui/controls";
-import { SettingGroup, SettingLine, SettingLoading, SettingNote } from "@/components/ui/overlay";
+import { SettingLine, SettingLoading, SettingNote } from "@/components/ui/overlay";
 import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
+import { Group } from "@/components/ui/group";
 
 /**
  * The window behaviour the shell owns, shown where every other preference is.
@@ -33,7 +34,7 @@ export function DesktopSettingsTile() {
       <Switch id={id} label={label} disabled={disabled} checked={value} onChange={(on) => update(change(on))} />
     </SettingLine>;
 
-  return <SettingGroup title="Desktop">
+  return <Group title="Desktop">
     <Show when={settings()} fallback={<SettingLoading>Reading the shell's settings…</SettingLoading>}>
       {(current) => <>
         {row("desktop-tray", "Keep running in tray", current().keepRunningInTray, false,
@@ -46,5 +47,5 @@ export function DesktopSettingsTile() {
         <Show when={error()}><SettingNote tone="error">{error()}</SettingNote></Show>
       </>}
     </Show>
-  </SettingGroup>;
+  </Group>;
 }

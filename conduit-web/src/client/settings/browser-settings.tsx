@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { Button, Segmented, SettingDetails, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue, Spinner } from "@/components/ui";
+import { Button, Segmented, SettingDetails, SettingLine, SettingLoading, SettingNote, SettingValue, Spinner, Group } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { api } from "../api/client";
 
@@ -44,7 +44,7 @@ export function BrowserSettings() {
   return <Show when={found()} fallback={<Show when={error()} fallback={<SettingLoading>Loading the browser…</SettingLoading>}>
     <SettingNote tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
   </Show>}>{(browser) => <>
-    <SettingGroup title="Hub browser">
+    <Group title="Hub browser">
       <SettingLine plain label="Status" title={browser().url || undefined}>
         <SettingValue>{!browser().available ? "Not available" : browser().running ? `Running${host(browser().url) ? ` · ${host(browser().url)}` : ""}` : "Starts when it is first opened"}</SettingValue>
       </SettingLine>
@@ -54,8 +54,8 @@ export function BrowserSettings() {
       <SettingLine plain label="Engine" title="Vercel's agent-browser driving Chrome. Agents use agent-browser's own tools on the same page.">
         <SettingValue mono>{browser().engine}{browser().version ? ` · agent-browser ${browser().version}` : ""}</SettingValue>
       </SettingLine>
-    </SettingGroup>
-    <SettingGroup title="Stream">
+    </Group>
+    <Group title="Stream">
       <SettingLine plain label="Frame rate" title="How often a Browser pane is sent the page; applied to open panes at once.">
         <Segmented label="Frame rate" size="sm" value={String(browser().settings.fps)} disabled={!!busy()}
           options={browser().choices.fps.map((fps) => ({ value: String(fps), label: `${fps} fps` }))} onChange={(value) => void put({ fps: Number(value) })} />
@@ -64,8 +64,8 @@ export function BrowserSettings() {
         <Segmented label="Quality" size="sm" value={String(browser().settings.quality)} disabled={!!busy()}
           options={browser().choices.quality.map((quality) => ({ value: String(quality), label: QUALITY_LABELS[quality] || String(quality) }))} onChange={(value) => void put({ quality: Number(value) })} />
       </SettingLine>
-    </SettingGroup>
-    <SettingGroup title="Data">
+    </Group>
+    <Group title="Data">
       <SettingLine plain label="Signed-in sites" state={browser().profile ? "kept across restarts" : "kept while it runs"} title="The browser keeps its own profile on the hub: cookies, storage and history.">
         <Button variant="ghost" size="sm" disabled={!!busy() || !browser().available} onClick={() => void act("restart")}>{busy() === "restart" ? <Spinner /> : null}Restart</Button>
         <Button variant="destructive" outline size="sm" disabled={!!busy() || !browser().available} onClick={() => void clear()}>{busy() === "clear" ? <Spinner /> : null}Clear data</Button>
@@ -75,6 +75,6 @@ export function BrowserSettings() {
         <SettingNote>One Chrome on the hub, shared: you see and drive it in a Browser pane, and Conduit's agents work the same page through
           agent-browser's tools (other harnesses through its MCP server, Settings › AI › Tools). Sites see the hub, signed in as whatever it signs in as.</SettingNote>
       </SettingDetails>
-    </SettingGroup>
+    </Group>
   </>}</Show>;
 }

@@ -3,7 +3,7 @@ import {
   createEffect, createMemo, createSignal, For, onCleanup, Show,
 } from "solid-js";
 
-import { Button, Input, Keycap, Switch, LiveNote, SettingGroup, SettingLine, SettingNote, SettingRecorder, SettingValue } from "@/components/ui";
+import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingNote, SettingRecorder, SettingValue, Group } from "@/components/ui";
 import { Select } from "@/components/menus";
 import { api } from "../api/client";
 import { desktopShell } from "../platform/installed-client";
@@ -247,7 +247,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
   onCleanup(() => window.removeEventListener("conduit:keybindings-changed", onFileChanged));
 
   return <>
-    <SettingGroup title="Keyboard">
+    <Group title="Keyboard">
       <SettingLine plain label="Keys for" state={shortcutEnvironmentLabel(props.manager.environment)}>
         <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><Icons.Reset /> Reset all</Button></SettingLine>
       <SettingLine label="Leader menu" state={<Show when={props.manager.leader}>{(stroke) => <Keycap>{formatShortcutStroke(stroke(), props.manager.environment)}</Keycap>}</Show>}>
@@ -263,10 +263,10 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       </>}</Show>
       {/* Inside the group: between groups it would part their hairline. */}
       <LiveNote>{status()}</LiveNote>
-    </SettingGroup>
+    </Group>
 
     <Show when={groups().length} fallback={<SettingNote tone="quiet">{query().trim() ? `No shortcuts match “${query()}”.` : "No shortcuts assigned."}</SettingNote>}>
-      <For each={groups()}>{([group, items]) => <SettingGroup title={GROUP_LABELS[group] || contextLabel(group)}>
+      <For each={groups()}>{([group, items]) => <Group title={GROUP_LABELS[group] || contextLabel(group)}>
         <For each={items}>{(command) => {
           const bindings = () => {
             revision();
@@ -294,7 +294,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
             </Show>
           </>;
         }}</For>
-      </SettingGroup>}</For>
+      </Group>}</For>
     </Show>
   </>;
 }

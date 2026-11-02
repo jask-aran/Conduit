@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { Button, Icons, Input, LiveNote, SettingGroup, SettingLine, SettingLoading, SettingNote, SettingValue, Switch } from "@/components/ui";
+import { Button, Icons, Input, LiveNote, SettingLine, SettingLoading, SettingNote, SettingValue, Switch, Group } from "@/components/ui";
 import { createDecisionScope } from "@/components/decision-dialog";
 import { api } from "../api/client";
 
@@ -93,15 +93,15 @@ export function SkillsSettings() {
   return <Show when={skills()} fallback={<Show when={error()} fallback={<SettingLoading>Loading skills…</SettingLoading>}>
     <SettingNote tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></SettingNote>
   </Show>}>{(list) => <>
-    <SettingGroup title="Installed">
+    <Group title="Installed">
       <Show when={list().some((skill) => skill.origin === "installed")} fallback={<SettingNote tone="quiet">None yet: find one below.</SettingNote>}>
         <For each={list().filter((skill) => skill.origin === "installed")}>{skillLine}</For>
       </Show>
-    </SettingGroup>
-    <SettingGroup title="Shipped">
+    </Group>
+    <Group title="Shipped">
       <For each={list().filter((skill) => skill.origin === "shipped")}>{skillLine}</For>
-    </SettingGroup>
-    <SettingGroup title="Find">
+    </Group>
+    <Group title="Find">
       <SettingLine label="skills.sh" state={searching() ? "searching…" : undefined}>
         <Input type="search" aria-label="Search skills.sh" placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
       </SettingLine>
@@ -121,6 +121,6 @@ export function SkillsSettings() {
       </Show>
       <SettingNote tone="quiet">A skill is instructions every profile's model reads, and files it can run: install from sources you trust.</SettingNote>
       <LiveNote>{status()}</LiveNote>
-    </SettingGroup>
+    </Group>
   </>}</Show>;
 }

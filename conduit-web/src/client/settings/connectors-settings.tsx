@@ -1,7 +1,8 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Button } from "@/components/ui/controls";
-import { SettingGroup, SettingLine } from "@/components/ui/overlay";
+import { SettingLine } from "@/components/ui/overlay";
 import { api } from "../api/client";
+import { Group } from "@/components/ui/group";
 
 /** An MCP server reaching the person's accounts (GET /v0/agent/connectors), signed in to once for the hub. Today the
  *  hub's agent calls its tools from codemode; anything that is not a read asks first. */
@@ -40,7 +41,7 @@ export function ConnectorsGroup() {
 
   onMount(() => void loadConnectors());
   // A hub without its agent has nothing to call them yet: the group waits for one.
-  return <Show when={connectors().length}><SettingGroup title="Connectors">
+  return <Show when={connectors().length}><Group title="Connectors">
     <For each={connectors()}>{(connector) =>
       <SettingLine label={connector.label} title={`${connector.url}: your accounts through one MCP server, signed in once for this hub. The agent calls its tools from code; anything that is not a read asks you first.`}
         state={<>{failure()[connector.id] || (connector.status === "on" ? `${connector.tools} tools` : connector.status === "error" ? connector.error || CONNECTOR_STATE.error : CONNECTOR_STATE[connector.status])}</>}>
@@ -50,5 +51,5 @@ export function ConnectorsGroup() {
         </Show>
       </SettingLine>}
     </For>
-  </SettingGroup></Show>;
+  </Group></Show>;
 }

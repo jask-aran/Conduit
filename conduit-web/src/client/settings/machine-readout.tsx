@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
-import { Reading, ReadingStat, ReadingStats, SettingColumn, SettingLine, SettingNote, SettingValue } from "@/components/ui";
+import { Reading, ReadingStat, ReadingStats, SettingLine, SettingNote, SettingValue, Group } from "@/components/ui";
 import { api } from "../api/client";
 
 /** GET /v0/server/machine (machine-readout.js): rates are since the previous reading; null where the platform cannot say. */
@@ -49,13 +49,13 @@ export function MachineReadout(props: { open: boolean; url?: string; title?: str
         </ReadingStats>
       </Reading>
       <Show when={now().processes?.length}>
-        <SettingColumn title="Busiest processes">
+        <Group kind="column" title="Busiest processes">
           <For each={now().processes!}>{(item) =>
             <SettingLine plain mono label={item.name} state={`pid ${item.pid}`} title={`${item.name} (pid ${item.pid}): ${percent(item.cpu)} of a core, ${bytes(item.memory)} resident`}>
               <SettingValue mono>{percent(item.cpu)} · {bytes(item.memory)}</SettingValue>
             </SettingLine>}
           </For>
-        </SettingColumn>
+        </Group>
       </Show>
     </>}</Show>
     <Show when={error()}><SettingNote tone={error().startsWith("This device's Conduit is older") ? "quiet" : "error"}>{error().startsWith("This device's") ? error() : `The machine's readout could not be read: ${error()}`}</SettingNote></Show>

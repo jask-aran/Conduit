@@ -1,8 +1,8 @@
-import { ComposerDock } from "@/components/ui";
+import { ComposerDock, Group, GroupHeading, GroupToggle } from "@/components/ui";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createContext, createEffect, createSignal, For, Index, onCleanup, onMount, Show, splitProps, useContext, type Accessor, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/menus";
-import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, Group, GroupHeading, GroupToggle, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
+import { Counts, DashEmpty, DashHeader, DashIconButton, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 
@@ -23,7 +23,7 @@ const Phone = createContext<Accessor<boolean>>(() => false);
 // switches, ⋯ and search. The breakpoint is measured from them, not tuned.
 const WATCHED = [
   ".ui-toolbar-start > *", ".ui-toolbar-end",
-  ".ui-dash-group[data-order='list'] > .ui-dash-group-head > *", ".ui-dash-group[data-order='list'] .ui-dash-group-actions > *",
+  ".ui-group[data-group=dash][data-order='list'] > .ui-group-head > *", ".ui-group[data-group=dash][data-order='list'] .ui-group-actions > *",
 ].join(", ");
 
 /** The width a flex row needs with nothing in it squeezed: its fixed
@@ -63,7 +63,7 @@ function glide(root: HTMLElement, change: () => void, shown?: DOMRect) {
   // Into two columns the composer narrows out of the right column's way; its
   // sections wait until it mostly has, so it never draws over them.
   const narrowing = !root.hasAttribute("data-one-column") && Boolean(before && after && after.width < before.width - 1);
-  for (const section of root.querySelectorAll<HTMLElement>(".ui-dash-group, .ui-dash-notice")) {
+  for (const section of root.querySelectorAll<HTMLElement>(".ui-group[data-group=dash], .ui-dash-notice")) {
     const delay = narrowing && section.closest(".ui-dash-aside") ? 200 : 0;
     running.push(section.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-quick"), delay, easing: "ease-out", fill: "backwards" }));
   }
@@ -83,7 +83,7 @@ function twoColumnWidth(root: HTMLElement) {
   const composer = root.querySelector<HTMLElement>(".ui-dash-composer");
   const actions = composer?.querySelector<HTMLElement>(".ui-toolbar");
   if (composer && actions) needs.push(rowNeed(actions) + composer.getBoundingClientRect().width - actions.getBoundingClientRect().width);
-  const heading = root.querySelector<HTMLElement>(".ui-dash-group[data-order='list'] > .ui-dash-group-head");
+  const heading = root.querySelector<HTMLElement>(".ui-group[data-group=dash][data-order='list'] > .ui-group-head");
   if (heading) needs.push(rowNeed(heading) + heading.parentElement!.getBoundingClientRect().width - heading.getBoundingClientRect().width);
   // --dash-aside and --dash-gutter are registered lengths (dashboard.css), so they read back in px.
   return Math.max(...needs) + (parseFloat(style.columnGap) || 0) + (parseFloat(style.getPropertyValue("--dash-aside")) || 0) + 2 * (parseFloat(style.getPropertyValue("--dash-gutter")) || 0);
@@ -267,7 +267,7 @@ export function SplitGroup(props: {
     : folds() ? <GroupToggle id={props.id} open={open()} count={props.count} onClick={toggle}>{props.label}</GroupToggle>
     : props.heading ?? <GroupHeading id={props.id} count={props.count}>{props.label}</GroupHeading>;
   const actions = () => narrow() && props.compactActions ? props.compactActions : props.actions;
-  return <Group id={props.id} labelled={Boolean(props.label)} section={props.id.replace(/^.*-/, "").replace("threads", "chats")} order={props.order} folded={folds() && !open()} busy={props.busy}
+  return <Group kind="dash" id={props.id} labelled={Boolean(props.label)} section={props.id.replace(/^.*-/, "").replace("threads", "chats")} order={props.order} folded={folds() && !open()} busy={props.busy}
     heading={heading()} actions={actions()} more={props.more}>{props.children}</Group>;
 }
 

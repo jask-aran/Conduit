@@ -30,8 +30,8 @@
 .ui-browser-entry > .ui-browser-mark { position: absolute; inset-block-start: var(--space-xs); inset-inline-end: var(--space-xs); width: var(--icon); height: var(--icon); }
 .ui-browser-mark > * { width: 100%; height: 100%; }
 .ui-browser-grid[data-view="details"] { display: block; }
-.ui-browser-columns, .ui-browser-grid[data-view="details"] > .ui-browser-entry { display: grid; width: 100%; min-width: var(--measure-dialog-large); grid-template-columns: minmax(var(--measure-xs), 1fr) var(--measure-xs) var(--measure-xs) var(--measure-sm) var(--measure-sm); min-height: var(--control); padding: var(--space-xs) var(--space-md) var(--space-xs) var(--control); gap: var(--space-sm); }
-.ui-browser-columns, .ui-browser-entry > small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-columns:where([data-group="browser"]), .ui-browser-grid[data-view="details"] > .ui-browser-entry { display: grid; width: 100%; min-width: var(--measure-dialog-large); grid-template-columns: minmax(var(--measure-xs), 1fr) var(--measure-xs) var(--measure-xs) var(--measure-sm) var(--measure-sm); min-height: var(--control); padding: var(--space-xs) var(--space-md) var(--space-xs) var(--control); gap: var(--space-sm); }
+.ui-columns:where([data-group="browser"]), .ui-browser-entry > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > :first-child { position: absolute; inset-inline-start: var(--space-sm); width: var(--icon); height: var(--icon); }
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > span { text-align: start; }
 .ui-browser-grid[data-view="details"] .ui-browser-mark { display: none; }

@@ -16,12 +16,12 @@
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   row             Row (nav, list, menu densities: the box and voice every row shares)
- *   nav             NavPane > NavGroup > Row, NavFolder, RailButton
+ *   nav             NavPane > Group > Row, NavFolder, RailButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
  *   pane            PaneTabRow > TabPlace > PaneTab, PaneAction, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, ToolHeader,
  *                   ToolBar, ToolButton, ToolFilter, ToolNotice, Tree > TreeRow
- *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > ChangeSection >
+ *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
  *   terminal        TermHeader and its parts, TermState, TermKeys

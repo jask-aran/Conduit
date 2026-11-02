@@ -196,14 +196,9 @@ export const SettingTitle = (props: { value: string; label: string; editable?: b
       onChange={(event) => props.onChange?.(event.currentTarget.value)} />
   : <h3 class="ui-setting-title">{props.value}</h3>;
 /** A group's lines in columns, as many as the room holds, a hairline between: This device's clients beside its workspaces. */
-export const SettingColumns = (props: { children: JSX.Element }) => <div class="ui-setting-columns">{props.children}</div>;
 /** One column of lines, under a label in the group's voice (so its edge is the lines' edge). */
-export const SettingColumn = (props: { title: string; children: JSX.Element }) =>
-  <section class="ui-setting-column" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
 /** What can be done with a group's subject, a row of small buttons at the lines' edge, wrapping as they must. */
 export const SettingActions = (props: { children: JSX.Element }) => <div class="ui-setting-actions" role="group">{props.children}</div>;
-export const SettingGroup = (props: { title: string; children: JSX.Element }) =>
-  <section class="ui-setting-group" aria-label={props.title}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
 
 /** A setting: its name (state that matters muted after it), then its control in the one control column.
  *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */

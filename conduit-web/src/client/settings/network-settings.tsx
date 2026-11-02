@@ -1,8 +1,9 @@
+import { Group } from "@/components/ui/group";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { StatusDot } from "@/components/ui/nav";
-import { SettingActions, SettingGroup, SettingLine, SettingLink, SettingNote, SettingValue } from "@/components/ui/overlay";
+import { SettingActions, SettingLine, SettingLink, SettingNote, SettingValue } from "@/components/ui/overlay";
 
 type Certificate = { names: string[]; validTo: string };
 /** What the hub says of its LAN names (src/network/lan-names-service.js). */
@@ -83,7 +84,7 @@ export function NetworkSettings() {
     return "Off";
   };
 
-  return <Show when={shown()}>{(status) => <SettingGroup title="Network">
+  return <Show when={shown()}>{(status) => <Group title="Network">
     <SettingLine plain label="LAN names" state={status().state !== "issuing" && (status().configured || status().certificates.nodes) ? `${state()} · ${until(status().certificates.nodes)}` : state()}
       title="Gives every device an https name on this network, so a browser tab here reaches it directly rather than through this server. Needs a domain on Cloudflare.">
       <Show when={status().state === "issuing"}><StatusDot label="Setting up" spinning /></Show>
@@ -132,5 +133,5 @@ export function NetworkSettings() {
         <Button size="sm" disabled={busy() || !ready()} onClick={() => void setUp()}>{busy() ? "Checking…" : "Set up"}</Button>
       </SettingActions>
     </Show>
-  </SettingGroup>}</Show>;
+  </Group>}</Show>;
 }

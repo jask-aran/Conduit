@@ -44,8 +44,8 @@
 @media (hover: hover) { .ui-dash-icon:is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-dash-icon > svg { width: var(--icon); height: var(--icon); }
 /* Folding (the app's watchFold): a folded item stays laid out, hidden, so its width is known when room comes back. */
-:is(.ui-dash-group-actions, .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
-:is(.ui-dash-group-actions, .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
+:is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
+:is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
 
 .ui-dash-notice { grid-area: notice; margin-bottom: var(--space-xl); }
 .ui-dash-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
@@ -63,28 +63,28 @@
   color: var(--muted-foreground); font: inherit; font-size: var(--text-row); cursor: pointer; }
 .ui-dash-conversation-open:hover { color: var(--foreground); }
 .ui-dash-conversation-open svg { inline-size: var(--icon-sm); block-size: var(--icon-sm); }
-.ui-dash-main > .ui-dash-group { min-height: 0; flex: 1; margin-top: var(--space-xl); }
-.ui-dash-main > .ui-dash-group > .ui-dash-group-rows { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
+.ui-dash-main > .ui-group:where([data-group="dash"]) { min-height: 0; flex: 1; margin-top: var(--space-xl); }
+.ui-dash-main > .ui-group:where([data-group="dash"]) > .ui-group-body:where([data-group="dash"] *) { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 /* Stacked: the left column's groups at their own size, ruled apart as the aside's are, the column scrolling. */
 .ui-dash[data-stacked] .ui-dash-main { overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
-.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group { flex: none; }
-.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
-.ui-dash[data-stacked] .ui-dash-main > .ui-dash-group + .ui-dash-group { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
+.ui-dash[data-stacked] .ui-dash-main > .ui-group:where([data-group="dash"]) { flex: none; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-group:where([data-group="dash"]) > .ui-group-body:where([data-group="dash"] *) { overflow: visible; }
+.ui-dash[data-stacked] .ui-dash-main > .ui-group:where([data-group="dash"]) + .ui-group:where([data-group="dash"]) { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 .ui-dash-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
-.ui-dash-aside > .ui-dash-group + .ui-dash-group { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
+.ui-dash-aside > .ui-group:where([data-group="dash"]) + .ui-group:where([data-group="dash"]) { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 
 /* A group: its heading (or switches) with actions at the right, then rows. */
-.ui-dash-group { display: flex; min-width: 0; flex-direction: column; }
-.ui-dash-group-head { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
-.ui-dash-main .ui-dash-group-head { padding-left: 0; }
-.ui-dash-group[data-folded] .ui-dash-group-head { padding-bottom: 0; }
-.ui-dash-group-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-dash-group-rows { display: flex; min-width: 0; flex-direction: column; }
+.ui-group:where([data-group="dash"]) { display: flex; min-width: 0; flex-direction: column; }
+.ui-group-head:where([data-group="dash"] *) { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
+.ui-dash-main .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
+.ui-group:where([data-group="dash"])[data-folded] .ui-group-head:where([data-group="dash"] *) { padding-bottom: 0; }
+.ui-group-actions:where([data-group="dash"] *) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
 /* Switches in the heading's place keep their size on one line; the actions take the rest and fold. */
 .ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }
 .ui-group-switches > * { flex: none; white-space: nowrap; }
-.ui-dash-group-head:has(> .ui-group-switches) > .ui-dash-group-actions { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
-.ui-dash-group-actions > * { flex: none; white-space: nowrap; }
+.ui-group-head:where([data-group="dash"] *):has(> .ui-group-switches) > .ui-group-actions:where([data-group="dash"] *) { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
+.ui-group-actions:where([data-group="dash"] *) > * { flex: none; white-space: nowrap; }
 
 /* GroupHeading: the strong section name. Geist at the strong weight in sentence case, a step under the row, its
    count in data. (The quiet label is .ui-title; a phone's labels take this voice through --label-*.) */
@@ -104,7 +104,7 @@
 @media (hover: hover) { .ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-group-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-group-action small { margin-left: auto; padding-left: var(--space-lg); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-dash-group-actions > .ui-counts { padding-inline: var(--space-md); font-size: var(--text-caption); }
+.ui-group-actions:where([data-group="dash"] *) > .ui-counts { padding-inline: var(--space-md); font-size: var(--text-caption); }
 
 /* Rows: the sidebar's, at a page. */
 /* A page has room for a taller row than the sidebar: two units at least, the sidebar's where that is taller (a phone). */
@@ -128,7 +128,7 @@
 .ui-row:where([data-density="list"]):is(:focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; }
 @media (hover: hover) { .ui-row:where([data-density="list"]):is(:hover, :focus-visible) .ui-thread-harness-mark[data-artwork] .ui-harness-mark-artwork { opacity: 1; } }
 .ui-dash-day { padding: var(--space-md) var(--row-inset) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-dash-group-rows > .ui-dash-day:first-child { padding-top: 0; }
+.ui-group-body:where([data-group="dash"] *) > .ui-dash-day:first-child { padding-top: 0; }
 .ui-dash-more { display: flex; width: 100%; min-height: var(--control-sm); align-items: center; border: 0; border-radius: var(--radius-control); background: transparent;
   padding: var(--space-xs) var(--row-inset) var(--space-xs) calc(var(--row-inset) + var(--icon) + var(--row-gap)); color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: var(--text-caption); text-align: left; }
 .ui-dash-more:is(:focus-visible, [data-held]) { outline: none; background: var(--border); color: var(--foreground); }
@@ -184,11 +184,11 @@
 .ui-dash[data-one-column] :is(.ui-dash-main, .ui-dash-aside) { display: contents; }
 .ui-dash[data-one-column] .ui-dash-composer { order: 2; }
 .ui-dash[data-one-column] .ui-dash-conversation { order: 1; flex: none; max-block-size: 60dvh; }
-.ui-dash[data-one-column] .ui-dash-group { min-height: auto; flex: none; margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
-.ui-dash[data-one-column] .ui-dash-main > .ui-dash-group > .ui-dash-group-rows { overflow: visible; }
-.ui-dash[data-one-column] .ui-dash-group[data-order="first"] { order: 3; }
-.ui-dash[data-one-column] .ui-dash-group[data-order="list"] { order: 4; }
-.ui-dash[data-one-column] .ui-dash-group[data-order="rest"] { order: 5; }
+.ui-dash[data-one-column] .ui-group:where([data-group="dash"]) { min-height: auto; flex: none; margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
+.ui-dash[data-one-column] .ui-dash-main > .ui-group:where([data-group="dash"]) > .ui-group-body:where([data-group="dash"] *) { overflow: visible; }
+.ui-dash[data-one-column] .ui-group:where([data-group="dash"])[data-order="first"] { order: 3; }
+.ui-dash[data-one-column] .ui-group:where([data-group="dash"])[data-order="list"] { order: 4; }
+.ui-dash[data-one-column] .ui-group:where([data-group="dash"])[data-order="rest"] { order: 5; }
 
 /* A phone: edge to edge at the phone's gutter, the composer docked at the foot (dock), quick actions a row of large
    targets with their icons, the ⋯ in the chat header instead. */
@@ -202,7 +202,7 @@
 .ui-dash[data-compact] .ui-dash-quick-action { height: var(--dash-tile-action); flex-direction: column; justify-content: center; gap: var(--space-md); border-radius: var(--radius-surface); font-size: var(--text-caption); }
 .ui-dash[data-compact] .ui-dash-quick-action > svg { display: block; width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
 .ui-dash[data-compact] .ui-dash-quick-more { display: none; }
-.ui-dash[data-compact] .ui-dash-group-head { padding-left: 0; }
+.ui-dash[data-compact] .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
 
 @media (prefers-reduced-motion: reduce) { .ui-group-toggle > svg, .ui-folder-mark [data-part="front"] { transition: none; } }
 .ui-change-status[data-conflict] { color: var(--destructive); }

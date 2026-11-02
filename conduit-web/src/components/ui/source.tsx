@@ -1,6 +1,6 @@
+import { GroupToggle } from "./group";
 import { For, Show, splitProps, type JSX } from "solid-js";
 import { Button } from "./controls";
-import { GroupToggle } from "./dashboard";
 
 /*
  * Source control (DESIGN Panes and windows): the branch's line, the commit box, the staged and unstaged groups of
@@ -39,12 +39,6 @@ export function CommitBox(props: {
 /** Changes in a run of groups: two side by side when the tool is wide enough. */
 export const ChangeLedger = (props: { children: JSX.Element }) => <div class="ui-change-ledger"><div>{props.children}</div></div>;
 /** A group of changes: its heading folds it, an action at the heading's right (stage all); then its rows, or a note. */
-export function ChangeSection(props: { open: boolean; label: string; count?: number; onToggle: () => void; action?: JSX.Element; children: JSX.Element }) {
-  return <section class="ui-change-section" data-open={props.open ? "" : undefined}>
-    <header><GroupToggle open={props.open} count={props.count} onClick={props.onToggle}>{props.label}</GroupToggle>{props.action}</header>
-    <Show when={props.open}>{props.children}</Show>
-  </section>;
-}
 /** The rows of changes, scrolling. */
 export const ChangeList = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-change-list" />;
 /** A change and its action (stage, unstage), the action shown on the pointer or focus. */

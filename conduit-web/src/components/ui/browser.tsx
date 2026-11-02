@@ -15,7 +15,6 @@ export const BrowserSearch = (props: { children: JSX.Element }) => <label class=
 export const BrowserCount = (props: { children: JSX.Element }) => <span class="ui-browser-count">{props.children}</span>;
 export const BrowserSummary = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-summary" />;
 export const BrowserSpacer = () => <span class="ui-browser-spacer" />;
-export const BrowserColumns = (props: { children: JSX.Element }) => <div class="ui-browser-columns">{props.children}</div>;
 export const BrowserMark = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-mark" />;
 export const BrowserEmpty = (props: { children: JSX.Element }) => <div class="ui-browser-empty">{props.children}</div>;
 export const BrowserLoading = (props: { children: JSX.Element }) => <div class="ui-browser-loading" role="status">{props.children}</div>;

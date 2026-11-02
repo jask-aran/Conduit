@@ -1,6 +1,6 @@
 import { For } from "solid-js";
-import { ReportCard, RoomRow, ClockRow, DayStrip, HarnessPrompt, Icons, LevelMark, type ClockKind } from "@/components/ui";
-import { DashIconButton, Group, GroupHeading } from "@/components/ui/dashboard";
+import { ReportCard, RoomRow, ClockRow, DayStrip, HarnessPrompt, Icons, LevelMark, type ClockKind, Group, GroupHeading } from "@/components/ui";
+import { DashIconButton } from "@/components/ui/dashboard";
 import { row, type Page } from "../model";
 
 /* Assistant: an agent that keeps going on its own. What runs it on a clock is listed next first over its day. In the app they are the agent's page's groups (dashboard/agent-page.tsx). */
@@ -13,7 +13,7 @@ const CLOCKS: { kind: ClockKind; title: string; cadence: string; status?: string
 ];
 
 const day = (now = 14 * 60 + 20) => <DayStrip now={now} quiet={{ start: 23 * 60, end: 7 * 60 }} pulse={30} marks={[{ at: 8 * 60, label: "Brief", kind: "brief" }, { at: 18 * 60, label: "Weekly review", kind: "schedule" }]} />;
-const timed = () => <div class="g-aside"><Group id="g-timed" labelled section="timed" heading={<GroupHeading id="g-timed" count={CLOCKS.length}>Timed</GroupHeading>}>
+const timed = () => <div class="g-aside"><Group kind="dash" id="g-timed" labelled section="timed" heading={<GroupHeading id="g-timed" count={CLOCKS.length}>Timed</GroupHeading>}>
   {day()}
   <For each={CLOCKS}>{(clock) => <ClockRow {...clock} actions={clock.remove ? <DashIconButton aria-label="Remove feed"><Icons.Delete /></DashIconButton> : undefined} />}</For>
 </Group></div>;

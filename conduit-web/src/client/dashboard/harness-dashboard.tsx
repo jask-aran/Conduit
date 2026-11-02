@@ -1,6 +1,6 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { HarnessMark, ThreadHarnessMark } from "@/components/ui";
-import { Icons } from "@/components/ui";
+import { Icons, GroupHeading } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { api } from "../api/client";
@@ -14,7 +14,7 @@ import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 import { Button, Input, Segmented } from "@/components/ui/controls";
-import { DashDay, DashEmpty, DashIconButton, DashNote, GroupAction, GroupHeading, GroupSwitches } from "@/components/ui/dashboard";
+import { DashDay, DashEmpty, DashIconButton, DashNote, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { CardPreview, CardRead } from "@/components/ui/card";
 import { Dialog } from "@/components/dialog";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
