@@ -45,14 +45,13 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
     await atomic(configFile, `${JSON.stringify(settings, null, 2)}\n`);
   }
   async function certificates() {
-    const found = {};
-    for (const [kind, prefix] of [["hub", "lan"], ["nodes", "nodes"]]) {
+    const found = await Promise.all([["hub", "lan"], ["nodes", "nodes"]].map(async ([kind, prefix]) => {
       try {
         const cert = new crypto.X509Certificate(await fs.readFile(path.join(tlsDir, `${prefix}-cert.pem`)));
-        found[kind] = { names: cert.subjectAltName?.split(", ").filter((name) => name.startsWith("DNS:")).map((name) => name.slice(4)) || [], validTo: cert.validTo };
-      } catch {}
-    }
-    return found;
+        return [kind, { names: cert.subjectAltName?.split(", ").filter((name) => name.startsWith("DNS:")).map((name) => name.slice(4)) || [], validTo: cert.validTo }];
+      } catch { return null; }
+    }));
+    return Object.fromEntries(found.filter(Boolean));
   }
   async function cliStatus() {
     if (cfCache && Date.now() - cfCache.at < 60_000) return cfCache.value;
@@ -85,16 +84,23 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
   }
   async function needsCertificate(prefix, name) {
     try {
-      const cert = new crypto.X509Certificate(await fs.readFile(path.join(tlsDir, `${prefix}-cert.pem`)));
-      const key = crypto.createPrivateKey(await fs.readFile(path.join(tlsDir, `${prefix}-key.pem`)));
+      const [certificate, privateKey] = await Promise.all([
+        fs.readFile(path.join(tlsDir, `${prefix}-cert.pem`)),
+        fs.readFile(path.join(tlsDir, `${prefix}-key.pem`)),
+      ]);
+      const cert = new crypto.X509Certificate(certificate);
+      const key = crypto.createPrivateKey(privateKey);
       return !cert.checkPrivateKey(key) || !cert.subjectAltName?.split(", ").includes(`DNS:${name}`) || Date.parse(cert.validTo) <= Date.now() + 30 * 86400_000;
     } catch { return true; }
   }
   async function run(force) {
     try {
       const targets = [["nodes", `*.${config.domain}`], ...(config.hubName ? [["lan", config.domain]] : [])];
-      const due = [];
-      for (const target of targets) if (force || await needsCertificate(...target)) due.push(target);
+      let due = targets;
+      if (!force) {
+        const needed = await Promise.all(targets.map((target) => needsCertificate(...target)));
+        due = targets.filter((_, index) => needed[index]);
+      }
       // A check that finds nothing due is not setting anything up, and says so only if it fails.
       if (due.length) {
         state = "issuing";

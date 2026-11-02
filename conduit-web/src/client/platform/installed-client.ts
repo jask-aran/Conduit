@@ -279,13 +279,15 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     if (readyDesktopUpdate) return { kind: "ready", version: readyDesktopUpdate.version };
     if (desktopUpdatePreparation) return desktopUpdatePreparation;
     desktopUpdatePreparation = (async (): Promise<PreparedDesktopUpdate> => {
-      const { check, Update } = await import("@tauri-apps/plugin-updater");
-      const { getIdentifier } = await import("@tauri-apps/api/app");
+      const [{ check, Update }, { getIdentifier }] = await Promise.all([
+        import("@tauri-apps/plugin-updater"), import("@tauri-apps/api/app"),
+      ]);
       let pending: InstanceType<typeof Update> | null = null;
       const unanswered: string[] = [];
       if (await getIdentifier() === "com.jaskaran.conduit.desktop.dev") {
-        const { activePath, activeServer, pathsOf } = await import("./servers.ts");
-        const { invoke } = await import("@tauri-apps/api/core");
+        const [{ activePath, activeServer, pathsOf }, { invoke }] = await Promise.all([
+          import("./servers.ts"), import("@tauri-apps/api/core"),
+        ]);
         // The route in use first, then every other address this server is
         // known by: whichever reaches it from here is as good as any, and
         // the one in use can have just gone away.

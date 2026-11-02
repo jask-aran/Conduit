@@ -63,8 +63,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
     const waiting = threads.flatMap((chatId) => (backends.getByChatId(chatId)?.hostUiRequests || [])
       .map((request) => ({ kind: "question", chatId, requestId: request.id, title: request.title || "A question" })));
     // A run waits on no one (it cannot ask); a thread whose chat is not live may still have a question pending.
-    for (const conversationId of agent.runtime.askerWaits?.keys() || []) {
-      const thread = await agent.describe(conversationId);
+    for (const thread of await Promise.all([...agent.runtime.askerWaits?.keys() || []].map((conversationId) => agent.describe(conversationId)))) {
       if (thread?.chatId && !waiting.some((item) => item.chatId === thread.chatId)) waiting.push({ kind: "question", chatId: thread.chatId, requestId: null, title: "A question" });
     }
     return {
@@ -148,6 +147,15 @@ export function registerAgentRoutes(app, { agent, backends }) {
         log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } }));
       });
     } catch (error) { next(error); }
+  });
+
+  // jbot's mailbox has mail (workers/jbot-mail): collect it now rather than at the next minute. The Worker proves itself
+  // with the shared secret; the call carries no mail, so a wrong or replayed one costs a poll at most.
+  app.post("/v0/agent/email/wake", (request, response) => {
+    const email = agent.runtime.messageLog?.channels.email;
+    if (!email?.ready || !email.authorizes(request.headers.authorization)) return response.status(404).json({ error: "not_found" });
+    void email.poll().catch((error) => console.error("[agent] email collection failed", error?.message || error));
+    response.status(202).json({ collecting: true });
   });
 
   app.get("/v0/agent/messages", (request, response) => {

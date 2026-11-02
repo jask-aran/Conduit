@@ -578,13 +578,13 @@ export class DurableAdapter extends EventEmitter {
 
   async create(options) {
     const harness = await this.runtime.open();
-    const fallback = await this.runtime.defaultModel();
+    const [fallback, vars] = await Promise.all([
+      this.runtime.defaultModel(),
+      options.templateId === "agent" && this.runtime.agentVars ? this.runtime.agentVars() : null,
+    ]);
     const spec = splitSpec(options.model) || (fallback && { provider: fallback.provider, modelId: fallback.modelId });
     let fixedVars = null;
-    if (options.templateId === "agent" && this.runtime.agentVars) {
-      const { now: _now, ...fixed } = await this.runtime.agentVars();
-      fixedVars = fixed;
-    }
+    if (vars) { const { now: _now, ...fixed } = vars; fixedVars = fixed; }
     const conversation = await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
       ...await this.runtime.agentFor(options.templateId, { roaming: options.roaming, fixedVars }),
       ...(spec ? { model: spec } : {}),

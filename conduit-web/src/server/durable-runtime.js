@@ -450,9 +450,12 @@ export class DurableRuntime {
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     const vars = isAgent && this.agentVars ? fixedVars || await this.agentVars().catch(() => ({})) : undefined;
-    const instructions = this.contextStore
-      ? await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars })
-      : [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(this.skillsFor(template.id).length ? ["# Skills", ...this.skillsFor(template.id).map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");
+    let instructions;
+    if (this.contextStore) instructions = await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars });
+    else {
+      const skills = this.skillsFor(template.id);
+      instructions = [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(skills.length ? ["# Skills", ...skills.map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");
+    }
     return {
       extensions, tools,
       modelTools: codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))

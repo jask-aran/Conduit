@@ -26,9 +26,12 @@
 /* A background spawn: one line, the verb in the row's weight, the ids in data type, the task muted after them. */
 .ui-agent-spawn { display: flex; flex-direction: column; }
 .ui-agent-spawn .ui-agent-head { flex: 1; }
-/* The fold's chevron stays shown, and turns as the line opens; what it drops down sits under the task, indented once. */
-.ui-agent-spawn .ui-agent-fold { opacity: 1; transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-agent-spawn[data-open] .ui-agent-fold { rotate: 180deg; }
+/* The fold's chevron as every disclosure's in the transcript (the trace's, a step's): under the pointer, in focus, or
+   open, turning as it opens, and ending on the column's edge with theirs (the row bleeds past it by its padding);
+   what it drops down sits under the task, indented once. */
+.ui-agent-spawn .ui-agent-fold { transition: opacity var(--duration-quick) var(--ease-change), rotate var(--duration-quick) var(--ease-change); }
+.ui-agent-spawn[data-open] .ui-agent-fold { opacity: 1; rotate: 180deg; }
+.ui-agent-row > .ui-agent-open:last-child { margin-right: calc(-1 * var(--space-sm)); }
 .ui-agent-started > .ui-agent-rows { margin: 0 0 var(--space-xs); padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-agent-spawn .ui-agent-title { color: var(--muted-foreground); }
 .ui-agent-status { flex: none; }

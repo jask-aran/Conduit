@@ -196,7 +196,8 @@ export function registerChatRoutes(app, {
       if (!context.chat.untracked) return response.json(chatView(context.chat));
       const project = await projects.get(String(request.body?.projectId || ""));
       const real = (root) => fs.realpath(root).catch(() => root);
-      if (!project || await real(project.workingRoot) !== await real(context.project.workingRoot)) {
+      const roots = project && await Promise.all([real(project.workingRoot), real(context.project.workingRoot)]);
+      if (!roots || roots[0] !== roots[1]) {
         return response.status(400).json({ error: "workspace_mismatch" });
       }
       await registry.update(context.chat.id, { untracked: false, projectId: project.id });

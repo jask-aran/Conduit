@@ -386,10 +386,11 @@ export class PersistentAgent {
 
   async view(state) {
     if (!this.enabled()) return { enabled: false };
-    state ||= await this.state();
+    const [current, settings] = await Promise.all([state || this.state(), this.shownSettings()]);
+    state = current;
     return {
       enabled: true,
-      settings: await this.shownSettings(),
+      settings,
       projectId: this.project.id,
       folder: this.folder,
       home: state.home,

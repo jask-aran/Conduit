@@ -63,6 +63,14 @@ async function loadTerminalFont() {
   return fontPromise;
 }
 
+const loadTerminalModules = () => Promise.all([
+  import("@xterm/xterm"),
+  import("@xterm/addon-fit"),
+  import("@xterm/addon-clipboard"),
+  import("@xterm/addon-webgl"),
+  import("@xterm/xterm/css/xterm.css"),
+]);
+
 /**
  * Turns the image files on a paste into the text to type into the PTY. The
  * renderer does not know where they go; the pane spools them and hands back a
@@ -73,9 +81,9 @@ export type TerminalPasteFiles = (files: File[]) => Promise<string>;
 export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles; onClipboardError?: (message: string) => void };
 
 export async function createTerminalRenderer(host: HTMLElement, options: TerminalRendererOptions = {}): Promise<TerminalRenderer> {
-  await loadTerminalFont();
+  const [, modules] = await Promise.all([loadTerminalFont(), loadTerminalModules()]);
   host.style.setProperty("--conduit-terminal-background", CONDUIT_TERMINAL_THEME().background);
-  return createXtermRenderer(host, options);
+  return createXtermRenderer(host, options, modules);
 }
 
 type TerminalFit = {
@@ -278,14 +286,12 @@ async function writeClipboardText(text: string, options: TerminalRendererOptions
   }
 }
 
-async function createXtermRenderer(host: HTMLElement, options: TerminalRendererOptions): Promise<TerminalRenderer> {
-  const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }, { WebglAddon }] = await Promise.all([
-    import("@xterm/xterm"),
-    import("@xterm/addon-fit"),
-    import("@xterm/addon-clipboard"),
-    import("@xterm/addon-webgl"),
-    import("@xterm/xterm/css/xterm.css"),
-  ]);
+async function createXtermRenderer(
+  host: HTMLElement,
+  options: TerminalRendererOptions,
+  modules: Awaited<ReturnType<typeof loadTerminalModules>>,
+): Promise<TerminalRenderer> {
+  const [{ Terminal }, { FitAddon }, { ClipboardAddon, Base64 }, { WebglAddon }] = modules;
   const terminal = new Terminal({
     fontSize: scaled(terminalFontSize()),
     fontFamily: terminalFontFamily(),

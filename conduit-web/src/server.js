@@ -188,9 +188,8 @@ const preferences = new PreferencesStore(
   { defaultTemplateId: config.piTemplate.id },
   { knownTemplateIds },
 );
-await preferences.load();
 const drafts = new DraftStore(config.draftsFile);
-await drafts.load();
+await Promise.all([preferences.load(), drafts.load()]);
 const authStore = new AuthStore(config.authFile);
 await authStore.load();
 await authStore.pruneExpired();

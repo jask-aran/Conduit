@@ -32,13 +32,14 @@ export function registerAttachmentRoutes(app, { attachments, findChatContext }) 
       // records of a send count. The send ledger is the one every harness
       // writes; the Pi session file is read as well because a chat that
       // predates the ledger has its sends recorded only there.
-      const announced = await attachments.announcedIds(context.project, context.chat.id);
       const sessionFile = conduitPiSessionFile(context.chat);
-      if (sessionFile) {
-        try {
-          for (const id of await readAnnouncedAttachmentIds(sessionFile, context.project)) announced.add(id);
-        } catch (error) { if (error.code !== "ENOENT") throw error; }
-      }
+      const sessionIds = sessionFile
+        ? readAnnouncedAttachmentIds(sessionFile, context.project).then((ids) => ({ ids }), (error) => ({ error }))
+        : Promise.resolve({ ids: new Set() });
+      const announced = await attachments.announcedIds(context.project, context.chat.id);
+      const legacy = await sessionIds;
+      if (legacy.error && legacy.error.code !== "ENOENT") throw legacy.error;
+      for (const id of legacy.ids || []) announced.add(id);
       response.json({ attachments: (await attachments.list(context.project, context.chat.id))
         .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
     } catch (error) { next(error); }

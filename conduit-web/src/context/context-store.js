@@ -153,17 +153,23 @@ export class ContextStore {
     if (id === "live-inbox" && this.agent()?.enabled()) return wrap(await renderWaitingInbox(this.agent()));
     return live[id].template;
   }
-  async summary(item, docs) {
+  async summary(item, docs, loaded = null) {
     const usedBy = docs.filter((doc) => [...doc.blocks, ...doc.live, ...doc.first, ...doc.notices].includes(item.id)).map((doc) => doc.id);
-    if (item.kind === "live") return { id: item.id, label: item.label, kind: item.kind, source: item.source, description: item.description, tag: item.tag, template: item.template, modified: false, editable: false, resettable: false, deletable: false, chars: (await this.previewLive(item.id)).length, usedBy };
-    const content = await this.content(item);
-    const def = await this.defaultContent(item);
+    if (item.kind === "live") {
+      const preview = loaded && Object.hasOwn(loaded, "preview") ? loaded.preview : await this.previewLive(item.id);
+      return { id: item.id, label: item.label, kind: item.kind, source: item.source, description: item.description, tag: item.tag, template: item.template, modified: false, editable: false, resettable: false, deletable: false, chars: preview.length, usedBy };
+    }
+    const [content, def] = loaded && Object.hasOwn(loaded, "content")
+      ? [loaded.content, loaded.defaultContent]
+      : await Promise.all([this.content(item), this.defaultContent(item)]);
     return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
   }
   async list() {
-    const catalog = await this.catalog(); const documents = await this.documents(catalog);
     const agent = this.agent();
-    const values = agent ? await promptVars(agent).catch(() => null) : null;
+    const catalogPromise = this.catalog();
+    const valuesPromise = agent ? promptVars(agent).catch(() => null) : null;
+    const catalog = await catalogPromise;
+    const [documents, values] = await Promise.all([this.documents(catalog), valuesPromise]);
     const value = (name) => name.split(".").reduce((at, key) => at?.[key], values);
     return { blocks: await Promise.all([...catalog.values()].map((item) => this.summary(item, documents))), documents,
       vars: VARS.map(([name, description]) => ({ name, description, scope: name === "now" ? "current" : "fixed", ...(values ? { value: String(value(name) ?? "") } : {}) })) };
@@ -171,10 +177,14 @@ export class ContextStore {
   async get(id) {
     const catalog = await this.catalog(); const item = catalog.get(id);
     if (!item) throw fail("Unknown block", 404);
-    const summary = await this.summary(item, await this.documents(catalog));
-    if (item.kind === "live") return { ...summary, preview: await this.previewLive(id) };
-    const def = await this.defaultContent(item);
-    return { ...summary, content: await this.content(item), ...(def !== null ? { defaultContent: def } : {}) };
+    const documentsPromise = this.documents(catalog);
+    if (item.kind === "live") {
+      const [documents, preview] = await Promise.all([documentsPromise, this.previewLive(id)]);
+      return { ...await this.summary(item, documents, { preview }), preview };
+    }
+    const [documents, content, defaultContent] = await Promise.all([documentsPromise, this.content(item), this.defaultContent(item)]);
+    const summary = await this.summary(item, documents, { content, defaultContent });
+    return { ...summary, content, ...(defaultContent !== null ? { defaultContent } : {}) };
   }
   validate(content) {
     if (typeof content !== "string" || !content.trim()) throw fail("Block content is required");
@@ -258,14 +268,15 @@ export class ContextStore {
     if (saved[id]) { delete saved[id].blocks; if (!Object.keys(saved[id]).length) delete saved[id]; }
     await this.writeJson("documents.json", saved); return this.document(id);
   }
-  async textSections(id, { vars } = {}) {
-    const catalog = await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);
+  async textSections(id, { vars, catalog: loadedCatalog } = {}) {
+    const catalog = loadedCatalog || await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);
     if (!doc) throw fail("Unknown document", 404);
     const sections = []; let previousSkill = false;
     for (const key of doc.blocks) {
       // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
       // fatal: a role must still start.
-      const item = catalog.get(key); if (!item || item.kind !== "text") continue;
+      const item = catalog.get(key);
+      if (!item || item.kind !== "text") continue;
       let text = await this.content(item);
       if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
@@ -279,11 +290,14 @@ export class ContextStore {
   async assemble(id, options = {}) { return (await this.textSections(id, options)).sections.map((item) => item.text).join("\n\n"); }
   async preview(id) {
     const agent = this.agent();
-    const vars = agent && (id === "agent" || id.startsWith("run:")) ? await promptVars(agent) : undefined;
-    const { doc, sections } = await this.textSections(id, { vars });
+    const [vars, catalog] = await Promise.all([
+      agent && (id === "agent" || id.startsWith("run:")) ? promptVars(agent) : null,
+      this.catalog(),
+    ]);
+    const { doc, sections } = await this.textSections(id, { vars, catalog });
     for (const [part, ids] of [["system", doc.live], ["first", doc.first], ["notice", doc.notices]]) for (const blockId of ids) {
-      const routine = blockId === "live-routine-context" ? (await this.catalog()).get(`routine-${doc.role.id}`)?.routine : null;
-      const item = (await this.catalog()).get(blockId);
+      const routine = blockId === "live-routine-context" ? catalog.get(`routine-${doc.role.id}`)?.routine : null;
+      const item = catalog.get(blockId);
       if (item?.kind === "notice") { const sample = { ...(vars || {}), now: vars?.now || new Date().toLocaleString(), task: "The task", reason: "The person asked for this run", event: "An event", routine: { title: "Routine", name: "routine" }, report: "The report", title: "Run", ask: { title: "Approval", id: "a-1" }, assistant: { name: "jbot" }, message: "Message", changes: "the person is now Sam" }; sections.push({ blockId, label: item.label, kind: "notice", part, text: renderVars(await this.content(item), sample) }); continue; }
       if (item?.kind === "text") { sections.push({ blockId, label: item.label, kind: "text", part, placed: true, text: (await this.content(item)).trim() }); continue; }
       const text = routine && agent?.folder ? await routineContext(agent, routine) : await this.previewLive(blockId);

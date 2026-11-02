@@ -1,4 +1,4 @@
-# Panes, browser and settings directions
+# Surfaces roadmap: panes, browser, agents and settings
 
 Status: directions and review decisions from 2026-11-02, after studying a comparable self-hosted agent workspace.
 Not all decided; shape into issues before building. Newest last.
@@ -83,3 +83,79 @@ The user's calls on the study's ranked list:
 ## Machine readout
 
 A per-device System info (CPU, memory, disk, network, top processes): one per hub/node in Distributed Conduit.
+
+## Task list (2026-11-02)
+
+Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees/empty-pane`), previewed on
+:4320 with its own data root.
+
+### The `empty-pane` branch
+
+- [ ] 1. Approve `PaneHome` as a v2 extension: only the container that centres Home and styles the headings and
+  status line inside it.
+- [ ] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×.
+- [ ] 3. Merge the branch into `main` and restart :4310 (`--force` while the stuck "Slow Spawn Narration" test chat
+  still waits).
+
+### Bugs and loose ends
+
+- [ ] 4. Possible data loss: a brand-new chat may be deleted if left while its first reply streams. Seen while
+  seeding, not confirmed.
+- [ ] 5. Pane corners and a sideways shift after closing a chat back to the empty pane. Parked.
+- [ ] 6. The body of commit `9ed79305`'s message names the studied product. Reword before pushing `main`, with the
+  other session idle.
+
+### Browser and agents
+
+- [ ] 7. Browser document `browser:<id>`, version 1: a managed Chrome on the hub, always open; person and agent share
+  one page by its id; shown by streaming (H.264); evaluate Vercel's agent-browser as the engine; check what v2's
+  existing `ui-browser` family (`browser.css`) covers first.
+- [ ] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
+  security headers kept (frame-ancestors rewritten, the injected script admitted by a CSP nonce); streaming as the
+  fallback for sites that refuse framing.
+- [ ] 9. Browsers on client devices, reachable from any other client through the hub.
+- [ ] 10. Acting as you: jbot uses your browser on a device you choose.
+- [ ] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
+  open, close and focus panes; use the browser.
+- [ ] 12. Add Vercel's agent-desktop for driving desktop apps on devices.
+
+### Settings
+
+- [ ] 13. AI › Tools: each profile's tools, where each comes from, and whether it asks. Read-only first.
+- [ ] 14. System › Devices: each device lists the harnesses it declares, with status, and a machine readout (CPU,
+  memory, disk, network, top processes).
+- [ ] 15. System › Usage: tokens, cost and tools over time, from the ledger.
+- [ ] 16. Services › Browser: where the browser runs, stream or proxy, quality, clear browser data.
+- [ ] 17. Models & accounts: group the helper models (naming, summary, review), each showing what it inherits.
+- [ ] 18. Server switcher: a profile picture in its menu. Account itself stays in Settings.
+
+### Chat, agents and voice (decided 2026-11-02)
+
+- [ ] 27. Message queue: rework what a message sent mid-turn does (queue, steer, interrupt); the current behaviour
+  is not what the user wants. Design first.
+- [ ] 28. Sub-agent limits: extend the `subagent` tool with limits (concurrent and background runs, iterations,
+  output size).
+- [ ] 29. Voice: extend Settings › Voice beyond dictation with text-to-speech (reading replies aloud) and voice memos.
+- [ ] 30. jbot channels: messaging apps (Telegram, Discord, Slack, WhatsApp, Signal, SMS, email) as jbot's channels,
+  grown through the jbot message log (`persistent-agent.md`). Worth keeping from the study: a conversation in a
+  messaging app attaches to a thread, and a command there starts a fresh one.
+- [ ] 31. A single drawer pane from the bottom, later. Not recursive splits.
+
+### Later or lower priority
+
+- [ ] 19. Memory view with scope and provenance.
+- [ ] 20. Skill discovery and status.
+- [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
+- [ ] 22. Commit message drafting with its own model.
+- [ ] 23. Notification destinations. jbot-only for now.
+- [ ] 24. Compaction made visible in the transcript, building on the compaction summary row. No settings page.
+- [ ] 25. A new-chat screen instead of the dashboard. Deferred.
+- [ ] 26. jbot message log (`persistent-agent.md`): add a delivery lifecycle per message: pending, sent, failed or
+  uncertain, an idempotency key, the destination snapshotted. The user's call.
+
+Decided not to build: a compaction settings page, a harness-first page, users and roles, an OpenAI-compatible
+gateway, notification targets beyond jbot, recursive splits in any direction, theming (import and export), image
+generation settings (models handle it), installed-app share settings, transcript sound effects.
+
+Waiting on pi-durable: an AI reviewer for approvals (a helper model approving or flagging tool calls); not before
+pi-durable itself covers it.

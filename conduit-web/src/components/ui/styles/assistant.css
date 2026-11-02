@@ -74,3 +74,15 @@
 
 /* jbot's picture, in an icon's place: its box, the app icon's own rounding. */
 .ui-agent-avatar { display: block; width: 1em; height: 1em; flex: none; object-fit: contain; }
+
+/* An email of a room: a mail client's thread, one email under another on a hairline. */
+.ui-room-body:has(> .ui-email) { gap: 0; }
+.ui-email { display: flex; min-width: 0; flex-direction: column; gap: var(--space-xs); padding-block: var(--space-md); }
+.ui-email + .ui-email { border-top: 1px solid var(--tint); }
+.ui-email-head { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-email-from { flex: none; font-weight: var(--weight-lift); }
+.ui-email-to { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-email-head > time { margin-left: auto; flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-email-more { align-self: flex-start; border: 0; border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); letter-spacing: 0.1em; cursor: pointer; }
+@media (hover: hover) { .ui-email-more:hover { color: var(--foreground); } }
+.ui-email-quoted { margin: 0; color: var(--muted-foreground); font: var(--text-caption)/var(--leading-row) var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
