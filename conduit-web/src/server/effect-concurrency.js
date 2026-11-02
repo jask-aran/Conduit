@@ -72,3 +72,16 @@ export class ServerConcurrency {
     return within(Promise.resolve().then(work), timeoutMs, () => { throw timeoutError(); });
   }
 }
+
+/**
+ * `work` for each item, at most `limit` at once, the results in the items' order: independent reads (a file each)
+ * that one after another left the disk idle while each was parsed.
+ */
+export async function mapLimit(items, limit, work) {
+  const list = [...items];
+  const results = new Array(list.length);
+  let next = 0;
+  const lane = async () => { while (next < list.length) { const index = next++; results[index] = await work(list[index], index); } };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, list.length)) }, lane));
+  return results;
+}

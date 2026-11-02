@@ -6,6 +6,7 @@ import { ensureChatTree } from "./owned-paths.js";
 import { harnessIdForImplementation, piBackendFor, templateBackend, withPiCompatibilityFields } from "./chat-backend.js";
 import { conduitPiSessionFile } from "./backend-session.js";
 import { placeOf } from "./place.js";
+import { mapLimit } from "./server/effect-concurrency.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -150,16 +151,20 @@ export class ChatStore {
         discoveredFiles.set(file, [...(discoveredFiles.get(file) || []), project]);
       }
     }
+    // Each discovered file's parent link, its index built on the way (the loops below read it warm): independent
+    // reads, so several at once rather than every session file in turn on each start.
     const parentSessions = new Map();
-    for (const [file, candidates] of discoveredFiles) {
+    const discovered = [...discoveredFiles];
+    const parents = await mapLimit(discovered, 8, async ([file, candidates]) => {
       for (const project of candidates) {
-        try {
-          const parent = await readSessionParentSession(file, project);
-          if (parent && discoveredFiles.has(parent)) parentSessions.set(file, parent);
-          break;
-        } catch {}
+        try { return { parent: await readSessionParentSession(file, project) }; } catch {}
       }
-    }
+      return null;
+    });
+    discovered.forEach(([file], index) => {
+      const parent = parents[index]?.parent;
+      if (parent && discoveredFiles.has(parent)) parentSessions.set(file, parent);
+    });
     const families = sessionFamilies(discoveredFiles.keys(), parentSessions);
     const familyChats = new Map();
     for (const item of rows) {
