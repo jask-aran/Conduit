@@ -81,7 +81,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                   <ReportCard title={message.title!} line={firstLine(message.body)} time={clock(message.at)} notified={message.notify !== "none"} onOpen={() => setReading(message)} />
                 </Match>
                 <Match when={true}>
-                  <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.notify !== "none" ? "Sent to your phone" : undefined} /></Turn>
+                  <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={message.notify !== "none"} /></Turn>
                 </Match>
               </Switch>
             </TranscriptRow>; })()}
