@@ -5522,6 +5522,8 @@ function App() {
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
       onOpenSettings={() => openSettings("agent")}
       markdownRenderer={markdownRenderer()}
+      working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
+      threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
         <PageComposer session={current} keyboardOwner={owns} /></Show>}
       onOpenChat={(id, event) => {

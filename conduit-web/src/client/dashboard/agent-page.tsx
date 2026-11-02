@@ -66,8 +66,11 @@ export function AgentPage(props: {
   markdownRenderer: MarkdownRendererId;
   /** The home thread's composer: what the person says in the app room, with every composer feature. */
   composer?: JSX.Element;
+  /** The home thread at work, and a key that moves with what it says: the stream follows both. */
+  working?: boolean;
+  threadChanged?: unknown;
 }) {
-  const log = useJbotMessages();
+  const log = useJbotMessages(() => props.threadChanged);
   const [now, setNow] = createSignal(Date.now());
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
   const [error, setError] = createSignal("");
@@ -281,7 +284,7 @@ export function AgentPage(props: {
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <DashNote error>{error()}</DashNote> : undefined}
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
-          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} />}
+          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer}
           aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{memoryGroup()}</>} />
       </Show>

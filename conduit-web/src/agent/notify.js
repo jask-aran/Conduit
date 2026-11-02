@@ -13,7 +13,7 @@ const line = (text, max) => {
 
 /** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId }) {
-  return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0 }) => void (async () => {
+  return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0, path = null }) => void (async () => {
     // The agent's threads, and any chat whose profile reaches the person's accounts (an approval it is waiting on).
     const thread = await agent.threadOf(conversationId);
     if (!thread?.chatId || thread.role === "run") return;
@@ -35,7 +35,8 @@ export function agentNotifier({ agent, push, hubId }) {
       v: 1,
       title: approval ? `${name} needs your approval` : `${title ? `${name}: ${line(title, 60)}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,
       body: line(text, 240),
-      path: `/chat/${thread.chatId}`,
+      // A message opens jbot's conversation (its page); an approval, the thread it waits in.
+      path: path || (thread.role === "home" && !approval ? "/jbot" : `/chat/${thread.chatId}`),
       tag,
       hub: hubId(),
       ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),

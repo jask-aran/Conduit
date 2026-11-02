@@ -29,7 +29,7 @@ export const headlineOf = (text, max = 160) => {
 export async function renderWaitingInbox(agent) {
     const state = await agent.state();
     const items = listInbox(state, { unhandled: true });
-    // Whether a report reaches the person's phone is jbot's call (`notify`), weighed against how often they want it.
+    // Whether a report reaches the person's phone is jbot's call (`message` with notify), weighed against how often they want it.
     const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
     if (!items.length) return dial;
     return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
@@ -70,7 +70,7 @@ export function inQuietHours(settings, now = Date.now()) {
   return quiet.start <= quiet.end ? time >= quiet.start && time < quiet.end : time >= quiet.start || time < quiet.end;
 }
 
-const DIAL_WORDS = { quiet: "notify only what cannot wait", normal: "notify what they should see today", chatty: "notify anything worth knowing" };
+const DIAL_WORDS = { quiet: "push only what cannot wait", normal: "push what they should see today", chatty: "push anything worth knowing" };
 
 export const entryText = (entry, timeZone) => {
   const when = new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(entry.at));
@@ -157,27 +157,5 @@ export function InboxTools(runtime) {
     if ((await agent.state()).home?.conversationId !== input.conversationId) return undefined;
     return renderWaitingInbox(agent);
   });
-  // In a thread (the home thread above all), after a run's report: jbot decides whether the person hears it now.
-  const notify = defineTool({
-    name: "notify",
-    description: "In a thread: send the person's phone and devices a notification of what you just wrote them, after a report "
-      + "they should see now. A title and one line. It ends your turn, so call it last. Not for replies to their own messages.",
-    parameters: Type.Object({
-      title: Type.String({ description: "A few words: what it is about." }),
-      text: Type.String({ description: "One line, as the lock screen shows it." }),
-      urgent: Type.Optional(Type.Boolean({ description: "Only for what cannot wait." })),
-    }),
-    replay: "unsafe",
-    execute: async ({ title, text, urgent }, api, context) => {
-      if (await runOnly(api)) return result("A run does not notify: report, and jbot decides.", true);
-      const key = await api.memo("notify", `note-${api.conversationId}-${Date.now()}`, context);
-      // What it notifies of is what it just said: the message log records that it reached their phone.
-      const said = runtime.messageLog?.latestOut(api.conversationId);
-      if (said && said.notify === "none") runtime.messageLog.update(said.id, () => ({ notify: urgent ? "urgent" : "push" }));
-      runtime.agentNotify?.({ kind: "report", conversationId: api.conversationId, title, text, level: urgent ? "urgent" : "attention", key });
-      // The report is written before it; another model call after it only ever produced an empty message.
-      return { ...result("Sent to their devices."), control: { terminate: true } };
-    },
-  });
-  return { tools: [quiet, failed, inbox, notify], sections: [waiting] };
+  return { tools: [quiet, failed, inbox], sections: [waiting] };
 }

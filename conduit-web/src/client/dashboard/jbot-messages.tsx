@@ -1,5 +1,5 @@
-import { createSignal, For, Match, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
-import { Answer, DashConversation, Message, MessageFoot, ReportCard, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
+import { Answer, DashConversation, Message, MessageFoot, ReportCard, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import { api } from "../api/client";
 import { ChatMarkdown } from "../chat/lazy-markdown";
@@ -18,19 +18,21 @@ export interface LogMessage {
 const clock = (at: string) => { const date = new Date(at); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; };
 const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
 
-/** The stream, over the page's composer (the home thread's own); polls while the page is open. */
-export function useJbotMessages() {
+/** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and
+ *  slowly besides, for what arrives without it (another device's message). */
+export function useJbotMessages(changed: () => unknown) {
   const [messages, setMessages] = createSignal<LogMessage[]>([]);
   const refresh = () => api<{ messages: LogMessage[] }>("/v0/agent/messages?limit=100").then((result) => setMessages(result.messages)).catch(() => {});
   onMount(() => {
     void refresh();
-    const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 3000);
+    const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 15_000);
     onCleanup(() => window.clearInterval(tick));
   });
+  createEffect(on(changed, () => void refresh(), { defer: true }));
   return { messages, refresh };
 }
 
-export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string }) {
+export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The person's message starts an exchange; jbot's reply to it is the exchange's; what jbot says next, a step on.
   const flowAt = (index: number): TranscriptFlow | undefined => {
@@ -41,7 +43,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
-      <Show when={props.messages.length} fallback={<p class="ui-dash-empty">Nothing said yet. Say something to {props.name}.</p>}>
+      <Show when={props.messages.length || props.working} fallback={<p class="ui-dash-empty">Nothing said yet. Say something to {props.name}.</p>}>
         <Transcript>
           <For each={props.messages}>{(message, index) =>
             <TranscriptRow flow={flowAt(index())} data-message-id={message.id}>
@@ -58,6 +60,8 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
               </Switch>
             </TranscriptRow>}
           </For>
+          {/* While a turn runs: the thread is at work; what it says arrives as messages. */}
+          <Show when={props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}><Turn><Trail><Step state="running" verb={`${props.name} is working`} /></Trail></Turn></TranscriptRow></Show>
         </Transcript>
       </Show>
     </DashConversation>

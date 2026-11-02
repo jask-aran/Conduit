@@ -366,7 +366,7 @@ export function Subagents(runtime) {
             await (await handle.submit({ type: "write", requestId: `${requestId}:kept`, entry: { kind: "conduit.subagent-report",
               data: { ...data, messageId: `${requestId}:kept`, kept: true }, model: [{ role: "user", content, timestamp }] } }, context)).wait(context);
           }
-          // The person's devices hear of it only if jbot decides they should (its `notify`); approvals push on their own.
+          // The person's devices hear of it only if jbot decides they should (`message` with notify); approvals push on their own.
         }
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
       } catch (error) {
