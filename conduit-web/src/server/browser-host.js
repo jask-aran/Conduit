@@ -1,3 +1,4 @@
+import { browserVideo } from "./browser-video.js";
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
@@ -51,9 +52,73 @@ const WITHHELD = new Set(["agent_browser_close", "agent_browser_tools_profiles"]
 const MCP_MS = 60_000;
 
 /** Services › Browser: its stream's frame rate (each viewer's, live) and JPEG quality (the browser's, from its start). */
-const DEFAULTS = { fps: 24, quality: 60 };
+const DEFAULTS = { fps: 24, quality: 60, codec: "h264" };
+const CODECS = ["h264", "h265", "jpeg"];
+const FFMPEG = (() => {
+  const name = process.env.CONDUIT_FFMPEG || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+  if (!path.isAbsolute(name) && !name.includes(path.sep)) return which(name);
+  try { fs.accessSync(name, fs.constants.X_OK); return name; } catch { return null; }
+})();
 const FPS = [10, 24, 30, 60];
 const QUALITY = [30, 60, 85];
+
+/** Both browser routes encode on this hub; agent-browser still receives only its own stream options. */
+function relay(sockets, request, socket, head, fps, reach) {
+  sockets.handleUpgrade(request, socket, head, (client) => {
+    const query = new URL(request.url, "http://localhost").searchParams;
+    const pass = new URLSearchParams();
+    for (const key of ["maxFps", "pacing"]) if (query.get(key)) pass.set(key, query.get(key));
+    const requested = query.get("codec");
+    let codec = FFMPEG && (requested === "h264" || requested === "h265") ? requested : "jpeg";
+    const send = (data, binary = false) => { if (client.readyState === WebSocket.OPEN) client.send(data, { binary }); };
+    const announce = () => send(JSON.stringify({ type: "codec", codec }));
+    announce();
+    const video = codec === "jpeg" ? null : browserVideo({ binary: FFMPEG, codec,
+      fps: Math.max(1, Math.min(60, Number(query.get("maxFps")) || fps)),
+      send: (data) => send(data, true), fallback: () => { codec = "jpeg"; announce(); } });
+    const held = [];
+    let upstream = null;
+    let closed = false;
+    const closeBoth = () => {
+      if (closed) return;
+      closed = true;
+      video?.close();
+      try { client.close(); } catch { /* gone */ }
+      try { upstream?.close(); } catch { /* gone */ }
+    };
+    client.on("message", (data, binary) => {
+      if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary });
+      else held.push({ data, binary });
+    });
+    client.on("close", closeBoth);
+    client.on("error", closeBoth);
+    reach(pass).then((found) => {
+      upstream = found;
+      upstream.on("error", closeBoth);
+      upstream.on("close", closeBoth);
+      upstream.on("open", () => {
+        if (closed) { upstream.close(); return; }
+        for (const { data, binary } of held.splice(0)) upstream.send(data, { binary });
+      });
+      if (closed) { upstream.close(); return; }
+      upstream.on("message", (data, binary) => {
+        if (!binary && codec !== "jpeg") {
+          let event;
+          try { event = JSON.parse(data.toString()); } catch { /* pass other text through */ }
+          if (event?.type === "frame" && typeof event.data === "string") {
+            video.write(event);
+            if (codec === "jpeg") send(data);
+            return;
+          }
+        }
+        send(data, binary);
+      });
+    }).catch((error) => {
+      send(JSON.stringify({ type: "error", message: error.message }));
+      closeBoth();
+    });
+  });
+}
 
 export class BrowserHost {
   constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null, dataRoot = null, session = HUB_SESSION, onChange = () => {} } = {}) {
@@ -131,25 +196,9 @@ export class BrowserHost {
 
   /** The pane's stream: the session's own, through this server (its sign-in already checked), frames out, input in. */
   handleUpgrade(id, request, socket, head) {
-    this.sockets.handleUpgrade(request, socket, head, (client) => {
-      const held = [];
-      let upstream = null;
-      const closeBoth = () => { try { client.close(); } catch { /* gone */ } try { upstream?.close(); } catch { /* gone */ } };
-      client.on("message", (data, binary) => { if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary }); else held.push(data); });
-      client.on("close", closeBoth);
-      this.start().then(() => {
-        const query = new URL(request.url, "http://localhost").searchParams;
-        const pass = new URLSearchParams();
-        for (const key of ["maxFps", "pacing"]) if (query.get(key)) pass.set(key, query.get(key));
-        upstream = new WebSocket(`ws://127.0.0.1:${this.port}/${pass.size ? `?${pass}` : ""}`);
-        upstream.on("open", () => { for (const data of held.splice(0)) upstream.send(data); });
-        upstream.on("message", (data, binary) => { if (client.readyState === WebSocket.OPEN) client.send(data, { binary }); });
-        upstream.on("close", closeBoth);
-        upstream.on("error", () => closeBoth());
-      }).catch((error) => {
-        if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "error", message: error.message }));
-        closeBoth();
-      });
+    relay(this.sockets, request, socket, head, this.settings.fps, async (pass) => {
+      await this.start();
+      return new WebSocket(`ws://127.0.0.1:${this.port}/${pass.size ? `?${pass}` : ""}`);
     });
   }
 
@@ -167,13 +216,14 @@ export class BrowserHost {
   /** Services › Browser's settings, and what it shows of the browser. */
   async describe() {
     const version = this.binary ? await new Promise((resolve) => execFile(this.binary, ["--version"], { timeout: 5000 }, (error, stdout) => resolve(error ? null : stdout.trim().replace(/^agent-browser\s*/, "")))) : null;
-    return { ...(await this.status()), engine: "Chrome", version, runsOn: "hub", profile: Boolean(this.profile), settings: this.settings, choices: { fps: FPS, quality: QUALITY } };
+    return { ...(await this.status()), engine: "Chrome", version, runsOn: "hub", profile: Boolean(this.profile), settings: this.settings, video: Boolean(FFMPEG), choices: { fps: FPS, quality: QUALITY, codec: CODECS } };
   }
 
   async configure(patch) {
     const next = { ...this.settings };
     if (patch?.fps !== undefined) { if (!FPS.includes(Number(patch.fps))) throw Object.assign(new Error("Frame rate is one of " + FPS.join(", ")), { status: 400 }); next.fps = Number(patch.fps); }
     if (patch?.quality !== undefined) { if (!QUALITY.includes(Number(patch.quality))) throw Object.assign(new Error("Quality is one of " + QUALITY.join(", ")), { status: 400 }); next.quality = Number(patch.quality); }
+    if (patch?.codec !== undefined) { if (!CODECS.includes(patch.codec)) throw Object.assign(new Error("Picture codec is one of " + CODECS.join(", ")), { status: 400 }); next.codec = patch.codec; }
     const restart = next.quality !== this.settings.quality;
     this.settings = next;
     if (this.settingsFile) {
@@ -260,31 +310,15 @@ export class RemoteBrowser {
   }
 
   status() { return this.available ? this.call("status").then((value) => ({ ...value, id: this.nodeId })) : Promise.resolve({ id: this.nodeId, available: false }); }
-  describe() { return this.call("describe").then((value) => ({ ...value, id: this.nodeId, runsOn: "device" })); }
+  describe() { return this.call("describe").then((value) => ({ ...value, id: this.nodeId, runsOn: "device", video: Boolean(FFMPEG) })); }
   configure(patch) { return this.call("configure", [patch]); }
   act(action, value) { return this.call("act", [action, value]); }
 
   handleUpgrade(_id, request, socket, head) {
-    this.sockets.handleUpgrade(request, socket, head, (client) => {
-      const held = [];
-      let upstream = null;
-      const closeBoth = () => { try { client.close(); } catch { /* gone */ } try { upstream?.close(); } catch { /* gone */ } };
-      client.on("message", (data, binary) => { if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary }); else held.push(data); });
-      client.on("close", closeBoth);
-      this.call("stream").then(({ port }) => {
-        const query = new URL(request.url, "http://localhost").searchParams;
-        const pass = new URLSearchParams();
-        for (const key of ["maxFps", "pacing"]) if (query.get(key)) pass.set(key, query.get(key));
-        // The device's stream, spoken over a tunnel to its loopback port rather than a socket of our own.
-        upstream = new WebSocket(`ws://127.0.0.1:${port}/${pass.size ? `?${pass}` : ""}`, { createConnection: () => this.tunnelTo(this.nodeHub, this.nodeId, { port }) });
-        upstream.on("open", () => { for (const data of held.splice(0)) upstream.send(data); });
-        upstream.on("message", (data, binary) => { if (client.readyState === WebSocket.OPEN) client.send(data, { binary }); });
-        upstream.on("close", closeBoth);
-        upstream.on("error", () => closeBoth());
-      }).catch((error) => {
-        if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: "error", message: error.message }));
-        closeBoth();
-      });
+    relay(this.sockets, request, socket, head, DEFAULTS.fps, async (pass) => {
+      const { port } = await this.call("stream");
+      // The device's loopback stream travels through its existing node tunnel.
+      return new WebSocket(`ws://127.0.0.1:${port}/${pass.size ? `?${pass}` : ""}`, { createConnection: () => this.tunnelTo(this.nodeHub, this.nodeId, { port }) });
     });
   }
 

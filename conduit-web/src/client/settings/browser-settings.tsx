@@ -6,8 +6,9 @@ import { api } from "../api/client";
 /** GET /v0/browsers/hub/settings (browser-host.js `describe`). */
 type BrowserSettings = {
   available: boolean; running?: boolean; url?: string | null; title?: string | null; engine: string; version: string | null; runsOn: string; profile: boolean;
-  settings: { fps: number; quality: number }; choices: { fps: number[]; quality: number[] };
+  video: boolean; settings: { fps: number; quality: number; codec: "h264" | "h265" | "jpeg" }; choices: { fps: number[]; quality: number[]; codec: BrowserSettings["settings"]["codec"][] };
 };
+const CODEC_LABELS = { h264: "H.264", h265: "H.265", jpeg: "JPEG" };
 const QUALITY_LABELS: Record<number, string> = { 30: "Low", 60: "Medium", 85: "High" };
 
 /**
@@ -31,7 +32,7 @@ export function BrowserSettings() {
     try { setFound(await request()); } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { setBusy(""); }
   };
-  const put = (patch: Partial<BrowserSettings["settings"]>) => run(patch.quality ? "quality" : "fps", () =>
+  const put = (patch: Partial<BrowserSettings["settings"]>) => run(patch.codec ? "codec" : patch.quality ? "quality" : "fps", () =>
     api<BrowserSettings>("/v0/browsers/hub/settings", { method: "PUT", body: JSON.stringify(patch) }));
   const act = (action: "restart" | "clear") => run(action, () =>
     api("/v0/browsers/hub/actions", { method: "POST", body: JSON.stringify({ action }) }).then(() => api<BrowserSettings>("/v0/browsers/hub/settings")));
@@ -40,6 +41,12 @@ export function BrowserSettings() {
     await act("clear");
   };
   const host = (url?: string | null) => { try { return url && url !== "about:blank" ? new URL(url).host : ""; } catch { return ""; } };
+
+  // The codecs this hub can encode: JPEG only without ffmpeg (the note below says why).
+  const Picture = (props: { browser: BrowserSettings }) =>
+    <Segmented label="Picture" size="sm" value={props.browser.video ? props.browser.settings.codec : "jpeg"} disabled={!!busy()}
+      options={props.browser.choices.codec.filter((codec) => props.browser.video || codec === "jpeg").map((codec) => ({ value: codec, label: CODEC_LABELS[codec] }))}
+      onChange={(codec) => void put({ codec })} />;
 
   return <Show when={found()} fallback={<Show when={error()} fallback={<Loading>Loading the browser…</Loading>}>
     <Note tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
@@ -60,6 +67,10 @@ export function BrowserSettings() {
         <Segmented label="Frame rate" size="sm" value={String(browser().settings.fps)} disabled={!!busy()}
           options={browser().choices.fps.map((fps) => ({ value: String(fps), label: `${fps} fps` }))} onChange={(value) => void put({ fps: Number(value) })} />
       </SettingLine>
+      <SettingLine plain label="Picture" title="The picture codec. Changing it reconnects open panes without restarting the browser.">
+        <Picture browser={browser()} />
+      </SettingLine>
+      <Show when={!browser().video}><Note>The hub needs ffmpeg for H.264 and H.265.</Note></Show>
       <SettingLine plain label="Quality" state={busy() === "quality" ? "restarting…" : undefined} title="The picture's JPEG quality. Changing it restarts the browser, back on the page it showed.">
         <Segmented label="Quality" size="sm" value={String(browser().settings.quality)} disabled={!!busy()}
           options={browser().choices.quality.map((quality) => ({ value: String(quality), label: QUALITY_LABELS[quality] || String(quality) }))} onChange={(value) => void put({ quality: Number(value) })} />

@@ -10,6 +10,8 @@ import { webSocketUrl } from "../api/transport.js";
  * on the screen go back as the page's own input, mapped from the pane to the page; the bar goes to an address, back,
  * forward and reloads; and the page's viewport follows the pane's size.
  */
+type Codec = "h264" | "h265" | "jpeg";
+type PictureSettings = { settings: { codec: Codec }; video: boolean };
 type Status = { id: string; available: boolean; running?: boolean; url?: string | null; title?: string | null; fps?: number };
 
 const BUTTONS: Record<number, string> = { 0: "left", 1: "middle", 2: "right" };
@@ -37,7 +39,13 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let frame = { width: 0, height: 0 };
   let closed = false;
   let retry = 0;
-  let drawing = Promise.resolve();
+  let drawing = false;
+  let pending: { data: string; generation: number } | null = null;
+  let generation = 0;
+  let picture: PictureSettings = { settings: { codec: "h264" }, video: true };
+  let jpegOnly = false;
+  let decoder: VideoDecoder | null = null;
+  let connecting = 0;
 
   const act = (action: string, value?: unknown) => api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}/actions`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, value }) })
@@ -51,28 +59,123 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   };
   const send = (event: Record<string, unknown>) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event)); };
 
-  const draw = (data: string) => {
-    // One frame at a time, the newest winning: a slow decode never queues stale frames behind it.
-    drawing = drawing.then(async () => {
-      const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0));
-      const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
-      if (!canvas) return;
-      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
-      canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-      bitmap.close();
-      if (!live()) { setLive(true); setState(null); }
-    }).catch(() => {});
+  // A blank page is the pane's own quiet start, not a white frame.
+  const blank = () => live() && !state() && (!status()?.url || status()!.url === "about:blank");
+  const painted = () => { if (!live()) { setLive(true); setState(null); } };
+  const closeDecoder = () => { if (decoder && decoder.state !== "closed") decoder.close(); decoder = null; };
+  const draw = async (data: string) => {
+    pending = { data, generation };
+    if (drawing) return;
+    drawing = true;
+    try {
+      while (pending) {
+        const next = pending;
+        pending = null;
+        let bitmap: ImageBitmap | null = null;
+        try {
+          const bytes = Uint8Array.from(atob(next.data), (char) => char.charCodeAt(0));
+          bitmap = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
+          if (!canvas || closed || next.generation !== generation) continue;
+          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
+          canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+          painted();
+        } catch { /* a later frame can still decode */ }
+        finally { bitmap?.close(); }
+      }
+    } finally { drawing = false; }
   };
 
+  const selectCodec = async (): Promise<{ codec: Codec; config?: VideoDecoderConfig }> => {
+    if (jpegOnly || !picture.video || picture.settings.codec === "jpeg" || typeof VideoDecoder === "undefined") return { codec: "jpeg" };
+    const candidates: Codec[] = picture.settings.codec === "h265" ? ["h265", "h264"] : ["h264"];
+    for (const codec of candidates) {
+      for (const name of codec === "h265" ? ["hev1.1.6.L93.B0", "hvc1.1.6.L93.B0"] : ["avc1.42E01F"]) {
+        const config = { codec: name, optimizeForLatency: true };
+        try { if ((await VideoDecoder.isConfigSupported(config)).supported) return { codec, config }; } catch { /* try the next codec */ }
+      }
+    }
+    return { codec: "jpeg" };
+  };
   const connect = async () => {
     if (closed) return;
+    const attempt = ++connecting;
     try {
-      const next = new WebSocket(await webSocketUrl(`/v0/browsers/${encodeURIComponent(props.id)}/stream?maxFps=${status()?.fps || 24}`));
+      const selected = await selectCodec();
+      const url = await webSocketUrl(`/v0/browsers/${encodeURIComponent(props.id)}/stream?maxFps=${status()?.fps || 24}&codec=${selected.codec}`);
+      if (closed || connecting !== attempt) return;
+      const next = new WebSocket(url);
+      next.binaryType = "arraybuffer";
       socket = next;
+      generation++;
+      pending = null;
+      closeDecoder();
+      let waitingKey = true;
+      let timestamp = 0;
+      let dimensions = "";
+      const fallback = () => {
+        if (closed || socket !== next) return;
+        jpegOnly = true;
+        closeDecoder();
+        next.close();
+      };
+      const configure = () => {
+        closeDecoder();
+        waitingKey = true;
+        if (!selected.config) { fallback(); return; }
+        const current = new VideoDecoder({
+          output: (image) => {
+            try {
+              if (closed || socket !== next || decoder !== current || !canvas) return;
+              const width = frame.width || image.displayWidth;
+              const height = frame.height || image.displayHeight;
+              if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+              canvas.getContext("2d")?.drawImage(image, 0, 0, width, height, 0, 0, width, height);
+              painted();
+            } finally { image.close(); }
+          },
+          error: () => { if (decoder === current) fallback(); },
+        });
+        decoder = current;
+        current.configure(selected.config);
+      };
       next.onmessage = (message) => {
-        let event: { type?: string; data?: string; url?: string; message?: string; metadata?: { deviceWidth: number; deviceHeight: number } };
-        try { event = JSON.parse(String(message.data)); } catch { return; }
-        if (event.type === "frame" && event.data) { if (event.metadata) frame = { width: event.metadata.deviceWidth, height: event.metadata.deviceHeight }; draw(event.data); }
+        if (closed || socket !== next) return;
+        if (typeof message.data !== "string") {
+          if (!(message.data instanceof ArrayBuffer) || message.data.byteLength <= 5 || !decoder) return;
+          const header = new DataView(message.data);
+          const key = Boolean(header.getUint8(0) & 1);
+          const width = header.getUint16(1);
+          const height = header.getUint16(3);
+          if (!width || !height) return;
+          frame = { width, height };
+          try {
+            const size = `${width}x${height}`;
+            if (dimensions && dimensions !== size) configure();
+            dimensions = size;
+            if (!decoder || decoder.state !== "configured") return;
+            if (decoder.decodeQueueSize > 2) {
+              waitingKey = true;
+              if (!key) return;
+              configure();
+              if (!decoder || decoder.state !== "configured") return;
+            }
+            if (waitingKey && !key) return;
+            waitingKey = false;
+            decoder.decode(new EncodedVideoChunk({ type: key ? "key" : "delta", timestamp: timestamp++, data: new Uint8Array(message.data, 5) }));
+          } catch { fallback(); }
+          return;
+        }
+        let event: { type?: string; codec?: string; data?: string; url?: string; message?: string; metadata?: { deviceWidth: number; deviceHeight: number } };
+        try { event = JSON.parse(message.data); } catch { return; }
+        if (event.type === "codec") {
+          generation++;
+          pending = null;
+          dimensions = "";
+          if (event.codec === "jpeg") closeDecoder();
+          else if (event.codec === selected.codec && selected.config) { try { configure(); } catch { fallback(); } }
+          else fallback();
+        }
+        else if (event.type === "frame" && event.data) { if (event.metadata) frame = { width: event.metadata.deviceWidth, height: event.metadata.deviceHeight }; void draw(event.data); }
         else if (event.type === "url" && event.url) {
           if (!editing) setAddress(event.url === "about:blank" ? "" : event.url);
           setStatus((current) => current && { ...current, url: event.url });
@@ -84,9 +187,12 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
       next.onopen = () => { retry = 0; };
       next.onclose = () => {
         if (closed || socket !== next) return;
+        generation++;
+        pending = null;
+        closeDecoder();
         setLive(false);
         setState({ text: "Reconnecting to the hub's browser…" });
-        window.setTimeout(() => void connect(), Math.min(8000, 500 * 2 ** retry++));
+        window.setTimeout(() => { if (socket === next) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
       };
     } catch (error) { setState({ text: error instanceof Error ? error.message : String(error), tone: "error" }); }
   };
@@ -129,8 +235,14 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
       const found = browsers.find((item) => item.id === props.id);
       if (found) { setWhere(found.name); if (!live()) setState({ text: `Starting ${found.name}'s browser…` }); }
     }).catch(() => {});
-    void api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`).then((found) => {
+    void Promise.all([
+      api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`),
+      api<PictureSettings>(`/v0/browsers/${encodeURIComponent(props.id)}/settings`).catch(() => ({ settings: { codec: "jpeg" as const }, video: false })),
+    ]).then(([found, settings]) => {
+      picture = settings;
       setStatus(found);
+      // The page it is already on (a browser opened before, or by an agent): its address until the stream says another.
+      if (!editing && found.url && found.url !== "about:blank") setAddress(found.url);
       if (!found.available) {
         setState({ tone: "error", text: props.id === "hub"
           ? <span>The hub's browser is not available: Conduit's agent-browser is missing for this machine. Reinstall Conduit, or set <code>CONDUIT_AGENT_BROWSER</code> to an agent-browser binary.</span>
@@ -163,13 +275,20 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     createEffect(() => { if (status()?.available) size(); });
     onCleanup(() => { observer.disconnect(); clearTimeout(sizing); });
   });
-  // Services › Browser changed it: the frame rate is this viewer's own, sent on the open stream; a restart reconnects.
-  const changed = () => void api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`).then((found) => {
+  // Frame rate applies live; a picture codec change reconnects only this viewer.
+  const changed = () => void Promise.all([
+    api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`),
+    api<PictureSettings>(`/v0/browsers/${encodeURIComponent(props.id)}/settings`),
+  ]).then(([found, settings]) => {
+    if (closed) return;
     setStatus(found); name(found);
-    if (found.fps) send({ type: "config", maxFps: found.fps });
+    const reconnect = picture.settings.codec !== settings.settings.codec || picture.video !== settings.video;
+    picture = settings;
+    if (reconnect) { jpegOnly = false; socket?.close(); }
+    else if (found.fps) send({ type: "config", maxFps: found.fps });
   }).catch(() => {});
   window.addEventListener("conduit:browser-changed", changed);
-  onCleanup(() => { closed = true; cancelAnimationFrame(moving); socket?.close(); window.removeEventListener("conduit:browser-changed", changed); });
+  onCleanup(() => { closed = true; generation++; pending = null; closeDecoder(); cancelAnimationFrame(moving); socket?.close(); window.removeEventListener("conduit:browser-changed", changed); });
 
   const go = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (event.key === "Escape") { editing = false; setAddress(status()?.url && status()!.url !== "about:blank" ? status()!.url! : ""); event.currentTarget.blur(); return; }
@@ -194,8 +313,8 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
           onFocus={(event) => { editing = true; event.currentTarget.select(); }} onBlur={() => { editing = false; }}
           onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={go} />
       </ToolBar>
-      <WebScreen ref={(element: HTMLDivElement) => { screen = element; }} canvas={(element) => { canvas = element; }} live={live()} aria-label="Page"
-        state={state()?.text} tone={state()?.tone} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerMove={onPointerMove}
+      <WebScreen ref={(element: HTMLDivElement) => { screen = element; }} canvas={(element) => { canvas = element; }} live={live() && !blank()} aria-label="Page"
+        state={blank() ? "Type an address or a search above." : state()?.text} tone={blank() ? "quiet" : state()?.tone} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerMove={onPointerMove}
         onWheel={onWheel} onKeyDown={(event) => key("keyDown", event)} onKeyUp={(event) => key("keyUp", event)} onPaste={onPaste}
         onContextMenu={(event) => event.preventDefault()} />
     </WebView>
