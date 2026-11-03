@@ -8,7 +8,7 @@ import { StatusDot } from "@/components/ui/nav";
 import { OverlayActions, OverlayBar, OverlayChip, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
 import { Item, Match, Section } from "@/components/ui/popover";
 import { Expand } from "@/components/ui/expand";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import { FileInputIcon, FilePlus2Icon, SlashIcon, SlidersHorizontalIcon } from "lucide-solid";
 import { activityLabel } from "../../activity.js";
@@ -585,12 +585,26 @@ export function CommandMenu(props: {
     setEditingId(target.chat.id);
     setEditingValue(target.chat.title || "");
   };
+  /*
+   * One mutation at a time (Codex review): a rename, move or delete holds `busy` until it settles, so a second choice
+   * cannot start another; and its completion acts only on the launch and the step it was started from, so a slow one
+   * finishing after chat search closed, reopened or moved on changes nothing there.
+   */
+  const [busy, setBusy] = createSignal(false);
+  let launch = 0;
+  createEffect(on(() => props.open, (open) => { if (open) launch++; }));
+  const mutate = async <T,>(run: () => Promise<T>, settle: (result: T) => void) => {
+    if (busy()) return;
+    const mine = launch;
+    setBusy(true);
+    try { const result = await run(); if (mine === launch && props.open) settle(result); }
+    finally { setBusy(false); }
+  };
   const submitRename = async () => {
     const target = editingTarget();
     const value = editingValue().trim();
     if (!target || !value) return;
-    const saved = await props.actions.renameChat(target.chat, target.project, value);
-    if (saved) setEditingId(null);
+    await mutate(() => props.actions.renameChat(target.chat, target.project, value), (saved) => { if (saved && editingId() === target.chat.id) setEditingId(null); });
   };
   const copySelected = () => { if (selectedTargets().length) void props.actions.copyChatLinks(selectedTargets()); };
   const selectDeleteChoice = (choice: "cancel" | "confirm") => {
@@ -610,16 +624,19 @@ export function CommandMenu(props: {
     const targets = pendingDelete();
     if (!targets) return;
     setPendingDelete(null);
-    const failed = await props.actions.deleteChats(targets);
-    setSelectedChatIds(new Set(failed));
-    if (!failed.length) { setSelectionMode(false); close(); }
+    await mutate(() => props.actions.deleteChats(targets), (failed) => {
+      setSelectedChatIds(new Set(failed));
+      if (!failed.length) { setSelectionMode(false); close(); }
+    });
   };
   const chooseDestination = async (project: Project) => {
     const targets = selectedTargets();
     if (!targets.length) return;
-    const failed = await props.actions.moveChats(targets, project);
-    setSelectedChatIds(new Set(failed));
-    if (!failed.length) { setSelectionMode(false); setMoveMode(false); close(); }
+    await mutate(() => props.actions.moveChats(targets, project), (failed) => {
+      if (!moveMode()) return;
+      setSelectedChatIds(new Set(failed));
+      if (!failed.length) { setSelectionMode(false); setMoveMode(false); close(); }
+    });
   };
   const moveSelected = (targets = selectedTargets()) => {
     if (!targets.length) return;
