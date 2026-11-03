@@ -4356,6 +4356,11 @@ function App() {
     requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(panesShown().length)), () => setWeightOverride(null)));
   };
   // An empty pane beside the one with the keyboard, its Home offering what to open there.
+  // The hub's browser: focused where it is shown, else opened beside (in place of a pane when there is no room).
+  const openBrowser = () => {
+    if (paneAOverride() === "browser:hub") return focusAnyPane("main");
+    void openBeside("browser:hub");
+  };
   const openEmptyPane = () => {
     if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
     void openBeside("home", true, true);
@@ -4475,7 +4480,7 @@ function App() {
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
-        <Show when={slotView(slot)?.startsWith("browser:")}>{renderBrowserDocument(slot, slotView(slot)!.slice("browser:".length))}</Show>
+        <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
@@ -5327,6 +5332,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.newPane, "application", () => openEmptyPane(), { when: () => !isMobileLayout() }),
+      shortcutManager.registerHandler(COMMAND_IDS.openBrowser, "application", () => openBrowser()),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
@@ -5844,6 +5850,7 @@ function App() {
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
+      <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
@@ -5947,7 +5954,7 @@ function App() {
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />

@@ -35,8 +35,8 @@ const RAIL_TOOLS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
  * reached from the dock, so it stays out of the tab order as the header's
  * icons do. A view dragged from the split onto it docks.
  *
- * Below the tools, set apart by a hairline, are chat search and the command
- * palette: actions rather than dock views, here so no pane's header carries
+ * Below the tools, set apart by a hairline, are the browser, chat search and the
+ * command palette: actions rather than dock views, here so no pane's header carries
  * the app's own controls. They stay when a page has no tools to show.
  *
  * At the foot, while panes are open beside pane A: Equalise, sharing the
@@ -49,6 +49,8 @@ export function WorkspaceRail(props: {
   tools: boolean;
   onOpenSearch: () => void;
   onOpenPalette: () => void;
+  /** The hub's browser, opened beside or focused. */
+  onOpenBrowser: () => void;
   current: PanelTab | null;
   inSplit: PanelTab | null;
   sourceControlEnabled: boolean;
@@ -99,13 +101,14 @@ export function WorkspaceRail(props: {
     <RailRule /></Show>
     <Show when={props.docked.length}>
       <For each={props.docked}>{(doc) => {
-        const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : Icons.FileText;
+        const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : doc.view.startsWith("browser:") ? Icons.Browser : Icons.FileText;
         return <IconButton kind="rail" tabIndex={-1} draggable={true} data-doc-view={doc.view}
           aria-label={`${doc.name} (docked)`} title={doc.name} current={props.currentDocked === doc.slot}
           onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></IconButton>;
       }}</For>
       <RailRule />
     </Show>
+    <IconButton kind="rail" tabIndex={-1} aria-label="Browser" title="Browser" onClick={() => props.onOpenBrowser()}><Icons.Browser /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></IconButton>
   </ToolRail>;
