@@ -37,7 +37,11 @@ export async function decide(agent, id, choice) {
   });
   if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : outcome.error === 400 ? "This approval has no reusable rule" : "Ask already decided or expired"), { status: outcome.error });
   const ask = outcome.ask;
-  const message = await notice(agent.runtime?.contextStore, choice === "deny" ? "approval-denied" : "approval-allowed", { ask });
+  const told = await notice(agent.runtime?.contextStore, choice === "deny" ? "approval-denied" : "approval-allowed", { ask });
+  // A run's ask outlives the run: the home thread is told whose it was, so its result is used for what the run was doing.
+  const message = ask.run && choice !== "deny"
+    ? `${told}\n\nOne of your runs asked for this and has since ended. Use the result for what that run was doing, and tell the person if it matters.`
+    : told;
   // The decision stands even if the thread cannot be told now: an allowed call still goes through when it is made.
   try { await agent.chatHost.deliverApproval(ask.chatId, message); return { ...ask, delivered: true }; }
   catch (error) {

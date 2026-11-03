@@ -121,6 +121,32 @@ const programOf = (args) => args?.code ?? args?.source ?? args?.program;
 /** The actions a connector tool's call will take: a gateway call's, or a program's; null when not knowable. */
 const connectorActions = (name, args) => connectorCalls(name, args) ?? (connectorTool(name) === "execute" ? programPaths(programOf(args)) : null);
 const connectorRead = (name, args) => { const paths = connectorActions(name, args); return Boolean(paths?.length && paths.every(isReadAction)); };
+/*
+ * Executor gates its own actions: a call or a program goes to it unasked, reads run at once, and an action it holds for
+ * approval (a mutation) comes back `approval-required` with a request id. That answer becomes the person's ask, and
+ * Allow resumes Executor's own request: one approval for each send or change, exactly the one Executor held. Conduit's
+ * list of read words is not consulted for it, so a mistyped path fails as Executor's UnknownTool instead of asking.
+ */
+const executorGates = (name) => name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name));
+const resumeTool = (name) => name.startsWith("mcp__") && connectorTool(name) === "resume";
+/** The approval Executor's result holds, if it holds one: `{ requestId, invocation, elicitation }`. */
+function heldForApproval(result) {
+  for (const part of result?.output || result?.content || []) {
+    if (part?.type !== "text" || !String(part.text).includes("approval-required")) continue;
+    const text = String(part.text);
+    for (let at = text.indexOf("{"); at >= 0; at = text.indexOf("{", at + 1)) {
+      try {
+        const value = JSON.parse(text.slice(at));
+        if (value?.status === "approval-required" && value.requestId) return value;
+      } catch {
+        const end = text.lastIndexOf("}");
+        try { const value = JSON.parse(text.slice(at, end + 1)); if (value?.status === "approval-required" && value.requestId) return value; } catch {}
+      }
+      break;
+    }
+  }
+  return null;
+}
 const connectorName = (name) => { const connector = name.split("__")[1] || ""; return `${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}`; };
 /** An action as words: `gmail.send` → "Gmail · send", `google.api.calendar.events.calendarEventsInsert` → "Google · calendar events insert". */
 function actionWords(path) {
@@ -186,6 +212,8 @@ export function askOf(tool, { guarded = false } = {}) {
 const SOURCE_WORDS = { executor: "Executor program", script: "Script in its folder", run: "A model run" };
 
 async function ruleTarget(runtime, name, args) {
+  // Resuming Executor's held request is one decision about one action: an "Always" would allow every future one.
+  if (resumeTool(name)) return null;
   if (name.startsWith("mcp__")) {
     // A gateway call's rule is the exact set of actions; a program has none to match.
     const paths = connectorCalls(name, args);
@@ -269,13 +297,31 @@ function presentation(name, args) {
     lines: [target, ...args.path ? [String(args.path)] : [], ...name === "write" && args.content ? [{ code: codeOf(args.content) }] : []] };
 }
 
+/*
+ * Every ask reaches the person's devices, a run's included (the run ends; the ask waits in the home thread), and
+ * records which devices took it. Still waiting after REMIND_MS, it is pushed once more. Not awaited by the call.
+ */
+const REMIND_MS = 10 * 60_000;
+function tellPerson(runtime, ask, send) {
+  const record = (pushed, field) => { if (pushed) void runtime.agent.update?.((doc) => { const held = doc.asks?.[ask.id]; if (held) held[field] = pushed; })?.catch?.(() => {}); };
+  void Promise.resolve(send()).then((pushed) => record(pushed, "pushed")).catch(() => {});
+  const timer = setTimeout(async () => {
+    try {
+      const held = (await runtime.agent.state()).asks?.[ask.id];
+      if (held?.status === "pending" && held.expiresAt > new Date().toISOString()) record(await send(), "reminded");
+    } catch {}
+  }, REMIND_MS);
+  timer.unref?.();
+}
+
 /** Create an ask or consume one exact, single-use grant in the tool's commit. */
-async function approve(runtime, api, name, args, context, thread) {
+async function approve(runtime, api, name, args, context, thread, shown = null) {
   const target = await ruleTarget(runtime, name, args);
-  const argsKey = createHash("sha256").update(JSON.stringify(canonical([name, args]))).digest("hex");
+  // Resuming one of Executor's held requests is the same decision however the answer is worded: keyed by the request.
+  const argsKey = createHash("sha256").update(JSON.stringify(canonical(resumeTool(name) && args?.requestId ? [name, args.requestId] : [name, args]))).digest("hex");
   const task = await api.getTask(api.taskId, context);
   const parentCallId = task?.input?.kind === "nested" ? task.input.parentCallId : null;
-  const info = presentation(name, args);
+  const info = shown || presentation(name, args);
   const now = new Date();
   const outcome = await api.commit(async (tx) => {
     const doc = await tx.doc(AgentDoc);
@@ -307,7 +353,7 @@ async function approve(runtime, api, name, args, context, thread) {
   if (outcome.allowed) return null;
   const { ask } = outcome;
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
-  if (outcome.created && !thread.run) runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id });
+  if (outcome.created) tellPerson(runtime, ask, () => runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${shown ? `${shown.title[0].toLowerCase()}${shown.title.slice(1)}` : summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id }));
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
   return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
 }
@@ -339,6 +385,8 @@ export function ApprovedTool(runtime) {
       }, context);
       if (outcome.error) return result(outcome.error, args.ask, true);
       if (outcome.interrupted) return result(`This approved call was interrupted; it may already have run. Check its effects before anything else (ask ${outcome.ask.id}).`, outcome.ask.id, true);
+      // Just after a restart a connector is still coming up: wait for it before saying its tool is gone.
+      if (outcome.ask.tool.startsWith("mcp__")) await runtime.agent.connectors?.ready?.(outcome.ask.tool.split("__")[1]).catch(() => {});
       const target = installedTool(runtime, outcome.ask.tool);
       if (!target || !outcome.ask.args) return result(`Ask ${outcome.ask.id}'s tool is not available now.`, outcome.ask.id, true);
       return target.execute(outcome.ask.args, api, context);
@@ -365,12 +413,16 @@ function guard(runtime, tools, confine) {
       if (confine && routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
       }
-      if ((tool.name.startsWith("mcp__") && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
+      const threadOf = async () => {
         const described = await runtime.agent.threadOf(api.conversationId);
         const run = described?.role === "run";
         const home = run ? await runtime.agent.home() : null;
         const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run, chat: described?.role === "chat" };
         if (!thread.chatId) throw new Error("Agent thread not found");
+        return { thread, run };
+      };
+      if ((tool.name.startsWith("mcp__") && !executorGates(tool.name) && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
+        const { thread, run } = await threadOf();
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.
         const asked = !run && runtime.agent.settings().youAsk !== false && editOnly(tool.name, args)
           && (await api.memo("personAsked", context) ?? await api.memo("personAsked", await personStarted(api, context), context));
@@ -382,6 +434,17 @@ function guard(runtime, tools, confine) {
       const local = confine && PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
       const result = await tool.execute(args, local ? { ...api, env } : api, context);
+      const held = executorGates(tool.name) ? heldForApproval(result) : null;
+      if (held) {
+        // Executor holds an action for approval: the person is asked, and Allow resumes Executor's request.
+        const { thread } = await threadOf();
+        const resume = tool.name.replace(/__[^_]+$/, "__resume");
+        const shown = presentation(tool.name, args);
+        const input = fieldsOf(held.invocation?.input);
+        const waiting = await approve(runtime, api, resume, { requestId: held.requestId, response: { action: "accept", content: {} } }, context, thread,
+          { ...shown, lines: input.length ? [{ fields: input }] : shown.lines });
+        if (waiting) return waiting;
+      }
       if (privateRead(tool.name, args) && !result?.isError) {
         await api.commit(async (tx) => { (await tx.doc(AgentDoc)).tainted[api.conversationId] = true; }, context);
       }

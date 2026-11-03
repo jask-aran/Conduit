@@ -1,3 +1,4 @@
+import { listAsks } from "../agent/asks.js";
 import { notice, stopPending, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
@@ -363,11 +364,16 @@ export function Subagents(runtime) {
           const handle = await api.conversation(api.conversationId, context);
           // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
           // acknowledged it ("Noted. …") instead of choosing. The thread shows both, the addition apart.
-          const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: report.answer, title });
-          const at = content.indexOf(report.answer);
-          const appended = task.input.gate && at >= 0 ? content.slice(at + report.answer.length) : null;
+          // What the run left waiting on the person's approval, said by the hub rather than left to the run's own words: a
+          // run that asked and ended often never mentioned it.
+          const waiting = task.input.gate && runtime.agent ? await api.memo("waitingAsks", listAsks(await runtime.agent.state())
+            .filter((ask) => ask.status === "pending" && ask.run === String(child)).map((ask) => `• ${ask.title} (ask ${ask.id})`), context) : [];
+          const answer = waiting.length ? `${report.answer}\n\nWaiting on the person's approval (they have been notified):\n${waiting.join("\n")}` : report.answer;
+          const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: answer, title });
+          const at = content.indexOf(answer);
+          const appended = task.input.gate && at >= 0 ? content.slice(at + answer.length) : null;
           const item = (await api.snapshot(SubagentRoster, api.conversationId, context)).children[id];
-          const data = { subagentId: label, conversationId: child, title, status: report.status, messageId: requestId, report: report.answer, ...(appended ? { appended } : {}),
+          const data = { subagentId: label, conversationId: child, title, status: report.status, messageId: requestId, report: answer, ...(appended ? { appended } : {}),
             ...(item.run ? { run: { ...item.run, startedAt: item.startedAt, endedAt: item.endedAt } } : {}),
             ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
           // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is kept
