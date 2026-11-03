@@ -119,8 +119,22 @@ ampcode.com/notes/permissions; block.github.io/goose/docs/guides/goose-permissio
 auto-approve; opencode.ai/docs/permissions; docs.github.com (copilot-cli allowing-tools); zed.dev/docs/ai/
 tool-permissions; nvd.nist.gov CVE-2026-48721; arXiv 2503.18813 (CaMeL), 2506.08837 (injection design patterns).
 
+## Decided after review (2026-11-03)
+
+- **Model**: the host's choice. Conduit passes its helper model (Settings › AI, the helper model); a cheaper default
+  is a later question. (Codex runs its reviewer on its small model under its own approval-model slug.)
+- **A run's task as the person's words**, by who wrote it:
+  - a task the person started (Run a task, a message asking for it): trusted, as their words;
+  - a routine (heartbeat, brief, a feed's run): its file is trusted only as saved, since saving a routine is itself
+    approved; what it gathered (mail, feeds) never is;
+  - a task the agent wrote itself (a check-back, a subagent's brief): not trusted. It is the agent's own prose, and
+    an injected instruction would arrive exactly that way. Its actions are judged on the person's words alone.
+- **Starter policy at Executor setup**, shown as rules the person edits before saving:
+  - may: reply in a thread the person is already in; label, archive and mark mail; create and move events on the
+    person's own calendars; draft anything;
+  - always the person's: send to someone new; delete anything; pay or transfer; share a file or calendar outside;
+    change account, security or forwarding settings.
+
 ## Open
 
-- Which model by default (cheap, structured output, low latency) and its budget line.
-- Whether the classifier's context includes the run's task (the person's words that started it) for runs.
-- The starter policy shown at Executor setup.
+Nothing blocking the build.
