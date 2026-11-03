@@ -198,6 +198,12 @@ require_dependencies() {
     echo "Conduit dependencies are not installed. Run: bash .devcontainer/start-conduit.sh setup" >&2
     exit 1
   fi
+  # A lockfile newer than what npm last installed (a pull or merge that added or moved a package): install it, or the
+  # build and server run on the old set and a new dependency is simply missing.
+  if [[ "$WEB_DIR/package-lock.json" -nt "$WEB_DIR/node_modules/.package-lock.json" ]]; then
+    echo "package-lock.json changed since the last install; running npm ci."
+    (cd "$WEB_DIR" && PATH="$WORKING_FILES_DIR/.venv/bin:$PATH" npm ci --no-audit --no-fund) || exit 1
+  fi
   if [[ ! -x "$WORKING_FILES_DIR/.venv/bin/python" ]]; then
     echo "Conduit's managed Python environment is not installed. Run: bash .devcontainer/start-conduit.sh setup" >&2
     exit 1
