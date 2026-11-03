@@ -359,6 +359,8 @@ export function Settings(props: {
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     return scored.sort((a, b) => a.score - b.score).slice(0, 30);
   });
+  // Each opened result's lookup is its own: a newer one, another section or closing Settings ends an older one's retries.
+  let lookup = 0;
   const openResult = (result: { section: Section; label: string; group: string | null }) => {
     setQuery("");
     openSection(result.section);
@@ -366,7 +368,9 @@ export function Settings(props: {
     if (result.group === null && result.label === label(result.section)) { requestAnimationFrame(focusPage); return; }
     // The section renders on the next frames (some after their data): look for the line a few times.
     let tries = 0;
+    const mine = ++lookup;
     const find = () => {
+      if (mine !== lookup || !props.open || section() !== result.section) return;
       const dialog = document.querySelector('[role="dialog"][aria-label="Settings"] main');
       const line = [...(dialog?.querySelectorAll<HTMLElement>(".ui-setting-line, .ui-switch, .ui-group-title, .ui-title") ?? [])]
         .find((element) => element.textContent?.trim().startsWith(result.label));
@@ -539,7 +543,15 @@ export function Settings(props: {
     if (target?.closest("[data-credential], .ui-setting-recorder")) return;
     // Keyboard: Escape steps back out before it closes: a search clears, a page hands focus back to its rail row.
     if (target?.matches('[aria-label="Search settings"]') && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); return; }
-    if (!narrow() && target?.closest('[role="dialog"][aria-label="Settings"] main')) { event.preventDefault(); event.stopPropagation(); focusRail(); return; }
+    if (!narrow() && target?.closest('[role="dialog"][aria-label="Settings"] main')) {
+      event.preventDefault();
+      // A search over the rail: it clears first, then its rail comes back to step to (no rail tab exists under results).
+      if (query()) { setQuery(""); requestAnimationFrame(focusRail); return; }
+      // A field answers its own Escape first (a title puts its name back): the step back waits until it has, so moving
+      // focus never blurs an edit into a save.
+      if (target.matches("input, textarea, [contenteditable='true']")) { queueMicrotask(focusRail); return; }
+      event.stopPropagation(); focusRail(); return;
+    }
     event.preventDefault();
     event.stopPropagation();
     props.onOpenChange(false);
