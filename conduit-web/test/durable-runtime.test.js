@@ -129,3 +129,21 @@ test("a question card pauses the turn and its answer resumes it", async (t) => {
   assert.ok(c.stream.messages.some(answer));
   assert.ok(c.stream.messages.some((event) => event.type === "permission_resolved" && event.requestId === request.id));
 });
+
+// durable-runtime.js: committed turns and tool calls live in SQLite; the chat log is a projection.
+test("finished turn messages and tool results survive a server restart", async (t) => {
+  const c = await chat(t);
+  await turn(c, "tool 1t");
+  const before = await json(`/v0/sessions/${c.id}`);
+  assert.ok(before.messages.some((message) => message.role === "assistant" && !message.interim));
+  assert.ok(before.tools.some((tool) => tool.output));
+  await harness.restart();
+  const after = await json(`/v0/sessions/${c.id}`);
+  // Compare history content and links, not live-only generation metadata or timestamps.
+  const messages = (history) => history.messages.map(({ id, role, content, blocks, interim, answers, stopReason }) =>
+    ({ id, role, content, blocks, interim, answers, stopReason }));
+  const tools = (history) => history.tools.map(({ toolCallId, name, input, output, isError, calls }) =>
+    ({ toolCallId, name, input, output, isError, calls }));
+  assert.deepEqual(messages(after), messages(before));
+  assert.deepEqual(tools(after), tools(before));
+});

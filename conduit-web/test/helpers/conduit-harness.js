@@ -181,7 +181,7 @@ function deferredEvent(events, predicate, timeoutMs) {
 export async function startConduitHarness({ env = {} } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-harness-"));
   const codexCommand = await writeFakeCodex(root, createRequire(import.meta.url).resolve("ws"));
-  const child = spawn(process.execPath, ["src/server.js"], {
+  const childOptions = {
     cwd: path.resolve(import.meta.dirname, "../.."),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -213,34 +213,41 @@ export async function startConduitHarness({ env = {} } = {}) {
       CONDUIT_WORKSPACE_ALLOWLIST: root,
       ...env,
     },
-  });
+  };
+  let child;
   let output = "";
-  child.stdout.on("data", (chunk) => { output += String(chunk); });
-  child.stderr.on("data", (chunk) => { output += String(chunk); });
   let origin = "";
-  try {
-    await waitFor(() => {
-      if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
-      const listening = output.match(/listening on (http:\/\/\S+)/);
-      if (listening) origin = listening[1];
-      return Boolean(origin);
-      // A server starts in well under a second alone; beside the rest of the suite it can take several.
-    }, "Conduit server did not report a port", { attempts: 600 });
-    await waitFor(async () => {
-      if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
-      try {
-        const response = await fetch(`${origin}/healthz`);
-        // Confirm this is our server and not merely something answering on the
-        // port. A stray listener that says 200 to everything would otherwise
-        // pass for ready, and every later request would go to it instead.
-        return response.ok && (await response.json())?.status === "ready";
-      } catch { return false; }
-    }, "Conduit server did not become ready");
-  } catch (error) {
-    child.kill("SIGTERM");
-    await fs.rm(root, { recursive: true, force: true });
-    throw error;
+  async function start() {
+    child = spawn(process.execPath, ["src/server.js"], childOptions);
+    output = "";
+    origin = "";
+    child.stdout.on("data", (chunk) => { output += String(chunk); });
+    child.stderr.on("data", (chunk) => { output += String(chunk); });
+    try {
+      await waitFor(() => {
+        if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
+        const listening = output.match(/listening on (http:\/\/\S+)/);
+        if (listening) origin = listening[1];
+        return Boolean(origin);
+        // A server starts in well under a second alone; beside the rest of the suite it can take several.
+      }, "Conduit server did not report a port", { attempts: 600 });
+      await waitFor(async () => {
+        if (child.exitCode != null) throw new Error(`Conduit server exited with ${child.exitCode}: ${output}`);
+        try {
+          const response = await fetch(`${origin}/healthz`);
+          // Confirm this is our server and not merely something answering on the
+          // port. A stray listener that says 200 to everything would otherwise
+          // pass for ready, and every later request would go to it instead.
+          return response.ok && (await response.json())?.status === "ready";
+        } catch { return false; }
+      }, "Conduit server did not become ready");
+    } catch (error) {
+      child.kill("SIGTERM");
+      await fs.rm(root, { recursive: true, force: true });
+      throw error;
+    }
   }
+  await start();
 
   const request = async (route, options = {}) => {
     try {
@@ -256,7 +263,7 @@ export async function startConduitHarness({ env = {} } = {}) {
   const streams = new Set();
   return {
     root,
-    origin,
+    get origin() { return origin; },
     request,
     async createProject(name) {
       const response = await request("/v0/projects", { method: "POST", body: JSON.stringify({ name }) });
@@ -385,6 +392,12 @@ export async function startConduitHarness({ env = {} } = {}) {
         });
       }
       return { exitCode: child.exitCode, output };
+    },
+    async restart() {
+      // A finished turn is already committed; an abrupt stop must preserve it too.
+      await this.terminate("SIGKILL");
+      streams.clear();
+      await start();
     },
     async stop() {
       await this.terminate();
