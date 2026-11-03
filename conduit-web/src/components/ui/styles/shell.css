@@ -62,6 +62,9 @@
 /* Over the panes: the dock takes no room in the row and floats above it, its edge at its surface's. */
 .ui-dock[data-overlay] { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
 .ui-dock[data-overlay] .ui-dock-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
+/* Closed over the panes, its surface folds to nothing at the panes' edge; its lift and hairline ring would still draw
+   there, a bright line beside the rail. */
+.ui-dock[data-overlay]:not([data-open]) .ui-dock-surface { box-shadow: none; }
 .ui-dock[data-overlay] .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
 /* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
 .ui-dock[data-expanded] .ui-dock-surface { width: calc(100cqw - var(--space-md)); }
