@@ -140,9 +140,14 @@ export function executorHolder(options?: { prefix?: string }): Holder;
 /** Held by tool name (shell on a device, posting in a chat); `when` narrows by arguments. */
 export function namedHolder(tools: string[], options?: { when?(call: { tool: string; arguments: JsonObject }): boolean; reversible?: boolean }): Holder;
 
-/** Default table: low allows; medium allows with medium+ authorisation; high allows only with high; critical escalates. */
+/** Default table: low allows; medium allows with medium+ authorisation (none: deny, low: ask); high allows only with high (medium: ask); critical always asks. An action that cannot be undone is never allowed above low risk without high authorisation. */
 export const DEFAULT_TABLE: OutcomeTable;
 /** A held action's exact key (sha256 of its canonical form), for `Policy.exact` and caches. */
 export function actionKey(held: HeldAction): string;
 /** A shell command as separate simple commands, env assignments stripped; null when it cannot be read safely. */
 export function canonicalShell(command: string): string[] | null;
+export function canonicalJson(value: unknown): string;
+/** A JSONL audit sink: one file a day under `dir`, kept `keepDays`. */
+export function jsonlAudit(dir: string, options?: { keepDays?: number }): (record: AuditRecord) => void;
+/** Newest-first records from a `jsonlAudit` directory. */
+export function readAudit(dir: string, options?: { limit?: number }): Promise<AuditRecord[]>;

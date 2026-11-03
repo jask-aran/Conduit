@@ -1,0 +1,35 @@
+{
+  "name": "pi-durable-approver",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-durable": "^1.4.0",
+    "@earendil-works/pi-ai": "*"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "pi",
+    "pi-durable",
+    "approval",
+    "agent",
+    "guard"
+  ]
+}
