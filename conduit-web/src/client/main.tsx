@@ -5889,10 +5889,16 @@ function App() {
     // Kept loaded while the page shows: opening the page again (its sidebar row) clears the session's chat, as any
     // route to a page does, and the composer went with it.
     let loading: string | null = null;
+    let active = true;
+    onCleanup(() => { active = false; });
     createEffect(on([() => agentView()?.home?.chatId, current.chat.loadedId] as const, ([id, loaded]) => {
-      if (!id || loaded === id || loading === id) return;
+      if (!id || loaded === id || loading === id || current.chat.navigatingId()) return;
       loading = id;
-      void agentChat(id).then((target) => current.chat.select(target.chat, target.project, { history: "none" })).catch(showError).finally(() => { loading = null; });
+      // A chat switch clears loadedId before its route commit closes this page. Do not select home over that switch,
+      // including when its lookup finishes after the page has closed.
+      void agentChat(id).then((target) => {
+        if (active && !current.chat.navigatingId()) return current.chat.select(target.chat, target.project, { history: "none" });
+      }).catch(showError).finally(() => { loading = null; });
     }));
     // The page shows none of the thread: it is a tap away (Open thread).
     const openThread = () => {
