@@ -2182,8 +2182,6 @@ function App() {
   // persistent bottom line; a menu can take focus without changing it.
   let heldRegion: HTMLElement | null = null;
   let syncFocusedShortcutContext: ((target: EventTarget | null) => void) | undefined;
-  // When a chord (Ctrl/Cmd/Alt) was last pressed: focus arriving just after it came by keyboard, and holds its region.
-  let chordAt = 0;
   // The region focus last moved into from another (set by the focusin sync), and the one it was in.
   let enteredRegion: HTMLElement | null = null;
   let focusRegion: HTMLElement | null = null;
@@ -5574,19 +5572,16 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen() || node.classList.contains("main-split"))) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // A region shows its held line when the keyboard brought focus there (a chord just pressed: a go-to, a pane or
-      // tab step); a click or Tab never lights it (keyboard-model.md › Enter). The sidebar's comes only from its go-to
-      // (acknowledgeFocusedRegion). Focus outside a region keeps the last owner until another receives focus.
+      // The held line follows focus into any region, however it came (a click, Tab, a chord); only a keyboard go-to
+      // also draws it out (the region cue, acknowledgeFocusedRegion). Focus outside a region keeps the last owner
+      // until another receives focus.
       const outermost = regions.at(-1);
       if (!outermost || !(outermost.element instanceof HTMLElement)) return;
       if (outermost.element !== focusRegion) { enteredRegion = outermost.element; focusRegion = outermost.element; }
-      if (outermost.name !== "sidebar" && performance.now() - chordAt < 600) holdRegion(outermost.element);
-      else if (heldRegion !== outermost.element) holdRegion(null);
+      holdRegion(outermost.element);
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
-    const noteChord = (event: KeyboardEvent) => { if (event.ctrlKey || event.metaKey || event.altKey) chordAt = performance.now(); };
-    window.addEventListener("keydown", noteChord, true);
     // A press is the person's own choice of where to be: deferred focus work started before it gives way (focusIntent).
     const notePress = () => { focusIntent++; };
     window.addEventListener("pointerdown", notePress, true);
@@ -5597,7 +5592,6 @@ function App() {
       window.removeEventListener("keydown", dismissOpenLayer, true);
       window.removeEventListener("keydown", escapeHome);
       window.removeEventListener("focusin", onFocusIn);
-      window.removeEventListener("keydown", noteChord, true);
       window.removeEventListener("pointerdown", notePress, true);
       for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();

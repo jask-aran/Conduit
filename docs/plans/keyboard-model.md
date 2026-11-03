@@ -49,8 +49,10 @@ Every region answers the same four questions in the same way.
   | Settings | Search |
   | Palette | Its input |
 
-- **The region cue and held line show on a keyboard arrival only.** A click or Tab never shows them. (Today any
-  `focusin` lights the held line except in the sidebar. That is a bug against this rule.)
+- **The held line follows focus; the region cue marks a keyboard arrival.** The held line (`[data-region]::after`, lit
+  by `data-focus-held`) moves to whichever region focus enters, by click, Tab or chord. Only a go-to chord also draws
+  it out from its middle (the region cue, `region-cue.ts`). Nothing else on screen changes. (Revised 2026-11-03: a
+  line that vanished on a click read as inconsistent.)
 
 ### 2. Move
 

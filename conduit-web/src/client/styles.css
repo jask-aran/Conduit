@@ -186,6 +186,9 @@ svg.lucide { stroke-width: 2.4; }
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-gentle) var(--ease-arrive);
+  /* Its own layer always: a 1.5px line at a fractional position, drawn on the arrival's animation layer and then
+     painted back into the region, came out a shade dimmer the moment the draw ended. */
+  will-change: transform, opacity;
 }
 [data-region][data-focus-held]::after { opacity: 1; }
 /* The sidebar runs to the foot of the window; its line sits on the cards'. */
