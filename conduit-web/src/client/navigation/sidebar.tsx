@@ -1,6 +1,6 @@
 import { reducedMotion } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
-import { AgentAvatar, HarnessMark, ThreadHarnessMark } from "@/components/ui";
+import { AgentAvatar, HarnessMark, PaneMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
@@ -122,6 +122,8 @@ export function Sidebar(props: {
   /** With two chats side by side: the one with the keyboard, current in place of the selection, and the other, marked open. */
   focusedId?: string | null;
   openIds?: string[];
+  /** Where a chat is open: its pane's letter and whether it is that pane's showing tab (PaneMark). */
+  placeOf?: (id: string) => { pane: string; shown: boolean } | undefined;
   /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
   onOpenChatBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
   /** Open an empty pane beside the one with the keyboard; absent where there are no panes (a phone). */
@@ -882,6 +884,7 @@ export function Sidebar(props: {
       </Show>}
       current={(props.focusedId || shownId()) === menuProps.chat.id}
       open={props.openIds?.includes(menuProps.chat.id)}
+      meta={(() => { const place = props.placeOf?.(menuProps.chat.id); return place ? <PaneMark pane={place.pane} shown={place.shown} /> : undefined; })()}
       selected={selected()}
       data-chat-id={menuProps.chat.id}
       draggable="true" data-doc-view={`chat:${menuProps.chat.id}`}

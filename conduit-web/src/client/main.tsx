@@ -4786,6 +4786,25 @@ function App() {
   const launchFocus = Number(launchUrl.searchParams.get("focus")) || 0;
   if (launchFocus > 0) createEffect(on(() => shownSlots().length, (count) => { const slot = shownSlots()[launchFocus - 1]; if (count && slot !== undefined) setKeyboardPane(slot); }));
   // The chats the panes show other than the one with the keyboard, marked open in the sidebar.
+  /*
+   * Where each chat is open, for the sidebar's PaneMark: the pane's letter in reading order -- A, the panes beside it,
+   * then the dock's -- and whether it is the pane's showing tab. A chat is open once (DESIGN.md › Focus and opening).
+   */
+  const chatPlaces = createMemo(() => {
+    const places = new Map<string, { pane: string; shown: boolean }>();
+    const docked = [...dockedSlots(), ...foldedSlots()].filter((slot) => slotView(slot) && !shownSlots().includes(slot));
+    const panes: PaneKey[] = ["main", ...shownSlots(), ...docked];
+    panes.forEach((pane, index) => {
+      const letter = String.fromCharCode(65 + index);
+      const active = activeTabOf(pane);
+      for (const id of tabsOf(pane)?.ids ?? (active ? [active] : [])) {
+        if (id === "home" || id.includes(":") || places.has(id)) continue;
+        places.set(id, { pane: letter, shown: id === active });
+      }
+      if (active && !active.includes(":") && active !== "home") places.set(active, { pane: letter, shown: true });
+    });
+    return places;
+  });
   const openChatIds = () => {
     if (!splitShown()) return [];
     const current = keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : mainChatId();
@@ -6019,7 +6038,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}

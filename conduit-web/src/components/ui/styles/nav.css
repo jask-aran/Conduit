@@ -167,3 +167,6 @@
 .ui-status[data-tone="danger"] { color: var(--destructive); }
 .ui-status[data-tone="unread"] { color: var(--status-unread); }
 .ui-status[data-stale] { opacity: var(--opacity-muted); }
+/* PaneMark (row.tsx): the pane a chat is open in, at the row's end; its showing tab at the foreground. */
+.ui-pane-mark { color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/1 var(--font-data); letter-spacing: 0; }
+.ui-pane-mark[data-shown] { color: var(--foreground); }
