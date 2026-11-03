@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendEntry } from "../src/agent/inbox.js";
@@ -35,6 +34,8 @@ test("a saved routine keeps its trigger, tasks and instructions in its own file"
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const currentSeeds = new URL("../../templates/agent/seed/routines/", import.meta.url);
+// Seed bytes as shipped at each commit, frozen so the test needs no git history (CI checks out shallow).
+const oldSeed = (commit, name, encoding) => fs.readFile(new URL(`fixtures/seed-routines/${commit}/${name}.md`, import.meta.url), encoding);
 
 test("every historical seed byte version upgrades; edited and unknown files stay untouched", async (t) => {
   const versions = {
@@ -44,7 +45,7 @@ test("every historical seed byte version upgrades; edited and unknown files stay
     const { root } = await agentFixture(t);
     const dir = path.join(root, "routines");
     await fs.mkdir(dir);
-    const old = execFileSync("git", ["show", `${commit}:templates/agent/seed/routines/${name}.md`]);
+    const old = await oldSeed(commit, name);
     const file = path.join(dir, `${name}.md`);
     await fs.writeFile(file, old);
     await seedRoutines(root, fileURLToPath(currentSeeds));
@@ -56,7 +57,7 @@ test("every historical seed byte version upgrades; edited and unknown files stay
     const { root } = await agentFixture(t);
     const dir = path.join(root, "routines");
     await fs.mkdir(dir);
-    const old = execFileSync("git", ["show", `${commit}:templates/agent/seed/routines/${name}.md`], { encoding: "utf8" });
+    const old = await oldSeed(commit, name, "utf8");
     await fs.writeFile(path.join(dir, `${name}.md`), serializeRoutine(parseRoutine(old, name)));
     await seedRoutines(root, fileURLToPath(currentSeeds));
     assert.deepEqual(await fs.readFile(path.join(dir, `${name}.md`)), await fs.readFile(new URL(`${name}.md`, currentSeeds)));
@@ -64,7 +65,7 @@ test("every historical seed byte version upgrades; edited and unknown files stay
   const { root } = await agentFixture(t);
   const dir = path.join(root, "routines");
   await fs.mkdir(dir);
-  const old = execFileSync("git", ["show", "0ec426a5:templates/agent/seed/routines/morning-brief.md"]);
+  const old = await oldSeed("0ec426a5", "morning-brief");
   const changed = Buffer.concat([old, Buffer.from("Edited by the person.\n")]);
   await fs.writeFile(path.join(dir, "morning-brief.md"), changed);
   await fs.writeFile(path.join(dir, "reflect.md"), "Unknown custom routine");
