@@ -103,6 +103,8 @@ export function SplitDashboard(props: {
   /** Dashboard's `stacked`: several groups in the left column. */
   stacked?: boolean;
   aside?: JSX.Element;
+  /** What its two columns need, as measured: a document that declares its width, so the pane holding it keeps it. */
+  onNeed?: (width: number) => void;
 }) {
   let root!: HTMLElement;
   const [phone, setPhone] = createSignal(isMobileLayout());
@@ -136,6 +138,7 @@ export function SplitDashboard(props: {
       frame = 0;
       setPaneWidth(root.clientWidth);
       setNeed(twoColumnWidth(root));
+      props.onNeed?.(need());
       shown = root.querySelector(".ui-dash-composer")?.getBoundingClientRect();
       if (!measured) requestAnimationFrame(() => { measured = true; });
     };

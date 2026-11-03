@@ -116,6 +116,7 @@ import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
 import { agentNeeds, agentView, refreshAgent } from "./state/agent";
 import { ServerSwitcher } from "./navigation/server-switcher";
+import { visibleRuntimeActivity } from "./navigation/runtime-indicator";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
@@ -778,8 +779,7 @@ function App() {
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
   // jbot's page works in its folder: the dock's tools and the panes beside it are its workspace's.
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
-    : routeKind() === "agent" ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
-    : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
+    : ["chat", "project", "dashboard", "agent"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
@@ -2527,7 +2527,7 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     setPanelOpenForChat(true);
   };
-  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : routeKind() === "agent" ? Boolean(workspacePanelScope()) : ["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
+  const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard", "agent"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope());
   /*
    * The panes beside pane A (docs/design/panes-and-rail.md, 6b): up to two,
    * B and C, each a slot with its own view, session and host, shown left to
@@ -2551,7 +2551,11 @@ function App() {
    * pane beside at their documents' minimums.
    */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  const viewMinWidth = (view: SplitView | null) => !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
+  // What the agent's page needs for its two columns (messages and composer, and its aside), as it measures it: a pane
+  // showing it keeps that width, and other panes fold first.
+  const [agentPageNeed, setAgentPageNeed] = createSignal(0);
+  const viewMinWidth = (view: SplitView | null) => view === "page:agent" ? Math.max(minMainPaneWidth(), agentPageNeed())
+    : !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   // The open dock keeps its own minimum; panes fold before it is pushed out.
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)
@@ -4404,6 +4408,18 @@ function App() {
     if (mode === "native") delete document.documentElement.dataset.titleBar; else document.documentElement.dataset.titleBar = mode;
     setWindowDrags(mode !== "native");
   });
+  // Chats with a turn under way (not a warm process waiting between turns), for the title bar.
+  const runningTurns = createMemo(() => [...runtime.processes().values()]
+    .filter((process) => { const activity = visibleRuntimeActivity(process); return activity && activity !== "idle" && activity !== "failed"; })
+    .map((process) => process.chatId));
+  const runningName = (id: string) => id === agentView()?.home?.chatId ? agentView()?.settings?.name || "Agent"
+    : (agentView()?.sides || []).find((side) => side.chatId === id)?.title || viewName(`chat:${id}` as SplitView);
+  const openRunning = async (id: string) => {
+    if (id === agentView()?.home?.chatId) return openAgentHere();
+    const project = catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id));
+    const target = project ? { chat: project.sessions.find((chat) => chat.id === id)!, project } : await agentChat(id).catch(() => null);
+    if (target) await openChatHere(target.chat, target.project); else showError("That chat is no longer available.");
+  };
   const windowControls = (kind: "bar" | "rail") => desktopShell && <WindowControls kind={kind} maximized={windowMaximized()}
     onMinimize={() => void desktopShell!.window.minimize()} onMaximize={() => void desktopShell!.window.toggleMaximize()} onClose={() => void desktopShell!.window.close()} />;
   // The hub's browser: focused where it is shown, else opened beside (in place of a pane when there is no room).
@@ -5694,7 +5710,7 @@ function App() {
       const id = agentView()?.home?.chatId;
       if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
     };
-    return <AgentPage
+    return <AgentPage onNeed={(width) => { if (!isMobileLayout()) setAgentPageNeed(Math.ceil(width)); }}
       header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
       onOpenThread={agentView()?.home?.chatId ? openThread : undefined}
       onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
@@ -5907,8 +5923,15 @@ function App() {
         middle={<LeadInput kind="web" readOnly aria-label="Search or run a command" placeholder="Search or run a command"
           onFocus={(event) => { event.currentTarget.blur(); openPalette(null); }} />}
         end={<>
-          <Show when={[...runtime.processes().values()].filter((process) => process.id).length}>{(count) =>
-            <Button variant="ghost" size="sm" title="Chats with a turn running" onClick={() => void openDashboard("none")}><Spinner />{count()} running</Button>}</Show>
+          <Show when={runningTurns().length}>{(count) =>
+            <DropdownMenu modal={false} placement="bottom-end">
+              <MenuControl as={Button} variant="ghost" size="sm" title="Chats with a turn running"><Spinner />{count()} running</MenuControl>
+              <MenuContent>
+                <MenuSection title="Running">
+                  <For each={runningTurns()}>{(id) => <MenuRow icon={<Spinner />} onSelect={() => void openRunning(id)}>{runningName(id)}</MenuRow>}</For>
+                </MenuSection>
+              </MenuContent>
+            </DropdownMenu>}</Show>
           <Show when={agentView()?.enabled && agentNeeds()}>{(needs) =>
             <Button variant="ghost" size="sm" title={`${agentView()?.settings?.name || "Agent"} wants you`} onClick={() => void openAgentHere()}>{agentView()?.settings?.name || "Agent"} · {needs()}</Button>}</Show>
           <Show when={updateState().kind === "ready"}>
@@ -6025,12 +6048,12 @@ function App() {
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard", "agent"].includes(routeKind()) && Boolean(selectedProject()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
     </AppShell>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />

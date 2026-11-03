@@ -54,6 +54,8 @@ const when = (schedule: AgentSchedule) => schedule.kind === "daily" ? `Daily ${s
   : "Once";
 
 export function AgentPage(props: {
+  /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
+  onNeed?: (width: number) => void;
   /** The page's header in its pane, titled with the agent's name. */
   header: (title: string) => JSX.Element;
   /** Opens its home thread: the page shows none of it. */
@@ -316,7 +318,7 @@ export function AgentPage(props: {
     {props.header(name())}
     <Show when={view()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <SplitDashboard page="Agent" label={`${name()}'s page`}
+        <SplitDashboard page="Agent" label={`${name()}'s page`} onNeed={props.onNeed}
           header={<SplitHeader title={name()} kind="Agent" glyph={<AgentAvatar />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
