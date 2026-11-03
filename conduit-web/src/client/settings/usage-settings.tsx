@@ -12,6 +12,9 @@ type Diagnostics = {
   requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number }[];
     afterGap: { fromMinutes: number; toMinutes: number | null; requests: number; misses: number }[];
     misses: { at: string; role: string; model: string; gapMinutes: number | null; why: string }[] };
+  keepWarm?: { policy: { model: string; pings: number; ttlMs: number | null; intervalMs: number | null; ttlSource: "declared" | "observed" | "assumed" | null;
+      gaps: number; reason: string | null } | null;
+    pings: number; pingHits: number; pingCost: number; lapses: number; keptHits: number; keptMisses: number; coldHits: number; coldMisses: number; saved: number; net: number };
   approvals: { judged: number; outcomes: { allow?: number; deny?: number; escalate?: number }; sources: Record<string, number>;
     askedYou: number; fromRuns: number; waiting: number; judgeMs: { median: number; max: number } | null;
     judgeCost: number; perDecision: number | null; jbotCost: number; jbotRequests: number; share: number | null;
@@ -21,6 +24,7 @@ type Diagnostics = {
 const real = (report: Diagnostics) => report.requests.byModel.filter((row) => !row.model.startsWith("conduit-test/"));
 const percent = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(value < 0.1 ? 1 : 0)}%`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+const minutes = (ms: number | null) => ms == null ? "—" : `${Math.round(ms / 60_000)} min`;
 const ROLE = { "jbot-home": "jbot's thread", "jbot-run": "a jbot run", chat: "a chat" } as Record<string, string>;
 const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", unlogged: "not logged" } as Record<string, string>;
 
@@ -116,6 +120,25 @@ export function UsageSettings() {
           </SettingDetails>
         </Show>
       </Group>
+      <Show when={report().keepWarm}>{(warm) =>
+        <Group title="Keep warm">
+          <Show when={warm().policy}>{(policy) =>
+            <SettingLine plain label="Policy" state={`${policy().model} · cache ${minutes(policy().ttlMs)} (${policy().ttlSource || "unknown"}) · from ${policy().gaps} past gaps`}
+              title="After each request on jbot's home thread, its last request is sent again at 90% of the cache's lifetime, read from cache, up to this many times: the count that would have cost least over the thread's past gaps.">
+              <SettingValue mono>{policy().pings ? `${policy().pings} × ${minutes(policy().intervalMs)}` : policy().reason || "off"}</SettingValue>
+            </SettingLine>}
+          </Show>
+          <SettingLine plain label="Pings" state={`${warm().pingHits} found the cache`}><SettingValue mono>{count(warm().pings)}</SettingValue></SettingLine>
+          <SettingLine plain label="Wakes after a lapse" state={`kept warm: ${warm().keptHits} hit, ${warm().keptMisses} missed · not: ${warm().coldHits} hit, ${warm().coldMisses} missed`}
+            title="Requests on the home thread after a gap longer than the cache's lifetime: whether a ping came in between, and whether the cache was there.">
+            <SettingValue mono>{count(warm().lapses)}</SettingValue>
+          </SettingLine>
+          <SettingLine plain label="Cost" state={`saved ${money(warm().saved)}`} title="What the pings cost (also in jbot's spend), and what the wakes they kept warm did not pay for a full read.">
+            <SettingValue mono>{money(warm().pingCost)}</SettingValue>
+          </SettingLine>
+          <SettingLine plain label="Net"><SettingValue mono>{warm().net < 0 ? `−${money(-warm().net)}` : money(warm().net)}</SettingValue></SettingLine>
+        </Group>}
+      </Show>
       <Group title="Approvals">
         <SettingLine plain label="Held for approval" title="Actions a tool's own gate held (an Executor send or change) and the approval model judged.">
           <SettingValue mono>{count(report().approvals.judged)}</SettingValue>

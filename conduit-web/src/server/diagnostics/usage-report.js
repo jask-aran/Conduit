@@ -53,6 +53,15 @@ function foldUsageAgent(db) {
   return doc;
 }
 
+/** Keep-warm's policy, numbers and ids only. */
+function pickPolicy(policy) {
+  const rates = policy.rates && typeof policy.rates === "object" ? { hit: usageNumber(policy.rates.hit), miss: usageNumber(policy.rates.miss) } : null;
+  return { model: typeof policy.model === "string" && /^[A-Za-z0-9_./:-]+$/.test(policy.model) ? policy.model : "unknown",
+    pings: usageNumber(policy.pings), ttlMs: usageNumber(policy.ttlMs) || null, intervalMs: usageNumber(policy.intervalMs) || null,
+    ttlSource: ["declared", "assumed"].includes(policy.ttlSource) ? policy.ttlSource : null, gaps: usageNumber(policy.gaps), rates,
+    reason: ["cache lifetime unknown", "no saving at this model's prices", "too few past wakes"].includes(policy.reason) ? policy.reason : null };
+}
+
 /** Content-free usage totals. Read the live database once; never copy or modify it. */
 export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const requested = Number(hours);
@@ -60,6 +69,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const from = now - hours * 3600000;
   const inWindow = (at) => at >= from && at <= now;
   const requests = { total: 0, byModel: [], afterGap: [], misses: [] };
+  const keepWarm = { policy: null, pings: 0, pingHits: 0, pingCost: 0, lapses: 0, keptHits: 0, keptMisses: 0, coldMisses: 0, coldHits: 0, saved: 0, net: 0 };
   const approvals = {
     judged: 0, outcomes: { allow: 0, deny: 0, escalate: 0 }, sources: {},
     askedYou: 0, fromRuns: 0, waiting: 0, judgeMs: null,
@@ -97,7 +107,12 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       if (typeof session === "string") sessions.set(session, String(row.owner_id));
     }
     const watched = new Map();
+    const pings = [];
     for await (const record of usageLogRecords(path.join(dataRoot, "runtime", "prefix-watch.jsonl"))) {
+      // Keep-warm's own lines (keep-warm.js): the policy it chose, and each ping with what it read and cost.
+      if (record.keepWarmPolicy && typeof record.keepWarmPolicy === "object") keepWarm.policy = { at: record.t, ...pickPolicy(record.keepWarmPolicy) };
+      if (Number.isFinite(record.keepWarm) && typeof record.key === "string") pings.push({ at: Date.parse(record.t), key: record.key,
+        input: usageNumber(record.input), cacheRead: usageNumber(record.cacheRead), cost: usageNumber(record.cost) });
       if (record.warm || typeof record.key !== "string") continue;
       const at = Date.parse(record.t);
       if (!Number.isFinite(at)) continue;
@@ -108,6 +123,19 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       watched.get(cid).push({ at, why: record.diverged == null ? "provider" : "changed" });
     }
 
+    const pingsOf = new Map();
+    for (const ping of pings) {
+      const cid = sessions.get(ping.key) ?? [...sessions].find(([key]) => key.startsWith(ping.key))?.[1];
+      if (cid == null) continue;
+      if (!pingsOf.has(cid)) pingsOf.set(cid, []);
+      pingsOf.get(cid).push(ping);
+      if (!inWindow(ping.at)) continue;
+      keepWarm.pings++;
+      keepWarm.pingHits += Number(ping.cacheRead >= 0.5 * ping.input && ping.input > 0);
+      keepWarm.pingCost += ping.cost;
+    }
+    const ttlMs = keepWarm.policy?.ttlMs || 30 * 60_000;
+    const rates = keepWarm.policy?.rates || null;
     const previous = new Map();
     const models = new Map();
     const gaps = [[5, 30], [30, 60], [60, 240], [240, null]]
@@ -146,6 +174,14 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
         bucket.requests++;
         bucket.misses += Number(miss);
       }
+      // A wake of the home thread after its cache would have lapsed: kept warm by a ping since its last request, or not.
+      if (cid === String(home) && prior && at - prior.at > ttlMs) {
+        const kept = (pingsOf.get(cid) || []).some((ping) => ping.at > prior.at && ping.at < at);
+        keepWarm.lapses++;
+        if (kept) keepWarm[miss ? "keptMisses" : "keptHits"]++;
+        else keepWarm[miss ? "coldMisses" : "coldHits"]++;
+        if (kept && !miss && rates) keepWarm.saved += cacheRead * Math.max(0, usageNumber(rates.miss) - usageNumber(rates.hit)) / 1e6;
+      }
       if (miss) {
         // Match the reference's last eligible log entry in file order, with a 1 s tolerance.
         const near = watched.get(cid)?.findLast((entry) => entry.at <= at + 1000);
@@ -154,6 +190,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
           model, gapMinutes, input, cacheRead, why: near?.why || "unlogged" });
       }
     }
+    keepWarm.net = keepWarm.saved - keepWarm.pingCost;
     requests.byModel = [...models.values()].sort((a, b) => b.requests - a.requests);
     for (const group of requests.byModel) group.cachedShare = group.cacheRead / Math.max(1, group.input + group.cacheRead);
     requests.afterGap = gaps.filter((bucket) => bucket.requests);
@@ -189,5 +226,5 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   approvals.share = approvals.jbotCost ? approvals.judgeCost / approvals.jbotCost : null;
   const count = (action) => action.allow + action.deny + action.escalate;
   approvals.byAction = [...actions.values()].sort((a, b) => count(b) - count(a)).slice(0, 8);
-  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, approvals };
+  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, approvals };
 }

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prefixWatch } from "./prefix-watch.js";
-import { listRoutines } from "../agent/routine-files.js";
+import { keepWarmPolicy, requestGaps } from "./keep-warm.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
@@ -141,10 +141,6 @@ export const USER_ENTRY = "conduit.user";
  * turn never writes near this many; a model whose own limit is lower keeps it.
  */
 const OUTPUT_CAP = 64_000;
-/** Keep-warm (DurableRuntime.keepWarm): 90% of the 30 minutes "long" retention keeps on GPT-5.6 and later, and pings
- * per real request: a cached read costs a tenth of a full one, so nine pings cost about one miss. */
-const KEEP_WARM_MS = 27 * 60_000;
-const KEEP_WARM_PINGS = 8;
 const cappedOutput = (models, onPayload) => new Proxy(models, {
   get(target, key) {
     if (key !== "streamSimple") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
@@ -227,15 +223,34 @@ export class DurableRuntime {
 
   /** A prompt a Pi extension sends its conversation (`sendUserMessage`), after what it is doing. */
   /**
-   * Keep jbot's home thread's prompt cache warm between wakes: shortly before the provider's cache would lapse, its
-   * last request is sent again for a handful of output tokens, read from cache at a tenth of the price. About nine
-   * pings cost one miss, so it pings only while a scheduled wake falls within what is left of that budget, and stops
-   * when a ping finds the cache gone (the provider kept it for less than the interval). Each real request starts over.
+   * Keep jbot's home thread's prompt cache warm between wakes (keep-warm.js): after each real request its last request
+   * is sent again at 90% of the model's cache lifetime, read from cache, as many times as the policy reckons pays over
+   * the thread's past gaps. A ping that finds the cache gone stops it. Pings count toward jbot's day and the usage ledger.
    */
-  keepWarm(params) {
+  keepWarm(params, model) {
     const key = params?.prompt_cache_key;
     if (!key || params.__warm) return;
-    void this.homeCacheKey().then((home) => { if (home?.key === key) this.armKeepWarm(home, Date.now(), 0); }).catch(() => {});
+    void this.homeCacheKey().then((home) => {
+      if (home?.key !== key) return;
+      const policy = this.keepWarmPolicyFor(home, model);
+      if (policy.pings > 0) this.armKeepWarm(home, Date.now(), 0, policy);
+      else clearTimeout(this.keepWarmTimer);
+    }).catch(() => {});
+  }
+
+  /** The policy for the home thread on this model, from its gaps; worked out again at most every ten minutes. */
+  keepWarmPolicyFor(home, model) {
+    const cached = this.keepWarmCached;
+    if (cached && cached.key === home.key && cached.model === `${model?.provider}/${model?.id}` && Date.now() - cached.at < 600_000) return cached.policy;
+    const id = /^\d+$/.test(String(home.conversationId)) ? Number(home.conversationId) : home.conversationId;
+    // Its own pings, so a gap they kept alive is not taken for how long the provider keeps a cache.
+    const pinged = (() => { try { return fs.readFileSync(path.join(this.dataRoot, "runtime", "prefix-watch.jsonl"), "utf8").split("\n")
+      .filter((line) => line.includes('"keepWarm":')).map((line) => JSON.parse(line)).filter((line) => line.key === home.key).map((line) => Date.parse(line.t)); } catch { return []; } })();
+    const policy = keepWarmPolicy({ model, gaps: requestGaps(this.file, id, 14, pinged) });
+    this.keepWarmCached = { at: Date.now(), key: home.key, model: `${model?.provider}/${model?.id}`, policy };
+    const shown = JSON.stringify(policy);
+    if (shown !== this.keepWarmShown) { this.keepWarmShown = shown; this.prefixWatch.note({ key: home.key, keepWarmPolicy: { model: `${model?.provider}/${model?.id}`, ...policy } }); }
+    return policy;
   }
 
   /** The home thread's conversation and cache key (its provider session), looked up at most once a minute. */
@@ -247,22 +262,17 @@ export class DurableRuntime {
     return this.homeKey;
   }
 
-  armKeepWarm(home, from, pings) {
+  armKeepWarm(home, from, pings, policy) {
     clearTimeout(this.keepWarmTimer);
-    this.keepWarmTimer = setTimeout(() => void this.pingCache(home.key, pings).catch((error) => console.warn("[cache] keep-warm failed", error?.message || error)),
-      Math.max(0, from + KEEP_WARM_MS - Date.now()));
+    this.keepWarmTimer = setTimeout(() => void this.pingCache(home.key, pings, policy).catch((error) => console.warn("[cache] keep-warm failed", error?.message || error)),
+      Math.max(0, from + policy.intervalMs - Date.now()));
     this.keepWarmTimer.unref?.();
   }
 
-  async pingCache(key, pings) {
+  async pingCache(key, pings, policy) {
     const home = await this.homeCacheKey();
     const saved = this.prefixWatch.last(key);
-    if (home?.key !== key || !saved || !this.agent?.enabled()) return;
-    // Gathering routines (gate "never") run without a model and never wake the thread.
-    const gatherers = new Set((await listRoutines(this.agent.folder).catch(() => [])).filter((item) => item.gate === "never").map((item) => item.name));
-    const wakes = Object.values((await this.agent.state())?.schedules || {}).filter((item) => !gatherers.has(item.routine))
-      .map((item) => Date.parse(item.nextAt)).filter(Number.isFinite);
-    if (pings >= KEEP_WARM_PINGS || !(Math.min(...wakes) - Date.now() < (KEEP_WARM_PINGS - pings) * KEEP_WARM_MS)) return;
+    if (home?.key !== key || !saved || !this.agent?.enabled() || pings >= policy.pings) return;
     let usage = null;
     const events = this.models.streamSimple(saved.model, { messages: [] }, { sessionId: key, cacheRetention: "long",
       onPayload: () => this.prefixWatch({ ...saved.params, __warm: true, max_output_tokens: 16 }, saved.model) });
@@ -270,9 +280,16 @@ export class DurableRuntime {
       if (event?.type === "error") console.warn("[cache] keep-warm failed", event.error?.errorMessage || "");
       if (event?.type === "done") usage = event.message?.usage;
     }
-    const input = (usage?.input || 0) + (usage?.cacheRead || 0);
-    this.prefixWatch.note({ key, keepWarm: pings + 1, input, cacheRead: usage?.cacheRead || 0, cost: usage?.cost?.total || 0 });
-    if (usage && usage.cacheRead >= 0.5 * input) this.armKeepWarm(home, Date.now(), pings + 1);
+    const input = (usage?.input || 0) + (usage?.cacheRead || 0) + (usage?.cacheWrite || 0);
+    const cost = usage?.cost?.total || 0;
+    this.prefixWatch.note({ key, keepWarm: pings + 1, input, cacheRead: usage?.cacheRead || 0, cost });
+    // What it cost is jbot's: its day (the budget) and the usage ledger, as the pings' own line.
+    if (usage) {
+      this.usage?.append({ t: "spend", d: this.usage.day(), c: "keep-warm", k: "tool:keep-warm",
+        v: [usage.input || 0, usage.output || 0, usage.cacheRead || 0, usage.cacheWrite || 0, cost] });
+      if (cost) await this.agent.update((doc) => { const day = this.agentDay?.() || new Date().toISOString().slice(0, 10); doc.spend[day] = (doc.spend[day] || 0) + cost; }).catch(() => {});
+    }
+    if (usage && usage.cacheRead >= 0.5 * input) this.armKeepWarm(home, Date.now(), pings + 1, policy);
   }
 
   async say(conversationId, content, whenBusy, context) {
@@ -345,10 +362,11 @@ export class DurableRuntime {
       // A restart drops the keep-warm timer: picked up again from the home thread's last request, once jbot is loaded.
       setTimeout(() => void this.homeCacheKey().then((home) => {
         const saved = home?.key && this.prefixWatch.last(home.key);
-        if (saved && Date.now() - saved.at < KEEP_WARM_MS) this.armKeepWarm(home, saved.at, 0);
+        const policy = saved && this.keepWarmPolicyFor(home, saved.model);
+        if (policy?.pings > 0 && Date.now() - saved.at < policy.intervalMs) this.armKeepWarm(home, saved.at, 0, policy);
       }).catch(() => {}), 30_000).unref?.();
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: cappedOutput(this.models, (params, model) => { this.keepWarm(params); return this.prefixWatch(params, model); }),
+        models: cappedOutput(this.models, (params, model) => { this.keepWarm(params, model); return this.prefixWatch(params, model); }),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
