@@ -91,8 +91,8 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 ### The `empty-pane` branch
 
-- [ ] 1. Approve `PaneHome` as a v2 extension: only the container that centres Home and styles the headings and
-  status line inside it.
+- [x] 1. Approve `PaneHome` as a v2 extension: only the container that centres Home and styles the headings and
+  status line inside it. Approved 2026-11-03; in DESIGN.md's Pane row.
 - [x] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×. Kept the
   header (it holds the shell, shortcuts and sessions) and gave it a document's ×: v2's `TermIdentity` takes `onClose`,
   a × after the terminal's name drawn as a lit tab's, closing the document as any is (`closeDocument`: the pane
