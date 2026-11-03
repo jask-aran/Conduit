@@ -56,6 +56,7 @@ import { mcpAccess } from "./server/mcp-access.js";
 import { BrowserHost, createBrowsers } from "./server/browser-host.js";
 import { tunnelTo } from "./nodes/remote-tunnel.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
+import { createBrowserProxy } from "./server/browser-proxy.js";
 import { registerSkillRoutes } from "./server/routes/skills.js";
 import { SkillStore } from "./skills/skill-store.js";
 import { createTerminalStream } from "./server/terminal-stream.js";
@@ -571,6 +572,22 @@ Object.assign(mcpAccess, { url: `http://${mcpHost}:${config.port}/v0/mcp/ui`, to
 const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
 app.use(mcp.beforeAuth);
 
+// Direct pages (Services › Browser, experimental): one proxy per origin Conduit is opened at, as a proxied page may be
+// framed only by that origin. Made on first use; a proxied page's origin is a port of this host, which a cookie does not
+// tell apart from Conduit's own, so nothing from one is answered here (below, and on upgrades).
+const browserProxies = new Map();
+const fromProxiedPage = (request) => { const origin = request.headers.origin; return Boolean(origin) && [...browserProxies.values()].some((proxy) => proxy.isProxyOrigin(origin)); };
+const browserProxyFor = (request) => {
+  const origin = request.headers.origin;
+  if (!origin || !browserHost.settings.direct) return null;
+  let host;
+  try { host = new URL(origin).host; } catch { return null; }
+  if (host !== request.headers.host) return null;
+  if (!browserProxies.has(origin)) browserProxies.set(origin, createBrowserProxy({ conduitOrigin: origin, host: config.host, cookieNames: ["conduit_session"] }));
+  return browserProxies.get(origin);
+};
+app.use((request, response, next) => fromProxiedPage(request) ? response.status(403).json({ error: "from_proxied_page" }) : next());
+
 const requireAuth = prepareAuthMiddleware(authStore);
 app.use(requireAuth);
 
@@ -656,7 +673,7 @@ const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: conf
 mcpAccess.browser = browserHost.mcpServer();
 // The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
 const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
-registerBrowserRoutes(app, { browsers });
+registerBrowserRoutes(app, { browsers, proxy: browserProxyFor });
 registerSkillRoutes(app, { skills });
 registerRuntimeRoutes(app, {
   uiControl,
@@ -1022,6 +1039,7 @@ const liveSessionStream = createLiveSessionStream({
 const handleUpgrade = async (request, socket, head) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
+  if (fromProxiedPage(request)) return socket.destroy();
   const match = pathname.match(/^\/v0\/live-sessions\/([a-f0-9-]{24,36})\/stream$/);
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";

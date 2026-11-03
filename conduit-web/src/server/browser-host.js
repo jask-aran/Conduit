@@ -52,7 +52,7 @@ const WITHHELD = new Set(["agent_browser_close", "agent_browser_tools_profiles"]
 const MCP_MS = 60_000;
 
 /** Services › Browser: its stream's frame rate (each viewer's, live) and JPEG quality (the browser's, from its start). */
-const DEFAULTS = { fps: 24, quality: 60, codec: "h264" };
+const DEFAULTS = { fps: 24, quality: 60, codec: "h264", direct: false };
 const CODECS = ["h264", "h265", "jpeg"];
 const FFMPEG = (() => {
   const name = process.env.CONDUIT_FFMPEG || (process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
@@ -226,6 +226,8 @@ export class BrowserHost {
     const next = { ...this.settings };
     if (patch?.fps !== undefined) { if (!FPS.includes(Number(patch.fps))) throw Object.assign(new Error("Frame rate is one of " + FPS.join(", ")), { status: 400 }); next.fps = Number(patch.fps); }
     if (patch?.quality !== undefined) { if (!QUALITY.includes(Number(patch.quality))) throw Object.assign(new Error("Quality is one of " + QUALITY.join(", ")), { status: 400 }); next.quality = Number(patch.quality); }
+    // Experimental: pages shown directly, proxied through the hub, rather than the shared browser's picture.
+    if (patch?.direct !== undefined) next.direct = patch.direct === true;
     if (patch?.codec !== undefined) { if (!CODECS.includes(patch.codec)) throw Object.assign(new Error("Picture codec is one of " + CODECS.join(", ")), { status: 400 }); next.codec = patch.codec; }
     const restart = next.quality !== this.settings.quality;
     this.settings = next;

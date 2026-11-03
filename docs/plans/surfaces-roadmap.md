@@ -121,7 +121,7 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 
 ### Browser and agents
 
-- [ ] 7. Browser document `browser:<id>`, version 1: a managed Chrome on the hub, always open; person and agent share
+- [x] 7. Browser document `browser:<id>`, version 1: a managed Chrome on the hub, always open; person and agent share
   one page by its id; shown by streaming (H.264); evaluate Vercel's agent-browser as the engine; check what v2's
   existing `ui-browser` family (`browser.css`) covers first. Built, with two differences to confirm: agent-browser
   (Apache-2.0, a Rust daemon over CDP) is the engine, and its own viewport stream is the transport -- JPEG frames over
@@ -136,13 +136,19 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   are given the server itself. `ui-browser` is the Computer's file explorer, so the pane is a new v2 family,
   Web (`WebView`, `WebAddress`, `WebScreen`; gallery Web). agent-browser is vendored (a dependency, 0.41.1; its native
   binaries come in the package, about 54 MB); `CONDUIT_AGENT_BROWSER` names another.
-- [ ] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
+  Confirmed 2026-11-03: starting on first use is right; the picture is now H.264 or H.265 encoded on the hub (ffmpeg),
+  JPEG kept as a choice and the fallback (Services › Browser › Picture).
+- [x] 8. Browser transport, version 2: proxy pages instead of streaming, each site on its own origin under the hub,
   security headers kept (frame-ancestors rewritten, the injected script admitted by a CSP nonce); streaming as the
   fallback for sites that refuse framing. Spiked (`docs/plans/browser-proxy-spike.md`,
   `conduit-web/scripts/spikes/browser-proxy-spike.mjs`): the header surgery works (framing, a nonce'd injected script,
   rewritten links, redirects, fetch, WebSocket, cookies), but ports are not cookie boundaries -- Conduit's own session
   cookie reached the proxied site -- so per-site origins need per-site hosts (a wildcard domain the person owns, not
   Tailscale names), and URLs built at runtime escape without a service worker. Recommendation: keep streaming.
+  Shipped 2026-11-03 as Services › Browser › Experimental › Direct pages, off by default and labelled partly broken:
+  `server/browser-proxy.js` (a listener per site origin, Conduit's cookies stripped, addresses checked and pinned against
+  SSRF, frame-ancestors and a nonce'd reporting script), `browser-proxy-view.tsx`; Conduit refuses any request or
+  upgrade whose Origin is a proxied page's. Per-site hosts, a service worker for runtime URLs and WebSockets remain.
 - [x] 9. Browsers on client devices, reachable from any other client through the hub. A device's node offers its
   own browser where it offers harnesses (a folder shared with commands, and agent-browser found): its own
   agent-browser session (`conduit-device`) and profile in the node's home (`nodes/node-agent.js`, a `browser` target:

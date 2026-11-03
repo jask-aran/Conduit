@@ -1,8 +1,9 @@
-import { createEffect, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ToolBar, LeadInput, WebScreen, WebView, IconButton } from "@/components/ui";
 import * as Icons from "@/components/ui/icons";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
+import { BrowserProxyView, proxyBack, proxyForward, proxyReload } from "./browser-proxy-view";
 
 /*
  * A Browser pane (`browser:<id>`, roadmap #7): the hub's browser, shared with Conduit's agents (server/browser-host.js,
@@ -11,7 +12,7 @@ import { webSocketUrl } from "../api/transport.js";
  * forward and reloads; and the page's viewport follows the pane's size.
  */
 type Codec = "h264" | "h265" | "jpeg";
-type PictureSettings = { settings: { codec: Codec }; video: boolean };
+type PictureSettings = { settings: { codec: Codec; direct?: boolean }; video: boolean };
 type Status = { id: string; available: boolean; running?: boolean; url?: string | null; title?: string | null; fps?: number };
 
 const BUTTONS: Record<number, string> = { 0: "left", 1: "middle", 2: "right" };
@@ -46,6 +47,11 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let jpegOnly = false;
   let decoder: VideoDecoder | null = null;
   let connecting = 0;
+  // Direct pages (Services › Browser, experimental): the hub's browser only; the page fetched through the hub's proxy and
+  // shown as itself, the bar driving it, with no stream while it is on.
+  const [direct, setDirect] = createSignal(false);
+  const [directUrl, setDirectUrl] = createSignal("");
+  let directFrame: HTMLIFrameElement | undefined;
 
   const act = (action: string, value?: unknown) => api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}/actions`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, value }) })
@@ -60,7 +66,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   const send = (event: Record<string, unknown>) => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event)); };
 
   // A blank page is the pane's own quiet start, not a white frame.
-  const blank = () => live() && !state() && (!status()?.url || status()!.url === "about:blank");
+  const blank = () => direct() ? !directUrl() : live() && !state() && (!status()?.url || status()!.url === "about:blank");
   const painted = () => { if (!live()) { setLive(true); setState(null); } };
   const closeDecoder = () => { if (decoder && decoder.state !== "closed") decoder.close(); decoder = null; };
   const draw = async (data: string) => {
@@ -97,7 +103,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     return { codec: "jpeg" };
   };
   const connect = async () => {
-    if (closed) return;
+    if (closed || direct()) return;
     const attempt = ++connecting;
     try {
       const selected = await selectCodec();
@@ -237,9 +243,10 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     }).catch(() => {});
     void Promise.all([
       api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}`),
-      api<PictureSettings>(`/v0/browsers/${encodeURIComponent(props.id)}/settings`).catch(() => ({ settings: { codec: "jpeg" as const }, video: false })),
+      api<PictureSettings>(`/v0/browsers/${encodeURIComponent(props.id)}/settings`).catch((): PictureSettings => ({ settings: { codec: "jpeg" }, video: false })),
     ]).then(([found, settings]) => {
       picture = settings;
+      setDirect(props.id === "hub" && settings.settings.direct === true);
       setStatus(found);
       // The page it is already on (a browser opened before, or by an agent): its address until the stream says another.
       if (!editing && found.url && found.url !== "about:blank") setAddress(found.url);
@@ -284,6 +291,8 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     setStatus(found); name(found);
     const reconnect = picture.settings.codec !== settings.settings.codec || picture.video !== settings.video;
     picture = settings;
+    const nowDirect = props.id === "hub" && settings.settings.direct === true;
+    if (nowDirect !== direct()) { setDirect(nowDirect); if (nowDirect) socket?.close(); else void connect(); return; }
     if (reconnect) { jpegOnly = false; socket?.close(); }
     else if (found.fps) send({ type: "config", maxFps: found.fps });
   }).catch(() => {});
@@ -298,6 +307,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     editing = false;
     setAddress(url);
     event.currentTarget.blur();
+    if (direct()) return void setDirectUrl(url);
     void act("open", url);
     screen?.focus();
   };
@@ -306,17 +316,20 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     {props.header}
     <WebView label="Hub browser">
       <ToolBar>
-        <IconButton label="Back" onClick={() => void act("back")}><Icons.Back /></IconButton>
-        <IconButton label="Forward" onClick={() => void act("forward")}><Icons.Forward /></IconButton>
-        <IconButton label="Reload" onClick={() => void act("reload")}><Icons.Refresh /></IconButton>
+        <IconButton label="Back" onClick={() => direct() ? directFrame && proxyBack(directFrame) : void act("back")}><Icons.Back /></IconButton>
+        <IconButton label="Forward" onClick={() => direct() ? directFrame && proxyForward(directFrame) : void act("forward")}><Icons.Forward /></IconButton>
+        <IconButton label="Reload" onClick={() => direct() ? directFrame && proxyReload(directFrame) : void act("reload")}><Icons.Refresh /></IconButton>
         <LeadInput kind="web" aria-label="Address" placeholder="Search or type an address" value={address()} lead={address().startsWith("https://") ? <Icons.Lock /> : <Icons.Browser />}
           onFocus={(event) => { editing = true; event.currentTarget.select(); }} onBlur={() => { editing = false; }}
           onInput={(event) => setAddress(event.currentTarget.value)} onKeyDown={go} />
       </ToolBar>
+      <Show when={!(direct() && directUrl())} fallback={<BrowserProxyView url={directUrl()} onFrame={(frame) => { directFrame = frame; }}
+        onPage={(page) => { if (!editing) setAddress(page.url); props.onTitle?.(page.title || new URL(page.url).host); }} />}>
       <WebScreen ref={(element: HTMLDivElement) => { screen = element; }} canvas={(element) => { canvas = element; }} live={live() && !blank()} aria-label="Page"
         state={blank() ? "Type an address or a search above." : state()?.text} tone={blank() ? "quiet" : state()?.tone} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerMove={onPointerMove}
         onWheel={onWheel} onKeyDown={(event) => key("keyDown", event)} onKeyUp={(event) => key("keyUp", event)} onPaste={onPaste}
         onContextMenu={(event) => event.preventDefault()} />
+      </Show>
     </WebView>
   </>;
 }

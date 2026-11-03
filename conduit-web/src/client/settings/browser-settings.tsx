@@ -1,12 +1,12 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { Button, Segmented, SettingDetails, SettingLine, SettingValue, Spinner, Group, Loading, Note } from "@/components/ui";
+import { Button, Segmented, SettingDetails, SettingLine, SettingValue, Spinner, Group, Loading, Note, Switch } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
 
 /** GET /v0/browsers/hub/settings (browser-host.js `describe`). */
 type BrowserSettings = {
   available: boolean; running?: boolean; url?: string | null; title?: string | null; engine: string; version: string | null; runsOn: string; profile: boolean;
-  video: boolean; settings: { fps: number; quality: number; codec: "h264" | "h265" | "jpeg" }; choices: { fps: number[]; quality: number[]; codec: BrowserSettings["settings"]["codec"][] };
+  video: boolean; settings: { fps: number; quality: number; codec: "h264" | "h265" | "jpeg"; direct?: boolean }; choices: { fps: number[]; quality: number[]; codec: BrowserSettings["settings"]["codec"][] };
 };
 const CODEC_LABELS = { h264: "H.264", h265: "H.265", jpeg: "JPEG" };
 const QUALITY_LABELS: Record<number, string> = { 30: "Low", 60: "Medium", 85: "High" };
@@ -32,7 +32,7 @@ export function BrowserSettings() {
     try { setFound(await request()); } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { setBusy(""); }
   };
-  const put = (patch: Partial<BrowserSettings["settings"]>) => run(patch.codec ? "codec" : patch.quality ? "quality" : "fps", () =>
+  const put = (patch: Partial<BrowserSettings["settings"]>) => run(patch.direct !== undefined ? "direct" : patch.codec ? "codec" : patch.quality ? "quality" : "fps", () =>
     api<BrowserSettings>("/v0/browsers/hub/settings", { method: "PUT", body: JSON.stringify(patch) }));
   const act = (action: "restart" | "clear") => run(action, () =>
     api("/v0/browsers/hub/actions", { method: "POST", body: JSON.stringify({ action }) }).then(() => api<BrowserSettings>("/v0/browsers/hub/settings")));
@@ -75,6 +75,16 @@ export function BrowserSettings() {
         <Segmented label="Quality" size="sm" value={String(browser().settings.quality)} disabled={!!busy()}
           options={browser().choices.quality.map((quality) => ({ value: String(quality), label: QUALITY_LABELS[quality] || String(quality) }))} onChange={(value) => void put({ quality: Number(value) })} />
       </SettingLine>
+    </Group>
+    <Group title="Experimental">
+      <SettingLine plain label="Direct pages" title="Browser panes show the page itself, fetched through the hub, instead of the shared browser's picture.">
+        <Switch label="Direct pages" checked={browser().settings.direct === true} disabled={!!busy()} onChange={(direct) => void put({ direct })} />
+      </SettingLine>
+      <Note>Partly broken by design: a page is fetched by the hub and shown in Conduit, so it is crisp and scrolls natively, but
+        it is not the browser your agents use, and many sites will not work. Links built by a page's scripts leave the proxy,
+        other sites' content loads from your own network, sites with bot checks refuse it, every proxied site shares cookies
+        with the others (they are ports of one host), it needs Conduit opened over plain http, and live connections
+        (WebSockets) do not pass. Conduit refuses anything a proxied page sends it.</Note>
     </Group>
     <Group title="Data">
       <SettingLine plain label="Signed-in sites" state={browser().profile ? "kept across restarts" : "kept while it runs"} title="The browser keeps its own profile on the hub: cookies, storage and history.">
