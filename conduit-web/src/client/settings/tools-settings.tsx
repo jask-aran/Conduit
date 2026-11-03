@@ -17,7 +17,8 @@ const ASKS = { never: "Runs", always: "Asks first", sometimes: "Sometimes asks" 
  * AI › Tools, read-only: a profile's tools as its chats get them. Conduit decides them from the profile's template
  * (durable-runtime.js, `selectionFor`); what asks is the agent policy's (policy.js, `askOf`). Nothing here is set.
  */
-export function ToolsSettings() {
+/** agent: start at the agent's profile (from a connector's tool count, in Account). */
+export function ToolsSettings(props: { agent?: boolean } = {}) {
   const [profiles, setProfiles] = createSignal<ProfileTools[] | null>(null);
   const [error, setError] = createSignal("");
   const [selected, setSelected] = createSignal("");
@@ -25,7 +26,9 @@ export function ToolsSettings() {
     setError("");
     return api<{ profiles: ProfileTools[] }>("/v0/profiles/tools").then(({ profiles }) => {
       setProfiles(profiles);
-      if (!profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
+      const agent = props.agent ? profiles.find((profile) => profile.agent)?.id : undefined;
+      if (agent) setSelected(agent);
+      else if (!profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
     }).catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
   onMount(() => void load());
@@ -65,7 +68,7 @@ export function ToolsSettings() {
           <Note>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
             connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</Note>
           <Note>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
-            plus devices and handoff. Connected accounts appear once a connector is connected (Models &amp; accounts).</Note>
+            plus devices and handoff. Connected accounts appear once a connector is connected (Account).</Note>
         </SettingDetails>
       </Group>
     </>}

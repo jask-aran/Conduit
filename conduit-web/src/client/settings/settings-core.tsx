@@ -337,6 +337,9 @@ export function Settings(props: {
   };
   // Search: every setting with a literal label (virtual:settings-index, read from this source), and each section by
   // name. A result opens its section and brings its line into view, marked for a moment.
+  // Tools opened from a connector's tool count (Account) starts at the agent's profile, whose tools those are.
+  const [toolsAtAgent, setToolsAtAgent] = createSignal(false);
+  createEffect(() => { if (section() !== "tools") setToolsAtAgent(false); });
   const [query, setQuery] = createSignal("");
   const results = createMemo(() => {
     const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -1375,9 +1378,9 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
-          <Show when={section() === "tools"}><ToolsSettings /></Show>
+          <Show when={section() === "tools"}><ToolsSettings agent={toolsAtAgent()} /></Show>
           <Show when={section() === "skills"}><SkillsSettings /></Show>
-          <Show when={section() === "account"}><AccountSettings /></Show>
+          <Show when={section() === "account"}><AccountSettings onOpenTools={() => { setToolsAtAgent(true); openSection("tools"); }} /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "server"}><ServerSettings projects={props.projects} /></Show>

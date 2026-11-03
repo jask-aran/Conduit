@@ -204,7 +204,14 @@ export const SettingTitle = (props: { value: string; label: string; editable?: b
 /** mono: the name is data (a model id, a tool's name), in the data face. */
 export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element }) => {
   const inner = () => <><span data-mono={props.mono ? "" : undefined}>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
-  return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title}>{inner()}</label>;
+  // A label hands a click anywhere on it to its control: right for a field, a switch or a menu, wrong for a button that
+  // acts (Disconnect, Remove). A click on the line, not on the button itself, is not that button's.
+  const guard = (event: MouseEvent) => {
+    const control = (event.currentTarget as HTMLLabelElement).control;
+    if (control instanceof HTMLButtonElement && !control.matches("[aria-haspopup], [role='switch'], [role='combobox'], [role='checkbox']")
+      && !(event.target as Element).closest("button, a, input, select, textarea")) event.preventDefault();
+  };
+  return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title} onClick={guard}>{inner()}</label>;
 };
 /**
  * A credential: its name and how it is held (state), then its actions: the caller's own first (actions: Sign in),
@@ -260,6 +267,9 @@ export function SettingCredential(props: {
 /** A setting's value that is read, not set; mono for ids, addresses and versions. */
 export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
 /** A link out, as a setting's control: Docs, Open sign-in. */
+/** A setting's state that leads somewhere in Settings ("6 tools" opens Tools): text in the state's voice, a button. */
+export const SettingStateLink = (props: { onClick: () => void; children: JSX.Element }) =>
+  <button type="button" class="ui-setting-state-link" onClick={() => props.onClick()}>{props.children}</button>;
 export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
 /** A line under a setting: what went wrong (error), or a quiet note. */
 /** More about a setting, folded under it until asked for. */
