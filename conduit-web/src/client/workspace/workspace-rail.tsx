@@ -91,7 +91,7 @@ export function WorkspaceRail(props: {
   return <ToolRail aria-label="Workspace tools" data-region="workspace-rail" foot={PANE_LAYOUTS[props.panes] || props.tools ? foot() : undefined}
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
     onDrop={(event) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onDock(drag.tool); } }}>
-    {props.windowControls}
+    <Show when={props.windowControls}>{props.windowControls}<RailRule /></Show>
     <Show when={props.tools}><For each={RAIL_TOOLS}>{(tool) => {
       const Icon = WORKSPACE_TOOL_ICONS[tool];
       const disabled = () => tool === "diff" && !props.sourceControlEnabled;

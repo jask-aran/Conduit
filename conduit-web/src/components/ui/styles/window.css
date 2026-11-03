@@ -1,7 +1,8 @@
 /* A desktop client's own window chrome (window.tsx): Conduit's bar, and the window's buttons. With the bar, everything
    below it is that much shorter and starts under it. */
 :root { --title-bar-height: 0px; }
-:root[data-title-bar="conduit"] { --title-bar-height: calc(var(--control) + var(--space-xs)); }
+/* As tall as Windows' own caption buttons (30px at 100%), so the bar is as slim as the caption it replaces. */
+:root[data-title-bar="conduit"] { --title-bar-height: var(--control-sm); }
 :root[data-title-bar="conduit"] body { padding-top: var(--title-bar-height); }
 .ui-title-bar { position: fixed; z-index: var(--layer-dock); inset: 0 0 auto 0; display: grid; height: var(--title-bar-height); grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; padding-left: var(--space-md); background: var(--frame); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
 .ui-title-bar-lead, .ui-title-bar-end { display: flex; min-width: 0; height: 100%; align-items: center; gap: var(--space-md); }
@@ -15,7 +16,7 @@
 .ui-window-controls[data-kind="bar"] { height: 100%; }
 .ui-window-controls[data-kind="bar"] > button { width: calc(var(--control) * 1.5); height: 100%; }
 /* At the top of the tool rail: the rail's own targets, stacked. */
-.ui-window-controls[data-kind="rail"] { flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-sm); }
+.ui-window-controls[data-kind="rail"] { flex-direction: column; gap: var(--space-2xs); }
 .ui-window-controls[data-kind="rail"] > button { width: var(--control); height: var(--control-sm); border-radius: var(--radius-control); }
 @media (hover: hover) {
   .ui-window-controls > button:hover { background: var(--tint); color: var(--foreground); }
@@ -24,3 +25,10 @@
 /* What the bar holds sizes to itself: a sidebar's control fills its row there, which here pushed the rest off. */
 .ui-title-bar .ui-server-control { width: auto; min-height: 0; }
 .ui-title-bar .ui-server-control[data-inline] .ui-server-copy > small { flex: none; }
+/* Quiet, as Windows' caption is: the bar's text in the label's weight and muted until pointed at; its icon buttons and
+   the search field fit inside the bar's height. */
+.ui-title-bar .ui-button { height: var(--control-xs); font-weight: var(--weight-rest); color: var(--muted-foreground); }
+@media (hover: hover) { .ui-title-bar .ui-button:hover { color: var(--foreground); } }
+.ui-title-bar .ui-icon-button { width: var(--control-xs); height: var(--control-xs); }
+.ui-title-bar-middle .ui-lead-input { width: var(--measure-sm); height: var(--control-xs); cursor: pointer; }
+.ui-title-bar-middle .ui-lead-input input { cursor: pointer; }
