@@ -18,7 +18,7 @@ export function prefixWatch(file) {
     saving = true;
     setTimeout(() => { saving = false; fs.writeFile(saved, JSON.stringify(Object.fromEntries(last)), () => {}); }, 1000).unref?.();
   };
-  // The last request per cache key, whole, for warmCache to send again; also on disk (the runtime DB holds the same
+  // The last request per cache key, whole, for keep-warm to send again; also on disk (the runtime DB holds the same
   // content), so a wake after a restart can still be warmed.
   const payloads = new Map();
   const dir = file.replace(/\.jsonl$/, "") + "-payloads";
@@ -66,6 +66,8 @@ export function prefixWatch(file) {
     if (params?.__warm) { const { __warm, ...rest } = params; return rest; }
     return undefined;
   };
+  // A line of the runtime's own about a request it made (a keep-warm ping and what it read from cache).
+  watch.note = (record) => fs.appendFile(file, JSON.stringify({ t: new Date().toISOString(), ...record, warm: true }) + "\n", () => {});
   watch.last = (key) => {
     if (!payloads.has(key)) { try { payloads.set(key, JSON.parse(fs.readFileSync(payloadFile(key), "utf8"))); } catch { return null; } }
     return payloads.get(key);
