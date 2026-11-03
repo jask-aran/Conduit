@@ -37,6 +37,22 @@ const base64 = (text) => Buffer.from(text, "utf8").toString("base64").replace(/.
 /** A header's value, with non-ASCII as RFC 2047 encoded words. */
 const header = (value) => /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 
+/**
+ * Whether the mail's From domain was proved by the server that received it (Cloudflare Email Routing): its own
+ * Authentication-Results, the topmost one (a sender can put forged ones below it, never above), from mx.cloudflare.net,
+ * with DMARC passing for the From domain and a DKIM signature of that domain passing.
+ */
+export function authenticatedFrom(mail) {
+  const domain = String(mail.from?.address || "").split("@")[1]?.toLowerCase();
+  if (!domain) return false;
+  const header = (mail.headers || []).find((item) => item.key === "authentication-results");
+  const value = String(header?.value || "").replace(/\s+/g, " ").toLowerCase();
+  if (!value.startsWith("mx.cloudflare.net")) return false;
+  const dmarc = new RegExp(`\\bdmarc=pass\\b[^;]*\\bheader\\.from=${domain.replace(/\./g, "\\.")}\\b`).test(value);
+  const dkim = new RegExp(`\\bdkim=pass\\b[^;]*\\bheader\\.d=${domain.replace(/\./g, "\\.")}\\b`).test(value);
+  return dmarc && dkim;
+}
+
 export class EmailChannel {
   constructor({ file, agent, log }) {
     this.file = file;
@@ -126,8 +142,11 @@ export class EmailChannel {
     const { own, quoted } = splitQuoted(whole);
     const text = own || whole;
     const body = text.length > BODY_MAX ? `${text.slice(0, BODY_MAX)}\n\n[… cut here: the rest is in ${dir}/]` : text;
-    const person = this.isPerson(mail.from?.address);
-    const native = { messageId, inReplyTo: mail.inReplyTo || null, references, subject: mail.subject || "", date: at,
+    // The person's only when their address is the sender AND the receiving server proved it: a From line alone is easy
+    // to forge (authenticatedFrom).
+    const authenticated = authenticatedFrom(mail);
+    const person = this.isPerson(mail.from?.address) && authenticated;
+    const native = { authenticated, messageId, inReplyTo: mail.inReplyTo || null, references, subject: mail.subject || "", date: at,
       from: mail.from || null, to: mail.to || [], cc: mail.cc || [], html: Boolean(mail.html), quoted: Boolean(own && quoted), folder: folder ? dir : null, attachments };
     const saved = folder ? `Saved in ${dir}/: message.eml${mail.html ? ", message.html" : ""}${attachments.map((item) => `, ${item.filename}`).join("")}` : null;
     // What jbot is given: where it came from, then the text; someone other than the person is data, never instructions.

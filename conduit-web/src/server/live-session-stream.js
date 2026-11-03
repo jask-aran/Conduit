@@ -320,7 +320,8 @@ export function createLiveSessionStream({
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
         ? command.streamingBehavior
         : null;
-      return sendPrompt(record, prepared, { streamingBehavior, messageId: offeredMessageId(command.messageId) });
+      // The person's own typing, from their client: the entry says so (the approval model trusts only such words).
+      return sendPrompt(record, prepared, { streamingBehavior, messageId: offeredMessageId(command.messageId), author: "person" });
     }
     if (command.type === "follow_up" || command.type === "steer") {
       const prepared = await promptForChat(record, command, String(command.message || ""));
@@ -342,7 +343,7 @@ export function createLiveSessionStream({
       }
       const queuedMessageId = offeredMessageId(command.messageId);
       const accepted = await adapter.queue(record.id, command.type, prepared.prompt,
-        { attachments: prepared.attachments, messageId: queuedMessageId });
+        { attachments: prepared.attachments, messageId: queuedMessageId, author: "person" });
       await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
         accepted?.attachmentIdentity || null, prepared.attachments);
       return null;
@@ -374,7 +375,7 @@ export function createLiveSessionStream({
         ...command,
         attachmentIds: interrupted.attachmentIds,
       }, interrupted.message));
-      return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId) });
+      return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId), author: "person" });
     }
     if (command.type === "stop_generation" || command.type === "abort") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
@@ -396,7 +397,7 @@ export function createLiveSessionStream({
       announceTruncation(record, command.entryId);
       await syncForkedChat(record, forked);
       const prepared = await withComposerModel(record, command, promptForChat(record, command, String(command.message || "")));
-      return sendPrompt(record, prepared, { sourceCheckpointId, messageId: offeredMessageId(command.messageId) });
+      return sendPrompt(record, prepared, { sourceCheckpointId, messageId: offeredMessageId(command.messageId), author: "person" });
     }
     if (command.type === "regenerate") {
       if (!adapter.getCapabilities().regenerate) throw Object.assign(new Error("This agent does not support regeneration"), { code: "regenerate_unsupported", status: 409 });

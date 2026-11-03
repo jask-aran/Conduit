@@ -60,7 +60,7 @@ export function actionView(held, canonicalCommands) {
 export function promptOf(policy, words, held, canonicalCommands) {
   const list = (items) => (items?.length ? items.map((item) => `- ${String(item).replace(/</g, "‹")}`).join("\n") : "(none)");
   const person = [
-    `Messages:\n${list((words?.messages || []).map((message) => message.text))}`,
+    `Messages:\n${list((words?.messages || []).map((message) => `${message.via ? `(${message.via}) ` : ""}${message.text}`))}`,
     `Past answers:\n${list((words?.answers || []).map((answer) => `${answer.choice}: ${answer.action}${answer.reason ? ` (${answer.reason})` : ""}`))}`,
     ...(words?.task ? [`Task they started:\n${String(words.task).replace(/</g, "‹")}`] : []),
   ].join("\n\n");

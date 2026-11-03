@@ -810,7 +810,7 @@ export class DurableAdapter extends EventEmitter {
       ...(options.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
     turn.opened = new Set([messageId]);
     try {
-      await this.submit(record, message, messageId, undefined, options.attachments, options.notice);
+      await this.submit(record, message, messageId, undefined, options.attachments, options.notice, options.author === "person" && !options.notice);
     } catch (cause) {
       // The turn was announced; one that never reached the conversation ends failed, not busy forever.
       this.publish(record, { type: "error", generationId: turn.generationId, scope: "runtime",
@@ -822,7 +822,9 @@ export class DurableAdapter extends EventEmitter {
     return { generationId: turn.generationId, attachmentIdentity: { messageId } };
   }
 
-  async submit(record, text, messageId, whenBusy, attachments = [], isNotice = false) {
+  // `byPerson`: typed by the person in their own client (live-session-stream's client commands), stamped on the entry as
+  // `author: "person"`; nothing the hub generates (notices, wakes, steers, reports) carries it.
+  async submit(record, text, messageId, whenBusy, attachments = [], isNotice = false, byPerson = false) {
     this.assertWritable(record);
     const summary = attachmentSummary(attachments);
     const expanded = await this.expandInput(record, text, { messageId, whenBusy, summary });
@@ -830,7 +832,7 @@ export class DurableAdapter extends EventEmitter {
     const submission = await submitWithNotes(this.runtime, record.conversation, {
       type: "input", content: expanded, requestId: messageId, ...(whenBusy ? { whenBusy } : {}),
       entry: { kind: USER_ENTRY, data: { messageId, text, timestamp: new Date().toISOString(),
-        ...(summary.length ? { attachments: summary } : {}) } },
+        ...(summary.length ? { attachments: summary } : {}), ...(byPerson ? { author: "person" } : {}) } },
     }, this.context, { jbot: record.templateId === "agent", freshPerson: !whenBusy && !isNotice,
       prepare: (content) => promptInput(content, attachments, { onDevice: Boolean(record.nodeId), processor: this.runtime.images }),
     });
@@ -1283,7 +1285,7 @@ export class DurableAdapter extends EventEmitter {
     this.assertWritable(record);
     if (!record) throw failure("No Conduit runtime session", "backend_unavailable", 404);
     const messageId = options.messageId || crypto.randomUUID();
-    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || [], options.notice);
+    await this.submit(record, message, messageId, type === "steer" ? "steer" : "followUp", options.attachments || [], options.notice, options.author === "person" && !options.notice);
     return { attachmentIdentity: { messageId } };
   }
 

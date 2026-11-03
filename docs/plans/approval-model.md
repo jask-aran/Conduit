@@ -136,6 +136,24 @@ tool-permissions; nvd.nist.gov CVE-2026-48721; arXiv 2503.18813 (CaMeL), 2506.08
   - always the person's: send to someone new; delete anything; pay or transfer; share a file or calendar outside;
     change account, security or forwarding settings.
 
+## Authenticated channels (2026-11-03)
+
+The judge takes the person's intent from wherever they gave it, as long as the channel proves they wrote it:
+
+| Channel | Proof |
+|---|---|
+| app (the agent's page) | logged by POST /v0/agent/messages before it reaches the thread |
+| thread (typed in the chat) | the entry's `author: "person"`, stamped only by the server's client-command path |
+| email | from one of the person's addresses, with the receiving server's own verdict (Cloudflare's topmost Authentication-Results: DMARC and DKIM pass for the From domain) |
+
+A From line alone no longer makes a mail the person's. Each message reaches the judge with its channel. Next:
+SMS and other channels join the same way (a proof at intake, recorded on the message); for mail that arrives without a
+server verdict, Executor can confirm a message is the person's by finding it in their own Sent mail.
+
+No shared approval thread: each decision is one stateless request whose fixed prefix (instructions, then policy) comes
+first, so a provider caches it when it is long enough; a thread would grow, and carry one action's content into the
+next decision.
+
 ## Open
 
 Nothing blocking the build.

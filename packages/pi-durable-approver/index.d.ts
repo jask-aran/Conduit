@@ -43,7 +43,8 @@ export interface Policy {
 
 /** Trusted intent: the person's own words. Never the agent's prose, tool output, mail or web content. */
 export interface PersonWords {
-  messages: { text: string; at?: string }[];
+  /** `via`: the authenticated channel it came by (the host's names: app, thread, email, sms…), shown to the judge. */
+  messages: { text: string; at?: string; via?: string }[];
   /** Their past answers to escalations: the action (as `describeAction`) and what they chose. */
   answers?: { action: string; choice: "allow" | "deny"; reason?: string; at?: string }[];
   /** A task they started, in their words (a run they asked for). */
