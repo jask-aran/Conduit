@@ -113,6 +113,9 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         </SettingLine>
       </Group>
       <Group title="Routine">
+        <SettingLine label="Email" title="Every 30 minutes, new mail from each Gmail account connected in Executor goes into its context inbox, for the heartbeat to weigh. Run it now from its row under Timed.">
+          <Switch label="Email" checked={current().email?.enabled === true} onChange={(enabled) => set({ email: { enabled } })} />
+        </SettingLine>
         <SettingLine label="Morning brief" title="A short brief in its home thread each morning: what happened, what is coming, what waits on you.">
           <Switch label="Morning brief" checked={current().brief.enabled} onChange={(enabled) => set({ brief: { ...current().brief, enabled } })} />
         </SettingLine>

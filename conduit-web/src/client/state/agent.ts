@@ -31,7 +31,7 @@ export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */
   projectId?: string;
-  settings?: { name: string; dial: AgentDial; youAsk?: boolean; executorDecides?: boolean; remindMinutes?: number; budgetUsdPerDay: number; timezone: string; brief: { enabled: boolean; at: string }; heartbeat: { enabled: boolean; everyMinutes: number }; quietHours: { enabled: boolean; start: string; end: string }; work: Record<AgentWorkKind, AgentWork | null> };
+  settings?: { name: string; dial: AgentDial; youAsk?: boolean; executorDecides?: boolean; remindMinutes?: number; budgetUsdPerDay: number; timezone: string; email?: { enabled: boolean }; brief: { enabled: boolean; at: string }; heartbeat: { enabled: boolean; everyMinutes: number }; quietHours: { enabled: boolean; start: string; end: string }; work: Record<AgentWorkKind, AgentWork | null> };
   home?: { chatId: string; conversationId: number } | null;
   sides?: Array<{ chatId: string; title: string; updatedAt?: string }>;
   spentToday?: number;

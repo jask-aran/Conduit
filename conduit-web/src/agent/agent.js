@@ -39,6 +39,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   brief: { enabled: true, at: "08:00" },
   // Shown from (and written through to) routines/morning-brief.md and routines/heartbeat.md, which hold them.
   heartbeat: { enabled: true, everyMinutes: 60 },
+  // New mail into the context inbox (routines/email.md, packaged with Conduit): opt in, since it reads the person's mail.
+  email: { enabled: false },
   // Notifications respect these hours; work continues.
   quietHours: { enabled: true, start: "23:00", end: "07:00" },
   nightlyCompaction: { enabled: true, minTokens: 100000, minShare: 0.25 },
@@ -129,6 +131,7 @@ export class PersistentAgent {
       timezone: saved.timezone && validZone(saved.timezone) ? saved.timezone : hostZone(),
       brief: { ...DEFAULT_SETTINGS.brief, ...(saved.brief || {}) },
       heartbeat: { ...DEFAULT_SETTINGS.heartbeat, ...(saved.heartbeat || {}) },
+      email: { ...DEFAULT_SETTINGS.email, ...(saved.email || {}) },
       quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(saved.quietHours || {}) },
       nightlyCompaction: { ...DEFAULT_SETTINGS.nightlyCompaction, ...(saved.nightlyCompaction || {}) },
       work: { ...DEFAULT_SETTINGS.work, ...(saved.work || {}) },
@@ -181,6 +184,11 @@ export class PersistentAgent {
       }
       next.heartbeat = { enabled: heartbeat.enabled, everyMinutes: every };
     }
+    if (patch.email !== undefined) {
+      const email = { ...this.settings().email, ...patch.email };
+      if (typeof email.enabled !== "boolean") fail("email is { enabled }");
+      next.email = { enabled: email.enabled };
+    }
     if (patch.quietHours !== undefined) {
       const quiet = { ...this.settings().quietHours, ...patch.quietHours };
       if (typeof quiet.enabled !== "boolean" || !clock(quiet.start) || !clock(quiet.end) || quiet.start === quiet.end) {
@@ -214,6 +222,7 @@ export class PersistentAgent {
       trigger: next.brief.at ? updateTrigger(routine.trigger, "at", { time: next.brief.at }) : routine.trigger }));
     if (patch.heartbeat) await this.adjustRoutine("heartbeat", (routine) => ({ ...routine, enabled: next.heartbeat.enabled !== false,
       trigger: patch.heartbeat.everyMinutes ? updateTrigger(routine.trigger, "every", { minutes: next.heartbeat.everyMinutes }) : routine.trigger }));
+    if (patch.email) await this.adjustRoutine("email", (routine) => ({ ...routine, enabled: next.email.enabled }));
     if (next.name && this.project?.name !== next.name) this.project = await this.projects.rename(this.project.id, next.name).catch(() => this.project) || this.project;
     // The home thread is titled with the name until the person retitles it.
     const home = (await this.state()).home?.chatId;
@@ -398,7 +407,8 @@ export class PersistentAgent {
   /** Settings as the person sees them: the brief's and heartbeat's from their routine files. */
   async shownSettings() {
     const settings = this.settings();
-    const [brief, beat] = await Promise.all(["morning-brief", "heartbeat"].map((name) => readRoutine(this.folder, name).catch(() => null)));
+    const [brief, beat, mail] = await Promise.all(["morning-brief", "heartbeat", "email"].map((name) => readRoutine(this.folder, name).catch(() => null)));
+    if (mail) settings.email = { enabled: mail.enabled };
     if (brief) settings.brief = { enabled: brief.enabled, at: settingRule(brief.trigger, "at")?.time || settings.brief.at };
     if (beat) settings.heartbeat = { enabled: beat.enabled, everyMinutes: settingRule(beat.trigger, "every")?.minutes ?? settings.heartbeat.everyMinutes };
     return settings;
