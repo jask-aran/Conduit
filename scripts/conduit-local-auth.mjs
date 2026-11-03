@@ -40,7 +40,8 @@ export async function mintLocalSession({
   if (!store.hasPassword()) {
     throw new Error("No Conduit password is configured; refuse to mint a session");
   }
-  const { token, session } = await store.createSession({ userAgent });
+  // A script's own session: it lapses an hour after its last use and never counts toward the device cap.
+  const { token, session } = await store.createSession({ userAgent, kind: "script" });
   await store.load({ force: true });
   return {
     token,

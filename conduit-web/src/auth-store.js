@@ -13,6 +13,16 @@ const MAX_SESSIONS = 20;
 const SCRYPT_MAX_MEM = 192 * 1024 * 1024;
 const TOKEN_BYTES = 32;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/*
+ * Sessions a script mints for itself (conduit-auth mint-session, probes, reports): `kind: "script"`. They lapse an hour
+ * after their last use and never count toward MAX_SESSIONS, so a probe that crashed before signing out cannot push a
+ * real device's sign-in out, and nothing needs clearing by hand. Those minted before the kind existed are known by
+ * their agent names.
+ */
+const SCRIPT_TTL_MS = 60 * 60 * 1000;
+const MAX_SCRIPT_SESSIONS = 50;
+const SCRIPT_AGENTS = new Set(["probe", "cache-report", "conduit-local-agent"]);
+const scriptSession = (session) => session.kind === "script" || SCRIPT_AGENTS.has(session.userAgent);
 const LAST_SEEN_REFRESH_MS = 60 * 1000;
 const LOCK_POLL_MS = 20;
 const LOCK_TIMEOUT_MS = 15 * 1000;
@@ -53,7 +63,7 @@ function normalizeAuthFile(raw) {
         createdAt: session.createdAt || null,
         lastSeenAt: session.lastSeenAt || null,
         userAgent: typeof session.userAgent === "string" ? session.userAgent : null,
-        kind: session.kind === "native" ? "native" : "browser",
+        kind: session.kind === "native" || session.kind === "script" ? session.kind : "browser",
       })) : [],
     // One-time sign-in codes `conduit-server open` hands a browser; a minute each.
     handoffs: Array.isArray(raw.handoffs) ? raw.handoffs
@@ -107,7 +117,7 @@ function expiredSession(session, now = Date.now()) {
   const created = session.createdAt ? new Date(session.createdAt).getTime() : null;
   const anchor = lastSeen ?? created;
   if (anchor == null) return false;
-  return now - anchor > SESSION_TTL_MS;
+  return now - anchor > (scriptSession(session) ? SCRIPT_TTL_MS : SESSION_TTL_MS);
 }
 
 function revisionFor(content) {
@@ -235,10 +245,11 @@ async function acquireAuthLock(filePath) {
 function appendSession(data, session) {
   data.sessions = data.sessions.filter((item) => !expiredSession(item));
   data.sessions.push(session);
-  if (data.sessions.length > MAX_SESSIONS) {
-    data.sessions.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
-    data.sessions = data.sessions.slice(data.sessions.length - MAX_SESSIONS);
-  }
+  // Each kind is capped on its own, oldest first: scripts never take a device's place.
+  const byAge = (list) => list.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
+  const scripts = byAge(data.sessions.filter(scriptSession)).slice(-MAX_SCRIPT_SESSIONS);
+  const people = byAge(data.sessions.filter((item) => !scriptSession(item))).slice(-MAX_SESSIONS);
+  data.sessions = [...people, ...scripts];
 }
 
 export class AuthStore {
@@ -515,6 +526,8 @@ export function statusSummary(store) {
   const data = store.data || { password: null, sessions: [] };
   return {
     hasPassword: Boolean(data.password),
-    sessionCount: data.sessions ? data.sessions.length : 0,
+    // Devices and browsers signed in: what the cap is about; scripts' own sessions are counted apart.
+    sessionCount: data.sessions ? data.sessions.filter((item) => !scriptSession(item) && !expiredSession(item)).length : 0,
+    scriptSessions: data.sessions ? data.sessions.filter((item) => scriptSession(item) && !expiredSession(item)).length : 0,
   };
 }
