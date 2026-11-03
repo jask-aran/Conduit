@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, Index, Match, onCleanup, Show, 
 import type { AgentSummary, Message, ToolItem, ToolKind } from "../api/contracts";
 import { spawned, TurnAgents } from "./agents";
 import type { TraceSegment, TurnTraceData } from "../turn-rows";
-import { elapsed, KIND_ICONS, scriptSaid, stepDuration, stepKind, stepText, stepVerb, toolName, ToolStep, VERBS } from "./tool-card";
+import { elapsed, KIND_ICONS, scriptSaid, stepDuration, stepKind, stepText, stepVerb, toolName, ToolStep, toolStepBody, toolStepLine, VERBS } from "./tool-card";
 import { Orb, ServiceIcon, Step, StepProse, StepSections, Trace, TraceError as LibraryTraceError, Trail } from "@/components/ui";
 import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
@@ -371,6 +371,15 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
     <StepSections loading={!text() && !failure()} error={failure() || undefined} sections={sections()} tools={toolNames()} />
   </Step>;
 }
+/* What a trail line reads once its trace is open and the line itself opened, for find in chat (registerFoldFind). */
+function trailText(item: TrailItem): string {
+  if (item.type === "text") return `${summaryOf(item.segment.text)}\n${item.segment.text}`;
+  if (item.type === "tool") return `${toolStepLine(item.tool)}\n${toolStepBody(item.tool)}`;
+  if (item.type === "group") return [GROUP_WORDS[item.kind](item.tools.length), ...item.tools.map((tool) => `${toolStepLine(tool)}\n${toolStepBody(tool)}`)].join("\n");
+  if (item.type === "error") return item.message.errorMessage || "The model request failed.";
+  if (item.type === "hidden") return "Reasoning not shared by the provider";
+  return "";
+}
 function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
@@ -379,7 +388,7 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       const summary = inline(props, () => summaryOf(segment().text));
       const thought = createMemo(() => segment().kind === "thinking");
-      return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
+      return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle} find={() => segment().text}>
         <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>
@@ -393,7 +402,8 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       const tools = () => (item() as Extract<TrailItem, { type: "group" }>).tools, kind = () => (item() as Extract<TrailItem, { type: "group" }>).kind;
       const fold = useFold(() => `group:${tools()[0]!.toolCallId}`, props);
       return <Step icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={GROUP_WORDS[kind()](tools().length)} state={!props.settled && tools().some((tool) => !tool.done) ? "running" : undefined}
-        time={stepDuration(tools()[0]!.timestamp, tools().at(-1)!.completedAt) || undefined} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}>
+        time={stepDuration(tools()[0]!.timestamp, tools().at(-1)!.completedAt) || undefined} motion={motion()} opens open={fold.open()} onToggle={fold.toggle}
+        find={() => tools().map((tool) => `${toolStepLine(tool)}\n${toolStepBody(tool)}`).join("\n")}>
         <Trail nested="group"><Index each={tools()}>{(tool) => { const inner = useFold(() => tool().toolCallId, props);
           return <ToolStep tool={tool()} settled={props.settled} open={inner.open()} onToggle={inner.toggle} />; }}</Index></Trail>
       </Step>;
@@ -508,7 +518,8 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
       work={settledRun() ? undefined : preview().work || undefined}
       latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
-      opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}>
+      opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}
+      find={looked() ? undefined : () => trail().map(trailText).join("\n")}>
       {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
         <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}

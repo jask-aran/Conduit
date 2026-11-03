@@ -90,6 +90,24 @@ export function stepDuration(from?: string, to?: string): string {
   return elapsed(ms);
 }
 
+/* For find in chat (registerFoldFind): a step's line as drawn, and what opening it draws -- its diff, its calls'
+   lines, its output's preview -- from the data, so a closed step's text is found without drawing it. Settled steps;
+   a running one's words differ only in tense. */
+export function toolStepLine(tool: ToolItem): string {
+  const said = tool.kind === "script" ? scriptSaid(tool, false) : null;
+  const item: Said = said?.call ?? tool;
+  const kind = stepKind(item), parts = stepParts(item);
+  const subject = parts.subject || (kind === "other" || kind === "script" ? "" : tool.name || "");
+  return [stepVerb(item, false), subject, parts.aside, said?.more ? `and ${said.more} more` : ""].filter(Boolean).join(" ");
+}
+export function toolStepBody(tool: ToolItem): string {
+  const output = stringify(tool.output ?? (tool.kind === "script" ? "" : tool.input ?? {}));
+  const preview = output.length <= MAX_PREVIEW ? output : commandTools.has(String(tool.name || "").toLowerCase()) ? output.slice(-MAX_PREVIEW) : output.slice(0, MAX_PREVIEW);
+  const diff = tool.facts?.diff?.length ? tool.facts.diff.map((line) => line.text).join("\n") : "";
+  const calls = (tool.calls || []).filter((call) => !call.earlier).map((call) => [stepVerb(call, false), toolName(stepParts(call).subject), stepParts(call).aside].filter(Boolean).join(" ")).join("\n");
+  return [diff, calls, !diff || tool.isError ? preview : ""].filter(Boolean).join("\n");
+}
+
 /* A tool step: the library's Step, StepOutput, a code-mode script's calls as a Trail of quiet Steps. `open`,
    `onToggle` are the trail's; its body is drawn the first time it opens (the Step's opens). Output a reload
    left on the server is fetched the first time it is opened. */
@@ -115,7 +133,7 @@ export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boole
   return <Step label={`${props.tool.name || "Tool"} ${status()}`} icon={<Dynamic component={KIND_ICONS[kind()]} />} verb={verb()} subject={subject() || undefined} face={parts().face} aside={aside()}
     changes={changes()} time={stepTime(props.tool.timestamp, props.tool.completedAt) || undefined}
     state={status() === "done" ? undefined : status() as "running" | "failed" | "stopped"} opens open={props.open} motion={props.motion}
-    onToggle={props.onToggle}>
+    onToggle={props.onToggle} find={() => toolStepBody(props.tool)}>
     <>
       <Show when={facts()?.diff?.length}><StepDiff lines={facts()!.diff!} hidden={(facts()!.added || 0) + (facts()!.removed || 0) > facts()!.diff!.filter((line) => line.sign !== "\u2026").length ? (facts()!.added || 0) + (facts()!.removed || 0) - facts()!.diff!.filter((line) => line.sign !== "\u2026").length : undefined} /></Show>
       {/* A script that made one call is said as that call already: its list would say it again. */}

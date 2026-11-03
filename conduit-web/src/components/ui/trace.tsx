@@ -3,7 +3,7 @@ import { For, Show, splitProps, type JSX } from "solid-js";
 
 import { Button, Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
-import { Failure, foldBody } from "./transcript";
+import { Failure, foldBody, registerFoldFind } from "./transcript";
 
 /**
  * quiet: a piece of work between what a turn says, not the turn's summary: its status at the line's weight.
@@ -26,10 +26,12 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
  * (entering fades it in), and how far into it it already is. opens: the trail is drawn only once opened (foldBody).
  * pinned: what the fold never hides, between the head and the trail (a turn's subagents, AgentRows).
  */
-export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; children?: JSX.Element }) {
+/* find: what the closed trail would read, for find in chat (registerFoldFind). */
+export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; find?: () => string; children?: JSX.Element }) {
   const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "quiet", "open", "onToggle"]);
   const { body, opens } = foldBody({ get opens() { return local.opens; }, get open() { return head.open; }, get children() { return local.children; } });
-  return <div class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
+  return <div ref={(element) => { if (local.find) registerFoldFind(element, () => local.find!(), () => { if (!head.open) head.onToggle?.(); }); }}
+    class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-find-fold={local.find && opens() && !head.open ? "" : undefined} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
     {local.pinned}
     <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
@@ -48,7 +50,7 @@ export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier"
  * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps;
  * opens: they are drawn only once it has opened (foldBody).
  */
-export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; face?: "code" | "text"; aside?: string; changes?: { added: number; removed: number }; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element }) {
+export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; face?: "code" | "text"; aside?: string; changes?: { added: number; removed: number }; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element ; find?: () => string}) {
   const fold = foldBody(props), body = fold.body;
   const opens = () => fold.opens() && !props.note;
   const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
@@ -59,7 +61,8 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
       <Show when={props.changes}>{(changes) => <span class="ui-step-changes"><Show when={changes().added}><span data-change="added">+{changes().added}</span></Show><Show when={changes().removed}><span data-change="removed">{"\u2212"}{changes().removed}</span></Show></span>}</Show>
       <Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
   </>;
-  return <li class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
+  return <li ref={(element) => { if (props.find) registerFoldFind(element, () => props.find!(), () => { if (!props.open) props.onToggle?.(); }); }}
+    data-find-fold={props.find && opens() && !props.open ? "" : undefined} class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
       <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
       <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>

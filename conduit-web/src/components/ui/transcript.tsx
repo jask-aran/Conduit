@@ -136,6 +136,14 @@ export const Changes = (props: { added: number; removed: number; title?: string;
  * the body is drawn the first time it opens and kept from then on, so it folds closed with its motion and a long
  * trail costs nothing until it is read. Without, the children are drawn to learn whether there is anything to open.
  */
+/*
+ * Find reaches what a closed fold has not drawn (client/chat/transcript-find.ts). A fold given `find` (Trace, Step) is
+ * marked data-find-fold while closed and registered here: `text` is what opening it would draw, read only when a
+ * search runs; `open` opens it, so a match inside can be shown. Matches are counted where the fold is.
+ */
+const foldFinds = new WeakMap<Element, { text: () => string; open: () => void }>();
+export const foldFindOf = (element: Element) => foldFinds.get(element);
+export const registerFoldFind = (element: Element, text: () => string, open: () => void) => { foldFinds.set(element, { text, open }); };
 export function foldBody(props: { opens?: boolean; open?: boolean; children?: JSX.Element }) {
   const [seen, setSeen] = createSignal(Boolean(props.open));
   createRenderEffect(() => { if (props.open) setSeen(true); });

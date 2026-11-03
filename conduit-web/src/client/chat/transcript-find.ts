@@ -1,4 +1,5 @@
 import { batch, createSignal, onCleanup } from "solid-js";
+import { foldFindOf } from "@/components/ui/transcript";
 
 /*
  * Find in chat (docs/plans/keyboard-model.md, gap 6): the pane's own find, in place of the browser's.
@@ -6,8 +7,10 @@ import { batch, createSignal, onCleanup } from "solid-js";
  * What it searches is the thread's text as drawn. The transcript's virtualization is content-visibility, not
  * unmounting (transcript-visibility.ts): a block far from the screen is skipped by layout and paint, or taken out of
  * layout, but its text nodes stay in the DOM, so every loaded message is searchable and a hit is exactly what gets
- * highlighted -- the message data would count Markdown's syntax and miss what a renderer adds. Earlier messages not
- * yet loaded, and a closed trace's steps (not rendered until opened), are not searched.
+ * highlighted -- the message data would count Markdown's syntax and miss what a renderer adds. What a closed fold (a
+ * turn's trace, a step's output) has not drawn is searched in memory, from the text the fold says it would draw
+ * (registerFoldFind): its hits count where the fold is, and stepping onto one opens the fold and lands on the match it
+ * then draws. No network: every harness but OpenCode sends the whole chat; OpenCode's unloaded pages are not searched.
  *
  * Matches are painted with the CSS Custom Highlight API (no DOM is touched; ::highlight rules in styles/find.css),
  * one registry entry for every pane's matches so two panes can each have a find open.
@@ -17,17 +20,37 @@ import { batch, createSignal, onCleanup } from "solid-js";
 const ROW = '[data-slot="message-scroller-item"]';
 /* Not text the reader reads: controls and their labels, times, icons, KaTeX's MathML twin, a skeleton. Rejected as
    elements, so the walk never enters them. */
-const SKIP = "button, time, svg, script, style, textarea, input, .katex-mathml, .markdown-skeleton, .ui-message-foot";
+const SKIP = "button, time, svg, script, style, textarea, input, .katex-mathml, .markdown-skeleton, .ui-message-foot, .ui-disclosure[data-open=false] > .ui-disclosure-body";
+/* A closed fold whose body find reads from memory. A body drawn once and closed again is skipped (SKIP) and read the
+   same way, so what is counted is what opening shows. */
+const FOLD = "[data-find-fold]";
 const MAX_MATCHES = 2000;
 
 export type FindMatch = { range: Range; row: HTMLElement };
+/** A match inside a closed fold: its `nth` there, found in the text the fold would draw. */
+type FoldHit = { fold: HTMLElement; nth: number; row: HTMLElement };
+type Entry = FindMatch | FoldHit;
+const inFold = (entry: Entry | undefined): entry is FoldHit => Boolean(entry && "fold" in entry);
+const occurrences = (text: string, needle: string) => {
+  const haystack = text.toLowerCase();
+  let count = 0;
+  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) count++;
+  return count;
+};
+// The closed folds of a row that find reads (not one inside another closed fold, or inside a closed body).
+const rowFolds = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>(FOLD)].filter((fold) => {
+  const up = fold.parentElement?.closest(`${FOLD}, .ui-disclosure[data-open=false] > .ui-disclosure-body`);
+  return !up || !row.contains(up);
+});
 
-/** Every match of `query` (case-insensitive) in the thread's rows, in reading order. A match never spans two rows. */
-export function findMatches(thread: HTMLElement, query: string): FindMatch[] {
+/** Every match of `query` (case-insensitive) in the thread's rows, in reading order: drawn text, and closed folds'
+ *  hits where the folds are. A match never spans two rows. */
+export function findMatches(thread: HTMLElement, query: string): Entry[] {
   const needle = query.toLowerCase();
   if (!needle) return [];
-  const matches: FindMatch[] = [];
+  const matches: Entry[] = [];
   for (const row of thread.querySelectorAll<HTMLElement>(`:scope > ${ROW}`)) {
+    const drawn: FindMatch[] = [];
     const nodes: Text[] = [], starts: number[] = [];
     let text = "";
     const walker = document.createTreeWalker(row, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
@@ -41,27 +64,41 @@ export function findMatches(thread: HTMLElement, query: string): FindMatch[] {
       starts.push(text.length);
       text += value;
     }
-    if (!nodes.length) continue;
     const haystack = text.toLowerCase();
     // toLowerCase keeps lengths for everything but a few letters (İ); offsets that drift would point past a node.
-    if (haystack.length !== text.length) continue;
-    // The node holding offset `at`, by binary search over the nodes' starts.
-    const nodeAt = (at: number, end: boolean) => {
-      let low = 0, high = nodes.length - 1;
-      while (low < high) {
-        const middle = (low + high + 1) >> 1;
-        if (starts[middle]! < at || (!end && starts[middle] === at)) low = middle; else high = middle - 1;
+    if (nodes.length && haystack.length === text.length) {
+      // The node holding offset `at`, by binary search over the nodes' starts.
+      const nodeAt = (at: number, end: boolean) => {
+        let low = 0, high = nodes.length - 1;
+        while (low < high) {
+          const middle = (low + high + 1) >> 1;
+          if (starts[middle]! < at || (!end && starts[middle] === at)) low = middle; else high = middle - 1;
+        }
+        return low;
+      };
+      for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
+        const first = nodeAt(at, false), last = nodeAt(at + needle.length, true);
+        const range = document.createRange();
+        range.setStart(nodes[first]!, at - starts[first]!);
+        range.setEnd(nodes[last]!, at + needle.length - starts[last]!);
+        drawn.push({ range, row });
       }
-      return low;
-    };
-    for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
-      const first = nodeAt(at, false), last = nodeAt(at + needle.length, true);
-      const range = document.createRange();
-      range.setStart(nodes[first]!, at - starts[first]!);
-      range.setEnd(nodes[last]!, at + needle.length - starts[last]!);
-      matches.push({ range, row });
-      if (matches.length >= MAX_MATCHES) return matches;
     }
+    // A fold's hits go after the drawn matches before it (its own header's included) and before those after it.
+    let next = 0;
+    for (const fold of rowFolds(row)) {
+      const text = foldFindOf(fold)?.text();
+      const count = text ? occurrences(text, needle) : 0;
+      if (!count) continue;
+      while (next < drawn.length) {
+        const position = fold.compareDocumentPosition(drawn[next]!.range.startContainer);
+        if (position & Node.DOCUMENT_POSITION_FOLLOWING && !(position & Node.DOCUMENT_POSITION_CONTAINED_BY)) break;
+        matches.push(drawn[next++]!);
+      }
+      for (let nth = 0; nth < count; nth++) matches.push({ fold, nth, row });
+    }
+    matches.push(...drawn.slice(next));
+    if (matches.length >= MAX_MATCHES) return matches.slice(0, MAX_MATCHES);
   }
   return matches;
 }
@@ -98,7 +135,7 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   const [query, setQueryValue] = createSignal("");
   const [total, setTotal] = createSignal(0);
   const [index, setIndex] = createSignal(-1);
-  let matches: FindMatch[] = [];
+  let matches: Entry[] = [];
   // Where focus was when the bar opened, given back when it closes.
   let returnFocus: HTMLElement | null = null;
   let input: HTMLInputElement | undefined;
@@ -106,8 +143,10 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   let observer: MutationObserver | null = null;
 
   const paint = () => {
-    const current = matches[index()]?.range ?? null;
-    if (matches.length) painted.set(owner, { all: matches.map((match) => match.range), current }); else painted.delete(owner);
+    const at = matches[index()];
+    const current = at && !inFold(at) ? at.range : null;
+    const all = matches.filter((match): match is FindMatch => !inFold(match)).map((match) => match.range);
+    if (all.length) painted.set(owner, { all, current }); else painted.delete(owner);
     repaint();
   };
   // The first match from the top of what is on screen down, so a search starts where the reader is.
@@ -116,10 +155,28 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     const below = matches.findIndex((match) => match.row.getBoundingClientRect().bottom > top);
     return below < 0 ? matches.length - 1 : below;
   };
-  const go = (next: number, reveal = true) => {
+  // Stepping onto a closed fold's hit opens the fold; once it has drawn, the hit is that same nth match inside it (or,
+  // further in, a fold of its own to open). A fold that will not open, or a hit its drawing lacks, moves on past it.
+  let opening = 0;
+  const go = (next: number, reveal = true, depth = 0) => {
+    const entry = matches[next];
     setIndex(next);
     paint();
-    if (reveal && matches[next]) options.reveal(matches[next]!);
+    if (!reveal || !entry) return;
+    if (!inFold(entry)) return options.reveal(entry);
+    const run = ++opening;
+    foldFindOf(entry.fold)?.open();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (run !== opening || !open()) return;
+      matches = findMatches(options.thread(), query());
+      setTotal(matches.length);
+      const inside = matches.flatMap((match, at) => entry.fold.contains(inFold(match) ? match.fold : match.range.startContainer) ? [at] : []);
+      const stuck = entry.fold.isConnected && entry.fold.hasAttribute("data-find-fold");
+      const target = !stuck && inside.length ? inside[Math.min(entry.nth, inside.length - 1)]!
+        : matches.findIndex((match) => !entry.fold.contains(inFold(match) ? match.fold : match.range.startContainer) && entry.row.compareDocumentPosition(match.row) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (target < 0 || depth >= 4) return go(Math.min(next, matches.length - 1), false);
+      go(target, true, depth + 1);
+    }));
   };
   /** Searches again. keep: the thread changed under an open find (a stream, a trace opening): stay at the same place. */
   const search = (keep = false) => {
@@ -129,8 +186,11 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     setTotal(matches.length);
     if (!matches.length) return go(-1, false);
     if (!keep || !previous) return go(nearest());
-    // The same row's first match at or after the old one's start, else where the old index falls.
-    const same = matches.findIndex((match) => match.row === previous.row && match.range.compareBoundaryPoints(Range.START_TO_START, previous.range) >= 0);
+    // The same row's first match at or after the old one's start (a fold's: the same fold's same hit), else where the
+    // old index falls.
+    const same = matches.findIndex((match) => match.row === previous.row && (inFold(previous)
+      ? inFold(match) && match.fold === previous.fold && match.nth === previous.nth
+      : !inFold(match) && match.range.compareBoundaryPoints(Range.START_TO_START, previous.range) >= 0));
     go(same >= 0 ? same : Math.min(index(), matches.length - 1), false);
   };
   let pendingKeep = false;
