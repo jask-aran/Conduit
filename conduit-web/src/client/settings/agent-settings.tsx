@@ -106,6 +106,14 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         <SettingLine label="What you ask, it does" title="When you ask it for something, edits to your own data (completing a task, moving an event, labelling mail) go ahead without an approval. Sending as you, deleting, and anything it starts on its own still ask.">
           <Switch label="What you ask, it does" checked={current().youAsk !== false} onChange={(youAsk) => set({ youAsk })} />
         </SettingLine>
+        <SettingLine label="Executor decides" title="Executor's calls go to it unasked: reads run at once, and what Executor holds for approval (a send, a change) is what you are asked, once. Off: Conduit's list of reads decides before each call, and anything else asks.">
+          <Switch label="Executor decides" checked={current().executorDecides !== false} onChange={(executorDecides) => set({ executorDecides })} />
+        </SettingLine>
+        <SettingLine label="Remind me" title="Every approval is pushed to your devices, a background run's too. One still waiting is pushed once more after this long.">
+          <Select id="agent-remind" value={String(current().remindMinutes ?? 10)} onChange={(event) => set({ remindMinutes: Number(event.currentTarget.value) })}>
+            <For each={[[0, "Never"], [5, "After 5 minutes"], [10, "After 10 minutes"], [30, "After 30 minutes"], [60, "After an hour"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
+          </Select>
+        </SettingLine>
       </Group>
       <Group title="Routine">
         <SettingLine label="Morning brief" title="A short brief in its home thread each morning: what happened, what is coming, what waits on you.">

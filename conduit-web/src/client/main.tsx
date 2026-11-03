@@ -117,6 +117,7 @@ import { OPEN_AGENT_EVENT } from "./chat/agents";
 import { agentNeeds, agentView, refreshAgent } from "./state/agent";
 import { ServerSwitcher } from "./navigation/server-switcher";
 import { RuntimeIndicator, visibleRuntimeActivity } from "./navigation/runtime-indicator";
+import { titleBarShows } from "./settings/title-bar-items";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
@@ -5874,7 +5875,7 @@ function App() {
     <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "agent" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
-      serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit"}
+      serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) await openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
@@ -5926,15 +5927,17 @@ function App() {
       {/* Conduit's own bar (Settings › Desktop › Title bar): everything here is a trial; what is kept is decided in use. */}
       <TitleBar
         lead={<>
-          <ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
-            onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} />
-          <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
-          <IconButton kind="pane" label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
+          <Show when={titleBarShows("server")}><ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
+            onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} /></Show>
+          <Show when={titleBarShows("history")}>
+            <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
+            <IconButton kind="pane" label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
+          </Show>
         </>}
-        middle={<LeadInput kind="web" readOnly aria-label="Search or run a command" placeholder="Search or run a command"
-          onFocus={(event) => { event.currentTarget.blur(); openPalette(null); }} />}
+        middle={<Show when={titleBarShows("search")}><LeadInput kind="web" readOnly aria-label="Search or run a command" placeholder="Search or run a command"
+          onFocus={(event) => { event.currentTarget.blur(); openPalette(null); }} /></Show>}
         end={<>
-          <Show when={liveChats().length}>
+          <Show when={titleBarShows("live") && liveChats().length}>
             <DropdownMenu modal={false} placement="bottom-end">
               <MenuControl as={Button} variant="ghost" size="sm" title="Live chats: a harness held for each until it is reclaimed">
                 <StatusDot label={runningTurns().length ? "Running" : "Live"} tone={runningTurns().length ? "active" : "success"} spinning={runningTurns().length > 0} />
@@ -5948,14 +5951,16 @@ function App() {
               </MenuContent>
             </DropdownMenu>
           </Show>
-          <Show when={agentView()?.enabled && agentNeeds()}>{(needs) =>
+          <Show when={titleBarShows("agent") && agentView()?.enabled && agentNeeds()}>{(needs) =>
             <Button variant="ghost" size="sm" title={`${agentView()?.settings?.name || "Agent"} wants you`} onClick={() => void openAgentHere()}>{agentView()?.settings?.name || "Agent"} · {needs()}</Button>}</Show>
-          <Show when={updateState().kind === "ready"}>
+          <Show when={titleBarShows("update") && updateState().kind === "ready"}>
             <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
           </Show>
-          <IconButton kind="pane" label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
-          <IconButton kind="pane" label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
-          <Show when={splitShown()}><IconButton kind="pane" label="Equalise panes" onClick={() => applyPaneLayout(Array(shownSlots().length + 1).fill(1))}><Icons.Split /></IconButton></Show>
+          <Show when={titleBarShows("panels")}>
+            <IconButton kind="pane" label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
+            <IconButton kind="pane" label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
+          </Show>
+          <Show when={titleBarShows("layout") && splitShown()}><IconButton kind="pane" label="Equalise panes" onClick={() => applyPaneLayout(Array(shownSlots().length + 1).fill(1))}><Icons.Split /></IconButton></Show>
           {windowControls("bar")}
         </>} />
     </Show>

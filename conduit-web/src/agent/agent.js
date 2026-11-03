@@ -27,6 +27,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dial: "normal",
   // In a turn the person started, edits to their own data through a connector go without an approval (policy.js).
   youAsk: true,
+  // Executor's own approvals decide what asks (policy.js): reads run, what it holds back is the ask. Off: Conduit's list
+  // of read actions decides before the call, as it did.
+  executorDecides: true,
+  // An ask still waiting is pushed once more after this many minutes; 0 never.
+  remindMinutes: 10,
   // Background runs stop for the day once they have spent this (USD); 0 is no limit.
   budgetUsdPerDay: 2,
   timezone: null,
@@ -145,6 +150,12 @@ export class PersistentAgent {
     }
     if (patch.dial !== undefined) { if (!DIALS.has(patch.dial)) fail("dial is quiet, normal or chatty"); next.dial = patch.dial; }
     if (patch.youAsk !== undefined) { if (typeof patch.youAsk !== "boolean") fail("youAsk is true or false"); next.youAsk = patch.youAsk; }
+    if (patch.executorDecides !== undefined) { if (typeof patch.executorDecides !== "boolean") fail("executorDecides is true or false"); next.executorDecides = patch.executorDecides; }
+    if (patch.remindMinutes !== undefined) {
+      const minutes = Number(patch.remindMinutes);
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) fail("remindMinutes is 0 to 1440");
+      next.remindMinutes = minutes;
+    }
     if (patch.budgetUsdPerDay !== undefined) {
       const budget = Number(patch.budgetUsdPerDay);
       if (!Number.isFinite(budget) || budget < 0 || budget > 1000) fail("budgetUsdPerDay is 0 to 1000");

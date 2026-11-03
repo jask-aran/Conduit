@@ -1,4 +1,5 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
+import { TITLE_BAR_ITEMS, setTitleBarShows, titleBarShows } from "./title-bar-items";
 import { Segmented, Switch } from "@/components/ui/controls";
 import { SettingLine } from "@/components/ui/overlay";
 import { desktopShell, type DesktopShellSettings, type DesktopTitleBar } from "../platform/installed-client.ts";
@@ -52,6 +53,13 @@ export function DesktopSettingsTile() {
             options={[{ value: "native", label: "Windows" }, { value: "none", label: "None" }, { value: "conduit", label: "Conduit" }] satisfies { value: DesktopTitleBar; label: string }[]}
             onChange={(titleBar) => update({ titleBar: titleBar as DesktopTitleBar })} />
         </SettingLine>
+        {/* Conduit's bar: each of its items can go, while what to keep is decided in use. */}
+        <Show when={(current().titleBar ?? "conduit") === "conduit"}>
+          <For each={TITLE_BAR_ITEMS}>{(item) =>
+            <SettingLine label={item.label} title={item.about}>
+              <Switch label={`Show ${item.label} in the title bar`} checked={titleBarShows(item.id)} onChange={(shown) => setTitleBarShows(item.id, shown)} />
+            </SettingLine>}</For>
+        </Show>
         <Show when={error()}><Note tone="error">{error()}</Note></Show>
       </>}
     </Show>

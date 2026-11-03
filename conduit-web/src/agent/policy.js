@@ -127,7 +127,7 @@ const connectorRead = (name, args) => { const paths = connectorActions(name, arg
  * Allow resumes Executor's own request: one approval for each send or change, exactly the one Executor held. Conduit's
  * list of read words is not consulted for it, so a mistyped path fails as Executor's UnknownTool instead of asking.
  */
-const executorGates = (name) => name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name));
+const executorGates = (runtime, name) => runtime.agent?.settings().executorDecides !== false && name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name));
 const resumeTool = (name) => name.startsWith("mcp__") && connectorTool(name) === "resume";
 /** The approval Executor's result holds, if it holds one: `{ requestId, invocation, elicitation }`. */
 function heldForApproval(result) {
@@ -201,7 +201,9 @@ export function askOf(tool, { guarded = false } = {}) {
   const name = tool?.name || "";
   if (name.startsWith("mcp__")) {
     return tool.connectorReadOnly ? { asks: "never", when: "Marked read-only by its connector." }
-      : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
+      : name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name))
+        ? { asks: "sometimes", when: "Executor decides: reads run, and what it holds for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
+        : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
   }
   if (!guarded) return { asks: "never" };
   if (ALWAYS_OUTWARD[name] && OUTWARD_ACTIONS[name]) return { asks: "sometimes", when: `Asks to ${OUTWARD_ACTIONS[name].join(" or ")}; its other actions go ahead.` };
@@ -299,18 +301,20 @@ function presentation(name, args) {
 
 /*
  * Every ask reaches the person's devices, a run's included (the run ends; the ask waits in the home thread), and
- * records which devices took it. Still waiting after REMIND_MS, it is pushed once more. Not awaited by the call.
+ * records which devices took it. Still waiting after the agent's remindMinutes (Settings › Agent), it is pushed once
+ * more. Not awaited by the call.
  */
-const REMIND_MS = 10 * 60_000;
 function tellPerson(runtime, ask, send) {
   const record = (pushed, field) => { if (pushed) void runtime.agent.update?.((doc) => { const held = doc.asks?.[ask.id]; if (held) held[field] = pushed; })?.catch?.(() => {}); };
   void Promise.resolve(send()).then((pushed) => record(pushed, "pushed")).catch(() => {});
+  const remind = Number(runtime.agent.settings().remindMinutes ?? 10);
+  if (!(remind > 0)) return;
   const timer = setTimeout(async () => {
     try {
       const held = (await runtime.agent.state()).asks?.[ask.id];
       if (held?.status === "pending" && held.expiresAt > new Date().toISOString()) record(await send(), "reminded");
     } catch {}
-  }, REMIND_MS);
+  }, remind * 60_000);
   timer.unref?.();
 }
 
@@ -421,7 +425,7 @@ function guard(runtime, tools, confine) {
         if (!thread.chatId) throw new Error("Agent thread not found");
         return { thread, run };
       };
-      if ((tool.name.startsWith("mcp__") && !executorGates(tool.name) && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
+      if ((tool.name.startsWith("mcp__") && !executorGates(runtime, tool.name) && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
         const { thread, run } = await threadOf();
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.
         const asked = !run && runtime.agent.settings().youAsk !== false && editOnly(tool.name, args)
@@ -434,7 +438,7 @@ function guard(runtime, tools, confine) {
       const local = confine && PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
       const result = await tool.execute(args, local ? { ...api, env } : api, context);
-      const held = executorGates(tool.name) ? heldForApproval(result) : null;
+      const held = executorGates(runtime, tool.name) ? heldForApproval(result) : null;
       if (held) {
         // Executor holds an action for approval: the person is asked, and Allow resumes Executor's request.
         const { thread } = await threadOf();
