@@ -162,7 +162,8 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       previous.set(cid, { at, total: input + cacheRead + usageNumber(usage.cacheWrite) });
       if (!inWindow(at)) continue;
       const model = `${usageIdentifier(message.provider)}/${typeof message.model === "string" && /^[A-Za-z0-9_./:-]+$/.test(message.model) ? message.model : "unknown"}`;
-      if (!models.has(model)) models.set(model, { model, requests: 0, input: 0, cacheRead: 0, cachedShare: 0, misses: 0 });
+      if (!models.has(model)) models.set(model, { model, requests: 0, input: 0, cacheRead: 0, cachedShare: 0, misses: 0, survivedMinutes: null, lapsedMinutes: null,
+        afterGap: gaps.map(({ fromMinutes, toMinutes }) => ({ fromMinutes, toMinutes, requests: 0, misses: 0 })) });
       const group = models.get(model);
       requests.total++;
       group.requests++;
@@ -173,6 +174,17 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
         const bucket = gaps.find((bucket) => gapMinutes >= bucket.fromMinutes && (bucket.toMinutes == null || gapMinutes < bucket.toMinutes));
         bucket.requests++;
         bucket.misses += Number(miss);
+        const own = group.afterGap[gaps.indexOf(bucket)];
+        own.requests++;
+        own.misses += Number(miss);
+      }
+      // The provider's cache lifetime as seen: the longest pause a cache survived (a keep-warm ping in it does not
+      // count) and the shortest one it did not, a miss the prefix log puts on the provider.
+      const pinged = prior && (pingsOf.get(cid) || []).some((ping) => ping.at > prior.at && ping.at < at);
+      if (prior && prior.total > 2048 && gapMinutes > 5 && !pinged) {
+        const why = miss ? watched.get(cid)?.findLast((entry) => entry.at <= at + 1000)?.why : null;
+        if (!miss) group.survivedMinutes = Math.max(group.survivedMinutes ?? 0, gapMinutes);
+        else if (why === "provider") group.lapsedMinutes = Math.min(group.lapsedMinutes ?? Infinity, gapMinutes);
       }
       // A wake of the home thread after its cache would have lapsed: kept warm by a ping since its last request, or not.
       if (cid === String(home) && prior && at - prior.at > ttlMs) {
@@ -192,7 +204,10 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
     }
     keepWarm.net = keepWarm.saved - keepWarm.pingCost;
     requests.byModel = [...models.values()].sort((a, b) => b.requests - a.requests);
-    for (const group of requests.byModel) group.cachedShare = group.cacheRead / Math.max(1, group.input + group.cacheRead);
+    for (const group of requests.byModel) {
+      group.cachedShare = group.cacheRead / Math.max(1, group.input + group.cacheRead);
+      group.afterGap = group.afterGap.filter((bucket) => bucket.requests);
+    }
     requests.afterGap = gaps.filter((bucket) => bucket.requests);
   } finally { db?.close(); }
 

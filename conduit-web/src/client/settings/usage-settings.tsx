@@ -9,7 +9,7 @@ type Usage = { since: string | null; days: UsageDay[] };
 /** GET /v0/diagnostics/usage: how the hub manages context and approvals, content-free (diagnostics/usage-report.js). */
 type Diagnostics = {
   window: { hours: number };
-  requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number }[];
+  requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number; survivedMinutes?: number | null; lapsedMinutes?: number | null }[];
     afterGap: { fromMinutes: number; toMinutes: number | null; requests: number; misses: number }[];
     misses: { at: string; role: string; model: string; gapMinutes: number | null; why: string }[] };
   keepWarm?: { policy: { model: string; pings: number; ttlMs: number | null; intervalMs: number | null; ttlSource: "declared" | "observed" | "assumed" | null;
@@ -24,6 +24,8 @@ type Diagnostics = {
 const real = (report: Diagnostics) => report.requests.byModel.filter((row) => !row.model.startsWith("conduit-test/"));
 const percent = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(value < 0.1 ? 1 : 0)}%`;
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+const lifetime = (row: { survivedMinutes?: number | null; lapsedMinutes?: number | null }) =>
+  `${row.survivedMinutes != null ? ` · lived ${Math.round(row.survivedMinutes)} min` : ""}${row.lapsedMinutes != null ? ` · lost by ${Math.round(row.lapsedMinutes)} min` : ""}`;
 const minutes = (ms: number | null) => ms == null ? "—" : `${Math.round(ms / 60_000)} min`;
 const ROLE = { "jbot-home": "jbot's thread", "jbot-run": "a jbot run", chat: "a chat" } as Record<string, string>;
 const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", unlogged: "not logged" } as Record<string, string>;
@@ -97,8 +99,8 @@ export function UsageSettings() {
           <SettingValue mono>{count(real(report()).reduce((sum, row) => sum + row.requests, 0))}</SettingValue>
         </SettingLine>
         <For each={real(report())}>{(row) =>
-          <SettingLine plain mono label={row.model} state={`${count(row.requests)} ${row.requests === 1 ? "request" : "requests"} · ${row.misses} ${row.misses === 1 ? "miss" : "misses"}`}
-            title="Cached: the share of each request's input read from the provider's cache. A miss re-sent most of a prefix the last request had cached.">
+          <SettingLine plain mono label={row.model} state={`${count(row.requests)} ${row.requests === 1 ? "request" : "requests"} · ${row.misses} ${row.misses === 1 ? "miss" : "misses"}${lifetime(row)}`}
+            title="Cached: the share of each request's input read from the provider's cache. A miss re-sent most of a prefix the last request had cached. Lived: the longest pause the provider's cache survived; lost: the shortest it did not.">
             <SettingValue mono>{percent(row.cachedShare)} cached</SettingValue>
           </SettingLine>}
         </For>

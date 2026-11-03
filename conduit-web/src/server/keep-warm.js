@@ -33,9 +33,9 @@ export function cacheLifetime(model, retention = "long", observedMs = 0) {
  * rate, a wake after it lapsed the full one (its write rate where the provider charges writes). With `pings` pings the
  * cache lives until pings * interval + ttl; each past gap is priced under every choice, and the cheapest wins.
  */
-export function keepWarmPolicy({ model, retention = "long", gaps: past }) {
+export function keepWarmPolicy({ model, retention = "long", gaps: past, survivedMs = 0 }) {
   // A gap the cache survived proves it lives at least that long (a ping in it would have kept it alive: none counted).
-  const ttl = cacheLifetime(model, retention, Math.max(0, ...past.filter((gap) => gap.hit && !gap.pinged).map((gap) => gap.ms)));
+  const ttl = cacheLifetime(model, retention, Math.max(survivedMs, ...past.filter((gap) => gap.hit && !gap.pinged).map((gap) => gap.ms)));
   const gaps = past.map((gap) => gap.ms);
   const hit = Number(model?.cost?.cacheRead) || 0;
   // A provider that declares its cache lifetimes charges writes (Anthropic); OpenAI's catalogue lists a write price it
@@ -78,4 +78,34 @@ export function requestGaps(file, conversationId, days = 14, pinged = []) {
     }
     return gaps;
   } catch { return []; } finally { db?.close(); }
+}
+
+/**
+ * The longest pause (ms) any conversation's cache on this provider and model survived over the last `days`: the
+ * provider's cache lifetime as seen, from every thread, not only the one kept warm. Gaps with a ping in them
+ * (`pinged`: times, on `pingedConversation`) are left out.
+ */
+export function survivedLifetime(file, model, days = 14, pingedConversation = null, pinged = []) {
+  let db;
+  try {
+    db = new DatabaseSync(file, { readOnly: true });
+    const since = Date.now() - days * 86_400_000;
+    const prior = new Map();
+    let longest = 0;
+    for (const row of db.prepare(`SELECT conversation_id, record FROM entries WHERE json_extract(record, '$.kind') = 'pi.assistant' ORDER BY rowid`).iterate()) {
+      const record = JSON.parse(row.record);
+      const message = (Array.isArray(record.model) ? record.model[0] : record.message) || {};
+      const usage = message.usage || {};
+      const at = Number(message.timestamp);
+      const total = (Number(usage.input) || 0) + (Number(usage.cacheRead) || 0) + (Number(usage.cacheWrite) || 0);
+      if (!Number.isFinite(at) || !total) continue;
+      const cid = String(row.conversation_id);
+      const before = prior.get(cid);
+      prior.set(cid, { at, total });
+      if (!before || at < since || message.provider !== model?.provider || message.model !== model?.id || before.total <= 2048) continue;
+      if (cid === String(pingedConversation) && pinged.some((ping) => ping > before.at && ping < at)) continue;
+      if ((Number(usage.cacheRead) || 0) >= 0.5 * before.total) longest = Math.max(longest, at - before.at);
+    }
+    return longest;
+  } catch { return 0; } finally { db?.close(); }
 }

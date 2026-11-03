@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prefixWatch } from "./prefix-watch.js";
-import { keepWarmPolicy, requestGaps } from "./keep-warm.js";
+import { keepWarmPolicy, requestGaps, survivedLifetime } from "./keep-warm.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
@@ -246,7 +246,7 @@ export class DurableRuntime {
     // Its own pings, so a gap they kept alive is not taken for how long the provider keeps a cache.
     const pinged = (() => { try { return fs.readFileSync(path.join(this.dataRoot, "runtime", "prefix-watch.jsonl"), "utf8").split("\n")
       .filter((line) => line.includes('"keepWarm":')).map((line) => JSON.parse(line)).filter((line) => line.key === home.key).map((line) => Date.parse(line.t)); } catch { return []; } })();
-    const policy = keepWarmPolicy({ model, gaps: requestGaps(this.file, id, 14, pinged) });
+    const policy = keepWarmPolicy({ model, gaps: requestGaps(this.file, id, 14, pinged), survivedMs: survivedLifetime(this.file, model, 14, id, pinged) });
     this.keepWarmCached = { at: Date.now(), key: home.key, model: `${model?.provider}/${model?.id}`, policy };
     const shown = JSON.stringify(policy);
     if (shown !== this.keepWarmShown) { this.keepWarmShown = shown; this.prefixWatch.note({ key: home.key, keepWarmPolicy: { model: `${model?.provider}/${model?.id}`, ...policy } }); }
