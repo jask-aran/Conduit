@@ -1,9 +1,11 @@
 /* A desktop client's own window chrome (window.tsx): Conduit's bar, and the window's buttons. With the bar, everything
    below it is that much shorter and starts under it. */
-:root { --title-bar-height: 0px; }
+:root { --title-bar-height: 0px; --title-bar-room: 0px; }
 /* As tall as Windows' own caption buttons (30px at 100%), so the bar is as slim as the caption it replaces. */
-:root[data-title-bar="conduit"] { --title-bar-height: var(--control-sm); }
-:root[data-title-bar="conduit"] body { padding-top: var(--title-bar-height); }
+:root[data-title-bar="conduit"] { --title-bar-height: var(--control-sm); --title-bar-room: calc(var(--title-bar-height) - var(--space-md)); }
+/* The bar takes the frame's gap above the panes as its own: the panes start where it ends, as under Windows' caption,
+   so nothing sits between the bar's buttons and the panes. */
+:root[data-title-bar="conduit"] body { padding-top: var(--title-bar-room); }
 .ui-title-bar { position: fixed; z-index: var(--layer-dock); inset: 0 0 auto 0; display: grid; height: var(--title-bar-height); grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; padding-left: var(--space-md); background: var(--frame); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
 .ui-title-bar-lead, .ui-title-bar-end { display: flex; min-width: 0; height: 100%; align-items: center; gap: var(--space-md); }
 .ui-title-bar-end { justify-content: flex-end; }
@@ -30,5 +32,8 @@
 .ui-title-bar .ui-button { height: var(--control-xs); font-weight: var(--weight-rest); color: var(--muted-foreground); }
 @media (hover: hover) { .ui-title-bar .ui-button:hover { color: var(--foreground); } }
 .ui-title-bar .ui-icon-button { width: var(--control-xs); height: var(--control-xs); }
-.ui-title-bar-middle .ui-lead-input { width: var(--measure-sm); height: var(--control-xs); cursor: pointer; }
+.ui-title-bar-middle .ui-lead-input { width: var(--measure-sm); cursor: pointer; }
+/* The address field's input is a toolbar's height; in the bar it is the size of the bar's buttons, clear of its edges. */
+.ui-title-bar-middle .ui-lead-input > input { height: var(--control-xs); font-size: var(--text-caption); }
+.ui-title-bar .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-title-bar-middle .ui-lead-input input { cursor: pointer; }
