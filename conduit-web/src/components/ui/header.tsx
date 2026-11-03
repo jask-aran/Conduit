@@ -1,6 +1,7 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
-import { onCleanup, onMount, Show, splitProps, untrack, type JSX } from "solid-js";
+import { createContext, onCleanup, onMount, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
+import { PaneMark } from "./row";
 import { Button } from "./controls";
 
 /*
@@ -32,19 +33,28 @@ const TERM_FOLDS = ["shortcuts", "labels"] as const;
  *          content overflows or the identity's title or context is cut, the next fold goes (TERM_FOLDS); each comes
  *          back once the header is as wide as it was needed at. A change to what it holds measures it again unfolded.
  */
+/* The letter of the pane a header heads (Sheet's `pane`), when there are several: PaneHeader draws it first, the same
+   letter the sidebar's PaneMark gives the chats open there. */
+const PaneLetterContext = createContext<() => string | undefined>(() => undefined);
+export const PaneLetter = (props: { letter?: string; children?: JSX.Element }) =>
+  <PaneLetterContext.Provider value={() => props.letter}>{props.children}</PaneLetterContext.Provider>;
+
 export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   kind?: PaneHeaderKind; ref?: HTMLElement | ((element: never) => void);
   lead?: JSX.Element; pill?: JSX.Element; after?: JSX.Element; frost?: boolean; actions?: JSX.Element;
   name?: string; nameTitle?: string; place?: string; placeTitle?: string; modes?: JSX.Element; views?: JSX.Element;
 }) {
   const kind = untrack(() => props.kind ?? "pane");
+  const letter = useContext(PaneLetterContext);
+  const mark = () => <Show when={letter()}>{(pane) => <PaneMark pane={pane()} self />}</Show>;
   if (kind === "file") {
-    const [, rest] = splitProps(props, ["kind", "class"]);
-    return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="file" />;
+    const [local, rest] = splitProps(props, ["kind", "class", "children"]);
+    return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="file">{mark()}{local.children}</header>;
   }
   if (kind === "tool") {
     const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost"]);
     return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool">
+      {mark()}
       <strong title={local.nameTitle}>{local.name}</strong>
       <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>
       {local.modes}
@@ -77,10 +87,11 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
       fit(true);
       onCleanup(() => { resize.disconnect(); content.disconnect(); });
     });
-    return <header ref={header} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term" data-tauri-drag-region={dragRegion()}>{local.children}{local.actions}</header>;
+    return <header ref={header} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term" data-tauri-drag-region={dragRegion()}>{mark()}{local.children}{local.actions}</header>;
   }
   const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views"]);
   return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
+    {mark()}
     <Show when={local.lead}><div class="ui-header-group" data-lead="">{local.lead}</div></Show>
     <div class="ui-header-title">{local.children}</div>
     {local.pill}

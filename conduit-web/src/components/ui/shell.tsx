@@ -1,6 +1,7 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { cn } from "@/lib/utils";
+import { PaneLetter } from "./header";
 
 /*
  * The shell (DESIGN Surfaces): beside the sidebar, the row the panes and the dock share. Each pane is a Sheet: the
@@ -22,12 +23,13 @@ export function AppShell(props: JSX.HTMLAttributes<HTMLDivElement> & { settling?
  *  and the others are not drawn. A sheet is a size container: what it holds is measured by its width. Its weight and
  *  min-width are the app's, as inline style. backdrop: what is drawn on its ground, under everything it holds (the
  *  meteor field), never taking the pointer. */
-export function Sheet(props: JSX.HTMLAttributes<HTMLElement> & { as?: "main" | "section"; lead?: boolean; docked?: boolean | "hidden"; under?: boolean; backdrop?: JSX.Element }) {
-  const [local, rest] = splitProps(props, ["as", "class", "lead", "docked", "under", "backdrop", "children"]);
+/* pane: its letter (A, B…) while there are several panes, which its header shows (PaneLetter). */
+export function Sheet(props: JSX.HTMLAttributes<HTMLElement> & { as?: "main" | "section"; lead?: boolean; docked?: boolean | "hidden"; under?: boolean; backdrop?: JSX.Element; pane?: string }) {
+  const [local, rest] = splitProps(props, ["as", "class", "lead", "docked", "under", "backdrop", "children", "pane"]);
   return <Dynamic component={local.as ?? "section"} {...rest} class={cn("ui-sheet", local.class)} data-lead={local.lead ? "" : undefined}
     data-docked={local.docked === "hidden" ? "hidden" : local.docked ? "" : undefined} data-under={local.under ? "" : undefined}>
     <Show when={local.backdrop}><div class="ui-sheet-backdrop" aria-hidden="true">{local.backdrop}</div></Show>
-    {local.children}
+    <PaneLetter letter={local.pane}>{local.children}</PaneLetter>
   </Dynamic>;
 }
 

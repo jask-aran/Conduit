@@ -170,3 +170,5 @@
 /* PaneMark (row.tsx): the pane a chat is open in, at the row's end; its showing tab at the foreground. */
 .ui-pane-mark { color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/1 var(--font-data); letter-spacing: 0; }
 .ui-pane-mark[data-shown] { color: var(--foreground); }
+/* A pane's own, first in its header: the place label's quiet, a step before what follows. */
+.ui-pane-mark[data-self] { flex: none; margin-inline: var(--space-xs) var(--space-sm); }

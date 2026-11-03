@@ -4591,7 +4591,7 @@ function App() {
         heldSlots.set(slot, hold);
         onCleanup(() => { if (heldSlots.get(slot) === hold) heldSlots.delete(slot); });
       }
-      return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { overflow: "hidden", ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}
+      return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" pane={paneLetter(slot)} docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { overflow: "hidden", ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}
         data-moving={paneMotion()?.slot === slot ? paneMotion()!.phase : undefined}>
         <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
         <Show when={!held()}>
@@ -4790,11 +4790,15 @@ function App() {
    * Where each chat is open, for the sidebar's PaneMark: the pane's letter in reading order -- A, the panes beside it,
    * then the dock's -- and whether it is the pane's showing tab. A chat is open once (DESIGN.md › Focus and opening).
    */
+  const paneOrder = createMemo((): PaneKey[] => {
+    const docked = [...dockedSlots(), ...foldedSlots()].filter((slot) => slotView(slot) && !shownSlots().includes(slot));
+    return ["main", ...shownSlots(), ...docked];
+  });
+  // A pane's letter for its header: only while there are several (one pane needs no name).
+  const paneLetter = (pane: PaneKey) => { const order = paneOrder(); const at = order.indexOf(pane); return order.length > 1 && at >= 0 ? String.fromCharCode(65 + at) : undefined; };
   const chatPlaces = createMemo(() => {
     const places = new Map<string, { pane: string; shown: boolean }>();
-    const docked = [...dockedSlots(), ...foldedSlots()].filter((slot) => slotView(slot) && !shownSlots().includes(slot));
-    const panes: PaneKey[] = ["main", ...shownSlots(), ...docked];
-    panes.forEach((pane, index) => {
+    paneOrder().forEach((pane, index) => {
       const letter = String.fromCharCode(65 + index);
       const active = activeTabOf(pane);
       for (const id of tabsOf(pane)?.ids ?? (active ? [active] : [])) {
@@ -6131,7 +6135,7 @@ function App() {
         </>} />
     </Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} pane={paneLetter("main")} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>

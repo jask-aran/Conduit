@@ -79,10 +79,12 @@ export function Row(props: RowProps) {
 }
 
 /**
+ * self: a pane's own letter, first in its header (PaneHeader, while there are several panes).
  * Where a document is open: the letter of the pane holding it (A, then the panes beside it, then the dock's, in
  * reading order), in Paper Mono at a row's end (its meta). shown: the pane's showing tab, at the foreground; a tab
  * behind another, muted.
  */
-export const PaneMark = (props: { pane: string; shown?: boolean }) =>
-  <span class="ui-pane-mark" data-shown={props.shown ? "" : undefined} title={props.shown ? `Showing in pane ${props.pane}` : `A tab in pane ${props.pane}`}
-    aria-label={props.shown ? `showing in pane ${props.pane}` : `a tab in pane ${props.pane}`}>{props.pane}</span>;
+export const PaneMark = (props: { pane: string; shown?: boolean; self?: boolean }) =>
+  <span class="ui-pane-mark" data-shown={props.shown ? "" : undefined} data-self={props.self ? "" : undefined}
+    title={props.self ? `Pane ${props.pane}` : props.shown ? `Showing in pane ${props.pane}` : `A tab in pane ${props.pane}`}
+    aria-label={props.self ? `pane ${props.pane}` : props.shown ? `showing in pane ${props.pane}` : `a tab in pane ${props.pane}`}>{props.pane}</span>;
