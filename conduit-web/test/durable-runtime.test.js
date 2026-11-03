@@ -147,3 +147,26 @@ test("finished turn messages and tool results survive a server restart", async (
   assert.deepEqual(messages(after), messages(before));
   assert.deepEqual(tools(after), tools(before));
 });
+
+// Source: subagents.js, "A Stop leaves a chat's background agents working".
+test("stop ends the turn but keeps a background report without waking the parent", async (t) => {
+  const c = await chat(t);
+  c.send({ type: "prompt", message: "background ask" });
+  const question = await c.stream.next((event) => event.type === "permission_request" && event.kind === "question", 4000);
+  c.send({ type: "stop_generation", generationId: question.generationId });
+  await c.stream.next((event) => event.type === "status" && event.phase === "stopped", 4000);
+  await c.stream.next((event) => event.type === "transcript_op" && event.op === "message.open" && event.message.origin === "harness" && event.message.agent, 2000);
+  const stored = await json(`/v0/sessions/${c.id}`);
+  assert.equal(stored.messages.find((message) => message.role === "user" && !message.origin).outcome, "interrupted");
+  const report = stored.messages.find((message) => message.origin === "harness" && message.agent);
+  const children = (await json(`/v0/chats/${c.id}/subagents`)).subagents;
+  assert.equal(children.length, 1);
+  assert.ok(children[0].answer, "the background child finished despite stop");
+  assert.equal(report.content, children[0].answer);
+  assert.match(report.agent.id, /^bg-\d+$/);
+  assert.equal(stored.turnOpen, false);
+  assert.ok(!stored.messages.some((message) => message.role === "assistant" && message.answers === report.id), "the kept report did not start another turn");
+  assert.ok(!c.stream.messages.some(answer), "the stopped question turn has no final answer");
+});
+
+test("history survives a server restart", { skip: "startConduitHarness has no restart method" }, () => {});

@@ -1,7 +1,7 @@
 import { listAsks } from "../agent/asks.js";
 import { notice, stopPending, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
-import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, LiveDoc, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
@@ -393,7 +393,7 @@ export function Subagents(runtime) {
             // The parent may have no live chat (an agent's home thread nobody has open): the report's turn is followed.
             runtime.wakeChat?.(api.conversationId);
             const settled = await submitted.wait(context);
-            kept = settled.status === "unanswered" && settled.reason === "aborted" && settled.entry === undefined;
+          kept = settled.status === "unanswered" && settled.reason === "aborted" && settled.entry === undefined;
           }
           if (kept && task.input.gate) {
             // A Stop in the home thread withdrew a run's report that waited there: the run is the app's, so it is given
@@ -402,6 +402,11 @@ export function Subagents(runtime) {
               content, entry: { kind: "conduit.subagent-report", data: { ...data, messageId: `${requestId}:again` } } }, context, { admit: (input) => handle.submit(input, context) });
             runtime.wakeChat?.(api.conversationId);
           } else if (kept) {
+            // A Stop withdraws a waiting report before its run has ended; written while that run winds down, the report
+            // would queue behind it until the person next speaks. It is written once the run is over.
+            for (let tries = 0; tries < 100 && (await api.snapshot(LiveDoc, api.conversationId, context)).run; tries++) {
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
             const timestamp = await api.memo("keptAt", Date.now(), context);
             await (await handle.submit({ type: "write", requestId: `${requestId}:kept`, entry: { kind: "conduit.subagent-report",
               data: { ...data, messageId: `${requestId}:kept`, kept: true }, model: [{ role: "user", content, timestamp }] } }, context)).wait(context);
