@@ -1,3 +1,4 @@
+import { dragRegion } from "./window";
 import { Frost } from "./frost";
 import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
@@ -70,7 +71,7 @@ export const DragPill = (props: { ref?: (element: HTMLDivElement) => void; icon?
  *  buttons are RailButtons (nav.tsx). */
 export function ToolRail(props: JSX.HTMLAttributes<HTMLElement> & { foot?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["foot", "children"]);
-  return <nav {...rest} class="ui-tool-rail" data-surface="frame">{local.children}<Show when={local.foot}><div class="ui-tool-rail-foot">{local.foot}</div></Show></nav>;
+  return <nav {...rest} class="ui-tool-rail" data-surface="frame" data-tauri-drag-region={dragRegion()}>{local.children}<Show when={local.foot}><div class="ui-tool-rail-foot">{local.foot}</div></Show></nav>;
 }
 export const RailRule = () => <span class="ui-rail-rule" aria-hidden="true" />;
 

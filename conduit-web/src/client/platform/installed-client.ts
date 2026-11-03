@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 /**
  * One question, asked once: is this an installed client talking to a Conduit
  * server somewhere else?
@@ -211,7 +212,12 @@ export interface DesktopShellSettings {
   startHidden: boolean;
   /** Run the node role in the background so a Conduit server can act on this computer. */
   serveAsDevice: boolean;
+  /** What sits above the app: Windows' caption, nothing, or Conduit's own bar (desktop_settings.rs `TitleBar`). */
+  titleBar: DesktopTitleBar;
 }
+export type DesktopTitleBar = "native" | "none" | "conduit";
+/** The title bar in use, as the shell last said: read once at start and after each save. Native until known. */
+export const [desktopTitleBar, setDesktopTitleBar] = createSignal<DesktopTitleBar>("native");
 
 export interface CompanionRoot { id: string; path: string; read: boolean; write: boolean; shell: boolean }
 export interface CompanionStatus {
@@ -265,14 +271,31 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
   },
   async settings(): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<DesktopShellSettings>("desktop_settings");
+    const found = await invoke<DesktopShellSettings>("desktop_settings");
+    setDesktopTitleBar(found.titleBar ?? "native");
+    return found;
   },
   // Returns what the shell ended up with: the OS registration for launch-at-
   // login can refuse, and the caller must show what is true rather than what
   // was asked for.
   async saveSettings(settings: DesktopShellSettings): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<DesktopShellSettings>("set_desktop_settings", { settings });
+    const saved = await invoke<DesktopShellSettings>("set_desktop_settings", { settings });
+    setDesktopTitleBar(saved.titleBar ?? "native");
+    return saved;
+  },
+  /** The window's own buttons, for a title bar that is not Windows'. */
+  window: {
+    minimize: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().minimize(),
+    toggleMaximize: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().toggleMaximize(),
+    close: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().close(),
+    isMaximized: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().isMaximized(),
+    /** Called with whether it is maximised, now and each time it is resized. */
+    watchMaximized: async (seen: (maximized: boolean) => void) => {
+      const current = (await import("@tauri-apps/api/window")).getCurrentWindow();
+      seen(await current.isMaximized());
+      return current.onResized(async () => seen(await current.isMaximized()));
+    },
   },
   /** Download and verify now; install only after the person takes the update. */
   async prepareUpdate(onProgress?: (update: UpdateProgress) => void, _quiet = false): Promise<PreparedDesktopUpdate> {

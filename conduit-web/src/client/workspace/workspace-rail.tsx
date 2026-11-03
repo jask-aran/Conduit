@@ -1,5 +1,5 @@
 import { Icons, IconButton } from "@/components/ui";
-import { For, Show } from "solid-js";
+import { For, Show, type JSX } from "solid-js";
 import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
@@ -51,6 +51,8 @@ export function WorkspaceRail(props: {
   onOpenPalette: () => void;
   /** The hub's browser, opened beside or focused. */
   onOpenBrowser: () => void;
+  /** The window's own buttons, at the top, when the desktop window has no title bar. */
+  windowControls?: JSX.Element;
   current: PanelTab | null;
   inSplit: PanelTab | null;
   sourceControlEnabled: boolean;
@@ -89,6 +91,7 @@ export function WorkspaceRail(props: {
   return <ToolRail aria-label="Workspace tools" data-region="workspace-rail" foot={PANE_LAYOUTS[props.panes] || props.tools ? foot() : undefined}
     onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
     onDrop={(event) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onDock(drag.tool); } }}>
+    {props.windowControls}
     <Show when={props.tools}><For each={RAIL_TOOLS}>{(tool) => {
       const Icon = WORKSPACE_TOOL_ICONS[tool];
       const disabled = () => tool === "diff" && !props.sourceControlEnabled;

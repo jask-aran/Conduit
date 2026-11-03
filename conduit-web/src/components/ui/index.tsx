@@ -23,6 +23,7 @@ export * from "./reading";
 export * from "./nav";
 export * from "./dashboard";
 export * from "./pane";
+export * from "./window";
 export * from "./shell";
 export * from "./source";
 export * from "./history";

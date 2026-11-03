@@ -55,6 +55,7 @@ pub fn run() {
             update_window::restore(handle);
             if let Some(window) = app.get_webview_window("main") {
                 window_chrome::paint_caption(&window);
+                desktop_settings::apply_title_bar(handle, settings.title_bar);
                 #[cfg(windows)]
                 certificate_trust::install(&window);
             }

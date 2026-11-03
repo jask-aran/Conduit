@@ -15,6 +15,17 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tauri_plugin_autostart::ManagerExt;
 
+/// What sits above the app: Windows' own caption, nothing (Conduit's sidebar and rail drag the window and hold its
+/// buttons), or Conduit's own bar. The two without the caption are an undecorated window.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TitleBar {
+    #[default]
+    Native,
+    None,
+    Conduit,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DesktopSettings {
@@ -25,11 +36,12 @@ pub struct DesktopSettings {
     pub start_hidden: bool,
     /// Run the node role in the background, so a Conduit server can act here.
     pub serve_as_device: bool,
+    pub title_bar: TitleBar,
 }
 
 impl Default for DesktopSettings {
     fn default() -> Self {
-        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false, serve_as_device: false }
+        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false, serve_as_device: false, title_bar: TitleBar::Native }
     }
 }
 
@@ -56,6 +68,13 @@ fn persist<R: Runtime>(app: &AppHandle<R>, settings: &DesktopSettings) -> Result
     }
     let text = serde_json::to_string_pretty(settings).map_err(|error| error.to_string())?;
     fs::write(file, text).map_err(|error| error.to_string())
+}
+
+/// The window's caption as the setting says: shown for Windows' own, gone for the other two.
+pub fn apply_title_bar<R: Runtime>(app: &AppHandle<R>, title_bar: TitleBar) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_decorations(title_bar == TitleBar::Native);
+    }
 }
 
 pub fn keep_running_in_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
@@ -89,6 +108,7 @@ pub fn set_desktop_settings<R: Runtime>(
     }
     persist(&app, &settings)?;
     crate::node_companion::supervise(&app, settings.serve_as_device);
+    apply_title_bar(&app, settings.title_bar);
     *state.0.lock().expect("desktop settings lock") = settings;
     Ok(settings)
 }

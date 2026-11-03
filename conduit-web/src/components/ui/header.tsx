@@ -1,3 +1,4 @@
+import { dragRegion } from "./window";
 import { Frost } from "./frost";
 import { onCleanup, onMount, Show, splitProps, untrack, type JSX } from "solid-js";
 import { Button } from "./controls";
@@ -76,10 +77,10 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
       fit(true);
       onCleanup(() => { resize.disconnect(); content.disconnect(); });
     });
-    return <header ref={header} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term">{local.children}{local.actions}</header>;
+    return <header ref={header} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term" data-tauri-drag-region={dragRegion()}>{local.children}{local.actions}</header>;
   }
   const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views"]);
-  return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined}>
+  return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
     <Show when={local.lead}><div class="ui-header-group" data-lead="">{local.lead}</div></Show>
     <div class="ui-header-title">{local.children}</div>
     {local.pill}

@@ -19,7 +19,8 @@ import type { ItemActions } from "./navigation/item-menus";
 import type { ComputerLocation, ComputerPrefetchPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
-import { androidShell, desktopShell, isInstalledClient } from "./platform/installed-client.ts";
+import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
+import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { startPush } from "./platform/push.ts";
 // The clients that stage a downloaded update and install it on request.
@@ -4378,6 +4379,20 @@ function App() {
     requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(panesShown().length)), () => setWeightOverride(null)));
   };
   // An empty pane beside the one with the keyboard, its Home offering what to open there.
+  // The desktop window's title bar (Settings › Desktop): Windows' caption, none (the app's empty chrome drags the
+  // window and the tool rail holds its buttons), or Conduit's own bar across the top.
+  const [windowMaximized, setWindowMaximized] = createSignal(false);
+  if (desktopShell) {
+    void desktopShell.settings().catch(() => {});
+    void desktopShell.window.watchMaximized(setWindowMaximized).then((stop) => onCleanup(stop)).catch(() => {});
+  }
+  createEffect(() => {
+    const mode = desktopShell ? desktopTitleBar() : "native";
+    if (mode === "native") delete document.documentElement.dataset.titleBar; else document.documentElement.dataset.titleBar = mode;
+    setWindowDrags(mode !== "native");
+  });
+  const windowControls = (kind: "bar" | "rail") => desktopShell && <WindowControls kind={kind} maximized={windowMaximized()}
+    onMinimize={() => void desktopShell!.window.minimize()} onMaximize={() => void desktopShell!.window.toggleMaximize()} onClose={() => void desktopShell!.window.close()} />;
   // The hub's browser: focused where it is shown, else opened beside (in place of a pane when there is no room).
   const openBrowser = () => {
     if (paneAOverride() === "browser:hub") return focusAnyPane("main");
@@ -5866,6 +5881,11 @@ function App() {
         void publishServerDirectory(servers()).finally(() => switchToServer(origin, isInstalledClient()));
       }} />
     } /></Show>
+    <Show when={desktopShell && desktopTitleBar() === "conduit"}>
+      <TitleBar lead={<span>{activeServer()?.name || "Conduit"}</span>}
+        middle={<Button variant="secondary" size="sm" onClick={() => openPalette(null)}><Icons.Search />Search or run a command</Button>}
+        end={windowControls("bar")} />
+    </Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
@@ -5976,7 +5996,7 @@ function App() {
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard"].includes(routeKind()) && selectedProject() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />

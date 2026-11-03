@@ -1,0 +1,23 @@
+/* A desktop client's own window chrome (window.tsx): Conduit's bar, and the window's buttons. With the bar, everything
+   below it is that much shorter and starts under it. */
+:root { --title-bar-height: 0px; }
+:root[data-title-bar="conduit"] { --title-bar-height: calc(var(--control) + var(--space-xs)); }
+:root[data-title-bar="conduit"] body { padding-top: var(--title-bar-height); }
+.ui-title-bar { position: fixed; z-index: var(--layer-dock); inset: 0 0 auto 0; display: grid; height: var(--title-bar-height); grid-template-columns: 1fr minmax(0, auto) 1fr; align-items: center; padding-left: var(--space-md); background: var(--frame); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
+.ui-title-bar-lead, .ui-title-bar-end { display: flex; min-width: 0; height: 100%; align-items: center; gap: var(--space-md); }
+.ui-title-bar-end { justify-content: flex-end; }
+.ui-title-bar-middle { display: flex; min-width: 0; justify-content: center; }
+
+.ui-window-controls { display: flex; flex: none; }
+.ui-window-controls > button { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted-foreground); cursor: default; }
+.ui-window-controls > button svg { width: var(--icon-sm); height: var(--icon-sm); }
+/* At a bar's end: Windows' own target widths, the full height of the bar. */
+.ui-window-controls[data-kind="bar"] { height: 100%; }
+.ui-window-controls[data-kind="bar"] > button { width: calc(var(--control) * 1.5); height: 100%; }
+/* At the top of the tool rail: the rail's own targets, stacked. */
+.ui-window-controls[data-kind="rail"] { flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-sm); }
+.ui-window-controls[data-kind="rail"] > button { width: var(--control); height: var(--control-sm); border-radius: var(--radius-control); }
+@media (hover: hover) {
+  .ui-window-controls > button:hover { background: var(--tint); color: var(--foreground); }
+  .ui-window-controls > button[data-close]:hover { background: var(--destructive); color: var(--foreground); }
+}

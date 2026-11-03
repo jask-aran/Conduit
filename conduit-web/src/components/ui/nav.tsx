@@ -1,3 +1,4 @@
+import { dragRegion } from "./window";
 import * as Icons from "./icons";
 import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
 
@@ -24,7 +25,7 @@ export function NavPane(props: JSX.HTMLAttributes<HTMLElement> & { collapsed?: b
   return <aside {...rest} class="ui-nav-pane" data-surface="frame" data-collapsed={local.collapsed ? "" : undefined} data-folded={local.folded ? "" : undefined}
     data-instant={local.instant ? "" : undefined} data-drawer={local.drawer}>
     <div class="ui-nav-pane-body">
-      <div class="ui-nav-head">{local.head}</div>
+      <div class="ui-nav-head" data-tauri-drag-region={dragRegion()}>{local.head}</div>
       <div class="ui-nav-list" ref={local.listRef}>{local.children}</div>
       <Show when={local.foot}><div class="ui-nav-foot">{local.foot}</div></Show>
     </div>

@@ -68,6 +68,7 @@ import "./reading.css";
 import "./nav.css";
 import "./dashboard.css";
 import "./pane.css";
+import "./window.css";
 import "./shell.css";
 import "./source.css";
 import "./history.css";

@@ -1,7 +1,7 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { Switch } from "@/components/ui/controls";
+import { Segmented, Switch } from "@/components/ui/controls";
 import { SettingLine } from "@/components/ui/overlay";
-import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
+import { desktopShell, type DesktopShellSettings, type DesktopTitleBar } from "../platform/installed-client.ts";
 import { Group } from "@/components/ui/group";
 import { Loading, Note } from "@/components/ui/state";
 
@@ -45,6 +45,13 @@ export function DesktopSettingsTile() {
         {/* Starting hidden is only a question for a launch nobody asked for. */}
         {row("desktop-start-hidden", "Start hidden", current().startHidden, !current().launchAtLogin,
           (on) => ({ startHidden: on }))}
+        {/* Windows' caption, none (the sidebar's head, the pane headers and the tool rail drag the window, and the rail
+            holds its buttons), or Conduit's own bar. */}
+        <SettingLine label="Title bar">
+          <Segmented label="Title bar" size="sm" value={current().titleBar ?? "native"}
+            options={[{ value: "native", label: "Windows" }, { value: "none", label: "None" }, { value: "conduit", label: "Conduit" }] satisfies { value: DesktopTitleBar; label: string }[]}
+            onChange={(titleBar) => update({ titleBar: titleBar as DesktopTitleBar })} />
+        </SettingLine>
         <Show when={error()}><Note tone="error">{error()}</Note></Show>
       </>}
     </Show>
