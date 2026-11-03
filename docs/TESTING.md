@@ -126,8 +126,7 @@ invariant it broke (DESIGN.md Motion).
   prompt streamed in the app and in the gallery's live phone, each on a fresh
   chat, comparing the states each passes through: one shown 150ms or more must
   show on both, in order. It also lists answers drawn and then taken away.
-  `--model <spec>` runs a real model on the Assistant profile (`--profile
-  coding` for codemode scripts); `--budget` traces each side and prints every
+  `--model <spec>` runs a real model on the Assistant profile; `--budget` traces each side and prints every
   task over 6.94ms with what ran. Other pages in that Chrome share its CPU, so
   counts vary several-fold: read the slow tasks, don't compare counts.
 

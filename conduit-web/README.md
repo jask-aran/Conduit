@@ -35,7 +35,7 @@ The reserved `chat` project uses `data/chat/files` as its working directory.
 Named projects use direct children such as `data/chat/files/example`. Project
 metadata lives centrally in ignored `data/conduit.json`; each chat's files live
 under `.conduit/chats/<chat-id>`. `data/sessions.json` stores the lightweight
-Conduit chat registry. Assistant, Coding and Runtime chats run on the
+Conduit chat registry. Assistant and Runtime chats run on the
 pi-durable-based Conduit durable agent. Each chat stores its template profile
 and durable conversation id; the template configures its prompt, tools,
 extensions, skills and model scope. The server keeps provider credentials and
@@ -630,8 +630,8 @@ token and cost values.
 
 ## Chat profile identity
 
-`GET /v0/profiles` returns templates and harness-backed profiles. Assistant,
-Coding and Runtime use `native_api` with implementation `conduit-runtime`; other
+`GET /v0/profiles` returns templates and harness-backed profiles. Assistant
+and Runtime use `native_api` with implementation `conduit-runtime`; other
 profiles select their own adapters. Runtime still uses its dedicated create
 route.
 

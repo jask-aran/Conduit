@@ -11,7 +11,6 @@ Shipped profiles:
 | id | Label | Role |
 |----|-------|------|
 | `assistant` | Assistant | Workspace tools and model-agnostic web research |
-| `coding` | Coding | Workspace tools, development skills and pi-durable codemode |
 | `runtime` | Runtime | Special chat for Conduit runtime management |
 
 `templates/chat-naming/SYSTEM.md` is the prompt for the separate chat-title
@@ -24,7 +23,7 @@ Profiles selects the default for new chats (`data/preferences.json`). Each chat
 stores `templateId` and `templateVersion` in `data/sessions.json`. On open, the
 server loads the current template and configures the durable conversation.
 
-Assistant and Coding are selectable profiles. Runtime is special: it cannot be
+Assistant is the selectable profile (Coding was retired on 2026-11-03; its id opens on the Assistant). Runtime is special: it cannot be
 a global or workspace default and does not appear in ordinary profile
 switching. Settings → Profiles provides **Open runtime chat**, which creates a
 new management chat.
@@ -55,9 +54,11 @@ Paths resolve relative to the template directory:
 - `models` — model scope when `data/pi/settings.json` has no enabled-model list
 - `extensions`, `skills`, `promptTemplates` — profile resources
 
-The Assistant and Coding profiles load the `pi-web-access` extension. Coding
-also uses pi-durable's codemode extension. Skills appear as `/skill:<name>`
-commands and are included in the profile instructions.
+The Assistant and jbot load the `pi-web-access` extension. Skills are listed in
+the profile instructions as an index (each skill's name and when it applies);
+the model loads one with the `skill` tool. Shared skills live in
+`templates/skills/`, jbot's own in `templates/agent/skills/`. Safety rules stay in
+the always-loaded prompt; a skill holds only how to do the work.
 
 Provider credentials and model settings stay under the configured agent
 settings directory, normally `data/pi`. Web-search routing may use a derived

@@ -14,7 +14,7 @@ test("repository templates are discoverable launch presets", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../templates");
   const templates = listPiTemplates(root);
   assert.ok(templates.some((template) => template.id === "assistant"));
-  assert.ok(templates.some((template) => template.id === "coding"));
+  assert.ok(!templates.some((template) => template.id === "coding"));
   assert.ok(!templates.some((template) => template.id === "code-mode"));
   assert.ok(templates.some((template) => template.id === "runtime"));
   assert.equal(new Set(templates.map((template) => template.id)).size, templates.length);
@@ -41,9 +41,7 @@ test("repository templates are discoverable launch presets", () => {
     }
     assert.ok(fs.readFileSync(template.systemPrompt, "utf8").trim(), template.systemPrompt);
   }
-  const coding = templates.find((template) => template.id === "coding");
-  assert.ok(coding.skills.length > 0);
-  assert.equal(templatePublicView(coding).defaultable, true);
+  assert.ok(templates.find((template) => template.id === "assistant").skills.length > 0);
   assert.equal(templatePublicView(templates.find((template) => template.id === "assistant")).defaultable, true);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
   const assistant = templates.find((template) => template.id === "assistant");
