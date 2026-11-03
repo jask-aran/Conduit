@@ -1,0 +1,14 @@
+/* FindBar (find.tsx): a pane's find floating over the top of what it searches, under the pane's header, at the
+   reading column's right edge. The matches are CSS highlights (no DOM): every match the tint, the current one the
+   foreground's wash, so the two are told apart as cursor and current are. */
+
+.ui-frost.ui-find-bar { position: absolute; z-index: 3; top: calc(var(--header-height) + var(--space-md)); right: max(var(--space-xl), calc((100% - var(--transcript-column-width)) / 2));
+  display: flex; width: min(var(--measure-md), calc(100% - 2 * var(--space-xl))); align-items: center; gap: var(--space-2xs);
+  border-radius: var(--radius-surface); padding: var(--frost-inset); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-md)); }
+.ui-find-bar > .ui-lead-input { flex: 1; }
+.ui-find-count { flex: none; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption)/1 var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .ui-frost.ui-find-bar { animation: none; } }
+@media (--conduit-phone-layout) { .ui-frost.ui-find-bar { right: var(--space-lg); width: calc(100% - 2 * var(--space-lg)); } }
+
+::highlight(conduit-find) { background-color: var(--border); color: var(--foreground); }
+::highlight(conduit-find-current) { background-color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); color: var(--background); }

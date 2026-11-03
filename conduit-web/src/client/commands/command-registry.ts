@@ -52,6 +52,7 @@ export const COMMAND_IDS = {
   nextPaneLayout: "pane.next-layout",
   openBrowser: "browser.open",
   focusTranscript: "focus-transcript",
+  findInChat: "find-in-chat",
   focusWorkspacePanel: "focus-workspace-panel",
   dashboardComposer: "dashboard.composer",
   dashboardChats: "dashboard.chats",
@@ -621,11 +622,13 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   command({
     id: COMMAND_IDS.focusTranscript,
     label: "Go to transcript",
-    description: "Move focus to the chat transcript, to scroll it from the keyboard",
+    description: "Move focus to the chat transcript, its cursor on the last turn",
     group: "navigation",
     icon: "chat",
-    keywords: ["transcript", "messages", "scroll", "focus", "read"],
+    keywords: ["transcript", "messages", "scroll", "focus", "read", "turn", "cursor"],
     contexts: EVERY_REGION,
+    // After the three go-to chords: the transcript is inside the pane, not a fourth surface on screen.
+    defaultBindings: [goTo(4)],
     allowInExclusiveTarget: true,
     palette: true,
   }),
@@ -651,6 +654,17 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     contexts: ["application", "chat", "dashboard", "workspace-panel"],
     allowInExclusiveTarget: true,
     palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.findInChat,
+    label: "Find in chat",
+    description: "Find text in the transcript of the pane with the keyboard",
+    group: "navigation",
+    icon: "search",
+    keywords: ["find", "search", "text", "transcript", "messages", "ctrl+f"],
+    // Pressed again from the find bar's own field, Ctrl+F is the browser's find (the handler's `when`).
+    contexts: ["chat", "dashboard"],
+    defaultBindings: [binding(stroke("KeyF", "F", ["primary"]))],
   }),
   command({
     id: COMMAND_IDS.workspaceFiles,

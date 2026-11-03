@@ -51,6 +51,10 @@ import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
 import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow } from "@/components/ui/menus";
+import { FindBar } from "@/components/ui/find";
+import { mountTranscriptCursor, visibleBand } from "./transcript-cursor";
+import { createTranscriptFind, type FindMatch } from "./transcript-find";
 import { fullDateTime } from "./full-date-time";
 import { elapsed } from "./tool-card";
 
@@ -134,6 +138,9 @@ function AnswerFoot(props: { message: Message; precedingUserId?: string; chat: T
    caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
+/** One of a row's actions as its menu lists them (the transcript cursor's Menu key): what its foot offers. */
+type TurnAction = { label: string; icon: JSX.Element; run: () => void };
+
 /** An approval as the thread draws it (GET /v0/agent `asks`). */
 export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; title: string; service: string | null; lines: ApprovalLine[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
@@ -182,6 +189,41 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
    *  the work that asked (its call, or the script it was called from), one not found there at the thread's foot. */
   approvals?: { asks: () => TranscriptAsk[]; answer: (id: string, choice: ApprovalChoice) => Promise<void>; refresh: () => void } }) {
   const narrated = () => props.narration === "show";
+  // The keyboard (transcript-cursor.ts, transcript-find.ts): each row's actions for its menu, the menu open on a row,
+  // and the find. readerScroll moves the view as the reader's own scroll (set once the scroll handling is mounted).
+  const turnActions = new WeakMap<HTMLElement, () => TurnAction[]>();
+  // The turn menu's hidden anchor (the menu positions from the row's foot, not from it).
+  let anchor: HTMLElement | undefined;
+  const [turnMenu, setTurnMenu] = createSignal<{ row: HTMLElement; actions: TurnAction[] } | null>(null);
+  let turnCursor: ReturnType<typeof mountTranscriptCursor> | null = null;
+  let readerScroll = (top: number) => { viewport.scrollTop = top; };
+  // A match brought to the middle of what is seen. Its text may be in a block the visibility pass hides (skipped, or
+  // out of layout far above): the block, or its row, is brought on screen first and the match measured once shown.
+  const revealMatch = (match: FindMatch) => {
+    let tries = 0;
+    const centre = (rect: DOMRect) => {
+      const band = visibleBand(viewport, thread);
+      if (rect.top >= band.top && rect.bottom <= band.bottom) return;
+      readerScroll(viewport.scrollTop + rect.top + rect.height / 2 - (band.top + band.bottom) / 2);
+    };
+    const attempt = () => {
+      if (!match.range.startContainer.isConnected) return;
+      const hidden = match.range.startContainer.parentElement?.closest<HTMLElement>("[data-transcript-visibility]");
+      const rect = match.range.getBoundingClientRect();
+      if (!hidden && (rect.width || rect.height)) { centre(rect); return; }
+      if (tries++ >= 4) return;
+      centre((hidden?.getAttribute("data-transcript-visibility") === "hidden" ? hidden : match.row).getBoundingClientRect());
+      requestAnimationFrame(() => requestAnimationFrame(attempt));
+    };
+    attempt();
+  };
+  const find = createTranscriptFind({ viewport: () => viewport, thread: () => thread, reveal: revealMatch });
+  const openTurnMenu = (row: HTMLElement) => {
+    const actions = turnActions.get(row)?.() ?? [];
+    if (!actions.length) return false;
+    setTurnMenu({ row, actions });
+    return true;
+  };
   let transcriptRoot!: HTMLDivElement;
   let motionShell!: HTMLDivElement;
   let viewport!: HTMLDivElement;
@@ -1032,6 +1074,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       (next) => setViewportScrollTop(next, false),
     );
     transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
+    turnCursor = mountTranscriptCursor({ viewport, thread, scrollTo: (top) => readerScroll(top), openMenu: openTurnMenu });
+    find.register(viewport);
     // When the reader last did something that can move the view: a wheel (a trackpad's momentum keeps sending them),
     // any key, a touch and the fling after it, a press held in the chat (a scrollbar drag, a text selection dragged
     // past the edge, middle-click scrolling), focus moving in it, and Find from when it opens until the page has focus
@@ -1048,6 +1092,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       programmaticScrollTop = null;
       cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
+    };
+    readerScroll = (top) => {
+      cancelLatestGlide();
+      reading(800);
+      claimUserScroll();
+      viewport.scrollTop = Math.round(top);
     };
     const onWheel = (event: WheelEvent) => {
       reading(300);
@@ -1198,6 +1248,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       cancelTypewriterTailRejoin();
       transcriptVisibility?.destroy();
       transcriptVisibility = null;
+      turnCursor?.destroy();
+      turnCursor = null;
       panelMotion?.destroy();
       panelMotion = null;
     });
@@ -1215,6 +1267,32 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
            somebody scrolls back down themselves. */}
       <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
         hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
+      {/* Find in chat (Ctrl+F in the pane): its bar over the transcript's top. */}
+      <Show when={find.open()}>
+        <FindBar query={find.query()} count={find.count()} inputRef={find.setInput} onQuery={find.setQuery} onNext={find.next} onPrevious={find.previous} onEscape={find.escape} onClose={find.close} />
+      </Show>
+      {/* The cursor's row's menu (Menu key, Shift+F10): its foot's actions, at its foot. The trigger is only the
+          menu's anchor; the row is where it opens. */}
+      <DropdownMenu open={Boolean(turnMenu())} onOpenChange={(open) => {
+        if (open) return;
+        setTurnMenu(null);
+      }} placement="bottom-start"
+        getAnchorRect={() => { const row = turnMenu()?.row; const rect = (row?.querySelector(".ui-message-foot") ?? row)?.getBoundingClientRect(); return rect ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height } : undefined; }}>
+        <MenuControl as="span" ref={(element: HTMLElement) => { anchor = element; }}
+          // The menu library hands focus back to its trigger, this hidden anchor, after closing: the transcript takes
+          // it, so the keyboard is never stranded on an invisible element.
+          onFocus={() => { if (!turnMenu()) queueMicrotask(() => { if (document.activeElement === anchor) viewport.focus({ preventScroll: true }); }); }} aria-hidden="true" tabIndex={-1} style={{ position: "absolute", top: 0, left: 0, width: 0, height: 0 }} />
+        <MenuContent onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          // Back to the transcript, unless a press outside the menu put focus somewhere of its own.
+          const active = document.activeElement;
+          // The invisible anchor counts as nowhere: focus handed back to it would strand the keyboard.
+          if (!active || active === document.body || active.closest('[data-slot="ui-menu-content"]') || active.getAttribute("aria-hidden") === "true") viewport.focus({ preventScroll: true });
+          else turnCursor?.menuClosed();
+        }}>
+          <For each={turnMenu()?.actions ?? []}>{(action) => <MenuRow icon={action.icon} onSelect={action.run}>{action.label}</MenuRow>}</For>
+        </MenuContent>
+      </DropdownMenu>
       {/* Editing an earlier message: a way out that is always there, floating
           over the composer where the edit happens, as the pencil would. */}
       <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
@@ -1222,7 +1300,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     </>}>
         <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
         <LibraryTranscript ref={thread} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}>
-        <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item"><LoadingEarlier /></TranscriptRow></Show>
+        <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item" data-cursor-skip><LoadingEarlier /></TranscriptRow></Show>
         <For each={timeline}>{(item, index) => {
           const flow = () => flowAt(index());
           if (item.type === "trace") {
@@ -1230,7 +1308,16 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            return <TranscriptRow ref={traceRow} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            // Its menu: what the foot under an answerless turn offers.
+            const traceActions = (): TurnAction[] => {
+              if (!(item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context"))) return [];
+              const actions: TurnAction[] = [];
+              if (props.supports("regenerate") && item.precedingUserId) actions.push({ label: "Regenerate response", icon: <Icons.Refresh />, run: () => void props.chat.regenerate(item.precedingUserId!) });
+              const entry = artifact();
+              if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: chatId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
+              return actions;
+            };
+            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1270,7 +1357,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
+            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1330,7 +1417,22 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             setCopied(true);
             setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
           };
-          return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
+          // Its menu: what its foot offers -- an answer's Copy, Regenerate and changes, the person's Edit from here.
+          const rowActions = (): TurnAction[] => {
+            const actions: TurnAction[] = [];
+            if (user()) {
+              if (!(message().content || "").startsWith(APPROVAL_NOTE) && !message().pending && props.supports("fork"))
+                actions.push({ label: props.chat.editingEntryId() === message().id ? "Cancel editing" : "Edit from here", icon: <Icons.Edit />, run: () => { props.chat.edit(message()); focusComposerSoon(); } });
+              return actions;
+            }
+            if (narrated() && !item.orb || !actionsShown()) return actions;
+            if (!message().discarded && (message().content || message().errorMessage)) actions.push({ label: "Copy Markdown", icon: <Icons.Copy />, run: () => void copy() });
+            if (props.supports("regenerate") && precedingUserId()) actions.push({ label: "Regenerate response", icon: <Icons.Refresh />, run: () => void props.chat.regenerate(precedingUserId()!) });
+            const entry = artifact();
+            if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: props.chat.loadedId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
+            return actions;
+          };
+          return <TranscriptRow ref={(element: HTMLDivElement) => { row = element; turnActions.set(element, rowActions); }} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
             <Show when={user()} fallback={<Turn>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>
@@ -1374,7 +1476,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         {/* Sent, and the server has not started the turn yet: its starting
             header shows with the message, fading in beside it, so the turn's
             own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" flow="exchange"><TraceStarting narrated={narrated()} since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
+        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip flow="exchange"><TraceStarting narrated={narrated()} since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
         </LibraryTranscript>
   </ChatScroller>;
 }

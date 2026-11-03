@@ -42,6 +42,7 @@
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
  *   approval        ApprovalSummary (the question card's, an ApprovalCard's), ApprovalCard
  *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
+ *   find            FindBar, and the ::highlight rules for its matches
  *   transcript      Transcript, Turn, Message, Bubble, Answer
  *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
  *   agents          AgentRows > AgentRow (a turn's subagents), AgentRider (a chat's background agents, a line each)
@@ -92,6 +93,7 @@ import "./rider.css";
 import "./approval.css";
 import "./transcript.css";
 import "./chat.css";
+import "./find.css";
 import "./code.css";
 import "./trace.css";
 import "./agents.css";

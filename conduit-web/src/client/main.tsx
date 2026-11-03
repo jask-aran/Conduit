@@ -67,6 +67,8 @@ import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION
 import { listAudioInputDevices, rematchInputDevice } from "./chat/voice-audio";
 import { installedClientKind } from "./platform/installed-client";
 import { Transcript } from "./chat/transcript";
+import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
+import { landTranscriptCursor } from "./chat/transcript-cursor";
 import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
@@ -5414,7 +5416,7 @@ function App() {
       ...getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusWorkspacePanel, context, focusWorkspacePanel, { when: () => Boolean(workspacePanelScope()) })),
       ...getCommandDefinition(COMMAND_IDS.focusTranscript).contexts.map((context) =>
-        shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, focusTranscript, { when: hasTranscript })),
+        shortcutManager.registerHandler(COMMAND_IDS.focusTranscript, context, () => { focusTranscript(); landTranscriptCursor(document.activeElement); }, { when: hasTranscript })),
       shortcutManager.registerHandler(COMMAND_IDS.focusMainPane, "application", focusMainPane),
       shortcutManager.registerHandler(COMMAND_IDS.nextTab, "application", () => stepTab(1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
@@ -5482,6 +5484,17 @@ function App() {
           shortcutManager.registerHandler(COMMAND_IDS.dashboardMessages, "dashboard", () => { focusSplitSection("messages"); }, { when: () => splitSections().has("messages") }),
         ];
       })(),
+      // Find in chat (keyboard model, gap 6): Ctrl+F opens the find bar of the transcript in the pane with the keyboard.
+      // Not claimed from an editor with its own find, nor from the find bar's own field: pressed again there, the
+      // browser's find opens.
+      ...((here: () => HTMLElement | null) => (["chat", "dashboard"] as const).map((context) => shortcutManager.registerHandler(COMMAND_IDS.findInChat, context, () => { openTranscriptFind(here()); }, {
+        when: () => !document.activeElement?.closest(".ui-find-bar, .cm-editor") && hasTranscriptFind(here()),
+      })))(() => {
+        // The pane's own transcript (a split pane sits inside the main one's element), else the region's.
+        const active = document.activeElement, pane = paneOf(active) ?? keyboardPane();
+        return [...document.querySelectorAll<HTMLElement>(`${paneSelector(pane)} .ui-chat-viewport`)].find((viewport) => paneOf(viewport) === pane)
+          ?? active?.closest("[data-region]")?.querySelector<HTMLElement>(".ui-chat-viewport") ?? null;
+      }),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });

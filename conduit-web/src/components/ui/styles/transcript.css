@@ -29,6 +29,10 @@
    --turn-step, for the orb), it steps in by as much, then hangs its mark. */
 :is(.ui-transcript, .ui-transcript-row) > .ui-envelope { margin-left: calc(max(0px, var(--icon-xl) + var(--row-gap) + var(--space-xs) - (100cqw - 100%) / 2) - var(--mark-hang)); }
 .ui-transcript-row { min-width: 0; }
+/* The transcript's keyboard cursor (client/chat/transcript-cursor.ts): the wash on the one row it is on, bled past the
+   row by a step so text never touches its edge. Paint only, on that row alone: no geometry moves and nothing inside
+   restyles. */
+.ui-transcript-row[data-focus-shown] { border-radius: var(--radius-surface); background: var(--tint); box-shadow: 0 0 0 var(--space-md) var(--tint); }
 .ui-loading-earlier { display: flex; justify-content: center; }
 /* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
    what either is. Drawn row by row the row says so (TranscriptRow `flow`); composed of parts, the parts do: a reply
@@ -131,11 +135,11 @@
 .ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
 /* A message's time and actions show while its row is hovered or holds focus, and on the latest exchange (a trial,
-   2026-11-01). On touch: the latest exchange's, and an older message's once it is tapped ([data-revealed]).
+   2026-11-01), and under the keyboard's cursor. On touch: the latest exchange's, and an older message's once it is tapped ([data-revealed]).
    How it ended (status) and what it changed (Changes) are facts, never hidden. Opacity only: nothing moves. */
 @media (hover: hover) {
   .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
-  .ui-transcript-row:is(:hover, :focus-within, [data-latest]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
+  .ui-transcript-row:is(:hover, :focus-within, [data-latest], [data-focus-shown]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
 }
 @media (hover: none) {
   .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
