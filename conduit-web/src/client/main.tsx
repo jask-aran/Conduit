@@ -5477,7 +5477,7 @@ function App() {
           ...([COMMAND_IDS.dockedPane1, COMMAND_IDS.dockedPane2, COMMAND_IDS.dockedPane3] as const).map((id, index) =>
             shortcutManager.registerHandler(id, "workspace-panel", () => { const slot = railDocked()[index]; if (slot !== undefined) chooseDocked(slot, false); }, { when: () => !isMobileLayout() && railDocked()[index] !== undefined })),
           // M from a docked pane: back out of the dock into the row, as its header's Move to a pane does.
-          shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => { const pane = here(); if (pane !== null) undockPane(pane as number); }, { when: () => { const pane = here(); return pane !== null && isDocked(pane); } }),
+          shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => { const pane = here(); if (pane !== null) undockPane(pane as number); }, { when: () => { const pane = here(); return pane !== null && isDocked(pane) && rowSlots().length < 2; } }),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewChat, "sidebar", () => { setMobileSidebarOpen(false); void startNewChat(); }),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewFolder, "sidebar", () => runSidebar("new-folder")),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarSearchChats, "sidebar", toggleSearchPalette),

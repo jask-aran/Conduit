@@ -52,14 +52,30 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
   // rooms interleave.
-  const rows = createMemo(() => props.messages.reduce<StreamRow[]>((list, message) => {
-    if (message.channel === "app") { list.push({ kind: "message", message }); return list; }
-    const since = list.findLastIndex((row) => row.kind === "message") + 1;
-    const room = list.slice(since).find((row) => row.kind === "room" && row.room === message.room);
-    if (room?.kind === "room") room.messages.push(message);
-    else list.push({ kind: "room", room: message.room, channel: message.channel, messages: [message] });
-    return list;
-  }, []));
+  // Each refresh reads new message objects; a row that is unchanged keeps its object, so <For> keeps its element and the
+  // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
+  let kept = new Map<string, { sig: string; row: StreamRow }>();
+  const rows = createMemo(() => {
+    const built = props.messages.reduce<StreamRow[]>((list, message) => {
+      if (message.channel === "app") { list.push({ kind: "message", message }); return list; }
+      const since = list.findLastIndex((row) => row.kind === "message") + 1;
+      const room = list.slice(since).find((row) => row.kind === "room" && row.room === message.room);
+      if (room?.kind === "room") room.messages.push(message);
+      else list.push({ kind: "room", room: message.room, channel: message.channel, messages: [message] });
+      return list;
+    }, []);
+    const next = new Map<string, { sig: string; row: StreamRow }>();
+    const stable = built.map((row) => {
+      const key = row.kind === "message" ? `m:${row.message.id}` : `r:${row.room}:${row.messages[0]!.id}`;
+      const sig = JSON.stringify(row);
+      const before = kept.get(key);
+      const chosen = before && before.sig === sig ? before.row : row;
+      next.set(key, { sig, row: chosen });
+      return chosen;
+    });
+    kept = next;
+    return stable;
+  });
   // A room's name: its subject, from whichever of its messages carries one.
   const roomName = (room: string) => props.messages.find((message) => message.room === room && message.title)?.title || room;
   // The person's message starts an exchange; jbot's reply to it is the exchange's; what jbot says next, a step on. A
