@@ -205,11 +205,12 @@ export function installSplitCursor(root: HTMLElement): () => void {
 
   // Capture, so a heading's own controls -- a segmented switch that selects on
   // arrows, a menu that opens on ↓ -- give way to the cursor.
-  // The browser drops :focus-visible while the window is away; hold the wash.
+  // The browser drops :focus-visible while the window is away; hold the wash -- only a wash that showed: a row a click
+  // focused (a message clicked) has none, and gains one on blur otherwise.
   const release = () => root.querySelector("[data-held]")?.removeAttribute("data-held");
   const away = () => {
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && root.contains(focused) && focused.matches(`${ROWS}, ${CONTROLS}`)) focused.setAttribute("data-held", "");
+    if (focused instanceof HTMLElement && root.contains(focused) && focused.matches(`${ROWS}, ${CONTROLS}`) && focused.matches(":focus-visible")) focused.setAttribute("data-held", "");
   };
   window.addEventListener("blur", away);
   window.addEventListener("focus", release);
