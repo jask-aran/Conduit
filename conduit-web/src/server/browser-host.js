@@ -204,7 +204,10 @@ export class BrowserHost {
 
   /** What the session starts with, whoever starts it (the pane, an agent's MCP server): its profile, its stream. */
   env() {
-    return { AGENT_BROWSER_SESSION: this.session, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality),
+    // Muted: the pane carries no sound, and a page left playing (a video in a closed tab) would sound on the hub's
+    // machine -- through WSLg, as Windows' "Remote Audio" -- with no way to stop it from Conduit.
+    const args = [process.env.AGENT_BROWSER_ARGS, "--mute-audio"].filter(Boolean).join("\n");
+    return { AGENT_BROWSER_SESSION: this.session, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality), AGENT_BROWSER_ARGS: args,
       ...(this.profile ? { AGENT_BROWSER_PROFILE: this.profile } : {}) };
   }
 
