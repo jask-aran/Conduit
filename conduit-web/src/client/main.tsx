@@ -114,7 +114,8 @@ import { createAgentUiBridge } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
-import { agentView, refreshAgent } from "./state/agent";
+import { agentNeeds, agentView, refreshAgent } from "./state/agent";
+import { ServerSwitcher } from "./navigation/server-switcher";
 import type { HarnessChoices, HarnessThreadTarget } from "./dashboard/harness-dashboard";
 import {
   applyTranscriptAppearance,
@@ -5882,9 +5883,28 @@ function App() {
       }} />
     } /></Show>
     <Show when={desktopShell && desktopTitleBar() === "conduit"}>
-      <TitleBar lead={<span>{activeServer()?.name || "Conduit"}</span>}
+      {/* Conduit's own bar (Settings › Desktop › Title bar): everything here is a trial; what is kept is decided in use. */}
+      <TitleBar
+        lead={<>
+          <ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
+            onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} />
+          <IconButton label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
+          <IconButton label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
+        </>}
         middle={<Button variant="secondary" size="sm" onClick={() => openPalette(null)}><Icons.Search />Search or run a command</Button>}
-        end={windowControls("bar")} />
+        end={<>
+          <Show when={[...runtime.processes().values()].filter((process) => process.id).length}>{(count) =>
+            <Button variant="ghost" size="sm" title="Chats with a turn running" onClick={() => void openDashboard("none")}><Spinner />{count()} running</Button>}</Show>
+          <Show when={agentView()?.enabled && agentNeeds()}>{(needs) =>
+            <Button variant="ghost" size="sm" title={`${agentView()?.settings?.name || "Agent"} wants you`} onClick={() => void openAgentHere()}>{agentView()?.settings?.name || "Agent"} · {needs()}</Button>}</Show>
+          <Show when={updateState().kind === "ready"}>
+            <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
+          </Show>
+          <IconButton label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
+          <IconButton label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
+          <Show when={splitShown()}><IconButton label="Equalise panes" onClick={() => applyPaneLayout(Array(shownSlots().length + 1).fill(1))}><Icons.Split /></IconButton></Show>
+          {windowControls("bar")}
+        </>} />
     </Show>
     <AppShell class="workspace-layout" settling={panesSettling()} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <Sheet as="main" lead under={workspaceExpanded()} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
