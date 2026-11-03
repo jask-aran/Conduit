@@ -76,9 +76,9 @@
   /* Travel: something large crossing the page to a new place (the composer docking after a first send, a split
      opening beside it), on --ease-arrive. Slower than gentle, since it goes further. */
   --duration-travel: 400ms;
-  /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three
+  /* Effects keep their own time: a level following a voice, focus arriving in a region (its edge traced once), a copy's wash fading, a spinner's turn (three
      times slower when motion is reduced), a recording's pulse, something live breathing. */
-  --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
+  --duration-follow: 120ms; --duration-arrival: 400ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
 }
 /*
  * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:

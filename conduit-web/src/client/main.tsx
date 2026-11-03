@@ -2182,6 +2182,9 @@ function App() {
   let syncFocusedShortcutContext: ((target: EventTarget | null) => void) | undefined;
   // When a chord (Ctrl/Cmd/Alt) was last pressed: focus arriving just after it came by keyboard, and holds its region.
   let chordAt = 0;
+  // The region focus last moved into from another (set by the focusin sync), and the one it was in.
+  let enteredRegion: HTMLElement | null = null;
+  let focusRegion: HTMLElement | null = null;
   /*
    * Focus intent: every deliberate move (a go-to, a pane step, a press) is a new one. Deferred focus work (a retry until
    * a composer is enabled, a swap's settle after its animation) remembers the intent it began under and gives way when
@@ -2197,8 +2200,13 @@ function App() {
   };
   const acknowledgeFocusedRegion = (region: HTMLElement | null) => {
     if (!region || !region.contains(document.activeElement)) return;
+    // Arriving where focus already was is no arrival: no cue (pressing a go-to twice does not flash). The focus events
+    // say whether this move crossed into the region (enteredRegion); the move happened just before this call.
+    // (The region given may hold the data-region element or sit inside it: the main pane's .chat-main holds its chat.)
+    const already = !enteredRegion || !(region.contains(enteredRegion) || enteredRegion.contains(region));
+    enteredRegion = null;
     holdRegion(region);
-    acknowledgeRegion(region);
+    if (!already) acknowledgeRegion(region);
   };
   const acknowledgeWorkspaceFocus = () => acknowledgeFocusedRegion(
     document.activeElement instanceof Element
@@ -5554,6 +5562,7 @@ function App() {
       // (acknowledgeFocusedRegion). Focus outside a region keeps the last owner until another receives focus.
       const outermost = regions.at(-1);
       if (!outermost || !(outermost.element instanceof HTMLElement)) return;
+      if (outermost.element !== focusRegion) { enteredRegion = outermost.element; focusRegion = outermost.element; }
       if (outermost.name !== "sidebar" && performance.now() - chordAt < 600) holdRegion(outermost.element);
       else if (heldRegion !== outermost.element) holdRegion(null);
     };
