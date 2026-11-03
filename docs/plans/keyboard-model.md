@@ -1,6 +1,6 @@
 # Keyboard model
 
-Status: agreed 2026-11-03; being built (steps 1–3 done). It extends DESIGN.md › Keyboard (2026-10-18), and wins where they differ. The
+Status: agreed and built 2026-11-03 (gaps 1–8; the computer dashboard keeps native Tab, its cursor is a redesign). Reviewed by Codex for implicit state and races; fixed. Still open: entering a jbot message's own links and controls by keyboard; the find bar sits over the text it searches; Go to transcript's Ctrl+Shift+4 is the macOS screenshot chord. It extends DESIGN.md › Keyboard (2026-10-18), and wins where they differ. The
 inventory it rests on is HEAD 96a382e7: the sidebar, panes, palettes and dashboards were built in October, and
 Settings on 2026-11-03.
 

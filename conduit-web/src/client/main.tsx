@@ -2180,6 +2180,15 @@ function App() {
   // persistent bottom line; a menu can take focus without changing it.
   let heldRegion: HTMLElement | null = null;
   let syncFocusedShortcutContext: ((target: EventTarget | null) => void) | undefined;
+  // When a chord (Ctrl/Cmd/Alt) was last pressed: focus arriving just after it came by keyboard, and holds its region.
+  let chordAt = 0;
+  /*
+   * Focus intent: every deliberate move (a go-to, a pane step, a press) is a new one. Deferred focus work (a retry until
+   * a composer is enabled, a swap's settle after its animation) remembers the intent it began under and gives way when
+   * a newer one exists, so it never pulls focus back from where the person went since (Codex review).
+   */
+  let focusIntent = 0;
+  let enterRetry: ReturnType<typeof setTimeout> | undefined;
   const holdRegion = (region: HTMLElement | null) => {
     if (heldRegion === region) return;
     heldRegion?.removeAttribute("data-focus-held");
@@ -2197,6 +2206,7 @@ function App() {
       : null,
   );
   const focusWorkspacePanel = () => {
+    focusIntent++;
     if (!workspacePanelScope()) return;
     if (isMobileLayout()) setMobileSidebarOpen(false);
     // The dock showing a docked pane: that pane is what it holds, so it takes the keyboard.
@@ -2232,18 +2242,25 @@ function App() {
   // still connecting is disabled, so the pane holds focus until it can take
   // it, unless something else has taken focus by then. The terminal page
   // focuses its own.
-  const enterMainPane = (attempt = 0, from: Element | null = null) => {
+  // Entering is not itself a new intent (a route settling calls it too): its retries belong to the intent it began
+  // under, and a deliberate move made since (focusMainPane, a go-to, a press) ends them.
+  const enterMainPane = (attempt = 0, from: Element | null = null, intent = focusIntent) => {
+    if (attempt === 0) clearTimeout(enterRetry);
+    if (intent !== focusIntent) return;
     if (routeKind() === "terminal") return;
     const pane = document.querySelector<HTMLElement>(".chat-main");
     const active = document.activeElement;
     if (attempt > 0 && active !== from && active !== document.body) return;
     if (hasComposer()) return focusComposer();
     if (active !== pane) pane?.focus({ preventScroll: true });
-    if (document.querySelector("textarea[data-composer-input]") && attempt < 20) setTimeout(() => enterMainPane(attempt + 1, pane), 100);
+    if (document.querySelector("textarea[data-composer-input]") && attempt < 20) enterRetry = setTimeout(() => enterMainPane(attempt + 1, pane, intent), 100);
   };
   const focusMainPane = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
+    focusIntent++;
     if (splitShown() && cyclePaneFocus()) return;
+    // The main pane has the keyboard now, even where its composer is entered by a retry (Codex review).
+    setKeyboardPane("main");
     enterMainPane();
     acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
   };
@@ -2264,6 +2281,7 @@ function App() {
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
+    focusIntent++;
     const collapsed = document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") === "collapsed";
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
@@ -3788,7 +3806,8 @@ function App() {
     const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
     const place = keep === null ? -1 : panesShown().indexOf(keep);
-    const settleFocus = () => { const target = panesShown()[place]; if (place >= 0 && target !== undefined) focusAnyPane(target); };
+    const intent = ++focusIntent;
+    const settleFocus = () => { if (intent !== focusIntent) return; const target = panesShown()[place]; if (place >= 0 && target !== undefined) focusAnyPane(target); };
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
     const left = paneElement(leftPane);
     const right = paneElement(rightPane);
@@ -5168,7 +5187,8 @@ function App() {
     // one an outside tap synthesises, closes that menu and leaves the drawer.
     if (phoneLayerOpen()) return;
     if (event.key === "Escape" && !paletteOpen() && !settingsOpen()) {
-      if (mobileSidebarOpen()) { event.preventDefault(); setMobileSidebarOpen(false); return; }
+      // One step at a time: chats selected in the drawer are cleared first (the sidebar's own Escape), the drawer next.
+      if (mobileSidebarOpen() && !document.querySelector(".ui-nav-pane [data-selected]")) { event.preventDefault(); setMobileSidebarOpen(false); return; }
     }
   };
 
@@ -5529,17 +5549,21 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen() || node.classList.contains("main-split"))) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // Main and workspace show their line whenever focus enters. The sidebar
-      // shows it only after its go-to shortcut. Focus outside a region keeps
-      // the last owner until another region receives focus.
+      // A region shows its held line when the keyboard brought focus there (a chord just pressed: a go-to, a pane or
+      // tab step); a click or Tab never lights it (keyboard-model.md › Enter). The sidebar's comes only from its go-to
+      // (acknowledgeFocusedRegion). Focus outside a region keeps the last owner until another receives focus.
       const outermost = regions.at(-1);
       if (!outermost || !(outermost.element instanceof HTMLElement)) return;
-      if (outermost.name === "sidebar") {
-        if (heldRegion !== outermost.element) holdRegion(null);
-      } else holdRegion(outermost.element);
+      if (outermost.name !== "sidebar" && performance.now() - chordAt < 600) holdRegion(outermost.element);
+      else if (heldRegion !== outermost.element) holdRegion(null);
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
+    const noteChord = (event: KeyboardEvent) => { if (event.ctrlKey || event.metaKey || event.altKey) chordAt = performance.now(); };
+    window.addEventListener("keydown", noteChord, true);
+    // A press is the person's own choice of where to be: deferred focus work started before it gives way (focusIntent).
+    const notePress = () => { focusIntent++; };
+    window.addEventListener("pointerdown", notePress, true);
     syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
       syncFocusedShortcutContext = undefined;
@@ -5547,6 +5571,8 @@ function App() {
       window.removeEventListener("keydown", dismissOpenLayer, true);
       window.removeEventListener("keydown", escapeHome);
       window.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("keydown", noteChord, true);
+      window.removeEventListener("pointerdown", notePress, true);
       for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();
       for (const release of releaseShortcutHandlers) release();
