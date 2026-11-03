@@ -88,3 +88,7 @@
 
 /* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
 .ui-composer-field > textarea { font-family: var(--font-transcript); }
+/* MessageFeedback (composer.tsx): the composer at a bubble's width, under the message it is about. */
+.ui-frost.ui-desktop-composer.ui-message-feedback { width: min(65%, var(--measure-2xl)); margin-top: var(--space-sm); }
+.ui-message-feedback-note { padding-inline: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+

@@ -74,6 +74,7 @@ export function AgentPage(props: {
 }) {
   const log = useJbotMessages(() => props.threadChanged);
   const [now, setNow] = createSignal(Date.now());
+  // A run's chat, by its conversation: run ids (bg-1, bg-2…) are counted again and repeat; a conversation never does.
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal<string | null>(null);
@@ -97,7 +98,7 @@ export function AgentPage(props: {
     const home = untrack(() => view()?.home?.chatId);
     if (!home) return;
     void api<{ agents: AgentSummary[] }>(`/v0/chats/${encodeURIComponent(home)}/agents`)
-      .then(({ agents }) => setRunChats(new Map(agents.filter((agent) => agent.id && agent.chatId).map((agent) => [agent.id!, agent.chatId!]))))
+      .then(({ agents }) => setRunChats(new Map(agents.filter((agent) => agent.conversationId != null && agent.chatId).map((agent) => [String(agent.conversationId), agent.chatId!]))))
       .catch(() => {});
   }));
 
@@ -119,7 +120,7 @@ export function AgentPage(props: {
   });
 
   const runRow = (run: AgentRun, live: boolean) => {
-    const chatId = () => runChats().get(run.id);
+    const chatId = () => runChats().get(String(run.conversationId));
     return <Row density="list" element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
       lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
       label={run.title || "A run"}

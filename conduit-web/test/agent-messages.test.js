@@ -4,6 +4,9 @@ import path from "node:path";
 import { EmailChannel } from "../src/agent/email.js";
 import { MessageLog, MessageTools } from "../src/agent/messages.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
+import { registerAgentRoutes } from "../src/server/routes/agent.js";
+import { personWords } from "../src/agent/person-words.js";
+import { entryText, InboxTools } from "../src/agent/inbox.js";
 
 async function mailbox(t) {
   const fixture = await agentFixture(t);
@@ -26,6 +29,77 @@ const mail = (id, { from = "person@example.test", cc, reply } = {}) => Buffer.fr
   `Message-ID: <${id}@example.test>`, `From: ${from}`, "To: bot@example.test", "Subject: Plans",
   ...(cc ? [`Cc: ${cc}`] : []), ...(reply ? [`In-Reply-To: <${reply}@example.test>`] : []), "", `Body of ${id}`,
 ].join("\r\n"));
+
+function feedbackRoute(agent) {
+  const routes = new Map();
+  const app = { get() {}, put() {}, patch() {}, delete() {}, post: (route, handler) => routes.set(route, handler) };
+  registerAgentRoutes(app, { agent });
+  return async (body) => {
+    let status = 200;
+    let payload;
+    const response = { status: (value) => { status = value; return response; }, json: (value) => { payload = value; return response; } };
+    await routes.get("/v0/agent/feedback")({ body }, response, (error) => { throw error; });
+    return { status, body: payload };
+  };
+}
+
+test("app feedback validates text and requires a jbot app message", async (t) => {
+  const { agent, log } = await mailbox(t);
+  const at = new Date().toISOString();
+  log.append({ id: "jbot", at, direction: "out", sender: "jbot", body: "Hello" });
+  log.append({ id: "person", at, direction: "in", sender: "person", body: "Hello" });
+  log.append({ id: "wrong-direction", at, direction: "in", sender: "jbot", body: "Hello" });
+  log.append({ id: "wrong-sender", at, direction: "out", sender: "person", body: "Hello" });
+  // Loaded channel records are sufficient here: no outbound delivery.
+  log.messages.push({ id: "email", at, channel: "email", direction: "out", sender: "jbot", body: "Hello" });
+  const post = feedbackRoute(agent);
+  for (const body of [undefined, {}, { messageId: "jbot" }, { messageId: "jbot", text: " \n " },
+    { messageId: "jbot", text: 1 }, { messageId: "jbot", text: "x".repeat(2001) },
+    { text: "Useful" }, { messageId: 1, text: "Useful" }, { messageId: " ", text: "Useful" }]) {
+    assert.deepEqual(await post(body), { status: 400, body: { error: "invalid_feedback" } });
+  }
+  for (const messageId of ["missing", "person", "email", "wrong-direction", "wrong-sender"]) {
+    assert.deepEqual(await post({ messageId, text: "Useful" }), { status: 404, body: { error: "message_not_found" } });
+  }
+  assert.deepEqual((await agent.state()).inbox, {});
+  for (const text of [" x ", ` ${"x".repeat(2000)} `]) {
+    const response = await post({ messageId: "jbot", text });
+    assert.equal(response.status, 201);
+    assert.equal((await agent.state()).inbox[response.body.id].text, text.trim());
+  }
+  t.mock.method(agent, "enabled", () => false);
+  assert.deepEqual(await post({ messageId: "jbot", text: "Useful" }), { status: 409, body: { error: "agent_not_enabled" } });
+});
+
+test("feedback keeps the person's words separate from the quoted jbot message", async (t) => {
+  const { agent, log, api, prompts } = await mailbox(t);
+  api.conversationId = await agent.update(async (doc, tx) => {
+    const home = await tx.createConversation({ ownership: { kind: "ownerless" } });
+    doc.home.conversationId = home.id;
+    return home.id;
+  });
+  const at = "2030-01-15T12:00:00.000Z";
+  const original = `Jbot-only quotation\n${"q".repeat(700)}`;
+  log.append({ id: "jbot-message", at, direction: "out", sender: "jbot", body: `  ${original}  ` });
+  const text = "FYI: Keep the detail\nDo not omit the times.";
+  const response = await feedbackRoute(agent)({ messageId: "jbot-message", text: `  ${text}\n  ` });
+  assert.equal(response.status, 201);
+  const item = (await agent.state()).inbox[response.body.id];
+  assert.deepEqual({ kind: item.kind, for: item.for, level: item.level, status: item.status, author: item.author,
+    via: item.via, messageId: item.messageId, headline: item.headline, text: item.text }, {
+    kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled", author: "person", via: "feedback",
+    messageId: "jbot-message", headline: "FYI: Keep the detail", text,
+  });
+  assert.ok(Number.isFinite(Date.parse(item.at)));
+  assert.equal(item.body, `${text}\n\nAbout jbot message jbot-message at ${at}:\n${`${original.slice(0, 599)}…`.split("\n").map((line) => `> ${line}`).join("\n")}`);
+  assert.match(entryText(item, "UTC"), /author: person, via: feedback/);
+  const read = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  assert.ok((await read.execute({ action: "read", id: item.id }, api)).output[0].text.includes(item.body));
+  // Feedback is for Reflection only: never the person's intent for the approval judge.
+  assert.ok(!(await personWords(agent, api.conversationId)).messages.some((message) => message.via === "feedback"));
+  assert.equal(prompts.length, 0, "feedback waits for Reflection without a home turn");
+  assert.equal(log.messages.length, 1, "feedback does not become a chat message");
+});
 
 // persistent-agent.md, Rooms and Email: one app room; one room per email thread.
 test("the app uses one room and separate email threads use separate rooms", async (t) => {

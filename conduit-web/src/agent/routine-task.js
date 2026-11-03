@@ -20,6 +20,10 @@ export const forkRecord = (state, id) => Object.values(state?.routineRuns || {})
 
 export function forkAllows(agent, record, name, args) {
   if (name === "memory") return true;
+  if (name === "inbox" && args?.action === "handle") {
+    const ids = [...(args.ids || []), ...(args.id ? [args.id] : [])];
+    return ids.length > 0 && ids.every((id) => record.outcome?.inboxIds?.includes(id));
+  }
   if (name === "read") return !args?.device;
   if (!["write", "edit"].includes(name) || args?.device || !record.reportPath) return false;
   return path.resolve(agent.folder, String(args?.path || "")) === path.resolve(agent.folder, record.reportPath);
@@ -28,7 +32,7 @@ export function routineToolGuard(runtime) {
   return hook(ToolTask, { beforeTool: async (call, api, context) => {
     const record = forkRecord(await api.snapshot(AgentDoc, context), api.conversationId);
     if (record && !forkAllows(runtime.agent, record, call.name, call.arguments)) {
-      return { block: "Routine forks cannot send, post, notify, request approval, or start other work. Use memory and the report file only." };
+      return { block: "Routine forks cannot send, post, notify, request approval, or start other work. Use memory, the report file, and inbox handle for gathered entries only." };
     }
   } });
 }

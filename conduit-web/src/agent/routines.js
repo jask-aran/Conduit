@@ -132,23 +132,26 @@ export async function notesTask(agent, task, cursor, state) {
 }
 
 /** One task, with its cursor: what it gathered as a block, how much of it is new, and the cursor to keep. */
-async function runTask(agent, task, cursor, state, now) {
+async function runTask(agent, task, cursor, state, now, routineName) {
   const zone = agent.settings().timezone;
   if (task.kind === "inbox") {
-    const entries = listInbox(state, task.all ? {} : { unhandled: true });
+    const filters = { for: task.for ?? routineName, kinds: task.kinds, addressed: task.addressed };
+    const entries = listInbox(state, { ...filters, unhandled: !task.all });
     const since = Date.parse(cursor.since || "") || 0;
     const fresh = entries.filter((entry) => Date.parse(entry.at) > since);
     const shown = [];
+    const inboxIds = [];
     let size = 0;
     for (const entry of fresh.slice(0, ENTRIES)) {
       const text = entryText({ ...entry, body: entry.body ? String(entry.body).slice(0, ENTRY_BODY) : "" }, zone);
       if (size + text.length > BLOCK_MAX) break;
       shown.push(text);
+      inboxIds.push(entry.id);
       size += text.length;
     }
     const more = fresh.length - shown.length;
-    return { fresh: fresh.length, cursor: fresh.length ? { since: fresh[0].at } : cursor, items: [],
-      block: block(task.id, { new: fresh.length, unhandled: listInbox(state, { unhandled: true }).length },
+    return { fresh: fresh.length, cursor: fresh.length ? { since: fresh[0].at } : cursor, items: [], inboxIds,
+      block: block(task.id, { new: fresh.length, unhandled: listInbox(state, { ...filters, unhandled: true }).length },
         fresh.length ? `${shown.join("\n")}${more ? `\n… and ${more} more (inbox list)` : ""}` : "Nothing new.") };
   }
   if (task.kind === "notes") return notesTask(agent, task, cursor, state);
@@ -184,12 +187,14 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
   let fresh = 0;
   const items = [];
   const taskVars = {};
+  const inboxIds = [];
   for (const task of routine.tasks) {
-    const done = await runTask(agent, task, cursors[task.id] || {}, state, now).catch((error) => ({
+    const done = await runTask(agent, task, cursors[task.id] || {}, state, now, routine.name).catch((error) => ({
       fresh: 0, cursor: cursors[task.id] || {}, items: [], error: error.message, block: block(task.id, { error: "yes" }, error.message) }));
     next[task.id] = done.cursor;
     tasks.push({ id: task.id, kind: task.kind, fresh: done.fresh, ...(done.error ? { error: done.error } : {}) });
     blocks.push(done.block);
+    inboxIds.push(...(done.inboxIds || []));
     taskVars[task.id] = done.block;
     if (task.kind === "notes") Object.assign(taskVars, { notesBlock: done.notes, declinedBlock: done.declined });
     fresh += done.fresh;
@@ -202,7 +207,7 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
     windowEnd: new Date(now).toISOString(), reportPath: `reports/${routine.name}/${agent.today(now)}.md` };
   const rendered = { ...routine, body: renderVars(routine.body, vars) };
   return {
-    run: true, cursors: next, tasks, items: [], fresh,
+    run: true, cursors: next, tasks, items: [], fresh, inboxIds,
     instructions: renderVars(await runInstructions(agent, rendered, now), vars),
     reportPath: vars.reportPath,
     prompt: [rendered.body, await routineContext(agent, routine, now), ...blocks].filter(Boolean).join("\n\n"),

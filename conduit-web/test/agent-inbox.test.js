@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AgentDoc } from "../src/agent/agent-doc.js";
-import { appendEntry, InboxTools, listInbox } from "../src/agent/inbox.js";
+import { appendEntry, entryText, InboxTools, listInbox } from "../src/agent/inbox.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 
 const day = 86400_000;
@@ -15,6 +15,34 @@ test("reports stay discrete in arrival order and a replay adds no second entry",
   const second = appendEntry(doc, entry("second"), now + 1);
   assert.equal(appendEntry(doc, entry("first"), now + 2).id, first.id);
   assert.deepEqual(listInbox(doc).map((item) => item.key), [second.key, first.key]);
+});
+
+test("addressing and kind filters leave the person's full inbox visible", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  await agent.update((doc) => {
+    appendEntry(doc, entry("mail"), now);
+    appendEntry(doc, { ...entry("empty-address"), for: [] }, now + 1);
+    appendEntry(doc, { ...entry("correction"), kind: "feedback", for: ["reflect", "review"] }, now + 2);
+    appendEntry(doc, { ...entry("other"), for: ["review"] }, now + 3);
+  });
+  const state = await agent.state();
+  const keys = (options) => listInbox(state, options).map((item) => item.key);
+  assert.deepEqual(keys(), ["other", "correction", "empty-address", "mail"]);
+  assert.deepEqual(keys({ for: "heartbeat" }), ["empty-address", "mail"]);
+  assert.deepEqual(keys({ for: "reflect" }), ["correction", "empty-address", "mail"]);
+  assert.deepEqual(keys({ for: "reflect", addressed: "only", kinds: ["feedback"] }), ["correction"]);
+  assert.deepEqual(keys({ for: "review", addressed: "only" }), ["other", "correction"]);
+  assert.deepEqual(keys({ for: "review", kinds: ["task"] }), ["other", "empty-address", "mail"]);
+  const correction = listInbox(state).find((item) => item.key === "correction");
+  assert.match(entryText(correction, "UTC"), /for: reflect, review/);
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  const listed = await tool.execute({ action: "list" }, api);
+  assert.match(listed.output[0].text, /for: reflect, review/);
+  for (const key of keys()) assert.ok(listed.output[0].text.includes(key));
+  const view = await agent.view();
+  assert.equal(view.inbox.length, 4);
+  assert.deepEqual(view.inbox.find((item) => item.id === correction.id).for, ["reflect", "review"]);
+  assert.equal(view.inbox.find((item) => item.id === correction.id).headline, "correction");
 });
 
 // inbox.js: "Prunes what has been handled a week."

@@ -61,7 +61,22 @@ What the run should do with what was gathered, and what to tell jbot.
 
   This means hourly outside quiet hours and every two hours inside them.
 - **tasks**, each `{ id, kind }`:
-  - `inbox` (`all: true` to include handled entries)
+  - `inbox`: `for: <routine-name>` defaults to this routine's name. Entries
+    with a nonempty `for` list are shown only when that list names the recipient.
+    Entries without an address (including `for: []`) stay visible unless the task
+    sets `addressed: only`. Optional `kinds: [feedback, ...]` selects entry kinds.
+    `all: true` includes handled entries; it keeps the same address, kind and
+    since-last-firing filters. For example:
+
+    ```yaml
+    - { id: feedback, kind: inbox, addressed: only, kinds: [feedback] }
+    ```
+
+    In `reflect.md`, this reads only feedback addressed to `reflect`. Heartbeat
+    keeps its plain inbox task and receives unaddressed email. Morning brief
+    keeps `all: true` and receives unaddressed entries, handled or not.
+    The person's inbox tool and agent page still show all recipients. Each
+    addressed entry carries `for` and retains its `headline`.
   - `calendar` (`account`, `calendars?`, `days?` 1 to 14)
   - `chats`
   - `notes`: pending NOTES.md entries and recent declined proposals. Notes are
@@ -75,7 +90,8 @@ What the run should do with what was gathered, and what to tell jbot.
 - **mode**: `run` (default) starts a background run. `fork` starts a private
   fork at the latest home-thread entry, with the home model, prompt and tools.
   It waits for an active home turn, up to 30 minutes. Only its memory tool
-  has home rights. It can read local files and write its report file. It cannot
+  has home rights. It can read local files, write its report file, and use
+  `inbox` handle only for entries supplied by its inbox tasks. It cannot
   message, notify, post, ask for approval or start other work. The fork is
   discarded after it stops. Both modes fill the body variables and task blocks.
 - **before**: an ordered list of `{ routine: name, ifMissedSince: last }`.
@@ -115,7 +131,8 @@ current gathering time. `reportPath` is `reports/<name>/<local-date>.md`.
 Unknown variables stay visible. These variables work in both modes.
 
 Quiet hours hold back notifications and interruptions, never routine work.
-The seeded Reflection is an ordinary routine: `mode: fork`, a notes task,
+The seeded Reflection is an ordinary routine: `mode: fork`, a notes task and
+an inbox task for feedback addressed to `reflect`,
 `output: inbox` and `after: [{ compact: {} }]`. The morning brief uses
 `before: [{ routine: reflect, ifMissedSince: last }]`.
 For a run, compaction, then a report to jbot, use:
@@ -135,3 +152,20 @@ after:
 2. `test` the whole file before proposing it.
 3. Tell the person in a line what it watches, how often, and when it would
    bother them; then `save`.
+
+## App feedback
+
+`POST /v0/agent/feedback` accepts `{ messageId, text }`. `messageId` must
+name a jbot-sent message in the app message log. `text` must be a string of
+1 to 2000 characters after trimming. Success returns HTTP 201 with `{ id }`,
+the new inbox entry id. Invalid fields return 400 `invalid_feedback`; an
+unknown message or a message from another sender or channel returns 404
+`message_not_found`. A disabled agent returns 409 `agent_not_enabled`.
+
+The entry has `kind: feedback`, `for: [reflect]`, `level: fyi`,
+`status: unhandled`, `author: person` and `via: feedback`. Its `headline` is
+the first feedback line. Its `text` holds only the person's feedback. Its
+`body` includes that feedback and the quoted jbot message, limited to 600
+characters, with the message time and id. Reflection treats the person's
+feedback as their own words, keeps jbot's quote as context, and marks the
+entry handled after processing it.

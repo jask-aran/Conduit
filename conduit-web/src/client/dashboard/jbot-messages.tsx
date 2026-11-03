@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { Answer, DashConversation, EmailItem, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -88,7 +88,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   };
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
-    : <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined} /></Turn>;
+    : <><Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
   // An email in its room: from and to as its headers say; its own words, what it quotes folded.
   const email = (message: LogMessage) => {
     const { own, quoted } = splitQuoted(message.body);
@@ -96,6 +96,27 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     const to = (message.native?.to || []).map(partyName).filter(Boolean).join(", ");
     return <EmailItem from={from} to={to || undefined} time={clock(message.at)} dateTime={message.at} quoted={quoted || undefined}>{markdown(own || message.body)}</EmailItem>;
   };
+  /*
+   * Feedback on what jbot said: the foot's Feedback opens a field under the message; what the person writes goes to the
+   * context inbox for Reflection (POST /v0/agent/feedback), never as a turn. One open at a time; sent ones keep a check.
+   */
+  const [feedbackOn, setFeedbackOn] = createSignal<string | null>(null);
+  const [feedbackSent, setFeedbackSent] = createSignal<ReadonlySet<string>>(new Set());
+  const sendFeedback = async (message: LogMessage, text: string) => {
+    await api("/v0/agent/feedback", { method: "POST", body: JSON.stringify({ messageId: message.id, text }) });
+    setFeedbackSent((sent) => new Set([...sent, message.id]));
+    setFeedbackOn(null);
+  };
+  const feedbackButton = (message: LogMessage) => {
+    const sent = () => feedbackSent().has(message.id);
+    return <Button variant="ghost" size="icon-xs" aria-label={sent() ? "Feedback sent; send more" : "Feedback on this message"} title={sent() ? "Feedback sent" : "Feedback"}
+      aria-expanded={feedbackOn() === message.id} onClick={() => setFeedbackOn(feedbackOn() === message.id ? null : message.id)}>
+      {sent() ? <Icons.Check /> : <Icons.Feedback />}
+    </Button>;
+  };
+  const feedbackField = (message: LogMessage) => <Show when={feedbackOn() === message.id}>
+    <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
+  </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
@@ -117,7 +138,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                   <ReportCard title={message.title!} line={firstLine(message.body)} time={clock(message.at)} notified={message.notify !== "none"} onOpen={() => setReading(message)} />
                 </Match>
                 <Match when={true}>
-                  <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)} /></Turn>
+                  <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}
                 </Match>
               </Switch>
             </TranscriptRow>; })()}

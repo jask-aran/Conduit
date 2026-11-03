@@ -13,7 +13,7 @@ const idPattern = /^[a-z][a-z0-9-]{0,30}$/;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
 /** Fields a task kind takes besides its id, kind and program. */
-const TASK_FIELDS = { inbox: ["all"], calendar: ["account", "calendars", "days"] };
+const TASK_FIELDS = { inbox: ["all", "for", "kinds", "addressed"], calendar: ["account", "calendars", "days"] };
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
 export const settingRule = (trigger, kind) => Array.isArray(trigger)
@@ -108,6 +108,12 @@ export function routineProblem(routine) {
     const unknown = Object.keys(task).find((key) => !["id", "kind", ...(field ? [field] : []), ...extra].includes(key));
     if (unknown) return `Unknown field ${unknown} on task ${task.id}.`;
     if (task.kind === "inbox" && task.all !== undefined && typeof task.all !== "boolean") return `Task ${task.id}: all is true or false.`;
+    if (task.kind === "inbox") {
+      if (task.for !== undefined && (typeof task.for !== "string" || !namePattern.test(task.for))) return `Task ${task.id}: for must be a routine name.`;
+      if (task.addressed !== undefined && task.addressed !== "only") return `Task ${task.id}: addressed must be only.`;
+      if (task.kinds !== undefined && (!Array.isArray(task.kinds) || !task.kinds.length
+        || task.kinds.some((kind) => typeof kind !== "string" || !namePattern.test(kind)))) return `Task ${task.id}: kinds must be a nonempty list of entry kinds.`;
+    }
     if (task.kind === "calendar") {
       if (typeof task.account !== "string" || !task.account) return `Task ${task.id}: the calendar's Executor account is required.`;
       if (task.calendars !== undefined && (!Array.isArray(task.calendars) || !task.calendars.length || task.calendars.some((id) => typeof id !== "string" || !id))) {

@@ -11,6 +11,7 @@ import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
 import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
+import { appendEntry } from "../../agent/inbox.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
 
@@ -38,6 +39,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
+ * POST /v0/agent/feedback           feedback about a jbot app message { messageId, text }; returns { id }
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
  * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
@@ -159,6 +161,29 @@ export function registerAgentRoutes(app, { agent, backends }) {
       if (!enabled(response)) return;
       await agent.connectors.disconnect(request.params.id);
       response.status(204).end();
+    } catch (error) { next(error); }
+  });
+
+  app.post("/v0/agent/feedback", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const { messageId, text: input } = request.body || {};
+      const text = typeof input === "string" ? input.trim() : "";
+      if (typeof messageId !== "string" || !messageId.trim() || !text || text.length > 2000) {
+        return response.status(400).json({ error: "invalid_feedback" });
+      }
+      const message = agent.runtime.messageLog?.messages.find((item) => item.id === messageId
+        && item.channel === "app" && item.direction === "out" && item.sender === "jbot");
+      if (!message) return response.status(404).json({ error: "message_not_found" });
+      const original = String(message.body || "").trim();
+      const quote = original.length > 600 ? `${original.slice(0, 599)}…` : original;
+      const key = `feedback:${crypto.randomUUID()}`;
+      const id = await agent.update((doc) => appendEntry(doc, {
+        key, kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled",
+        title: "Feedback", headline: text.split(/\r?\n/)[0], author: "person", via: "feedback", text, messageId,
+        body: `${text}\n\nAbout jbot message ${message.id} at ${message.at}:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}`,
+      }).id);
+      response.status(201).json({ id });
     } catch (error) { next(error); }
   });
 

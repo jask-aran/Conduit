@@ -62,6 +62,7 @@ import {
   MessageSquareIcon,
   MessageSquarePlusIcon,
   MessageSquareTextIcon,
+  MessageSquareQuoteIcon,
   MicIcon,
   Minimize2Icon,
   MonitorIcon,
@@ -211,6 +212,8 @@ export const LogOut = LogOutIcon;
 export const Maximize = Maximize2Icon;
 /** A message or agent narration. */
 export const Message = MessageSquareTextIcon;
+/** Feedback on something said (a message's foot). */
+export const Feedback = MessageSquareQuoteIcon;
 /** Microphone. */
 export const Microphone = MicIcon;
 /** Restore a pane to its smaller size. */

@@ -9,7 +9,7 @@ import { AgentDoc, nextId } from "./agent-doc.js";
  * home thread sees the unhandled headlines each turn. A run with nothing to say ends with `nothing_to_report` and
  * leaves no entry, only its history. Handled entries stay a week.
  *
- * An entry: `{ id, key, at, kind, title, subagentId, conversationId, level, headline, status, handledAt?, outcome? }`,
+ * An entry: `{ id, key, at, kind, title, subagentId, conversationId, level, headline, status, handledAt?, outcome?, for? }`,
  * `level` one of fyi, attention, urgent, failed; `status` unhandled or handled; `key` the run delivery it records;
  * `handledBy` the conversation that marked it (a heartbeat's run, for its line in the home thread).
  */
@@ -53,14 +53,17 @@ export function appendEntry(doc, entry, now = Date.now()) {
 }
 
 /** Entries newest first; `unhandled` only those still waiting. */
-export const listInbox = (state, { unhandled = false } = {}) => Object.values(state?.inbox || {})
-  .filter((item) => !unhandled || item.status === "unhandled")
+export const listInbox = (state, { unhandled = false, for: recipient, kinds, addressed } = {}) => Object.values(state?.inbox || {})
+  .filter((item) => (!unhandled || item.status === "unhandled")
+    && (!kinds || kinds.includes(item.kind))
+    && (recipient === undefined || (item.for?.length ? item.for.includes(recipient) : addressed !== "only")))
   .sort((a, b) => b.at.localeCompare(a.at));
 
 const LEVEL_LABEL = { fyi: "FYI", attention: "ATTENTION", urgent: "URGENT", failed: "FAILED" };
 /* An entry's line says when it came, not how long ago: a line that ages every turn would be a different section every
    turn, sent again each time (the prompt cache keeps only what does not change). */
-const line = (item, timeZone) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}: ${item.headline || "(no text)"} (${item.kind}, ${new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(item.at))})`;
+const addressedTo = (item) => item.for?.length ? ` · for: ${item.for.join(", ")}` : "";
+const line = (item, timeZone) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}${addressedTo(item)}: ${item.headline || "(no text)"} (${item.kind}, ${new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(item.at))})`;
 
 /** Whether it is the person's quiet hours, in the agent's time zone: `{ enabled, start, end }`, wrapping midnight. */
 export function inQuietHours(settings, now = Date.now()) {
@@ -75,7 +78,7 @@ const DIAL_WORDS = { quiet: "push only what cannot wait", normal: "push what the
 export const entryText = (entry, timeZone) => {
   const when = new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(entry.at));
   const body = entry.body && entry.body !== entry.headline ? `\n${entry.body.split("\n").map((row) => `    ${row}`).join("\n")}` : "";
-  return `- [${entry.id}] ${when} · ${entry.title} · ${entry.level}: ${entry.headline}${body}`;
+  return `- [${entry.id}] ${when} · ${entry.title}${addressedTo(entry)} · ${entry.level}${entry.author === "person" ? ` · author: person, via: ${entry.via || "unknown"}` : ""}: ${entry.headline}${body}`;
 };
 
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });

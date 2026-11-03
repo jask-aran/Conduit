@@ -1,9 +1,9 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { children, createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
-import { Button } from "./controls";
+import { Button, TextArea } from "./controls";
 import { Aura, PillWave } from "./pill";
 import { Rider } from "./rider";
 import { reducedMotion } from "./motion";
@@ -98,3 +98,34 @@ export function Toolbar(props: { start?: JSX.Element; end?: JSX.Element; aside?:
     <span ref={(el) => createEffect(() => { el.inert = !aside(); })} class="ui-toolbar-aside" data-folded={aside() ? undefined : ""} aria-hidden={aside() ? undefined : "true"}><span>{held()}</span></span>
     <Show when={props.primary !== undefined}><span class="ui-toolbar-primary">{props.primary}</span></Show></div></div>;
 }
+
+/**
+ * MessageFeedback: a small composer under one message, for the person's words about what it said or did -- the
+ * composer's frost, field and toolbar, its Send the primary; a quiet note says where it goes. Ctrl/Cmd+Enter or Enter
+ * sends (Shift+Enter a new line), Escape cancels (its own rung of the ladder). Focused on open.
+ */
+export function MessageFeedback(props: { onSend: (text: string) => Promise<unknown> | unknown; onCancel: () => void; note?: string; placeholder?: string }) {
+  const [text, setText] = createSignal("");
+  const [busy, setBusy] = createSignal(false);
+  let field!: HTMLTextAreaElement;
+  onMount(() => field.focus({ preventScroll: true }));
+  const send = async () => {
+    const value = text().trim();
+    if (!value || busy()) return;
+    setBusy(true);
+    try { await props.onSend(value); } finally { setBusy(false); }
+  };
+  return <Frost class="ui-desktop-composer ui-message-feedback">
+    <ComposerField><TextArea ref={field} maxLength={2000} value={text()} aria-label="Feedback on this message"
+      placeholder={props.placeholder ?? "What should it have said or done differently?"}
+      onInput={(event) => setText(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.isComposing) return;
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); props.onCancel(); }
+      }} /></ComposerField>
+    <Toolbar start={<span class="ui-message-feedback-note">{props.note ?? "Feedback"}</span>}
+      primary={<Button variant="ghost" size="icon-sm" aria-label="Send feedback" disabled={!text().trim() || busy()} onClick={() => void send()}><Icons.Send /></Button>} />
+  </Frost>;
+}
+

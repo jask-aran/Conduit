@@ -166,6 +166,72 @@ test("a heartbeat does not start a run for handled context", async (t) => {
   assert.equal(outcome.fresh, 0);
 });
 
+test("inbox task filters round trip and reject invalid fields", () => {
+  const configured = text.replace("kind: inbox", "kind: inbox, for: reflect, addressed: only, kinds: [feedback], all: true");
+  const parsed = parseRoutine(configured, "review");
+  assert.deepEqual(parseRoutine(serializeRoutine(parsed), "review"), parsed);
+  for (const [valid, invalid, error] of [
+    ["for: reflect", "for: [reflect]", /for must be a routine name/],
+    ["for: reflect", "for: Bad Name", /for must be a routine name/],
+    ["addressed: only", "addressed: true", /addressed must be only/],
+    ["kinds: [feedback]", "kinds: feedback", /kinds must be a nonempty list/],
+    ["kinds: [feedback]", "kinds: []", /kinds must be a nonempty list/],
+    ["kinds: [feedback]", "kinds: [null]", /kinds must be a nonempty list/],
+    ["all: true", "all: yes", /all is true or false/],
+  ]) assert.throws(() => parseRoutine(configured.replace(valid, invalid), "review"), error);
+});
+
+test("routine inboxes select recipients before counting, gating and advancing cursors", async (t) => {
+  const { agent } = await agentFixture(t);
+  const state = await agent.state();
+  const mail = appendEntry(state, { ...news("mail", "unhandled"), kind: "email" }, now - 4);
+  const handled = appendEntry(state, news("old-news", "handled"), now - 3);
+  const feedback = appendEntry(state, { ...news("correction", "unhandled"), kind: "feedback", for: ["reflect"] }, now - 2);
+  appendEntry(state, { ...news("other", "unhandled"), for: ["other"] }, now - 1);
+  const heartbeat = await executeRoutine(agent, routine(), { state, now });
+  assert.equal(heartbeat.fresh, 1);
+  assert.deepEqual(heartbeat.inboxIds, [mail.id]);
+  assert.match(heartbeat.message, /unhandled="1"/);
+  assert.equal(heartbeat.cursors.arrivals.since, mail.at);
+  const reflect = { ...routine(), name: "reflect", tasks: [{ id: "feedback", kind: "inbox", addressed: "only", kinds: ["feedback"] }] };
+  const reflected = await executeRoutine(agent, reflect, { state, now });
+  assert.equal(reflected.fresh, 1);
+  assert.deepEqual(reflected.inboxIds, [feedback.id]);
+  assert.ok(!reflected.message.includes("mail detail"));
+  const repeated = await executeRoutine(agent, reflect, { state, now, cursors: reflected.cursors });
+  assert.equal(repeated.run, false);
+  const delegated = await executeRoutine(agent, { ...reflect, name: "review", tasks: [{ ...reflect.tasks[0], for: "reflect" }] }, { state, now });
+  assert.deepEqual(delegated.inboxIds, [feedback.id]);
+  const brief = { ...routine(), name: "morning-brief", tasks: [{ id: "inbox", kind: "inbox", all: true }] };
+  const briefing = await executeRoutine(agent, brief, { state, now });
+  assert.deepEqual(briefing.inboxIds, [handled.id, mail.id]);
+  assert.equal(briefing.fresh, 2);
+  assert.equal(briefing.cursors.inbox.since, handled.at);
+  const later = await executeRoutine(agent, brief, { state, now, cursors: { inbox: { since: mail.at } } });
+  assert.deepEqual(later.inboxIds, [handled.id]);
+  state.inbox[feedback.id].status = "handled";
+  assert.equal((await executeRoutine(agent, reflect, { state, now })).run, false);
+  const allFeedback = await executeRoutine(agent, { ...reflect, tasks: [{ ...reflect.tasks[0], all: true }] }, { state, now });
+  assert.deepEqual(allFeedback.inboxIds, [feedback.id]);
+});
+
+test("a fork can handle only inbox entries supplied in its task blocks", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  const id = await agent.update((doc) => appendEntry(doc, { ...news("feedback", "unhandled"), for: ["reflect"] }, now).id);
+  const record = { outcome: { inboxIds: [id] } };
+  assert.equal(forkAllows(agent, record, "inbox", { action: "handle", ids: [id] }), true);
+  assert.equal(forkAllows(agent, record, "inbox", { action: "handle", id }), true);
+  for (const args of [{ action: "list" }, { action: "read", id }, { action: "handle" },
+    { action: "handle", ids: [id, "not-gathered"] }, { action: "handle", ids: [id], id: "not-gathered" }]) {
+    assert.equal(forkAllows(agent, record, "inbox", args), false);
+  }
+  assert.equal(forkAllows(agent, {}, "inbox", { action: "handle", id }), false);
+  const { InboxTools } = await import("../src/agent/inbox.js");
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  await tool.execute({ action: "handle", ids: [id], outcome: "Added USER directive" }, api);
+  assert.equal((await agent.state()).inbox[id].status, "handled");
+});
+
 // persistent-agent.md, How prompts are assembled: each task's tagged output is in the first message.
 test("tasks gather in order before a run and their output becomes its first message", async (t) => {
   const { agent } = await agentFixture(t);
@@ -606,7 +672,7 @@ test("seed routines parse and compose through general fields", async () => {
     assert.deepEqual(parseRoutine(serializeRoutine(seeds[name]), name), seeds[name]);
   }
   assert.equal(seeds.reflect.mode, "fork");
-  assert.deepEqual(seeds.reflect.tasks, [{ id: "notes", kind: "notes" }]);
+  assert.deepEqual(seeds.reflect.tasks, [{ id: "notes", kind: "notes" }, { id: "feedback", kind: "inbox", addressed: "only", kinds: ["feedback"] }]);
   assert.deepEqual(seeds.reflect.after, [{ compact: {} }]);
   assert.deepEqual(seeds["morning-brief"].before, [{ routine: "reflect", ifMissedSince: "last" }]);
   assert.equal(seeds.heartbeat.mode, "run");
