@@ -145,10 +145,11 @@ The judge takes the person's intent from wherever they gave it, as long as the c
 | app (the agent's page) | logged by POST /v0/agent/messages before it reaches the thread |
 | thread (typed in the chat) | the entry's `author: "person"`, stamped only by the server's client-command path |
 | email | from one of the person's addresses, with the receiving server's own verdict (Cloudflare's topmost Authentication-Results: DMARC and DKIM pass for the From domain) |
+| email, unverified | from one of the person's addresses and found in their own Sent mail through Executor (`in:sent rfc822msgid:`), a read the hub makes itself |
 
 A From line alone no longer makes a mail the person's. Each message reaches the judge with its channel. Next:
-SMS and other channels join the same way (a proof at intake, recorded on the message); for mail that arrives without a
-server verdict, Executor can confirm a message is the person's by finding it in their own Sent mail.
+SMS and other channels join the same way (a proof at intake, recorded on the message); mail without a server verdict is
+confirmed through Executor (above).
 
 No shared approval thread: each decision is one stateless request whose fixed prefix (instructions, then policy) comes
 first, so a provider caches it when it is long enough; a thread would grow, and carry one action's content into the

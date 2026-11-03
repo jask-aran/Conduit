@@ -77,6 +77,33 @@ export class EmailChannel {
   get ready() { return Boolean(this.config?.address && this.config?.worker && this.config?.secret); }
   /** Whether jbot sends mail at all (`send: true`); off, an email is answered in the app. */
   get sends() { return this.ready && this.config?.send === true; }
+  /**
+   * Whether the person's own Gmail holds this mail in Sent: Executor's gmail.search for its Message-ID
+   * (`in:sent rfc822msgid:`), a read made by the hub, not by jbot. A match must come from the person's address. Any
+   * failure (no Executor, no Gmail, a timeout, an id that is not plain) is "not proved", never a pass.
+   */
+  async sentByPerson(mail, messageId) {
+    const id = String(messageId || "").replace(/^<|>$/g, "");
+    if (!id || !/^[^\s"'<>()]+@[^\s"'<>()]+$/.test(id)) return false;
+    try {
+      const connectors = this.agent.connectors;
+      await connectors?.ready?.("executor");
+      const tool = connectors?.tools().find((item) => item.name === "mcp__executor__call");
+      if (!tool) return false;
+      const result = await tool.execute({ calls: [{ path: "tools.gmail.search", input: { query: `in:sent rfc822msgid:${id}`, max: 1 } }] },
+        { signal: AbortSignal.timeout(20_000) });
+      if (result?.isError) return false;
+      const text = (result?.output || []).filter((part) => part.type === "text").map((part) => part.text).join("");
+      const answer = JSON.parse(text.slice(text.indexOf("{")));
+      const call = answer?.execution?.value?.[0];
+      if (answer?.status !== "completed" || !call?.ok) return false;
+      // gmail.search answers { threads: [{ account, messageId, from, … }], errors }.
+      const found = Array.isArray(call.value) ? call.value : call.value?.threads || call.value?.messages || [];
+      const from = lower(mail.from?.address);
+      return found.some((item) => lower(item?.account) === from || String(item?.from || "").toLowerCase().includes(from));
+    } catch { return false; }
+  }
+
   isPerson(address) { return (this.config?.person || []).map(lower).includes(lower(address)); }
   /** A sender whose email starts a turn: the person, or one they allowed (an address, or @domain). */
   wakes(address) {
@@ -144,9 +171,12 @@ export class EmailChannel {
     const body = text.length > BODY_MAX ? `${text.slice(0, BODY_MAX)}\n\n[… cut here: the rest is in ${dir}/]` : text;
     // The person's only when their address is the sender AND the receiving server proved it: a From line alone is easy
     // to forge (authenticatedFrom).
-    const authenticated = authenticatedFrom(mail);
+    // Without a server's proof (mail forwarded, or a host that adds no verdict), the person's own Gmail can still vouch
+    // for it: Executor finds it in their Sent mail (sentByPerson).
+    const proof = authenticatedFrom(mail) ? "server" : this.isPerson(mail.from?.address) && await this.sentByPerson(mail, messageId) ? "sent" : null;
+    const authenticated = Boolean(proof);
     const person = this.isPerson(mail.from?.address) && authenticated;
-    const native = { authenticated, messageId, inReplyTo: mail.inReplyTo || null, references, subject: mail.subject || "", date: at,
+    const native = { authenticated, ...(proof ? { proof } : {}), messageId, inReplyTo: mail.inReplyTo || null, references, subject: mail.subject || "", date: at,
       from: mail.from || null, to: mail.to || [], cc: mail.cc || [], html: Boolean(mail.html), quoted: Boolean(own && quoted), folder: folder ? dir : null, attachments };
     const saved = folder ? `Saved in ${dir}/: message.eml${mail.html ? ", message.html" : ""}${attachments.map((item) => `, ${item.filename}`).join("")}` : null;
     // What jbot is given: where it came from, then the text; someone other than the person is data, never instructions.
