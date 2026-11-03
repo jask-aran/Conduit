@@ -8,7 +8,16 @@ import fs from "node:fs";
  */
 const hash = (value) => createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex").slice(0, 12);
 export function prefixWatch(file) {
-  const last = new Map();
+  // Each key's last hashes, kept beside the log: after a restart a changed prefix still shows as Conduit's, not the provider's.
+  const saved = file.replace(/\.jsonl$/, "") + "-last.json";
+  let last;
+  try { last = new Map(Object.entries(JSON.parse(fs.readFileSync(saved, "utf8")))); } catch { last = new Map(); }
+  let saving = false;
+  const save = () => {
+    if (saving) return;
+    saving = true;
+    setTimeout(() => { saving = false; fs.writeFile(saved, JSON.stringify(Object.fromEntries(last)), () => {}); }, 1000).unref?.();
+  };
   // The last request per cache key, whole, for warmCache to send again.
   const payloads = new Map();
   const watch = (params, model) => {
@@ -22,9 +31,10 @@ export function prefixWatch(file) {
       const before = last.get(key);
       last.set(key, now);
       if (last.size > 200) last.delete(last.keys().next().value);
+      save();
       let diverged = null;
       if (before) {
-        if (before.head !== now.head) diverged = { at: "head", instructions: hash(params.instructions) !== hash(previous?.instructions), tools: hash(params.tools) !== hash(previous?.tools), model: params.model !== previous?.model, reasoning: JSON.stringify(params.reasoning) !== JSON.stringify(previous?.reasoning) };
+        if (before.head !== now.head) diverged = !previous ? { at: "head" } : { at: "head", instructions: hash(params.instructions) !== hash(previous?.instructions), tools: hash(params.tools) !== hash(previous?.tools), model: params.model !== previous?.model, reasoning: JSON.stringify(params.reasoning) !== JSON.stringify(previous?.reasoning) };
         else {
           const index = before.items.findIndex((item, i) => now.items[i] !== item);
           // What changed, a little of each side, so a miss can be read without the payloads.
