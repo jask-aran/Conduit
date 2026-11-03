@@ -3142,25 +3142,34 @@ function App() {
   };
   /* The hub's browser in a pane (browser/browser-pane.tsx): its tab named by the page's title as it learns it. */
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
+  const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
   </SheetFill>;
-  const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
-    const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
-    createEffect(on(id, (shell) => {
-      if (untrack(record)) return;
-      void api<{ ptys: { id: string; projectId: string; cwd?: string | null; status: string }[] }>("/v0/ptys")
-        .then(({ ptys = [] }) => { if (id() === shell) setRecord(ptys.find((item) => item.id === shell && item.status === "running") ?? null); })
-        .catch(() => setRecord(null));
-    }));
+  /** A terminal in a pane: the pane's tab row above (its tab named for the shell), the terminal's own bar under it. In
+   *  the dock or on a phone it keeps one header, the bar, with the pane's actions and its close. */
+  const renderTerminalDocument = (pane: PaneKey, shell: string) => {
+    const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
+    void api<{ ptys: { id: string; projectId: string; cwd?: string | null; title?: string | null; status: string }[] }>("/v0/ptys")
+      .then(({ ptys = [] }) => {
+        const found = ptys.find((item) => item.id === shell && item.status === "running") ?? null;
+        setRecord(found);
+        if (found?.title) setTermTitles((current) => ({ ...current, [`term:${shell}`]: found.title! }));
+      })
+      .catch(() => setRecord(null));
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
+    const tabbed = () => !inDock(pane) && !isMobileLayout();
     return <SheetFill class="pane-terminal">
+      <Show when={tabbed()}>
+        <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
+      </Show>
       <Show when={record()} fallback={<Show when={record() === null}>
-        <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></PaneHeader><Empty>This terminal has ended.</Empty>
+        <Show when={!tabbed()}><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></PaneHeader></Show><Empty>This terminal has ended.</Empty>
       </Show>}>{(found) =>
-        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={id()} onShown={(next) => setPaneView(pane, `term:${next}`)} headerActions={paneTabActions(pane)}
-          onClose={inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
+        <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={shell} onShown={(next) => { if (next !== shell) void setPaneView(pane, `term:${next}`); }}
+          headerActions={tabbed() ? undefined : paneTabActions(pane)}
+          onClose={tabbed() || inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
       }</Show>
     </SheetFill>;
   };
@@ -3827,7 +3836,7 @@ function App() {
     if (view.startsWith("page:project:")) return catalogue.projects().find((item) => item.id === view.slice("page:project:".length))?.name || "Project";
     const files = parseFileView(view);
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
-    if (view.startsWith("term:")) return "Terminal";
+    if (view.startsWith("term:")) return termTitles()[view] || "Terminal";
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
@@ -3835,8 +3844,9 @@ function App() {
    * Chat tabs (panes-and-rail.md, 6c). A pane showing a chat holds up to
    * five; its view is the active one, the only one mounted, and switching is
    * a document switch in place. A plain open replaces the active tab; Ctrl, a
-   * drop on the pane or Alt with no room adds one. Anything but a chat takes
-   * the pane and its tabs close. Drafts are kept per chat and each pane's
+   * drop on the pane or Alt with no room adds one. Any document is a tab (chat,
+   * page, browser, terminal); a file viewer or an empty pane takes the pane and
+   * its tabs close. Drafts are kept per chat and each pane's
    * transcript keeps scroll positions, so a tab keeps what a remount would lose.
    */
   type PaneTabs = { ids: string[]; used: string[] };
@@ -3851,9 +3861,9 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  // A pane's tabs are its documents: chats, pages and browsers (a file viewer has its own tabs; a terminal and an empty
-  // pane are not tabs). A chat's key is its id, as tabs were when only chats were; any other document's is its view.
-  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && /^(chat|page|browser):/.test(view));
+  // A pane's tabs are its documents: chats, pages, browsers and terminals (a file viewer has its own tabs; an empty pane
+  // is not a tab). A chat's key is its id, as tabs were when only chats were; any other document's is its view.
+  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && /^(chat|page|browser|term):/.test(view));
   const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
   const tabView = (key: string) => (key.includes(":") ? key : `chat:${key}`) as SplitView;
   // The place a tab belongs to, which groups it: a chat's project, a project page's project, else the document's kind.
@@ -4337,7 +4347,7 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
       place: tabPlace,
-      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place.startsWith("doc:") ? "Conduit" : placeLabelOf(place); },
+      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : placeLabelOf(place); },
       title: (id) => viewName(tabView(id)),
       lit: () => activeTabOf(pane),
       used: () => tabsOf(pane)?.used ?? [],
@@ -4491,7 +4501,7 @@ function App() {
         <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
-        <Show when={slotView(slot)?.startsWith("term:")}>{renderTerminalDocument(slot, () => slotView(slot)!.slice("term:".length))}</Show>
+        <Show when={slotView(slot)?.startsWith("term:") ? slotView(slot)!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument(slot, shell)}</Show>
         <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
@@ -5861,7 +5871,7 @@ function App() {
       <Show when={splitDropActive()}><DropWash within /></Show>
       {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
-      <Show when={paneAOverride()?.startsWith("term:")}>{renderTerminalDocument("main", () => paneAOverride()!.slice("term:".length))}</Show>
+      <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
