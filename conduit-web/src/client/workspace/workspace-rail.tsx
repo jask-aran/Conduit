@@ -20,7 +20,7 @@ export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" 
 }
 
 // Share presets for the panes, by how many are open; the first is even.
-const PANE_LAYOUTS: Record<number, number[][]> = {
+export const PANE_LAYOUTS: Record<number, number[][]> = {
   2: [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]],
   3: [[1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2]],
 };

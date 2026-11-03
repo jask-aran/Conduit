@@ -15,17 +15,24 @@
  * step and ↓ comes back down. Enter opens, the Menu key or Shift+F10 opens the
  * row's menu, and Esc goes back to the composer.
  *
+ * A page's conversation over its composer (jbot's messages, DashConversation) is a section too: the stream's rows
+ * that mark themselves [data-dash-row] step with ↑/↓, Tab lands on the newest, and Enter opens what the message
+ * holds -- a report's card, a folded room, else its first link. It reads first in Tab's round, above the composer.
+ *
  * Pointer and keyboard move the one cursor: a pointer moving over a row takes
  * focus there while a row has it, and arrowing away from a still pointer
  * takes the rows out of hover until it moves again. Leaving the window keeps
  * the cursor where it was (data-held), since focus there is only waiting.
  */
 
-const ROWS = ":is(.ui-row[data-density=list]:is(button, a), .ui-dash-more, .ui-folder)";
+const ROWS = ":is(.ui-row[data-density=list]:is(button, a), .ui-dash-more, .ui-folder, .ui-dash-conversation [data-dash-row])";
+// A section: a dashboard group, or the conversation over the composer.
+const GROUP = ":is(.ui-group[data-group=dash], .ui-dash-conversation)";
+const CONVERSATION = ".ui-dash-conversation";
 const CONTROLS = ".ui-group-head :is(button, a[href])";
 const INPUT = ":is(.ui-dash-composer, [data-dash-dock]) :is(textarea, [contenteditable='true'])";
 
-export type SplitSection = "composer" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files" | "folders";
+export type SplitSection = "composer" | "messages" | "chats" | "projects" | "workspaces" | "terminals" | "changes" | "files" | "folders";
 export type SplitPage = "Dashboard" | "Project" | "Workspace" | "Harness" | "Agent";
 
 const visible = (element: Element) => typeof element.checkVisibility === "function"
@@ -49,6 +56,7 @@ export function splitSections() {
   const sections = new Set<SplitSection>();
   if (!root) return sections;
   if (root.querySelector(INPUT)) sections.add("composer");
+  if ([...root.querySelectorAll(`${CONVERSATION} [data-dash-row]`)].some(visible)) sections.add("messages");
   for (const group of root.querySelectorAll<HTMLElement>(".ui-group[data-group=dash][data-section]")) if (visible(group)) sections.add(group.dataset.section as SplitSection);
   return sections;
 }
@@ -63,10 +71,11 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const last = new WeakMap<Element, HTMLElement>();
   let pointerFocus = false;
 
-  const groups = () => [...root.querySelectorAll<HTMLElement>(".ui-group[data-group=dash]")]
+  const groups = () => [...root.querySelectorAll<HTMLElement>(GROUP)]
     .filter((group) => visible(group) && (rowsIn(group).length || controlsIn(group).length))
-    // The chats list reads first, then the right column, top to bottom.
-    .sort((a, b) => Number(b.dataset.order === "list") - Number(a.dataset.order === "list"));
+    // The conversation reads first, then the chats list, then the right column, top to bottom.
+    .sort((a, b) => rank(a) - rank(b));
+  const rank = (group: HTMLElement) => group.matches(CONVERSATION) ? 0 : group.dataset.order === "list" ? 1 : 2;
   const rowsIn = (group: Element) => [...group.querySelectorAll<HTMLElement>(ROWS)].filter(visible);
   const controlsIn = (group: Element) => [...group.querySelectorAll<HTMLElement>(CONTROLS)].filter(visible);
   const composer = () => root.querySelector<HTMLElement>(INPUT);
@@ -91,8 +100,9 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const enter = (group: Element | undefined) => {
     if (!group) return false;
     const remembered = last.get(group);
-    // A folded group is entered at its heading.
-    return move(remembered?.isConnected && visible(remembered) ? remembered : rowsIn(group)[0] ?? controlsIn(group)[0]);
+    // A folded group is entered at its heading; the conversation at its newest message, at its foot.
+    const rows = rowsIn(group);
+    return move(remembered?.isConnected && visible(remembered) ? remembered : (group.matches(CONVERSATION) ? rows.at(-1) : rows[0]) ?? controlsIn(group)[0]);
   };
   // Tab's round: the composer, then each group.
   const tab = (from: Element | null, back: boolean) => {
@@ -105,7 +115,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const go = (section: SplitSection) => {
     if (!root.isConnected || !visible(root)) return false;
     if (section === "composer") return toComposer();
-    const group = root.querySelector<HTMLElement>(`.ui-group[data-group=dash][data-section="${section}"]`);
+    const group = section === "messages" ? root.querySelector<HTMLElement>(CONVERSATION) : root.querySelector<HTMLElement>(`.ui-group[data-group=dash][data-section="${section}"]`);
     return group ? enter(group) : false;
   };
   installed.add(go);
@@ -120,7 +130,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
     }
     const row = target.matches(ROWS) ? target : null;
     const control = !row && target.matches(CONTROLS) ? target : null;
-    const group = (row ?? control)?.closest<HTMLElement>(".ui-group[data-group=dash]");
+    const group = (row ?? control)?.closest<HTMLElement>(GROUP);
     if (!group) return;
     const rows = rowsIn(group);
     const controls = controlsIn(group);
@@ -148,6 +158,12 @@ export function installSplitCursor(root: HTMLElement): () => void {
         case "ArrowLeft": if (shelf) move(rows[index - 1]); else handled = false; break;
         case "Home": move(rows[0]); break;
         case "End": move(rows[rows.length - 1]); break;
+        // A message is no button: Enter opens what it holds.
+        case "Enter": {
+          const opens = row!.matches("[data-dash-row]") ? row!.querySelector<HTMLElement>(".ui-report-card, .ui-room-row, a[href]") : null;
+          if (opens) opens.click(); else handled = false;
+          break;
+        }
         case "ContextMenu":
         case "F10": {
           if (event.key === "F10" && !event.shiftKey) { handled = false; break; }
@@ -177,7 +193,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   const focusin = (event: FocusEvent) => {
     const row = event.target instanceof HTMLElement ? event.target : null;
     if (!row?.matches(ROWS)) return;
-    const group = row.closest(".ui-group[data-group=dash]");
+    const group = row.closest(GROUP);
     if (group) last.set(group, row);
     if (!pointerFocus && row.matches(":focus-visible")) keyboardCursor(true);
   };

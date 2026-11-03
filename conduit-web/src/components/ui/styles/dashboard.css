@@ -55,6 +55,8 @@
 .ui-dash-conversation-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-md) var(--space-2xs); scrollbar-width: var(--native-scrollbar-width);
   mask-image: linear-gradient(transparent, #000 var(--space-xl)); }
 .ui-dash-conversation-scroll > * + * { margin-top: var(--space-lg); }
+/* The page cursor on a message of the conversation (split-cursor.ts, [data-dash-row]): the wash, bled past the row by a shadow so nothing moves. */
+.ui-dash-conversation [data-dash-row]:is(:focus-visible, [data-held]) { outline: none; border-radius: var(--radius-control); background: var(--border); box-shadow: 0 0 0 var(--space-xs) var(--border); }
 /* A transcript here has no header over it and its composer under it, not over it: nothing to clear at either end. */
 /* No mask over one: a masked box round a scroller that composites on its own flickers as the page animates behind it. */
 .ui-dash-conversation-scroll[data-scrolls] { --header-height: 0px; --transcript-composer-inset: var(--space-md); display: flex; overflow: hidden; flex-direction: column; padding: 0; mask-image: none; }

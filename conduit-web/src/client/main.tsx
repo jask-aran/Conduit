@@ -102,7 +102,7 @@ import { dropWash, dropZoneAt, fileTabParam, fileTabsFromParams, moveKey, nextSh
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
 import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
-import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
+import { PANE_LAYOUTS, readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
 import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
@@ -5436,6 +5436,52 @@ function App() {
       ...([["dashboardComposer", "composer"], ["dashboardChats", "chats"], ["dashboardProjects", "projects"], ["dashboardWorkspaces", "workspaces"], ["dashboardTerminals", "terminals"], ["dashboardChanges", "changes"], ["dashboardFiles", "files"]] as const)
         .map(([id, section]) => shortcutManager.registerHandler(COMMAND_IDS[id], "dashboard", () => { focusSplitSection(section); }, { when: () => splitSections().has(section) })),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
+      // Keyboard paths where there were none (docs/plans/keyboard-model.md › Gaps 7-8): each leader key does what a
+      // pane header's, a tab's, the tool rail's or the sidebar heading's button does, on the pane with the keyboard.
+      ...(() => {
+        const panesAt = ["chat", "dashboard", "workspace-panel"] as const;
+        const here = () => isMobileLayout() ? null : paneOf(document.activeElement);
+        // A file viewer's tab is its focused column's file; any other pane's, its tab row's lit tab, else its one tab.
+        const closeTabHere = async (pane: PaneKey) => {
+          const files = parseFileView(viewOf(pane));
+          if (files?.length) { const side = shownFileSide(pane); return await closeFileTab(pane, side, fileEntryKey(files[side]!)); }
+          const active = activeTabOf(pane);
+          if (active && (tabsOf(pane)?.ids.length ?? 0) > 1 && tabsOf(pane)!.ids.includes(active)) return await closeTab(pane, active);
+          await closeDocument(pane);
+        };
+        // A chat with no tab row has no tab to close (its pane's close is Shift+X).
+        const hasTab = (pane: PaneKey) => Boolean(parseFileView(viewOf(pane))?.length || tabsOf(pane)?.ids.length || !viewOf(pane)?.startsWith("chat:"));
+        const canClosePane = (pane: PaneKey) => inDock(pane) || (splitShown() && (pane !== "main" || shownSlots()[0] !== undefined));
+        const canSwap = (pane: PaneKey) => splitShown() && !inDock(pane) && swapPartner(pane) !== null;
+        const layouts = () => PANE_LAYOUTS[splitShown() ? shownSlots().length + 1 : 1];
+        // The preset after the one nearest the panes' shares now.
+        const nextLayout = () => {
+          const presets = layouts()!.map(normalized);
+          const shares = paneShares();
+          const distance = (weights: number[]) => weights.reduce((sum, weight, index) => sum + Math.abs(weight - (shares[index] ?? 0)), 0);
+          const at = presets.reduce((best, weights, index) => distance(weights) < distance(presets[best]!) ? index : best, 0);
+          applyPaneLayout(layouts()![(at + 1) % presets.length]!);
+        };
+        const railDocked = () => dockContents().filter((slot) => slotView(slot));
+        return [
+          ...panesAt.flatMap((context) => [
+            shortcutManager.registerHandler(COMMAND_IDS.closeTab, context, () => { const pane = here(); if (pane !== null) void closeTabHere(pane); }, { when: () => { const pane = here(); return pane !== null && hasTab(pane); } }),
+            shortcutManager.registerHandler(COMMAND_IDS.closePane, context, () => { const pane = here(); if (pane !== null) void (inDock(pane) ? closeSlot(pane as number) : closePane(pane)); }, { when: () => { const pane = here(); return pane !== null && canClosePane(pane); } }),
+            shortcutManager.registerHandler(COMMAND_IDS.swapPanes, context, () => { const pane = here(); const target = pane === null ? null : swapTarget(pane); if (pane !== null && target !== null) void swapPanes(pane, false, target, true, keyboardPane()); }, { when: () => { const pane = here(); return pane !== null && canSwap(pane); } }),
+            shortcutManager.registerHandler(COMMAND_IDS.equalisePanes, context, () => applyPaneLayout(layouts()![0]!), { when: () => !isMobileLayout() && Boolean(layouts()) }),
+            shortcutManager.registerHandler(COMMAND_IDS.nextPaneLayout, context, nextLayout, { when: () => !isMobileLayout() && Boolean(layouts()) }),
+          ]),
+          shortcutManager.registerHandler(COMMAND_IDS.toggleDockOverlay, "workspace-panel", toggleDockOverlay, { when: () => !isMobileLayout() && dockAvailable() }),
+          ...([COMMAND_IDS.dockedPane1, COMMAND_IDS.dockedPane2, COMMAND_IDS.dockedPane3] as const).map((id, index) =>
+            shortcutManager.registerHandler(id, "workspace-panel", () => { const slot = railDocked()[index]; if (slot !== undefined) chooseDocked(slot, false); }, { when: () => !isMobileLayout() && railDocked()[index] !== undefined })),
+          // M from a docked pane: back out of the dock into the row, as its header's Move to a pane does.
+          shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => { const pane = here(); if (pane !== null) undockPane(pane as number); }, { when: () => { const pane = here(); return pane !== null && isDocked(pane); } }),
+          shortcutManager.registerHandler(COMMAND_IDS.sidebarNewChat, "sidebar", () => { setMobileSidebarOpen(false); void startNewChat(); }),
+          shortcutManager.registerHandler(COMMAND_IDS.sidebarNewFolder, "sidebar", () => runSidebar("new-folder")),
+          shortcutManager.registerHandler(COMMAND_IDS.sidebarSearchChats, "sidebar", toggleSearchPalette),
+          shortcutManager.registerHandler(COMMAND_IDS.dashboardMessages, "dashboard", () => { focusSplitSection("messages"); }, { when: () => splitSections().has("messages") }),
+        ];
+      })(),
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });
