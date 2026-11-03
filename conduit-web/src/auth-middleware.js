@@ -90,6 +90,7 @@ const GLOBAL_THRESHOLD = 50;
 const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
 const KEYS_KEPT = 2000;
 const KEY_FORGOTTEN_MS = 24 * 60 * 60 * 1000;
+const TRUSTED_FORGOTTEN_MS = 90 * KEY_FORGOTTEN_MS;
 const backoffAfter = (failures, threshold) => failures < threshold ? 0
   : Math.min(RATE_LIMIT_CAP_MS, RATE_LIMIT_BASE_MS * 2 ** (failures - threshold));
 
@@ -117,13 +118,18 @@ export function createLoginThrottle({ file = null, now = () => Date.now() } = {}
   };
   const prune = (at) => {
     recent = recent.filter((time) => at - time < GLOBAL_WINDOW_MS);
-    for (const [key, entry] of keys) if (at - entry.lastAt > KEY_FORGOTTEN_MS && at >= entry.nextAllowedAt) keys.delete(key);
+    for (const [key, entry] of keys) if (at - entry.lastAt > (entry.trusted ? TRUSTED_FORGOTTEN_MS : KEY_FORGOTTEN_MS) && at >= entry.nextAllowedAt) keys.delete(key);
+    // Strangers go first: a flood of forged addresses must not push out the clients that have signed in.
+    for (const [key, entry] of keys) { if (keys.size <= KEYS_KEPT) break; if (!entry.trusted) keys.delete(key); }
     while (keys.size > KEYS_KEPT) keys.delete(keys.keys().next().value);
   };
   return {
     /** When this client may try again (ms since the epoch); 0 when it may now. */
     retryAt(key, at = now()) {
-      const until = Math.max(keys.get(key)?.nextAllowedAt || 0, globalUntil);
+      // A client that has signed in before is not held by the ceiling: attempts spread over forged or many addresses
+      // slow strangers, never lock the owner out of their own hub.
+      const entry = keys.get(key);
+      const until = Math.max(entry?.nextAllowedAt || 0, entry?.trusted ? 0 : globalUntil);
       return until > at ? until : 0;
     },
     noteFailure(key, at = now()) {
@@ -139,21 +145,24 @@ export function createLoginThrottle({ file = null, now = () => Date.now() } = {}
       if (spread) globalUntil = Math.max(globalUntil, at + spread);
       save();
     },
-    noteSuccess(key) {
-      if (keys.delete(key)) save();
+    noteSuccess(key, at = now()) {
+      keys.delete(key);
+      keys.set(key, { failures: 0, nextAllowedAt: 0, lastAt: at, trusted: true });
+      save();
     },
     flush: () => writing,
   };
 }
 
 /**
- * Who is trying to sign in, for throttling: behind a proxy on this machine or network (Caddy, a tunnel's connector),
+ * Who is trying to sign in, for throttling: behind a proxy on this machine (Caddy, a tunnel's connector),
  * the client it names; otherwise the connection's own address. A name a client could forge only moves its own
  * attempts to another count -- the ceiling across all clients still holds.
  */
 export function loginThrottleKey(request) {
   const socket = String(request.socket?.remoteAddress || "").replace(/^::ffff:/, "");
-  const proxied = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|f[cd])/i.test(socket);
+  // Only a proxy on this machine (Caddy, a tunnel's connector) is believed: a LAN client could name anyone.
+  const proxied = /^(127\.|::1$)/.test(socket);
   if (!proxied) return socket || "unknown";
   const headers = request.headers || {};
   const named = headers["cf-connecting-ip"] || headers["x-real-ip"]
