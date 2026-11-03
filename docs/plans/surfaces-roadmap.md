@@ -235,6 +235,15 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   pages in any pane. A person who keeps many sites open may want each browser tab to be one of the pane's tabs instead;
   offer it as a setting, off by default.
 
+- [ ] 33. Native browser in the desktop clients (2026-11-03): in the Windows (and later macOS) app, "Open browser here"
+  shows real pages in a Tauri child webview laid over the pane's body -- no stream, no proxy, the client's own network
+  and sign-ins. Orca does this with Electron's `<webview>` tag (composited in the page, so menus draw over it; a partition
+  per profile; CDP through `webContents.debugger` in-process). Tauri has no composited equivalent: `Window::add_child`
+  (the `unstable` feature) makes a native view that paints over Conduit's HTML, so the pane hides or shrinks it while a
+  menu, dialog or drag is over it; its bounds follow the pane by ResizeObserver; title and URL come from
+  `on_document_title_changed` / `on_navigation` as events; back and forward by script; its own `data_directory`; agents
+  drive it through WebView2's in-process DevTools protocol (`CallDevToolsProtocolMethod`), never a debugging port.
+
 ### Later or lower priority
 
 - [ ] 19. Memory view with scope and provenance. Prototype 2026-11-02 on jbot's page, a Remembered group over its
