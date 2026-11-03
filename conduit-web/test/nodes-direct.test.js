@@ -1,0 +1,72 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { directAddresses, signGrant, verifyGrant, keySecret, DIRECT_TTL_MS, DIRECT_PTY_TTL_MS,
+  channelKey, nodeChannel, sealFrame, openFrame, SEAL_TO_NODE, SEAL_TO_CLIENT } from "../src/nodes/direct.js";
+
+// Design: direct-terminal security review; 100.64/10 alone is not proof of Tailscale.
+test("direct routes use real LAN and Tailscale adapters and exclude public and virtual addresses", () => {
+  const nic = (address, extra = {}) => ({ address, family: "IPv4", internal: false, ...extra });
+  const lan = "192.168.40.2";
+  const tailnet = "100.80.1.2";
+  assert.deepEqual(directAddresses({
+    tailscale0: [nic(tailnet)], ethernet: [nic(lan), nic("100.90.1.2"), nic("203.0.113.2"), nic("127.0.0.1", { internal: true })],
+    docker0: [nic("172.17.0.1")], vEthernet: [nic("172.18.0.1")], duplicate: [nic(lan)],
+  }), [{ address: lan, reach: "private" }, { address: tailnet, reach: "tailnet" }]);
+});
+
+const now = 1000;
+const secret = keySecret("fixture-node-key");
+const readGrant = () => ({ place: { root: "fixture-root", path: "project" }, read: true, expires: now + DIRECT_TTL_MS });
+
+// direct.js verifyGrant: a token is accepted only by the node whose secret signed it.
+test("a direct grant does not verify under another node key", () => {
+  const grant = readGrant();
+  const token = signGrant(secret, grant);
+  assert.deepEqual(verifyGrant(secret, token, now), grant);
+  assert.equal(verifyGrant(keySecret("different-node-key"), token, now), null);
+});
+
+// direct.js verifyGrant: an expired or malformed token is refused.
+test("direct grants expire at their deadline and malformed tokens are refused", () => {
+  const grant = readGrant();
+  const token = signGrant(secret, grant);
+  assert.deepEqual(verifyGrant(secret, token, grant.expires - 1), grant);
+  assert.equal(verifyGrant(secret, token, grant.expires), null);
+  for (const malformed of [null, "", "not-a-token", `${token}.extra`, signGrant(secret, "not a grant")]) {
+    assert.equal(verifyGrant(secret, malformed, now), null);
+  }
+});
+
+// Design: direct terminals; neither kind of grant passes for the other.
+test("a read grant cannot attach a terminal and a terminal grant cannot read files", () => {
+  const read = readGrant();
+  const pty = { pty: "fixture-terminal", nonce: "fixture-nonce", expires: now + DIRECT_PTY_TTL_MS };
+  assert.deepEqual(verifyGrant(secret, signGrant(secret, pty), now, "pty"), pty);
+  assert.equal(verifyGrant(secret, signGrant(secret, read), now, "pty"), null);
+  assert.equal(verifyGrant(secret, signGrant(secret, pty), now, "read"), null);
+});
+
+// Design: direct terminals; direction and frame count prevent moving or replaying a frame.
+test("a sealed terminal frame opens once and only in its intended direction", () => {
+  const key = channelKey(secret, "fixture-nonce");
+  const raw = Buffer.from(key, "base64url");
+  const channel = nodeChannel(key);
+  const kind = 7;
+  const body = Buffer.from("fixture terminal input");
+  const frame = sealFrame(raw, SEAL_TO_NODE, 0, kind, body);
+  assert.deepEqual(channel.open(frame), { kind, body });
+  assert.equal(channel.open(frame), null);
+  assert.equal(channel.open(sealFrame(raw, SEAL_TO_CLIENT, 1, kind, body)), null);
+  assert.deepEqual(openFrame(raw, SEAL_TO_CLIENT, 0, channel.seal(kind, body)), { kind, body });
+});
+
+// Design: direct terminals; changed or truncated frames cannot open.
+test("changed and truncated sealed frames are rejected without throwing", () => {
+  const key = Buffer.from(channelKey(secret, "fixture-nonce"), "base64url");
+  const frame = sealFrame(key, SEAL_TO_NODE, 0, 9, Buffer.from("fixture payload"));
+  assert.ok(openFrame(key, SEAL_TO_NODE, 0, frame));
+  const changed = Buffer.from(frame);
+  changed[0] ^= 1;
+  assert.equal(openFrame(key, SEAL_TO_NODE, 0, changed), null);
+  assert.equal(openFrame(key, SEAL_TO_NODE, 0, frame.subarray(0, 8)), null);
+});

@@ -24,7 +24,8 @@ test("mint-session creates a caller-labeled token without a password", async () 
   assert.equal(minted.userAgent, "test-agent");
   assert.equal(typeof minted.token, "string");
   assert.ok(minted.token.length > 20);
-  assert.equal(minted.sessionCount, 1);
+  // A script's session never counts toward the device cap.
+  assert.equal(minted.sessionCount, 0);
   assert.equal((await store.findSession(minted.token)).userAgent, "test-agent");
   await fs.rm(root, { recursive: true, force: true });
 });
