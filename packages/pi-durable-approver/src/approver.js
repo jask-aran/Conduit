@@ -40,6 +40,12 @@ export function createApprover(options) {
   // Executor requests this gate has seen, by request id: what became of them, so a resume the agent makes itself
   // cannot carry out what the gate refused or what waits on the person.
   const requests = new Map();
+  const remember = (id, value) => {
+    requests.delete(id);
+    requests.set(id, value);
+    // Bounded: the oldest go first (a resume of one that old escalates, as one the gate never saw).
+    if (requests.size > 1000) requests.delete(requests.keys().next().value);
+  };
 
   async function judge(held, api, context) {
     const started = Date.now();
@@ -149,10 +155,10 @@ export function createApprover(options) {
           if (!held) continue;
           const id = held.resume?.arguments?.requestId;
           const verdict = await judgeOf(held);
-          if (id) requests.set(id, { held, outcome: verdict.outcome });
+          if (id) remember(id, { held, outcome: verdict.outcome });
           if (verdict.outcome === "allow") return charged(await carryOut(held, run, api, context));
           const answer = await notAllowed(held, verdict, run, api, context);
-          if (id) requests.set(id, { held, outcome: answer.details?.approver?.escalation === "pending" ? "pending" : answer.isError ? "deny" : "allow" });
+          if (id) remember(id, { held, outcome: answer.details?.approver?.escalation === "pending" ? "pending" : answer.isError ? "deny" : "allow" });
           return charged(answer);
         }
         return result;
