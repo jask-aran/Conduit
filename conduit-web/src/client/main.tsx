@@ -2687,7 +2687,7 @@ function App() {
     if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
     if (!again && switchToTab(view)) return;
     // A chat with no room for another pane joins the focused pane of chats as a kept tab (6c).
-    if (view.startsWith("chat:") && panesShown().includes(pane) && activeChatOf(pane) && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) {
+    if (tabbable(view) && panesShown().includes(pane) && activeTabOf(pane) && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) {
       keepNext.add(String(pane));
       if (pane === "main") void openInPaneA(view); else await setSlotView(pane, view);
       if (focus) focusAnyPane(pane);
@@ -2943,7 +2943,7 @@ function App() {
       : draggedPane !== null ? { text: `Swap with ${named(viewOf(pane))}`, icon: "swap" }
       : draggedGroup ? { text: "Move these tabs here", icon: "tab" }
       : panesShown().some((other) => viewOf(other) === draggedView) ? { text: "Already open: go to it", icon: "here" }
-      : draggedView.startsWith("chat:") && activeChatOf(pane) ? { text: "Add as a tab here", icon: "tab" }
+      : tabbable(draggedView) && activeTabOf(pane) ? { text: "Add as a tab here", icon: "tab" }
       : parseFileView(viewOf(pane))?.length === 0 ? { text: "Open in this pane", icon: "here" }
       : { text: `Open here in place of ${named(viewOf(pane))}`, icon: "here" };
     setDragHint({ x: event.clientX, y: event.clientY, ...hint });
@@ -3014,7 +3014,7 @@ function App() {
         [String(group.pane)]: { ids: remaining, used: source.used.filter((id) => remaining.includes(id)) },
         [String(pane)]: { ids, used: [recent, ...ids.filter((id) => id !== recent)] },
       }));
-      if (remaining.length && group.ids.includes(activeChatOf(group.pane) ?? "")) await switchTab(group.pane, source.used.find((id) => remaining.includes(id)) ?? remaining[0]!);
+      if (remaining.length && group.ids.includes(activeTabOf(group.pane) ?? "")) await switchTab(group.pane, source.used.find((id) => remaining.includes(id)) ?? remaining[0]!);
       if (pane === target.pane) await switchTab(pane, recent);
     } finally {
       swappingPanes = false;
@@ -3080,7 +3080,7 @@ function App() {
       if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) await setPaneView(target.pane, formatFileView([held[0]!, adding[0]!]));
       else {
         // A chat on a pane of chats joins it as a kept tab (6c).
-        if (next.startsWith("chat:") && activeChatOf(target.pane)) keepNext.add(String(target.pane));
+        if (tabbable(next) && activeTabOf(target.pane)) keepNext.add(String(target.pane));
         await setPaneView(target.pane, next);
       }
       return focusAnyPane(target.pane);
@@ -3144,7 +3144,7 @@ function App() {
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
-      header={<PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></PaneHeader>} />
+      header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
   </SheetFill>;
   const renderTerminalDocument = (pane: PaneKey, id: () => string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null } | null | undefined>(undefined);
@@ -3434,7 +3434,7 @@ function App() {
     const view: SplitView = `chat:${target.id}`;
     if (target.id === mainChatId() || focusPaneShowing(view) || switchToTab(view)) return true;
     const pane = keyboardPaneSlot() ?? "main";
-    if (!activeChatOf(pane)) return false;
+    if (!activeTabOf(pane)) return false;
     markChatRead(catalogue, target);
     keepNext.add(String(pane));
     if (pane === "main") void openChat(target, project); else await setSlotView(pane, view);
@@ -3851,16 +3851,25 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  // The place a chat tab belongs to, which groups it.
-  const tabPlace = (id: string) => catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
-  const activeChatOf = (pane: PaneKey) => { const view = viewOf(pane); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
+  // A pane's tabs are its documents: chats, pages and browsers (a file viewer has its own tabs; a terminal and an empty
+  // pane are not tabs). A chat's key is its id, as tabs were when only chats were; any other document's is its view.
+  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && /^(chat|page|browser):/.test(view));
+  const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
+  const tabView = (key: string) => (key.includes(":") ? key : `chat:${key}`) as SplitView;
+  // The place a tab belongs to, which groups it: a chat's project, a project page's project, else the document's kind.
+  const tabPlace = (id: string) => id.startsWith("page:project:") ? id.slice("page:project:".length)
+    : id.includes(":") ? `doc:${id.split(":")[0]}`
+    : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
+  const activeTabOf = (pane: PaneKey) => { const view = viewOf(pane); return tabbable(view) ? tabKey(view) : null; };
   // The next chat opened into these panes is added as a tab rather than replacing the active one.
   const keepNext = new Set<string>();
   function tabsFromParams(params: URLSearchParams): Record<string, PaneTabs> {
     const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
     const found: Record<string, PaneTabs> = {};
     for (const value of params.getAll("tabs")) {
-      const [position, list] = value.split(":");
+      const split = value.indexOf(":");
+      const position = value.slice(0, split);
+      const list = split < 0 ? "" : value.slice(split + 1);
       const at = Number(position);
       const key = at === 0 ? "main" : order[at - 1] === undefined ? null : String(order[at - 1]);
       if (key === null || !list) continue;
@@ -3884,8 +3893,8 @@ function App() {
       const view = untrack(() => viewOf(pane));
       const key = String(pane);
       if (pane === "main" && !view) continue;
-      if (!view?.startsWith("chat:")) { delete next[key]; continue; }
-      const id = view.slice("chat:".length);
+      if (!tabbable(view)) { delete next[key]; continue; }
+      const id = tabKey(view);
       const tabs = next[key] ?? { ids: [], used: [] };
       if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
       let ids = [...tabs.ids];
@@ -3915,7 +3924,7 @@ function App() {
         used = used.filter((item) => item !== drop);
       }
       next[key] = { ids, used };
-      // A chat is a tab in one pane at a time.
+      // A document is a tab in one pane at a time.
       for (const [other, list] of Object.entries(next)) {
         if (other === key || !list.ids.includes(id)) continue;
         next[other] = { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) };
@@ -3936,7 +3945,7 @@ function App() {
     const items = shown.flatMap((entry, side) => (fileTabsOf(pane, side)?.entries ?? [entry]).map((item) => ({ side, key: fileEntryKey(item) })));
     return !isMobileLayout() && items.length > 1 ? { pane, shown, items } : null;
   };
-  const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeChatOf(pane) ?? "") ? { pane, list } : null; };
+  const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeTabOf(pane) ?? "") ? { pane, list } : null; };
   const stepTab = async (step: number) => {
     const files = fileTabsToStep();
     if (files) {
@@ -3947,7 +3956,7 @@ function App() {
     }
     const found = tabsToStep();
     if (!found) return;
-    const at = found.list.ids.indexOf(activeChatOf(found.pane)!);
+    const at = found.list.ids.indexOf(activeTabOf(found.pane)!);
     void switchTab(found.pane, found.list.ids[(at + step + found.list.ids.length) % found.list.ids.length]!);
   };
   // False only on the way to pane A with no focus of its own to go back to.
@@ -3955,14 +3964,16 @@ function App() {
 
   const switchTab = async (pane: PaneKey, id: string) => {
     setKeyboardPane(pane);
-    if (pane === "main") await openInPaneA(`chat:${id}`);
-    else await setSlotView(pane, `chat:${id}`);
+    const view = tabView(id);
+    if (!view.startsWith("chat:")) await setPaneView(pane, view);
+    else if (pane === "main") await openInPaneA(view);
+    else await setSlotView(pane, view);
     focusAnyPane(pane);
   };
   const closeTab = async (pane: PaneKey, id: string) => {
     const tabs = tabsOf(pane);
     if (!tabs || tabs.ids.length < 2) return await closeDocument(pane);
-    if (activeChatOf(pane) === id) {
+    if (activeTabOf(pane) === id) {
       await switchTab(pane, tabs.used.find((item) => item !== id && tabs.ids.includes(item)) ?? tabs.ids.find((item) => item !== id)!);
     }
     setPaneTabs((current) => {
@@ -3970,11 +3981,11 @@ function App() {
       return list ? { ...current, [String(pane)]: { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) } } : current;
     });
   };
-  // A chat open as a background tab anywhere is gone to, not opened again.
+  // A document open as a background tab anywhere is gone to, not opened again.
   const switchToTab = (view: SplitView) => {
-    if (!view.startsWith("chat:")) return false;
-    const id = view.slice("chat:".length);
-    const pane = panesShown().find((candidate) => tabsOf(candidate)?.ids.includes(id) && activeChatOf(candidate) !== id);
+    if (!tabbable(view)) return false;
+    const id = tabKey(view);
+    const pane = panesShown().find((candidate) => tabsOf(candidate)?.ids.includes(id) && activeTabOf(candidate) !== id);
     if (pane === undefined) return false;
     void switchTab(pane, id);
     return true;
@@ -4326,22 +4337,23 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
       place: tabPlace,
-      placeLabel: (id) => placeLabelOf(tabPlace(id)),
-      title: (id) => viewName(`chat:${id}`),
-      lit: () => activeChatOf(pane),
+      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place.startsWith("doc:") ? "Conduit" : placeLabelOf(place); },
+      title: (id) => viewName(tabView(id)),
+      lit: () => activeTabOf(pane),
       used: () => tabsOf(pane)?.used ?? [],
-      live: (id) => Boolean(runtime.getProcess(id)),
+      live: (id) => !id.includes(":") && Boolean(runtime.getProcess(id)),
       select: (id) => void switchTab(pane, id),
       close: (id) => void closeTab(pane, id),
-      dragView: (id) => `chat:${id}`,
+      dragView: (id) => tabView(id),
       groupDrag: (ids) => ({ "data-tab-group": ids.join(",") }),
     });
     return { get tabs() { return row(); } };
   };
   // A tab's close on a pane's only document: the pane stays, empty (Home). An empty pane's close closes the pane.
   // A document other than a chat is its pane's one tab: its title and its close.
+  // With other documents kept beside it, the pane's tab row instead.
   const documentTab = (pane: PaneKey, title?: string) => isMobileLayout() ? undefined
-    : <PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} /></PaneTabs>;
+    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} /></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
     // The slide-over dock never shows an empty pane: a document closed there closes its docked pane, as the dock's

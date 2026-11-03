@@ -225,6 +225,10 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   messaging app attaches to a thread, and a command there starts a fresh one.
 - [ ] 31. A single drawer pane from the bottom, later. Not recursive splits.
 
+- [ ] 32. Browser tabs as pane tabs, a setting (2026-11-03): today a browser is one document, a tab beside chats and
+  pages in any pane. A person who keeps many sites open may want each browser tab to be one of the pane's tabs instead;
+  offer it as a setting, off by default.
+
 ### Later or lower priority
 
 - [ ] 19. Memory view with scope and provenance. Prototype 2026-11-02 on jbot's page, a Remembered group over its
