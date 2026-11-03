@@ -9,7 +9,7 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 /**
  * jbot's messages on its page (docs/plans/persistent-agent.md › Talking to the person): the message log's app room,
  * newest at the foot, held there while you read (DashConversation), over the page's composer. What the person says
- * is a bubble; what jbot says is an answer; a report (a message with a title) is a card opening in a reader.
+ * is a bubble; what jbot says is a bubble too, a hairline one (Turn bubble), times always shown; a report (a message with a title) is a card opening in a reader.
  */
 export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
@@ -67,7 +67,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   };
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
-    : <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined} /></Turn>;
+    : <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined} /></Turn>;
   // An email in its room: from and to as its headers say; its own words, what it quotes folded.
   const email = (message: LogMessage) => {
     const { own, quoted } = splitQuoted(message.body);
@@ -79,7 +79,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   return <>
     <DashConversation label={`Messages with ${props.name}`}>
       <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
-        <Transcript>
+        <Transcript data-times="shown">
           <For each={rows()}>{(row, index) => row.kind === "room"
             ? <TranscriptRow flow={flowAt(index())}>
               <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
@@ -96,7 +96,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                   <ReportCard title={message.title!} line={firstLine(message.body)} time={clock(message.at)} notified={message.notify !== "none"} onOpen={() => setReading(message)} />
                 </Match>
                 <Match when={true}>
-                  <Turn>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)} /></Turn>
+                  <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)} /></Turn>
                 </Match>
               </Switch>
             </TranscriptRow>; })()}

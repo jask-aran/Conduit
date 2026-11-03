@@ -214,3 +214,14 @@
 /* Welcome: an empty chat's greeting, centred in its host above the room kept for the composer. */
 .ui-welcome { display: grid; height: 100%; min-height: 100%; place-content: center; padding-bottom: var(--welcome-room, 0); text-align: center; }
 .ui-welcome h1 { margin: 0; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); letter-spacing: -0.02em; }
+
+/* A turn said as a message (Turn bubble: the agent's page, a messaging app): its answer in a hairline bubble at the
+   left, no wider than most of the column, a tail rising from its top-left corner; its foot under it. The tail is a
+   square turned on its corner, its two upper edges the bubble's hairline, its fill the pane's covering the line. */
+.ui-turn[data-bubble] { --turn-step: 0px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.ui-turn[data-bubble] > .ui-answer { --tail: calc(2 * var(--space-xs)); position: relative; width: fit-content; max-width: 80%; min-width: calc(1lh + 2 * var(--space-md));
+  border: var(--hairline) solid var(--border); border-radius: var(--radius-message); background: var(--background); padding: var(--space-md) var(--space-lg); }
+.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: calc(var(--tail) / -2 - var(--hairline) / 2); left: var(--space-lg); width: var(--tail); height: var(--tail);
+  border-top: var(--hairline) solid var(--border); border-left: var(--hairline) solid var(--border); background: var(--background); transform: rotate(45deg); }
+/* Times always shown (Transcript data-times="shown"): where messages arrive unseen, when each came is the point. */
+.ui-transcript[data-times="shown"] .ui-message-foot > time { opacity: 1; }

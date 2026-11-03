@@ -27,3 +27,9 @@
 .ui-chat-scroller[data-panel-motion] .ui-answer .katex-display > .katex {
   contain: layout;
 }
+
+/* In a message bubble (Turn bubble) the answer is settled and the bubble sizes to its words: contained, the root has no
+   width of its own and the bubble shrinks to a word a line. */
+.ui-turn[data-bubble] .chat-markdown[data-renderer="incremark"]:not([data-inline]) > .incremark {
+  contain: none;
+}

@@ -4412,8 +4412,16 @@ function App() {
     setWindowDrags(mode !== "native");
   });
   // Live chats (a harness process held for them, until reclaimed) and of those, the ones with a turn under way.
-  const liveChats = createMemo(() => [...runtime.processes().values()].filter((process) => visibleRuntimeActivity(process)));
-  const generating = (process: RuntimeProcess) => { const activity = visibleRuntimeActivity(process); return activity !== "idle" && activity !== "failed"; };
+  // A new chat is started warm, before anything is said in it: not a chat the person has going until it has a message.
+  const liveChats = createMemo(() => {
+    const chats = new Map(catalogue.projects().flatMap((project) => project.sessions.map((chat) => [chat.id, chat] as const)));
+    return [...runtime.processes().values()].filter((process) => {
+      if (!visibleRuntimeActivity(process)) return false;
+      const chat = chats.get(process.chatId);
+      return !chat || Boolean(chat.lastMessageAt || chat.lastUserMessageAt) || generating(process);
+    });
+  });
+  function generating(process: RuntimeProcess) { const activity = visibleRuntimeActivity(process); return activity !== "idle" && activity !== "failed"; }
   const runningTurns = createMemo(() => liveChats().filter(generating).map((process) => process.chatId));
   const runningName = (id: string) => id === agentView()?.home?.chatId ? agentView()?.settings?.name || "Agent"
     : (agentView()?.sides || []).find((side) => side.chatId === id)?.title || viewName(`chat:${id}` as SplitView);
