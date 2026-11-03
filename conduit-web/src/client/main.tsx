@@ -2191,6 +2191,9 @@ function App() {
    * a newer one exists, so it never pulls focus back from where the person went since (Codex review).
    */
   let focusIntent = 0;
+  // What the person last used: a press or a key. Focus in the sidebar after a press is a chat being opened (and
+  // focus passing through its row), not the keyboard moving there.
+  let lastInput: "pointer" | "key" = "key";
   let enterRetry: ReturnType<typeof setTimeout> | undefined;
   const holdRegion = (region: HTMLElement | null) => {
     if (heldRegion === region) return;
@@ -5573,17 +5576,21 @@ function App() {
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
       // The held line follows focus into any region, however it came (a click, Tab, a chord); only a keyboard go-to
-      // also draws it out (the region cue, acknowledgeFocusedRegion). Focus outside a region keeps the last owner
-      // until another receives focus.
+      // also draws it out (the region cue, acknowledgeFocusedRegion). The sidebar is the exception: a click there opens
+      // a chat, it is not the keyboard moving to the sidebar (focus passes through its row on the way to the pane), so
+      // the line stays where it was. Focus outside a region keeps the last owner until another receives focus.
       const outermost = regions.at(-1);
       if (!outermost || !(outermost.element instanceof HTMLElement)) return;
       if (outermost.element !== focusRegion) { enteredRegion = outermost.element; focusRegion = outermost.element; }
+      if (outermost.name === "sidebar" && lastInput === "pointer") return;
       holdRegion(outermost.element);
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
     // A press is the person's own choice of where to be: deferred focus work started before it gives way (focusIntent).
-    const notePress = () => { focusIntent++; };
+    const notePress = () => { focusIntent++; lastInput = "pointer"; };
+    const noteKey = () => { lastInput = "key"; };
+    window.addEventListener("keydown", noteKey, true);
     window.addEventListener("pointerdown", notePress, true);
     syncFocusedShortcutContext(document.activeElement);
     onCleanup(() => {
@@ -5593,6 +5600,7 @@ function App() {
       window.removeEventListener("keydown", escapeHome);
       window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("pointerdown", notePress, true);
+      window.removeEventListener("keydown", noteKey, true);
       for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();
       for (const release of releaseShortcutHandlers) release();
