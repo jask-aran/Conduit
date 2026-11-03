@@ -3499,7 +3499,9 @@ function App() {
     return true;
   };
   // What a pane beside A already shows is gone to there, not opened again in pane A.
+  // A document is open once: one a pane already shows -- pane A included, a page there as a chat -- is gone to.
   const focusPaneShowing = (view: SplitView) => {
+    if (keyboardPaneSlot() !== null && viewOf("main") === view) { setKeyboardPane("main"); enterMainPane(); return true; }
     const slot = shownSlots().find((candidate) => slotView(candidate) === view);
     if (slot === undefined) return false;
     focusPane(slot);
@@ -3515,6 +3517,9 @@ function App() {
   const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
     if (focusPaneShowing(view) || switchToTab(view)) return;
     const slot = keyboardPaneSlot();
+    // Ctrl keeps what the pane shows as a tab, for a page (jbot, a dashboard, a project) as for a chat
+    // (openChatAsTab): the next view opened there joins its tabs instead of replacing the active one.
+    if (tabActivation() && tabbable(view) && activeTabOf(slot ?? "main")) keepNext.add(String(slot ?? "main"));
     // Pane A goes by its route, and the route changing clears what showed
     // over it; only going to the route it already has needs clearing here.
     if (slot === null) {
@@ -3524,7 +3529,6 @@ function App() {
     if (!(await setSlotView(slot, view))) return;
     focusPane(slot);
     // The document arriving can take the focused element with it; the pane
-    // keeps the keyboard.
     // keeps the keyboard, unless the person has since gone elsewhere.
     const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
     let moved = false;
@@ -3954,6 +3958,9 @@ function App() {
       if (pane === "main" && !view) continue;
       if (!tabbable(view)) { delete next[key]; continue; }
       const id = tabKey(view);
+      // jbot's home thread is the jbot page's (page:agent), never a chat tab of its own: leaving the page for a chat,
+      // the route turns to the chat a moment before the selection does, and that moment took a tab's place.
+      if (id === untrack(() => agentView()?.home?.chatId)) continue;
       const tabs = next[key] ?? { ids: [], used: [] };
       if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
       let ids = [...tabs.ids];
