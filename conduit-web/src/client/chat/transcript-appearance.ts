@@ -226,6 +226,27 @@ export function saveCodeBlockCollapseLines(
  * Stamp the presets onto the document root. CSS resolves everything from there,
  * so changing a preference never re-renders a message.
  */
+/** The agent's app room (its page's messages): as wide as the transcript, or its own width. A messaging view reads
+ *  wider than a chat, so its own default is Wide. Saved on this device; stamped on the root (data-agent-width). */
+export type AgentMessagesWidthMode = "transcript" | TranscriptWidthMode;
+export const AGENT_MESSAGES_WIDTH_STORAGE_KEY = "conduit:agent-messages-width";
+export const AGENT_MESSAGES_WIDTH_OPTIONS: ReadonlyArray<{ value: AgentMessagesWidthMode; label: string }> = [
+  { value: "transcript", label: "Same as transcript" },
+  ...TRANSCRIPT_WIDTH_OPTIONS,
+];
+const isAgentMessagesWidth = (value: unknown): value is AgentMessagesWidthMode => AGENT_MESSAGES_WIDTH_OPTIONS.some((option) => option.value === value);
+const storedAgentWidth = (): AgentMessagesWidthMode => {
+  try { const stored = localStorage.getItem(AGENT_MESSAGES_WIDTH_STORAGE_KEY); return isAgentMessagesWidth(stored) ? stored : "wide"; } catch { return "wide"; }
+};
+export const [agentMessagesWidth, setAgentMessagesWidthSignal] = createSignal<AgentMessagesWidthMode>(typeof window === "undefined" ? "wide" : storedAgentWidth());
+export function saveAgentMessagesWidth(mode: AgentMessagesWidthMode) {
+  const selected = isAgentMessagesWidth(mode) ? mode : "wide";
+  try { localStorage.setItem(AGENT_MESSAGES_WIDTH_STORAGE_KEY, selected); } catch {}
+  setAgentMessagesWidthSignal(selected);
+  if (typeof document !== "undefined") document.documentElement.dataset.agentWidth = selected;
+}
+if (typeof document !== "undefined") document.documentElement.dataset.agentWidth = agentMessagesWidth();
+
 export function applyTranscriptAppearance(options: {
   width?: TranscriptWidthMode;
   wideBlocks?: TranscriptWideBlocksMode;

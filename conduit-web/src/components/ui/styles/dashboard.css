@@ -207,6 +207,3 @@
 @media (prefers-reduced-motion: reduce) { .ui-group-toggle > svg, .ui-folder-mark [data-part="front"] { transition: none; } }
 .ui-change-status[data-conflict] { color: var(--destructive); }
 .ui-row:where([data-density="list"])[data-change-row][data-selected] { background: var(--tint); }
-
-/* The agent's page reads as a messaging app: a wider column than a chat's, its bubbles taking most of it. */
-.ui-dash[data-page="Agent"] { --reading-width: var(--measure-3xl); }

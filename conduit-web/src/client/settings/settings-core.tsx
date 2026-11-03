@@ -46,6 +46,10 @@ import {
   type PanelMotionMode,
   TRANSCRIPT_WIDE_BLOCKS_OPTIONS,
   TRANSCRIPT_WIDTH_OPTIONS,
+  AGENT_MESSAGES_WIDTH_OPTIONS,
+  agentMessagesWidth,
+  saveAgentMessagesWidth,
+  type AgentMessagesWidthMode,
   USER_MESSAGE_COLLAPSE_OPTIONS,
   type UserMessageCollapseMode,
   type TranscriptWideBlocksMode,
@@ -1259,6 +1263,11 @@ export function Settings(props: {
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
+                  <Show when={agentView()?.enabled}><SettingLine label={`${agentView()?.settings?.name || "The agent"}'s message view`} title="How wide its page's messages are: as the transcript, or its own width.">
+                    <Select id="agent-messages-width" aria-label={`${agentView()?.settings?.name || "The agent"}'s message view width`} value={agentMessagesWidth()} onChange={(event) => saveAgentMessagesWidth(event.currentTarget.value as AgentMessagesWidthMode)}>
+                      <For each={AGENT_MESSAGES_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine></Show>
                   <SettingLine label="Wide blocks">
                     <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
                       <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

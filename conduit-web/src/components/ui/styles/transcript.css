@@ -216,12 +216,16 @@
 .ui-welcome h1 { margin: 0; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); letter-spacing: -0.02em; }
 
 /* A turn said as a message (Turn bubble: the agent's page, a messaging app): its answer in a hairline bubble at the
-   left, no wider than most of the column, a tail rising from its top-left corner; its foot under it. The tail is a
-   square turned on its corner, its two upper edges the bubble's hairline, its fill the pane's covering the line. */
+   left, no wider than most of the column, its foot under it. Its tail rises from its top-left corner, flush with its
+   left edge, as a messaging app's does: the corner is square, and above it a right triangle whose upright continues the
+   bubble's left edge and whose slope comes back down to its top edge. The triangle's fill (the pane's) covers the top
+   edge where the tail opens into the bubble. */
 .ui-turn[data-bubble] { --turn-step: 0px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
-.ui-turn[data-bubble] > .ui-answer { --tail: calc(2 * var(--space-xs)); position: relative; width: fit-content; max-width: 80%; min-width: calc(1lh + 2 * var(--space-md));
-  border: var(--hairline) solid var(--border); border-radius: var(--radius-message); background: var(--background); padding: var(--space-md) var(--space-lg); }
-.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: calc(var(--tail) / -2 - var(--hairline) / 2); left: var(--space-lg); width: var(--tail); height: var(--tail);
-  border-top: var(--hairline) solid var(--border); border-left: var(--hairline) solid var(--border); background: var(--background); transform: rotate(45deg); }
+.ui-turn[data-bubble] > .ui-answer { --tail: calc(2.5 * var(--space-xs)); position: relative; width: fit-content; max-width: 80%; min-width: calc(1lh + 2 * var(--space-md));
+  margin-top: var(--tail); border: var(--hairline) solid var(--border); border-radius: var(--radius-message); border-top-left-radius: 0;
+  background: var(--background); padding: var(--space-md) var(--space-lg); }
+.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: calc(-1 * var(--tail) - var(--hairline)); left: calc(-1 * var(--hairline));
+  width: var(--tail); height: calc(var(--tail) + var(--hairline)); border-left: var(--hairline) solid var(--border);
+  background: linear-gradient(to top right, var(--background) calc(50% - var(--hairline)), var(--border) calc(50% - var(--hairline)), var(--border) 50%, transparent 50%); }
 /* Times always shown (Transcript data-times="shown"): where messages arrive unseen, when each came is the point. */
 .ui-transcript[data-times="shown"] .ui-message-foot > time { opacity: 1; }
