@@ -438,10 +438,20 @@ function approverOf(runtime) {
       const waiting = await approve(runtime, api, held.resume.tool, held.resume.arguments, context, thread, shown);
       return waiting ? { status: "pending", message: waiting.output.map((part) => part.text).join("") } : { status: "allowed" };
     },
-    // Rule of Two: a run works on what arrived (mail, feeds, events), and a thread that read a connector lately has
-    // outside content in it; either way an action that reaches someone is the person's.
-    untrusted: async (api) => (await runtime.agent.threadOf(api.conversationId))?.role === "run"
-      || Date.now() - (readOutside.get(String(api.conversationId)) || 0) < OUTSIDE_MS,
+    // Rule of Two: a run works on what arrived (mail, feeds, events), so an action of a run that reaches someone is
+    // always the person's. A thread that read a connector lately has outside content in it too, unless the person
+    // started this turn with words they typed in that time ("reply to her for me"): then the judge weighs the action
+    // against what they asked, and the outside content is only what the reply is about. Typed words are the message
+    // log's (person-words.js), never a prompt the hub generated; the turn's trigger must be theirs (personStarted).
+    untrusted: async (api, context) => {
+      if ((await runtime.agent.threadOf(api.conversationId))?.role === "run") return true;
+      const read = readOutside.get(String(api.conversationId)) || 0;
+      if (Date.now() - read >= OUTSIDE_MS) return false;
+      const asked = (await personWords(runtime.agent, api.conversationId, { messages: 1 })).messages[0];
+      const theirs = asked && Date.now() - Date.parse(asked.at) < OUTSIDE_MS
+        && (await api.memo("personAsked", context) ?? await api.memo("personAsked", await personStarted(api, context), context));
+      return !theirs;
+    },
     audit: jsonlAudit(path.join(runtime.dataRoot, "agent", "approvals")),
   });
   // Wrapped per call: a connector reinstalls its tools, so a wrap kept by name would hold a stale one.
