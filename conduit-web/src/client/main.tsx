@@ -4,7 +4,7 @@ import { HarnessMark, HeaderNote } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader } from "@/components/ui";
+import { AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -3121,8 +3121,8 @@ function App() {
     const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
     return <>
-      <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Empty pane" /></PaneHeader>
-      <PaneHome label="Empty pane">
+      <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="New tab" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
+      <PaneHome label="New tab">
         <header><DashHeader title={greeting()} context={[activeServer()?.name || "Hub", buildLabel(clientBuild)]} /></header>
         <Actions kind="rider">
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
@@ -3829,7 +3829,7 @@ function App() {
       const found = catalogue.projects().flatMap((project) => project.sessions).find((item) => item.id === id) || hiddenChats().get(id)?.chat;
       return found?.title || "New chat";
     }
-    if (view === "home") return "Empty pane";
+    if (view === "home") return "New tab";
     if (view === "page:dashboard") return "Conduit Dashboard";
     if (view === "page:agent") return agentView()?.settings?.name || "Agent";
     if (view === "page:computer") return activeServer()?.name || "Hub";
@@ -3863,13 +3863,13 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  // A pane's tabs are its documents: chats, pages, browsers and terminals (a file viewer has its own tabs; an empty pane
-  // is not a tab). A chat's key is its id, as tabs were when only chats were; any other document's is its view.
-  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && /^(chat|page|browser|term):/.test(view));
+  // A pane's tabs are its documents: chats, pages, browsers, terminals and a New tab (Home: what to open there). A file
+  // viewer has its own tabs. A chat's key is its id, as tabs were when only chats were; any other document's is its view.
+  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term):/.test(view)));
   const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
-  const tabView = (key: string) => (key.includes(":") ? key : `chat:${key}`) as SplitView;
+  const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
   // The place a tab belongs to, which groups it: a chat's project, a project page's project, else the document's kind.
-  const tabPlace = (id: string) => id.startsWith("page:project:") ? id.slice("page:project:".length)
+  const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
     : id.includes(":") ? `doc:${id.split(":")[0]}`
     : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   const activeTabOf = (pane: PaneKey) => { const view = viewOf(pane); return tabbable(view) ? tabKey(view) : null; };
@@ -3936,9 +3936,9 @@ function App() {
         used = used.filter((item) => item !== drop);
       }
       next[key] = { ids, used };
-      // A document is a tab in one pane at a time.
+      // A document is a tab in one pane at a time (a New tab is each pane's own).
       for (const [other, list] of Object.entries(next)) {
-        if (other === key || !list.ids.includes(id)) continue;
+        if (other === key || id === "home" || !list.ids.includes(id)) continue;
         next[other] = { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) };
       }
     }
@@ -4242,6 +4242,8 @@ function App() {
     // The lit tab drags too (a file's; a chat's header moves its pane instead).
     dragLit?: boolean;
     groupDrag?: (keys: string[]) => Record<string, string>;
+    // A + after the tabs: a New tab in this pane.
+    add?: () => void;
   };
   const createTabStrip = (options: TabStripOptions) => {
     const groups = createMemo(() => {
@@ -4342,6 +4344,7 @@ function App() {
           </MenuContent>
         </DropdownMenu>
       </Show>
+      <Show when={options.add}><IconButton kind="pane" label="New tab" onClick={() => options.add!()}><Icons.Add /></IconButton></Show>
     </PaneTabs>) : undefined);
   };
   const placeLabelOf = (projectId: string) => { const project = catalogue.projects().find((item) => item.id === projectId); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
@@ -4356,6 +4359,7 @@ function App() {
       live: (id) => !id.includes(":") && Boolean(runtime.getProcess(id)),
       select: (id) => void switchTab(pane, id),
       close: (id) => void closeTab(pane, id),
+      add: () => void newTab(pane),
       dragView: (id) => tabView(id),
       groupDrag: (ids) => ({ "data-tab-group": ids.join(",") }),
     });
@@ -4365,7 +4369,15 @@ function App() {
   // A document other than a chat is its pane's one tab: its title and its close.
   // With other documents kept beside it, the pane's tab row instead.
   const documentTab = (pane: PaneKey, title?: string) => isMobileLayout() ? undefined
-    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} /></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
+    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} />
+        <Show when={viewOf(pane) !== "home"}><IconButton kind="pane" label="New tab" onClick={() => void newTab(pane)}><Icons.Add /></IconButton></Show></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
+  /** A New tab in this pane, kept beside what it shows (gone to if the pane has one). */
+  const newTab = async (pane: PaneKey) => {
+    if (isMobileLayout()) return;
+    if (tabsOf(pane)?.ids.includes("home")) return void switchTab(pane, "home");
+    keepNext.add(String(pane));
+    if (await setPaneView(pane, "home")) focusAnyPane(pane);
+  };
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
     // The slide-over dock never shows an empty pane: a document closed there closes its docked pane, as the dock's
@@ -5888,10 +5900,11 @@ function App() {
         lead={<>
           <ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
             onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} />
-          <IconButton label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
-          <IconButton label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
+          <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
+          <IconButton kind="pane" label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
         </>}
-        middle={<Button variant="secondary" size="sm" onClick={() => openPalette(null)}><Icons.Search />Search or run a command</Button>}
+        middle={<LeadInput kind="web" readOnly aria-label="Search or run a command" placeholder="Search or run a command"
+          onFocus={(event) => { event.currentTarget.blur(); openPalette(null); }} />}
         end={<>
           <Show when={[...runtime.processes().values()].filter((process) => process.id).length}>{(count) =>
             <Button variant="ghost" size="sm" title="Chats with a turn running" onClick={() => void openDashboard("none")}><Spinner />{count()} running</Button>}</Show>
@@ -5900,9 +5913,9 @@ function App() {
           <Show when={updateState().kind === "ready"}>
             <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
           </Show>
-          <IconButton label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
-          <IconButton label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
-          <Show when={splitShown()}><IconButton label="Equalise panes" onClick={() => applyPaneLayout(Array(shownSlots().length + 1).fill(1))}><Icons.Split /></IconButton></Show>
+          <IconButton kind="pane" label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
+          <IconButton kind="pane" label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
+          <Show when={splitShown()}><IconButton kind="pane" label="Equalise panes" onClick={() => applyPaneLayout(Array(shownSlots().length + 1).fill(1))}><Icons.Split /></IconButton></Show>
           {windowControls("bar")}
         </>} />
     </Show>
