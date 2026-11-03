@@ -11,7 +11,10 @@ type Diagnostics = {
   window: { hours: number };
   requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number; survivedMinutes?: number | null; lapsedMinutes?: number | null }[];
     afterGap: { fromMinutes: number; toMinutes: number | null; requests: number; misses: number }[];
-    misses: { at: string; role: string; model: string; gapMinutes: number | null; why: string }[] };
+    misses: { at: string; role: string; model: string; gapMinutes: number | null; why: string }[];
+    causes?: Record<string, { misses: number; tokens: number }> };
+  changes?: { toolSets: { added: number; addedTokens: number; addedTools: number; full: number; fullTokens: number; fullTools: number };
+    system: { count: number; tokens: number } };
   keepWarm?: { policy: { model: string; pings: number; ttlMs: number | null; intervalMs: number | null; ttlSource: "declared" | "observed" | "assumed" | null;
       gaps: number; reason: string | null } | null;
     pings: number; pingHits: number; pingCost: number; lapses: number; keptHits: number; keptMisses: number; coldHits: number; coldMisses: number; saved: number; net: number };
@@ -30,7 +33,9 @@ const lifetime = (row: { survivedMinutes?: number | null; lapsedMinutes?: number
   `${row.survivedMinutes != null ? ` · lived ${Math.round(row.survivedMinutes)} min` : ""}${row.lapsedMinutes != null ? ` · lost by ${Math.round(row.lapsedMinutes)} min` : ""}`;
 const minutes = (ms: number | null) => ms == null ? "—" : `${Math.round(ms / 60_000)} min`;
 const ROLE = { "jbot-home": "jbot's thread", "jbot-run": "a jbot run", chat: "a chat" } as Record<string, string>;
-const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", unlogged: "not logged" } as Record<string, string>;
+const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", head: "Conduit changed the instructions",
+  tools: "Conduit changed a tool declaration", system: "Conduit changed a system message", history: "the history was rewritten",
+  unlogged: "not logged", "before-log": "before the prefix log began" } as Record<string, string>;
 
 const RANGES = [7, 30, 90] as const;
 const money = (value: number) => value === 0 ? "$0" : value < 0.01 ? "<$0.01" : `$${value.toFixed(2)}`;
@@ -106,6 +111,31 @@ export function UsageSettings() {
             <SettingValue mono>{percent(row.cachedShare)} cached</SettingValue>
           </SettingLine>}
         </For>
+        <Show when={Object.keys(report().requests.causes || {}).length}>
+          <SettingDetails summary="Misses by cause">
+            <For each={Object.entries(report().requests.causes || {}).sort((a, b) => b[1].tokens - a[1].tokens)}>{([why, row]) =>
+              <SettingLine plain label={WHY[why] || why} state={`${row.misses} ${row.misses === 1 ? "miss" : "misses"}`}
+                title="Prompt tokens these misses sent again without the cache.">
+                <SettingValue mono>{count(row.tokens)} tokens</SettingValue>
+              </SettingLine>}
+            </For>
+          </SettingDetails>
+        </Show>
+        <Show when={report().changes}>{(changes) =>
+          <SettingDetails summary="Mid-conversation changes">
+            <SettingLine plain label="Tools added" state={`${changes().toolSets.addedTools} tools`}
+              title="Tool declarations pi-durable appended with only what was new: the cache before them holds.">
+              <SettingValue mono>{changes().toolSets.added} · {count(changes().toolSets.addedTokens)} tokens</SettingValue>
+            </SettingLine>
+            <SettingLine plain label="Whole tool set again" state={`${changes().toolSets.fullTools} tools`}
+              title="pi-durable declared every tool again: the tool order changed or a tool's definition did. Conduit keeps one append-only order so this stays rare.">
+              <SettingValue mono>{changes().toolSets.full} · {count(changes().toolSets.fullTokens)} tokens</SettingValue>
+            </SettingLine>
+            <SettingLine plain label="System messages" title="Section updates and notices appended as system messages.">
+              <SettingValue mono>{changes().system.count} · {count(changes().system.tokens)} tokens</SettingValue>
+            </SettingLine>
+          </SettingDetails>}
+        </Show>
         <Show when={report().requests.afterGap.length}>
           <SettingDetails summary="Misses after a pause">
             <For each={report().requests.afterGap}>{(gap) =>

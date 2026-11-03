@@ -70,6 +70,9 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const inWindow = (at) => at >= from && at <= now;
   const requests = { total: 0, byModel: [], afterGap: [], misses: [] };
   let context = null;
+  const changes = { toolSets: { added: 0, addedTokens: 0, addedTools: 0, full: 0, fullTokens: 0, fullTools: 0 }, system: { count: 0, tokens: 0 } };
+  // Misses by cause, and the prompt tokens each cause sent again uncached.
+  const causes = {};
   const keepWarm = { policy: null, pings: 0, pingHits: 0, pingCost: 0, lapses: 0, keptHits: 0, keptMisses: 0, coldMisses: 0, coldHits: 0, saved: 0, net: 0 };
   const approvals = {
     judged: 0, outcomes: { allow: 0, deny: 0, escalate: 0 }, sources: {},
@@ -109,7 +112,9 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
     }
     const watched = new Map();
     const pings = [];
+    let logStart = null;
     for await (const record of usageLogRecords(path.join(dataRoot, "runtime", "prefix-watch.jsonl"))) {
+      logStart ??= Date.parse(record.t) || null;
       // Keep-warm's own lines (keep-warm.js): the policy it chose, and each ping with what it read and cost.
       if (record.keepWarmPolicy && typeof record.keepWarmPolicy === "object") keepWarm.policy = { at: record.t, ...pickPolicy(record.keepWarmPolicy) };
       if (Number.isFinite(record.keepWarm) && typeof record.key === "string") pings.push({ at: Date.parse(record.t), key: record.key,
@@ -121,7 +126,21 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       if (cid == null) continue;
       if (!watched.has(cid)) watched.set(cid, []);
       // Drop divergence content immediately; only the category can leave this module.
-      watched.get(cid).push({ at, why: record.diverged == null ? "provider" : "changed" });
+      const cause = ["head", "tools", "system", "history"].includes(record.diverged?.cause) ? record.diverged.cause : "changed";
+      watched.get(cid).push({ at, why: record.diverged == null ? "provider" : cause });
+      // What Conduit and pi-durable appended mid-conversation, and whether it kept the cache (an append always does).
+      if (inWindow(at) && record.changes && typeof record.changes === "object") {
+        for (const set of Array.isArray(record.changes.toolSets) ? record.changes.toolSets : []) {
+          const kind = set?.full ? "full" : "added";
+          changes.toolSets[kind]++;
+          changes.toolSets[`${kind}Tokens`] += usageNumber(set?.tokens);
+          changes.toolSets[`${kind}Tools`] += usageNumber(set?.tools);
+        }
+        if (record.changes.system) {
+          changes.system.count += usageNumber(record.changes.system.count);
+          changes.system.tokens += usageNumber(record.changes.system.tokens);
+        }
+      }
     }
 
     const pingsOf = new Map();
@@ -198,9 +217,14 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       if (miss) {
         // Match the reference's last eligible log entry in file order, with a 1 s tolerance.
         const near = watched.get(cid)?.findLast((entry) => entry.at <= at + 1000);
+        // Before the prefix log began there is nothing to read the cause from.
+        const why = near?.why || (logStart == null || at < logStart ? "before-log" : "unlogged");
+        causes[why] ||= { misses: 0, tokens: 0 };
+        causes[why].misses++;
+        causes[why].tokens += input;
         requests.misses.push({ at: new Date(at).toISOString(),
           role: cid === String(home) ? "jbot-home" : jbot.has(cid) ? "jbot-run" : "chat",
-          model, gapMinutes, input, cacheRead, why: near?.why || "unlogged" });
+          model, gapMinutes, input, cacheRead, why });
       }
     }
     keepWarm.net = keepWarm.saved - keepWarm.pingCost;
@@ -275,5 +299,5 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   approvals.share = approvals.jbotCost ? approvals.judgeCost / approvals.jbotCost : null;
   const count = (action) => action.allow + action.deny + action.escalate;
   approvals.byAction = [...actions.values()].sort((a, b) => count(b) - count(a)).slice(0, 8);
-  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, context, skills, approvals };
+  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests: { ...requests, causes }, changes, keepWarm, context, skills, approvals };
 }

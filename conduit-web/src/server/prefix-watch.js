@@ -38,9 +38,9 @@ export function prefixWatch(file) {
       })));
     }, 1000).unref?.();
   };
-  const watch = (params, model) => {
+  const watch = (params, model, sessionId) => {
     try {
-      const key = params?.prompt_cache_key;
+      const key = params?.prompt_cache_key || (typeof sessionId === "string" ? sessionId : null);
       if (!key) return undefined;
       const items = Array.isArray(params.input) ? params.input : Array.isArray(params.messages) ? params.messages : [];
       const now = { head: hash([params.instructions, params.tools, params.model, params.reasoning]), items: items.map(hash), types: items.map((item) => item?.type || item?.role) };
@@ -60,8 +60,26 @@ export function prefixWatch(file) {
           const clip = (item) => JSON.stringify(item ?? null).slice(0, 400);
           if (index >= 0) diverged = { at: index, of: before.items.length, was: before.types[index], now: now.types[index], before: clip(prior?.[index]), after: clip(items[index]) };
         }
+        // Which part of the prompt Conduit changed: the head (instructions or top-level tools), a tool declaration
+        // (an additional_tools item), a system message (a section patch, a notice), or the history itself.
+        if (diverged) diverged.cause = diverged.at === "head" ? "head" : [diverged.was, diverged.now].includes("additional_tools") ? "tools"
+          : [diverged.was, diverged.now].some((type) => type === "developer" || type === "system") ? "system" : "history";
       }
-      fs.appendFile(file, JSON.stringify({ t: new Date().toISOString(), key, items: items.length, diverged, ...(params.__warm ? { warm: true } : {}) }) + "\n", () => {});
+      // What this request appended that Conduit or pi-durable put there, not the conversation: tool declarations
+      // (pi declares only what was added while the order holds, the whole set again when it does not) and system
+      // messages. Counts and sizes only.
+      const appended = before && !diverged ? items.slice(before.items.length) : [];
+      const tokens = (value) => Math.round(JSON.stringify(value ?? null).length / 4);
+      const toolSets = appended.filter((item) => item?.type === "additional_tools").map((item) => {
+        const declared = new Set(items.slice(0, items.indexOf(item)).filter((other) => other?.type === "additional_tools")
+          .flatMap((other) => (other.tools || []).map((tool) => tool?.name)));
+        const names = (item.tools || []).map((tool) => tool?.name);
+        return { tools: names.length, tokens: tokens(item), full: declared.size > 0 && [...declared].every((name) => names.includes(name)) };
+      });
+      const system = appended.filter((item) => item?.type !== "additional_tools" && (item?.role === "developer" || item?.role === "system"));
+      const changes = toolSets.length || system.length
+        ? { ...(toolSets.length ? { toolSets } : {}), ...(system.length ? { system: { count: system.length, tokens: tokens(system) } } : {}) } : null;
+      fs.appendFile(file, JSON.stringify({ t: new Date().toISOString(), key, items: items.length, diverged, ...(changes ? { changes } : {}), ...(params.__warm ? { warm: true } : {}) }) + "\n", () => {});
     } catch { /* diagnostics never break a request */ }
     if (params?.__warm) { const { __warm, ...rest } = params; return rest; }
     return undefined;

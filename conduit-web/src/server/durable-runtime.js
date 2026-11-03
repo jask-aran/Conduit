@@ -149,7 +149,8 @@ const cappedOutput = (models, onPayload) => new Proxy(models, {
     return (model, context, options = {}) => target.streamSimple(model, context,
       { ...options, maxTokens: Math.min(options.maxTokens ?? model.maxTokens ?? OUTPUT_CAP, OUTPUT_CAP),
         // Options pass through the task checkpoint, which keeps no functions: the payload hook is added here.
-        ...(onPayload && !options.onPayload ? { onPayload } : {}) });
+        // The session id rides along: a provider with no prompt_cache_key (OpenRouter) is still logged per conversation.
+        ...(onPayload && !options.onPayload ? { onPayload: (params, payloadModel) => onPayload(params, payloadModel, options.sessionId) } : {}) });
   },
 });
 
@@ -372,7 +373,7 @@ export class DurableRuntime {
         if (policy?.pings > 0 && Date.now() - saved.at < policy.intervalMs) this.armKeepWarm(home, saved.at, 0, policy);
       }).catch(() => {}), 30_000).unref?.();
       this.harness = await Harness.open(await openNodeSqliteStorage(this.file), {
-        models: cappedOutput(this.models, (params, model) => { this.keepWarm(params, model); return this.prefixWatch(params, model); }),
+        models: cappedOutput(this.models, (params, model, sessionId) => { this.keepWarm(params, model); return this.prefixWatch(params, model, sessionId); }),
         registry,
         // Each call's files and processes are the conversation's working
         // directory: the project the chat belongs to, on whichever device holds it.
