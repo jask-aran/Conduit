@@ -124,8 +124,14 @@ export class SkillStore {
     // Its id: the skill's own, unless that is taken by a shipped or another installed one.
     const taken = new Set((await this.list()).map((skill) => skill.id));
     const existing = Object.entries(this.state.installed).find(([, item]) => item.source === source && item.skillId === skillId)?.[0];
-    let id = existing || idFor(skillId) || "skill";
-    for (let n = 2; !existing && taken.has(id); n += 1) id = `${idFor(skillId)}-${n}`;
+    const base = idFor(skillId) || "skill";
+    let id = existing || base;
+    for (let n = 2; !existing && taken.has(id); n += 1) {
+      const suffix = `-${n}`;
+      id = `${base.slice(0, Math.max(0, 64 - suffix.length))}${suffix}`;
+      if (!SAFE_ID.test(id)) break;
+    }
+    if (!SAFE_ID.test(id)) throw Object.assign(new Error("The skill has no valid install id"), { status: 400 });
     const folder = path.join(this.root, id);
     const staging = path.join(this.root, `.${id}.${process.pid}.staging`);
     await fs.rm(staging, { recursive: true, force: true });

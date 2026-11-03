@@ -7,6 +7,8 @@ import { mapLimit } from "./server/effect-concurrency.js";
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024;
 const MAX_CHECKPOINTS_PER_CHAT = 50;
+// Parsed checkpoints kept between listings, by their files' sizes.
+const PARSED_BYTES = 256 * 1024 * 1024;
 const ANCHOR_TAIL_BYTES = 64 * 1024;
 const MAX_ANCHOR_HOPS = 8;
 
@@ -249,9 +251,17 @@ export class TurnCheckpointStore {
       wanted.push({ relativePath, stat });
     });
     const contents = await mapLimit(wanted, 8, ({ relativePath }) => host.read(relativePath));
+    byteLength = 0;
     wanted.forEach(({ relativePath, stat }, index) => {
+      const content = contents[index];
+      // A file can grow after lstat; only the bytes read can spend the final budget.
+      if (content.byteLength > MAX_FILE_BYTES || byteLength + content.byteLength > MAX_CHECKPOINT_BYTES) {
+        entries[relativePath] = { kind: "unavailable", size: content.byteLength, modifiedAt: stat.mtimeMs };
+        return;
+      }
+      byteLength += content.byteLength;
       // A device's stat carries no mode; the digest then reads it as 0 on both sides.
-      entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: contents[index].toString("base64") };
+      entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: content.toString("base64") };
     });
     const createdAt = new Date().toISOString();
     const id = crypto.randomUUID();
@@ -544,8 +554,8 @@ export class TurnCheckpointStore {
   async #checkpoints(chatId) {
     const directory = path.join(this.root, keyFor(chatId));
     const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));
-    // Each file stat'd (and read, when it changed) at once: a chat's fifty, one after another, were fifty round trips.
-    const read = await Promise.all(names.filter((item) => item.endsWith(".json")).sort().map(async (name) => {
+    // Bound simultaneous reads and parses without returning to one round trip per file.
+    const read = await mapLimit(names.filter((item) => item.endsWith(".json")).sort(), 4, async (name) => {
       try {
         const file = path.join(directory, name);
         const stat = await fs.stat(file);
@@ -554,18 +564,25 @@ export class TurnCheckpointStore {
         if (held?.stamp === stamp) return { file, held };
         const checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
         checkpoint[FILE] = file;
-        return { file, held: { stamp, checkpoint } };
+        return { file, held: { stamp, size: stat.size, checkpoint } };
       }
       catch (error) { if (error.code !== "ENOENT") throw error; return null; }
-    }));
+    });
     const checkpoints = [];
     for (const item of read) {
       if (!item) continue;
-      // Kept most recent last; room for two chats' worth, as one chat's (MAX_CHECKPOINTS_PER_CHAT) read in order
-      // through a smaller cache evicted each file just before it was wanted again, and every read parsed them all.
+      // Kept most recent last: room for two chats' worth by count (a cache smaller than one chat's
+      // MAX_CHECKPOINTS_PER_CHAT evicted each file just before it was wanted again, so every listing parsed them all),
+      // and at most PARSED_BYTES in all, so a chat of near-limit checkpoints cannot hold gigabytes.
       this.parsed.delete(item.file);
       this.parsed.set(item.file, item.held);
-      while (this.parsed.size > MAX_CHECKPOINTS_PER_CHAT * 2) this.parsed.delete(this.parsed.keys().next().value);
+      let bytes = 0;
+      for (const held of this.parsed.values()) bytes += held.size || 0;
+      while (this.parsed.size > 1 && (this.parsed.size > MAX_CHECKPOINTS_PER_CHAT * 2 || bytes > PARSED_BYTES)) {
+        const [oldest, held] = this.parsed.entries().next().value;
+        bytes -= held.size || 0;
+        this.parsed.delete(oldest);
+      }
       checkpoints.push(item.held.checkpoint);
     }
     return checkpoints;
