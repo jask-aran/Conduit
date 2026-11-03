@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import {
   clearSessionCookie,
   createLoginThrottle,
@@ -126,6 +127,47 @@ export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, 
       authenticated: Boolean(request.conduitAuth),
       sessionCount: authStore.sessions().length,
     });
+  });
+
+  /*
+   * The hub's sign-ins (Settings › System › Server): each session by an opaque id (a hash of its token's hash, so the
+   * list never carries what authenticates), its kind and client, when it began and was last used, and whether it is
+   * the asking client's own. Scripts' sessions are listed apart. Ending one is any signed-in client's to do.
+   */
+  const sessionId = (session) => crypto.createHash("sha256").update(session.tokenHash).digest("base64url").slice(0, 16);
+  app.get("/v0/auth/sessions", (request, response) => {
+    const context = request.conduitAuth;
+    if (!context) return response.status(401).json({ error: "unauthorized" });
+    const own = context.session?.tokenHash;
+    response.set("Cache-Control", "no-store").json({ sessions: authStore.sessions().map((session) => ({
+      id: sessionId(session), kind: session.kind, userAgent: session.userAgent, createdAt: session.createdAt, lastSeenAt: session.lastSeenAt,
+      current: Boolean(own) && session.tokenHash === own,
+    })) });
+  });
+  app.delete("/v0/auth/sessions/:id", async (request, response) => {
+    const context = request.conduitAuth;
+    if (!context) return response.status(401).json({ error: "unauthorized" });
+    const target = authStore.sessions().find((session) => sessionId(session) === String(request.params.id));
+    if (!target) return response.status(404).json({ error: "no_session" });
+    if (target.tokenHash === context.session?.tokenHash) return response.status(400).json({ error: "own_session", message: "Sign out instead." });
+    await authStore.removeSessionsByPrefix(target.tokenHash);
+    response.json({ ok: true });
+  });
+  /** A new password: the current one first (throttled as a sign-in is), then every other session ends. */
+  app.post("/v0/auth/password", async (request, response) => {
+    const context = request.conduitAuth;
+    if (!context) return response.status(401).json({ error: "unauthorized" });
+    if (refuse(request, response)) return response.status(429).json({ error: "rate_limited", message: "Too many failed attempts. Try again shortly." });
+    const current = String(request.body?.current || "");
+    const next = String(request.body?.next || "");
+    if (next.length < 8 || next.length > 512) return response.status(400).json({ error: "weak_password", message: "Use at least 8 characters." });
+    if (!await authStore.verifyPassword(current).catch(() => false)) {
+      throttle.noteFailure(loginThrottleKey(request));
+      return response.status(401).json({ error: "invalid_credentials", message: "The current password is not right." });
+    }
+    throttle.noteSuccess(loginThrottleKey(request));
+    await authStore.changePassword(next, context.token);
+    response.json({ ok: true });
   });
 
   app.post("/v0/auth/reset-sessions", async (request, response) => {

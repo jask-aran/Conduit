@@ -27,7 +27,6 @@ const DIALS = [
 ] as const;
 const HEARTBEATS = [30, 60, 120, 240, 480, 1440];
 const every = (minutes: number) => minutes < 60 ? `${minutes} min` : minutes === 1440 ? "Once a day" : `${minutes / 60} h`;
-const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch { return [] as string[]; } })();
 
 /* "Same as jbot": the home thread's model, whatever it is when the run starts. */
 const SAME = (name: string): ModelOption => ({ provider: `${name}'s thread`, id: "", spec: "", label: `Same as ${name}`, thinkingLevels: [] });
@@ -97,11 +96,6 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         </SettingLine>
         <SettingLine label="Daily budget" title="The most its background work may spend in a day, in dollars; 0 is no limit. Past it, scheduled work waits for tomorrow and says so." state={budgetError() || undefined}>
           <Input id="agent-budget" inputMode="decimal" value={draft().budget} onInput={(event) => editBudget(event.currentTarget.value)} />
-        </SettingLine>
-        <SettingLine label="Time zone" title="Where its day, its brief and its budget are counted.">
-          <Select id="agent-zone" value={current().timezone} onChange={(event) => set({ timezone: event.currentTarget.value })}>
-            <For each={zones.includes(current().timezone) ? zones : [current().timezone, ...zones]}>{(zone) => <option value={zone}>{zone.replace(/_/g, " ")}</option>}</For>
-          </Select>
         </SettingLine>
       </Group>
       <Group title="Approvals">

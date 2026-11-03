@@ -190,6 +190,10 @@ export function registerRuntimeRoutes(app, {
         return response.status(400).json({ error: "invalid_session_name_thinking_level" });
       }
       const accountName = request.body?.accountName;
+      const accountHome = request.body?.accountHome;
+      if (accountHome != null && (typeof accountHome !== "string" || accountHome.trim().length > 120)) {
+        return response.status(400).json({ error: "invalid_account_home" });
+      }
       if (accountName != null && (typeof accountName !== "string" || accountName.trim().length > 60)) {
         return response.status(400).json({ error: "invalid_account_name" });
       }
@@ -224,13 +228,16 @@ export function registerRuntimeRoutes(app, {
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
         ...(accountName != null ? { accountName } : {}),
+        ...(accountHome != null ? { accountHome } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
         ...(sidebarPins != null ? { sidebarPins } : {}),
         ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
         ...uiPatch,
       });
-      // The account's name is the person's: their agent knows them by it ({{person.name}}, its USER.md).
-      if (accountName != null) await Promise.resolve(onAccountRenamed?.(saved.accountName || "")).catch((error) => console.warn("[account] agent not told the name:", error?.message || error));
+      // The account's name and home are the person's: their agent knows them by them ({{person.name}}, its USER.md).
+      if (accountName != null || accountHome != null) await Promise.resolve(onAccountRenamed?.({
+        ...(accountName != null ? { name: saved.accountName || "" } : {}), ...(accountHome != null ? { home: saved.accountHome || "" } : {}),
+      })).catch((error) => console.warn("[account] agent not told:", error?.message || error));
       response.json(saved);
     } catch (error) { next(error); }
   });

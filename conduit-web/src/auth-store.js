@@ -365,6 +365,17 @@ export class AuthStore {
     });
   }
 
+  /** A new password from a signed-in client: every other session ends (the old password may be why), this one stays. */
+  async changePassword(password, keepToken) {
+    const hashed = await hashPassword(password);
+    const keep = keepToken ? hashToken(keepToken) : null;
+    await this._mutate((data) => {
+      data.password = hashed;
+      data.sessions = keep ? data.sessions.filter((session) => timingSafeEqualString(session.tokenHash, keep)) : [];
+      return { changed: true };
+    });
+  }
+
   async resetSessions() {
     return this._mutate((data) => {
       if (!data.sessions.length) return { changed: false };

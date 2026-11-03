@@ -159,16 +159,17 @@ export function paletteGroupOf(command: { id?: string; group?: string; destructi
 /** Only sections the Solid Settings surface renders. Target's `diagnostics` is
  *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
-  { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me"] },
+  { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me", "time zone", "home", "connectors", "executor", "gmail", "integrations"] },
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
-  { id: "models", label: "Models & accounts", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
+  { id: "models", label: "Models", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
   { id: "prompts", label: "Prompts", keywords: ["prompt", "system prompt", "context", "instructions"] },
   { id: "blocks", label: "Blocks", keywords: ["blocks", "context", "snippets"] },
   { id: "tools", label: "Tools", keywords: ["tools", "approval", "ask", "codemode", "connector", "extension", "profile"] },
   { id: "agent", label: "Agent", keywords: ["jbot", "agent", "persistent", "routines", "inbox"] },
+  { id: "server", label: "Server", keywords: ["server", "hub", "machine", "cpu", "memory", "disk", "processes", "harnesses", "identity", "password", "sessions", "sign in", "sign out", "signed in"] },
   { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
-  { id: "devices", label: "Devices", keywords: ["devices", "machine", "cpu", "memory", "disk", "network", "processes", "nodes", "clients"] },
+  { id: "devices", label: "Devices", keywords: ["devices", "network", "nodes", "clients"] },
   { id: "usage", label: "Usage", keywords: ["usage", "cost", "spend", "tokens", "billing", "money"] },
   { id: "voice", label: "Voice", keywords: ["dictation", "microphone", "transcription", "speech"] },
   { id: "browser", label: "Browser", keywords: ["browser", "chrome", "agent-browser", "stream", "frame rate", "quality", "cookies", "clear data"] },

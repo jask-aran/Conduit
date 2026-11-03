@@ -10,6 +10,7 @@ const DEFAULTS = {
   // The approval model (Settings › AI › Helper models: Review); "" is the naming model's.
   reviewModel: "",
   accountName: "",
+  accountHome: "",
   sessionNameThinkingLevel: "off",
   profileModelDefaults: {},
   terminalShortcuts: [],
@@ -248,9 +249,13 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   // The hub account's name (Settings › Account), whose initials are its picture in the server switcher.
   const accountName = typeof input.accountName === "string" ? input.accountName.trim().slice(0, 60)
     : typeof fallback.accountName === "string" ? fallback.accountName.trim().slice(0, 60) : "";
+  // Where they live (Settings › Account): their agent's USER.md `home`, for weather, travel and "near me".
+  const accountHome = typeof input.accountHome === "string" ? input.accountHome.trim().slice(0, 120)
+    : typeof fallback.accountHome === "string" ? fallback.accountHome.trim().slice(0, 120) : "";
   return {
     defaultTemplateId,
     accountName,
+    accountHome,
     sessionNameModel,
     reviewModel,
     sessionNameThinkingLevel,

@@ -6,9 +6,9 @@ import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
 import { DevicesSettingsTile } from "./devices-settings";
+import { ServerSettings } from "./server-settings";
 import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
 import { createAgentSettings } from "./agent-settings";
-import { ConnectorsGroup } from "./connectors-settings";
 import { ToolsSettings } from "./tools-settings";
 import { AccountSettings } from "./account-settings";
 import { BrowserSettings } from "./browser-settings";
@@ -68,8 +68,8 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
-  { label: "AI", sections: [{ id: "models", label: "Models & accounts", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
-  { label: "System", sections: [{ id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
+  { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
+  { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
@@ -81,11 +81,12 @@ const sectionLabels: Record<Section, string> = {
   account: "Account",
   ui: "Appearance",
   shortcuts: "Shortcuts",
-  models: "Models & accounts",
+  models: "Models",
   prompts: "Prompts",
   blocks: "Blocks",
   tools: "Tools",
   skills: "Skills",
+  server: "Server",
   runtime: "Runtime",
   devices: "Devices",
   usage: "Usage",
@@ -753,7 +754,7 @@ export function Settings(props: {
   /**
    * A provider account's line: how it is connected and its own actions (sign in, a key, remove), its key form in
    * place of them while open, the fields that go with the key and a sign-in under way below it. One credential,
-   * shown in Models & accounts and, for what search runs on, in Web search.
+   * shown in Models and, for what search runs on, in Web search.
    */
   const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
     const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
@@ -1379,6 +1380,7 @@ export function Settings(props: {
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
+          <Show when={section() === "server"}><ServerSettings projects={props.projects} /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
@@ -1598,7 +1600,7 @@ export function Settings(props: {
                       onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
                   <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
-                    title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models & accounts.",
+                    title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models.",
                   })}</Show>
                   <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
                     <SettingLine label="Add a provider" title="A search provider's API key, kept in pi-web-access's web-search.json on this server.">
@@ -1681,7 +1683,6 @@ export function Settings(props: {
                 </Show>
               </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </Group>
-            <ConnectorsGroup />
           </></Show>
       </OverlayPage>
     </Show>

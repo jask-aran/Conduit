@@ -694,10 +694,12 @@ registerRuntimeRoutes(app, {
   projects,
   serverIdentity,
   onServerRenamed: (name) => lanAdvertisement.rename(name),
-  // Settings › Account's name is what the agent calls the person: written into its USER.md, where its prompts read it.
-  onAccountRenamed: async (name) => {
+  // Settings › Account's name and home are the person's to their agent: written into its USER.md, where its prompts read them.
+  onAccountRenamed: async (patch) => {
     const agent = backends.adapters.get("conduit-runtime")?.runtime.agent;
-    if (agent?.folder && name) await writePerson(agent.folder, { name });
+    // An emptied name leaves the agent's as it was; an emptied home clears it.
+    const person = Object.fromEntries(Object.entries(patch).filter(([field, value]) => value || field === "home"));
+    if (agent?.folder && Object.keys(person).length) await writePerson(agent.folder, person);
   },
 });
 

@@ -35,26 +35,39 @@ function entriesOf(source, section, group = null, locals = null, depth = 0) {
   return entries;
 }
 
-export function buildSettingsIndex(root) {
-  const dir = path.join(root, "src/client/settings");
-  const core = fs.readFileSync(path.join(dir, "settings-core.tsx"), "utf8");
-  // Imported names -> their settings file (createAgentSettings also answers to `agentSettings.`).
+// A settings file's own imports from its siblings: name -> file (createAgentSettings also answers to `agentSettings.`).
+function importsOf(source) {
   const files = new Map();
-  for (const [, names, file] of core.matchAll(/import \{([^}]+)\} from "\.\/([a-z-]+)";/g)) {
+  for (const [, names, file] of source.matchAll(/import \{([^}]+)\} from "\.\/([a-z-]+)(?:\.tsx)?";/g)) {
     for (const name of names.split(",").map((item) => item.trim().replace(/^type /, "")).filter(Boolean)) files.set(name, `${file}.tsx`);
   }
   if (files.has("createAgentSettings")) files.set("agentSettings", files.get("createAgentSettings"));
+  return files;
+}
+
+/** A region's rows, then those of every sibling file a component it draws comes from, followed down (once each). */
+function regionEntries(dir, region, section, files, seen) {
+  const entries = entriesOf(region, section);
+  const drawn = new Set([...region.matchAll(/<([A-Za-z]+)(?:\.Page)?[\s/>]/g)].map((match) => match[1]));
+  for (const name of drawn) {
+    const file = files.get(name);
+    if (!file || file === "settings-core.tsx" || seen.has(file)) continue;
+    seen.add(file);
+    let source;
+    try { source = fs.readFileSync(path.join(dir, file), "utf8"); } catch { continue; }
+    entries.push(...regionEntries(dir, source, section, importsOf(source), seen));
+  }
+  return entries;
+}
+
+export function buildSettingsIndex(root) {
+  const dir = path.join(root, "src/client/settings");
+  const core = fs.readFileSync(path.join(dir, "settings-core.tsx"), "utf8");
+  const files = importsOf(core);
   const marks = [...core.matchAll(/<Show when=\{section\(\) === "([a-z]+)"\}>/g)].map((match) => ({ id: match[1], at: match.index }));
   const entries = [];
   marks.forEach((mark, index) => {
-    const region = core.slice(mark.at, marks[index + 1]?.at ?? core.length);
-    entries.push(...entriesOf(region, mark.id));
-    const drawn = new Set([...region.matchAll(/<([A-Za-z]+)(?:\.Page)?[\s/>]/g)].map((match) => match[1]));
-    for (const name of drawn) {
-      const file = files.get(name);
-      if (!file || file === "settings-core.tsx") continue;
-      try { entries.push(...entriesOf(fs.readFileSync(path.join(dir, file), "utf8"), mark.id)); } catch {}
-    }
+    entries.push(...regionEntries(dir, core.slice(mark.at, marks[index + 1]?.at ?? core.length), mark.id, files, new Set()));
   });
   const seen = new Set();
   return entries.filter((entry) => { const key = `${entry.section}\0${entry.group}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; });

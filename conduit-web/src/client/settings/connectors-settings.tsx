@@ -9,7 +9,7 @@ import { Group } from "@/components/ui/group";
 type Connector = { id: string; label: string; url: string; status: "off" | "connecting" | "on" | "error"; tools: number; error?: string };
 const CONNECTOR_STATE = { off: "Not connected", connecting: "Connecting…", on: "Connected", error: "Not working" } as const;
 
-/** Models & accounts' Connectors group: Connect signs in in another tab (the system browser in the apps). */
+/** Account's integrations (Connectors): Connect signs in in another tab (the system browser in the apps). */
 export function ConnectorsGroup() {
   const [connectors, setConnectors] = createSignal<Connector[]>([]);
   const [connecting, setConnecting] = createSignal<string | null>(null);

@@ -9,10 +9,13 @@ import { httpUrl } from "../api/transport.js";
  */
 const [accountName, setAccountName] = createSignal("");
 export { accountName };
+/** Where they live: a place in their words, given to their agent (its USER.md `home`). */
+const [accountHome, setAccountHome] = createSignal("");
+export { accountHome };
 
 // Shared with the app's own read of the preferences on load: one request, not a second straight after it.
-export const loadAccount = () => readShared<{ accountName?: string }>("/v0/preferences")
-  .then((preferences) => { setAccountName(preferences.accountName || ""); }).catch(() => {})
+export const loadAccount = () => readShared<{ accountName?: string; accountHome?: string }>("/v0/preferences")
+  .then((preferences) => { setAccountName(preferences.accountName || ""); setAccountHome(preferences.accountHome || ""); }).catch(() => {})
   .then(loadPicture);
 
 /** The account's picture: its address (versioned, so a change shows at once), or null for the name's initials. */
@@ -49,4 +52,9 @@ export async function removeAccountPicture() {
 export const saveAccountName = async (name: string) => {
   const saved = await api<{ accountName?: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountName: name.trim() }) });
   setAccountName(saved.accountName || "");
+};
+
+export const saveAccountHome = async (home: string) => {
+  const saved = await api<{ accountHome?: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountHome: home.trim() }) });
+  setAccountHome(saved.accountHome || "");
 };
