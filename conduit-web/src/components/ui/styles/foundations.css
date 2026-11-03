@@ -279,9 +279,11 @@
 
 /* What a surface gives the controls on it. --tint, one value for its washes and its lines (the
    ground's is the app's --border); --well, the fill under an input or an
-   outline button: a step darker than the ground, nothing over frost, which is its own fill. */
-:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); }
-[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; }
+   outline button: a step darker than the ground, nothing over frost, which is its own fill. --field, the fill of a
+   tool field (a search LeadInput): the surface's tint where unset, nothing over frost (a hairline with nothing
+   inside, never frost on frost); `initial` lets a ground inside frost take its tint again. */
+:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); --field: initial; }
+[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; --field: transparent; }
 
 /* A scroller's native bar, for the pieces that scroll (the nav list, a file's body, the tree, the change list): the
    standard properties win over WebKit's painting when they are not auto, so Firefox keeps a thin bar and
