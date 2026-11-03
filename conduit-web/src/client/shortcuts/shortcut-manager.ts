@@ -287,8 +287,10 @@ export class ShortcutManager {
           && sameStroke(match.binding.strokes[1], stroke)
           && (!isExclusiveTerminalEvent(event) || match.command.allowInExclusiveTarget));
       this.clearPendingSequence();
-      if (!match) return false;
-      return this.executeMatch(event, match);
+      if (match) return this.executeMatch(event, match);
+      // Not a second stroke: a chord (the go-to keys the leader menu shows) is dispatched as itself rather than lost;
+      // a bare key just ends the sequence (Codex review).
+      if (!(event.ctrlKey || event.metaKey || event.altKey)) return false;
     }
 
     const contexts = this.orderedActiveContexts();

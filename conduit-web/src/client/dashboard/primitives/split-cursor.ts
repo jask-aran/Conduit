@@ -39,11 +39,14 @@ const visible = (element: Element) => typeof element.checkVisibility === "functi
   ? element.checkVisibility({ visibilityProperty: true })
   : element.getClientRects().length > 0;
 
-const installed = new Set<(section: SplitSection) => boolean>();
+// Each installed dashboard's go-to, by its root: a command acts on the dashboard that has the keyboard (Codex review:
+// two dashboards side by side resolved one for the leader's offer and another for the run).
+const installed = new Map<HTMLElement, (section: SplitSection) => boolean>();
+const focused = () => document.activeElement?.closest<HTMLElement>(".ui-dash") ?? null;
 
 // The page showing, which declares what it is (data-page) and its sections
 // (each group's data-section), so the leader offers only what is there.
-const showing = () => [...document.querySelectorAll<HTMLElement>(".ui-dash")].find(visible);
+const showing = () => { const here = focused(); return here && visible(here) ? here : [...document.querySelectorAll<HTMLElement>(".ui-dash")].find(visible); };
 
 /** What the showing page is, for the leader's path. */
 export function splitPage() {
@@ -63,8 +66,9 @@ export function splitSections() {
 
 /** Leader's go-to: move the showing dashboard's cursor to a section. */
 export function focusSplitSection(section: SplitSection) {
-  for (const go of installed) if (go(section)) return true;
-  return false;
+  const root = showing();
+  const go = root ? installed.get(root) : undefined;
+  return go ? go(section) : false;
 }
 
 export function installSplitCursor(root: HTMLElement): () => void {
@@ -118,13 +122,14 @@ export function installSplitCursor(root: HTMLElement): () => void {
     const group = section === "messages" ? root.querySelector<HTMLElement>(CONVERSATION) : root.querySelector<HTMLElement>(`.ui-group[data-group=dash][data-section="${section}"]`);
     return group ? enter(group) : false;
   };
-  installed.add(go);
+  installed.set(root, go);
 
   const keydown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (!target || !root.contains(target)) return;
-    if (event.key === "Tab" && target.matches(INPUT)) {
+    // Tab in a composer whose slash menu is open completes the command: the composer's, not a section move.
+    if (event.key === "Tab" && target.matches(INPUT) && target.getAttribute("aria-expanded") !== "true") {
       if (tab(null, event.shiftKey)) { event.preventDefault(); event.stopPropagation(); }
       return;
     }
@@ -214,7 +219,7 @@ export function installSplitCursor(root: HTMLElement): () => void {
   root.addEventListener("pointermove", pointermove);
   root.addEventListener("focusin", focusin);
   return () => {
-    installed.delete(go);
+    if (installed.get(root) === go) installed.delete(root);
     window.removeEventListener("blur", away);
     window.removeEventListener("focus", release);
     root.removeEventListener("focusout", release);

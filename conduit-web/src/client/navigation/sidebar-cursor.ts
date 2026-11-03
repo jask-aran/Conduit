@@ -132,7 +132,9 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
       const next = all[index + offset];
       if (!next) return;
       if (event.shiftKey) {
-        anchor ??= current;
+        // A range starts again where the cursor is when nothing is selected any more (Escape cleared it elsewhere) or its
+        // anchor is gone from the list (Codex review).
+        if (!options.hasSelection() || !anchor || !all.includes(anchor)) anchor = current;
         selectThrough(anchor, next, all);
       } else {
         anchor = null;

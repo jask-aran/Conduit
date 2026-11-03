@@ -23,7 +23,10 @@ export function Crumbs(props: { label: string; items: { label: string; current?:
 /** foot: fixed above the composer; the wrapper marks shortcut events from inside the card. path, hints and rows
  *  are each optional, so a part can be shown alone in its card. */
 export function Leader(props: { label?: string; placement?: "foot"; "data-shortcut-leader-palette"?: string; path?: JSX.Element; hints?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
-  return <div class="ui-leader-placement" data-placement={props.placement} data-shortcut-leader-palette={props["data-shortcut-leader-palette"]}>
+  // It never takes focus: the keys belong to where the leader started, and a click on it (a level, a row) keeps focus
+  // there rather than ending the sequence before the click lands.
+  return <div class="ui-leader-placement" data-placement={props.placement} data-shortcut-leader-palette={props["data-shortcut-leader-palette"]}
+    onMouseDown={(event) => event.preventDefault()}>
     <Overlay label={props.label ?? "Leader"} class="ui-leader" motion={props.motion}><Show when={props.path}><OverlayHead>{props.path}</OverlayHead></Show>
       <Show when={props.children}><OverlayList>{props.children}</OverlayList></Show>{props.hints}</Overlay>
   </div>;

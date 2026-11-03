@@ -337,6 +337,9 @@ export function Composer(props: {
   createEffect(on(editing, () => window.dispatchEvent(new CustomEvent("conduit:voice-captions")), { defer: true }));
 
   let restoringDraft = false;
+  // The slash menu's lookups: each typed change is one; Escape ends the current one, so a lookup that finishes after the
+  // menu was dismissed cannot open it again (Codex review).
+  let slashLookup = 0;
   const change = (value: string, manual = true) => {
     if (manual && !restoringDraft) snapshot();
     if (manual) {
@@ -346,8 +349,9 @@ export function Composer(props: {
       if (dictatedRange() || [...takes.values()].some((take) => take.range)) cancelTakes();
     }
     props.chat.setDraft(value);
+    const lookup = ++slashLookup;
     if (value.startsWith("/")) void props.chat.loadHarnessCommands().then(() => {
-      if (props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
+      if (lookup === slashLookup && props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     });
     setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     scheduleResize();
@@ -640,7 +644,7 @@ export function Composer(props: {
   const keydown = (event: KeyboardEvent) => {
     // An input method composing text owns its keys: its Enter confirms a candidate, never sends.
     if (event.isComposing || event.keyCode === 229) return;
-    if (event.key === "Escape" && slashOpen()) { event.preventDefault(); setSlashOpen(false); return; }
+    if (event.key === "Escape" && slashOpen()) { event.preventDefault(); slashLookup++; setSlashOpen(false); return; }
     // Escape never stops a turn: it steps back (keyboard-model.md › Leave); stopping is Ctrl+Shift+Backspace or the button.
     if (event.key === "Tab" && slashOpen()) {
       event.preventDefault();
@@ -789,7 +793,7 @@ export function Composer(props: {
   });
 
   const field = () => <>
-    <TextArea ref={input} rows={1} data-composer-input="" aria-label="Message the agent" data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
+    <TextArea ref={input} rows={1} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the
