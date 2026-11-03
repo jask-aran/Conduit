@@ -113,6 +113,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
       if (next === question.options.length) own?.focus();
       return;
     }
+    // Digits choose the option at that number: list grammar, like ↑↓ and Enter, so not a command in the registry.
     const digit = Number(event.key);
     if (Number.isInteger(digit) && digit >= 1 && digit <= count) { take(); choose(question, digit - 1); return; }
     if (event.key === "Enter" || event.key === " ") { take(); choose(question, cursor()); }

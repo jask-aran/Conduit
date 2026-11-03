@@ -27,6 +27,8 @@ import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcu
 import { createVoiceWaveformController, type VoiceWaveformController } from "./voice-waveform";
 import { MAX_RESPONSIVE_BAR_COUNT } from "@/components/ui/voice-waveform-model";
 import { ModelSelector } from "./model-selector";
+import { COMMAND_IDS } from "../commands/command-registry";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 
 import { parseReviewComments, removeReviewComment, reviewComments, updateReviewComment } from "./review-comments";
 import { ReviewCommentCards } from "./review-comment-cards";
@@ -73,6 +75,8 @@ export function Composer(props: {
   voiceSettings: VoiceDictationSettings;
   /** With two chats side by side, whether this composer's side has the keyboard, and with it the dictation key. */
   keyboardOwner?: () => boolean;
+  /** The app's shortcut manager, which owns the composer's own chords (Steer). Without it they fall back to their defaults. */
+  shortcuts?: ShortcutManager;
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
   onOpenModelSelector?: () => void;
@@ -623,7 +627,19 @@ export function Composer(props: {
     });
   };
 
+  // Steer (Ctrl+Shift+Enter by default) is a command; it runs only from this composer's field, with a turn running and
+  // something to send, and not while the slash menu has Enter.
+  const canSteer = () => busy() && hasText() && !slashOpen();
+  if (props.shortcuts) {
+    const shortcuts = props.shortcuts;
+    const releaseSteer = (["chat", "dashboard"] as const).map((context) => shortcuts.registerHandler(COMMAND_IDS.steerTurn, context,
+      () => void sendMessage("steer"), { when: () => document.activeElement === input && canSteer() }));
+    onCleanup(() => releaseSteer.forEach((release) => release()));
+  }
+  // The field's own keys: the slash menu, Enter to send and Shift+Enter for a new line, and the prompt history.
   const keydown = (event: KeyboardEvent) => {
+    // An input method composing text owns its keys: its Enter confirms a candidate, never sends.
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape" && slashOpen()) { event.preventDefault(); setSlashOpen(false); return; }
     // Escape never stops a turn: it steps back (keyboard-model.md › Leave); stopping is Ctrl+Shift+Backspace or the button.
     if (event.key === "Tab" && slashOpen()) {
@@ -642,10 +658,12 @@ export function Composer(props: {
       event.preventDefault();
       if (canSend()) sendMessage();
     }
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && event.shiftKey && busy() && hasText()) {
+    if (!props.shortcuts && event.key === "Enter" && (event.ctrlKey || event.metaKey) && event.shiftKey && canSteer()) {
       event.preventDefault();
       sendMessage("steer");
     }
+    // ↑/↓ walk the prompts sent before, from an empty field: text editing, like Enter and Shift+Enter above, so
+    // they stay here rather than in the command registry.
     if (event.key === "ArrowUp" && (historyIndex !== null || props.chat.draft() === "")) {
       const prompts = sentPrompts();
       if (!prompts.length) return;

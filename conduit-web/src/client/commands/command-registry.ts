@@ -90,6 +90,13 @@ export const COMMAND_IDS = {
   deleteHighlightedChat: "chat-search.delete-highlighted",
   moveSelectedChats: "chat-search.move-selected",
   deleteSelectedChats: "chat-search.delete-selected",
+  toggleChatPreview: "chat-search.toggle-preview",
+  openRowProject: "chat-search.open-project",
+  focusChatSearch: "chat-search.focus-search",
+  toggleHighlightedSelection: "chat-search.toggle-highlighted",
+  copySelectedChats: "chat-search.copy-selected",
+  steerTurn: "composer.steer",
+  findInSettings: "settings.find",
 } as const;
 
 const command = (
@@ -603,7 +610,8 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "workspace-panel",
     keywords: ["workspace", "split", "side by side", "beside", "file", "diff"],
     contexts: ["workspace-panel"],
-    defaultBindings: [scopedBinding("KeyB", "B")],
+    // Alt+Enter is the file tree's and the change list's own: open the focused row beside.
+    defaultBindings: [scopedBinding("KeyB", "B"), binding(stroke("Enter", "Enter", ["alt"]))],
   }),
   command({
     id: COMMAND_IDS.copyTranscript,
@@ -852,6 +860,81 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
       binding(stroke("Delete", "Delete")),
     ],
     destructive: true,
+  }),
+  // Chat search's own keys. Its list grammar (↑↓, Home/End, Page Up/Down, ←→ through folders, Enter, Backspace, Tab
+  // into a page, typing to search) stays in command-menu.tsx: it is how a list moves, not a command.
+  command({
+    id: COMMAND_IDS.toggleChatPreview,
+    label: "Toggle chat preview",
+    description: "Show or hide the preview of the highlighted chat",
+    group: "chat-management",
+    icon: "chat",
+    keywords: ["preview", "peek", "show", "hide"],
+    contexts: ["chat-search.browse", "chat-search.edit", "chat-search.move"],
+    defaultBindings: [binding(stroke("KeyP", "P", ["primary"]))],
+  }),
+  command({
+    id: COMMAND_IDS.openRowProject,
+    label: "Open highlighted folder",
+    description: "Open the folder or workspace of the highlighted row",
+    group: "chat-management",
+    icon: "new-folder",
+    keywords: ["open", "folder", "project", "workspace", "highlighted"],
+    contexts: ["chat-search.browse"],
+    defaultBindings: [binding(stroke("Enter", "Enter", ["primary"]))],
+  }),
+  command({
+    id: COMMAND_IDS.focusChatSearch,
+    label: "Search from the list",
+    description: "Move from the list to the search field; on a folder, search inside it",
+    group: "chat-management",
+    icon: "search",
+    keywords: ["search", "find", "filter", "folder", "scope"],
+    contexts: ["chat-search.browse", "chat-search.edit", "chat-search.move"],
+    defaultBindings: [binding(stroke("Slash", "/"))],
+  }),
+  command({
+    id: COMMAND_IDS.toggleHighlightedSelection,
+    label: "Select highlighted chat",
+    description: "Add the highlighted chat to the selection, or take it out",
+    group: "chat-management",
+    icon: "chat",
+    keywords: ["select", "deselect", "bulk", "highlighted"],
+    contexts: ["chat-search.edit"],
+    defaultBindings: [binding(stroke("Space", " "))],
+  }),
+  command({
+    id: COMMAND_IDS.copySelectedChats,
+    label: "Copy selected chat links",
+    description: "Copy links to all selected chats",
+    group: "chat-management",
+    icon: "copy",
+    keywords: ["copy", "link", "clipboard", "bulk", "selected"],
+    contexts: ["chat-search.edit"],
+    defaultBindings: [binding(stroke("KeyC", "C"))],
+  }),
+  // The composer's text-editing keys -- Enter sends, Shift+Enter breaks the line, ↑/↓ walk the sent prompts -- stay
+  // in composer.tsx: they edit the field. Dictation's key is its own setting (Settings › Voice).
+  command({
+    id: COMMAND_IDS.steerTurn,
+    label: "Steer",
+    description: "Send the draft into the running turn instead of queueing it",
+    group: "composer",
+    icon: "chat",
+    keywords: ["steer", "send", "interrupt", "running", "turn"],
+    contexts: ["chat", "dashboard"],
+    defaultBindings: [binding(stroke("Enter", "Enter", ["primary", "shift"]))],
+  }),
+  // Settings' own. Its rail and result list move by list grammar in settings-core.tsx.
+  command({
+    id: COMMAND_IDS.findInSettings,
+    label: "Find in Settings",
+    description: "Move to the Settings search field",
+    group: "settings",
+    icon: "search",
+    keywords: ["search", "find", "filter", "settings"],
+    contexts: ["settings"],
+    defaultBindings: [binding(stroke("Slash", "/")), binding(stroke("KeyF", "F", ["primary"]))],
   }),
 ];
 

@@ -261,7 +261,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceSourceControl, "workspace-panel", () => selectShortcutTab("diff"), { when: () => props.sourceControlEnabled() && workspaceShortcutAvailable() }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceChat, "workspace-panel", () => selectShortcutTab("chat"), { when: workspaceShortcutAvailable }),
     props.shortcuts.registerHandler(COMMAND_IDS.workspaceTerminal, "workspace-panel", () => selectShortcutTab("terminal"), { when: workspaceShortcutAvailable }),
-    props.shortcuts.registerHandler(COMMAND_IDS.workspaceOpenBeside, "workspace-panel", () => openFocusedBeside(), { when: () => Boolean(props.onOpenBeside && focusedBeside()) && workspaceShortcutAvailable() }),
+    props.shortcuts.registerHandler(COMMAND_IDS.workspaceOpenBeside, "workspace-panel", () => openFocusedBeside(), { when: () => canOpenFocusedBeside() && workspaceShortcutAvailable() }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 
@@ -284,11 +284,18 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (path) { files.setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path, beside); }
   };
   // The leader's Open beside: the file or change the keyboard is on.
+  // The focused row, in the dock or in the tool's split in the main pane.
   const focusedBeside = () => {
-    const row = document.activeElement instanceof HTMLElement && panelRoot?.contains(document.activeElement) ? document.activeElement : null;
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const row = focused && (panelRoot?.contains(focused) || props.splitHost?.()?.contains(focused)) ? focused : null;
     if (row?.matches('[role="treeitem"]:not([aria-expanded])') && row.dataset.path) return { kind: "file" as const, path: row.dataset.path };
     if (row?.matches("[data-change-path]")) return { kind: "diff" as const, path: row.dataset.changePath!, staged: row.dataset.staged === "true" };
     return null;
+  };
+  // A file opens beside wherever the tree offers it (a pane of its own, or the split); a change only into the split.
+  const canOpenFocusedBeside = () => {
+    const target = focusedBeside();
+    return Boolean(target && (props.onOpenBeside || (target.kind === "file" && props.onOpenFile)));
   };
   const openFocusedBeside = () => {
     const target = focusedBeside();

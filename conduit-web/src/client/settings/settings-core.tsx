@@ -545,9 +545,10 @@ export function Settings(props: {
     props.onOpenChange(false);
   };
   /*
-   * Settings by keyboard: / or Ctrl+F finds (↑↓ through the results, Enter opens one); the rail moves with ↑↓ and its
-   * row is the cursor; → or Enter goes into the page, Tab from control to control (each shows its own focus); Escape
-   * steps back: page to rail, rail to closed.
+   * Settings by keyboard: / or Ctrl+F finds (the Find in Settings command, registered with the settings context below;
+   * ↑↓ through the results, Enter opens one); the rail moves with ↑↓ and its row is the cursor; → or Enter goes into
+   * the page, Tab from control to control (each shows its own focus); Escape steps back: page to rail, rail to closed.
+   * The rail's and the results' arrows are list grammar, so they stay with their lists.
    */
   const dialogEl = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"]');
   const focusRail = () => dialogEl()?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
@@ -558,19 +559,12 @@ export function Settings(props: {
     first?.focus();
   };
   const focusSearch = () => dialogEl()?.querySelector<HTMLInputElement>('[aria-label="Search settings"]')?.focus();
-  onMount(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!props.open || event.defaultPrevented) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (!target?.closest('[role="dialog"][aria-label="Settings"]')) return;
-      const typing = target.closest("input, textarea, select, [contenteditable='true'], .cm-editor");
-      if ((event.key === "/" && !typing) || ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && !target.closest(".cm-editor"))) {
-        event.preventDefault(); focusSearch();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    onCleanup(() => document.removeEventListener("keydown", onKey, true));
-  });
+  // Find in Settings acts from inside the dialog, and not in a code editor, which has its own find. (A bare `/` never
+  // reaches it from a field: the manager leaves unmodified keys to whatever is being typed in.)
+  const findAvailable = () => {
+    const focused = document.activeElement;
+    return Boolean(focused?.closest('[role="dialog"][aria-label="Settings"]') && !focused.closest(".cm-editor"));
+  };
   const navigateSettingsTabs = (event: KeyboardEvent) => {
     if ((event.key === "ArrowRight" || event.key === "Enter") && !narrow()) { event.preventDefault(); if (event.key === "Enter") (event.currentTarget as HTMLElement).click(); requestAnimationFrame(focusPage); return; }
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
@@ -633,10 +627,12 @@ export function Settings(props: {
     // chord (Ctrl+,) closes it.
     const releaseSettingsContext = props.shortcuts.activateContext("settings", { exclusive: true });
     const releaseClose = props.shortcuts.registerHandler(COMMAND_IDS.openSettings, "settings", () => props.onOpenChange(false));
+    const releaseFind = props.shortcuts.registerHandler(COMMAND_IDS.findInSettings, "settings", focusSearch, { when: findAvailable });
     document.addEventListener("keydown", dismissEscape, true);
     onCleanup(() => {
       releaseSettingsContext();
       releaseClose();
+      releaseFind();
       document.removeEventListener("keydown", dismissEscape, true);
     });
   });

@@ -661,6 +661,17 @@ export function CommandMenu(props: {
     runCommand(command);
   };
 
+  // Where chat search's own keys act: the list, and (for chords) the search field above it.
+  const inList = () => Boolean(listbox?.contains(document.activeElement));
+  const inSearch = () => document.activeElement === input || inList();
+  // `/` from the list: on a folder in the full list, search inside that folder; anywhere else, the search field.
+  const searchFromList = () => {
+    const row = selectable()[active()];
+    const project = row?.type === "folder" || row?.type === "browse-all" ? row.project : row?.type === "command" ? row.command.project : null;
+    if (project && chatScope().kind === "all") enterScope(project, true);
+    else focusInput();
+  };
+
   const paletteRootCommandIds = commandRegistry
     .filter((command) => command.contexts.includes("palette.root") && command.defaultBindings.length)
     .map((command) => command.id);
@@ -688,6 +699,14 @@ export function CommandMenu(props: {
     props.shortcuts.registerHandler(COMMAND_IDS.deleteSelectedChats, "chat-search.edit", requestDelete),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.move", close),
     props.shortcuts.registerHandler(COMMAND_IDS.searchChats, "chat-search.rename", close),
+    ...(["chat-search.browse", "chat-search.edit", "chat-search.move"] as const).map((context) =>
+      props.shortcuts.registerHandler(COMMAND_IDS.toggleChatPreview, context, togglePreview, { when: inSearch })),
+    props.shortcuts.registerHandler(COMMAND_IDS.openRowProject, "chat-search.browse", () => openRowProject(selectable()[active()]), { when: inSearch }),
+    props.shortcuts.registerHandler(COMMAND_IDS.focusChatSearch, "chat-search.browse", searchFromList, { when: inList }),
+    props.shortcuts.registerHandler(COMMAND_IDS.focusChatSearch, "chat-search.edit", () => input?.focus(), { when: inList }),
+    props.shortcuts.registerHandler(COMMAND_IDS.focusChatSearch, "chat-search.move", () => input?.focus(), { when: () => inList() && selectionMode() }),
+    props.shortcuts.registerHandler(COMMAND_IDS.toggleHighlightedSelection, "chat-search.edit", () => { const target = activeChat(); if (target) toggleChatSelection(target.chat.id); }, { when: inList }),
+    props.shortcuts.registerHandler(COMMAND_IDS.copySelectedChats, "chat-search.edit", copySelected, { when: inList }),
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 
@@ -780,26 +799,16 @@ export function CommandMenu(props: {
     });
   }
 
+  /*
+   * The list grammar: ↑↓, Home/End, Page Up/Down, ←→ through folders, Enter, Escape, Backspace, Tab into a page and
+   * typing to search. These are how the list moves, so they stay here. Chat search's own keys (Ctrl+P, Ctrl+Enter,
+   * `/`, and Space and C while selecting) are commands in the registry, registered above, and run before this does.
+   */
   const keydown = (event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
+    if (event.isComposing || event.keyCode === 229) return;
     const inList = event.currentTarget === listbox;
-    // Unmodified selection actions belong to the result list. When the search
-    // input owns the event, letters and Delete must edit the query instead.
-    if (selectionMode() && event.currentTarget !== input
-      && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      if (event.key === " ") { event.preventDefault(); const target = activeChat(); if (target) toggleChatSelection(target.chat.id); return; }
-      if (key === "c") { event.preventDefault(); copySelected(); return; }
-      if (key === "/") { event.preventDefault(); input?.focus(); return; }
-    }
     if (chatPage() && inList && !moveMode()) {
       const row = selectable()[active()];
-      if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault();
-        const project = row?.type === "folder" || row?.type === "browse-all" ? row.project : row?.type === "command" ? row.command.project : null;
-        if (project && chatScope().kind === "all") enterScope(project, true);
-        else focusInput();
-        return;
-      }
       if (event.key === "ArrowRight" && row?.type === "folder") {
         event.preventDefault();
         if (searching()) enterScope(row.project);
@@ -837,8 +846,6 @@ export function CommandMenu(props: {
       if (row?.type === "command" && row.command.kind === "page") { event.preventDefault(); runRow(row); }
       return;
     }
-    if (chatPage() && (event.ctrlKey || event.metaKey) && !event.altKey && key === "p") { event.preventDefault(); togglePreview(); return; }
-    if (event.key === "Enter" && chatPage() && (event.ctrlKey || event.metaKey) && !selectionMode() && !moveMode()) { event.preventDefault(); openRowProject(selectable()[active()]); return; }
     // Nothing is lit from a fresh search field, so Enter there goes to the list
     // rather than opening a row the reader cannot see chosen.
     if (event.key === "Enter" && chatPage() && !inList && !searching() && !pointerCursor()) { event.preventDefault(); listbox?.focus(); return; }
@@ -873,6 +880,8 @@ export function CommandMenu(props: {
 
   const renameKeydown = (event: KeyboardEvent) => {
     event.stopPropagation();
+    // An input method composing text owns Enter: it confirms a candidate, never the rename.
+    if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Enter") { event.preventDefault(); void submitRename(); }
     if (event.key === "Escape") { event.preventDefault(); setEditingId(null); }
   };

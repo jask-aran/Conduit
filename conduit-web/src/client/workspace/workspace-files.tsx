@@ -685,8 +685,8 @@ export function FilesView(props: {
         item.focus();
       }
     };
-    if (event.key === "Enter" && event.altKey && props.onOpenBeside && event.currentTarget.getAttribute("aria-expanded") === null) props.onOpenBeside(event.currentTarget.dataset.path || "");
-    else if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
+    // The tree's list grammar. Alt+Enter, open beside, is the panel's Open beside command (command-registry.ts).
+    if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
     else if (event.key === "ArrowUp") focus(Math.max(0, index - 1));
     else if (event.key === "Home") focus(0);
     else if (event.key === "End") focus(items.length - 1);
