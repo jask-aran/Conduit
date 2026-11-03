@@ -39,7 +39,7 @@ export const networkPage: Page = {
   examples: [
     row("one device", "The hub and the device it runs on: Ubuntu headless, Windows headed by this app.", () => <NetworkMap hub={hub} devices={[desktop(true)]} />, { surfaces: ["frost"] }),
     row("spokes", "Browsers and a phone, hung from the hub beside the desktop.", () => <NetworkMap hub={hub} devices={[desktop(true), browsers, phone]} />, { surfaces: ["frost"] }),
-    row("chain", "ChainMap: a document's blocks stacked under the role it starts down one line; a click chooses a link (the chosen one the only wash, nothing behind hover); dashed links are filled in by Conduit. In the app it is a Workbench's side column (see Workbench)", () => chain(), { surfaces: ["ground"], phone: true, code: "<ChainMap><ChainHead/><ChainLink/><ChainGap/><ChainBreak/></ChainMap>" }),
+    row("chain", "ChainMap: a document's blocks stacked under the role it starts down one line; a click chooses a link (the chosen one the only wash, nothing behind hover); dashed links are filled in by Conduit. In the app it is a Workbench's side column (see Workbench)", () => chain(), { surfaces: ["ground"], phone: true, code: "<ChainMap><ChainLink/><ChainGap/><ChainBreak/></ChainMap>" }),
     row("chain with a first message", "A run's document: its system prompt, what Conduit adds, then the first message it is woken with", () => chain(true), { surfaces: ["ground"] }),
     row("offline device", "A device with nothing connected hangs by a dashed line; one client relayed by the other.", () => <NetworkMap hub={hub} devices={[desktop(true), laptop]} />, { surfaces: ["frost"] }),
   ],

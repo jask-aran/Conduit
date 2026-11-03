@@ -62,9 +62,9 @@ export const ClientCards = (props: { label?: string; children: JSX.Element }) =>
 
 /**
  * One client, outlined: its mark and its name in the label's voice with its dot, what it says (Conduit Dev · this
- * app, Offline since …), its properties as facts, the workspaces it mounts on the network, then its actions along its foot.
+ * app, Offline since …), the workspaces it mounts on the network, then its actions along its foot.
  */
-export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; facts?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
+export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
   return <section class="ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
     <header class="ui-client-head">
       <span class="ui-client-mark" aria-hidden="true">{props.mark ?? clientMark(props.client)}</span>
@@ -72,7 +72,6 @@ export function ClientCard(props: { client: NetworkClient; status: string; mark?
       <StatusDot label={props.client.online ? "Connected" : "Offline"} tone={props.client.online ? "success" : "muted"} />
     </header>
     <p class="ui-client-status">{[props.status, props.client.meta].filter(Boolean).join(" · ")}</p>
-    <Show when={props.facts}><dl class="ui-client-facts">{props.facts}</dl></Show>
     <Show when={props.places}><div class="ui-client-places">{props.places}</div></Show>
     <Show when={props.actions}><footer class="ui-client-actions">{props.actions}</footer></Show>
   </section>;
