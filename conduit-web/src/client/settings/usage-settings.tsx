@@ -6,6 +6,23 @@ import { api } from "../api/client";
 type ModelSpend = { key: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 type UsageDay = { date: string; replies: number; tools: Record<string, number>; models: ModelSpend[]; cost: number; tokens: number };
 type Usage = { since: string | null; days: UsageDay[] };
+/** GET /v0/diagnostics/usage: how the hub manages context and approvals, content-free (diagnostics/usage-report.js). */
+type Diagnostics = {
+  window: { hours: number };
+  requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number }[];
+    afterGap: { fromMinutes: number; toMinutes: number | null; requests: number; misses: number }[];
+    misses: { at: string; role: string; model: string; gapMinutes: number | null; why: string }[] };
+  approvals: { judged: number; outcomes: { allow?: number; deny?: number; escalate?: number }; sources: Record<string, number>;
+    askedYou: number; fromRuns: number; waiting: number; judgeMs: { median: number; max: number } | null;
+    judgeCost: number; perDecision: number | null; jbotCost: number; jbotRequests: number; share: number | null;
+    byAction: { action: string; allow?: number; deny?: number; escalate?: number }[] };
+};
+// Conduit's own test providers (fixtures for probes) are not usage worth reading.
+const real = (report: Diagnostics) => report.requests.byModel.filter((row) => !row.model.startsWith("conduit-test/"));
+const percent = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(value < 0.1 ? 1 : 0)}%`;
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+const ROLE = { "jbot-home": "jbot's thread", "jbot-run": "a jbot run", chat: "a chat" } as Record<string, string>;
+const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", unlogged: "not logged" } as Record<string, string>;
 
 const RANGES = [7, 30, 90] as const;
 const money = (value: number) => value === 0 ? "$0" : value < 0.01 ? "<$0.01" : `$${value.toFixed(2)}`;
@@ -22,7 +39,10 @@ export function UsageSettings() {
     setError("");
     return api<Usage>(`/v0/usage?days=${range()}`).then(setUsage).catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
-  onMount(() => void load());
+  // How context and approvals went over the same period (at most 30 days: the report reads the runtime's own records).
+  const [diagnostics, setDiagnostics] = createSignal<Diagnostics | null>(null);
+  const loadDiagnostics = () => api<Diagnostics>(`/v0/diagnostics/usage?hours=${Math.min(720, range() * 24)}`).then(setDiagnostics).catch(() => setDiagnostics(null));
+  onMount(() => { void load(); void loadDiagnostics(); });
   const days = createMemo(() => usage()?.days || []);
   const total = createMemo(() => days().reduce((sum, item) => ({ cost: sum.cost + item.cost, tokens: sum.tokens + item.tokens, replies: sum.replies + item.replies }), { cost: 0, tokens: 0, replies: 0 }));
   const models = createMemo(() => {
@@ -49,7 +69,7 @@ export function UsageSettings() {
     <Group title="Spend">
       <SettingLine plain label="Period">
         <Segmented label="Period" size="sm" value={String(range())} options={RANGES.map((days) => ({ value: String(days), label: `${days} days` }))}
-          onChange={(value) => { setRange(Number(value)); void load(); }} />
+          onChange={(value) => { setRange(Number(value)); void load(); void loadDiagnostics(); }} />
       </SettingLine>
       <SettingLine plain label="Spent" state="API-equivalent" title="Each call priced when it was made, at its model's API list price; kept as dollars, so later price changes never move a past day.">
         <SettingValue mono>{money(total().cost)}</SettingValue>
@@ -67,6 +87,65 @@ export function UsageSettings() {
     <Show when={tools().length}><Group title="Tool calls">
       <For each={tools()}>{([name, calls]) => <SettingLine plain mono label={name}><SettingValue mono>{count(calls)}</SettingValue></SettingLine>}</For>
     </Group></Show>
+    <Show when={diagnostics()}>{(report) => <>
+      <Group title="Prompt cache">
+        <SettingLine plain label="Requests" state={report().window.hours < range() * 24 ? `last ${Math.round(report().window.hours / 24)} days` : undefined}>
+          <SettingValue mono>{count(real(report()).reduce((sum, row) => sum + row.requests, 0))}</SettingValue>
+        </SettingLine>
+        <For each={real(report())}>{(row) =>
+          <SettingLine plain mono label={row.model} state={`${count(row.requests)} ${row.requests === 1 ? "request" : "requests"} · ${row.misses} ${row.misses === 1 ? "miss" : "misses"}`}
+            title="Cached: the share of each request's input read from the provider's cache. A miss re-sent most of a prefix the last request had cached.">
+            <SettingValue mono>{percent(row.cachedShare)} cached</SettingValue>
+          </SettingLine>}
+        </For>
+        <Show when={report().requests.afterGap.length}>
+          <SettingDetails summary="Misses after a pause">
+            <For each={report().requests.afterGap}>{(gap) =>
+              <SettingLine plain label={`${gap.fromMinutes}–${gap.toMinutes ?? "∞"} min`}><SettingValue mono>{gap.misses} of {gap.requests}</SettingValue></SettingLine>}
+            </For>
+          </SettingDetails>
+        </Show>
+        <Show when={report().requests.misses.length}>
+          <SettingDetails summary={`Each miss (${report().requests.misses.length})`}>
+            <For each={report().requests.misses.slice(-20).reverse()}>{(miss) =>
+              <SettingLine plain label={new Date(miss.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                state={`${ROLE[miss.role] || miss.role} · ${miss.model}${miss.gapMinutes != null ? ` · after ${Math.round(miss.gapMinutes)} min` : ""}`}>
+                <SettingValue>{WHY[miss.why] || miss.why}</SettingValue>
+              </SettingLine>}
+            </For>
+          </SettingDetails>
+        </Show>
+      </Group>
+      <Group title="Approvals">
+        <SettingLine plain label="Held for approval" title="Actions a tool's own gate held (an Executor send or change) and the approval model judged.">
+          <SettingValue mono>{count(report().approvals.judged)}</SettingValue>
+        </SettingLine>
+        <SettingLine plain label="Decided for you" state={`${report().approvals.outcomes.allow || 0} allowed · ${report().approvals.outcomes.deny || 0} refused`}>
+          <SettingValue mono>{count((report().approvals.outcomes.allow || 0) + (report().approvals.outcomes.deny || 0))}</SettingValue>
+        </SettingLine>
+        <SettingLine plain label="Asked you" state={`${report().approvals.fromRuns} from runs${report().approvals.waiting ? ` · ${report().approvals.waiting} waiting` : ""}`}
+          title="Approvals put to you: what the approval model could not allow, and anything held without it.">
+          <SettingValue mono>{count(report().approvals.askedYou)}</SettingValue>
+        </SettingLine>
+        <Show when={report().approvals.judgeMs}>{(ms) =>
+          <SettingLine plain label="Time to decide" state={`slowest ${seconds(ms().max)}`}><SettingValue mono>{seconds(ms().median)}</SettingValue></SettingLine>}
+        </Show>
+        <SettingLine plain label="Cost" state={report().approvals.perDecision != null ? `${money(report().approvals.perDecision!)} a decision` : undefined}
+          title="What the approval model spent, priced as jbot's own requests are. It is also inside jbot's spend.">
+          <SettingValue mono>{money(report().approvals.judgeCost)}</SettingValue>
+        </SettingLine>
+        <SettingLine plain label="Next to jbot" state={`jbot: ${money(report().approvals.jbotCost)} over ${count(report().approvals.jbotRequests)} requests`}>
+          <SettingValue mono>{report().approvals.share == null || !report().approvals.judged ? "—" : `+${percent(report().approvals.share)}`}</SettingValue>
+        </SettingLine>
+        <Show when={report().approvals.byAction.length}>
+          <SettingDetails summary="By action">
+            <For each={report().approvals.byAction}>{(row) =>
+              <SettingLine plain mono label={row.action}><SettingValue>{[row.allow && `${row.allow} allowed`, row.deny && `${row.deny} refused`, row.escalate && `${row.escalate} asked`].filter(Boolean).join(" · ")}</SettingValue></SettingLine>}
+            </For>
+          </SettingDetails>
+        </Show>
+      </Group>
+    </>}</Show>
     <Group title="About these numbers">
       <SettingDetails summary="How spend is counted">
         <Note>Each call is priced when it is made, at its model's API list price (subscriptions such as ChatGPT or Copilot at

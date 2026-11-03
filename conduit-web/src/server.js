@@ -74,6 +74,7 @@ import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
 import { registerAgentRoutes } from "./server/routes/agent.js";
+import { registerDiagnosticsRoutes } from "./server/routes/diagnostics.js";
 import { PersistentAgent } from "./agent/agent.js";
 import { createChatHost } from "./agent/chat-host.js";
 import { startEvents } from "./agent/events.js";
@@ -810,6 +811,7 @@ if (persistentAgent) {
   void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
     .catch((error) => console.error("[agent] could not load", error));
 }
+registerDiagnosticsRoutes(app, { dataRoot: config.dataRoot });
 registerSessionContextRoutes(app, { backends, findChatContext });
 registerSessionRoutes(app, {
   attachments,
