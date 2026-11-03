@@ -634,6 +634,11 @@ export function Subagents(runtime) {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
+    if (gate && runtime.agent?.connectors.entry("executor").status !== "on") {
+      const doc = await tx.doc(AgentDoc);
+      doc.notices.push({ id: `n-${doc.next++}`, kind: "connector", text: `${title}: Executor isn't connected`, at: new Date().toISOString() });
+      doc.notices.splice(0, Math.max(0, doc.notices.length - 20));
+    }
     const run = nextRun(roster, origin, trigger);
     const label = nextLabel(roster, "bg");
     const id = nextKey(roster);

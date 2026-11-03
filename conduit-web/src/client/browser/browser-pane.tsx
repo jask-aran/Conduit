@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ToolBar, LeadInput, WebScreen, WebView, IconButton } from "@/components/ui";
+import type { AgentPointerState } from "@/components/ui/web";
 import * as Icons from "@/components/ui/icons";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
@@ -38,6 +39,27 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let editing = false;
   let socket: WebSocket | null = null;
   let frame = { width: 0, height: 0 };
+  /*
+   * Where an agent acts on the page (browser-host.js's pointer messages, page CSS px), placed on the screen as the
+   * frame is drawn: whole, centred across, from the top. It rests (fades) once the agent has been still 2.5 s.
+   */
+  const [pointer, setPointer] = createSignal<AgentPointerState | null>(null);
+  let pointerKey = 0;
+  let resting: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(resting));
+  const LABELS: Record<string, string> = { down: "Press", up: "Release", click: "Click", type: "Type", scroll: "Scroll" };
+  const showPointer = (event: { phase?: string; x?: number; y?: number; label?: string; viewport?: { width: number; height: number } }) => {
+    if (!screen || typeof event.x !== "number" || typeof event.y !== "number") return;
+    const rect = screen.getBoundingClientRect();
+    const width = event.viewport?.width || frame.width || canvas?.width || rect.width;
+    const height = event.viewport?.height || frame.height || canvas?.height || rect.height;
+    const scale = Math.min(rect.width / width, rect.height / height) || 1;
+    const left = (rect.width - width * scale) / 2;
+    const phase = (event.phase || "move") as AgentPointerState["phase"];
+    setPointer({ x: left + event.x * scale, y: event.y * scale, phase, label: phase === "move" ? undefined : event.label || LABELS[phase], key: ++pointerKey });
+    clearTimeout(resting);
+    resting = setTimeout(() => setPointer((current) => current && { ...current, resting: true, label: undefined }), 2500);
+  };
   let closed = false;
   let retry = 0;
   let drawing = false;
@@ -174,7 +196,8 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
           } catch { fallback(); }
           return;
         }
-        let event: { type?: string; codec?: string; data?: string; url?: string; message?: string; metadata?: { deviceWidth: number; deviceHeight: number } };
+        let event: { type?: string; codec?: string; data?: string; url?: string; message?: string; metadata?: { deviceWidth: number; deviceHeight: number };
+          phase?: string; x?: number; y?: number; label?: string; viewport?: { width: number; height: number } };
         try { event = JSON.parse(message.data); } catch { return; }
         if (event.type === "codec") {
           generation++;
@@ -184,6 +207,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
           else if (event.codec === selected.codec && selected.config) { try { configure(); } catch { fallback(); } }
           else fallback();
         }
+        else if (event.type === "pointer") showPointer(event);
         else if (event.type === "frame" && event.data) { if (event.metadata) frame = { width: event.metadata.deviceWidth, height: event.metadata.deviceHeight }; void draw(event.data); }
         else if (event.type === "url" && event.url) {
           if (!editing) setAddress(event.url === "about:blank" ? "" : event.url);
@@ -329,7 +353,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
       </ToolBar>
       <Show when={!(direct() && directUrl())} fallback={<BrowserProxyView url={directUrl()} onFrame={(frame) => { directFrame = frame; }}
         onPage={(page) => { if (!editing) setAddress(page.url); props.onTitle?.(page.title || new URL(page.url).host); }} />}>
-      <WebScreen ref={(element: HTMLDivElement) => { screen = element; }} canvas={(element) => { canvas = element; }} live={live() && !blank()} aria-label="Page"
+      <WebScreen ref={(element: HTMLDivElement) => { screen = element; }} canvas={(element) => { canvas = element; }} live={live() && !blank()} aria-label="Page" pointer={pointer()} pointerBy="Agent"
         state={blank() ? "Type an address or a search above." : state()?.text} tone={blank() ? "quiet" : state()?.tone} onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerMove={onPointerMove}
         onWheel={onWheel} onKeyDown={(event) => key("keyDown", event)} onKeyUp={(event) => key("keyUp", event)} onPaste={onPaste}
         onContextMenu={(event) => event.preventDefault()} />

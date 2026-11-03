@@ -14,3 +14,17 @@
 .ui-web-state[data-tone="error"] { color: var(--destructive); }
 .ui-web-state code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-web-frame { transition: none; } }
+/* AgentPointer: big and plain on purpose -- the person follows it across a whole page. The mark's tip is the point
+   (the box sits at x, y); it glides between places, a ring goes out from the tip on a press, its label rides beside. */
+.ui-agent-pointer { position: absolute; top: 0; left: 0; z-index: 2; display: flex; align-items: flex-start; gap: var(--space-2xs); pointer-events: none;
+  transition: transform var(--duration-travel) var(--ease-room), opacity var(--duration-gentle) var(--ease-change); will-change: transform; }
+.ui-agent-pointer[data-resting] { opacity: 0; }
+.ui-agent-pointer-mark { width: var(--icon-xl); height: var(--icon-xl); margin: calc(-0.1 * var(--icon-xl)) 0 0 calc(-0.1 * var(--icon-xl));
+  color: var(--background); fill: var(--foreground); stroke-width: 1.5; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
+.ui-agent-pointer-label { margin-top: var(--icon-sm); border-radius: var(--radius-control); padding: 0 var(--space-xs); background: var(--foreground); color: var(--background);
+  font: var(--weight-strong) var(--text-caption)/var(--leading-text) var(--font-sans); white-space: nowrap; }
+.ui-agent-pointer-ring { position: absolute; top: 0; left: 0; width: var(--icon-xl); height: var(--icon-xl);
+  border: calc(2 * var(--hairline)) solid var(--foreground); border-radius: 50%; translate: -50% -50%; animation: ui-agent-pointer-ring var(--duration-gentle) var(--ease-change) forwards; }
+@keyframes ui-agent-pointer-ring { from { scale: 0.3; opacity: 0.9; } to { scale: 1.6; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ui-agent-pointer { transition: opacity var(--duration-quick) linear; } .ui-agent-pointer-ring { animation: none; opacity: 0; } }
+

@@ -50,6 +50,13 @@ const vendored = () => {
 // only describe the server itself.
 const WITHHELD = new Set(["agent_browser_close", "agent_browser_tools_profiles"]);
 const MCP_MS = 60_000;
+const POINTER_ACTIONS = {
+  click: ["click", "Click"], dblclick: ["click", "Double-click"], hover: ["move", "Hover"],
+  fill: ["type", "Type"], type: ["type", "Type"], check: ["click", "Check"],
+  uncheck: ["click", "Uncheck"], select: ["click", "Select"], drag: ["down", "Drag"],
+  mouse_move: ["move", "Move"], mouse_down: ["down", "Down"], mouse_up: ["up", "Up"],
+  mouse_wheel: ["scroll", "Scroll"], scroll: ["scroll", "Scroll"],
+};
 
 /** Services › Browser: its stream's frame rate (each viewer's, live) and JPEG quality (the browser's, from its start). */
 const DEFAULTS = { fps: 24, quality: 60, codec: "h264", direct: false };
@@ -63,7 +70,7 @@ const FPS = [10, 24, 30, 60];
 const QUALITY = [30, 60, 85];
 
 /** Both browser routes encode on this hub; agent-browser still receives only its own stream options. */
-function relay(sockets, request, socket, head, fps, reach) {
+function relay(sockets, request, socket, head, fps, reach, observe = () => {}) {
   sockets.handleUpgrade(request, socket, head, (client) => {
     const query = new URL(request.url, "http://localhost").searchParams;
     const pass = new URLSearchParams();
@@ -87,6 +94,7 @@ function relay(sockets, request, socket, head, fps, reach) {
       try { upstream?.close(); } catch { /* gone */ }
     };
     client.on("message", (data, binary) => {
+      if (!binary) { try { observe(JSON.parse(data.toString()), true); } catch { /* forward unchanged */ } }
       if (upstream?.readyState === WebSocket.OPEN) upstream.send(data, { binary });
       else held.push({ data, binary });
     });
@@ -102,10 +110,11 @@ function relay(sockets, request, socket, head, fps, reach) {
       });
       if (closed) { upstream.close(); return; }
       upstream.on("message", (data, binary) => {
-        if (!binary && codec !== "jpeg") {
+        if (!binary) {
           let event;
           try { event = JSON.parse(data.toString()); } catch { /* pass other text through */ }
-          if (event?.type === "frame" && typeof event.data === "string") {
+          if (event) observe(event, false);
+          if (codec !== "jpeg" && event?.type === "frame" && typeof event.data === "string") {
             video.write(event);
             if (codec === "jpeg") send(data);
             return;
@@ -134,6 +143,8 @@ export class BrowserHost {
     this.port = null;
     this.starting = null;
     this.sockets = new WebSocketServer({ noServer: true });
+    this.pointer = null;
+    this.viewport = null;
   }
 
   get available() { return Boolean(this.binary); }
@@ -199,7 +210,63 @@ export class BrowserHost {
     relay(this.sockets, request, socket, head, this.settings.fps, async (pass) => {
       await this.start();
       return new WebSocket(`ws://127.0.0.1:${this.port}/${pass.size ? `?${pass}` : ""}`);
+    }, (event, input) => {
+      // Observe the person's mouse position for coordinate-free mouse tools; never announce their input.
+      if (input && event.type === "input_mouse" && Number.isFinite(event.x) && Number.isFinite(event.y)) {
+        this.pointer = { x: event.x, y: event.y };
+      }
+      if (!input && event.type === "frame") {
+        const { deviceWidth: width, deviceHeight: height } = event.metadata || {};
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) this.viewport = { width, height };
+      }
     });
+  }
+
+  /**
+   * Text on the signed-in pane stream: { type: "pointer", phase, x, y, at, viewport?: { width, height } }.
+   * x/y and viewport use viewport CSS px; at is Unix milliseconds. Non-move phases also carry by: "agent", label.
+   * Size comes from the latest frame's deviceWidth/deviceHeight, retained here even for binary video viewers.
+   */
+  announcePointer(point, phase, label) {
+    this.pointer = point;
+    const message = JSON.stringify({ type: "pointer", phase, ...point, at: Date.now(),
+      ...(phase === "move" ? {} : { by: "agent", label }),
+      ...(this.viewport ? { viewport: this.viewport } : {}) });
+    for (const client of this.sockets.clients) {
+      try { if (client.readyState === WebSocket.OPEN) client.send(message, { binary: false }); } catch { /* viewer gone */ }
+    }
+  }
+
+  /** Resolve without scrolling or focusing. A slow/missing box must never prevent the actual tool call. */
+  async pointerPlan(name, args) {
+    const action = POINTER_ACTIONS[name.replace(/^agent_browser_/, "")];
+    // Other sessions/namespaces are not the hub's page. Direct MCP harnesses bypass this wrapper entirely.
+    if (!action || (args.session && args.session !== this.session) || args.namespace) return null;
+    const box = async (selector) => {
+      const result = JSON.parse(await this.run(["--json", ...(args.extraArgs || []), "get", "box", selector], { timeout: 250 }));
+      if (result.success === false) return null;
+      const value = result.data?.box || result.data;
+      if (!value || ![value.x, value.y, value.width, value.height].every(Number.isFinite) || value.width <= 0 || value.height <= 0) return null;
+      return { x: value.x + value.width / 2, y: value.y + value.height / 2 };
+    };
+    let timer;
+    try {
+      return await Promise.race([
+        (async () => {
+          let point;
+          let end = null;
+          if (name === "agent_browser_drag") {
+            [point, end] = await Promise.all([box(args.source), box(args.target)]);
+            if (!end) return null;
+          } else if (args.selector) point = await box(args.selector);
+          else if (name === "agent_browser_mouse_move") point = { x: args.x, y: args.y };
+          else if (name === "agent_browser_scroll") point = this.viewport && { x: this.viewport.width / 2, y: this.viewport.height / 2 };
+          else point = this.pointer;
+          return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? { point, end, phase: action[0], label: action[1] } : null;
+        })(),
+        new Promise((resolve) => { timer = setTimeout(() => resolve(null), 275); }),
+      ]);
+    } catch { return null; } finally { clearTimeout(timer); }
   }
 
   /** What the session starts with, whoever starts it (the pane, an agent's MCP server): its profile, its stream. */
@@ -266,7 +333,16 @@ export class BrowserHost {
       replay: tool.annotations?.readOnlyHint === true ? "safe" : "unsafe",
       execute: async (args, api) => {
         try {
+          const pointer = await this.pointerPlan(tool.name, args);
+          if (pointer) {
+            this.announcePointer(pointer.point, "move");
+            if (pointer.phase !== "move") this.announcePointer(pointer.point, pointer.phase, pointer.label);
+          }
           const result = await (await this.client()).callTool(tool.name, args, { signal: api?.signal, timeoutMs: MCP_MS });
+          if (pointer?.end && !result.isError) {
+            this.announcePointer(pointer.end, "move");
+            this.announcePointer(pointer.end, "up", pointer.label);
+          }
           return { output: toLlmContent(result), isError: result.isError === true };
         } catch (error) { return { output: [{ type: "text", text: `The browser did not answer: ${String(error?.message || error).slice(0, 200)}` }], isError: true }; }
       },

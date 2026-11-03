@@ -201,6 +201,7 @@ export function routineTask(runtime) {
           const doc = await tx.doc(AgentDoc);
           const current = doc.routineRuns[task.id];
           current.outcome = outcome;
+          for (const task of outcome.tasks || []) if (task.error === "Executor isn't connected") routineNotice(doc, record.routine.title, `${task.id}: ${task.error}`, api.now());
           current.startedAt = api.now();
           if (!outcome.run) {
             completeRoutine(doc, record.routine, outcome, new Date(api.now()).toISOString());

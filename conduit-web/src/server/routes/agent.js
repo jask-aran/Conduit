@@ -113,7 +113,9 @@ export function registerAgentRoutes(app, { agent, backends }) {
         questions: waiting,
         asks: view.asks.filter((ask) => ask.status === "pending"),
         proposals: await listProposals(agent),
-        notices: state.notices,
+        notices: [...state.notices, ...(agent.connectors.entry("executor").status === "on" ? [] : [{
+          id: "connector-executor", kind: "connector", text: "Executor isn't connected", at: null,
+        }])],
       },
     };
   };
@@ -258,7 +260,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
     try {
       const state = agent.enabled() ? await agent.state() : null;
       const view = await agent.view(state);
-      response.json(view.enabled ? { ...view, attention: await attention(view, state) } : view);
+      response.json({ ...view, connectors: agent.connectors.list(), ...(view.enabled ? { attention: await attention(view, state) } : {}) });
     } catch (error) { next(error); }
   });
 
@@ -518,6 +520,8 @@ export function registerAgentRoutes(app, { agent, backends }) {
   app.delete("/v0/agent/notices/:id", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
+      // This notice reflects current status and remains until Executor connects.
+      if (request.params.id === "connector-executor") return response.status(204).end();
       let found = false;
       await agent.update((doc) => {
         const index = doc.notices.findIndex((notice) => notice.id === request.params.id);

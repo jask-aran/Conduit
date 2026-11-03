@@ -238,6 +238,7 @@ test("tasks gather in order before a run and their output becomes its first mess
   const { agent } = await agentFixture(t);
   const calls = [];
   // Executor is outward I/O; keep task gathering, gating and prompt assembly real.
+  agent.connectors.entry("executor").status = "on";
   t.mock.method(agent.connectors, "ready", async () => {});
   t.mock.method(agent.connectors, "tools", () => [{ name: "mcp__executor__execute", execute: async ({ code }) => {
     const key = code.includes("first-source") ? "first" : "second";
@@ -958,4 +959,12 @@ test("reopening old context offers it again past each matching routine's cursor"
     assert.equal((await executeRoutine(agent, plan, { state, now, cursors: second.cursors })).run, false);
   }
   assert.equal((await executeRoutine(agent, { ...routine(), name: "other" }, { state, now })).run, false);
+});
+
+test("a routine with a closed gate still records its Executor failure as an attention notice", async (t) => {
+  const f = await routineFixture(t, { gate: "when-new", tasks: [{ id: "mail", kind: "executor", code: "return [];" }] });
+  await f.reach("done");
+  const state = await f.agent.state();
+  assert.equal(state.routineState.review.lastError, "mail: Executor isn't connected");
+  assert.equal(state.notices.at(-1).text, "Review arrivals: mail: Executor isn't connected");
 });

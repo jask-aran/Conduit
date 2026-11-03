@@ -149,7 +149,7 @@ export async function runSource(agent, source, { signal, seen = [] } = {}) {
       // A check that fires as the hub starts found Executor still connecting, and failed until the next one.
       await agent.connectors.ready("executor");
       const tool = agent.connectors.tools().find((item) => item.name === "mcp__executor__execute");
-      if (!tool) return { items: [], error: "Executor is not connected." };
+      if (agent.connectors.entry("executor").status !== "on" || !tool) return { items: [], error: "Executor isn't connected" };
       const code = `const seen = new Set(${JSON.stringify(seen)});\n${source.code}`;
       const result = await tool.execute({ code }, { signal: signal || AbortSignal.timeout(90_000) });
       const output = (result.output || []).filter((part) => part.type === "text").map((part) => part.text).join("");

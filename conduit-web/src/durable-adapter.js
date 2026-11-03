@@ -459,6 +459,7 @@ export class DurableAdapter extends EventEmitter {
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
+    runtime.refreshLiveTools = (extension) => this.refreshLiveTools(extension);
     runtime.routineContextUsage = async (home, _context, compaction) => {
       const entries = await this.entries(home);
       const lastContext = [...entries].reverse().find((entry) => entry.kind === "pi.compaction" || (entry.kind === "pi.assistant" && entry.model?.[0]?.usage));
@@ -620,15 +621,7 @@ export class DurableAdapter extends EventEmitter {
       await this.remember(conversation, options.chatId);
     }
     if (options.readOnly) return this.start(conversation, options);
-    // The template as it is now: its tools, extensions and prompt (as edited in Settings).
-    const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
-    const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
-    const settings = await this.runtime.agentFor(options.templateId, { roaming, fixedVars: noticeState?.prompt });
-    if (options.templateId === "agent") {
-      const stored = await harness.snapshot(DurableAgentDoc, conversation.id, this.context);
-      if (stored?.instructions !== undefined) settings.instructions = stored.instructions;
-    }
-    await conversation.configure(settings, this.context);
+    await this.configureSession(conversation, options);
     // A conversation from before places learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {
@@ -638,6 +631,69 @@ export class DurableAdapter extends EventEmitter {
     const spec = splitSpec(options.model);
     if (spec && spec.modelId !== record.modelId) await this.setModel(record.id, options.model);
     return record;
+  }
+
+  // Restore and live refresh use the same fixed prompt slots and stored agent instructions.
+  async sessionSettings(conversation, options) {
+    const harness = this.runtime.harness;
+    const stored = await harness.snapshot(DurableAgentDoc, conversation.id, this.context);
+    // Reattached sessions have no launch options; recover their profile before rebuilding the selection.
+    const chat = options.chatId && this.runtime.agent?.registry?.metadata(options.chatId);
+    const templateId = options.templateId || chat?.templateId || chat?.backend?.profileId
+      || (Array.isArray(stored?.extensions) && stored.extensions.includes("agent") ? "agent" : null);
+    const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
+    const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
+    const settings = await this.runtime.agentFor(templateId, { roaming, fixedVars: noticeState?.prompt });
+    if (templateId === "agent" && stored?.instructions !== undefined) settings.instructions = stored.instructions;
+    return settings;
+  }
+
+  configureSession(conversation, options, extension = null) {
+    this.sessionConfigurations ||= new Map();
+    const previous = this.sessionConfigurations.get(conversation.id) || Promise.resolve();
+    const pending = previous.catch(() => {}).then(async () => {
+      const settings = await this.sessionSettings(conversation, options);
+      if (extension && !settings.extensions?.some((item) => item.name === extension)) return false;
+      await conversation.configure(settings, this.context);
+      return true;
+    });
+    this.sessionConfigurations.set(conversation.id, pending);
+    return pending.finally(() => {
+      if (this.sessionConfigurations.get(conversation.id) === pending) this.sessionConfigurations.delete(conversation.id);
+    });
+  }
+
+  async refreshLiveTools(extension) {
+    // Queue the whole pass so each conversation is configured in refresh order, including children.
+    this.toolRefresh = (this.toolRefresh || Promise.resolve()).then(async () => {
+      const harness = this.runtime.harness;
+      if (!harness) return;
+      const refreshed = new Set();
+      for (const record of this.rawRecords()) {
+        try {
+          if (await this.configureSession(record.conversation, record, extension)) refreshed.add(record.conversationId);
+        } catch (error) { console.warn("[tools] live refresh failed", record.conversationId, error); }
+      }
+      // Task-owned conversations may have no writable adapter record. Preserve their stripped selection and prompt.
+      const { tasks, submissions } = await harness.inspect(this.context);
+      const active = new Set([...tasks.flatMap((task) => [task.record.conversationId, task.record.input?.child]), ...submissions.map((item) => item.conversationId)]);
+      const prefix = extension === "connectors" ? "mcp__" : "agent_browser_";
+      const tools = this.runtime.extensions.get(extension)?.tools.filter((tool) => tool.name.startsWith(prefix)) || [];
+      for (const id of active) {
+        if (id == null || refreshed.has(id)) continue;
+        try {
+          const conversation = await harness.conversation(id, this.context);
+          const agent = await conversation.agent(this.context);
+          if (!agent.extensions.some((item) => item.name === extension)) continue;
+          const stored = await harness.snapshot(DurableAgentDoc, id, this.context);
+          if (!Array.isArray(stored?.tools)) continue; // Unset/removal filters already resolve new registry tools.
+          const kept = stored.tools.filter((name) => !name.startsWith(prefix)).map((name) => ({ name }));
+          const ordered = this.runtime.inToolOrder([...new Map([...kept, ...tools].map((tool) => [tool.name, tool])).values()]);
+          await conversation.configure({ tools: ordered }, this.context);
+        } catch (error) { console.warn("[tools] child refresh failed", id, error); }
+      }
+    }).catch((error) => { console.warn("[tools] refresh failed", error); });
+    return this.toolRefresh;
   }
 
   async start(conversation, { chatId, project, templateId = null, readOnly = false, parentChatId = null }) {

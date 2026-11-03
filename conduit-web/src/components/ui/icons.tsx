@@ -66,6 +66,7 @@ import {
   MicIcon,
   Minimize2Icon,
   MonitorIcon,
+  MousePointer2Icon,
   PaletteIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
@@ -220,6 +221,8 @@ export const Microphone = MicIcon;
 export const Minimize = Minimize2Icon;
 /** This computer or display appearance. */
 export const Monitor = MonitorIcon;
+/** An agent's pointer over a page it drives (AgentPointer). */
+export const Pointer = MousePointer2Icon;
 /** Additional actions for this item. */
 export const More = EllipsisIcon;
 /** Move a chat into a folder. */
