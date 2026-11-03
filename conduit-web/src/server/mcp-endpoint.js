@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
+import { validateToolArguments } from "@earendil-works/pi-ai";
 import { UiTool } from "./ui-control.js";
 import { mcpAccess } from "./mcp-access.js";
 
@@ -57,7 +58,11 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
     if (method === "tools/call") {
       const tool = tools().find((item) => item.name === params?.name);
       if (!tool) return fail(id, -32602, `Unknown tool: ${params?.name}`);
-      const result = await tool.execute(params?.arguments || {}, {}, {});
+      // Checked against the tool's own schema, as a model's call is: a harness's arguments are not trusted to be well-formed.
+      let args;
+      try { args = validateToolArguments(tool, { type: "toolCall", id: String(id ?? ""), name: tool.name, arguments: params?.arguments || {} }); }
+      catch (error) { return fail(id, -32602, error?.message || "Invalid arguments"); }
+      const result = await tool.execute(args, {}, {});
       return reply(id, { content: (result.output || []).map((part) => ({ type: "text", text: part.text ?? "" })), isError: Boolean(result.isError) });
     }
     if (typeof method === "string" && method.startsWith("notifications/")) return null;

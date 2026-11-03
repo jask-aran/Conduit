@@ -565,7 +565,9 @@ app.get("/client-bundle/:build.zip", async (request, response, next) => {
 // Conduit as an MCP server (mcp-endpoint.js): the hub's token lets a harness in ahead of the sign-in check; a signed-in
 // caller reaches the same endpoint below. Its tools find the UI and the browser on `mcpRuntime`, filled in once made.
 const mcpRuntime = {};
-Object.assign(mcpAccess, { url: `http://127.0.0.1:${config.port}/v0/mcp/ui`, token: mcpToken(config.dataRoot) });
+// Where this server listens, as a harness on this machine reaches it: loopback unless it is bound to one address only.
+const mcpHost = /^(0\.0\.0\.0|::|\[::\]|)$/.test(config.host || "") ? "127.0.0.1" : String(config.host).includes(":") && !String(config.host).startsWith("[") ? `[${config.host}]` : config.host;
+Object.assign(mcpAccess, { url: `http://${mcpHost}:${config.port}/v0/mcp/ui`, token: mcpToken(config.dataRoot) });
 const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
 app.use(mcp.beforeAuth);
 
