@@ -1,6 +1,8 @@
 ---
 title: Heartbeat
-trigger: { every: 60 }
+trigger:
+  - { every: 60 }
+  - { every: 120, during: quiet }
 tasks:
   - { id: inbox, kind: inbox }
 gate: when-new
@@ -37,6 +39,9 @@ Still reported, in a line, but not worth digging into:
 - Newsletters, promotions and marketing.
 - Receipts for something already paid.
 - Security notices for a sign-in just made.
+
+A Reflection entry is for the morning brief: mark it handled, outcome "For
+the brief", and leave it out of the report.
 
 ## Report
 

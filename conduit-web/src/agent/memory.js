@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
-import { block } from "./routines.js";
+import { block, NOTES_FILE } from "./routines.js";
 import { splitFrontMatter } from "./routine-files.js";
 
 const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
@@ -145,12 +145,36 @@ export async function acceptProposal(agent, id) {
   });
 }
 
+/** How many declined proposals the state doc keeps (`declined`), so a reflection does not propose them again. */
+export const DECLINED_KEPT = 100;
+
 export async function rejectProposal(agent, id) {
   return locked(`${agent.folder}:proposal:${id}`, () => agent.update((doc) => {
     const proposal = Object.hasOwn(doc.proposals, id) ? { ...doc.proposals[id] } : null;
-    if (proposal) delete doc.proposals[id];
+    if (proposal) {
+      delete doc.proposals[id];
+      doc.declined = [...(doc.declined || []), { file: proposal.file, op: proposal.op, text: proposal.text, at: new Date().toISOString() }].slice(-DECLINED_KEPT);
+    }
     return proposal;
   }));
+}
+
+/**
+ * What a thread or run learned by inference, for the Reflection routine to promote or drop: one line appended to
+ * NOTES.md, `- <date> | <origin> | <text>` with its provenance. Never edits another line; a replayed call adds nothing.
+ */
+async function note(agent, origin, text, attribution) {
+  const root = await fs.realpath(agent.folder);
+  const target = path.join(root, NOTES_FILE);
+  return locked(target, async () => {
+    try { if ((await fs.lstat(target)).isSymbolicLink()) throw new Error("NOTES.md must not be a link."); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+    const call = token(attribution.callId);
+    const content = await read(target);
+    if (linesOf(content).some((line) => lineText(line).match(provenance)?.[3] === call)) return;
+    const comment = `<!-- conduit by:${attribution.by} chat:${token(attribution.chatId || "-")} call:${call} at:${attribution.at} -->`;
+    await fs.appendFile(target, `${content && !content.endsWith("\n") ? "\n" : ""}- ${agent.today(Date.parse(attribution.at))} | ${origin} | ${text} ${comment}\n`);
+  });
 }
 
 async function search(agent, query) {
@@ -250,11 +274,11 @@ export async function forgetLine(agent, file, date, line) {
 export function MemoryTools(runtime) {
   const memory = defineTool({
     name: "memory",
-    description: "Read, add, remove or search the agent's memory files.",
+    description: "Read, add, remove or search the agent's memory files; note (text only) appends what you inferred, with its evidence, for the nightly reflection.",
     // Removal has no file receipt, so an interrupted call must not select a line again.
     replay: "unsafe",
     parameters: Type.Object({
-      action: Type.Union([Type.Literal("read"), Type.Literal("add"), Type.Literal("remove"), Type.Literal("search")]),
+      action: Type.Union([Type.Literal("read"), Type.Literal("add"), Type.Literal("remove"), Type.Literal("search"), Type.Literal("note")]),
       file: Type.Optional(Type.Union([Type.Literal("soul"), Type.Literal("user"), Type.Literal("memory"), Type.Literal("diary")])),
       section: Type.Optional(Type.String({ description: "For add: the ## heading in the file to put the line under, e.g. People or Commitments." })),
       text: Type.Optional(Type.String()), query: Type.Optional(Type.String()), date: Type.Optional(Type.String()),
@@ -264,6 +288,14 @@ export function MemoryTools(runtime) {
       if (!agent || !agent.enabled()) return result("The agent is not enabled.", true);
       try {
         if (args.action === "search") return result(await search(agent, args.query || ""));
+        if (args.action === "note") {
+          if (!args.text || !args.text.trim() || /[\r\n]|<!--|-->/.test(args.text)) return result("Provide one non-empty line of text.", true);
+          if (args.text.trim().length > 500) return result("A note must be 500 characters or fewer.", true);
+          const origin = await agent.describe(api.conversationId);
+          const by = origin?.role || "agent";
+          await note(agent, by === "side" ? `side:${origin.chatId}` : by, args.text.trim(), { by, chatId: origin?.chatId, callId: api.callId, at: new Date().toISOString() });
+          return result("Noted for the reflection.");
+        }
         const file = args.file;
         if (!file) return result("Choose a memory file.", true);
         const date = args.date === undefined ? agent.today() : args.date;
@@ -271,7 +303,10 @@ export function MemoryTools(runtime) {
         if (args.action === "read") return result(compact(await read(await filePath(agent, file, date))));
         if (file === "soul") return result("Your soul belongs to the person: suggest the change to them instead.", true);
         if (!args.text || !args.text.trim() || /[\r\n]/.test(args.text)) return result("Provide one non-empty line of text.", true);
-        const origin = await agent.describe(api.conversationId);
+        const state = await agent.state();
+        // Only the firing's live record grants home memory access; model-written files cannot grant it.
+        const reflection = state.reflection?.conversationId === api.conversationId;
+        const origin = reflection ? { role: "home", chatId: state.home?.chatId } : await agent.describe(api.conversationId);
         const by = origin?.role || "agent";
         const at = new Date().toISOString();
         if (by === "run" && file !== "diary") {

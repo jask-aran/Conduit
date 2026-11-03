@@ -9,7 +9,8 @@ import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
 import { migrateSoul } from "./memory.js";
 import { applyRoutine, executeRoutine, migrateToRoutines, promptVars, runInstructions } from "./routines.js";
-import { readRoutine, seedRoutines, writeRoutine } from "./routine-files.js";
+import { needsReflection, REFLECTION_WAIT_MS, startReflection } from "./reflection.js";
+import { readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -38,8 +39,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   brief: { enabled: true, at: "08:00" },
   // Shown from (and written through to) routines/morning-brief.md and routines/heartbeat.md, which hold them.
   heartbeat: { enabled: true, everyMinutes: 60 },
-  // No heartbeat in these hours (the agent's time zone); later, its night upkeep.
+  // Notifications respect these hours; work continues.
   quietHours: { enabled: true, start: "23:00", end: "07:00" },
+  nightlyCompaction: { enabled: true, minTokens: 100000, minShare: 0.25 },
   // The model and effort each kind of background run uses ({ model: "provider/id", thinkingLevel }); null is the
   // home thread's. `other`: check-backs, events, webhooks and runs started by hand.
   work: { brief: null, heartbeat: null, other: null },
@@ -128,6 +130,7 @@ export class PersistentAgent {
       brief: { ...DEFAULT_SETTINGS.brief, ...(saved.brief || {}) },
       heartbeat: { ...DEFAULT_SETTINGS.heartbeat, ...(saved.heartbeat || {}) },
       quietHours: { ...DEFAULT_SETTINGS.quietHours, ...(saved.quietHours || {}) },
+      nightlyCompaction: { ...DEFAULT_SETTINGS.nightlyCompaction, ...(saved.nightlyCompaction || {}) },
       work: { ...DEFAULT_SETTINGS.work, ...(saved.work || {}) },
     };
   }
@@ -185,6 +188,14 @@ export class PersistentAgent {
       }
       next.quietHours = { enabled: quiet.enabled, start: quiet.start, end: quiet.end };
     }
+    if (patch.nightlyCompaction !== undefined) {
+      const value = { ...this.settings().nightlyCompaction, ...patch.nightlyCompaction };
+      if (typeof value.enabled !== "boolean" || !Number.isInteger(value.minTokens) || value.minTokens < 0
+        || !Number.isFinite(value.minShare) || value.minShare < 0 || value.minShare > 1) {
+        fail("nightlyCompaction is { enabled, minTokens: non-negative integer, minShare: number from 0 to 1 }");
+      }
+      next.nightlyCompaction = { enabled: value.enabled, minTokens: value.minTokens, minShare: value.minShare };
+    }
     if (patch.work !== undefined) {
       const work = { ...this.settings().work };
       for (const [kind, choice] of Object.entries(patch.work || {})) {
@@ -200,9 +211,9 @@ export class PersistentAgent {
     this.cached = next;
     // The brief's and heartbeat's clocks are their routine files' now: Settings writes through to them.
     if (patch.brief) await this.adjustRoutine("morning-brief", (routine) => ({ ...routine, enabled: next.brief.enabled !== false,
-      trigger: next.brief.at ? { kind: "at", time: next.brief.at } : routine.trigger }));
+      trigger: next.brief.at ? updateTrigger(routine.trigger, "at", { time: next.brief.at }) : routine.trigger }));
     if (patch.heartbeat) await this.adjustRoutine("heartbeat", (routine) => ({ ...routine, enabled: next.heartbeat.enabled !== false,
-      trigger: patch.heartbeat.everyMinutes ? { kind: "every", minutes: next.heartbeat.everyMinutes } : routine.trigger }));
+      trigger: patch.heartbeat.everyMinutes ? updateTrigger(routine.trigger, "every", { minutes: next.heartbeat.everyMinutes }) : routine.trigger }));
     if (next.name && this.project?.name !== next.name) this.project = await this.projects.rename(this.project.id, next.name).catch(() => this.project) || this.project;
     // The home thread is titled with the name until the person retitles it.
     const home = (await this.state()).home?.chatId;
@@ -348,7 +359,22 @@ export class PersistentAgent {
     const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
     if (!routine) return { error: "routine_not_found", status: 404 };
     if (routine.error) return { error: routine.error, status: 400 };
-    const state = await this.state();
+    let state = await this.state();
+    if (name === "morning-brief" && needsReflection(state) && !await this.overBudget()) {
+      const { conversationId } = await this.home();
+      const harness = await this.runtime.open();
+      const reflection = await this.update(async (doc, tx) => needsReflection(doc)
+        ? startReflection(tx, doc, this, conversationId, `before-brief:${key || new Date().toISOString()}`) : null);
+      if (reflection) {
+        const startedAt = (await this.state()).reflection?.startedAt ?? Date.now();
+        let timer;
+        const done = await Promise.race([harness.waitForTask(reflection, this.context), new Promise((resolve) => {
+          timer = setTimeout(() => resolve(null), Math.max(0, REFLECTION_WAIT_MS - (Date.now() - startedAt)));
+        })]).finally(() => clearTimeout(timer));
+        if (!done) await harness.abortTask(reflection, this.context);
+      }
+      state = await this.state();
+    }
     const outcome = await executeRoutine(this, routine, { cursors: state.cursors?.[name] || {}, state, force: true });
     if (outcome.run && await this.overBudget()) return { error: "agent_over_budget" };
     const { conversationId } = await this.home();
@@ -390,8 +416,8 @@ export class PersistentAgent {
   async shownSettings() {
     const settings = this.settings();
     const [brief, beat] = await Promise.all(["morning-brief", "heartbeat"].map((name) => readRoutine(this.folder, name).catch(() => null)));
-    if (brief) settings.brief = { enabled: brief.enabled, at: brief.trigger.kind === "at" ? brief.trigger.time : settings.brief.at };
-    if (beat) settings.heartbeat = { enabled: beat.enabled, everyMinutes: beat.trigger.kind === "every" ? beat.trigger.minutes : settings.heartbeat.everyMinutes };
+    if (brief) settings.brief = { enabled: brief.enabled, at: settingRule(brief.trigger, "at")?.time || settings.brief.at };
+    if (beat) settings.heartbeat = { enabled: beat.enabled, everyMinutes: settingRule(beat.trigger, "every")?.minutes ?? settings.heartbeat.everyMinutes };
     return settings;
   }
 

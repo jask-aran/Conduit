@@ -115,3 +115,44 @@ test("an interrupted email delivery becomes uncertain after reload and is not re
   await settled;
   await log.writing;
 });
+
+test("quiet hours suppress non-urgent pushes while retaining messages and approvals", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2030, 0, 15, 23, 30) });
+  const { agent, log, api } = await mailbox(t);
+  agent.cached.quietHours = { enabled: true, start: "23:00", end: "07:00" };
+  const { agentNotifier } = await import("../src/agent/notify.js");
+  const sent = [];
+  const push = { list: () => [{ id: "phone", label: "Phone" }], send: async (message) => { sent.push(message); return [{ id: "phone", ok: true }]; } };
+  agent.runtime.agentNotify = agentNotifier({ agent, push, hubId: () => "hub" });
+  const tool = MessageTools(agent.runtime).tools.find((item) => item.name === "message");
+  const call = (id) => ({ ...api, taskId: id, memo: async (_key, value) => value });
+  await tool.execute({ text: "Night update", notify: "push" }, call("night"));
+  assert.equal(log.list().find((item) => item.id === "tool:night").body, "Night update");
+  assert.equal(sent.length, 0);
+  assert.deepEqual(await agent.runtime.agentNotify({ kind: "approval", conversationId: api.conversationId, text: "Approval", key: "ask" }), { to: [], missed: [] });
+  assert.equal(sent.length, 0, "approval priority cannot bypass quiet hours");
+  await tool.execute({ text: "Urgent update", notify: "urgent" }, call("urgent"));
+  assert.equal(sent.length, 1);
+  assert.equal(log.list().find((item) => item.id === "tool:urgent").body, "Urgent update");
+  t.mock.timers.setTime(Date.UTC(2030, 0, 16, 7));
+  await agent.runtime.agentNotify({ kind: "approval", conversationId: api.conversationId, text: "Approval", key: "ask" });
+  assert.equal(sent.length, 2, "approval pushes after quiet hours");
+});
+
+test("a person-requested test push works during quiet hours", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2030, 0, 15, 23, 30) });
+  const { agent } = await agentFixture(t, { quietHours: { enabled: true, start: "23:00", end: "07:00" } });
+  const { registerPushRoutes } = await import("../src/server/routes/push.js");
+  const routes = new Map();
+  const app = { post: (route, handler) => routes.set(route, handler), get() {}, delete() {} };
+  let sent = 0;
+  registerPushRoutes(app, { agent, hubId: () => "hub", push: { send: async () => { sent++; return []; } } });
+  let body;
+  const response = { json: (value) => { body = value; return response; } };
+  await routes.get("/v0/push/test")({ body: {} }, response, (error) => { throw error; });
+  assert.deepEqual(body, []);
+  assert.equal(sent, 1);
+  t.mock.timers.setTime(Date.UTC(2030, 0, 16, 7));
+  await routes.get("/v0/push/test")({ body: {} }, response, (error) => { throw error; });
+  assert.equal(sent, 2);
+});

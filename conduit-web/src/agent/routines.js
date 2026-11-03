@@ -1,11 +1,12 @@
 import { notice } from "../context/notices.js";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { entryText, inQuietHours, listInbox } from "./inbox.js";
+import { entryText, listInbox } from "./inbox.js";
 import { fileItems, itemText, runSource, SEEN_KEPT } from "./feeds.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
-import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, writeRoutine } from "./routine-files.js";
+import { startReflection } from "./reflection.js";
+import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, updateTrigger, writeRoutine } from "./routine-files.js";
 
 /**
  * Routines (docs/plans/persistent-agent.md, "Verbs and structures"): a trigger fires a routine; its tasks gather
@@ -19,13 +20,22 @@ export const RUN_FILE = "RUN.md";
 const ENTRIES = 25;
 const ENTRY_BODY = 6000;
 const BLOCK_MAX = 40_000;
+/** What threads and runs inferred, appended by `memory` note (memory.js), read by the `notes` task. */
+export const NOTES_FILE = "NOTES.md";
+/** How many recent declined proposals the `notes` task shows beside the notes. */
+const DECLINED_SHOWN = 30;
+/** A daily routine whose quiet-hours start is off fires at this time instead. */
+const QUIET_FALLBACK = "23:00";
+/** A NOTES.md line as memory.js writes it: `- <date> | <origin> | <text> <!-- conduit … at:<iso> -->`. */
+const NOTE_LINE = /^- (\S+) \| (\S+) \| (.*) <!-- conduit by:\S+ chat:\S+ call:(\S+) at:(\S+) -->$/;
 /** Opt-in context blocks a routine may ask for (`context:` in its front matter), by file. */
 const CONTEXT_FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
+const escapeBlock = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const attrText = (attrs = {}) => Object.entries(attrs).filter(([, value]) => value !== undefined && value !== null && value !== "")
-  .map(([key, value]) => ` ${key}="${String(value).replace(/"/g, "'")}"`).join("");
-/** A tagged context block, as every prompt is composed from. */
-export const block = (tag, attrs, text) => `<${tag}${attrText(attrs)}>\n${String(text || "").trim()}\n</${tag}>`;
+  .map(([key, value]) => ` ${key}="${escapeBlock(value)}"`).join("");
+/** Escape data so it cannot close or forge prompt blocks. */
+export const block = (tag, attrs, text) => `<${tag}${attrText(attrs)}>\n${escapeBlock(String(text || "").trim())}\n</${tag}>`;
 
 /** The {{variables}} prompts are filled with: the person's fields (USER.md front matter), the agent's, the time. */
 export async function promptVars(agent, now = Date.now()) {
@@ -92,6 +102,35 @@ return lists.flatMap((list) => list.items ?? []).map((event) => ({ id: event.id,
   detail: event.location ?? "", at: event.start?.dateTime ?? event.start?.date, url: event.htmlLink }));`;
 };
 
+const clip = (text, max) => { const flat = String(text || "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
+
+/** Lines in order until the block size runs out. */
+function capped(items) {
+  const shown = [];
+  let size = 0;
+  for (const item of items) {
+    if (size + item.text.length > BLOCK_MAX) break;
+    shown.push(item);
+    size += item.text.length + 1;
+  }
+  return { shown, more: items.length - shown.length };
+}
+
+/** Pending notes are identified by their call provenance, never by their timestamps. */
+export async function notesTask(agent, task, cursor, state) {
+  const consumed = new Set(cursor.calls || []);
+  const notes = (await folderText(agent, NOTES_FILE)).split(/\r?\n/).map((line) => NOTE_LINE.exec(line)).filter(Boolean)
+    .filter((match) => !consumed.has(match[4]))
+    .map((match) => ({ call: match[4], text: `- ${match[1]} | ${match[2]} | ${match[3]}` }));
+  const { shown, more } = capped(notes);
+  const declined = (state.declined || []).slice(-DECLINED_SHOWN).reverse()
+    .map((item) => `- ${item.at.slice(0, 10)} · ${item.op} ${item.file}: ${clip(item.text, 300)}`);
+  const text = notes.length ? `${shown.map((item) => item.text).join("\n")}${more ? `\n… and ${more} more, next time` : ""}` : "No new notes.";
+  return { fresh: shown.length, cursor: { calls: [...consumed, ...shown.map((item) => item.call)] }, items: [],
+    notes: block("notes", { new: shown.length }, text), declined: block("declined", {}, declined.join("\n") || "None."),
+    block: block(task.id, { new: shown.length }, [text, ...(declined.length ? [`Declined by the person (never propose again without new evidence):\n${declined.join("\n")}`] : [])].join("\n\n")) };
+}
+
 /** One task, with its cursor: what it gathered as a block, how much of it is new, and the cursor to keep. */
 async function runTask(agent, task, cursor, state, now) {
   const zone = agent.settings().timezone;
@@ -112,6 +151,7 @@ async function runTask(agent, task, cursor, state, now) {
       block: block(task.id, { new: fresh.length, unhandled: listInbox(state, { unhandled: true }).length },
         fresh.length ? `${shown.join("\n")}${more ? `\n… and ${more} more (inbox list)` : ""}` : "Nothing new.") };
   }
+  if (task.kind === "notes") return notesTask(agent, task, cursor, state);
   if (task.kind === "chats") {
     const since = Date.parse(cursor.since || "") || now - 86400000;
     const chats = finishedChats(agent, since).slice(0, 30);
@@ -138,7 +178,6 @@ async function runTask(agent, task, cursor, state, now) {
  * JSON (it is memoised by the clock), applied in a commit by `applyRoutine`. Never throws for a task's failure.
  */
 export async function executeRoutine(agent, routine, { cursors = {}, state, now = Date.now(), force = false } = {}) {
-  if (!force && routine.quiet !== false && inQuietHours(agent.settings(), now)) return { skipped: "quiet" };
   const next = {};
   const tasks = [];
   const blocks = [];
@@ -171,15 +210,23 @@ export async function applyRoutine(tx, doc, agent, conversationId, routine, outc
   doc.cursors ||= {};
   doc.routineState ||= {};
   if (outcome.skipped) return;
-  doc.cursors[routine.name] = outcome.cursors;
+  // A notes cursor is committed only by a successful Reflection, never by admission or a budget skip.
+  doc.cursors[routine.name] = { ...(doc.cursors[routine.name] || {}),
+    ...Object.fromEntries(Object.entries(outcome.cursors || {}).map(([id, cursor]) =>
+      [id, routine.tasks.find((task) => task.id === id)?.kind === "notes" ? doc.cursors[routine.name]?.[id] || {} : cursor])) };
   const errors = outcome.tasks.filter((task) => task.error).map((task) => `${task.id}: ${task.error}`);
   doc.routineState[routine.name] = { lastAt: slot, fresh: outcome.fresh, ran: outcome.run, lastError: errors.join("; ") || null };
   if (outcome.run) {
+    if (routine.name === "reflect") {
+      await startReflection(tx, doc, agent, conversationId, `r-reflect:${slot}`);
+      return;
+    }
     const work = agent.settings().work[workKind(routine.name)];
     const model = routine.model || work?.model || null;
     await agent.spawnRun(tx, conversationId, { key: `r-${routine.name}:${slot}`, kind: routine.name, title: routine.title,
       task: outcome.message, instructions: outcome.instructions, output: routine.output, raw: true,
       ...(model ? { model, thinkingLevel: routine.effort || (routine.model ? null : work?.thinkingLevel) || null } : {}) });
+    if (routine.name === "morning-brief") doc.lastBriefAt = new Date().toISOString();
   } else if (routine.output !== "jbot" && outcome.items.length) {
     fileItems(doc, { key: `r-${routine.name}:${slot}`, title: routine.title, feedId: `r-${routine.name}`, level: routine.level }, outcome.items, slot);
   }
@@ -188,13 +235,23 @@ export async function applyRoutine(tx, doc, agent, conversationId, routine, outc
 /** The routines, valid ones as the clock wants them: `r-<name>` schedule items (schedule.js seeds their clocks). */
 export async function routineClocks(agent) {
   const clocks = {};
+  const quiet = agent.settings().quietHours;
+  // `at: quiet`: the start of quiet hours, as they are now (a change to them reseeds the clocks).
+  const time = (value) => value === "quiet" ? (quiet?.enabled && quiet.start ? quiet.start : QUIET_FALLBACK) : value;
   for (const routine of await listRoutines(agent.folder)) {
     if (routine.error || routine.enabled === false) continue;
     const { trigger } = routine;
+    const clockRule = (rule) => ({ kind: rule.kind === "at" ? "daily" : rule.kind,
+      at: rule.kind === "at" ? time(rule.time) : rule.kind === "once" ? rule.at : null,
+      everyMinutes: rule.kind === "every" ? rule.minutes : null,
+      ...(rule.during !== undefined ? { during: rule.during === "quiet" ? (quiet?.enabled ? `${quiet.start}-${quiet.end}` : null) : rule.during } : {}) });
     // A one-off whose time has passed has fired (or was missed): its file stays as a record, its clock does not.
-    if (trigger.kind === "once" && Date.parse(trigger.at) < Date.now() - 60_000) continue;
-    clocks[`r-${routine.name}`] = { kind: trigger.kind === "at" ? "daily" : trigger.kind, at: trigger.kind === "at" ? trigger.time : trigger.kind === "once" ? trigger.at : null,
-      everyMinutes: trigger.kind === "every" ? trigger.minutes : null, title: routine.title, task: null, routine: routine.name };
+    const rules = (Array.isArray(trigger) ? trigger : [trigger])
+      .filter((rule) => rule.kind !== "once" || Date.parse(rule.at) >= Date.now() - 60_000).map(clockRule);
+    if (!rules.length) continue;
+    const windowed = Array.isArray(trigger) || trigger.during !== undefined;
+    clocks[`r-${routine.name}`] = { ...(windowed ? { kind: "rules", rules } : rules[0]),
+      title: routine.title, task: null, routine: routine.name };
   }
   return clocks;
 }
@@ -207,7 +264,7 @@ export async function routineClocks(agent) {
 export async function migrateToRoutines(agent, seedDir) {
   const settings = agent.settings();
   for (const [name, adjust] of [
-    ["morning-brief", (routine) => ({ ...routine, enabled: settings.brief.enabled !== false, trigger: { kind: "at", time: settings.brief.at || routine.trigger.time } })],
+    ["morning-brief", (routine) => ({ ...routine, enabled: settings.brief.enabled !== false, trigger: settings.brief.at ? updateTrigger(routine.trigger, "at", { time: settings.brief.at }) : routine.trigger })],
     ["heartbeat", (routine) => ({ ...routine, enabled: settings.heartbeat.enabled !== false })],
   ]) {
     if (await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
@@ -219,7 +276,12 @@ export async function migrateToRoutines(agent, seedDir) {
 }
 
 const toolResult = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
-const triggerWords = (trigger) => trigger.kind === "every" ? `every ${trigger.minutes} min` : trigger.kind === "at" ? `daily at ${trigger.time}` : `once at ${trigger.at}`;
+export const triggerWords = (trigger, compact = false) => {
+  if (Array.isArray(trigger)) return trigger.map((rule) => triggerWords(rule, true)).join("; ");
+  const words = trigger.kind === "every" ? (compact && trigger.minutes === 60 ? "hourly" : compact && trigger.minutes % 60 === 0 ? `every ${trigger.minutes / 60} hours` : `every ${trigger.minutes} min`)
+    : trigger.kind === "at" ? (trigger.time === "quiet" ? "daily as quiet hours start" : `daily at ${trigger.time}`) : `once at ${trigger.at}`;
+  return words + (trigger.during === "quiet" ? " in quiet hours" : trigger.during ? ` during ${trigger.during}` : "");
+};
 const TEST_SHOWN = 12_000;
 
 /**

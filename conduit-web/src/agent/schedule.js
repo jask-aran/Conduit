@@ -1,18 +1,27 @@
 import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
+import { needsReflection, reflectionTask, REFLECTION_WAIT_MS, startReflection } from "./reflection.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
-import { applyRoutine, executeRoutine, routineClocks } from "./routines.js";
+import { applyRoutine, executeRoutine, routineClocks, triggerWords } from "./routines.js";
 import { listRoutines, readRoutine, writeRoutine } from "./routine-files.js";
 
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const clockOptions = (conversationId) => ({ ownership: { kind: "conversation" }, conversationId, background: true });
 
+// A next-slot search reads many local dates in the same zone, including DST transitions.
+let localFormatter;
+let localZone;
+
 /** Read local calendar fields without using the server's time zone. */
 function localTime(time, zone) {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(time);
+  if (!localFormatter || localZone !== zone) {
+    localFormatter = new Intl.DateTimeFormat("en-GB", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+    localZone = zone;
+  }
+  const parts = localFormatter.formatToParts(time);
   return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
 }
 
@@ -46,7 +55,76 @@ function nextDaily(at, zone, now, lastAt = null) {
   throw new Error("Could not find the next daily time");
 }
 
-function nextTime(schedule, zone, now) {
+/** Window starts are inclusive; ends are exclusive. Equal widths keep file order. */
+function ruleWindow(rule, zone, now) {
+  if (rule.during === undefined) return { start: -Infinity, width: Infinity };
+  if (rule.during === null) return null; // Quiet hours are disabled.
+  const [start, end] = rule.during.split("-");
+  const minute = (at) => { const [h, m] = at.split(":").map(Number); return h * 60 + m; };
+  const p = localTime(now, zone);
+  const time = p.hour * 60 + p.minute;
+  const from = minute(start), to = minute(end);
+  if (!(from < to ? time >= from && time < to : time >= from || time < to)) return null;
+  let began = nextDaily(start, zone, now - 48 * 3600000);
+  for (let next = nextDaily(start, zone, began); next <= now; next = nextDaily(start, zone, began)) began = next;
+  return { start: began, width: (to - from + 1440) % 1440 };
+}
+
+function winningRule(rules, zone, now) {
+  let winner = null;
+  for (const rule of rules) {
+    const window = ruleWindow(rule, zone, now);
+    if (window && (!winner || window.width < winner.window.width)) winner = { rule, window };
+  }
+  return winner;
+}
+
+function ruleApplies(rule, rules, zone, now) {
+  const winner = winningRule(rules, zone, now);
+  return winner?.rule === rule || (rule.during === undefined && winner?.window.width === Infinity);
+}
+
+function nextRules(schedule, zone, now) {
+  const rules = schedule.rules;
+  // One-offs can be years away. Check them directly, outside the recurring search.
+  let next = Infinity;
+  for (const rule of rules) {
+    if (rule.kind !== "once") continue;
+    const at = Date.parse(rule.at);
+    if (at >= now && (!schedule.lastAt || at > Date.parse(schedule.lastAt)) && ruleApplies(rule, rules, zone, at)) next = Math.min(next, at);
+  }
+  if (rules.every((rule) => rule.kind === "once" || rule.during === null)) return Number.isFinite(next) ? next : null;
+  const windows = [...new Set(rules.map((rule) => rule.during).filter(Boolean))];
+  let cursor = now;
+  // A full local-year cycle also covers windows that only fit an interval on a DST repeat.
+  const limit = now + 370 * 86400000;
+  while (cursor < limit && cursor < next) {
+    const boundary = Math.min(...windows.flatMap((window) => window.split("-").map((at) => nextDaily(at, zone, cursor))));
+    let candidateNext = Infinity;
+    for (const rule of rules) {
+      if (rule.kind === "once" || !ruleApplies(rule, rules, zone, cursor)) continue;
+      const window = ruleWindow(rule, zone, cursor);
+      let candidate;
+      if (rule.kind === "every") {
+        const interval = rule.everyMinutes * 60000;
+        const base = Math.max(window.start, schedule.lastAt ? Date.parse(schedule.lastAt) : Number.isFinite(window.start) ? window.start : now);
+        const after = Math.max(now, cursor - 1);
+        candidate = base + Math.max(1, Math.floor((after - base) / interval) + 1) * interval;
+      } else {
+        const last = schedule.dailyLastAt?.[rule.at];
+        candidate = nextDaily(rule.at, zone, Math.max(now, cursor - 1), last);
+      }
+      if (candidate < boundary && ruleApplies(rule, rules, zone, candidate)) candidateNext = Math.min(candidateNext, candidate);
+    }
+    if (Number.isFinite(candidateNext)) return Math.min(next, candidateNext);
+    if (!Number.isFinite(boundary)) break;
+    cursor = boundary;
+  }
+  return Number.isFinite(next) && (next <= limit || cursor >= next) ? next : null;
+}
+
+export function nextTime(schedule, zone, now) {
+  if (schedule.kind === "rules") return nextRules(schedule, zone, now);
   if (schedule.kind === "daily") return nextDaily(schedule.at, zone, now, schedule.lastAt);
   if (schedule.kind === "once") return Date.parse(schedule.at);
   const interval = schedule.everyMinutes * 60000;
@@ -60,6 +138,16 @@ function validOnce(at, now) {
   if (!match || !Number.isFinite(Date.parse(at)) || Date.parse(at) <= now) return false;
   const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
   return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
+}
+
+/** Daily slots expire after two hours; Reflection catches up once after any absence. */
+export function slotFate(schedule, slot, now) {
+  const late = now - Date.parse(slot);
+  if (schedule.kind === "daily") {
+    if (late < 2 * 3600000) return "fire";
+    return schedule.routine === "reflect" ? "catch-up" : "missed";
+  }
+  return late <= 6 * 3600000 ? "fire" : "missed";
 }
 
 /** How long a run's routine waits for the gathering due with it before going without it. */
@@ -76,6 +164,7 @@ function makeClock(runtime) {
         const schedule = state?.schedules[task.input.scheduleId];
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const next = schedule.nextAt ? Date.parse(schedule.nextAt) : nextTime(schedule, agent.settings().timezone, api.now());
+        if (next === null) { await api.sleepUntil(api.now() + 86400000, { phase: "wait" }, context); return; }
         const slot = new Date(next).toISOString();
         let waiting = false;
         await api.commit(async (tx) => {
@@ -102,10 +191,34 @@ function makeClock(runtime) {
         const schedule = (await api.snapshot(AgentDoc, context))?.schedules[task.input.scheduleId];
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const slot = task.state.checkpoint.slot;
-        const missed = api.now() - Date.parse(slot) > 6 * 3600000;
+        const fate = slotFate(schedule, slot, api.now());
+        const missed = fate !== "fire";
+        const catchUp = fate === "catch-up";
         // A routine (routines.js): its tasks gather without a model, its gate decides whether its run fires. Memoised
         // before it is applied, so a replay does not ask Executor again.
-        const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
+        const routine = schedule.routine && (!missed || catchUp) ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
+        // A brief waits for the missed night's Reflection, including its compaction, before gathering its inbox.
+        if (routine?.name === "morning-brief" && !routine.error) {
+          const key = `before-brief:${slot}`;
+          let reflection = await api.memo(key, context);
+          if (reflection === undefined) {
+            await api.commit(async (tx) => {
+              const doc = await tx.doc(AgentDoc);
+              reflection = needsReflection(doc) ? await startReflection(tx, doc, agent, api.conversationId, key) : null;
+            }, context);
+            await api.memo(key, reflection, context);
+          }
+          const held = reflection && await runtime.harness.getTask(reflection, context);
+          if (held && held.state.status !== "terminal") {
+            const active = (await api.snapshot(AgentDoc, context))?.reflection;
+            const startedAt = active?.taskId === reflection ? active.startedAt : held.startedAt ?? Date.parse(slot);
+            if (api.now() - startedAt >= REFLECTION_WAIT_MS) {
+              await runtime.harness.abortTask(reflection, context);
+            } else {
+              await api.sleepUntil(api.now() + 2000, { phase: "fire", slot }, context); return;
+            }
+          }
+        }
         let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
         // A routine whose run weighs what was gathered (the heartbeat, the brief) goes after the gathering due with it:
         // the Email feed and the heartbeat both due at :18:57 must not race, or the run misses what the feed files in
@@ -141,6 +254,15 @@ function makeClock(runtime) {
               key: `${current.id}:${slot}`, kind: current.feed ? "feed" : "checkback", title: current.title,
               task: current.feed ? current.feed.source.task : current.task,
             });
+          }
+          if (current.kind === "rules") {
+            current.dailyLastAt ||= {};
+            for (const rule of current.rules) {
+              if (rule.kind === "daily" && ruleApplies(rule, current.rules, agent.settings().timezone, Date.parse(slot))
+                && nextDaily(rule.at, agent.settings().timezone, Date.parse(slot) - 1, current.dailyLastAt[rule.at]) === Date.parse(slot)) {
+                current.dailyLastAt[rule.at] = slot;
+              }
+            }
           }
           current.lastAt = slot;
           current.nextAt = null;
@@ -189,6 +311,7 @@ export function ScheduleTools(runtime) {
         const today = agent.today();
         const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
         return result(schedules.map((item) => {
+          if (!item.nextAt) return `${item.id}: ${item.title} — no applicable trigger`;
           const time = Date.parse(item.nextAt);
           const day = agent.today(time);
           const date = day === today ? "today" : day === tomorrow ? "tomorrow" : day;
@@ -262,7 +385,7 @@ export function ScheduleTools(runtime) {
       return result(`Scheduled ${item.id}: ${item.title}`);
     },
   });
-  return { tools: [schedule], tasks: [clock], addClocked: clockAdder(runtime) };
+  return { tools: [schedule], tasks: [clock, reflectionTask(runtime)], addClocked: clockAdder(runtime) };
 }
 
 const seeding = new WeakMap();
@@ -328,7 +451,8 @@ export async function seedSchedules(agent) {
       const task = old?.clock ? await harness.getTask(old.clock, agent.context) : null;
       const live = task && !task.abortRequested && !["terminal", "completing"].includes(task.state.status);
       const changed = old && (!target || !live || task.conversationId !== conversationId || old.kind !== target.kind || old.at !== target.at || old.everyMinutes !== target.everyMinutes
-        || (old.kind === "daily" && old.zone !== settings.timezone));
+        || JSON.stringify(old.rules) !== JSON.stringify(target.rules)
+        || (["daily", "rules"].includes(old.kind) && old.zone !== settings.timezone));
       if (old && !changed) {
         // Same clock, newer words (a built-in task's text changed in a release): take them without a new clock.
         if (target.task !== old.task) await conversation.commit(async (tx) => {
@@ -348,10 +472,15 @@ export async function seedSchedules(agent) {
         if (!target) { delete doc.schedules[id]; return; }
         const current = doc.schedules[id];
         const sameTime = current && current.kind === target.kind && current.at === target.at && current.everyMinutes === target.everyMinutes
-          && (current.kind !== "daily" || current.zone === settings.timezone);
+          && JSON.stringify(current.rules) === JSON.stringify(target.rules)
+          && (!["daily", "rules"].includes(current.kind) || current.zone === settings.timezone);
         const item = { ...target, id, clock: null, nextAt: sameTime ? current.nextAt : null, lastAt: current?.lastAt || null,
-          system: Object.hasOwn(desired, id), createdAt: current?.createdAt || new Date().toISOString(), zone: settings.timezone };
-        item.nextAt ||= new Date(nextTime({ ...item, lastAt: item.kind === "daily" && !sameTime ? null : item.lastAt }, settings.timezone, Date.now())).toISOString();
+          system: Object.hasOwn(desired, id), createdAt: current?.createdAt || new Date().toISOString(), zone: settings.timezone,
+          ...(target.kind === "rules" ? { dailyLastAt: current?.dailyLastAt || {} } : {}) };
+        if (!item.nextAt) {
+          const next = nextTime({ ...item, lastAt: item.kind === "daily" && !sameTime ? null : item.lastAt }, settings.timezone, Date.now());
+          item.nextAt = next === null ? null : new Date(next).toISOString();
+        }
         item.clock = await tx.createTask(makeClock(agent.runtime), { scheduleId: id }, clockOptions(conversationId));
         doc.schedules[id] = item;
       }, agent.context);
@@ -385,16 +514,19 @@ export async function listSchedules(agent) {
   const now = Date.now();
   const state = await agent.state();
   // A routine that only gathers (no run) shows as a feed does: where it reads from and how its last firing went.
-  const gathers = new Map((await listRoutines(agent.folder)).filter((routine) => !routine.error && routine.gate === "never")
+  const routines = (await listRoutines(agent.folder)).filter((routine) => !routine.error);
+  const gathers = new Map(routines.filter((routine) => routine.gate === "never")
     .map((routine) => [routine.name, routine.tasks[0]?.kind]));
+  const wording = new Map(routines.map((routine) => [routine.name, triggerWords(routine.trigger)]));
   return Object.values(state.schedules).map((item) => {
     const { id, title, kind, at, everyMinutes, lastAt, system, routine } = item;
-    const nextAt = item.nextAt || new Date(nextTime(item, zone, now)).toISOString();
+    const next = item.nextAt ? Date.parse(item.nextAt) : item.kind === "rules" && item.nextAt === null ? null : nextTime(item, zone, now);
+    const nextAt = next === null ? null : new Date(next).toISOString();
     const last = routine && state.routineState?.[routine];
     const feed = item.feed ? { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed }
       : gathers.has(routine) ? { source: gathers.get(routine) === "script" ? "script" : "executor", lastRunAt: last?.lastAt || null, lastCount: last?.fresh || 0,
         lastError: last?.lastError || null, primed: true } : null;
-    return { id, title, kind, at, everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task } : {}), ...(feed ? { feed } : {}) };
+    return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" ? { cadence: wording.get(routine) } : {}) } : {}), ...(feed ? { feed } : {}) };
   })
     .sort((a, b) => (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }

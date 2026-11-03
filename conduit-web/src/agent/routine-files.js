@@ -15,6 +15,15 @@ const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.include
 const TASK_FIELDS = { inbox: ["all"], calendar: ["account", "calendars", "days"] };
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
+export const settingRule = (trigger, kind) => Array.isArray(trigger)
+  ? trigger.find((rule) => rule.kind === kind && rule.during === undefined) || trigger.find((rule) => rule.kind === kind)
+  : trigger.kind === kind ? trigger : null;
+export const updateTrigger = (trigger, kind, change) => {
+  if (!Array.isArray(trigger)) return { kind, ...change };
+  const selected = settingRule(trigger, kind);
+  return selected ? trigger.map((rule) => rule === selected ? { ...rule, ...change } : rule) : trigger;
+};
+
 /** Separate the delimiters without changing the body. */
 export function splitFrontMatter(text) {
   const first = text.match(/^---\r?\n/);
@@ -38,30 +47,39 @@ export function routineProblem(routine) {
   if (unknownField) return `Unknown routine field ${unknownField}.`;
   if (typeof routine.name !== "string" || !namePattern.test(routine.name)) return "Invalid routine name.";
   if (typeof routine.title !== "string" || !routine.title.trim()) return "A title is required.";
-  const trigger = routine.trigger;
-  if (!object(trigger)) return "A valid trigger is required.";
-  if (trigger.kind === "every") {
-    if (!keysOnly(trigger, ["kind", "minutes"]) || !Number.isInteger(trigger.minutes)
-      || trigger.minutes < 5 || trigger.minutes > 1440) return "Every must be a whole number from 5 to 1440 minutes.";
-  } else if (trigger.kind === "at") {
-    if (!keysOnly(trigger, ["kind", "time"]) || typeof trigger.time !== "string"
-      || !/^([01]\d|2[0-3]):[0-5]\d$/.test(trigger.time)) return "At must be a time in HH:MM format.";
-  } else if (trigger.kind === "once") {
-    const iso = /^(\d{4})-(\d\d)-(\d\d)T\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/;
-    const match = typeof trigger.at === "string" && iso.exec(trigger.at);
-    const date = match && new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
-    if (!keysOnly(trigger, ["kind", "at"]) || !match || !Number.isFinite(Date.parse(trigger.at))
-      || !date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[0].slice(0, 10)) {
-      return "Once must be an ISO date-time with a timezone.";
+  const triggers = Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger];
+  if (!triggers.length) return "A valid trigger is required.";
+  for (const trigger of triggers) {
+    if (!object(trigger)) return "A valid trigger is required.";
+    if (trigger.kind === "every") {
+      if (!keysOnly(trigger, ["kind", "minutes", "during"]) || !Number.isInteger(trigger.minutes)
+        || trigger.minutes < 5 || trigger.minutes > 1440) return "Every must be a whole number from 5 to 1440 minutes.";
+    } else if (trigger.kind === "at") {
+      // `quiet`: the start of the person's quiet hours, whatever they are set to (routines.js routineClocks).
+      if (!keysOnly(trigger, ["kind", "time", "during"]) || typeof trigger.time !== "string"
+        || !(trigger.time === "quiet" || /^([01]\d|2[0-3]):[0-5]\d$/.test(trigger.time))) return "At must be a time in HH:MM format, or quiet.";
+    } else if (trigger.kind === "once") {
+      const iso = /^(\d{4})-(\d\d)-(\d\d)T\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/;
+      const match = typeof trigger.at === "string" && iso.exec(trigger.at);
+      const date = match && new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00Z`);
+      if (!keysOnly(trigger, ["kind", "at", "during"]) || !match || !Number.isFinite(Date.parse(trigger.at))
+        || !date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[0].slice(0, 10)) {
+        return "Once must be an ISO date-time with a timezone.";
+      }
+    } else return "A valid trigger is required.";
+    if (trigger.during !== undefined && (typeof trigger.during !== "string"
+      || !(trigger.during === "quiet" || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(trigger.during))
+      || (trigger.during !== "quiet" && trigger.during.slice(0, 5) === trigger.during.slice(6)))) {
+      return "During must be quiet or HH:MM-HH:MM, with different start and end times.";
     }
-  } else return "A valid trigger is required.";
+  }
   if (!Array.isArray(routine.tasks)) return "Tasks must be a list.";
   const ids = new Set();
   for (const task of routine.tasks) {
     if (!object(task) || typeof task.id !== "string" || !idPattern.test(task.id)) return "Each task needs a valid id.";
     if (ids.has(task.id)) return "Task ids must be unique.";
     ids.add(task.id);
-    if (!["inbox", "calendar", "chats", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
+    if (!["inbox", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
     const field = task.kind === "executor" ? "code" : task.kind === "script" ? "command" : null;
     const extra = TASK_FIELDS[task.kind] || [];
     const unknown = Object.keys(task).find((key) => !["id", "kind", ...(field ? [field] : []), ...extra].includes(key));
@@ -111,13 +129,15 @@ export function parseRoutine(text, name) {
     "context"];
   const unknownKey = Object.keys(data).find((key) => !fields.includes(key));
   if (unknownKey) throw new Error(`Unknown field ${unknownKey} in the front matter.`);
-  const input = data.trigger;
-  let trigger = null;
-  if (object(input) && Object.keys(input).length === 1) {
-    if (Object.hasOwn(input, "every")) trigger = { kind: "every", minutes: input.every };
-    if (Object.hasOwn(input, "at")) trigger = { kind: "at", time: input.at };
-    if (Object.hasOwn(input, "once")) trigger = { kind: "once", at: input.once };
-  }
+  const parseTrigger = (input) => {
+    if (!object(input) || !keysOnly(input, ["every", "at", "once", "during"])
+      || ["every", "at", "once"].filter((key) => Object.hasOwn(input, key)).length !== 1) return null;
+    const during = Object.hasOwn(input, "during") ? { during: input.during } : {};
+    if (Object.hasOwn(input, "every")) return { kind: "every", minutes: input.every, ...during };
+    if (Object.hasOwn(input, "at")) return { kind: "at", time: input.at, ...during };
+    return { kind: "once", at: input.once, ...during };
+  };
+  const trigger = Array.isArray(data.trigger) ? data.trigger.map(parseTrigger) : parseTrigger(data.trigger);
   const routine = { name, title: data.title === undefined ? name : data.title, trigger,
     tasks: data.tasks === undefined ? [] : data.tasks, gate: data.gate, output: data.output,
     model: data.model === undefined ? null : data.model, effort: data.effort === undefined ? null : data.effort,
@@ -132,15 +152,18 @@ export function parseRoutine(text, name) {
 export function serializeRoutine(routine) {
   const problem = routineProblem(routine);
   if (problem) throw new Error(problem);
-  const { name, title, trigger, tasks, gate, output, model, effort, level, quiet, enabled, context, body } = routine;
+  const { name, title, trigger, tasks, gate, output, model, effort, level, enabled, context, body } = routine;
+  const writeTrigger = (rule) => ({ ...(rule.kind === "every" ? { every: rule.minutes }
+    : rule.kind === "at" ? { at: rule.time } : { once: rule.at }), ...(rule.during !== undefined ? { during: rule.during } : {}) });
   const data = { ...(title !== name ? { title } : {}),
-    trigger: trigger.kind === "every" ? { every: trigger.minutes }
-      : trigger.kind === "at" ? { at: trigger.time } : { once: trigger.at },
+    trigger: Array.isArray(trigger) ? trigger.map(writeTrigger) : writeTrigger(trigger),
     ...(tasks.length ? { tasks } : {}), gate, output, ...(model !== null ? { model } : {}),
     ...(effort !== null ? { effort } : {}), ...(level !== "fyi" ? { level } : {}),
-    ...(!quiet ? { quiet } : {}), ...(!enabled ? { enabled } : {}), ...(context.length ? { context } : {}) };
+    ...(!enabled ? { enabled } : {}), ...(context.length ? { context } : {}) };
   const doc = new YAML.Document(data);
-  doc.get("trigger", true).flow = true;
+  if (Array.isArray(trigger)) {
+    for (const rule of doc.get("trigger", true).items) rule.flow = true;
+  } else doc.get("trigger", true).flow = true;
   for (const task of doc.get("tasks", true)?.items || []) {
     const field = task.get("kind") === "executor" ? "code" : task.get("kind") === "script" ? "command" : null;
     const value = field && task.get(field, true);

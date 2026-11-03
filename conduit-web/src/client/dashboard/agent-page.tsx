@@ -49,7 +49,7 @@ function age(value: string | null | undefined, now: number) {
   return at > now && span !== "now" ? `in ${span}` : span;
 }
 
-const when = (schedule: AgentSchedule) => schedule.kind === "daily" ? `Daily ${schedule.at || ""}`.trim()
+const when = (schedule: AgentSchedule) => schedule.kind === "rules" ? schedule.cadence || "Scheduled" : schedule.kind === "daily" ? `Daily ${schedule.at || ""}`.trim()
   : schedule.kind === "every" ? `Every ${schedule.everyMinutes && schedule.everyMinutes % 60 === 0 ? `${schedule.everyMinutes / 60}h` : `${schedule.everyMinutes}m`}`
   : "Once";
 

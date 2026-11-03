@@ -6,7 +6,6 @@ tasks:
   - { id: chats, kind: chats }
 gate: always
 output: jbot
-quiet: false
 ---
 Gather what jbot needs to give the person a full look at their day. Your first
 message carries everything that came into the inbox since the last brief
@@ -18,7 +17,8 @@ Report in full, with the specifics (times, people, order and tracking numbers,
 amounts, deadlines), the links that do the next thing, and the context you
 found around each, under Today, Needs them, Mail and messages, Coming up;
 leave out a heading with nothing under it. Mark the inbox entries the brief
-covers handled.
+covers handled. When a Reflection entry came in since the last brief, end with
+one line, "Learned overnight: <its summary>"; otherwise say nothing of it.
 
 Where an item has an obvious next step outside the folder (a reply to send, an
 invite to answer, a chat to start on something), prepare it in full and make

@@ -8,7 +8,7 @@ import { attachmentForDevice } from "./nodes/device-attachments.js";
 import { EventEmitter } from "node:events";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
-import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, watchEvents } from "@earendil-works/pi-durable";
+import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, DEFAULT_COMPACTION_POLICY, watchEvents } from "@earendil-works/pi-durable";
 import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
@@ -459,6 +459,22 @@ export class DurableAdapter extends EventEmitter {
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
+    runtime.reflectionContextUsage = async (home, _context, compaction) => {
+      const entries = await this.entries(home);
+      const lastContext = [...entries].reverse().find((entry) => entry.kind === "pi.compaction" || (entry.kind === "pi.assistant" && entry.model?.[0]?.usage));
+      // A summary changes the context; the preceding request no longer measures it.
+      if (!lastContext || lastContext.kind === "pi.compaction") return null;
+      const usage = (await this.contextFromHistory({ conversation: home }))?.contextUsage;
+      if (!usage) return null;
+      const configured = await home.agent(this.context);
+      const model = configured.model && runtime.models.getModel(configured.model.provider, configured.model.modelId);
+      const policy = { ...DEFAULT_COMPACTION_POLICY, ...compaction };
+      const override = policy.modelOverrides?.[`${configured.model?.provider}/${configured.model?.modelId}`];
+      const reserve = override?.reserveTokens ?? policy.reserveTokens;
+      const background = override?.backgroundTokens ?? policy.backgroundTokens;
+      return { ...usage, contextWindow: model?.contextWindow || 0,
+        compactAt: model?.contextWindow ? model.contextWindow - reserve - background : null };
+    };
     runtime.subagentStep = agentStep;
     runtime.subagentsChanged = (conversationId, change) => {
       this.agentHeartbeats ||= new Map();
