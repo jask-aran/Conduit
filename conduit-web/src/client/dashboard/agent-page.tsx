@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
-import { MenuRow } from "@/components/ui/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
@@ -10,6 +10,7 @@ import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, Sp
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { Row } from "@/components/ui/row";
+import { GroupAction } from "@/components/ui/dashboard";
 
 /**
  * The hub's persistent agent's page (docs/plans/persistent-agent.md): its messages with the person (the message log's
@@ -170,12 +171,55 @@ export function AgentPage(props: {
     }
     return [...counts].sort((a, b) => b[1] - a[1]).map(([noun, count]) => `${count} ${count === 1 || noun.endsWith("s") ? noun : `${noun}s`}`).join(" · ");
   };
-  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Context inbox" count={unhandled() || null}>
+  /*
+   * The context inbox, the person's to edit as much as jbot's (POST/PATCH/DELETE /v0/agent/inbox, the same verbs as
+   * conduit_inbox): a row opens the entry; its menu marks it handled or reopens it, addresses it to a routine, dismisses
+   * it (handled, outcome dismissed: nothing lost) or deletes it (the person only). Add files a note of their own.
+   */
+  const [readingEntry, setReadingEntry] = createSignal<AgentInboxEntry | null>(null);
+  const [adding, setAdding] = createSignal(false);
+  const [note, setNote] = createSignal("");
+  const routines = createMemo(() => timed().filter((rule) => rule.routine).map((rule) => ({ id: rule.routine!, title: rule.title })));
+  const routineTitle = (id: string) => routines().find((routine) => routine.id === id)?.title || id;
+  const editEntry = (entry: AgentInboxEntry, body: Record<string, unknown>) => act(`inbox:${entry.id}`, () =>
+    api(`/v0/agent/inbox/${encodeURIComponent(entry.id)}`, { method: "PATCH", body: JSON.stringify(body) }));
+  const deleteEntry = (entry: AgentInboxEntry) => act(`inbox:${entry.id}`, () =>
+    api(`/v0/agent/inbox/${encodeURIComponent(entry.id)}`, { method: "DELETE" }));
+  const addNote = () => {
+    const text = note().trim();
+    if (!text) return;
+    void act("inbox:add", async () => {
+      await api("/v0/agent/inbox", { method: "POST", body: JSON.stringify({ title: "Note", headline: (text.split(/\r?\n/)[0] ?? text).slice(0, 200), body: text, level: "fyi", kind: "note" }) });
+      setNote(""); setAdding(false);
+    });
+  };
+  const entryContext = (entry: AgentInboxEntry) => entry.status === "handled"
+    ? `${entry.title} · ${entry.outcome === "dismissed" ? "dismissed" : "handled"}`
+    : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
+  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Context inbox" count={unhandled() || null}
+    actions={<GroupAction onClick={() => setAdding(true)}>Add</GroupAction>}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inbox()}>{(entry) =>
-        <Row density="list" lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={tally([entry])}
-          context={entry.status === "handled" ? `${entry.title} · handled` : `${entry.title} · for the next heartbeat`} meta={age(entry.at, now())} />}
+        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => setReadingEntry(entry)}
+            lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.kind === "note" || entry.kind === "feedback" ? entry.headline : tally([entry])}
+            context={entryContext(entry)} meta={age(entry.at, now())} />
+          <ContextMenuContent>
+            <ContextMenuGroup>
+              <Show when={entry.status === "unhandled"} fallback={<ContextMenuItem onSelect={() => void editEntry(entry, { action: "reopen" })}><Icons.Undo />Reopen</ContextMenuItem>}>
+                <ContextMenuItem onSelect={() => void editEntry(entry, { action: "handle", outcome: "Handled by the person" })}><Icons.Check />Mark handled</ContextMenuItem>
+                <ContextMenuItem onSelect={() => void editEntry(entry, { action: "dismiss" })}><Icons.Hide />Dismiss</ContextMenuItem>
+              </Show>
+            </ContextMenuGroup>
+            <MenuSection title="For">
+              <ContextMenuItem onSelect={() => void editEntry(entry, { action: "address", for: [] })}>{entry.for?.length ? <Icons.Inbox /> : <Icons.Check />}Any routine</ContextMenuItem>
+              <For each={routines()}>{(routine) =>
+                <ContextMenuItem onSelect={() => void editEntry(entry, { action: "address", for: [routine.id] })}>{entry.for?.length === 1 && entry.for?.[0] === routine.id ? <Icons.Check /> : <Icons.Clock />}{routine.title}</ContextMenuItem>}
+              </For>
+            </MenuSection>
+            <MenuSection><ContextMenuItem variant="destructive" onSelect={() => void deleteEntry(entry)}><Icons.Delete />Delete</ContextMenuItem></MenuSection>
+          </ContextMenuContent>
+        </ContextMenu>}
       </For>
     </Show>
   </SplitGroup>;
@@ -375,6 +419,17 @@ export function AgentPage(props: {
       </Show>
     </Show>
 
+    <Dialog open={readingEntry() !== null} onOpenChange={(open) => { if (!open) setReadingEntry(null); }} title={readingEntry()?.title || ""} close="Close">
+      <Show when={readingEntry()}>{(entry) => <>
+        <For each={(entry().body && entry().body !== entry().headline ? entry().body! : entry().headline).split(/\n{2,}/)}>{(paragraph) => <p>{paragraph}</p>}</For>
+        <Note kind="card" tone="quiet">{entryContext(entry())} · {age(entry().at, now())}</Note>
+      </>}</Show>
+    </Dialog>
+    <Dialog open={adding()} onOpenChange={setAdding} title="Add to the context inbox" close="Cancel" busy={busy() === "inbox:add"}
+      actions={<Button type="button" disabled={!note().trim() || busy() === "inbox:add"} onClick={addNote}>Add</Button>}>
+      <TextArea aria-label="Note" rows={4} autofocus value={note()} placeholder="Something jbot should know or act on…" onInput={(event) => setNote(event.currentTarget.value)}
+        onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) addNote(); }} />
+    </Dialog>
     {/* A run now: a task it works on alone, reporting to the home thread. */}
     <Dialog open={asking()} onOpenChange={setAsking} title="Run a task" close="Cancel" busy={busy() === "wake"}
       actions={<Button type="button" disabled={!task().trim() || busy() === "wake"} onClick={() => void runTask()}>Run <Icons.Proceed /></Button>}>

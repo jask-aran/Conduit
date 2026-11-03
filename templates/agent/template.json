@@ -26,7 +26,7 @@
     "start_chat",
     "steer_chat",
     "approved",
-    "inbox",
+    "conduit_inbox",
     "nothing_to_report",
     "run_failed",
     "message",

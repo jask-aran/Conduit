@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { defineDoc, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
@@ -32,9 +33,9 @@ export async function renderWaitingInbox(agent, state = null) {
     // Whether a report reaches the person's phone is jbot's call (`message` with notify), weighed against how often they want it.
     const dial = `How often the person wants to be interrupted: ${agent.settings().dial} (${DIAL_WORDS[agent.settings().dial] || DIAL_WORDS.normal}).`;
     if (!items.length) return dial;
-    return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with inbox handle:`,
+    return [dial, `Unhandled in your inbox (${items.length}). Tell the person what matters when it fits, then mark it with conduit_inbox handle:`,
       ...items.slice(0, 12).map((item) => line(item, agent.settings().timezone)),
-      ...(items.length > 12 ? [`… and ${items.length - 12} more (inbox list).`] : [])].join("\n");
+      ...(items.length > 12 ? [`… and ${items.length - 12} more (conduit_inbox list).`] : [])].join("\n");
 }
 
 /** Append a run's entry in the caller's commit; idempotent by `key`. Prunes what has been handled a week. */
@@ -58,6 +59,68 @@ export const listInbox = (state, { unhandled = false, for: recipient, kinds, add
     && (!kinds || kinds.includes(item.kind))
     && (recipient === undefined || (item.for?.length ? item.for.includes(recipient) : addressed !== "only")))
   .sort((a, b) => b.at.localeCompare(a.at));
+
+const badInbox = (message) => Object.assign(new Error(message), { status: 400 });
+// Copy entries before the commit closes their tracked overlays.
+const entryCopy = (entry) => JSON.parse(JSON.stringify(entry));
+const missingInbox = () => Object.assign(new Error("No such entry."), { status: 404 });
+const inboxText = (value, name) => {
+  if (typeof value !== "string" || !value.trim()) throw badInbox(`${name} is required.`);
+  return value.trim();
+};
+const recipients = (value) => {
+  if (value === null) return [];
+  const names = typeof value === "string" ? [value] : value;
+  if (!Array.isArray(names) || names.some((name) => typeof name !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(name))) throw badInbox("for must contain routine names.");
+  return [...new Set(names)];
+};
+
+/** Shared mutation functions. Caller identity comes from the route or tool, never the input. */
+export function addInboxEntry(doc, input, { author, by, key = `note:${crypto.randomUUID()}` }) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw badInbox("An entry is required.");
+  const title = inboxText(input.title, "title");
+  const headline = inboxText(input.headline, "headline");
+  if (!["fyi", "attention", "urgent"].includes(input.level)) throw badInbox("level must be fyi, attention or urgent.");
+  if (input.body !== undefined && typeof input.body !== "string") throw badInbox("body must be text.");
+  const kind = input.kind === undefined ? "note" : inboxText(input.kind, "kind");
+  const addressed = input.for === undefined ? {} : { for: recipients(input.for) };
+  return entryCopy(appendEntry(doc, { key, title, headline, kind, level: input.level, status: "unhandled", author, by,
+    ...(input.body === undefined ? {} : { body: input.body }), ...addressed }));
+}
+
+export function editInboxEntries(doc, input, { by, conversationId } = {}) {
+  if (!input || !["handle", "reopen", "address", "dismiss"].includes(input.action)) throw badInbox("Invalid inbox action.");
+  if (input.ids !== undefined && (!Array.isArray(input.ids) || input.ids.some((id) => typeof id !== "string" || !id.trim()))) throw badInbox("ids must contain entry ids.");
+  if (input.id !== undefined && (typeof input.id !== "string" || !input.id.trim())) throw badInbox("id must be an entry id.");
+  const ids = [...new Set([...(input.ids || []), ...(input.id ? [input.id] : [])])];
+  if (!ids.length) throw badInbox("An entry id is required.");
+  const outcome = input.action === "dismiss" ? "dismissed" : input.action === "handle" ? inboxText(input.outcome, "outcome").slice(0, 200) : undefined;
+  const addressed = input.action === "address" ? recipients(input.for) : undefined;
+  const entries = ids.map((id) => { const item = Object.hasOwn(doc.inbox || {}, id) ? doc.inbox[id] : undefined; if (!item) throw missingInbox(); return item; });
+  for (const item of entries) {
+    if (input.action === "address") item.for = addressed;
+    else if (input.action === "reopen") {
+      item.status = "unhandled";
+      delete item.handledAt; delete item.outcome; delete item.handledBy;
+      // Keep arrival time. Move eligibility past all existing routine cursors, even within the same millisecond.
+      const cursors = Object.values(doc.cursors || {}).flatMap((tasks) => Object.values(tasks));
+      item.reopenedAt = new Date(Math.max(Date.now(), ...cursors.map((cursor) => (Date.parse(cursor.since || "") || 0) + 1))).toISOString();
+    } else if (item.status !== "handled") {
+      item.status = "handled";
+      item.handledAt = new Date().toISOString();
+      item.outcome = outcome;
+      if (conversationId !== undefined) item.handledBy = conversationId;
+    }
+    if (by !== undefined) item.by = by;
+  }
+  return entries.map(entryCopy);
+}
+
+export function deleteInboxEntry(doc, id) {
+  const item = Object.hasOwn(doc.inbox || {}, id) ? doc.inbox[id] : undefined;
+  if (!item) throw missingInbox();
+  delete doc.inbox[id];
+}
 
 const LEVEL_LABEL = { fyi: "FYI", attention: "ATTENTION", urgent: "URGENT", failed: "FAILED" };
 /* An entry's line says when it came, not how long ago: a line that ages every turn would be a different section every
@@ -107,52 +170,7 @@ export function InboxTools(runtime) {
     replay: "safe",
     execute: ending("failed"),
   });
-  const inbox = defineTool({
-    name: "inbox",
-    description: "Your inbox: what your runs reported and has not been dealt with. list (unhandled; all:true for the week), "
-      + "read (id: the run's whole report), handle (ids, outcome: what you did with them, in a few words).",
-    parameters: Type.Object({
-      action: Type.Union([Type.Literal("list"), Type.Literal("read"), Type.Literal("handle")]),
-      id: Type.Optional(Type.String()),
-      ids: Type.Optional(Type.Array(Type.String())),
-      outcome: Type.Optional(Type.String()),
-      all: Type.Optional(Type.Boolean()),
-    }),
-    replay: "safe",
-    execute: async ({ action, id, ids, outcome, all }, api, context) => {
-      const agent = runtime.agent;
-      if (!agent?.enabled()) return result("The agent is not enabled.", true);
-      const state = await api.snapshot(AgentDoc, context);
-      if (action === "list") {
-        const items = listInbox(state, { unhandled: !all });
-        return result(items.map((item) => `${line(item, agent.settings().timezone)}${item.status === "handled" ? ` [handled: ${item.outcome || "done"}]` : ""}`).join("\n")
-          || (all ? "The inbox is empty." : "Nothing waits in the inbox."));
-      }
-      if (action === "read") {
-        const item = id && state?.inbox?.[id];
-        if (!item) return result("No such entry.", true);
-        const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
-        return result(`${line(item, agent.settings().timezone)}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
-      }
-      const wanted = [...new Set([...(ids || []), ...(id ? [id] : [])])];
-      if (!wanted.length || !outcome?.trim()) return result("ids and an outcome are required.", true);
-      const done = await api.commit(async (tx) => {
-        const doc = await tx.doc(AgentDoc);
-        const marked = [];
-        for (const key of wanted) {
-          const item = doc.inbox?.[key];
-          if (!item || item.status === "handled") continue;
-          item.status = "handled";
-          item.handledAt = new Date().toISOString();
-          item.outcome = outcome.trim().slice(0, 200);
-          item.handledBy = api.conversationId;
-          marked.push(key);
-        }
-        return marked;
-      }, context);
-      return result(done.length ? `Handled ${done.join(", ")}.` : "Nothing to mark: those are handled or unknown.");
-    },
-  });
+  const inbox = ConduitInboxTool(runtime);
   // The home thread sees what waits, each turn, so a person who talks first is never told stale news.
   const waiting = section("agent-inbox", async (input) => {
     const agent = runtime.agent;
@@ -162,4 +180,56 @@ export function InboxTools(runtime) {
     return renderWaitingInbox(agent, state);
   });
   return { tools: [quiet, failed, inbox], sections: [waiting] };
+}
+
+export function ConduitInboxTool(runtime) {
+  return defineTool({
+    name: "conduit_inbox",
+    description: "The hub's context inbox, shared by all callers. No client parameter. "
+      + "list (unhandled defaults true; kind and for filter), read (id), handle (id or ids, outcome), "
+      + "reopen (clear handling), address (for: routine names; [] or null clears), add (title, headline, body?, "
+      + "level: fyi|attention|urgent, kind defaults note, for?), dismiss (handle with outcome dismissed). There is no delete action.",
+    parameters: Type.Object({
+      action: Type.Union(["list", "read", "handle", "reopen", "address", "add", "dismiss"].map((value) => Type.Literal(value))),
+      id: Type.Optional(Type.String()),
+      ids: Type.Optional(Type.Array(Type.String())),
+      outcome: Type.Optional(Type.String()),
+      all: Type.Optional(Type.Boolean({ description: "Include handled entries (legacy shorthand for unhandled:false)." })),
+      unhandled: Type.Optional(Type.Boolean()),
+      kind: Type.Optional(Type.String()),
+      for: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String()), Type.Null()], { description: "list: one routine name; add/address: names, [] or null to clear." })),
+      title: Type.Optional(Type.String()),
+      headline: Type.Optional(Type.String()),
+      body: Type.Optional(Type.String()),
+      level: Type.Optional(Type.Union(["fyi", "attention", "urgent"].map((value) => Type.Literal(value)))),
+    }),
+    replay: "safe",
+    execute: async (args, api = {}, context) => {
+      const agent = runtime.agent;
+      if (!agent?.enabled()) return result("The agent is not enabled.", true);
+      const state = await agent.state();
+      try {
+        if (args.action === "list") {
+          if (args.for !== undefined && typeof args.for !== "string") throw badInbox("list for must be a routine name.");
+          const items = listInbox(state, { unhandled: args.unhandled ?? !args.all, kinds: args.kind ? [args.kind] : undefined, for: args.for });
+          return result(items.map((item) => `${line(item, agent.settings().timezone)}${item.status === "handled" ? ` [handled: ${item.outcome || "done"}]` : ""}`).join("\n") || "Nothing waits in the inbox.");
+        }
+        if (args.action === "read") {
+          const item = Object.hasOwn(state.inbox || {}, args.id) ? state.inbox[args.id] : undefined;
+          if (!item) throw missingInbox();
+          const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
+          return result(`${line(item, agent.settings().timezone)}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
+        }
+        const change = (doc) => {
+          if (args.action === "add") return addInboxEntry(doc, args, { author: api.conversationId ?? "mcp", by: api.conversationId ?? "mcp", key: api.callId ? `inbox:${api.callId}` : undefined });
+          return editInboxEntries(doc, args, { by: api.conversationId ?? "mcp", conversationId: api.conversationId });
+        };
+        const done = api.commit ? await api.commit(async (tx) => change(await tx.doc(AgentDoc)), context) : await agent.update(change);
+        return result(JSON.stringify(done));
+      } catch (error) {
+        if (error.status === 400 || error.status === 404) return result(error.message, true);
+        throw error;
+      }
+    },
+  });
 }

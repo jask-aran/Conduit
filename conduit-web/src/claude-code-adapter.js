@@ -504,7 +504,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
       // Conduit's own tools (mcp-endpoint.js: its panes, the hub's browser) when it runs on the hub, which reaches them.
       ...(mcpAccess.url && !this.processes(record).sdkSpawn ? { mcpServers: {
-        "conduit-ui": { type: "http", url: mcpAccess.url, headers: { Authorization: `Bearer ${mcpAccess.token}` } },
+        "conduit": { type: "http", url: mcpAccess.url, headers: { Authorization: `Bearer ${mcpAccess.token}` } },
         // The hub's browser: agent-browser's own server, on the page the person shares (browser-host.js).
         ...(mcpAccess.browser ? { "agent-browser": { type: "stdio", ...mcpAccess.browser } } : {}),
       } } : {}),

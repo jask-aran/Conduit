@@ -11,7 +11,7 @@ import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
 import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
-import { appendEntry } from "../../agent/inbox.js";
+import { addInboxEntry, appendEntry, deleteInboxEntry, editInboxEntries } from "../../agent/inbox.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
 
@@ -39,6 +39,9 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
+ * POST /v0/agent/inbox              add context as the signed-in person { title, headline, body?, level, kind?, for? }
+ * PATCH /v0/agent/inbox/:id         { action: handle|reopen|address|dismiss, outcome?, for? }
+ * DELETE /v0/agent/inbox/:id        hard delete, person only
  * POST /v0/agent/feedback           feedback about a jbot app message { messageId, text }; returns { id }
  * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
  * POST /v0/agent/proposals/:id/{accept,reject}
@@ -162,6 +165,39 @@ export function registerAgentRoutes(app, { agent, backends }) {
       await agent.connectors.disconnect(request.params.id);
       response.status(204).end();
     } catch (error) { next(error); }
+  });
+
+  app.post("/v0/agent/inbox", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const entry = await agent.update((doc) => addInboxEntry(doc, request.body, { author: "person", by: "person" }));
+      response.status(201).json(entry);
+    } catch (error) {
+      if ([400, 404].includes(error.status)) return response.status(error.status).json({ error: error.message });
+      next(error);
+    }
+  });
+  app.patch("/v0/agent/inbox/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const entry = await agent.update((doc) => editInboxEntries(doc, {
+        action: request.body?.action, outcome: request.body?.outcome, for: request.body?.for, id: request.params.id,
+      }, { by: "person" })[0]);
+      response.json(entry);
+    } catch (error) {
+      if ([400, 404].includes(error.status)) return response.status(error.status).json({ error: error.message });
+      next(error);
+    }
+  });
+  app.delete("/v0/agent/inbox/:id", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      await agent.update((doc) => deleteInboxEntry(doc, request.params.id));
+      response.status(204).end();
+    } catch (error) {
+      if ([400, 404].includes(error.status)) return response.status(error.status).json({ error: error.message });
+      next(error);
+    }
   });
 
   app.post("/v0/agent/feedback", async (request, response, next) => {

@@ -47,5 +47,5 @@ the brief", and leave it out of the report.
 
 How many came in and from where, then each entry under its own short heading
 with its facts, its links and the context you found; a line is enough for what
-is not worth digging into. Mark the entries with `inbox` handle, outcome
+is not worth digging into. Mark the entries with `conduit_inbox` handle, outcome
 "Reported to jbot".

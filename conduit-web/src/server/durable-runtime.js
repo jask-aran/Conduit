@@ -342,7 +342,7 @@ export class DurableRuntime {
       const web = await this.webTools();
       if (web) install(web);
       install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
-        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with ui, view browser:hub)",
+        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with conduit_ui, view browser:hub)",
         instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] }));
       this.refreshConnectors = () => {
         // In name order, and only when something about them changed: a reconnect that lists the same tools in another
@@ -570,7 +570,7 @@ export class DurableRuntime {
     const extensions = [...new Set(["conduit", "ui", "skills", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode", "browser"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, "ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
+    const wanted = new Set([...ALWAYS, "conduit_ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
       ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])

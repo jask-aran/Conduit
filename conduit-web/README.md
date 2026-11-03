@@ -1077,3 +1077,43 @@ Existing processes need a restart to inherit this setting. Shell prompts with
 their own discovery may still show the enclosing repository. This is a discovery
 boundary, not a restriction on explicit Git paths. Runtime data defaults to
 `~/.conduit/data` and can be moved with `CONDUIT_DATA_ROOT`.
+
+### Conduit MCP and context inbox
+
+The `conduit` MCP server uses Streamable HTTP at `/v0/mcp`.
+`/v0/mcp/ui` remains an alias for existing configs. A hub MCP bearer token or
+a signed-in session permits access. Settings › AI › Tools provides the URL
+and `[mcp_servers.conduit]` config at `GET /v0/mcp/access`.
+
+`conduit_ui` reads and arranges client tabs; `client` defaults to the tab in use.
+`conduit_inbox` reads and edits the hub's shared context inbox. It has no client
+parameter. Both tools have the same names for native agents and MCP callers.
+Inbox actions are `list`, `read`, `handle`, `reopen`, `address`, `add`, and
+`dismiss`. `list` accepts `unhandled` (default true), `kind`, and `for` (one
+routine name, including unaddressed entries). `id` or `ids` selects entries
+for edits; `read` uses `id`. `handle` requires `outcome`; `dismiss` handles with
+outcome `dismissed`. `address` sets `for` to routine names; `[]` or `null`
+clears it. `add` requires `title`, `headline`, and `level`
+(`fyi|attention|urgent`); `body`, `kind` (default `note`), and `for` are optional.
+Agent additions record the calling conversation as author. MCP calls need no
+conversation and record `by: "mcp"`; MCP additions use author `mcp`.
+
+The signed-in person's HTTP routes use the same inbox functions:
+
+| Method and path | Input | Success |
+| --- | --- | --- |
+| `POST /v0/agent/inbox` | Add fields above; author is always `person` | 201, entry |
+| `PATCH /v0/agent/inbox/:id` | `{ action: handle\|reopen\|address\|dismiss, outcome?, for? }` | 200, entry |
+| `DELETE /v0/agent/inbox/:id` | None; hard delete, person only | 204 |
+
+Invalid input returns 400; an unknown entry returns 404. A disabled agent
+returns 409. Inbox entries, including person-authored ones, never enter
+`personWords` or become approval intent. Only the person's routes can hard
+delete entries; the tool cannot. `GET /v0/agent` reads current inbox state on
+every request. The page uses the existing polling path, as for routines.
+
+`reopen` clears `handledAt`, `handledBy`, and `outcome`. It preserves arrival
+time and sets `reopenedAt` beyond existing routine cursors. Inbox tasks apply
+status, recipient, and kind filters before comparing that eligibility time
+with their cursor, so the matching routines receive the reopened entry again.
+The routine task kind and frontmatter `kind: inbox` keep their names.

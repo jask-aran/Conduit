@@ -25,7 +25,7 @@ const routineFile = (folder, name, args) => {
 };
 /** Calls that read the person's own data, which taint the conversation: theirs directly, or what a source gathered of it. */
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action), feed: (args) => args?.action === "test",
-  routine: (args) => args?.action === "test", inbox: (args) => args?.action === "read" };
+  routine: (args) => args?.action === "test", conduit_inbox: (args) => args?.action === "read" };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
 
 /*

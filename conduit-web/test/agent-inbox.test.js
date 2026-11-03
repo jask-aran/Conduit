@@ -35,7 +35,7 @@ test("addressing and kind filters leave the person's full inbox visible", async 
   assert.deepEqual(keys({ for: "review", kinds: ["task"] }), ["other", "empty-address", "mail"]);
   const correction = listInbox(state).find((item) => item.key === "correction");
   assert.match(entryText(correction, "UTC"), /for: reflect, review/);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
   const listed = await tool.execute({ action: "list" }, api);
   assert.match(listed.output[0].text, /for: reflect, review/);
   for (const key of keys()) assert.ok(listed.output[0].text.includes(key));
@@ -63,7 +63,7 @@ test("handled context stays seven days while unhandled context does not expire",
 test("handling context removes it from waiting without deleting its outcome", async (t) => {
   const { agent, api } = await agentFixture(t);
   const id = await agent.update((doc) => appendEntry(doc, entry("news"), now).id);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
   await tool.execute({ action: "handle", ids: [id], outcome: "Added to brief" }, api);
   const state = await agent.state();
   assert.deepEqual(listInbox(state, { unhandled: true }), []);
@@ -72,4 +72,92 @@ test("handling context removes it from waiting without deleting its outcome", as
   assert.equal(state.inbox[id].handledBy, api.conversationId);
   await tool.execute({ action: "handle", ids: [id], outcome: "Replacement" }, api);
   assert.equal((await agent.state()).inbox[id].outcome, "Added to brief");
+});
+
+test("native inbox edits keep caller identity and support filters, addressing, reopening and dismissal", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const call = async (args) => {
+    const response = await tool.execute(args, api);
+    assert.ok(!response.isError, response.output[0].text);
+    return response.output[0].text;
+  };
+  const item = JSON.parse(await call({ action: "add", title: "Check", headline: "Agent context", body: "Detail", level: "attention", for: ["reflect"], author: "person" }));
+  assert.equal(item.author, api.conversationId);
+  assert.equal(item.kind, "note");
+  assert.match(await call({ action: "read", id: item.id }), /Detail/);
+  assert.match(await call({ action: "list", kind: "note", for: "reflect" }), /Agent context/);
+  assert.doesNotMatch(await call({ action: "list", kind: "feedback" }), /Agent context/);
+  assert.doesNotMatch(await call({ action: "list", for: "heartbeat" }), /Agent context/);
+  await call({ action: "address", id: item.id, for: [] });
+  assert.match(await call({ action: "list", for: "heartbeat" }), /Agent context/);
+  await call({ action: "address", id: item.id, for: "reflect" });
+  await call({ action: "handle", id: item.id, outcome: "Read" });
+  assert.doesNotMatch(await call({ action: "list" }), /Agent context/);
+  assert.match(await call({ action: "list", unhandled: false }), /Agent context/);
+  await call({ action: "reopen", id: item.id });
+  const reopened = (await agent.state()).inbox[item.id];
+  assert.equal(reopened.status, "unhandled");
+  for (const field of ["outcome", "handledAt", "handledBy"]) assert.equal(reopened[field], undefined);
+  assert.equal(reopened.at, item.at);
+  await call({ action: "dismiss", id: item.id });
+  assert.equal((await agent.state()).inbox[item.id].outcome, "dismissed");
+  for (const args of [{ action: "delete", id: item.id }, { action: "address", id: item.id },
+    { action: "handle", id: item.id }, { action: "add", title: "No level", headline: "Missing" },
+    { action: "dismiss", ids: [item.id, "missing"] }, { action: "reopen", id: "__proto__" }]) {
+    assert.equal((await tool.execute(args, api)).isError, true);
+  }
+});
+
+test("person inbox routes share edits, return current entries and reject invalid input", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  const { registerAgentRoutes } = await import("../src/server/routes/agent.js");
+  const { personWords } = await import("../src/agent/person-words.js");
+  // Give personWords a real, empty conversation to scan.
+  api.conversationId = await agent.update(async (doc, tx) => {
+    const home = await tx.createConversation({ ownership: { kind: "ownerless" } });
+    doc.home.conversationId = home.id;
+    return home.id;
+  });
+  const routes = new Map();
+  const app = Object.fromEntries(["get", "post", "patch", "delete", "put"].map((verb) => [verb, (path, handler) => routes.set(`${verb} ${path}`, handler)]));
+  registerAgentRoutes(app, { agent });
+  const request = async (verb, body, id) => {
+    let status = 200, payload;
+    const response = { status(value) { status = value; return this; }, json(value) { payload = value; return this; }, end() {} };
+    await routes.get(`${verb} /v0/agent/inbox${verb === "post" ? "" : "/:id"}`)({ body, params: { id } }, response, (error) => { throw error; });
+    return { status, body: payload };
+  };
+  const added = await request("post", { title: "Person note", headline: "Context only", level: "fyi", author: "impostor", handledBy: 42 });
+  assert.equal(added.status, 201);
+  const id = added.body.id;
+  assert.equal(added.body.author, "person");
+  assert.equal(added.body.by, "person");
+  assert.equal(added.body.handledBy, undefined);
+  assert.ok((await agent.view()).inbox.some((entry) => entry.id === id));
+  assert.deepEqual((await personWords(agent, api.conversationId)).messages, []);
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  await tool.execute({ action: "add", title: "Agent note", headline: "Not intent", level: "fyi", author: "person" }, api);
+  assert.deepEqual((await personWords(agent, api.conversationId)).messages, []);
+  for (const body of [undefined, {}, { title: "", headline: "x", level: "fyi" }, { title: "x", headline: "x", level: "failed" },
+    { title: "x", headline: "x", level: "fyi", body: 2 }, { title: "x", headline: "x", level: "fyi", for: ["Bad Name"] }]) {
+    assert.equal((await request("post", body)).status, 400);
+  }
+  assert.equal((await request("patch", { action: "handle" }, id)).status, 400);
+  assert.equal((await request("patch", { action: "delete" }, id)).status, 400);
+  assert.equal((await request("patch", { action: "address", for: [2] }, id)).status, 400);
+  for (const action of ["reopen", "dismiss", "address", "handle"]) {
+    assert.equal((await request("patch", { action, outcome: "Done", for: [] }, "missing")).status, 404);
+  }
+  for (const body of [{ action: "address", for: ["reflect"] }, { action: "address", for: null },
+    { action: "handle", outcome: "Used" }, { action: "reopen" }, { action: "dismiss" }]) {
+    const response = await request("patch", body, id);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.id, id);
+    assert.deepEqual((await agent.view()).inbox.find((entry) => entry.id === id), response.body);
+  }
+  assert.equal((await agent.state()).inbox[id].outcome, "dismissed");
+  assert.equal((await request("delete", undefined, id)).status, 204);
+  assert.equal((await request("delete", undefined, id)).status, 404);
+  assert.ok(!(await agent.view()).inbox.some((entry) => entry.id === id));
 });

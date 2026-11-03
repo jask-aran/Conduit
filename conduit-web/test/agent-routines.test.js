@@ -220,15 +220,15 @@ test("a fork can handle only inbox entries supplied in its task blocks", async (
   const { agent, api } = await agentFixture(t);
   const id = await agent.update((doc) => appendEntry(doc, { ...news("feedback", "unhandled"), for: ["reflect"] }, now).id);
   const record = { outcome: { inboxIds: [id] } };
-  assert.equal(forkAllows(agent, record, "inbox", { action: "handle", ids: [id] }), true);
-  assert.equal(forkAllows(agent, record, "inbox", { action: "handle", id }), true);
+  assert.equal(forkAllows(agent, record, "conduit_inbox", { action: "handle", ids: [id] }), true);
+  assert.equal(forkAllows(agent, record, "conduit_inbox", { action: "handle", id }), true);
   for (const args of [{ action: "list" }, { action: "read", id }, { action: "handle" },
     { action: "handle", ids: [id, "not-gathered"] }, { action: "handle", ids: [id], id: "not-gathered" }]) {
-    assert.equal(forkAllows(agent, record, "inbox", args), false);
+    assert.equal(forkAllows(agent, record, "conduit_inbox", args), false);
   }
-  assert.equal(forkAllows(agent, {}, "inbox", { action: "handle", id }), false);
+  assert.equal(forkAllows(agent, {}, "conduit_inbox", { action: "handle", id }), false);
   const { InboxTools } = await import("../src/agent/inbox.js");
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "inbox");
+  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
   await tool.execute({ action: "handle", ids: [id], outcome: "Added USER directive" }, api);
   assert.equal((await agent.state()).inbox[id].status, "handled");
 });
@@ -934,4 +934,28 @@ test("schedule listings describe rule lists and leave dormant schedules dormant"
   assert.equal(schedule.cadence, "hourly; every 2 hours in quiet hours");
   assert.equal(schedule.everyMinutes, 60);
   assert.equal(schedule.nextAt, null);
+});
+
+test("reopening old context offers it again past each matching routine's cursor", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  const id = await agent.update((doc) => appendEntry(doc, { ...news("old", "unhandled"), for: ["heartbeat", "reflect"] }, now - 1000).id);
+  const heartbeat = routine();
+  const reflect = { ...routine(), name: "reflect" };
+  const first = await executeRoutine(agent, heartbeat, { state: await agent.state(), now });
+  await agent.update((doc) => {
+    doc.cursors = { heartbeat: first.cursors, reflect: { arrivals: { since: new Date(now + 5000).toISOString() } } };
+  });
+  const { ConduitInboxTool } = await import("../src/agent/inbox.js");
+  const tool = ConduitInboxTool(agent.runtime);
+  await tool.execute({ action: "handle", id, outcome: "Done" }, api);
+  await tool.execute({ action: "reopen", id }, api);
+  const state = await agent.state();
+  assert.equal(state.inbox[id].at, new Date(now - 1000).toISOString());
+  assert.ok(Date.parse(state.inbox[id].reopenedAt) > now + 5000);
+  for (const plan of [heartbeat, reflect]) {
+    const second = await executeRoutine(agent, plan, { state, now, cursors: state.cursors[plan.name] });
+    assert.deepEqual(second.inboxIds, [id]);
+    assert.equal((await executeRoutine(agent, plan, { state, now, cursors: second.cursors })).run, false);
+  }
+  assert.equal((await executeRoutine(agent, { ...routine(), name: "other" }, { state, now })).run, false);
 });

@@ -571,7 +571,7 @@ app.get("/client-bundle/:build.zip", async (request, response, next) => {
 const mcpRuntime = {};
 // Where this server listens, as a harness on this machine reaches it: loopback unless it is bound to one address only.
 const mcpHost = /^(0\.0\.0\.0|::|\[::\]|)$/.test(config.host || "") ? "127.0.0.1" : String(config.host).includes(":") && !String(config.host).startsWith("[") ? `[${config.host}]` : config.host;
-Object.assign(mcpAccess, { url: `http://${mcpHost}:${config.port}/v0/mcp/ui`, token: mcpToken(config.dataRoot) });
+Object.assign(mcpAccess, { url: `http://${mcpHost}:${config.port}/v0/mcp`, token: mcpToken(config.dataRoot) });
 const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
 app.use(mcp.beforeAuth);
 
@@ -799,6 +799,8 @@ if (durableAdapter) {
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;
 registerPushRoutes(app, { push, hubId: () => serverIdentity.id, agent: persistentAgent });
 if (persistentAgent) {
+  mcpRuntime.agent = persistentAgent;
+  mcpRuntime.lastAnswer = (...args) => durableAdapter.runtime.lastAnswer(...args);
   persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
@@ -1220,6 +1222,6 @@ front.listen(config.port, config.host, () => {
   // an address nothing listens on is worse than no advertisement at all.
   lanAdvertisement.start(front.address().port);
   // The port it really listens on, for the harnesses given the MCP endpoint.
-  mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp/ui`;
+  mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp`;
   void warmModelCatalogue();
 });

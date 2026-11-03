@@ -20,7 +20,7 @@ const live = {
   "live-jbot-files": { label: "jbot's files", description: "jbot's soul, what it knows of the person, its memory and today's diary, as they stand each turn (16k characters at most: provenance lines go first). The section has no wrapper of its own.",
     template: "<soul>\n{{SOUL.md}}\n</soul>\n\n<user>\n{{USER.md, without its fields}}\n</user>\n\n<memory>\n{{MEMORY.md}}\n</memory>\n\n<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>" },
   "live-inbox": { label: "Waiting inbox", tag: "agent-inbox", description: "How often the person wants interrupting, and what is unhandled in jbot's inbox. Home thread only.",
-    template: "<agent-inbox>\nHow often the person wants to be interrupted: {{dial}} ({{what the dial means}}).\nUnhandled in your inbox ({{count}}). Tell the person what matters when it fits, then mark it with inbox handle:\n{{each unhandled entry, twelve at most}}\n</agent-inbox>" },
+    template: "<agent-inbox>\nHow often the person wants to be interrupted: {{dial}} ({{what the dial means}}).\nUnhandled in your inbox ({{count}}). Tell the person what matters when it fits, then mark it with conduit_inbox handle:\n{{each unhandled entry, twelve at most}}\n</agent-inbox>" },
   "live-routine-context": { label: "Routine's context", description: "The files the routine opts into (its context: list), each in its own tag.",
     template: "<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>\n\n<{{user | memory | soul}}>\n{{the file, as it stands}}\n</{{user | memory | soul}}>" },
   "live-subagent-task": { label: "Task", description: "The task the parent hands it, whole: goal, context, constraints, what to report.",

@@ -4,7 +4,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 
 /*
  * Agents drive Conduit's UI (roadmap #11): what each open tab of Conduit shows, as it tells us (client agent-ui.ts),
- * and commands sent to one tab over its runtime stream, answered over HTTP. The `ui` tool (UiTool) is how Conduit's own
+ * and commands sent to one tab over its runtime stream, answered over HTTP. The `conduit_ui` tool (UiTool) is how Conduit's own
  * agents use it; GET /v0/ui and POST /v0/ui/commands are the same for a CLI or an MCP server.
  *
  * A tab is `connection/tab`: tabs of one browser share a stream (its connection), each with its own id. With none
@@ -76,7 +76,7 @@ export class UiControl {
 
 const rank = (view) => (view.focused ? 2e13 : 0) + (view.visible ? 1e13 : 0) + view.at;
 
-/** The `ui` tool's description of a look: one line per tab, then its panes. */
+/** The `conduit_ui` tool's description of a look: one line per tab, then its panes. */
 export function describeLook(tabs) {
   if (!tabs.length) return "Conduit is not open anywhere right now.";
   return tabs.map((tab, index) => [
@@ -86,13 +86,13 @@ export function describeLook(tabs) {
 }
 
 /**
- * The `ui` tool: an agent sees what the person has open in Conduit and arranges it, as they would. Every profile's
+ * The `conduit_ui` tool: an agent sees what the person has open in Conduit and arranges it, as they would. Every profile's
  * chats have it; a subagent's child does not (no one is watching it work).
  */
 export function UiTool(runtime) {
   const text = (value, isError = false) => ({ output: [{ type: "text", text: value }], ...(isError ? { isError: true } : {}) });
   return defineTool({
-    name: "ui",
+    name: "conduit_ui",
     description: "See and arrange what the person has open in Conduit. look: each open Conduit tab or app (the one in use first) "
       + "with its panes, what each shows and which has the keyboard. open: show something -- chat:<id>, page:dashboard, "
       + "page:agent, page:project:<id>, browser:hub (the hub's browser, which you work through the agent_browser tools), terminal or files -- in a pane (pane: main or a number; default the one with the "

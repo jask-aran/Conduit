@@ -69,7 +69,7 @@ Built (2026-10-29): **quiet runs and the inbox** (`conduit-web/src/agent/inbox.j
 `nothing_to_report` (no entry, only its history) or `run_failed` (a reason), else its first word sets the level as
 before. The reporter appends every other result to `AgentDoc.inbox`; a brief, a task the person started, the
 heartbeat's own decision, an urgent report and a run with asks waiting are told at once and land handled. The rest
-wait unhandled, shown each turn of the home thread (section `agent-inbox`) and handled with the `inbox` tool;
+wait unhandled, shown each turn of the home thread (section `agent-inbox`) and handled with the `conduit_inbox` tool;
 the page lists them under Inbox. The heartbeat makes no model call when the inbox is empty and HEARTBEAT.md lists
 nothing.
 

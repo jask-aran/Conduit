@@ -262,7 +262,7 @@ export function registerRuntimeRoutes(app, {
   app.post("/v0/runtime/clients/:id/commands/:command", (request, response) => {
     response.status(uiControl.answer(request.params.id, request.params.command, request.body) ? 204 : 404).end();
   });
-  // The same as the `ui` tool, for a CLI or an MCP server: every open tab and its panes; a command to one of them.
+  // The same as the `conduit_ui` tool, for a CLI or an MCP server: every open tab and its panes; a command to one of them.
   app.get("/v0/ui", (_request, response) => response.json({ tabs: uiControl.look() }));
   app.post("/v0/ui/commands", async (request, response) => {
     const { action, view, pane, beside, client } = request.body || {};

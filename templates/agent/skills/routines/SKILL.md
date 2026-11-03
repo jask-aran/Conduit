@@ -75,7 +75,7 @@ What the run should do with what was gathered, and what to tell jbot.
     In `reflect.md`, this reads only feedback addressed to `reflect`. Heartbeat
     keeps its plain inbox task and receives unaddressed email. Morning brief
     keeps `all: true` and receives unaddressed entries, handled or not.
-    The person's inbox tool and agent page still show all recipients. Each
+    The `conduit_inbox` tool and agent page still show all recipients. Each
     addressed entry carries `for` and retains its `headline`.
   - `calendar` (`account`, `calendars?`, `days?` 1 to 14)
   - `chats`
@@ -91,7 +91,7 @@ What the run should do with what was gathered, and what to tell jbot.
   fork at the latest home-thread entry, with the home model, prompt and tools.
   It waits for an active home turn, up to 30 minutes. Only its memory tool
   has home rights. It can read local files, write its report file, and use
-  `inbox` handle only for entries supplied by its inbox tasks. It cannot
+  `conduit_inbox` handle only for entries supplied by its inbox tasks. It cannot
   message, notify, post, ask for approval or start other work. The fork is
   discarded after it stops. Both modes fill the body variables and task blocks.
 - **before**: an ordered list of `{ routine: name, ifMissedSince: last }`.

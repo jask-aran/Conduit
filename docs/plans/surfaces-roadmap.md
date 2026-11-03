@@ -128,7 +128,7 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   a WebSocket with mouse, key and touch input, not H.264 -- proxied through the hub behind Conduit's sign-in
   (`server/browser-host.js`, `routes/browsers.js`, `/v0/browsers/hub/stream`); and the session starts on first use
   rather than at boot, then stays open, across a restart of Conduit too. The person opens it from an empty pane
-  (Browser) or an agent with `ui` (`browser:hub`); the pane (`client/browser/browser-pane.tsx`) has back, forward,
+  (Browser) or an agent with `conduit_ui` (`browser:hub`); the pane (`client/browser/browser-pane.tsx`) has back, forward,
   reload and an address bar, follows the page's URL and title, and sets the page's viewport to its size. Agents share
   the page through agent-browser's own MCP server on the same session, not a tool of Conduit's, so the engine can be
   swapped (Browser Use, a cloud browser) later: Conduit's agents load its tools into codemode (a `browser` namespace;
@@ -161,9 +161,9 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
 - [x] 11. Agents drive Conduit's UI through an MCP server or a code-mode CLI: know what the person is looking at;
   open, close and focus panes; use the browser. Every open tab tells the server its panes (what each shows, which has
   the keyboard, whether the tab is in use; `client/agent-ui.ts`), and the server sends a command to one tab over its
-  runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have `ui` (look, open, close,
+  runtime stream and waits for its answer (`server/ui-control.js`). Conduit's agents have `conduit_ui` (look, open, close,
   focus) in every profile, from codemode in Coding, not in subagents, and the browser through agent-browser's tools
-  (#7). Other harnesses get `ui` from the conduit-ui MCP server (`server/mcp-endpoint.js`, `/v0/mcp/ui`, Streamable
+  (#7). Other harnesses get `conduit_ui` from the conduit MCP server (`server/mcp-endpoint.js`, `/v0/mcp` (alias `/v0/mcp/ui`), Streamable
   HTTP; a Conduit session or the hub's token, `data/mcp-token`) and the browser from agent-browser's own MCP server on
   the shared session: Claude Code chats Conduit starts on the hub are given both; Codex and other MCP clients take
   an entry for each copied from Settings › AI › Tools. Not yet: Claude Code running on a

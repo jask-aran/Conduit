@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import { validateToolArguments } from "@earendil-works/pi-ai";
+import { ConduitInboxTool } from "../agent/inbox.js";
 import { UiTool } from "./ui-control.js";
 import { mcpAccess } from "./mcp-access.js";
 
 /*
- * conduit-ui, Conduit as an MCP server (roadmap #11): the `ui` tool Conduit's own agents have -- what the person has
+ * conduit, Conduit as an MCP server (roadmap #11): the `conduit_ui` tool Conduit's own agents have -- what the person has
  * open, and opening, closing and focusing panes -- for every other harness: Claude Code (given it when Conduit starts
  * one on the hub), Codex and any MCP client (added by hand, from Settings › AI › Tools). The hub's browser is not here:
  * harnesses are given agent-browser's own MCP server on the shared session (browser-host.js), so its engine can change
@@ -40,7 +41,7 @@ const safeEqual = (a, b) => {
  * `afterAuth`: the same endpoint for a signed-in caller.
  */
 export function createMcpEndpoint({ runtime, token, version = "" }) {
-  const tools = () => [UiTool(runtime)];
+  const tools = () => [UiTool(runtime), ConduitInboxTool(runtime)];
   const reply = (id, result) => ({ jsonrpc: "2.0", id, result });
   const fail = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
@@ -48,8 +49,8 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
     const { id, method, params } = message || {};
     if (method === "initialize") {
       return reply(id, { protocolVersion: typeof params?.protocolVersion === "string" ? params.protocolVersion : PROTOCOL,
-        capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit-ui", title: "Conduit UI", version },
-        instructions: "Conduit, the workspace the person is using: see what they have open and arrange their panes (ui). The hub's browser they share with you is agent-browser's own server (its pane is browser:hub)." });
+        capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit", title: "Conduit", version },
+        instructions: "Conduit itself, the app the person uses: what is on their screens (conduit_ui, targets a client tab, default the one in use) and the hub's own state (conduit_inbox, shared context inbox; no client parameter). More hub areas can follow. The hub's shared browser uses agent-browser's own server (pane browser:hub)." });
     }
     if (method === "ping") return reply(id, {});
     if (method === "tools/list") {
@@ -82,27 +83,27 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
 
   const json = express.json({ limit: "256kb" });
   const beforeAuth = express.Router();
-  beforeAuth.get("/v0/mcp/ui", (request, response, next) => {
+  beforeAuth.get(["/v0/mcp", "/v0/mcp/ui"], (request, response, next) => {
     const bearer = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     return bearer && safeEqual(bearer, token) ? refuseGet(request, response) : next();
   });
-  beforeAuth.post("/v0/mcp/ui", (request, response, next) => {
+  beforeAuth.post(["/v0/mcp", "/v0/mcp/ui"], (request, response, next) => {
     const bearer = String(request.headers.authorization || "").replace(/^Bearer\s+/i, "");
     if (!bearer || !safeEqual(bearer, token)) return next();
     json(request, response, (error) => error ? response.status(400).json(fail(null, -32700, "Parse error")) : void handle(request, response));
   });
   const afterAuth = express.Router();
-  afterAuth.get("/v0/mcp/ui", refuseGet);
-  afterAuth.post("/v0/mcp/ui", (request, response) => void handle(request, response));
+  afterAuth.get(["/v0/mcp", "/v0/mcp/ui"], refuseGet);
+  afterAuth.post(["/v0/mcp", "/v0/mcp/ui"], (request, response) => void handle(request, response));
   // For a signed-in person adding it to another harness (Settings › AI › Tools): where it is, and Codex's entry.
-  // For a signed-in person adding them to another harness (Settings › AI › Tools): conduit-ui, and agent-browser on the
+  // For a signed-in person adding them to another harness (Settings › AI › Tools): conduit, and agent-browser on the
   // shared session, as Codex's config.toml takes them.
-  afterAuth.get("/v0/mcp/ui/access", (_request, response) => {
+  afterAuth.get(["/v0/mcp/access", "/v0/mcp/ui/access"], (_request, response) => {
     const browser = mcpAccess.browser;
     const toml = (value) => JSON.stringify(value);
     response.set("Cache-Control", "no-store").json({
       url: mcpAccess.url, browser: Boolean(browser),
-      codex: [`[mcp_servers.conduit-ui]`, `url = ${toml(mcpAccess.url)}`, `http_headers = { "Authorization" = ${toml(`Bearer ${mcpAccess.token}`)} }`, "",
+      codex: [`[mcp_servers.conduit]`, `url = ${toml(mcpAccess.url)}`, `http_headers = { "Authorization" = ${toml(`Bearer ${mcpAccess.token}`)} }`, "",
         ...(browser ? [`[mcp_servers.agent-browser]`, `command = ${toml(browser.command)}`, `args = ${toml(browser.args)}`,
           `env = { ${Object.entries(browser.env).map(([key, value]) => `${key} = ${toml(value)}`).join(", ")} }`, ""] : [])].join("\n"),
     });

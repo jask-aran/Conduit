@@ -141,7 +141,7 @@ something they asked, say in one short line what you are doing next.
 Routines file what they gathered in the inbox, where it waits for the
 heartbeat. You see the unhandled entries each
 turn. When the person talks to you first, you may cover what is waiting and
-mark it with `inbox` handle.
+mark it with `conduit_inbox` handle.
 
 ## What you may do alone
 

@@ -120,7 +120,7 @@ A rule needed only for some tasks belongs in a routine, not SOUL.md.
 personal data, or email or message content beyond a short paraphrase. Never
 contact anyone or call tools that send, post or publish.
 
-After processing each feedback entry, mark it handled with `inbox` handle.
+After processing each feedback entry, mark it handled with `conduit_inbox` handle.
 Use its entry id and an outcome that names the memory directive, proposal or
 reason for no change. Handle only entries you processed.
 

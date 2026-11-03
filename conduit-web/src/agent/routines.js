@@ -138,7 +138,8 @@ async function runTask(agent, task, cursor, state, now, routineName) {
     const filters = { for: task.for ?? routineName, kinds: task.kinds, addressed: task.addressed };
     const entries = listInbox(state, { ...filters, unhandled: !task.all });
     const since = Date.parse(cursor.since || "") || 0;
-    const fresh = entries.filter((entry) => Date.parse(entry.at) > since);
+    const eligibleAt = (entry) => Math.max(Date.parse(entry.at), Date.parse(entry.reopenedAt || "") || 0);
+    const fresh = entries.filter((entry) => eligibleAt(entry) > since).sort((a, b) => eligibleAt(b) - eligibleAt(a));
     const shown = [];
     const inboxIds = [];
     let size = 0;
@@ -150,9 +151,9 @@ async function runTask(agent, task, cursor, state, now, routineName) {
       size += text.length;
     }
     const more = fresh.length - shown.length;
-    return { fresh: fresh.length, cursor: fresh.length ? { since: fresh[0].at } : cursor, items: [], inboxIds,
+    return { fresh: fresh.length, cursor: fresh.length ? { since: new Date(eligibleAt(fresh[0])).toISOString() } : cursor, items: [], inboxIds,
       block: block(task.id, { new: fresh.length, unhandled: listInbox(state, { ...filters, unhandled: true }).length },
-        fresh.length ? `${shown.join("\n")}${more ? `\n… and ${more} more (inbox list)` : ""}` : "Nothing new.") };
+        fresh.length ? `${shown.join("\n")}${more ? `\n… and ${more} more (conduit_inbox list)` : ""}` : "Nothing new.") };
   }
   if (task.kind === "notes") return notesTask(agent, task, cursor, state);
   if (task.kind === "chats") {

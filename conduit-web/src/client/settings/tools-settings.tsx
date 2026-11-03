@@ -100,21 +100,21 @@ export function ToolsSettings(props: { connector?: string } = {}) {
 }
 
 /**
- * Conduit's tools for other harnesses: the hub's MCP endpoint (ui and browser). Claude Code started by Conduit on the
+ * Conduit's tools for other harnesses: the hub's MCP endpoint (conduit_ui, conduit_inbox and browser). Claude Code started by Conduit on the
  * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
  * the entry, never shown.
  */
 function McpAccess() {
   const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
   const [copied, setCopied] = createSignal("");
-  onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/ui/access").then(setAccess).catch(() => {}));
+  onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/access").then(setAccess).catch(() => {}));
   const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
     .catch(() => setCopied("Copying was not allowed here"));
   return <Show when={access()}>{(found) => <Group title="Other harnesses">
-    <SettingLine plain label="conduit-ui" mono title="Conduit's ui tool over MCP (Streamable HTTP): what the person has open, and opening, closing and focusing panes. A signed-in session or the hub's token may call it.">
+    <SettingLine plain label="conduit" mono title="Conduit over MCP (Streamable HTTP): conduit_ui reads and arranges client tabs; conduit_inbox edits the hub's shared context inbox. A signed-in session or the hub's token may call it.">
       <SettingValue mono>{found().url}</SettingValue>
     </SettingLine>
-    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="[mcp_servers.conduit-ui] with the hub's token as its Authorization header, and [mcp_servers.agent-browser] on the shared page.">
+    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="[mcp_servers.conduit] with the hub's token as its Authorization header, and [mcp_servers.agent-browser] on the shared page.">
       <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
     </SettingLine>
     <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
