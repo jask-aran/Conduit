@@ -115,6 +115,7 @@ import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
 import { agentNeeds, agentView, refreshAgent } from "./state/agent";
+import { agentPageLaidOut } from "./state/arrival";
 import { ServerSwitcher } from "./navigation/server-switcher";
 import { RuntimeIndicator, visibleRuntimeActivity } from "./navigation/runtime-indicator";
 import { titleBarShows } from "./settings/title-bar-items";
@@ -842,6 +843,12 @@ function App() {
       // Only a transcript renders in passes. A dashboard or project page is
       // laid out in one, and three still frames on a phone still busy with
       // the rest of the open were close to half a second of nothing.
+      // The agent's page draws its messages from their own read and the lazy markdown renderer: shown before both,
+      // its bubbles were empty and then filled, moving the column under the fade.
+      // A hub with no agent shows its empty page at once; one whose agent is not known yet waits for it (or the fallback).
+      // Its composer is the home thread's: shown before that thread is loaded, its model read "Model" and then changed.
+      if (routeKind() === "agent" && (agentView() == null || (agentView()!.enabled && (!agentPageLaidOut()
+        || Boolean(agentView()!.home?.chatId) && chat.loadedId() !== agentView()!.home!.chatId)))) return;
       const settled = () => ["dashboard", "project", "agent"].includes(routeKind()) && shownSlots().length <= 1
         ? new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
         : waitForStill();

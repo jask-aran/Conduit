@@ -3,6 +3,7 @@ import { splitQuoted } from "../../email-quote.js";
 import { Answer, DashConversation, EmailItem, Icons, Message, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
+import { setAgentPageLaidOut } from "../state/arrival";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 
@@ -31,11 +32,13 @@ const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.repla
 
 /** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and
  *  slowly besides, for what arrives without it (another device's message). */
+
 export function useJbotMessages(changed: () => unknown) {
   const [messages, setMessages] = createSignal<LogMessage[]>([]);
   const refresh = () => api<{ messages: LogMessage[] }>("/v0/agent/messages?limit=100").then((result) => setMessages(result.messages)).catch(() => {});
+  // Read and drawable together: the first read, with the renderer's chunk, before the page is shown.
+  void Promise.all([refresh(), ChatMarkdown.preload()]).finally(() => setAgentPageLaidOut(true));
   onMount(() => {
-    void refresh();
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 15_000);
     onCleanup(() => window.clearInterval(tick));
   });
