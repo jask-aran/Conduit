@@ -1,4 +1,5 @@
 import { accessPagePlugin } from "./scripts/access-page-plugin.mjs";
+import { buildSettingsIndex } from "./scripts/settings-index.mjs";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import { VitePWA } from "vite-plugin-pwa";
@@ -41,6 +42,25 @@ function materialIconManifestPlugin() {
   };
 }
 
+// Settings search's index, read from the settings source (scripts/settings-index.mjs); rebuilt when that source changes.
+function settingsIndexPlugin() {
+  const id = "virtual:settings-index";
+  return {
+    name: "conduit-settings-index",
+    resolveId: (source) => source === id ? `\0${id}` : null,
+    load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      this.addWatchFile?.(path.resolve(import.meta.dirname, "src/client/settings"));
+      return `export default ${JSON.stringify(buildSettingsIndex(import.meta.dirname))};`;
+    },
+    handleHotUpdate({ file, server }) {
+      if (!file.includes(`${path.sep}client${path.sep}settings${path.sep}`)) return;
+      const module = server.moduleGraph.getModuleById(`\0${id}`);
+      if (module) server.moduleGraph.invalidateModule(module);
+    },
+  };
+}
+
 function galleryApiPlugin() {
   const id = "virtual:gallery-api";
   return {
@@ -78,6 +98,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       sharedGeometryCssPlugin(),
       materialIconManifestPlugin(),
+      settingsIndexPlugin(),
       gallery && galleryApiPlugin(),
       solid({ ssr: access }),
       !gallery && !access && accessPagePlugin(import.meta.filename),

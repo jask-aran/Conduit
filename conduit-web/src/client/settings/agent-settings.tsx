@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { Button, Input, Segmented, Switch, TextArea } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
-import { SettingLine } from "@/components/ui/overlay";
+import { SettingLine, SettingWide } from "@/components/ui/overlay";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
 import type { ModelOption } from "../api/contracts";
@@ -182,14 +182,16 @@ function ApprovalRules() {
     } catch (failure) { setError((failure as Error).message); }
     finally { setSaving(false); }
   };
-  const field = (key: "may" | "always" | "limits", label: string, title: string) =>
-    <SettingLine label={label} title={title}>
-      <TextArea id={`approval-${key}`} rows={5} value={draft()[key]} onInput={(event) => setDraft({ ...draft(), [key]: event.currentTarget.value })} />
-    </SettingLine>;
+  // A list of rules: its name on a line, then the rules in the library's text block for a setting's own text
+  // (SettingWide), full width. A component with a literal label, so settings search finds it (settings-index.mjs).
+  const RuleList = (props: { key: "may" | "always" | "limits"; label: string; title: string }) =>
+    <><SettingLine plain label={props.label} title={props.title} state="one a line" />
+      <SettingWide><TextArea id={`approval-${props.key}`} aria-label={props.label} rows={Math.max(3, lines(draft()[props.key]).length + 1)} value={draft()[props.key]}
+        onInput={(event) => setDraft({ ...draft(), [props.key]: event.currentTarget.value })} /></SettingWide></>;
   return <Show when={policy()} fallback={<Show when={error()}><Note tone="error">{error()}</Note></Show>}>
-    {field("may", "It may", "What the approval model may allow without asking you, one rule a line, in your own words.")}
-    {field("always", "Always yours", "What always comes to you, whatever else allows it: one class a line.")}
-    {field("limits", "Never", "Things it must not do at all (\"don't email Sam\"). Kept as rules, so a long thread cannot lose them.")}
+    <RuleList key="may" label="It may" title="What the approval model may allow without asking you, one rule a line, in your own words." />
+    <RuleList key="always" label="Always yours" title="What always comes to you, whatever else allows it: one class a line." />
+    <RuleList key="limits" label="Never" title="Things it must not do at all (&quot;don't email Sam&quot;). Kept as rules, so a long thread cannot lose them." />
     <SettingLine label={starter() ? "Starter rules, not saved yet" : "Rules"} title="The approval model reads these with your own messages, never with what the agent read.">
       <Button size="sm" variant={changed() ? "primary" : "secondary"} disabled={saving() || !changed()} onClick={() => void save()}>{starter() ? "Save these rules" : "Save"}</Button>
     </SettingLine>

@@ -57,11 +57,12 @@ import {
 } from "../chat/transcript-appearance";
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
+import settingsIndex from "virtual:settings-index";
 import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/ui/dialog";
-import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading } from "@/components/ui";
+import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 
@@ -332,6 +333,43 @@ export function Settings(props: {
     setSection(id);
     setBrowsingSections(false);
     if (narrow()) queueMicrotask(() => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"] main h2')?.focus());
+  };
+  // Search: every setting with a literal label (virtual:settings-index, read from this source), and each section by
+  // name. A result opens its section and brings its line into view, marked for a moment.
+  const [query, setQuery] = createSignal("");
+  const results = createMemo(() => {
+    const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const sections = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null as string | null, label: label(item.id as Section) })));
+    const known = new Set(sections.map((item) => item.section));
+    const entries = [...sections, ...settingsIndex.filter((entry) => known.has(entry.section as Section)).map((entry) => ({ ...entry, section: entry.section as Section }))];
+    const scored = entries.map((entry) => {
+      const name = entry.label.toLowerCase();
+      const where = `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase();
+      if (!words.every((word) => name.includes(word) || where.includes(word))) return null;
+      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : 2) + (entry.group === null && entry.label === label(entry.section) ? -0.5 : 0);
+      return { ...entry, score };
+    }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    return scored.sort((a, b) => a.score - b.score).slice(0, 30);
+  });
+  const openResult = (result: { section: Section; label: string; group: string | null }) => {
+    setQuery("");
+    openSection(result.section);
+    if (result.group === null && result.label === label(result.section)) return;
+    // The section renders on the next frames (some after their data): look for the line a few times.
+    let tries = 0;
+    const find = () => {
+      const dialog = document.querySelector('[role="dialog"][aria-label="Settings"] main');
+      const line = [...(dialog?.querySelectorAll<HTMLElement>(".ui-setting-line, .ui-switch, .ui-group-title, .ui-title") ?? [])]
+        .find((element) => element.textContent?.trim().startsWith(result.label));
+      const target = line?.closest<HTMLElement>(".ui-setting-line") ?? line;
+      if (target) {
+        target.scrollIntoView({ block: "center" });
+        target.dataset.found = "";
+        setTimeout(() => { delete target.dataset.found; }, 1600);
+      } else if (++tries < 20) setTimeout(find, 50);
+    };
+    requestAnimationFrame(find);
   };
   const backToSections = () => {
     setBrowsingSections(true);
@@ -1203,7 +1241,18 @@ export function Settings(props: {
   >
     <Show when={!narrow() || showingIndex()}>
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
-        <For each={sectionGroups}>{(group) => <Group kind="nav" title={group.label}>
+        <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && results()[0]) { event.preventDefault(); openResult(results()[0]!); }
+            if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
+          }} />
+        <Show when={query().trim()}>
+          <Group kind="nav" title={results().length ? "Results" : "No setting matches"}>
+            <For each={results()}>{(result) => <Row density="nav" element="button" detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
+              onClick={() => openResult(result)}>{result.label}</Row>}</For>
+          </Group>
+        </Show>
+        <For each={query().trim() ? [] : sectionGroups}>{(group) => <Group kind="nav" title={group.label}>
           <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
             lead={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
         </Group>}</For>

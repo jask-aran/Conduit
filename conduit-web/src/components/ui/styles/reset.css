@@ -25,7 +25,8 @@
   button, input, select, optgroup, textarea, ::file-selector-button { font: inherit; font-feature-settings: inherit; font-variation-settings: inherit; letter-spacing: inherit; color: inherit; border-radius: 0; background-color: transparent; opacity: 1; }
   ::placeholder { opacity: 1; color: color-mix(in oklab, currentcolor 50%, transparent); }
   textarea { resize: vertical; }
-  ::-webkit-search-decoration { -webkit-appearance: none; }
+  /* A search field's own clear button and mark are the browser's, not the library's: Escape clears one that offers it. */
+  ::-webkit-search-decoration, ::-webkit-search-cancel-button { -webkit-appearance: none; }
   ::-webkit-date-and-time-value { min-height: 1lh; text-align: inherit; }
   ::-webkit-datetime-edit { display: inline-flex; }
   :-moz-ui-invalid { box-shadow: none; }
