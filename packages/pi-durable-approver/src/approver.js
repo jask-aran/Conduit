@@ -3,7 +3,7 @@ import { createAllowCache } from "./cache.js";
 import { createBreaker } from "./breaker.js";
 import { withRetry } from "./retry.js";
 import { canonicalShell } from "./shell.js";
-import { rate } from "./classifier.js";
+import { addUsage, emptyUsage, rate } from "./classifier.js";
 import { DEFAULT_TABLE, outcomeOf } from "./table.js";
 
 /*
@@ -45,18 +45,17 @@ export function createApprover(options) {
     const started = Date.now();
     const key = actionKey(held);
     const memoName = `${name}:verdict:${key}`;
+    // A replay finds the verdict decided before, and spends nothing again (`usage` is only the first decision's).
     const remembered = await api.memo(memoName, context);
-    if (remembered) return remembered;
+    if (remembered) return { ...remembered, usage: undefined };
     const decided = await decide(held, key, api, context);
     const verdict = await api.memo(memoName, decided.verdict, context);
-    if (!remembered) {
-      breaker.record(String(api.conversationId), verdict.outcome === "deny");
-      try {
-        options.audit?.({ at: new Date().toISOString(), conversationId: String(api.conversationId), callId: api.callId, held, verdict,
-          attempts: decided.attempts, ms: Date.now() - started, ...(decided.model ? { model: decided.model } : {}) });
-      } catch {}
-    }
-    return verdict;
+    breaker.record(String(api.conversationId), verdict.outcome === "deny");
+    try {
+      options.audit?.({ at: new Date().toISOString(), conversationId: String(api.conversationId), callId: api.callId, held, verdict,
+        attempts: decided.attempts, ms: Date.now() - started, ...(decided.model ? { model: decided.model } : {}), ...(decided.usage ? { usage: decided.usage } : {}) });
+    } catch {}
+    return { ...verdict, usage: decided.usage };
   }
 
   async function decide(held, key, api, context) {
@@ -81,7 +80,7 @@ export function createApprover(options) {
       attempts = run.attempts;
     } catch (error) {
       const why = error?.timeout ? "The approval model timed out" : error?.malformed ? "The approval model's answer could not be read" : "The approval model could not be reached";
-      return { verdict: { outcome: "escalate", risk: "high", authorization: "none", reason: `${why}, so you decide.`, source: "fallback" }, attempts: error?.attempts ?? attempts, model: model?.id };
+      return { verdict: { outcome: "escalate", risk: "high", authorization: "none", reason: `${why}, so you decide.`, source: "fallback" }, attempts: error?.attempts ?? attempts, model: model?.id, usage: error?.usage };
     }
     // An unreadable shell command (substitutions, heredocs) is never allowed past low risk on the model's word.
     const unreadable = SHELL_TOOLS.has(held.action) && commands === null;
@@ -92,7 +91,7 @@ export function createApprover(options) {
       verdict = { ...verdict, outcome: "escalate", reason: `${rating.reason} The agent read outside content in this turn, so an action that reaches someone is yours to approve.`, source: "rule-of-two" };
     }
     if (verdict.outcome === "allow") cache.set(cacheKey, verdict);
-    return { verdict, attempts, model: model?.id };
+    return { verdict, attempts, model: model?.id, usage: rating.usage };
   }
 
   /** Carry out an allowed held action: its own resume, or the call itself. */
@@ -130,24 +129,31 @@ export function createApprover(options) {
       execute: async (args, api, context) => {
         const call = { tool: tool.name, arguments: args ?? {} };
         const run = () => tool.execute(args, api, context);
+        // What the judge spent goes on the call's result, so pi-durable counts it with the conversation's usage.
+        const spent = emptyUsage();
+        const charged = (result) => {
+          if (!spent.totalTokens && !spent.cost.total) return result;
+          return { ...result, usage: addUsage(addUsage(emptyUsage(), result?.usage), spent) };
+        };
+        const judgeOf = async (held) => { const verdict = await judge(held, api, context); addUsage(spent, verdict.usage); return verdict; };
         for (const holder of options.holders) {
           const held = holder.before?.(call);
           if (!held) continue;
           if (held.action === "executor.resume") return resumeByAgent(held, run, api, context);
-          const verdict = await judge(held, api, context);
-          return verdict.outcome === "allow" ? run() : notAllowed(held, verdict, run, api, context);
+          const verdict = await judgeOf(held);
+          return charged(verdict.outcome === "allow" ? await run() : await notAllowed(held, verdict, run, api, context));
         }
         const result = await run();
         for (const holder of options.holders) {
           const held = holder.after?.(call, result);
           if (!held) continue;
           const id = held.resume?.arguments?.requestId;
-          const verdict = await judge(held, api, context);
+          const verdict = await judgeOf(held);
           if (id) requests.set(id, { held, outcome: verdict.outcome });
-          if (verdict.outcome === "allow") return carryOut(held, run, api, context);
+          if (verdict.outcome === "allow") return charged(await carryOut(held, run, api, context));
           const answer = await notAllowed(held, verdict, run, api, context);
           if (id) requests.set(id, { held, outcome: answer.details?.approver?.escalation === "pending" ? "pending" : answer.isError ? "deny" : "allow" });
-          return answer;
+          return charged(answer);
         }
         return result;
       },

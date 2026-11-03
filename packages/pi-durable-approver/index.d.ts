@@ -94,6 +94,8 @@ export interface AuditRecord {
   attempts: number;
   ms: number;
   model?: string;
+  /** What the judge spent on this decision (both passes), as pi-ai reports it; also added to the call's result `usage`. */
+  usage?: import("@earendil-works/pi-ai").Usage;
 }
 
 export interface ApproverOptions {

@@ -92,16 +92,32 @@ export function parseVerdict(text) {
 export async function rate({ complete, model, policy, words, held, canonicalCommands, signal }) {
   const { user, truncated } = promptOf(policy, words, held, canonicalCommands);
   const messages = [{ role: "user", content: user, timestamp: Date.now() }];
+  // What the judge spent, both passes, as pi-ai reports it (the host counts it as it counts the agent's own requests).
+  const usage = emptyUsage();
   const ask = async (systemPrompt, maxTokens) => {
     const reply = await complete(model, { systemPrompt, messages }, { temperature: 0, maxTokens, signal });
-    if (reply?.stopReason === "error" || reply?.stopReason === "aborted") throw new Error(reply.errorMessage || "The approval model failed.");
+    addUsage(usage, reply?.usage);
+    if (reply?.stopReason === "error" || reply?.stopReason === "aborted") throw Object.assign(new Error(reply.errorMessage || "The approval model failed."), { usage });
     return textOf(reply);
   };
   // The quick pass may only clear what cannot reach anyone or be lost: a truncated action, one that cannot be undone,
   // or one with recipients always gets the reasoned pass.
   const quick = !truncated && held.reversible !== false && !held.recipients?.length;
   if (quick && /^ALLOW\.?$/i.test(await ask(QUICK, 16))) {
-    return { risk: "low", authorization: "high", always: false, reason: "Plainly within your rules.", truncated, passes: 1 };
+    return { risk: "low", authorization: "high", always: false, reason: "Plainly within your rules.", truncated, passes: 1, usage };
   }
-  return { ...parseVerdict(await ask(FULL, 400)), truncated, passes: 2 };
+  const full = await ask(FULL, 400);
+  try { return { ...parseVerdict(full), truncated, passes: 2, usage }; } catch (error) { throw Object.assign(error, { usage }); }
+}
+
+/** pi-ai's Usage, zeroed. */
+export function emptyUsage() {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+}
+/** Add one Usage into another, in place. */
+export function addUsage(into, usage) {
+  if (!usage) return into;
+  for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"]) into[key] += Number(usage[key]) || 0;
+  for (const key of ["input", "output", "cacheRead", "cacheWrite", "total"]) into.cost[key] += Number(usage.cost?.[key]) || 0;
+  return into;
 }
