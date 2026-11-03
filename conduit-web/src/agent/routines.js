@@ -2,10 +2,10 @@ import { notice } from "../context/notices.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { entryText, listInbox } from "./inbox.js";
-import { fileItems, itemText, runSource, SEEN_KEPT } from "./feeds.js";
+import { itemText, runSource, SEEN_KEPT } from "./feeds.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
-import { startReflection } from "./reflection.js";
+import { startRoutine } from "./routine-task.js";
 import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, updateTrigger, writeRoutine } from "./routine-files.js";
 
 /**
@@ -183,53 +183,47 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
   const blocks = [];
   let fresh = 0;
   const items = [];
+  const taskVars = {};
   for (const task of routine.tasks) {
     const done = await runTask(agent, task, cursors[task.id] || {}, state, now).catch((error) => ({
       fresh: 0, cursor: cursors[task.id] || {}, items: [], error: error.message, block: block(task.id, { error: "yes" }, error.message) }));
     next[task.id] = done.cursor;
     tasks.push({ id: task.id, kind: task.kind, fresh: done.fresh, ...(done.error ? { error: done.error } : {}) });
     blocks.push(done.block);
+    taskVars[task.id] = done.block;
+    if (task.kind === "notes") Object.assign(taskVars, { notesBlock: done.notes, declinedBlock: done.declined });
     fresh += done.fresh;
     items.push(...done.items);
   }
   const run = force ? routine.gate !== "never" : routine.gate === "always" || (routine.gate === "when-new" && fresh > 0);
   if (!run) return { run: false, cursors: next, tasks, items, fresh };
-  const vars = await promptVars(agent, now);
+  const vars = { ...await promptVars(agent, now), ...taskVars,
+    windowStart: state.routineState?.[routine.name]?.completedAt || "the start of your home thread",
+    windowEnd: new Date(now).toISOString(), reportPath: `reports/${routine.name}/${agent.today(now)}.md` };
+  const rendered = { ...routine, body: renderVars(routine.body, vars) };
   return {
     run: true, cursors: next, tasks, items: [], fresh,
-    instructions: await runInstructions(agent, routine, now),
+    instructions: renderVars(await runInstructions(agent, rendered, now), vars),
+    reportPath: vars.reportPath,
+    prompt: [rendered.body, await routineContext(agent, routine, now), ...blocks].filter(Boolean).join("\n\n"),
     message: [await notice(agent.runtime?.contextStore, "wake-routine", { ...vars, routine }), ...blocks].join("\n\n"),
   };
 }
 
-/** The work settings a routine's run takes when its file names no model: the brief's, the heartbeat's, or other. */
-const workKind = (name) => name === "morning-brief" ? "brief" : name === "heartbeat" ? "heartbeat" : "other";
-
-/** What a firing did, in the commit that keeps its cursors: start its run, or file its tasks' new items. */
+/** Admission starts one durable lifecycle; gathering happens after prerequisites. */
 export async function applyRoutine(tx, doc, agent, conversationId, routine, outcome, slot) {
+  if (outcome?.skipped) return;
+  return startRoutine(tx, doc, agent, conversationId, routine, slot, { outcome });
+}
+
+/** Commit all task cursors only after success, or when the gate starts no run. */
+export function completeRoutine(doc, routine, outcome, at) {
   doc.cursors ||= {};
+  doc.cursors[routine.name] = outcome.cursors;
   doc.routineState ||= {};
-  if (outcome.skipped) return;
-  // A notes cursor is committed only by a successful Reflection, never by admission or a budget skip.
-  doc.cursors[routine.name] = { ...(doc.cursors[routine.name] || {}),
-    ...Object.fromEntries(Object.entries(outcome.cursors || {}).map(([id, cursor]) =>
-      [id, routine.tasks.find((task) => task.id === id)?.kind === "notes" ? doc.cursors[routine.name]?.[id] || {} : cursor])) };
-  const errors = outcome.tasks.filter((task) => task.error).map((task) => `${task.id}: ${task.error}`);
-  doc.routineState[routine.name] = { lastAt: slot, fresh: outcome.fresh, ran: outcome.run, lastError: errors.join("; ") || null };
-  if (outcome.run) {
-    if (routine.name === "reflect") {
-      await startReflection(tx, doc, agent, conversationId, `r-reflect:${slot}`);
-      return;
-    }
-    const work = agent.settings().work[workKind(routine.name)];
-    const model = routine.model || work?.model || null;
-    await agent.spawnRun(tx, conversationId, { key: `r-${routine.name}:${slot}`, kind: routine.name, title: routine.title,
-      task: outcome.message, instructions: outcome.instructions, output: routine.output, raw: true,
-      ...(model ? { model, thinkingLevel: routine.effort || (routine.model ? null : work?.thinkingLevel) || null } : {}) });
-    if (routine.name === "morning-brief") doc.lastBriefAt = new Date().toISOString();
-  } else if (routine.output !== "jbot" && outcome.items.length) {
-    fileItems(doc, { key: `r-${routine.name}:${slot}`, title: routine.title, feedId: `r-${routine.name}`, level: routine.level }, outcome.items, slot);
-  }
+  doc.routineState[routine.name] = { ...doc.routineState[routine.name], ...(outcome.run ? { completedAt: at } : {}),
+    fresh: outcome.fresh, ran: outcome.run,
+    lastError: outcome.tasks.filter((task) => task.error).map((task) => `${task.id}: ${task.error}`).join("; ") || null };
 }
 
 /** The routines, valid ones as the clock wants them: `r-<name>` schedule items (schedule.js seeds their clocks). */
@@ -270,7 +264,14 @@ export async function migrateToRoutines(agent, seedDir) {
     if (await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
     const seed = await readText(path.join(seedDir, `${name}.md`));
     if (!seed) continue;
-    await writeRoutine(agent.folder, adjust(parseRoutine(seed, name)));
+    const original = parseRoutine(seed, name);
+    const adjusted = adjust(original);
+    if (JSON.stringify(adjusted) === JSON.stringify(original)) {
+      // Preserve the exact seed bytes so future seed upgrades can identify it.
+      const target = path.join(agent.folder, "routines", `${name}.md`);
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, seed, { flag: "wx" });
+    } else await writeRoutine(agent.folder, adjusted);
     if (name === "heartbeat") await fs.unlink(path.join(agent.folder, "HEARTBEAT.md")).catch(() => {});
   }
 }

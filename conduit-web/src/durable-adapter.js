@@ -459,7 +459,7 @@ export class DurableAdapter extends EventEmitter {
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
-    runtime.reflectionContextUsage = async (home, _context, compaction) => {
+    runtime.routineContextUsage = async (home, _context, compaction) => {
       const entries = await this.entries(home);
       const lastContext = [...entries].reverse().find((entry) => entry.kind === "pi.compaction" || (entry.kind === "pi.assistant" && entry.model?.[0]?.usage));
       // A summary changes the context; the preceding request no longer measures it.

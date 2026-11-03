@@ -1,4 +1,5 @@
 import { constants } from "node:fs";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
@@ -42,7 +43,7 @@ export function splitFrontMatter(text) {
 export function routineProblem(routine) {
   if (!object(routine)) return "A routine is required.";
   const fields = ["name", "title", "trigger", "tasks", "gate", "output", "model", "effort",
-    "level", "quiet", "enabled", "context", "body"];
+    "level", "quiet", "enabled", "context", "body", "mode", "before", "after"];
   const unknownField = Object.keys(routine).find((key) => !fields.includes(key));
   if (unknownField) return `Unknown routine field ${unknownField}.`;
   if (typeof routine.name !== "string" || !namePattern.test(routine.name)) return "Invalid routine name.";
@@ -71,6 +72,28 @@ export function routineProblem(routine) {
       || !(trigger.during === "quiet" || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(trigger.during))
       || (trigger.during !== "quiet" && trigger.during.slice(0, 5) === trigger.during.slice(6)))) {
       return "During must be quiet or HH:MM-HH:MM, with different start and end times.";
+    }
+  }
+  if (routine.mode !== undefined && !["run", "fork"].includes(routine.mode)) return "Mode must be run or fork.";
+  for (const field of ["before", "after"]) {
+    const steps = routine[field] === undefined ? [] : routine[field];
+    if (!Array.isArray(steps)) return `${field} must be a list.`;
+    for (const step of steps) {
+      if (!object(step)) return `Invalid ${field} step.`;
+      if (field === "before") {
+        if (!keysOnly(step, ["routine", "ifMissedSince"]) || (typeof step.routine !== "string" || !namePattern.test(step.routine))
+          || step.ifMissedSince !== "last") return "Before requires { routine: name, ifMissedSince: last }.";
+      } else if (keysOnly(step, ["routine"]) && typeof step.routine === "string" && namePattern.test(step.routine)) {
+        // A dependency is checked for cycles below and against saved files before use.
+      } else if (keysOnly(step, ["message"]) && step.message === "jbot") {
+        // The final text is sent regardless of output.
+      } else if (keysOnly(step, ["compact"]) && object(step.compact)) {
+        const options = step.compact;
+        if (!keysOnly(options, ["minTokens", "minShare"])
+          || (options.minTokens !== undefined && (!Number.isInteger(options.minTokens) || options.minTokens < 0))
+          || (options.minShare !== undefined && (!Number.isFinite(options.minShare) || options.minShare < 0 || options.minShare > 1))) return "Invalid compact thresholds.";
+      } else return "Invalid after step.";
+      if (step.routine === routine.name) return `Routine cycle: ${routine.name} -> ${routine.name}.`;
     }
   }
   if (!Array.isArray(routine.tasks)) return "Tasks must be a list.";
@@ -126,7 +149,7 @@ export function parseRoutine(text, name) {
   if (!/^---\r?\n/.test(text)) throw new Error("Front matter is required.");
   const { data, body } = splitFrontMatter(text);
   const fields = ["title", "trigger", "tasks", "gate", "output", "model", "effort", "level", "quiet", "enabled",
-    "context"];
+    "context", "mode", "before", "after"];
   const unknownKey = Object.keys(data).find((key) => !fields.includes(key));
   if (unknownKey) throw new Error(`Unknown field ${unknownKey} in the front matter.`);
   const parseTrigger = (input) => {
@@ -138,7 +161,8 @@ export function parseRoutine(text, name) {
     return { kind: "once", at: input.once, ...during };
   };
   const trigger = Array.isArray(data.trigger) ? data.trigger.map(parseTrigger) : parseTrigger(data.trigger);
-  const routine = { name, title: data.title === undefined ? name : data.title, trigger,
+  const routine = { name, mode: data.mode === undefined ? "run" : data.mode,
+    before: data.before === undefined ? [] : data.before, after: data.after === undefined ? [] : data.after, title: data.title === undefined ? name : data.title, trigger,
     tasks: data.tasks === undefined ? [] : data.tasks, gate: data.gate, output: data.output,
     model: data.model === undefined ? null : data.model, effort: data.effort === undefined ? null : data.effort,
     level: data.level === undefined ? "fyi" : data.level, quiet: data.quiet === undefined ? true : data.quiet,
@@ -155,7 +179,8 @@ export function serializeRoutine(routine) {
   const { name, title, trigger, tasks, gate, output, model, effort, level, enabled, context, body } = routine;
   const writeTrigger = (rule) => ({ ...(rule.kind === "every" ? { every: rule.minutes }
     : rule.kind === "at" ? { at: rule.time } : { once: rule.at }), ...(rule.during !== undefined ? { during: rule.during } : {}) });
-  const data = { ...(title !== name ? { title } : {}),
+  const data = { ...(routine.mode === "fork" ? { mode: "fork" } : {}),
+    ...(routine.before?.length ? { before: routine.before } : {}), ...(routine.after?.length ? { after: routine.after } : {}), ...(title !== name ? { title } : {}),
     trigger: Array.isArray(trigger) ? trigger.map(writeTrigger) : writeTrigger(trigger),
     ...(tasks.length ? { tasks } : {}), gate, output, ...(model !== null ? { model } : {}),
     ...(effort !== null ? { effort } : {}), ...(level !== "fyi" ? { level } : {}),
@@ -183,18 +208,23 @@ function routinePath(folder, name) {
  * A file of the agent's folder, read by the hub (outside the sandbox): never through a link, which the agent can make
  * point anywhere on the hub. Null when it is not there.
  */
-export async function readFolderFile(folder, ...parts) {
+async function readFolderBytes(folder, ...parts) {
   let handle;
   try {
     const file = path.join(await fs.realpath(folder), ...parts);
     if (await fs.realpath(path.dirname(file)) !== path.dirname(file)) throw new Error(`${parts.join("/")} must not be under a link.`);
     handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-    return await handle.readFile("utf8");
+    return await handle.readFile();
   } catch (error) {
     if (error.code === "ENOENT") return null;
     if (error.code === "ELOOP") throw new Error(`${parts.join("/")} must not be a link.`);
     throw error;
   } finally { await handle?.close(); }
+}
+
+export async function readFolderFile(folder, ...parts) {
+  const bytes = await readFolderBytes(folder, ...parts);
+  return bytes === null ? null : bytes.toString("utf8");
 }
 
 export async function writeFolderFile(folder, name, content) {
@@ -239,8 +269,26 @@ export async function readRoutine(folder, name) {
   return text === null ? null : parseRoutine(text, name);
 }
 
+/** Validate both dependency directions; unavailable targets cannot form a cycle yet. */
+export async function validateRoutineGraph(folder, candidate) {
+  const routines = new Map((await listRoutines(folder)).filter((item) => !item.error).map((item) => [item.name, item]));
+  routines.set(candidate.name, candidate);
+  const visited = new Set();
+  const visit = (name, stack) => {
+    if (stack.includes(name)) throw new Error(`Routine cycle: ${[...stack, name].join(" -> ")}.`);
+    if (visited.has(name)) return;
+    const routine = routines.get(name);
+    for (const step of [...(routine?.before || []), ...(routine?.after || [])]) {
+      if (step.routine) visit(step.routine, [...stack, name]);
+    }
+    visited.add(name);
+  };
+  visit(candidate.name, []);
+}
+
 export async function writeRoutine(folder, routine) {
   const text = serializeRoutine(routine);
+  await validateRoutineGraph(folder, routine);
   const file = routinePath(folder, routine.name);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, text);
@@ -251,15 +299,75 @@ export async function removeRoutine(folder, name) {
   catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
+// Committed seed bytes, plus the old migration's default-settings serialized copies (SHA-256).
+const OLD_SEEDS = {
+  heartbeat: ["0c5b4c99095960a5b50e835f2e52f03f970e0f11afb82ba715268c54d4af67c3", "fcb64153edd18c39b88661fa5adb498b9852179be7ef29b7beaa0be800b585ad",
+    "1a49c0072d7c2492d2f672ee15b092bbdb767378e6c5dd457c2bbdeea4eade0b", "7290af75c97331f32d4783c26ef6301c7caf21d638b0128eea8cb64182b4988e"],
+  "morning-brief": ["7ba36bcd56a4720beaeec5af06e706653922c0718dbd4ca8b2a388cc84b2735c", "951d7434a833c93816c91d2473534539f3acfa33b2e1914dddd6cf5c2db37c9c",
+    "d66dc906bbb0e79b7dae596a8b2bddd409c630baf0777cf39a642bcfb5b75cd0", "c9299bcbe0c150bd1e91b6fe1f7c0bd0c287f754e76787537cc3e9cd76ce5025"],
+  reflect: ["0172fa248f2822c85ee718e5351ddf062f273dc9942d5898ca42f2798be0d39e"],
+};
+const SEED_RECORD = ".seeds.json";
+const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+
+/** Only replace a seed whose exact bytes match its recorded or historical version. */
 export async function seedRoutines(folder, seedDir) {
   let files;
   try { files = await fs.readdir(seedDir); }
   catch (error) { if (error.code === "ENOENT") return; throw error; }
+  await fs.mkdir(path.join(folder, ROUTINES_DIR), { recursive: true });
+  const manifestPath = path.join(folder, ROUTINES_DIR, SEED_RECORD);
+  const raw = await readFolderFile(folder, ROUTINES_DIR, SEED_RECORD);
+  const records = raw === null ? {} : JSON.parse(raw);
+  if (!object(records)) throw new Error("Invalid routine seed record.");
+  const save = () => writeFile(manifestPath, `${JSON.stringify(records, null, 2)}\n`);
   for (const file of files.filter((item) => item.endsWith(".md"))) {
-    const target = routinePath(folder, file.slice(0, -3));
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    try { await fs.copyFile(path.join(seedDir, file), target, 1); }
-    catch (error) { if (error.code !== "EEXIST") throw error; }
+    const name = file.slice(0, -3);
+    const target = routinePath(folder, name);
+    const seed = await fs.readFile(path.join(seedDir, file));
+    const seedHash = digest(seed);
+    let current = await readFolderBytes(folder, ROUTINES_DIR, file);
+    if (current === null) {
+      try {
+        await fs.writeFile(target, seed, { flag: "wx" });
+        records[name] = { hash: seedHash };
+        await save();
+        continue;
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        current = await readFolderBytes(folder, ROUTINES_DIR, file);
+        if (current === null) continue;
+      }
+    }
+    const currentHash = digest(current);
+    let record = records[name];
+    // A crash after replacement but before recording the new hash is recoverable.
+    if (record?.pending === currentHash) {
+      records[name] = record = { hash: currentHash };
+      await save();
+    }
+    if (!record) {
+      if (currentHash !== seedHash && !OLD_SEEDS[name]?.includes(currentHash)) continue;
+      records[name] = record = { hash: currentHash };
+      await save();
+    }
+    if (currentHash !== record.hash) {
+      if (record.pending) { records[name] = { hash: record.hash }; await save(); }
+      continue;
+    }
+    if (currentHash === seedHash) continue;
+    records[name] = { hash: currentHash, pending: seedHash };
+    await save();
+    // Recheck immediately before replacement; an intervening edit stays untouched.
+    const latest = await readFolderBytes(folder, ROUTINES_DIR, file);
+    if (latest === null || digest(latest) !== currentHash) {
+      records[name] = { hash: currentHash };
+      await save();
+      continue;
+    }
+    await writeFile(target, seed);
+    records[name] = { hash: seedHash };
+    await save();
   }
 }
 

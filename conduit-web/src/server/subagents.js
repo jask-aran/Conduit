@@ -2,6 +2,7 @@ import { listAsks } from "../agent/asks.js";
 import { notice, stopPending, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, LiveDoc, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
+import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 
@@ -277,7 +278,8 @@ export function Subagents(runtime) {
           || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
         const report = await api.memo("report", { answer: capOutput(answer, limits().outputChars),
-          status: settled.status === "done" && !limited ? "finished" : "failed" }, context);
+          status: settled.status === "done" && !limited
+            && (!task.input.origin?.routineTaskId || answerEntry?.model?.[0]?.stopReason === "stop") ? "finished" : "failed" }, context);
         const endedAt = task.input.gate ? await api.memo("endedAt", new Date().toISOString(), context) : null;
         let stopped = false;
         let changed = false;
@@ -308,6 +310,14 @@ export function Subagents(runtime) {
             doc.spend[day] = (doc.spend[day] || 0) + spent;
           }, context);
         }
+        // Cursor success belongs to the worker's reply, even if delivery to jbot later fails.
+        if (task.input.origin?.routineTaskId && report.status === "finished" && level !== "failed" && !stopped) await api.commit(async (tx) => {
+          const doc = await tx.doc(AgentDoc);
+          const record = doc.routineRuns?.[task.input.origin.routineTaskId];
+          if (!record || record.runSucceeded) return;
+          completeRoutine(doc, record.routine, record.outcome, endedAt);
+          record.runSucceeded = true;
+        }, context);
         // Told at once: what was asked for (a brief, a task the person started, the heartbeat's decision), what is
         // urgent, and a run that left something to approve, whose asks show under its report. The rest waits in the
         // inbox for the heartbeat, or for the person to talk to jbot first.
@@ -413,7 +423,7 @@ export function Subagents(runtime) {
           }
           // The person's devices hear of it only if jbot decides they should (`message` with notify); approvals push on their own.
         }
-        await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: report } }), context);
+        await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: task.input.origin?.routineTaskId && (level === "failed" || stopped) ? { ...report, status: "failed" } : report } }), context);
       } catch (error) {
         let changed = false;
         if (!api.signal.aborted) await api.commit(async (tx) => {

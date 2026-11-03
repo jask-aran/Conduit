@@ -1,13 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendEntry } from "../src/agent/inbox.js";
-import { applyRoutine, block, executeRoutine, migrateToRoutines, routineClocks, runInstructions, triggerWords } from "../src/agent/routines.js";
+import { completeRoutine, block, executeRoutine, migrateToRoutines, routineClocks, runInstructions, triggerWords } from "../src/agent/routines.js";
 import { MemoryTools, rejectProposal } from "../src/agent/memory.js";
 import { listSchedules, seedSchedules, slotFate } from "../src/agent/schedule.js";
-import { listRoutines, parseRoutine, readRoutine, ROUTINES_DIR, serializeRoutine, writeRoutine } from "../src/agent/routine-files.js";
-import { finishReflection, isReflection, needsReflection, reflectionAllows, reflectionCompactionGuard, reflectionTask, reflectionToolGuard, shouldCompact, startReflection } from "../src/agent/reflection.js";
+import { listRoutines, parseRoutine, readRoutine, ROUTINES_DIR, seedRoutines, serializeRoutine, validateRoutineGraph, writeRoutine } from "../src/agent/routine-files.js";
+import { forkRecord, forkAllows, routineCompactionGuard, routineTask, routineToolGuard, shouldCompact, startRoutine, ROUTINE_DEPTH } from "../src/agent/routine-task.js";
+import { legacyRoutineTask } from "../src/agent/legacy-routine-task.js";
 import { MessageTools } from "../src/agent/messages.js";
 import { AgentDoc } from "../src/agent/agent-doc.js";
 import { AgentDoc as PiAgentDoc, configure, LiveDoc, UsageDoc } from "@earendil-works/pi-durable";
@@ -27,6 +31,107 @@ test("a saved routine keeps its trigger, tasks and instructions in its own file"
   await writeRoutine(root, expected);
   assert.deepEqual(await fs.readdir(path.join(root, ROUTINES_DIR)), [`${expected.name}.md`]);
   assert.deepEqual(await readRoutine(root, expected.name), expected);
+});
+
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const currentSeeds = new URL("../../templates/agent/seed/routines/", import.meta.url);
+
+test("every historical seed byte version upgrades; edited and unknown files stay untouched", async (t) => {
+  const versions = {
+    heartbeat: ["b5db1bd6", "0ec426a5"], "morning-brief": ["b5db1bd6", "0ec426a5"], reflect: ["b5db1bd6"],
+  };
+  for (const [name, commits] of Object.entries(versions)) for (const commit of commits) await t.test(`${name} ${commit}`, async (t) => {
+    const { root } = await agentFixture(t);
+    const dir = path.join(root, "routines");
+    await fs.mkdir(dir);
+    const old = execFileSync("git", ["show", `${commit}:templates/agent/seed/routines/${name}.md`]);
+    const file = path.join(dir, `${name}.md`);
+    await fs.writeFile(file, old);
+    await seedRoutines(root, fileURLToPath(currentSeeds));
+    const seed = await fs.readFile(new URL(`${name}.md`, currentSeeds));
+    assert.deepEqual(await fs.readFile(file), seed);
+    assert.equal(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"))[name].hash, sha256(seed));
+  });
+  for (const name of ["heartbeat", "morning-brief"]) for (const commit of versions[name]) await t.test(`migrated ${name} ${commit}`, async (t) => {
+    const { root } = await agentFixture(t);
+    const dir = path.join(root, "routines");
+    await fs.mkdir(dir);
+    const old = execFileSync("git", ["show", `${commit}:templates/agent/seed/routines/${name}.md`], { encoding: "utf8" });
+    await fs.writeFile(path.join(dir, `${name}.md`), serializeRoutine(parseRoutine(old, name)));
+    await seedRoutines(root, fileURLToPath(currentSeeds));
+    assert.deepEqual(await fs.readFile(path.join(dir, `${name}.md`)), await fs.readFile(new URL(`${name}.md`, currentSeeds)));
+  });
+  const { root } = await agentFixture(t);
+  const dir = path.join(root, "routines");
+  await fs.mkdir(dir);
+  const old = execFileSync("git", ["show", "0ec426a5:templates/agent/seed/routines/morning-brief.md"]);
+  const changed = Buffer.concat([old, Buffer.from("Edited by the person.\n")]);
+  await fs.writeFile(path.join(dir, "morning-brief.md"), changed);
+  await fs.writeFile(path.join(dir, "reflect.md"), "Unknown custom routine");
+  await seedRoutines(root, fileURLToPath(currentSeeds));
+  assert.deepEqual(await fs.readFile(path.join(dir, "morning-brief.md")), changed);
+  assert.equal(await fs.readFile(path.join(dir, "reflect.md"), "utf8"), "Unknown custom routine");
+  const records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
+  assert.equal(records["morning-brief"], undefined);
+  assert.equal(records.reflect, undefined);
+});
+
+test("new copies track their exact bytes, upgrade later, and never replace an edited tracked file", async (t) => {
+  const { root } = await agentFixture(t);
+  const seeds = path.join(root, "seed-source");
+  const dir = path.join(root, "routines");
+  await fs.mkdir(seeds);
+  await fs.writeFile(path.join(seeds, "example.md"), "first\n");
+  await seedRoutines(root, seeds);
+  const file = path.join(dir, "example.md");
+  let records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
+  assert.equal(records.example.hash, sha256("first\n"));
+  await fs.writeFile(path.join(seeds, "example.md"), "second\n");
+  await seedRoutines(root, seeds);
+  assert.equal(await fs.readFile(file, "utf8"), "second\n");
+  records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
+  assert.equal(records.example.hash, sha256("second\n"));
+  await fs.writeFile(file, "second\nPerson's edit\n");
+  await fs.writeFile(path.join(seeds, "example.md"), "third\n");
+  await seedRoutines(root, seeds);
+  assert.equal(await fs.readFile(file, "utf8"), "second\nPerson's edit\n");
+  assert.equal(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example.hash, sha256("second\n"));
+});
+
+test("seed tracking recovers interrupted replacement without treating an edited file as a seed", async (t) => {
+  const { root } = await agentFixture(t);
+  const seeds = path.join(root, "seed-source");
+  const dir = path.join(root, "routines");
+  await fs.mkdir(seeds);
+  await fs.mkdir(dir);
+  await fs.writeFile(path.join(seeds, "example.md"), "new\n");
+  const record = { example: { hash: sha256("old\n"), pending: sha256("new\n") } };
+  await fs.writeFile(path.join(dir, ".seeds.json"), JSON.stringify(record));
+  await fs.writeFile(path.join(dir, "example.md"), "new\n");
+  await seedRoutines(root, seeds);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example, { hash: sha256("new\n") });
+  await fs.writeFile(path.join(dir, ".seeds.json"), JSON.stringify(record));
+  await fs.writeFile(path.join(dir, "example.md"), "person's edit\n");
+  await seedRoutines(root, seeds);
+  assert.equal(await fs.readFile(path.join(dir, "example.md"), "utf8"), "person's edit\n");
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example, { hash: sha256("old\n") });
+});
+
+test("agent seeding tracks default routine copies but preserves migrated settings", async (t) => {
+  const first = await agentFixture(t);
+  await first.agent.seedFolder();
+  const records = JSON.parse(await fs.readFile(path.join(first.root, "routines", ".seeds.json"), "utf8"));
+  for (const name of ["heartbeat", "morning-brief", "reflect"]) {
+    const actual = await fs.readFile(path.join(first.root, "routines", `${name}.md`));
+    assert.deepEqual(actual, await fs.readFile(new URL(`${name}.md`, currentSeeds)));
+    assert.equal(records[name].hash, sha256(actual));
+  }
+  const custom = await agentFixture(t, { brief: { enabled: false, at: "09:00" } });
+  await custom.agent.seedFolder();
+  const brief = await readRoutine(custom.root, "morning-brief");
+  assert.equal(brief.enabled, false);
+  assert.equal(brief.trigger.time, "09:00");
+  assert.equal(JSON.parse(await fs.readFile(path.join(custom.root, "routines", ".seeds.json"), "utf8"))["morning-brief"], undefined);
 });
 
 // listRoutines reports a bad file rather than losing its valid neighbours.
@@ -138,15 +243,14 @@ test("notes stay pending through admission and failure; success consumes only sh
   const second = await executeRoutine(agent, plan, { state: await agent.state(), now: Date.now(), cursors: first.cursors });
   assert.equal(second.fresh, 0, "the candidate cursor identifies the shown call");
   const doc = await agent.state();
-  t.mock.method(agent, "spawnRun", async () => ({}));
   const normal = { ...plan, name: "review-notes" };
-  await applyRoutine(null, doc, agent, api.conversationId, normal, first, new Date(now).toISOString());
-  assert.deepEqual(doc.cursors[normal.name].notes, {}, "admission does not consume notes");
+  doc.cursors = { [normal.name]: {} };
+  assert.deepEqual(doc.cursors[normal.name].notes, undefined, "admission does not consume notes");
   assert.equal((await executeRoutine(agent, plan, { state: doc, cursors: doc.cursors[normal.name] })).fresh, 1);
   // A concurrent append can have the exact same timestamp; only call provenance controls consumption.
   const sameTime = lines[1].replace("call:c1", "call:concurrent").replace("Prefers bills before receipts", "Another fact");
   await fs.appendFile(path.join(root, "NOTES.md"), `${sameTime}\n`);
-  finishReflection(doc, { key: "night", notesCursor: first.cursors.notes, windowStart: "start", windowEnd: "end" }, "Summary: Kept one preference", new Date(now).toISOString());
+  completeRoutine(doc, plan, first, new Date(now).toISOString());
   const pending = await executeRoutine(agent, plan, { state: doc, cursors: doc.cursors.reflect });
   assert.equal(pending.fresh, 1);
   assert.match(pending.message, /Another fact/);
@@ -170,7 +274,7 @@ test("declining a proposal keeps a bounded record of what was declined", async (
 test("only the active fork has home memory rights; its messages are refused", async (t) => {
   const { root, agent, api } = await agentFixture(t);
   t.mock.method(agent, "describe", async () => ({ role: "run", chatId: null }));
-  await agent.update((doc) => { doc.reflection = { taskId: 1, conversationId: "fork", reportPath: "reflections/2030-01-15.md" }; });
+  await agent.update((doc) => { doc.routineRuns = { 1: { taskId: 1, conversationId: "fork", reportPath: "reports/review/2030-01-15.md" } }; });
   const tool = memoryTool(agent);
   const forkApi = { ...toolApi(api, "d1"), conversationId: "fork" };
   assert.equal((await tool.execute({ action: "add", file: "user", text: "Starts work at 9am", section: "Routines" }, forkApi)).output[0].text, "Added.");
@@ -178,15 +282,15 @@ test("only the active fork has home memory rights; its messages are refused", as
   assert.equal((await tool.execute({ action: "add", file: "soul", text: "Be terse" }, forkApi)).isError, true);
   assert.equal((await MessageTools(agent.runtime).tools[0].execute({ text: "Hello" }, forkApi)).isError, true);
   for (const name of ["message", "notify", "subagent", "schedule", "ask_user", "approved", "bash", "mcp__executor__execute"]) {
-    const guarded = reflectionToolGuard(agent.runtime).handlers.beforeTool;
-    assert.match((await guarded({ name, arguments: {} }, { ...forkApi, snapshot: api.snapshot })).block, /Reflection cannot/);
-    assert.match((await guarded({ name, arguments: {}, parent: { taskId: 42, callId: "nested" } }, { ...forkApi, snapshot: api.snapshot })).block, /Reflection cannot/);
+    const guarded = routineToolGuard(agent.runtime).handlers.beforeTool;
+    assert.match((await guarded({ name, arguments: {} }, { ...forkApi, snapshot: api.snapshot })).block, /Routine forks cannot/);
+    assert.match((await guarded({ name, arguments: {}, parent: { taskId: 42, callId: "nested" } }, { ...forkApi, snapshot: api.snapshot })).block, /Routine forks cannot/);
   }
   const state = await agent.state();
-  assert.equal(reflectionAllows(agent, state.reflection, "write", { path: "SOUL.md" }), false);
-  assert.equal(reflectionAllows(agent, state.reflection, "write", { path: state.reflection.reportPath }), true);
-  assert.equal(isReflection(state, "unrelated"), false);
-  await agent.update((doc) => { delete doc.reflection; });
+  assert.equal(forkAllows(agent, state.routineRuns[1], "write", { path: "SOUL.md" }), false);
+  assert.equal(forkAllows(agent, state.routineRuns[1], "write", { path: state.routineRuns[1].reportPath }), true);
+  assert.equal(forkRecord(state, "unrelated"), undefined);
+  await agent.update((doc) => { delete doc.routineRuns; });
   assert.match((await tool.execute({ action: "add", file: "memory", text: "Later work" }, { ...forkApi, callId: "d2" })).output[0].text, /^Proposed/);
 });
 
@@ -229,10 +333,10 @@ test("a quiet trigger follows the start of quiet hours, and 23:00 when they are 
   assert.equal((await routineClocks(agent))["r-reflect"].at, "23:00");
 });
 
-test("a daily routine's slot missed while the hub was off catches up once, then waits for the next slot from now", async (t) => {
+test("a daily routine's expired slot waits for the next slot from now", async (t) => {
   const slot = new Date(now - 3 * 86400000).toISOString();
   assert.equal(slotFate({ kind: "daily", routine: "reflect" }, new Date(now - 3600000).toISOString(), now), "fire");
-  assert.equal(slotFate({ kind: "daily", routine: "reflect" }, slot, now), "catch-up");
+  assert.equal(slotFate({ kind: "daily", routine: "reflect" }, slot, now), "missed");
   assert.equal(slotFate({ kind: "daily", routine: "morning-brief" }, new Date(now - 7199999).toISOString(), now), "fire");
   assert.equal(slotFate({ kind: "daily", routine: "morning-brief" }, new Date(now - 7200000).toISOString(), now), "missed");
   assert.equal(slotFate({ kind: "daily", routine: "morning-brief" }, slot, now), "missed");
@@ -240,34 +344,34 @@ test("a daily routine's slot missed while the hub was off catches up once, then 
   assert.equal(slotFate({ kind: "daily", task: "Check back" }, slot, now), "missed");
   t.mock.timers.enable({ apis: ["Date"], now });
   const { agent } = await agentFixture(t);
-  // After the catch-up its clock keeps the old slot as lastAt: the next is one future slot, not the days it missed.
+  // After the missed slot its clock keeps the old slot as lastAt: the next is one future slot, not the days it missed.
   await agent.update((doc) => { doc.schedules["r-reflect"] = { id: "r-reflect", title: "Reflection", kind: "daily", at: "23:00", routine: "reflect", lastAt: slot }; });
   const next = Date.parse((await listSchedules(agent))[0].nextAt);
   assert.ok(next > now && next - now <= 86400000);
 });
 
-// Execute task phases against real pi-durable commits; replace only the model submission.
-async function nightFixture(t) {
+// Execute durable phases with real document commits; replace model submission only.
+async function routineFixture(t, changes = {}) {
   const fixture = await agentFixture(t);
   const { agent, session } = fixture;
   const homeId = await session.commit(async (tx) => {
     const home = await tx.createConversation({ ownership: { kind: "ownerless" } });
-    await configure(tx, home.id, { model: { provider: "fixture", modelId: "home" }, thinkingLevel: "high", instructions: "Home prompt", tools: [{ name: "memory" }, { name: "message" }] });
+    await configure(tx, home.id, { model: { provider: "fixture", modelId: "home" }, thinkingLevel: "high", instructions: "Home prompt" });
     Object.assign(await tx.doc(ConduitWorkspace, home.id), { roaming: true });
     (await tx.doc(ConduitIds, home.id)).chatId = "home-chat";
-    await tx.appendEntry(home.id, { kind: "conduit.user", data: { text: "Remember I work at 9am.", author: "person" }, model: [{ role: "user", content: "Remember I work at 9am.", timestamp: now }] });
-    await configure(tx, home.id, { tools: null });
+    await tx.appendEntry(home.id, { kind: "conduit.user", data: { text: "Work at 9am" }, model: [{ role: "user", content: "Work at 9am", timestamp: now }] });
     (await tx.doc(AgentDoc)).home.conversationId = home.id;
     return home.id;
   }, BACKGROUND_CONTEXT);
-  await writeRoutine(agent.folder, reflection());
+  const plan = { ...routine(), name: "review", mode: "fork", gate: "always", output: "inbox", tasks: [{ id: "notes", kind: "notes" }], ...changes };
+  await writeRoutine(agent.folder, plan);
   let taskId;
   await session.commit(async (tx) => {
     const doc = await tx.doc(AgentDoc);
-    taskId = await startReflection(tx, doc, agent, homeId, "night");
-    doc.reflection.startedAt = now;
+    taskId = await startRoutine(tx, doc, agent, homeId, plan, new Date(now).toISOString());
+    doc.routineRuns[taskId].startedAt = now;
   }, BACKGROUND_CONTEXT);
-  const task = { id: taskId, input: { homeId, key: "night" }, state: { checkpoint: { phase: "wait" } } };
+  const task = { id: taskId, input: { homeId, name: plan.name }, state: { checkpoint: { phase: "before", index: 0 } } };
   const memos = new Map();
   const api = { taskId, conversationId: homeId, now: () => now, signal: new AbortController().signal,
     snapshot: (token, id) => token.definition.scope === "session" ? session.snapshot(token, BACKGROUND_CONTEXT) : session.snapshot(token, id, BACKGROUND_CONTEXT),
@@ -276,157 +380,279 @@ async function nightFixture(t) {
     sleepUntil: async (until, checkpoint) => { task.state = { status: "sleeping", until, checkpoint }; },
     setTimer: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); },
   };
-  return { ...fixture, homeId, task, api, phases: reflectionTask(agent.runtime).definition.phases };
+  const reports = [];
+  const fork = { submit: async (input) => { reports.push(input); return { wait: async () => ({ status: "done", answer: 1 }) }; },
+    entries: async () => ({ items: [{ model: [{ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Summary: Kept the schedule" }] }] }] }), abort: async () => {} };
+  agent.runtime.harness = { conversation: async (id) => ({ ...fork, id }), abortTask: async () => {} };
+  const phases = routineTask(agent.runtime).definition.phases;
+  const step = () => phases[task.state.checkpoint.phase](task, api, BACKGROUND_CONTEXT);
+  const reach = async (phase) => { for (let i = 0; task.state.checkpoint?.phase !== phase && i < 10; i++) await step(); assert.equal(task.state.checkpoint?.phase, phase); };
+  return { ...fixture, homeId, task, api, phases, step, reach, plan, fork, reports };
 }
 
-test("a fork shares AgentDoc, copies workspace and agent settings, and leaves home history and turn state intact", async (t) => {
-  const { session, agent, homeId, task, api, phases } = await nightFixture(t);
+test("composition fields round trip; mode defaults to run; malformed steps are refused", () => {
+  assert.equal(routine().mode, "run");
+  const composed = text.replace("output: jbot", "mode: fork\nbefore: [{ routine: prepare, ifMissedSince: last }]\nafter: [{ compact: { minTokens: 2, minShare: 0.5 } }, { routine: follow-up }, { message: jbot }]\noutput: inbox");
+  const parsed = parseRoutine(composed, "review");
+  assert.deepEqual(parseRoutine(serializeRoutine(parsed), "review"), parsed);
+  for (const field of ["mode: other", "mode: null", "before: null", "after: null", "after: {}", "after: [{ compact: { minShare: 2 } }]", "after: [{ compact: { minTokens: -1 } }]", "after: [{ compact: { enabled: false } }]", "after: [{ message: person }]", "after: [{ routine: review }]", "before: [{ routine: prepare }]", "before: [{ routine: prepare, ifMissedSince: today }]", "after: [{ routine: prepare, message: jbot }]"]) {
+    assert.throws(() => parseRoutine(text.replace("output: jbot", `output: jbot\n${field}`), "review"), field);
+  }
+});
+
+test("cycles across both dependency lists are refused on save and at runtime; chains have a depth limit", async (t) => {
+  const { agent, session, homeId, plan } = await routineFixture(t);
+  await writeRoutine(agent.folder, { ...plan, name: "first", after: [{ routine: "second" }] });
+  await assert.rejects(writeRoutine(agent.folder, { ...plan, name: "second", before: [{ routine: "first", ifMissedSince: "last" }] }), /Routine cycle/);
+  for (const chain of [[plan.name], Array(ROUTINE_DEPTH).fill("other")]) {
+    await assert.rejects(session.commit(async (tx) => startRoutine(tx, await tx.doc(AgentDoc), agent, homeId, plan, "slot", { chain }), BACKGROUND_CONTEXT), /cycle or depth limit/);
+  }
+  await fs.writeFile(path.join(agent.folder, "routines", "second.md"), serializeRoutine({ ...plan, name: "second", after: [{ routine: "first" }] }));
+  await assert.rejects(validateRoutineGraph(agent.folder, { ...plan, name: "first", after: [{ routine: "second" }] }), /Routine cycle/);
+});
+
+test("a generic fork inherits current home settings without changing home history, identity or turn lock", async (t) => {
+  const { session, agent, homeId, task, reach } = await routineFixture(t);
   const before = await session.commit((tx) => tx.scanEntries({ conversationId: homeId }, 10), BACKGROUND_CONTEXT);
   const homeAgent = await session.snapshot(PiAgentDoc, homeId, BACKGROUND_CONTEXT);
-  const chatsBefore = agent.registry.list({ includeHidden: true }).length;
-  await phases.wait(task, api, BACKGROUND_CONTEXT);
-  assert.equal(task.state.checkpoint.phase, "run");
-  const state = await agent.state();
-  const forkId = state.reflection.conversationId;
+  await reach("run");
+  const forkId = (await agent.state()).routineRuns[task.id].conversationId;
   assert.ok(forkId && forkId !== homeId);
   assert.deepEqual(await session.snapshot(PiAgentDoc, forkId, BACKGROUND_CONTEXT), homeAgent);
   assert.deepEqual(await session.snapshot(ConduitWorkspace, forkId, BACKGROUND_CONTEXT), await session.snapshot(ConduitWorkspace, homeId, BACKGROUND_CONTEXT));
-  assert.deepEqual(await session.snapshot(LiveDoc, forkId, BACKGROUND_CONTEXT), undefined, "a fork does not copy the turn lock");
+  assert.equal(await session.snapshot(LiveDoc, forkId, BACKGROUND_CONTEXT), undefined);
+  assert.equal((await session.snapshot(ConduitIds, forkId, BACKGROUND_CONTEXT)).chatId, undefined);
   assert.deepEqual(await session.commit((tx) => tx.scanEntries({ conversationId: homeId }, 10), BACKGROUND_CONTEXT), before);
-  assert.equal((await session.snapshot(AgentDoc, BACKGROUND_CONTEXT)).reflection.conversationId, forkId);
-  assert.equal((await session.snapshot(ConduitIds, forkId, BACKGROUND_CONTEXT)).chatId, undefined, "restart recovery cannot attach the fork");
-  assert.equal((await agent.describe(forkId)).role, "run", "only memory grants home rights");
-  assert.equal(agent.registry.list({ includeHidden: true }).length, chatsBefore, "no chat is registered for the fork");
+  assert.equal((await agent.describe(forkId)).role, "run");
 });
 
-test("failed or stopped Reflection keeps notes pending; a successful reply files FYI and consumes its call ids", async (t) => {
-  const { session, agent, task, api, phases } = await nightFixture(t);
-  await memoryTool(agent).execute({ action: "note", text: "Work starts at 9am" }, { ...api, callId: "note-call" });
-  await phases.wait(task, api, BACKGROUND_CONTEXT);
-  const record = (await agent.state()).reflection;
-  assert.deepEqual(record.notesCursor.calls, ["note-call"]);
-  let status = "unanswered";
-  let stopReason = "stop";
-  const fork = { id: record.conversationId,
-    submit: async () => ({ wait: async () => ({ status, answer: 1 }) }),
-    entries: async () => ({ items: [{ model: [{ role: "assistant", stopReason, content: [{ type: "text", text: "Summary: Kept the work schedule" }] }] }] }),
-  };
-  agent.runtime.harness = { conversation: async () => fork };
-  await phases.run(task, api, BACKGROUND_CONTEXT);
-  assert.equal((await agent.state()).cursors?.reflect, undefined);
-  assert.equal((await agent.state()).reflection, undefined);
-  assert.equal((await agent.state()).lastReflection, undefined);
-  await agent.update((doc) => { doc.reflection = record; });
-  status = "done";
-  stopReason = "aborted";
-  await phases.run(task, api, BACKGROUND_CONTEXT);
-  assert.equal((await agent.state()).cursors?.reflect, undefined);
-  await agent.update((doc) => { doc.reflection = record; });
-  stopReason = "length";
-  await phases.run(task, api, BACKGROUND_CONTEXT);
-  assert.equal((await agent.state()).cursors?.reflect, undefined, "a truncated reply is not success");
-  await agent.update((doc) => { doc.reflection = record; });
-  stopReason = "stop";
-  await phases.run(task, api, BACKGROUND_CONTEXT);
-  const done = await agent.state();
-  assert.deepEqual(done.cursors.reflect.notes.calls, ["note-call"]);
-  assert.equal(done.reflection.conversationId, undefined, "memory permission ends with the turn");
-  assert.equal(Object.values(done.inbox)[0].level, "fyi");
-  assert.equal(task.state.checkpoint.phase, "compact");
-  assert.equal(await session.snapshot(UsageDoc, fork.id, BACKGROUND_CONTEXT), undefined);
-});
-
-test("the morning brief starts and waits for a missed Reflection before gathering or spawning its own run", async (t) => {
-  const { agent, session, api } = await agentFixture(t);
-  const homeId = await session.commit(async (tx) => (await tx.createConversation({ ownership: { kind: "ownerless" } })).id, BACKGROUND_CONTEXT);
-  const { ScheduleTools } = await import("../src/agent/schedule.js");
-  const clock = ScheduleTools(agent.runtime).tasks[0].definition;
-  await writeRoutine(agent.folder, { ...routine(), name: "morning-brief", gate: "always" });
-  const slot = new Date(Date.now()).toISOString();
-  const task = { id: 3, input: { scheduleId: "r-morning-brief" }, state: { checkpoint: { slot } } };
-  await agent.update((doc) => {
-    doc.lastBriefAt = "2030-01-01T08:00:00.000Z";
-    doc.lastReflection = { at: "2030-01-01T07:00:00.000Z" };
-    doc.schedules[task.input.scheduleId] = { id: task.input.scheduleId, routine: "morning-brief", kind: "daily", clock: task.id };
+test("run and fork fill the same body variables and task blocks; only run spawns a background worker", async (t) => {
+  for (const mode of ["run", "fork"]) await t.test(mode, async (t) => {
+    const f = await routineFixture(t, { mode, body: "Review {{notesBlock}} at {{windowEnd}}. Write {{reportPath}}. {{unknown}}" });
+    await memoryTool(f.agent).execute({ action: "note", text: "Starts at 9am" }, { ...f.api, callId: "call" });
+    let spawned;
+    t.mock.method(f.agent, "spawnRun", async (_tx, _home, input) => { spawned = input; return { reporter: 200 }; });
+    await f.reach("run");
+    const record = (await f.agent.state()).routineRuns[f.task.id];
+    assert.match(record.outcome.instructions, /Starts at 9am/);
+    assert.match(record.outcome.prompt, /2030-01-15T12:00:00.000Z/);
+    assert.match(record.outcome.prompt, /reports\/review\/2030-01-15.md/);
+    assert.match(record.outcome.prompt, /\{\{unknown\}\}/);
+    assert.equal(Boolean(spawned), mode === "run");
+    if (spawned) assert.match(spawned.task, /Starts at 9am/);
+    assert.equal((await f.agent.state()).cursors?.review, undefined);
   });
-  assert.equal(needsReflection(await agent.state()), true);
-  let running = true;
-  agent.runtime.harness = { getTask: async () => ({ state: { status: running ? "running" : "terminal" } }) };
-  const memos = new Map();
-  let slept = false;
-  let spawned = 0;
-  t.mock.method(agent, "spawnRun", async () => { spawned++; });
-  const clockApi = { ...api, conversationId: homeId, now: Date.now,
-    commit: async (fn) => { await session.commit(fn, BACKGROUND_CONTEXT); },
-    memo: async (key, value) => { if (value !== BACKGROUND_CONTEXT) memos.set(key, value); return memos.get(key); },
-    sleepUntil: async () => { slept = true; },
-  };
-  await clock.phases.fire(task, clockApi, BACKGROUND_CONTEXT);
-  assert.equal(slept, true);
-  assert.equal(spawned, 0);
-  assert.ok((await agent.state()).reflection.taskId);
-  await agent.update((doc) => {
-    finishReflection(doc, { key: "before-brief", notesCursor: { calls: [] }, windowStart: "start", windowEnd: slot }, "Summary: Learned the work schedule", slot);
-    delete doc.reflection;
+});
+
+test("all task cursors commit after success in either mode; failed or truncated replies keep notes pending", async (t) => {
+  for (const mode of ["run", "fork"]) await t.test(mode, async (t) => {
+    const f = await routineFixture(t, { mode, tasks: [{ id: "notes", kind: "notes" }, { id: "chats", kind: "chats" }] });
+    await memoryTool(f.agent).execute({ action: "note", text: "Starts at 9am" }, { ...f.api, callId: "note-call" });
+    t.mock.method(f.agent, "spawnRun", async () => ({ reporter: 200 }));
+    await f.reach("run");
+    const record = (await f.agent.state()).routineRuns[f.task.id];
+    if (mode === "run") f.api.waitForTask = async () => ({ state: { outcome: { status: "completed", result: { status: "failed", answer: "failed" } } } });
+    else f.fork.entries = async () => ({ items: [{ model: [{ stopReason: "length", content: [{ type: "text", text: "partial" }] }] }] });
+    await f.step();
+    assert.equal((await f.agent.state()).cursors?.review, undefined);
+    assert.match((await f.agent.state()).routineState.review.lastError, /did not finish successfully/);
+    await f.agent.update((doc) => { doc.routineRuns[f.task.id] = record; });
+    f.task.state = { checkpoint: { phase: "run" } };
+    if (mode === "run") f.api.waitForTask = async () => ({ state: { outcome: { status: "completed", result: { status: "finished", answer: "ready" } } } });
+    else f.fork.entries = async () => ({ items: [{ model: [{ stopReason: "stop", content: [{ type: "text", text: "ready" }] }] }] });
+    await f.step();
+    const state = await f.agent.state();
+    assert.deepEqual(state.cursors.review, record.outcome.cursors);
+    assert.deepEqual(state.cursors.review.notes.calls, ["note-call"]);
+    assert.equal(state.routineRuns[f.task.id].conversationId, undefined);
   });
-  running = false;
-  await clock.phases.fire(task, clockApi, BACKGROUND_CONTEXT);
-  assert.equal(spawned, 1);
-  const outcome = [...memos.entries()].find(([key]) => key.startsWith("routine:"))[1];
-  assert.match(outcome.message, /Learned the work schedule/);
-  assert.equal(needsReflection(await agent.state()), true, "the next night follows this brief");
 });
 
-test("Reflection atomically admits compaction for an idle home", async (t) => {
-  const { agent, session, homeId, task, api, phases } = await nightFixture(t);
-  agent.runtime.harness = { submission: async () => ({ wait: async () => ({ status: "done" }) }), conversation: async () => ({}) };
-  agent.runtime.reflectionContextUsage = async () => ({ tokens: 100000, contextWindow: 200000, compactAt: 150000 });
-  let compactId;
-  api.waitForTask = async (id) => { compactId = id; return { state: { outcome: { status: "completed", result: { submissionId: 778 } } } }; };
-  await phases.compact(task, api, BACKGROUND_CONTEXT);
-  const compact = await session.commit((tx) => tx.task(compactId), BACKGROUND_CONTEXT);
-  assert.equal(compact.kind, "pi.compaction");
-  assert.equal(compact.input.reason, "manual");
-  assert.match(compact.input.instructions, /Durable facts were just written to USER.md, MEMORY.md and the diary/);
-  assert.match(compact.input.instructions, /open commitments, threads in progress/);
-  assert.equal((await session.snapshot(LiveDoc, homeId, BACKGROUND_CONTEXT)).compactions[0].taskId, compactId);
-  assert.equal((await agent.state()).lastNightlyCompaction, new Date(now).toISOString());
-  assert.equal((await agent.state()).reflection, undefined);
+test("a closed gate advances cursors and starts no after steps; budget skips leave cursors unchanged", async (t) => {
+  const f = await routineFixture(t, { mode: "run", gate: "when-new", tasks: [{ id: "chats", kind: "chats" }], after: [{ message: "jbot" }] });
+  await f.reach("done");
+  assert.ok((await f.agent.state()).cursors.review.chats.since);
+  await f.step();
+  assert.equal(f.reports.length, 0);
+  assert.ok((await f.agent.state()).routineState.review.finishedAt);
+  const b = await routineFixture(t);
+  t.mock.method(b.agent, "overBudget", async () => true);
+  await b.step(); await b.step();
+  assert.equal((await b.agent.state()).cursors?.review, undefined);
+  assert.match((await b.agent.state()).routineState.review.lastError, /budget/);
 });
 
-test("a home turn starting before the admission commit prevents compaction", async (t) => {
-  const { agent, session, homeId, task, api, phases } = await nightFixture(t);
-  agent.runtime.harness = { conversation: async () => ({}) };
-  agent.runtime.reflectionContextUsage = async () => ({ tokens: 100000, contextWindow: 200000, compactAt: 150000 });
-  api.commit = async (fn) => {
-    await session.commit(async (tx) => {
-      (await tx.doc(LiveDoc, homeId)).run = { taskId: 999, inputs: [] };
-      await fn(tx);
-    }, BACKGROUND_CONTEXT);
+test("after steps run in order; failure stops the rest without undoing consumed cursors", async (t) => {
+  const f = await routineFixture(t, { after: [{ message: "jbot" }, { compact: {} }, { message: "jbot" }] });
+  await f.reach("after");
+  const order = [];
+  f.agent.runtime.harness.conversation = async () => ({ submit: async (input) => { order.push(input.requestId); } });
+  f.agent.runtime.routineContextUsage = async () => { order.push("compact"); return { tokens: 100000, contextWindow: 200000, compactAt: 150000 }; };
+  f.api.waitForTask = async () => ({ state: { outcome: { status: "failed", error: { message: "model unavailable" } } } });
+  await f.step(); await f.step();
+  assert.equal(order.length, 2);
+  assert.match(order[0], /after:0$/);
+  assert.equal(order[1], "compact");
+  assert.equal(f.task.state.outcome.status, "aborted");
+  const state = await f.agent.state();
+  assert.equal(state.routineState.review.lastError, "Compaction: model unavailable");
+  assert.match(state.notices.at(-1).text, /Compaction: model unavailable/);
+  assert.ok(state.cursors.review);
+  assert.ok(state.routineState.review.completedAt);
+  assert.equal(state.routineState.review.finishedAt, undefined);
+});
+
+test("compaction places its summary before the next message; below-threshold compaction skips", async (t) => {
+  for (const tokens of [100000, 99999]) await t.test(String(tokens), async (t) => {
+    const f = await routineFixture(t, { after: [{ compact: {} }, { message: "jbot" }] });
+    await f.reach("after");
+    const order = [];
+    f.agent.runtime.routineContextUsage = async () => ({ tokens, contextWindow: 200000, compactAt: 150000 });
+    f.api.waitForTask = async () => { order.push("compact"); return { state: { outcome: { status: "completed", result: { submissionId: 123 } } } }; };
+    f.agent.runtime.harness.submission = async () => ({ wait: async () => { order.push("placed"); return { status: "done" }; } });
+    f.agent.runtime.harness.conversation = async () => ({ submit: async () => { order.push("message"); } });
+    await f.step(); await f.step(); await f.step();
+    assert.deepEqual(order, tokens === 100000 ? ["compact", "placed", "message"] : ["message"]);
+    assert.equal(f.task.state.outcome.status, "completed");
+  });
+});
+
+test("chained routines keep their own tasks and gate; the parent waits for full completion", async (t) => {
+  const f = await routineFixture(t, { after: [{ routine: "collect" }, { message: "jbot" }] });
+  await writeRoutine(f.agent.folder, { ...routine(), name: "collect", gate: "never", tasks: [{ id: "chats", kind: "chats" }], after: [] });
+  await f.reach("after");
+  f.api.waitForTask = async (id) => {
+    const record = (await f.agent.state()).routineRuns[id];
+    assert.equal(record.force, false);
+    assert.equal(record.routine.gate, "never");
+    assert.equal(record.routine.tasks[0].id, "chats");
+    assert.deepEqual(record.chain, ["review", "collect"]);
+    return { state: { outcome: { status: "completed" } } };
   };
-  await phases.compact(task, api, BACKGROUND_CONTEXT);
-  const live = await session.snapshot(LiveDoc, homeId, BACKGROUND_CONTEXT);
-  assert.equal(live.compactions, undefined);
-  assert.equal((await agent.state()).reflection.compactionId, undefined);
-  assert.equal(task.state.status, "sleeping");
+  await f.step();
+  assert.equal(f.task.state.checkpoint.index, 1);
+  assert.equal(f.reports.length, 1);
+  await f.step();
+  assert.match(f.reports.at(-1).requestId, /after:1$/);
 });
 
-test("a busy home waits at most thirty minutes without forking or consuming notes", async (t) => {
-  const { agent, session, homeId, task, api, phases } = await nightFixture(t);
-  await session.commit(async (tx) => {
-    (await tx.doc(AgentDoc)).reflection.startedAt = now - 30 * 60000;
-    (await tx.doc(LiveDoc, homeId)).run = { taskId: 999, inputs: [] };
-  }, BACKGROUND_CONTEXT);
-  await phases.wait(task, api, BACKGROUND_CONTEXT);
-  assert.equal((await agent.state()).reflection, undefined);
-  assert.equal((await agent.state()).lastReflection, undefined);
-  assert.equal(task.state.outcome.status, "aborted");
+test("before ifMissedSince compares full completion with the parent's previous firing and waits before gathering", async (t) => {
+  for (const fresh of [false, true]) await t.test(String(fresh), async (t) => {
+    const f = await routineFixture(t, { before: [{ routine: "prepare", ifMissedSince: "last" }] });
+    await writeRoutine(f.agent.folder, { ...routine(), name: "prepare", after: [{ message: "jbot" }] });
+    await f.agent.update((doc) => {
+      doc.routineRuns[f.task.id].previousAt = "2030-01-14T12:00:00.000Z";
+      doc.routineState.prepare = { finishedAt: fresh ? "2030-01-15T11:00:00.000Z" : "2030-01-14T11:00:00.000Z" };
+    });
+    let waits = 0;
+    f.api.waitForTask = async (id) => {
+      waits++;
+      assert.equal((await f.agent.state()).routineRuns[id].routine.name, "prepare");
+      assert.equal((await f.agent.state()).routineRuns[f.task.id].outcome, undefined);
+      return { state: { outcome: { status: "completed" } } };
+    };
+    await f.step();
+    assert.equal(waits, fresh ? 0 : 1);
+    await f.step();
+    assert.equal(f.task.state.checkpoint.phase, "gather");
+  });
 });
 
-test("Reflection keeps inherited prompt sections without treating its other tools as home", async (t) => {
+test("a failed or stalled prerequisite is noticed and the parent continues within the bound", async (t) => {
+  for (const stalled of [false, true]) await t.test(String(stalled), async (t) => {
+    const f = await routineFixture(t, { before: [{ routine: "prepare", ifMissedSince: "last" }] });
+    await writeRoutine(f.agent.folder, { ...routine(), name: "prepare" });
+    let aborted;
+    f.agent.runtime.harness.abortTask = async (id) => { aborted = id; };
+    f.api.waitForTask = stalled ? async () => new Promise(() => {}) : async () => ({ state: { outcome: { status: "aborted", reason: "worker failed" } } });
+    if (stalled) f.api.setTimer = (callback) => { queueMicrotask(callback); return () => {}; };
+    await f.step();
+    assert.equal(f.task.state.checkpoint.phase, "before");
+    assert.equal(f.task.state.checkpoint.index, 1);
+    assert.equal((await f.agent.state()).cursors?.review, undefined);
+    assert.ok(aborted);
+    assert.match((await f.agent.state()).notices.at(-1).text, stalled ? /30-minute/ : /worker failed/);
+    await f.step();
+    assert.equal(f.task.state.checkpoint.phase, "gather");
+  });
+});
+
+test("a busy home blocks forks and compaction until the idle wait bound", async (t) => {
+  for (const compact of [false, true]) await t.test(String(compact), async (t) => {
+    const f = await routineFixture(t, { after: compact ? [{ compact: {} }] : [] });
+    await f.reach(compact ? "after" : "wait");
+    await f.session.commit(async (tx) => { (await tx.doc(LiveDoc, f.homeId)).run = { taskId: 99 }; }, BACKGROUND_CONTEXT);
+    await f.step();
+    assert.equal(f.task.state.status, "sleeping");
+    f.api.now = () => now + 30 * 60000;
+    await f.step();
+    assert.equal(f.task.state.outcome.status, "aborted");
+    assert.match((await f.agent.state()).routineState.review.lastError, /idle wait limit/);
+  });
+});
+
+test("the compaction guard declines if a home turn starts after admission", async () => {
+  const guard = routineCompactionGuard().handlers.beforeCompact;
+  const api = { conversationId: 1, snapshot: async () => ({ run: { taskId: 9 } }) };
+  assert.deepEqual(await guard({ instructions: "Routine compaction 7. Keep working state." }, api), { decline: true });
+  assert.equal(await guard({ instructions: "Ordinary automatic summary" }, api), undefined);
+});
+
+test("seed routines parse and compose through general fields", async () => {
+  const seed = new URL("../../templates/agent/seed/routines/", import.meta.url);
+  const seeds = {};
+  for (const name of ["reflect", "morning-brief", "heartbeat"]) {
+    seeds[name] = parseRoutine(await fs.readFile(new URL(`${name}.md`, seed), "utf8"), name);
+    assert.deepEqual(parseRoutine(serializeRoutine(seeds[name]), name), seeds[name]);
+  }
+  assert.equal(seeds.reflect.mode, "fork");
+  assert.deepEqual(seeds.reflect.tasks, [{ id: "notes", kind: "notes" }]);
+  assert.deepEqual(seeds.reflect.after, [{ compact: {} }]);
+  assert.deepEqual(seeds["morning-brief"].before, [{ routine: "reflect", ifMissedSince: "last" }]);
+  assert.equal(seeds.heartbeat.mode, "run");
+});
+
+test("a real durable scheduler runs a generic fork then a chained background run on the scripted model", { timeout: 5000 }, async (t) => {
+  const { createModels } = await import("@earendil-works/pi-ai/models");
+  const { createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable");
+  const { scriptedProvider } = await import("../src/server/scripted-model.js");
+  const { AgentExtension } = await import("../src/agent/extension.js");
+  const { Subagents } = await import("../src/server/subagents.js");
+  const { agent } = await agentFixture(t);
+  const models = createModels(); models.setProvider(scriptedProvider());
+  const registry = createRegistry();
+  const subagents = Subagents(agent.runtime); registry.install(subagents);
+  const extension = AgentExtension(agent.runtime, []); registry.install(extension);
+  const harness = await Harness.open(new MemoryStorage(), { models, registry }, BACKGROUND_CONTEXT);
+  t.after(() => harness.close(BACKGROUND_CONTEXT));
+  agent.runtime.harness = harness; agent.runtime.open = async () => harness;
+  const home = await harness.root(BACKGROUND_CONTEXT, { agent: {
+    model: { provider: "conduit-test", modelId: "steady" }, thinkingLevel: "max", instructions: "Home system prompt", extensions: [extension, subagents],
+  } });
+  await agent.update((doc) => { doc.home = { conversationId: home.id, chatId: "home" }; });
+  await (await home.submit({ type: "input", requestId: "home", content: "Reply with the single word home." }, BACKGROUND_CONTEXT)).wait(BACKGROUND_CONTEXT);
+  const entriesBefore = (await home.entries({}, 100, undefined, BACKGROUND_CONTEXT)).items;
+  const plan = { ...routine(), name: "review", mode: "fork", gate: "always", tasks: [], output: "inbox", body: "Reply with the single word ready.", after: [{ routine: "collect" }] };
+  await writeRoutine(agent.folder, { ...plan, name: "collect", mode: "run", after: [], body: "Reply with the single word collected." });
+  await writeRoutine(agent.folder, plan);
+  let id;
+  await home.commit(async (tx) => { id = await startRoutine(tx, await tx.doc(AgentDoc), agent, home.id, plan, new Date().toISOString()); }, BACKGROUND_CONTEXT);
+  const result = await harness.waitForTask(id, BACKGROUND_CONTEXT);
+  assert.equal(result.state.outcome.status, "completed", JSON.stringify(result.state.outcome));
+  const state = await agent.state();
+  assert.ok(state.routineState.review.finishedAt);
+  assert.ok(state.routineState.collect.finishedAt);
+  assert.deepEqual(state.routineRuns, {});
+  assert.deepEqual((await home.entries({}, 100, undefined, BACKGROUND_CONTEXT)).items.filter((entry) => entry.kind !== "conduit.run-quiet"), entriesBefore);
+  assert.ok(Object.values(state.inbox).some((entry) => entry.kind === "review"));
+  assert.ok(state.cursors.collect);
+});
+
+
+test("a fork keeps inherited prompt sections without granting home rights to its other tools", async (t) => {
   const { AgentExtension } = await import("../src/agent/extension.js");
   const { agent, api } = await agentFixture(t);
-  await agent.update((doc) => { doc.reflection = { conversationId: "fork" }; });
+  await agent.update((doc) => { doc.routineRuns = { 1: { conversationId: "fork" } }; });
   const extension = AgentExtension(agent.runtime, []);
   for (const key of ["agent-memory", "agent-inbox"]) {
     const wrapper = extension.wraps.find((wrap) => wrap.section === key);
@@ -436,127 +662,30 @@ test("Reflection keeps inherited prompt sections without treating its other tool
   }
 });
 
-test("the durable scheduler runs a complete hidden Reflection turn on a scripted model", { timeout: 5000 }, async (t) => {
-  const { createModels } = await import("@earendil-works/pi-ai/models");
-  const { createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable");
-  const { scriptedProvider } = await import("../src/server/scripted-model.js");
-  const { AgentExtension } = await import("../src/agent/extension.js");
-  const { agent } = await agentFixture(t);
-  const homeChatId = (await agent.state()).home.chatId;
-  const models = createModels();
-  models.setProvider(scriptedProvider());
-  const registry = createRegistry();
-  const extension = AgentExtension(agent.runtime, []);
-  registry.install(extension);
-  const harness = await Harness.open(new MemoryStorage(), { models, registry }, BACKGROUND_CONTEXT);
-  t.after(() => harness.close(BACKGROUND_CONTEXT));
-  agent.runtime.harness = harness;
-  agent.runtime.open = async () => harness;
-  const home = await harness.root(BACKGROUND_CONTEXT, { agent: {
-    model: { provider: "conduit-test", modelId: "steady" }, thinkingLevel: "max", instructions: "Home system prompt", extensions: [extension],
-  } });
-  await agent.update((doc) => { doc.home = { conversationId: home.id, chatId: homeChatId }; });
-  await (await home.submit({ type: "input", requestId: "home", content: "Reply with the single word home." }, BACKGROUND_CONTEXT)).wait(BACKGROUND_CONTEXT);
-  const entriesBefore = (await home.entries({}, 100, undefined, BACKGROUND_CONTEXT)).items;
-  await writeRoutine(agent.folder, { ...reflection(), body: "Reply with the single word ready." });
-  let id;
-  await home.commit(async (tx) => { id = await startReflection(tx, await tx.doc(AgentDoc), agent, home.id, "scheduled-night"); }, BACKGROUND_CONTEXT);
-  const result = await harness.waitForTask(id, BACKGROUND_CONTEXT);
-  assert.equal(result.state.outcome.status, "completed");
-  const state = await agent.state();
-  assert.equal(state.reflection, undefined);
-  assert.equal(state.lastReflection.key, "scheduled-night");
-  assert.match(Object.values(state.inbox)[0].body, /^The scripted turn acted on: no keywords/);
-  assert.deepEqual((await home.entries({}, 100, undefined, BACKGROUND_CONTEXT)).items, entriesBefore);
-  // Run now follows the same ordering as a scheduled morning brief.
-  await writeRoutine(agent.folder, { ...routine(), name: "morning-brief", gate: "always" });
-  await agent.update((doc) => { doc.lastBriefAt = new Date(Date.now() + 1).toISOString(); });
-  let brief;
-  t.mock.method(agent, "spawnRun", async (_tx, _home, input) => { brief = input; });
-  assert.equal((await agent.fireRoutine("morning-brief", "run-now")).ran, true);
-  assert.equal((await agent.state()).lastReflection.key, "before-brief:run-now");
-  assert.match(brief.task, /Reflection/);
-});
-
-test("a stalled Reflection turn is aborted and its notes remain pending", async (t) => {
-  const { agent, task, api, phases } = await nightFixture(t);
-  await phases.wait(task, api, BACKGROUND_CONTEXT);
-  const forkId = (await agent.state()).reflection.conversationId;
+test("a stalled fork is aborted before its memory guard is revoked", async (t) => {
+  const f = await routineFixture(t);
+  await f.reach("run");
+  const forkId = (await f.agent.state()).routineRuns[f.task.id].conversationId;
   let aborted = false;
-  agent.runtime.harness = { conversation: async () => ({ id: forkId,
-    submit: async () => ({ wait: () => new Promise(() => {}) }), abort: async () => { aborted = true; } }) };
-  api.setTimer = (callback) => { queueMicrotask(callback); return () => {}; };
-  await phases.run(task, api, BACKGROUND_CONTEXT);
-  assert.equal(aborted, true);
-  assert.equal((await agent.state()).reflection, undefined);
-  assert.equal((await agent.state()).lastReflection, undefined);
-  assert.equal(task.state.outcome.status, "aborted");
-});
-
-test("a nightly compaction is declined if the home turn starts after admission", async (t) => {
-  const { agent, api } = await agentFixture(t);
-  await agent.update((doc) => { doc.reflection = { taskId: 7 }; });
-  const guard = reflectionCompactionGuard().handlers.beforeCompact;
-  const hookApi = { conversationId: api.conversationId, snapshot: (token) => token === AgentDoc ? agent.state() : { run: { taskId: 9 } } };
-  assert.deepEqual(await guard({ instructions: "Nightly Reflection 7. Keep the working state." }, hookApi), { decline: true });
-  assert.equal(await guard({ instructions: "Manual compaction." }, hookApi), undefined);
-});
-
-test("a terminal Reflection record does not block the next cycle", async (t) => {
-  const { agent, session, homeId } = await nightFixture(t);
-  await agent.update((doc) => { doc.reflection.taskId = 999999; });
-  let next;
-  await session.commit(async (tx) => { next = await startReflection(tx, await tx.doc(AgentDoc), agent, homeId, "next-night"); }, BACKGROUND_CONTEXT);
-  assert.ok(next);
-  assert.equal((await agent.state()).reflection.taskId, next);
-});
-
-test("a completing Reflection keeps its active fork guard until terminal", async () => {
-  const doc = { reflection: { taskId: 12, conversationId: 20 } };
-  const tx = { task: async () => ({ id: 12, state: { status: "completing" } }), createTask: async () => { throw new Error("must not start a second fork"); } };
-  assert.equal(await startReflection(tx, doc, { runtime: {} }, 1, "night"), 12);
-  assert.equal(doc.reflection.conversationId, 20);
-});
-
-test("a stalled Reflection cannot hold the morning brief past the deadline", async (t) => {
-  const { agent, session, api } = await agentFixture(t);
-  const homeId = await session.commit(async (tx) => (await tx.createConversation({ ownership: { kind: "ownerless" } })).id, BACKGROUND_CONTEXT);
-  const { ScheduleTools } = await import("../src/agent/schedule.js");
-  const clock = ScheduleTools(agent.runtime).tasks[0].definition;
-  await writeRoutine(agent.folder, { ...routine(), name: "morning-brief", gate: "always" });
-  const slot = new Date().toISOString();
-  const task = { id: 3, input: { scheduleId: "r-morning-brief" }, state: { checkpoint: { slot } } };
-  await agent.update((doc) => { doc.schedules[task.input.scheduleId] = { id: task.input.scheduleId, routine: "morning-brief", kind: "daily", clock: task.id }; });
-  let aborted = 0;
-  agent.runtime.harness = { getTask: async () => ({ state: { status: "running" } }), abortTask: async () => { aborted++; } };
-  let brief = 0;
-  t.mock.method(agent, "spawnRun", async () => { brief++; });
-  const memos = new Map();
-  const clockApi = { ...api, conversationId: homeId, now: Date.now,
-    commit: async (fn) => { await session.commit(fn, BACKGROUND_CONTEXT); },
-    memo: async (key, value) => { if (value !== BACKGROUND_CONTEXT) memos.set(key, value); return memos.get(key); },
-    sleepUntil: async () => {},
+  f.fork.submit = async () => ({ wait: () => new Promise(() => {}) });
+  f.fork.abort = async () => {
+    assert.ok(forkRecord(await f.agent.state(), forkId));
+    aborted = true;
   };
-  await clock.phases.fire(task, clockApi, BACKGROUND_CONTEXT);
-  await agent.update((doc) => { doc.reflection.startedAt = Date.now() - 30 * 60000; });
-  await clock.phases.fire(task, clockApi, BACKGROUND_CONTEXT);
-  assert.equal(aborted, 1);
-  assert.equal(brief, 1);
-  assert.ok((await agent.state()).reflection, "the guard remains until the fork stops");
+  f.api.setTimer = (callback) => { queueMicrotask(callback); return () => {}; };
+  await f.step();
+  assert.equal(aborted, true);
+  assert.equal((await f.agent.state()).routineRuns[f.task.id], undefined);
+  assert.equal((await f.agent.state()).cursors?.review, undefined);
+  assert.equal(f.task.state.outcome.status, "aborted");
 });
 
-test("a failed compaction records its error and leaves successful Reflection intact", async (t) => {
-  const { agent, task, api, phases } = await nightFixture(t);
-  agent.runtime.harness = { conversation: async () => ({ compact: async () => 777 }) };
-  agent.runtime.reflectionContextUsage = async () => ({ tokens: 100000, contextWindow: 200000, compactAt: 150000 });
-  api.waitForTask = async () => ({ state: { outcome: { status: "failed", error: { message: "model unavailable" } } } });
-  await agent.update((doc) => { doc.lastReflection = { key: "night", at: new Date(now).toISOString() }; });
-  await phases.compact(task, api, BACKGROUND_CONTEXT);
-  const state = await agent.state();
-  assert.equal(state.routineState.reflect.lastError, "Compaction: model unavailable");
-  assert.equal(state.lastNightlyCompaction, undefined);
-  assert.equal(state.lastReflection.key, "night");
-  assert.equal(state.reflection, undefined);
+test("a completing lifecycle keeps its active fork guard and cannot admit a second fork", async () => {
+  const plan = { ...routine(), name: "review" };
+  const doc = { routineRuns: { 12: { taskId: 12, routine: plan, conversationId: 20 } } };
+  const tx = { task: async () => ({ id: 12, state: { status: "completing" } }), createTask: async () => { throw new Error("must not start a second fork"); } };
+  assert.equal(await startRoutine(tx, doc, { runtime: {} }, 1, plan, "slot"), 12);
+  assert.equal(doc.routineRuns[12].conversationId, 20);
 });
 
 test("old token usage cannot trigger a second compaction after a summary", async (t) => {
@@ -566,7 +695,81 @@ test("old token usage cannot trigger a second compaction after a summary", async
   t.mock.method(adapter, "entries", async () => [{ kind: "pi.assistant", model: [{ usage: { input: 120000 } }] }, { kind: "pi.compaction" }]);
   t.mock.method(adapter, "contextFromHistory", async () => ({ contextUsage: { tokens: 120000 } }));
   const home = { agent: async () => ({ model: { provider: "test", modelId: "one" } }) };
-  assert.equal(await runtime.reflectionContextUsage(home), null);
+  assert.equal(await runtime.routineContextUsage(home), null);
+});
+
+test("the previous durable task definition stops its fork and compaction before revoking access", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  const old = { taskId: 7, conversationId: "old-fork", reportPath: "reflections/old.md", compactionId: 8 };
+  await agent.update((doc) => { doc.reflection = old; doc.cursors = { reflect: { notes: { calls: ["already-consumed"] } } }; });
+  const actions = [];
+  agent.runtime.harness = {
+    conversation: async () => ({ abort: async () => {
+      assert.equal(forkRecord(await agent.state(), "old-fork").taskId, 7);
+      actions.push("fork");
+    } }),
+    getTask: async () => ({ state: { status: "running" } }),
+    abortTask: async () => { assert.ok(forkRecord(await agent.state(), "old-fork")); actions.push("compact"); },
+    waitForTask: async () => { actions.push("settled"); },
+  };
+  const definition = legacyRoutineTask(agent.runtime).definition;
+  assert.equal(definition.name, "conduit.agent-reflection");
+  assert.deepEqual(Object.keys(definition.phases).sort(), ["compact", "run", "wait"]);
+  let outcome;
+  const legacyApi = { ...api, taskId: 7, now: () => now,
+    snapshot: async (token) => token === AgentDoc ? agent.state() : null,
+    commit: async (change) => { outcome = await api.commit(change); },
+  };
+  await definition.phases.run({ id: 7 }, legacyApi, BACKGROUND_CONTEXT);
+  assert.deepEqual(actions, ["fork", "compact", "settled"]);
+  const state = await agent.state();
+  assert.equal(state.reflection, undefined);
+  assert.deepEqual(state.cursors.reflect.notes.calls, ["already-consumed"]);
+  assert.equal(state.routineState.reflect.lastError, "Interrupted by routine upgrade.");
+  assert.equal(outcome.outcome.status, "aborted");
+});
+
+test("a persisted old task is recovered by the scheduler and terminated cleanly", { timeout: 5000 }, async (t) => {
+  const { createSession, createRegistry, Harness, MemoryStorage } = await import("@earendil-works/pi-durable");
+  const { createModels } = await import("@earendil-works/pi-ai/models");
+  const { AgentExtension } = await import("../src/agent/extension.js");
+  const { agent } = await agentFixture(t);
+  const storage = new MemoryStorage();
+  const prior = createSession(storage);
+  const oldDefinition = legacyRoutineTask(agent.runtime);
+  let id;
+  await prior.commit(async (tx) => {
+    const home = await tx.createConversation({ ownership: { kind: "ownerless" } });
+    id = await tx.createTask(oldDefinition, { key: "old", homeId: home.id }, {
+      conversationId: home.id, ownership: { kind: "conversation" }, background: true,
+    });
+    const doc = await tx.doc(AgentDoc);
+    doc.reflection = { taskId: id, conversationId: null };
+    doc.cursors = { reflect: { notes: { calls: ["kept"] } } };
+  }, BACKGROUND_CONTEXT);
+  const registry = createRegistry();
+  registry.install(AgentExtension(agent.runtime, []));
+  const harness = await Harness.open(storage, { models: createModels(), registry }, BACKGROUND_CONTEXT);
+  agent.runtime.harness = harness;
+  agent.runtime.open = async () => harness;
+  t.after(async () => { await harness.close(BACKGROUND_CONTEXT); await prior.close(BACKGROUND_CONTEXT); });
+  const result = await harness.waitForTask(id, BACKGROUND_CONTEXT);
+  assert.equal(result.state.outcome.status, "aborted");
+  const state = await harness.snapshot(AgentDoc, BACKGROUND_CONTEXT);
+  assert.equal(state.reflection, undefined);
+  assert.deepEqual(state.cursors.reflect.notes.calls, ["kept"]);
+});
+
+test("legacy fork permissions and compaction guards remain active until the old task stops", async (t) => {
+  const { agent, api } = await agentFixture(t);
+  await agent.update((doc) => { doc.reflection = { taskId: 7, conversationId: "old", reportPath: "reflections/old.md" }; });
+  const hookApi = { ...api, conversationId: "old" };
+  for (const name of ["message", "notify", "subagent", "mcp__executor__execute"]) {
+    assert.match((await routineToolGuard(agent.runtime).handlers.beforeTool({ name, arguments: {} }, hookApi)).block, /cannot/);
+  }
+  const guard = routineCompactionGuard().handlers.beforeCompact;
+  const guardApi = { conversationId: "home", snapshot: async (token) => token === AgentDoc ? agent.state() : { run: { taskId: 9 } } };
+  assert.deepEqual(await guard({ instructions: "Nightly Reflection 7. Keep the working state." }, guardApi), { decline: true });
 });
 
 test("trigger parsing and serialisation preserve a map or a list with windows", () => {

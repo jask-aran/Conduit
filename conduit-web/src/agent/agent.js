@@ -8,8 +8,8 @@ import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
 import { migrateSoul } from "./memory.js";
-import { applyRoutine, executeRoutine, migrateToRoutines, promptVars, runInstructions } from "./routines.js";
-import { needsReflection, REFLECTION_WAIT_MS, startReflection } from "./reflection.js";
+import { migrateToRoutines, promptVars, runInstructions } from "./routines.js";
+import { startRoutine } from "./routine-task.js";
 import { readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
@@ -359,37 +359,20 @@ export class PersistentAgent {
     const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
     if (!routine) return { error: "routine_not_found", status: 404 };
     if (routine.error) return { error: routine.error, status: 400 };
-    let state = await this.state();
-    if (name === "morning-brief" && needsReflection(state) && !await this.overBudget()) {
-      const { conversationId } = await this.home();
-      const harness = await this.runtime.open();
-      const reflection = await this.update(async (doc, tx) => needsReflection(doc)
-        ? startReflection(tx, doc, this, conversationId, `before-brief:${key || new Date().toISOString()}`) : null);
-      if (reflection) {
-        const startedAt = (await this.state()).reflection?.startedAt ?? Date.now();
-        let timer;
-        const done = await Promise.race([harness.waitForTask(reflection, this.context), new Promise((resolve) => {
-          timer = setTimeout(() => resolve(null), Math.max(0, REFLECTION_WAIT_MS - (Date.now() - startedAt)));
-        })]).finally(() => clearTimeout(timer));
-        if (!done) await harness.abortTask(reflection, this.context);
-      }
-      state = await this.state();
-    }
-    const outcome = await executeRoutine(this, routine, { cursors: state.cursors?.[name] || {}, state, force: true });
-    if (outcome.run && await this.overBudget()) return { error: "agent_over_budget" };
+    if (await this.overBudget() && routine.gate !== "never") return { error: "agent_over_budget" };
     const { conversationId } = await this.home();
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(conversationId, this.context);
     const slot = new Date().toISOString();
-    const run = await conversation.commit(async (tx) => {
+    const taskId = await conversation.commit(async (tx) => {
       const doc = await tx.doc(AgentDoc);
-      await applyRoutine(tx, doc, this, conversationId, { ...routine, name }, { ...outcome, key }, slot);
+      const id = await startRoutine(tx, doc, this, conversationId, routine, slot, { force: true,
+        ...(key ? { key: `manual:${name}:${key}` } : {}) });
       const current = doc.schedules[`r-${name}`];
-      // Run while it was due (its clock late): this firing is that slot's, so the clock does not fire it again.
       if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
-      return outcome.run;
+      return id;
     }, this.context);
-    return { ran: run, tasks: outcome.tasks, fresh: outcome.fresh };
+    return { ran: routine.gate !== "never", taskId };
   }
 
   /**
@@ -397,13 +380,13 @@ export class PersistentAgent {
    * system prompt is RUN.md (routines.js), a routine's with its `<routine>` block; `raw` takes `task` as the whole
    * first message (a routine composes its own). `output`: where its report goes (jbot, inbox, both).
    */
-  async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null }) {
+  async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null, routineTaskId = null }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
     const work = this.settings().work[kind === "brief" || kind === "morning-brief" ? "brief" : kind === "heartbeat" ? "heartbeat" : "other"];
-    const chosen = model ? { model, thinkingLevel } : work ? { model: work.model, thinkingLevel: work.thinkingLevel } : {};
+    const chosen = model ? { model, thinkingLevel } : work ? { model: work.model, thinkingLevel: thinkingLevel || work.thinkingLevel } : {};
     return this.runtime.spawnBackground(tx, conversationId, { key, title: title || kind,
       task: raw ? task : await runBrief(kind, task, this.settings().timezone, this.runtime.contextStore), instructions: instructions ?? await runInstructions(this),
-      origin: { kind, key, ...(output ? { output } : {}) }, gate: true, ...chosen });
+      origin: { kind, key, ...(output ? { output } : {}), ...(routineTaskId ? { routineTaskId } : {}) }, gate: true, ...chosen });
   }
 
   /** The agent as the API shows it. */

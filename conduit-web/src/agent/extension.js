@@ -1,5 +1,5 @@
 import { defineExtension, wrapSection } from "@earendil-works/pi-durable";
-import { reflectionCompactionGuard, reflectionToolGuard } from "./reflection.js";
+import { forkRecord, routineCompactionGuard, routineToolGuard } from "./routine-task.js";
 import { AgentDoc } from "./agent-doc.js";
 import { ChatTools } from "./chat-tools.js";
 import { EventTools } from "./events.js";
@@ -28,14 +28,14 @@ export function AgentExtension(runtime, installed) {
   return defineExtension({
     name: "agent",
     tools: own,
-    hooks: [reflectionToolGuard(runtime), reflectionCompactionGuard()],
+    hooks: [routineToolGuard(runtime), routineCompactionGuard()],
     tasks: parts.flatMap((part) => part.tasks || []),
     sections: parts.flatMap((part) => part.sections || []),
     // The device tools are another extension's; the agent's own outward tools are its own.
     wraps: [...policyWraps(runtime, [...installed, ...own]), ...["agent-memory", "agent-inbox"].map((key) =>
       wrapSection(key, (source) => ({ ...source, tag: false, render: async (input, context) => {
         const state = runtime.agent?.enabled() ? await input.read.snapshot(AgentDoc, context) : null;
-        if (state?.reflection?.conversationId === input.conversationId) return input.shown[key];
+        if (forkRecord(state, input.conversationId)) return input.shown[key];
         const text = await source.render(input, context);
         return text === undefined || source.tag === false ? text : `<${key}>\n${text}\n</${key}>`;
       } })))],

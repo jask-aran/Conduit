@@ -1,9 +1,10 @@
 import { defineTask, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
-import { needsReflection, reflectionTask, REFLECTION_WAIT_MS, startReflection } from "./reflection.js";
+import { routineTask } from "./routine-task.js";
+import { legacyRoutineTask } from "./legacy-routine-task.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
-import { applyRoutine, executeRoutine, routineClocks, triggerWords } from "./routines.js";
+import { applyRoutine, routineClocks, triggerWords } from "./routines.js";
 import { listRoutines, readRoutine, writeRoutine } from "./routine-files.js";
 
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
@@ -140,12 +141,12 @@ function validOnce(at, now) {
   return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
 }
 
-/** Daily slots expire after two hours; Reflection catches up once after any absence. */
+/** Daily slots expire after two hours. */
 export function slotFate(schedule, slot, now) {
   const late = now - Date.parse(slot);
   if (schedule.kind === "daily") {
     if (late < 2 * 3600000) return "fire";
-    return schedule.routine === "reflect" ? "catch-up" : "missed";
+    return "missed";
   }
   return late <= 6 * 3600000 ? "fire" : "missed";
 }
@@ -193,32 +194,8 @@ function makeClock(runtime) {
         const slot = task.state.checkpoint.slot;
         const fate = slotFate(schedule, slot, api.now());
         const missed = fate !== "fire";
-        const catchUp = fate === "catch-up";
-        // A routine (routines.js): its tasks gather without a model, its gate decides whether its run fires. Memoised
-        // before it is applied, so a replay does not ask Executor again.
-        const routine = schedule.routine && (!missed || catchUp) ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
-        // A brief waits for the missed night's Reflection, including its compaction, before gathering its inbox.
-        if (routine?.name === "morning-brief" && !routine.error) {
-          const key = `before-brief:${slot}`;
-          let reflection = await api.memo(key, context);
-          if (reflection === undefined) {
-            await api.commit(async (tx) => {
-              const doc = await tx.doc(AgentDoc);
-              reflection = needsReflection(doc) ? await startReflection(tx, doc, agent, api.conversationId, key) : null;
-            }, context);
-            await api.memo(key, reflection, context);
-          }
-          const held = reflection && await runtime.harness.getTask(reflection, context);
-          if (held && held.state.status !== "terminal") {
-            const active = (await api.snapshot(AgentDoc, context))?.reflection;
-            const startedAt = active?.taskId === reflection ? active.startedAt : held.startedAt ?? Date.parse(slot);
-            if (api.now() - startedAt >= REFLECTION_WAIT_MS) {
-              await runtime.harness.abortTask(reflection, context);
-            } else {
-              await api.sleepUntil(api.now() + 2000, { phase: "fire", slot }, context); return;
-            }
-          }
-        }
+        // Admission is idempotent. The lifecycle gathers after its prerequisites finish.
+        const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
         let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
         // A routine whose run weighs what was gathered (the heartbeat, the brief) goes after the gathering due with it:
         // the Email feed and the heartbeat both due at :18:57 must not race, or the run misses what the feed files in
@@ -226,18 +203,19 @@ function makeClock(runtime) {
         // until no gathering routine's slot is at or before its own.
         if (routine && !routine.error && fired === undefined && routine.gate !== "never" && api.now() - Date.parse(slot) < GATHER_WAIT_MS) {
           const gatherers = new Set((await listRoutines(agent.folder)).filter((other) => !other.error && other.gate === "never").map((other) => `r-${other.name}`));
-          const due = Object.values((await api.snapshot(AgentDoc, context))?.schedules || {})
+          const snapshot = await api.snapshot(AgentDoc, context);
+          const due = Object.values(snapshot?.routineRuns || {}).some((record) => gatherers.has(`r-${record.routine.name}`) && Date.parse(record.slot) <= Date.parse(slot))
+            || Object.values(snapshot?.schedules || {})
             .some((other) => other.id !== schedule.id && gatherers.has(other.id) && other.nextAt && Date.parse(other.nextAt) <= Date.parse(slot));
           if (due) { await api.sleepUntil(api.now() + 2000, { phase: "fire", slot }, context); return; }
         }
         if (routine && !routine.error && fired === undefined) {
-          const state = await api.snapshot(AgentDoc, context);
-          fired = await api.memo(`routine:${slot}`, await executeRoutine(agent, routine, { cursors: state?.cursors?.[routine.name] || {}, state, now: api.now() }), context);
+          fired = await api.memo(`routine:${slot}`, { admitted: true }, context);
         }
         // A feed that reads (a program, a script) runs here, without a model; a run feed is a run like any other.
         const direct = schedule.feed && schedule.feed.source.kind !== "run";
         const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] }), context) : null;
-        const spends = schedule.routine ? Boolean(fired?.run) : !missed && !direct;
+        const spends = schedule.routine ? false : !missed && !direct;
         const overBudget = spends && await agent.overBudget();
         if (overBudget) await agent.notice("budget", `Skipped ${schedule.title}: today's budget of $${agent.settings().budgetUsdPerDay} is spent.`);
         await api.commit(async (tx) => {
@@ -247,7 +225,7 @@ function makeClock(runtime) {
           // Taken already: run by hand while it was due (POST /v0/agent/schedules/:id/run).
           const taken = current.lastAt && Date.parse(current.lastAt) >= Date.parse(slot);
           if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
-          else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, overBudget ? { ...fired, run: false, items: [] } : fired, slot);
+          else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, null, slot);
           else if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
           else if (!schedule.routine && !missed && !overBudget && !taken) {
             await agent.spawnRun(tx, api.conversationId, {
@@ -385,7 +363,7 @@ export function ScheduleTools(runtime) {
       return result(`Scheduled ${item.id}: ${item.title}`);
     },
   });
-  return { tools: [schedule], tasks: [clock, reflectionTask(runtime)], addClocked: clockAdder(runtime) };
+  return { tools: [schedule], tasks: [clock, routineTask(runtime), legacyRoutineTask(runtime)], addClocked: clockAdder(runtime) };
 }
 
 const seeding = new WeakMap();

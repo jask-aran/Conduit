@@ -1,5 +1,8 @@
 ---
 title: Reflection
+mode: fork
+tasks: [{ id: notes, kind: notes }]
+after: [{ compact: {} }]
 trigger: { at: quiet }
 gate: always
 output: inbox
@@ -24,7 +27,8 @@ you found it.
 
 {{declinedBlock}}
 
-- Earlier reports: reflections/*.md in your agent folder. Read the last few.
+- Earlier reports: reports/reflect/*.md and reflections/*.md in your agent folder.
+  Read the last few.
   Don't repeat a rejected proposal unless there is clearly new evidence, and
   say what's new if you do.
 - Write your report to: {{reportPath}}

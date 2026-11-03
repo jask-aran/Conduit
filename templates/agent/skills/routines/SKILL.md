@@ -42,7 +42,7 @@ What the run should do with what was gathered, and what to tell jbot.
   person's time zone, `{ at: quiet }` as their quiet hours start (23:00 when
   quiet hours are off), or `{ once: <ISO time with zone> }`. A daily routine
   whose time passed while the hub was off fires on return only if less than two
-  hours late; otherwise it waits for its next slot. Reflection catches up once.
+  hours late; otherwise it waits for its next slot.
   A trigger can also be a nonempty list of these rules. Each rule can have
   `during: quiet` or `during: "HH:MM-HH:MM"`, in the person's time zone.
   Windows include their start and exclude their end, and can cross midnight.
@@ -65,22 +65,68 @@ What the run should do with what was gathered, and what to tell jbot.
   - `calendar` (`account`, `calendars?`, `days?` 1 to 14)
   - `chats`
   - `notes`: pending NOTES.md entries and recent declined proposals. Notes are
-    consumed by call id only after a successful Reflection fork.
+    consumed by call id only after that routine succeeds, in either mode.
   - `executor`: `code`, a read-only program that returns a JSON list of
     `{ id, title, detail?, text?, at?, url? }`. Call tools by literal path
     (`tools.app.action(…)`); a program that writes is refused.
   - `script`: `command`, printing that JSON list.
 - **gate**: `when-new` (run only when a task found something new), `always`, or
   `never` (gather into the inbox, no run).
-- **output**: `jbot`, `inbox` or `both`.
+- **mode**: `run` (default) starts a background run. `fork` starts a private
+  fork at the latest home-thread entry, with the home model, prompt and tools.
+  It waits for an active home turn, up to 30 minutes. Only its memory tool
+  has home rights. It can read local files and write its report file. It cannot
+  message, notify, post, ask for approval or start other work. The fork is
+  discarded after it stops. Both modes fill the body variables and task blocks.
+- **before**: an ordered list of `{ routine: name, ifMissedSince: last }`.
+  Run that prerequisite, including its `after` steps, if it has not completed
+  since this routine's previous firing. Wait up to 30 minutes. If it fails,
+  times out, is missing or is disabled, record a notice and continue. The
+  target uses its own tasks, gate and output.
+- **after**: steps run in order after a successful run or fork:
+  - `{ compact: {} }` compacts the idle home thread at or above
+    `max(minTokens, minShare × context window)`. Override either threshold in
+    the map. Defaults come from `nightlyCompaction`, including its enabled
+    switch. Skip below the threshold, after a prior summary with no new usage,
+    or at the automatic compaction threshold. Wait up to 30 minutes for idle
+    home state and compaction; a failed or declined compaction fails the step.
+  - `{ routine: name }` fires that routine with its own gate and tasks, and
+    waits for its full lifecycle, including its `after` steps.
+  - `{ message: jbot }` sends this routine's final text to jbot as a report,
+    regardless of `output`. Repeated message steps each send one report.
+  A failed step stops the list and appears as the routine's last failure in
+  the attention list. A gate that starts no run also starts no `after` steps.
+  Routine dependencies in both lists must have no cycles. Saving and starting
+  validate the graph; runtime chains stop at 16 routines.
+- **output**: `jbot`, `inbox` or `both`, delivered before `after` steps.
 - Optional: `model` (provider/model), `effort`, `level` (fyi, attention,
   urgent), `enabled`, `context` (soul, user, memory, diary: the files its run sees).
 
+Task cursors commit only after the run or fork succeeds. A failed `after`
+step does not undo this commit: replaying the notes would repeat completed
+memory work. If the gate starts no run, cursors still advance. Budget skips,
+failed runs and failed forks leave cursors unchanged.
+
+Body variables include `person.name`, `person.home`, `assistant.name`,
+`timezone`, `now`, and each task's id (its escaped block). A notes task also
+supplies `notesBlock` and `declinedBlock`. `windowStart` is this routine's last
+successful run time, or the start of the home thread; `windowEnd` is the
+current gathering time. `reportPath` is `reports/<name>/<local-date>.md`.
+Unknown variables stay visible. These variables work in both modes.
+
 Quiet hours hold back notifications and interruptions, never routine work.
-Reflection runs privately in a fork of the home thread with its model and tools.
-It writes memory directly, files its Summary in the inbox, then compacts the
-idle home thread when its configured token threshold is met. If Reflection did
-not succeed since the last morning brief, the next brief waits for it first.
+The seeded Reflection is an ordinary routine: `mode: fork`, a notes task,
+`output: inbox` and `after: [{ compact: {} }]`. The morning brief uses
+`before: [{ routine: reflect, ifMissedSince: last }]`.
+For a run, compaction, then a report to jbot, use:
+
+```yaml
+mode: run
+output: inbox
+after:
+  - compact: {}
+  - message: jbot
+```
 
 ## Building one
 

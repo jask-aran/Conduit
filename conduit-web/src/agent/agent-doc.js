@@ -10,9 +10,10 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `watches`, `hooks`: Conduit events and webhook tokens that wake it (events.js).
  * - `proposals`: id → memory a run proposed, waiting for the person (memory.js).
  * - `declined`: the proposals the person declined, `{ file, op, text, at }`, oldest first, at most 100 (memory.js); the
- *   Reflection routine's `notes` task shows them so they are not proposed again (routines.js).
- * - `reflection`: the active Reflection task and its fork, only while it runs (reflection.js).
- * - `lastReflection`, `lastNightlyCompaction`, `lastBriefAt`: successful night work and the last brief firing.
+ *   routine's `notes` task shows them so they are not proposed again (routines.js).
+ * - `routineRuns`: task id → active routine lifecycle, including its guarded fork (routine-task.js).
+ * - `routineState`: name → last firing, successful run, full completion and failure.
+ * - `lastCompactionAt`: last successful routine compaction.
  * - `spend`: `YYYY-MM-DD` (the agent's time zone) → USD its runs spent (subagents.js reporter).
  * - `notices`: what the attention list says beside the work itself, newest last, at most 20 (agent.js).
  * - `tainted`: conversation id → true once it read private data (policy.js).

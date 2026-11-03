@@ -1,3 +1,4 @@
+import { forkRecord } from "./routine-task.js";
 import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-durable";
@@ -184,7 +185,7 @@ export function MessageTools(runtime) {
       if (channel === "email" && !email?.sends) return result("You do not send email: say it in the app (room app) instead.", true);
       if (room.startsWith("email:") && !log.messages.some((item) => item.room === room)) return result(`No email room ${room}.`, true);
       if (room.startsWith("email:") && !email.personOnly(room)) return result("Not sent: that email has someone other than the person in it, and your address writes only to the person. If they want it answered, offer to send it from their own Gmail (Executor), which asks their approval; never say it was sent.", true);
-      if ((await runtime.agent?.state())?.reflection?.conversationId === api.conversationId) return result("Reflection cannot message the person.", true);
+      if (forkRecord(await runtime.agent?.state(), api.conversationId)) return result("Routine forks cannot message the person.", true);
       const at = await api.memo("at", new Date().toISOString(), context);
       const id = `tool:${api.taskId}`;
       // A replay finds it written (the id is its key) and neither writes nor pushes it again.

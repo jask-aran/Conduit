@@ -1,5 +1,6 @@
 ---
 title: Morning brief
+before: [{ routine: reflect, ifMissedSince: last }]
 trigger: { at: "08:00" }
 tasks:
   - { id: inbox, kind: inbox, all: true }

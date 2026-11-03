@@ -1,3 +1,4 @@
+import { forkRecord } from "./routine-task.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -145,7 +146,7 @@ export async function acceptProposal(agent, id) {
   });
 }
 
-/** How many declined proposals the state doc keeps (`declined`), so a reflection does not propose them again. */
+/** How many declined proposals the state doc keeps (`declined`), so a routine does not propose them again. */
 export const DECLINED_KEPT = 100;
 
 export async function rejectProposal(agent, id) {
@@ -160,7 +161,7 @@ export async function rejectProposal(agent, id) {
 }
 
 /**
- * What a thread or run learned by inference, for the Reflection routine to promote or drop: one line appended to
+ * What a thread or run learned by inference, for a notes routine to promote or drop: one line appended to
  * NOTES.md, `- <date> | <origin> | <text>` with its provenance. Never edits another line; a replayed call adds nothing.
  */
 async function note(agent, origin, text, attribution) {
@@ -274,7 +275,7 @@ export async function forgetLine(agent, file, date, line) {
 export function MemoryTools(runtime) {
   const memory = defineTool({
     name: "memory",
-    description: "Read, add, remove or search the agent's memory files; note (text only) appends what you inferred, with its evidence, for the nightly reflection.",
+    description: "Read, add, remove or search the agent's memory files; note (text only) appends what you inferred, with its evidence, for a notes routine.",
     // Removal has no file receipt, so an interrupted call must not select a line again.
     replay: "unsafe",
     parameters: Type.Object({
@@ -294,7 +295,7 @@ export function MemoryTools(runtime) {
           const origin = await agent.describe(api.conversationId);
           const by = origin?.role || "agent";
           await note(agent, by === "side" ? `side:${origin.chatId}` : by, args.text.trim(), { by, chatId: origin?.chatId, callId: api.callId, at: new Date().toISOString() });
-          return result("Noted for the reflection.");
+          return result("Noted for a notes routine.");
         }
         const file = args.file;
         if (!file) return result("Choose a memory file.", true);
@@ -305,8 +306,8 @@ export function MemoryTools(runtime) {
         if (!args.text || !args.text.trim() || /[\r\n]/.test(args.text)) return result("Provide one non-empty line of text.", true);
         const state = await agent.state();
         // Only the firing's live record grants home memory access; model-written files cannot grant it.
-        const reflection = state.reflection?.conversationId === api.conversationId;
-        const origin = reflection ? { role: "home", chatId: state.home?.chatId } : await agent.describe(api.conversationId);
+        const fork = forkRecord(state, api.conversationId);
+        const origin = fork ? { role: "home", chatId: state.home?.chatId } : await agent.describe(api.conversationId);
         const by = origin?.role || "agent";
         const at = new Date().toISOString();
         if (by === "run" && file !== "diary") {
