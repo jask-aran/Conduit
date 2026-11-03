@@ -1,6 +1,8 @@
 ---
 name: managed-python
 description: Before reading, writing or editing a spreadsheet, Word or PowerPoint file, PDF or data file (csv, parquet, xlsx, docx, pptx, pdf), or any data crunching in Python. Which libraries are there and how to edit files safely.
+nudge:
+  - bash: python
 ---
 
 # Managed Python

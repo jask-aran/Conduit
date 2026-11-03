@@ -1,6 +1,8 @@
 ---
 name: executor
 description: Before using the person's connected accounts (mail, calendar, docs, drive and anything else linked in Executor) - reading, searching, sending, creating or changing. How to find an action, call it, batch it, and how approvals work.
+nudge:
+  - codemode: executor
 ---
 
 # The person's connected accounts (Executor)

@@ -60,6 +60,16 @@ the model loads one with the `skill` tool. Shared skills live in
 `templates/skills/`, jbot's own in `templates/agent/skills/`. Safety rules stay in
 the always-loaded prompt; a skill holds only how to do the work.
 
+Two optional front matter fields:
+
+- `nudge`: the calls that begin the skill's kind of work, each a tool name or
+  `tool: text` (a call of that tool whose arguments contain the text). The
+  first such call in a conversation that has not loaded the skill gets a line
+  saying to load it; Settings › Usage › Skills counts how often it was loaded
+  first.
+- `subagents: false`: keep it out of subagents' and jbot's runs' index (they get
+  every other skill).
+
 Provider credentials and model settings stay under the configured agent
 settings directory, normally `data/pi`. Web-search routing may use a derived
 model file there. Shell tools prepend `working-files/.venv/bin` (or `Scripts` on

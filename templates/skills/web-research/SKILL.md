@@ -1,6 +1,8 @@
 ---
 name: web-research
 description: Before any web search or fetch beyond one quick lookup - researching, comparing, checking a claim, anything current, high-stakes or niche. How to pick quick or deep, which web tool when, and how to cite.
+# The calls that go past a quick lookup: a page fetched, stored results read, a claim checked.
+nudge: [fetch_content, get_search_content, source_check]
 ---
 
 # Web research

@@ -1,6 +1,8 @@
 ---
 name: conduit-runtime
 description: Manage Conduit Pi templates, preferences, and package installs. Load for profile editing, pi install, or runtime troubleshooting.
+# Managing Conduit itself is the Runtime chat's, not a subagent's.
+subagents: false
 ---
 
 # Conduit runtime

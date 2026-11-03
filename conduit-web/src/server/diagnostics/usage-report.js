@@ -232,6 +232,19 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
     requests.afterGap = gaps.filter((bucket) => bucket.requests);
   } finally { db?.close(); }
 
+  // Skills (skill-tool.js): per skill, how often a conversation loaded it, and of the conversations that began its
+  // work, how many had loaded it first. Names only.
+  const skillRows = new Map();
+  for await (const record of usageLogRecords(path.join(dataRoot, "runtime", "skill-use.jsonl"))) {
+    if (!inWindow(Date.parse(record.t)) || typeof record.skill !== "string") continue;
+    const name = usageIdentifier(record.skill);
+    if (!skillRows.has(name)) skillRows.set(name, { skill: name, loads: 0, began: 0, beganLoaded: 0 });
+    const row = skillRows.get(name);
+    if (record.event === "load") row.loads++;
+    if (record.event === "began") { row.began++; row.beganLoaded += Number(record.loaded === true); }
+  }
+  const skills = [...skillRows.values()].sort((a, b) => b.began + b.loads - a.began - a.loads);
+
   const dir = path.join(dataRoot, "agent", "approvals");
   const files = await fs.readdir(dir).catch((error) => { if (error.code === "ENOENT") return []; throw error; });
   const dates = [new Date(from).toISOString().slice(0, 10), new Date(now).toISOString().slice(0, 10)];
@@ -262,5 +275,5 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   approvals.share = approvals.jbotCost ? approvals.judgeCost / approvals.jbotCost : null;
   const count = (action) => action.allow + action.deny + action.escalate;
   approvals.byAction = [...actions.values()].sort((a, b) => count(b) - count(a)).slice(0, 8);
-  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, context, approvals };
+  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, context, skills, approvals };
 }

@@ -16,6 +16,7 @@ type Diagnostics = {
       gaps: number; reason: string | null } | null;
     pings: number; pingHits: number; pingCost: number; lapses: number; keptHits: number; keptMisses: number; coldHits: number; coldMisses: number; saved: number; net: number };
   context?: { at: string; instructions: number; tools: number; toolSets: number; toolSetTokens: number; conversation: number; byTool: { name: string; tokens: number }[] } | null;
+  skills?: { skill: string; loads: number; began: number; beganLoaded: number }[];
   approvals: { judged: number; outcomes: { allow?: number; deny?: number; escalate?: number }; sources: Record<string, number>;
     askedYou: number; fromRuns: number; waiting: number; judgeMs: { median: number; max: number } | null;
     judgeCost: number; perDecision: number | null; jbotCost: number; jbotRequests: number; share: number | null;
@@ -138,6 +139,16 @@ export function UsageSettings() {
             <For each={context().byTool}>{(tool) => <SettingLine plain mono label={tool.name}><SettingValue mono>{count(tool.tokens)}</SettingValue></SettingLine>}</For>
           </SettingDetails>
         </Group>}
+      </Show>
+      <Show when={report().skills?.length}>
+        <Group title="Skills">
+          <For each={report().skills}>{(row) =>
+            <SettingLine plain mono label={row.skill} state={`loaded ${row.loads} ${row.loads === 1 ? "time" : "times"}`}
+              title="Of the conversations that began this skill's kind of work (its nudge calls), how many had loaded the skill first; the others were nudged.">
+              <SettingValue mono>{row.began ? `${row.beganLoaded} of ${row.began} loaded first` : "—"}</SettingValue>
+            </SettingLine>}
+          </For>
+        </Group>
       </Show>
       <Show when={report().keepWarm}>{(warm) =>
         <Group title="Keep warm">

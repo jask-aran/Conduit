@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prefixWatch } from "./prefix-watch.js";
-import { SkillTool } from "./skill-tool.js";
+import { SkillTool, skillNudges } from "./skill-tool.js";
 import { SKILLS_INTRO } from "../context/context-store.js";
 import { keepWarmPolicy, requestGaps, survivedLifetime } from "./keep-warm.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
@@ -357,6 +357,10 @@ export class DurableRuntime {
       this.refreshConnectors();
       // The hub's browser (browser-host.js): agent-browser's own MCP tools, from codemode, once its server answers.
       install(defineExtension({ name: "browser", tools: [] }));
+      // The skill nudges (skill-tool.js), as pi-durable wraps on the tools a skill's `nudge` names; selected everywhere.
+      const nudged = [...new Set((await this.skillsAvailable().catch(() => [])).flatMap((skill) => (skill.nudge || [])
+        .map((entry) => typeof entry === "string" ? entry : Object.keys(entry || {})[0]).filter(Boolean)))];
+      install(defineExtension({ name: "skills", tools: [], wraps: skillNudges(this, nudged) }));
       void this.loadBrowserTools();
       // Bash finds Conduit's managed Python first, as it does for Conduit Pi.
       const shellEnv = this.shellEnv = buildManagedToolEnvironment(process.env);
@@ -562,7 +566,7 @@ export class DurableRuntime {
     const connects = isAgent || template.connectors === true;
     // Codemode comes with the connected accounts, or with a template that lists it.
     const codes = connects || template.tools.includes("codemode");
-    const extensions = [...new Set(["conduit", "ui", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
+    const extensions = [...new Set(["conduit", "ui", "skills", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode", "browser"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
     const wanted = new Set([...ALWAYS, "ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
@@ -574,9 +578,35 @@ export class DurableRuntime {
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     // A connector's tools and the browser's are many and large: codemode reaches them (its namespaces), the model does not.
     const behindCodemode = (tool) => tool.name.startsWith("mcp__") || tool.name.startsWith("agent_browser_");
-    const modelTools = codemodeOnly ? tools.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
-      : codes ? tools.filter((tool) => !behindCodemode(tool)) : null;
-    return { template, isAgent, extensions, tools, modelTools };
+    const ordered = this.inToolOrder(tools);
+    const modelTools = codemodeOnly ? ordered.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
+      : codes ? ordered.filter((tool) => !behindCodemode(tool)) : null;
+    return { template, isAgent, extensions, tools: ordered, modelTools };
+  }
+
+  /**
+   * Tools in Conduit's one append-only order (runtime/tool-order.json): a tool keeps the place it first had, and one
+   * new to the hub goes after all the others. pi-durable then sees a conversation's tool list only grow at its end and
+   * declares just what was added; a reordered list would make it declare the whole set again (harness/prompt.js
+   * planTools). The order starts as the registry's, so nothing moves when it is first written.
+   */
+  inToolOrder(tools) {
+    const file = path.join(this.dataRoot, "runtime", "tool-order.json");
+    if (!this.toolOrder) {
+      let saved = [];
+      try { saved = JSON.parse(fs.readFileSync(file, "utf8")); } catch { /* first run */ }
+      const registered = [...this.extensions.values()].flatMap((extension) => (extension.tools || []).map((tool) => tool.name));
+      this.toolOrder = Array.isArray(saved) && saved.length ? saved.filter((name) => typeof name === "string") : registered;
+    }
+    const before = this.toolOrder.length;
+    const known = new Set(this.toolOrder);
+    for (const tool of tools) if (!known.has(tool.name)) { this.toolOrder.push(tool.name); known.add(tool.name); }
+    if (this.toolOrder.length !== before || !fs.existsSync(file)) {
+      try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(this.toolOrder, null, 1)}\n`); }
+      catch (error) { console.warn("[tools] order not saved", error?.message || error); }
+    }
+    const place = new Map(this.toolOrder.map((name, index) => [name, index]));
+    return [...tools].sort((a, b) => place.get(a.name) - place.get(b.name));
   }
 
   /**

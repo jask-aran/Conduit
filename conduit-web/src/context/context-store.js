@@ -66,6 +66,8 @@ const skillLabel = (name) => `${name.replace(/[-_]+/g, " ").replace(/^./, (lette
 const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || path.basename(folder);
 const skillBody = (text) => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 const skillDescription = (text) => /^description:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || "";
+/** Whether a skill is offered to subagents and runs too: unless its front matter says `subagents: false`. */
+const forSubagents = (text) => { try { return splitFrontMatter(text).data?.subagents !== false; } catch { return true; } };
 /** The index's opening: skills are listed, not pasted; the `skill` tool loads one (server/skill-tool.js). */
 export const SKILLS_INTRO = "# Skills\n\nSkills are the instructions for kinds of work: each line below says when one applies. When one fits "
   + "what you are about to do, call `skill` with its name first and follow what it says. It is one quick call, and it beats "
@@ -100,13 +102,14 @@ export class ContextStore {
     if (base) add("base", "Shared base", "shipped", { file: base });
     for (const folder of new Set(this.templates.flatMap((item) => item.skills || []))) {
       const id = `skill-${path.basename(folder)}`;
-      if (!blocks.has(id)) add(id, skillLabel(skillName(await fs.readFile(path.join(folder, "SKILL.md"), "utf8"), folder)), "shipped", { file: path.join(folder, "SKILL.md"), skill: folder });
+      const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8");
+      if (!blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "shipped", { file: path.join(folder, "SKILL.md"), skill: folder, subagents: forSubagents(text) });
     }
     // Skills installed on the hub (Settings › Skills), after the shipped ones; a shipped id keeps its own.
     for (const { id: skillId, folder } of this.skills?.installedFolders() || []) {
       const id = `skill-${skillId}`;
       const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8").catch(() => null);
-      if (text !== null && !blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "installed", { file: path.join(folder, "SKILL.md"), skill: folder, installed: true });
+      if (text !== null && !blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "installed", { file: path.join(folder, "SKILL.md"), skill: folder, installed: true, subagents: forSubagents(text) });
     }
     add("chat-naming", "Chat naming", "shipped", { file: this.chatNamingPath });
     add("web-tools", "Web tools", "shipped", { file: this.webPath, description: "Comes with the web tools: placed by Conduit after the document's own blocks." });
@@ -139,13 +142,16 @@ export class ContextStore {
       if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
       else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t), [], [...(t.connectors ? ["notice-approval-allowed", "notice-approval-denied"] : []), "notice-report-subagent", "notice-stop"]);
     }
+    // Subagents and runs do the legwork: they get every skill not marked `subagents: false`, after their own blocks.
+    const legwork = [...new Set([...this.templates.flatMap((t) => (t.skills || []).map((folder) => `skill-${path.basename(folder)}`)), ...installed])]
+      .filter((id) => catalog.get(id)?.subagents !== false);
     const agentTemplate = this.templates.find((t) => t.id === "agent");
     if (agentTemplate && catalog.has("run-rules")) {
       const sections = templateLive(agentTemplate, true).filter((x) => x !== "live-jbot-files" && x !== "live-inbox");
-      add("run:task", "run", "task", "Task run", ["run-rules"], sections, ["notice-wake-run"], ["notice-wake-event", "notice-wake-webhook"]);
-      for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["notice-wake-routine"]);
+      add("run:task", "run", "task", "Task run", ["run-rules", ...legwork], sections, ["notice-wake-run"], ["notice-wake-event", "notice-wake-webhook"]);
+      for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id, ...legwork], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["notice-wake-routine"]);
     }
-    add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base"], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
+    add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base", ...legwork], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");
     return docs.map((doc) => ({ ...doc, blocks: saved[doc.id]?.blocks || doc.blocks, subagents: saved[doc.id]?.subagents ?? null, modified: Boolean(saved[doc.id]) }));
@@ -256,7 +262,11 @@ export class ContextStore {
     for (const item of (await this.catalog()).values()) {
       if (!item.skill || (this.skills && !this.skills.enabled(path.basename(item.skill)))) continue;
       const text = await this.content(item).catch(() => null);
-      if (text !== null) out.push({ name: skillName(text, item.skill), description: skillDescription(text), folder: item.skill, text });
+      if (text === null) continue;
+      let data = {};
+      try { data = splitFrontMatter(text).data || {}; } catch { /* a skill with broken front matter still loads by name */ }
+      out.push({ name: skillName(text, item.skill), description: skillDescription(text), folder: item.skill, text,
+        nudge: Array.isArray(data.nudge) ? data.nudge : [], subagents: data.subagents !== false });
     }
     return out;
   }
@@ -301,7 +311,8 @@ export class ContextStore {
     // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
     // A skill turned off in Settings › Skills is left out wherever it is placed.
     const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text"
-      && !(item.skill && this.skills && !this.skills.enabled(path.basename(item.skill))));
+      && !(item.skill && this.skills && !this.skills.enabled(path.basename(item.skill)))
+      && !(item.skill && item.subagents === false && (id === "subagent" || id.startsWith("run:"))));
     const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
     for (const [index, { key, item }] of blocks.entries()) {
       let text = contents[index];
