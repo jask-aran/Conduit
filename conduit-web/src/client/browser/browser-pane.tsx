@@ -132,10 +132,13 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
           output: (image) => {
             try {
               if (closed || socket !== next || decoder !== current || !canvas) return;
-              const width = frame.width || image.displayWidth;
-              const height = frame.height || image.displayHeight;
+              // The canvas is the picture's own size, drawn whole: the page's size (frame) can differ from the picture's
+              // (a screencast scaled to fit, or device pixels), and drawing the page's size cut a small picture into a
+              // corner of a big canvas. The page's size is only for mapping the pointer.
+              const width = image.displayWidth;
+              const height = image.displayHeight;
               if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-              canvas.getContext("2d")?.drawImage(image, 0, 0, width, height, 0, 0, width, height);
+              canvas.getContext("2d")?.drawImage(image, 0, 0, width, height);
               painted();
             } finally { image.close(); }
           },
