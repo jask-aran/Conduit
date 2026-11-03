@@ -178,7 +178,11 @@ node -e '
     overlay.mainBinaryName = `conduit-desktop-${variant}`;
     overlay.bundle.icon = config.bundle.icon.map((icon) => icon.replace("icons/", "icons/dev/"));
     overlay.bundle.windows = { nsis: { installerIcon: "icons/dev/icon.ico" } };
-    overlay.app = { windows: [{ ...config.app.windows[0], title: "" }] };
+    // A development client keeps its DevTools port open, so it can be inspected and driven over CDP without being
+    // relaunched (Dev 9223, Durable 9224). Setting the arguments replaces the ones wry sets, so those are kept here.
+    const port = variant === "durable" ? 9224 : 9223;
+    overlay.app = { windows: [{ ...config.app.windows[0], title: "",
+      additionalBrowserArgs: `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=${port} --remote-allow-origins=*` }] };
   }
   require("fs").writeFileSync(out, JSON.stringify(overlay, null, 2) + "\n");
 '  "$overlay" "$build_version" "$local_updates" "$update_base" "$dev_client" "$variant"
