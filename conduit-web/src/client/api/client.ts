@@ -15,7 +15,7 @@ type Read = { status: number; ok: boolean; text: string };
  * A request on a route the client moves off is given up, not waited out: an address with nothing behind it (a hub
  * whose LAN address changed, a phone that left home) holds a request until the OS's connect timeout, and a few of
  * those filled the WebView's connections to that host so everything after them queued. A read is asked again on the
- * new route; a write is not repeated, since it may have arrived.
+ * new route (and again if it moves again, up to three times); a write is not repeated, since it may have arrived.
  */
 const readOf = async (url: string, init: RequestInit): Promise<Read> => {
   const read = !init.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
@@ -26,7 +26,9 @@ const readOf = async (url: string, init: RequestInit): Promise<Read> => {
       const response = await authorizedFetch(httpUrl(url), { ...init, signal: init.signal ? AbortSignal.any([init.signal, moved.signal]) : moved.signal });
       return { status: response.status, ok: response.ok, text: await response.text() };
     } catch (error) {
-      if (!moved.signal.aborted || init.signal?.aborted || !read || attempt > 0) throw error;
+      // A start or a wake can move the route more than once (the last route, then the race's winner): a read follows each
+      // move, up to a few, rather than failing on the second.
+      if (!moved.signal.aborted || init.signal?.aborted || !read || attempt >= 3) throw error;
     } finally {
       stop();
     }

@@ -109,11 +109,14 @@ export function startPathSelection(deps: PathSelectorDeps) {
   const probeAll = (paths: ServerPath[], entry: ServerEntry) =>
     Promise.all(paths.map((path) => usable(path, entry)));
 
+  // How long the route in use has to answer on a wake before another is taken (longer while something would be cut off).
+  const KEEP_MS = 1500;
+  const KEEP_BUSY_MS = 8000;
   /**
    * Starting, waking or changing network: the route in use may be gone, and waiting out two failed checks twenty
    * seconds apart left a phone that had left home on its LAN address for half a minute. Every route is asked at once
-   * and the first to prove itself is taken; the one in use is kept if it answers first, or if moving would interrupt
-   * something and it answers at all. A nearer route that answers later is taken by the passes after.
+   * and the first to prove itself is taken, unless the one in use answers within KEEP_MS (KEEP_BUSY_MS if moving
+   * would interrupt something). A nearer route that answers later is taken by the passes after.
    */
   const rush = async () => {
     if (running) return;
@@ -126,9 +129,14 @@ export function startPathSelection(deps: PathSelectorDeps) {
       const asked = routes.map((path) => usable(path, entry).then((ok) => ok ? path : Promise.reject()));
       const first = await Promise.any(asked).catch(() => null);
       if (!first) { setSearching(true); return; }
-      if (first.origin !== current && current && deps.busy()) {
+      // The route in use is kept whenever it still answers, promptly: taking whichever answered first moved a client
+      // that woke (a window shown again, a phone resumed) to another route and back on the passes after, cutting off
+      // what was in flight each time ("The route to the server changed"). A nearer route is still taken by the
+      // passes; a route that answers late, or not at all, is left at once.
+      if (first.origin !== current && current) {
         const index = routes.findIndex((path) => path.origin === current);
-        if (index >= 0 && await asked[index]!.then(() => true, () => false)) return;
+        const prompt = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), deps.busy() ? KEEP_BUSY_MS : KEEP_MS));
+        if (index >= 0 && await Promise.race([asked[index]!.then(() => true, () => false), prompt])) { setSearching(false); return; }
       }
       agree.clear();
       setSearching(false);
