@@ -1,4 +1,5 @@
 import { Frost } from "./frost";
+import { IconButton } from "./actions";
 import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 
@@ -69,13 +70,17 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
  */
 export type LeadInputKind = "tool" | "web" | "browser";
 
-export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { kind?: LeadInputKind; lead?: JSX.Element; ref?: (element: HTMLInputElement) => void }) {
-  const [local, rest] = splitProps(props, ["kind", "lead"]);
+/** onClear: a × at the field's end while it holds text, the library's icon button; it clears (the caller empties the
+ *  value) and keeps the caret in the field. */
+export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { kind?: LeadInputKind; lead?: JSX.Element; ref?: (element: HTMLInputElement) => void; onClear?: () => void }) {
+  const [local, rest] = splitProps(props, ["kind", "lead", "onClear"]);
   const kind = () => local.kind ?? "tool";
   const field = () => kind() === "web"
     ? <input type="text" spellcheck={false} autocomplete="off" {...rest} />
     : kind() === "browser" ? <Input type="search" {...rest} /> : <input type="search" {...rest} />;
-  return <label class="ui-lead-input" data-lead-input={kind()}>{local.lead ?? <Icons.Search />}{field()}</label>;
+  const clear = (event: MouseEvent) => { event.preventDefault(); local.onClear?.(); (event.currentTarget as HTMLElement).closest(".ui-lead-input")?.querySelector("input")?.focus(); };
+  return <label class="ui-lead-input" data-lead-input={kind()} data-clearable={local.onClear ? "" : undefined}>{local.lead ?? <Icons.Search />}{field()}
+    <Show when={local.onClear && String(rest.value ?? "")}><IconButton kind="file" class="ui-lead-input-clear" label="Clear" onMouseDown={(event) => event.preventDefault()} onClick={clear}><Icons.Close /></IconButton></Show></label>;
 }
 
 /** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */

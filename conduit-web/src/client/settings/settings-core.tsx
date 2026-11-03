@@ -1241,7 +1241,7 @@ export function Settings(props: {
   >
     <Show when={!narrow() || showingIndex()}>
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
-        <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)}
+        <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onClear={() => setQuery("")}
           onKeyDown={(event) => {
             if (event.key === "Enter" && results()[0]) { event.preventDefault(); openResult(results()[0]!); }
             if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }

@@ -18,6 +18,8 @@ import { IconButton } from "./actions";
  * Its bar: what it is and what can be done to it (head: a block's name and actions), then find, undo, redo, wrap. Its
  * foot, as a file's: what is known of it (status: where it comes from, how big) and where the caret is. Mod-S saves
  * when onSave is given.
+ * bar / status false: without the bar or the foot, for a few lines edited in place (a settings list). fit: as tall as
+ * its text, up to a measure, rather than a set height.
  */
 const slotMarks = new MatchDecorator({
   regexp: /\{\{[^{}\n]*\}\}|<\/?(?:[a-z][\w-]*|\{\{[^{}\n]*\}\})(?:\s[^<>\n]*)?>/gi,
@@ -29,7 +31,7 @@ const promptMarks = ViewPlugin.fromClass(class {
   update(update: ViewUpdate) { this.decorations = slotMarks.updateDeco(update, this.decorations); }
 }, { decorations: (plugin) => plugin.decorations });
 
-export function TextEditor(props: { value: string; label: string; onChange?: (value: string) => void; onSave?: () => void; readOnly?: boolean; markdown?: boolean; wrap?: boolean; fill?: boolean; head?: JSX.Element; status?: JSX.Element }) {
+export function TextEditor(props: { value: string; label: string; onChange?: (value: string) => void; onSave?: () => void; readOnly?: boolean; markdown?: boolean; wrap?: boolean; fill?: boolean; fit?: boolean; bar?: boolean; status?: JSX.Element | false; head?: JSX.Element }) {
   let host!: HTMLDivElement;
   let view: EditorView | undefined;
   const editable = new Compartment();
@@ -70,8 +72,8 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
   createEffect(() => { const readOnly = Boolean(props.readOnly); view?.dispatch({ effects: editable.reconfigure([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]) }); });
   createEffect(() => { const on = wrap(); view?.dispatch({ effects: wrapping.reconfigure(on ? EditorView.lineWrapping : []) }); });
   const run = (command: (target: EditorView) => boolean) => { if (view) { command(view); view.focus(); } };
-  return <div class="ui-text-editor" data-fill={props.fill ? "" : undefined} data-readonly={props.readOnly ? "" : undefined}>
-    <div class="ui-text-editor-bar">
+  return <div class="ui-text-editor" data-fill={props.fill ? "" : undefined} data-fit={props.fit ? "" : undefined} data-readonly={props.readOnly ? "" : undefined}>
+    <Show when={props.bar !== false}><div class="ui-text-editor-bar">
       <Show when={props.head}><div class="ui-text-editor-head">{props.head}</div></Show>
       <span class="ui-text-editor-tools">
       <IconButton kind="file" label="Find and replace (Ctrl+F)" onClick={() => run(openSearchPanel)}><Icons.Search /></IconButton>
@@ -81,11 +83,11 @@ export function TextEditor(props: { value: string; label: string; onChange?: (va
       </Show>
       <IconButton kind="file" label={wrap() ? "Don't wrap lines" : "Wrap lines"} aria-pressed={wrap()} onClick={() => setWrap(!wrap())}><WrapTextIcon /></IconButton>
       </span>
-    </div>
+    </div></Show>
     <div ref={host} class="ui-text-editor-host" />
-    <StatusBar label={`${props.label} status`} commands={props.status}>
+    <Show when={props.status !== false}><StatusBar label={`${props.label} status`} commands={props.status || undefined}>
       <StatusText>{`Ln ${caret().line}, Col ${caret().column}`}</StatusText>
       <StatusText>{`${caret().lines} lines`}</StatusText>
-    </StatusBar>
+    </StatusBar></Show>
   </div>;
 }

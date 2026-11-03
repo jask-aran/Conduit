@@ -1,7 +1,9 @@
-import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { Button, Input, Segmented, Switch, TextArea } from "@/components/ui/controls";
+import { createEffect, createSignal, For, lazy, on, Show } from "solid-js";
+import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { SettingLine, SettingWide } from "@/components/ui/overlay";
+// CodeMirror: kept out of the settings chunk until a page shows it.
+const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
 import type { ModelOption } from "../api/contracts";
@@ -182,12 +184,12 @@ function ApprovalRules() {
     } catch (failure) { setError((failure as Error).message); }
     finally { setSaving(false); }
   };
-  // A list of rules: its name on a line, then the rules in the library's text block for a setting's own text
-  // (SettingWide), full width. A component with a literal label, so settings search finds it (settings-index.mjs).
+  // A list of rules: its name on a line, then the library's text editor, full width, without its bar or foot and as
+  // tall as its rules (a line each, numbered). A component with a literal label, so settings search finds it.
   const RuleList = (props: { key: "may" | "always" | "limits"; label: string; title: string }) =>
     <><SettingLine plain label={props.label} title={props.title} state="one a line" />
-      <SettingWide><TextArea id={`approval-${props.key}`} aria-label={props.label} rows={Math.max(3, lines(draft()[props.key]).length + 1)} value={draft()[props.key]}
-        onInput={(event) => setDraft({ ...draft(), [props.key]: event.currentTarget.value })} /></SettingWide></>;
+      <SettingWide><TextEditor label={props.label} value={draft()[props.key]} markdown={false} bar={false} status={false} fit
+        onChange={(value) => setDraft({ ...draft(), [props.key]: value })} /></SettingWide></>;
   return <Show when={policy()} fallback={<Show when={error()}><Note tone="error">{error()}</Note></Show>}>
     <RuleList key="may" label="It may" title="What the approval model may allow without asking you, one rule a line, in your own words." />
     <RuleList key="always" label="Always yours" title="What always comes to you, whatever else allows it: one class a line." />

@@ -135,6 +135,9 @@
 .ui-lead-input:where([data-lead-input="tool"]) > input { width: 100%; height: var(--control-tool); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--tint); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font-size: var(--text-caption); }
 /* The field's hairline, as an input's (controls.css .ui-input): the tint at rest, the foreground's line on hover and focus. */
 .ui-lead-input:where([data-lead-input="tool"]) > input { border-color: var(--tint); }
+/* Clearable: the × at the field's end, inside its hairline; the text stops short of it. */
+.ui-lead-input[data-clearable] > input { padding-right: var(--control-sm); }
+.ui-lead-input > .ui-lead-input-clear { position: absolute; right: var(--space-2xs); }
 .ui-lead-input:where([data-lead-input="tool"]) > input:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 @media (hover: hover) { .ui-lead-input:where([data-lead-input="tool"]) > input:hover { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); } }
 .ui-lead-input:where([data-lead-input="tool"]) > input::placeholder { color: var(--muted-foreground); }
