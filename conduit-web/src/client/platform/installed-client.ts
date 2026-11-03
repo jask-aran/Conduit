@@ -216,8 +216,9 @@ export interface DesktopShellSettings {
   titleBar: DesktopTitleBar;
 }
 export type DesktopTitleBar = "native" | "none" | "conduit";
-/** The title bar in use, as the shell last said: read once at start and after each save. Native until known. */
-export const [desktopTitleBar, setDesktopTitleBar] = createSignal<DesktopTitleBar>("native");
+/** The title bar in use, as the shell last said: read once at start and after each save. Conduit's (the default) until
+ *  known, so the usual window does not draw without its bar first. */
+export const [desktopTitleBar, setDesktopTitleBar] = createSignal<DesktopTitleBar>("conduit");
 
 export interface CompanionRoot { id: string; path: string; read: boolean; write: boolean; shell: boolean }
 export interface CompanionStatus {
@@ -272,7 +273,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
   async settings(): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
     const found = await invoke<DesktopShellSettings>("desktop_settings");
-    setDesktopTitleBar(found.titleBar ?? "native");
+    setDesktopTitleBar(found.titleBar ?? "conduit");
     return found;
   },
   // Returns what the shell ended up with: the OS registration for launch-at-
@@ -281,7 +282,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
   async saveSettings(settings: DesktopShellSettings): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
     const saved = await invoke<DesktopShellSettings>("set_desktop_settings", { settings });
-    setDesktopTitleBar(saved.titleBar ?? "native");
+    setDesktopTitleBar(saved.titleBar ?? "conduit");
     return saved;
   },
   /** The window's own buttons, for a title bar that is not Windows'. */

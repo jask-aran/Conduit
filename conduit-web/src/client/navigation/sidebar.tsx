@@ -113,6 +113,8 @@ function storedCollapsedProjects(): Set<string> {
 }
 
 export function Sidebar(props: {
+  /** The server switcher and update are in Conduit's title bar (desktop), so the foot is not drawn. */
+  serverInTitleBar?: boolean;
   projects: Project[];
   catalogueLoaded: boolean;
   projectId: string;
@@ -1099,7 +1101,8 @@ export function Sidebar(props: {
           <Segmented pill icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />
         </Show>
       </>}
-      foot={phoneLayout() ? undefined : <>
+      // Conduit's title bar holds the server switcher and the update (desktop): the sidebar has no foot then.
+      foot={phoneLayout() || props.serverInTitleBar ? undefined : <>
         {/*
           * Above the server row rather than inside the menu, because the menu
           * is shut whenever this matters. A build waiting to be taken can

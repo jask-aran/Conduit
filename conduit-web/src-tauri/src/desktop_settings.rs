@@ -20,9 +20,10 @@ use tauri_plugin_autostart::ManagerExt;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TitleBar {
-    #[default]
     Native,
     None,
+    /// The default: the slimmest that still shows the hub and the window's buttons.
+    #[default]
     Conduit,
 }
 
@@ -41,7 +42,7 @@ pub struct DesktopSettings {
 
 impl Default for DesktopSettings {
     fn default() -> Self {
-        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false, serve_as_device: false, title_bar: TitleBar::Native }
+        Self { keep_running_in_tray: true, launch_at_login: false, start_hidden: false, serve_as_device: false, title_bar: TitleBar::Conduit }
     }
 }
 

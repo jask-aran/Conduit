@@ -48,7 +48,7 @@ export function DesktopSettingsTile() {
         {/* Windows' caption, none (the sidebar's head, the pane headers and the tool rail drag the window, and the rail
             holds its buttons), or Conduit's own bar. */}
         <SettingLine label="Title bar">
-          <Segmented label="Title bar" size="sm" value={current().titleBar ?? "native"}
+          <Segmented label="Title bar" size="sm" value={current().titleBar ?? "conduit"}
             options={[{ value: "native", label: "Windows" }, { value: "none", label: "None" }, { value: "conduit", label: "Conduit" }] satisfies { value: DesktopTitleBar; label: string }[]}
             onChange={(titleBar) => update({ titleBar: titleBar as DesktopTitleBar })} />
         </SettingLine>
