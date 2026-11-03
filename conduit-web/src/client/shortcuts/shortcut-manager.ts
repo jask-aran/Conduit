@@ -80,6 +80,7 @@ export class ShortcutManager {
   private readonly activeContexts = new Map<symbol, ActiveContext>();
   private readonly handlers = new Map<symbol, RegisteredHandler>();
   private readonly listeners = new Set<() => void>();
+  private readonly commandListeners = new Set<(commandId: string) => void>();
   private overrides: ShortcutOverrides;
   private pending: PendingShortcutSequence | null = null;
   private registrationOrder = 0;
@@ -228,6 +229,7 @@ export class ShortcutManager {
       if (!match) continue;
       this.clearPendingSequence();
       match.handler.run();
+      this.emitCommand(commandId);
       return true;
     }
     return false;
@@ -235,6 +237,12 @@ export class ShortcutManager {
 
   isContextActive(context: ShortcutContext): boolean {
     return [...this.activeContexts.values()].some((active) => active.context === context);
+  }
+
+  /** Hear each command as its key runs it (the keyboard tour watches what the person does): its id, after its handler. */
+  onCommand(listener: (commandId: string) => void): () => void {
+    this.commandListeners.add(listener);
+    return () => { this.commandListeners.delete(listener); };
   }
 
   subscribe(listener: () => void): () => void {
@@ -401,10 +409,15 @@ export class ShortcutManager {
     event.preventDefault();
     event.stopPropagation();
     match.handler.run();
+    this.emitCommand(match.command.id);
     return true;
   }
 
   private emit(): void {
     for (const listener of this.listeners) listener();
+  }
+
+  private emitCommand(commandId: string): void {
+    for (const listener of this.commandListeners) listener(commandId);
   }
 }

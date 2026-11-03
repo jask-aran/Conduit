@@ -73,6 +73,8 @@ import { isChatContentActivity } from "./chat/transcript-source";
 import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
+import { KeyboardTour, keyboardTourActive, startKeyboardTour, watchForTourOffer } from "./tour/keyboard-tour";
+import type { TourEnv } from "./tour/tour-steps";
 import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeaderMenu } from "./shortcuts/leader-menu";
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
@@ -5172,6 +5174,7 @@ function App() {
     keyboardProbe: () => toast.success(toggleKeyboardProbe()
       ? "Keyboard measurements on. Open a chat and tap the composer."
       : "Keyboard measurements off."),
+    keyboardTour: startKeyboardTour,
     delete: () => runSidebar("delete-chat", focusedTarget()),
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
@@ -5243,6 +5246,20 @@ function App() {
     publish();
     onCleanup(shortcutManager.subscribe(publish));
   });
+
+  // The keyboard tour (client/tour/keyboard-tour.tsx): started from the palette or Settings › Shortcuts, Settings
+  // closing as it starts so the page it teaches is in view; offered once, by a toast, after the person first uses a
+  // go-to chord or the leader (never on load). What it cannot see in the page it asks here.
+  createEffect(on(keyboardTourActive, (running) => { if (running) setSettingsOpen(false); }, { defer: true }));
+  onCleanup(watchForTourOffer(shortcutManager, () => toast("Conduit has a keyboard tour", {
+    description: "Learn the regions, lists, the leader and panes by pressing the keys.",
+    action: { label: "Take the tour", onClick: () => startKeyboardTour() },
+  })));
+  const tourEnv: TourEnv = {
+    hasDock: () => Boolean(workspacePanelScope()) && !isMobileLayout(),
+    canStepTabs: () => Boolean(tabsToStep() || fileTabsToStep()),
+    splitShown: () => splitShown() && !isMobileLayout(),
+  };
 
   onMount(() => {
     let hydratingUiPreferences = false;
@@ -6213,6 +6230,7 @@ function App() {
     <CommandMenu open={paletteOpen()} onOpenChange={setPaletteOpen} onPageChange={setPalettePage} initialPage={palettePage()} initialQuery={paletteInitialQuery()} launchNonce={paletteNonce()} directLaunch={paletteDirectLaunch()}
       context={paletteContext()} runtime={runtime} actions={paletteActions} onChooseModel={(spec) => void focusedModels().chooseModel(spec)} currentModel={focusedModels().model()} scopeModels={focusedModels().allModels()} enabledModelSpecs={focusedModels().enabledModels()} onToggleModelScope={(spec) => { const models = focusedModels(); const enabled = models.enabledModels(); void models.saveScope(enabled.includes(spec) ? enabled.filter((item) => item !== spec) : [...enabled, spec]); }} shortcuts={shortcutManager} />
     <LeaderPalette shortcuts={shortcutManager} />
+    <KeyboardTour shortcuts={shortcutManager} env={tourEnv} />
     <Show when={settingsLoaded()}>
       <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} onOpenDeviceTerminal={(node) => void openDeviceTerminal(node)} onOpenDeviceBrowser={(nodeId) => { setSettingsOpen(false); void openBeside(`browser:${nodeId}`, true); }} onOpenWorkspace={(project) => { setSettingsOpen(false); void openProjectHere(project); }} shortcuts={shortcutManager} />
     </Show>

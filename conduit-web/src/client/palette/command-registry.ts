@@ -18,6 +18,7 @@ import {
   COMMAND_IDS, getCommandDefinition,
 } from "../commands/command-registry.ts";
 import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort.ts";
+import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
 
 export interface PaletteContext {
   nativeApp: boolean;
@@ -69,6 +70,7 @@ export interface PaletteActions {
   updateApp: () => void;
   resetAppCache: () => void;
   keyboardProbe: () => void;
+  keyboardTour: () => void;
   delete: () => void;
   deleteFolder: () => void;
   settings: (section: string) => void;
@@ -147,7 +149,7 @@ const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
   [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
   [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
-  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app",
+  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.keyboardTour]: "app",
 };
 
 export function paletteGroupOf(command: { id?: string; group?: string; destructive?: boolean }): string {
@@ -259,6 +261,8 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   // Available everywhere, including the shell: it is the client without an
   // address bar that the numbers are hardest to get out of.
   [COMMAND_IDS.keyboardProbe]: { isAvailable: () => true, run: (actions) => actions.keyboardProbe() },
+  // Desktop only: on a phone the keys mean nothing.
+  [COMMAND_IDS.keyboardTour]: { isAvailable: () => typeof matchMedia !== "function" || !matchMedia(PHONE_LAYOUT_QUERY).matches, run: (actions) => actions.keyboardTour() },
   [COMMAND_IDS.deleteChat]: { isAvailable: hasChat, run: (actions) => actions.delete() },
   [COMMAND_IDS.deleteFolder]: { isAvailable: isNamedFolder, run: (actions) => actions.deleteFolder() },
 };

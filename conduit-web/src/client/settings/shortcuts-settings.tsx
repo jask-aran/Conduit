@@ -16,6 +16,7 @@ import {
 import type {
   ShortcutBinding, ShortcutCommandDefinition, ShortcutConflict, ShortcutStroke,
 } from "../shortcuts/shortcut-types";
+import { keyboardTourAvailable, startKeyboardTour } from "../tour/keyboard-tour";
 import { LEADER_MENU_OPTIONS, leaderMenu, saveLeaderMenu, type LeaderMenuMode } from "../shortcuts/leader-menu";
 
 const GROUP_LABELS: Record<string, string> = {
@@ -255,6 +256,8 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </Select>
       </SettingLine>
+      <Show when={keyboardTourAvailable()}><SettingLine plain label="Keyboard tour" state="learn the keys by pressing them">
+        <Button variant="ghost" size="sm" onClick={startKeyboardTour}><Icons.Keyboard /> Take the keyboard tour</Button></SettingLine></Show>
       <SettingLine label="Find"><Input type="search" aria-label="Search shortcuts" placeholder="Commands, contexts or keys" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></SettingLine>
       <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>
       <Show when={file()}>{(held) => <>

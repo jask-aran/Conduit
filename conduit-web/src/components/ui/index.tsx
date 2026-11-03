@@ -40,6 +40,7 @@ export * from "./overlay";
 export * from "./network";
 export * from "./workbench";
 export * from "./leader";
+export * from "./tour";
 export * from "./pill";
 export * from "./phone-composer";
 export * from "./composer";

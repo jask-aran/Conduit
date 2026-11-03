@@ -36,6 +36,7 @@
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   network         NetworkMap: devices, their environments and clients, hung from the head's
  *   leader          Leader, Crumbs, Spotlight
+ *   tour            TourCard (the keyboard tour), its fixed Spotlight
  *   pill            Pill*, Aura
  *   phone-composer  PhoneComposer
  *   composer        DesktopComposer, Toolbar
@@ -86,6 +87,7 @@ import "./overlay.css";
 import "./network.css";
 import "./workbench.css";
 import "./leader.css";
+import "./tour.css";
 import "./pill.css";
 import "./phone-composer.css";
 import "./composer.css";
