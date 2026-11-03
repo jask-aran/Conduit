@@ -5405,6 +5405,9 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, "application", goToSidebar),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
+      // Stop the turn of the pane that has the keyboard (its own chord: Escape only steps back).
+      ...(["chat", "dashboard"] as const).map((context) => shortcutManager.registerHandler(COMMAND_IDS.stopResponse, context,
+        () => { const { chat } = focusedSession(); if (chat.streaming()) void chat.stop(); }, { when: () => focusedSession().chat.streaming() })),
       // The go-to jumps, from every region the leader can start in.
       ...getCommandDefinition(COMMAND_IDS.focusComposer).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusComposer, context, focusComposer, { when: hasComposer })),
@@ -5436,6 +5439,24 @@ function App() {
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });
+    // The Escape ladder's last rung (docs/plans/keyboard-model.md › Leave): an Escape nothing nearer took, in a region
+    // with no Escape of its own (the transcript, the file viewer, the dock), hands focus home: the composer of the pane
+    // it is in, or the main pane's from the dock. Bubble phase, so menus, fields and editors answer first. Terminals
+    // keep Escape for their program; overlays close themselves.
+    const escapeHome = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape" || event.repeat || paletteOpen() || settingsOpen()) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || target.closest("[data-shortcut-exclusive='terminal'], [role='dialog'], [role='menu'], [role='listbox'], input, textarea, select, [contenteditable='true']:not(.cm-content)")) return;
+      const fromDock = target.closest("[data-region='workspace-panel']");
+      if (!fromDock && !target.closest("[data-part='transcript'], .ui-chat-viewport, .file-viewer-surface, .cm-editor")) return;
+      const pane = fromDock ? null : paneOf(target);
+      const composer = (pane !== null ? document.querySelector<HTMLTextAreaElement>(`${paneSelector(pane)} textarea[data-composer-input]:not([disabled])`) : null)
+        ?? document.querySelector<HTMLTextAreaElement>(".chat-main textarea[data-composer-input]:not([disabled])");
+      if (!composer) return;
+      event.preventDefault();
+      composer.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", escapeHome);
     // The regions around focus, innermost first, each an active context: focus
     // in the composer makes composer, chat and application active in that
     // order (SHORTCUT_REGION_PARENTS). A closed workspace panel is not a place.
@@ -5465,6 +5486,7 @@ function App() {
       syncFocusedShortcutContext = undefined;
       holdRegion(null);
       window.removeEventListener("keydown", dismissOpenLayer, true);
+      window.removeEventListener("keydown", escapeHome);
       window.removeEventListener("focusin", onFocusIn);
       for (const release of releaseFocusedContexts) release();
       uninstallShortcuts();

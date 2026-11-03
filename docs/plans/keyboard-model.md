@@ -1,6 +1,6 @@
 # Keyboard model
 
-Status: proposed 2026-11-03. It extends DESIGN.md › Keyboard (2026-10-18), which this replaces once agreed. The
+Status: agreed 2026-11-03; being built (steps 1–3 done). It extends DESIGN.md › Keyboard (2026-10-18), and wins where they differ. The
 inventory it rests on is HEAD 96a382e7: the sidebar, panes, palettes and dashboards were built in October, and
 Settings on 2026-11-03.
 

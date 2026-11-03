@@ -135,7 +135,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "settings",
     keywords: ["preferences", "configure"],
-    contexts: ["application", "palette.root", "palette.page"],
+    contexts: ["application", "palette.root", "palette.page", "settings"],
     defaultBindings: [binding(stroke("Comma", ",", ["primary"]))],
     palette: true,
   }),
@@ -591,7 +591,8 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     icon: "workspace-panel",
     keywords: ["workspace", "split", "dock", "move"],
     contexts: ["workspace-panel", "chat"],
-    defaultBindings: [scopedBinding("KeyD", "D")],
+    // Shift+D: D is a dashboard's Changes, and one leader key means one thing at every level.
+    defaultBindings: [scopedBinding("KeyD", "D", ["shift"])],
     allowInExclusiveTarget: true,
   }),
   command({
@@ -661,7 +662,9 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "stop",
     keywords: ["abort", "cancel"],
-    contexts: ["palette.root"],
+    // Its own chord: Escape steps back and never acts (docs/plans/keyboard-model.md › Leave).
+    contexts: ["palette.root", "chat", "dashboard"],
+    defaultBindings: [binding(stroke("Backspace", "Backspace", ["primary", "shift"]))],
     palette: true,
   }),
   command({

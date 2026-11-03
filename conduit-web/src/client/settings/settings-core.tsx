@@ -36,6 +36,7 @@ import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProf
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
+import { COMMAND_IDS } from "../commands/command-registry";
 import { parseUiScale, UI_SCALE_OPTIONS, type UiScale } from "../preferences/ui-scale";
 import {
   CODE_BLOCK_COLLAPSE_LINE_CHOICES,
@@ -580,7 +581,10 @@ export function Settings(props: {
     event.preventDefault();
     const index = event.key === "Home" ? 0
       : event.key === "End" ? tabs.length - 1
-        : (current + (event.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
+        // A list clamps at its ends (keyboard-model.md › Move): ↑ on the first row goes up to search.
+        : current + (event.key === "ArrowDown" ? 1 : -1);
+    if (index < 0) { focusSearch(); return; }
+    if (index >= tabs.length) return;
     // Beside its page the rail switches sections as it moves; as a phone's screen of its own it is a list to choose from.
     if (!narrow()) tabs[index]?.click();
     tabs[index]?.focus();
@@ -625,10 +629,14 @@ export function Settings(props: {
 
   createEffect(() => {
     if (!props.open) return;
-    const releaseSettingsContext = props.shortcuts.activateContext("settings");
+    // A modal: the app's chords do not reach the page under it (docs/plans/keyboard-model.md › Ownership); its own
+    // chord (Ctrl+,) closes it.
+    const releaseSettingsContext = props.shortcuts.activateContext("settings", { exclusive: true });
+    const releaseClose = props.shortcuts.registerHandler(COMMAND_IDS.openSettings, "settings", () => props.onOpenChange(false));
     document.addEventListener("keydown", dismissEscape, true);
     onCleanup(() => {
       releaseSettingsContext();
+      releaseClose();
       document.removeEventListener("keydown", dismissEscape, true);
     });
   });
@@ -1292,7 +1300,7 @@ export function Settings(props: {
           }} />
         <Show when={query().trim()}>
           <Group kind="nav" title={results().length ? "Results" : "No setting matches"}>
-            <For each={results()}>{(result, index) => <Row density="nav" element="button" data-result={index()} current={index() === cursor()} tabIndex={-1} detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
+            <For each={results()}>{(result, index) => <Row density="nav" element="button" data-result={index()} data-focus-shown={index() === cursor() ? "" : undefined} tabIndex={-1} detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
               onClick={() => openResult(result)}>{result.label}</Row>}</For>
           </Group>
         </Show>

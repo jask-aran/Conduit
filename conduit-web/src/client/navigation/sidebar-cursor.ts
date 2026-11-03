@@ -19,6 +19,12 @@
  * as does any arrival from the keyboard, such as the go-to chord. Leaving the
  * window keeps the cursor where it was (data-held): the browser drops
  * :focus-visible while the window is away, though focus has not moved.
+ *
+ * The rows are one Tab stop (roving focus): the row the cursor was last on,
+ * else the current page's row, else the folder holding it, else the first row
+ * -- the order the go-to chord enters by. The other rows are out of the tab
+ * order. That is settled just before a Tab moves focus (and on entering the
+ * list), not as rows arrive, so a stream of new rows costs nothing.
  */
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
@@ -45,6 +51,8 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   const { root, list } = options;
   let anchor: HTMLElement | null = null;
   let pointerFocus = false;
+  // The row the cursor was last on: where Tab comes back to.
+  let remembered: HTMLElement | null = null;
 
   const stops = () => [...list.querySelectorAll<HTMLElement>(STOPS)].filter(visible);
   const toggleOf = (link: Element) => link.closest(".ui-nav-folder")?.querySelector<HTMLButtonElement>(".ui-nav-toggle") ?? null;
@@ -63,6 +71,37 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   const selectThrough = (from: HTMLElement, to: HTMLElement, all: HTMLElement[]) => {
     const a = all.indexOf(from), b = all.indexOf(to);
     options.select(all.slice(Math.min(a, b), Math.max(a, b) + 1).map((row) => row.dataset.chatId).filter((id): id is string => Boolean(id)));
+  };
+
+  const stopOf = (element: Element | undefined) => element && (element.matches(STOPS) ? element as HTMLElement : element.querySelector<HTMLElement>(STOPS));
+  const rovingStop = () => {
+    if (remembered?.isConnected && list.contains(remembered) && visible(remembered)) return remembered;
+    for (const candidate of [...list.querySelectorAll('[aria-current="page"]'), ...list.querySelectorAll("[data-within]")]) {
+      const stop = stopOf(candidate);
+      if (stop && visible(stop)) return stop;
+    }
+    for (const stop of list.querySelectorAll<HTMLElement>(STOPS)) if (visible(stop)) return stop;
+    return null;
+  };
+  // One row in the tab order; writes only the rows whose tabIndex changes.
+  const syncTabStops = () => {
+    const chosen = rovingStop();
+    for (const stop of list.querySelectorAll<HTMLElement>(STOPS)) {
+      const index = stop === chosen ? 0 : -1;
+      if (stop.tabIndex !== index) stop.tabIndex = index;
+    }
+  };
+  const remember = (element: HTMLElement) => {
+    if (element === remembered) return;
+    if (remembered && remembered !== element && remembered.isConnected) remembered.tabIndex = -1;
+    remembered = element;
+    element.tabIndex = 0;
+  };
+  // Before the browser moves focus for a Tab, from anywhere.
+  const tabPressed = (event: KeyboardEvent) => { if (event.key === "Tab") syncTabStops(); };
+  const pointerdown = (event: PointerEvent) => {
+    const row = event.target instanceof Element ? event.target.closest<HTMLElement>(STOPS) : null;
+    if (row && list.contains(row)) remember(row);
   };
 
   const keydown = (event: KeyboardEvent) => {
@@ -154,6 +193,10 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   };
   const focusin = (event: FocusEvent) => {
     const row = event.target instanceof HTMLElement ? event.target : null;
+    if (row?.matches(STOPS) && list.contains(row)) {
+      remember(row);
+      if (!(event.relatedTarget instanceof Node && list.contains(event.relatedTarget))) syncTabStops();
+    }
     if (!pointerFocus && row?.matches(`${STOPS}, ${SWITCH}`) && row.matches(":focus-visible")) keyboardCursor(true);
   };
 
@@ -173,6 +216,9 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
 
   root.addEventListener("keydown", keydown);
   root.addEventListener("pointermove", pointermove);
+  root.addEventListener("pointerdown", pointerdown);
+  window.addEventListener("keydown", tabPressed, true);
+  const firstSync = requestAnimationFrame(syncTabStops);
   root.addEventListener("focusin", focusin);
   root.addEventListener("focusout", release);
   window.addEventListener("blur", away);
@@ -185,6 +231,9 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     root.removeEventListener("focusin", focusin);
     root.removeEventListener("keydown", keydown);
     root.removeEventListener("pointermove", pointermove);
+    root.removeEventListener("pointerdown", pointerdown);
+    window.removeEventListener("keydown", tabPressed, true);
+    cancelAnimationFrame(firstSync);
     keyboardCursor(false);
   };
 }

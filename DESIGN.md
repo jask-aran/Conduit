@@ -215,6 +215,8 @@ The panes smoke and `test/file-tabs.test.js` assert these; a change to a rule ch
 
 # Keyboard
 
+The full model (enter, move, act, leave; the Escape ladder; modals exclusive; every key a command) is docs/plans/keyboard-model.md, agreed 2026-11-03; where this section and it differ, it wins.
+
 One model for every surface, so no surface grows keys of its own.
 
 - **Regions.** The app is a tree of regions following focus; shortcuts resolve innermost first, then outward. Ctrl+Shift+1/2/3 go to the sidebar, the panes and the dock, opening and focusing, never closing; Ctrl+B and Ctrl+. stay plain toggles.

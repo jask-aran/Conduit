@@ -625,8 +625,7 @@ export function Composer(props: {
 
   const keydown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && slashOpen()) { event.preventDefault(); setSlashOpen(false); return; }
-    // Esc with nothing of the composer's to close stops the turn under way (the Stop button's).
-    if (event.key === "Escape" && busy() && supports("cancel") && !event.repeat) { event.preventDefault(); void props.chat.stop(); return; }
+    // Escape never stops a turn: it steps back (keyboard-model.md › Leave); stopping is Ctrl+Shift+Backspace or the button.
     if (event.key === "Tab" && slashOpen()) {
       event.preventDefault();
       const selected = slashCommand();

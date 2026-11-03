@@ -303,7 +303,8 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   onCleanup(() => { closed = true; generation++; pending = null; closeDecoder(); cancelAnimationFrame(moving); socket?.close(); window.removeEventListener("conduit:browser-changed", changed); });
 
   const go = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
-    if (event.key === "Escape") { editing = false; setAddress(status()?.url && status()!.url !== "about:blank" ? status()!.url! : ""); event.currentTarget.blur(); return; }
+    // Escape steps back one level (keyboard-model.md › Leave): the address reverts and the page takes the keyboard.
+    if (event.key === "Escape") { event.preventDefault(); editing = false; setAddress(status()?.url && status()!.url !== "about:blank" ? status()!.url! : ""); (screen ?? event.currentTarget).focus({ preventScroll: true }); if (document.activeElement === event.currentTarget) event.currentTarget.blur(); return; }
     if (event.key !== "Enter") return;
     const url = addressOf(event.currentTarget.value);
     if (!url) return;
