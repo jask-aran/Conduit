@@ -902,8 +902,6 @@ app.use((error, _request, response, _next) => {
       "workspace_preview_mode_invalid",
       "dangerous_workspace_root",
       "unsafe_conduit_path",
-      "native_resource_limit",
-      "native_resource_symlink",
       "clone_url_required",
       "clone_target_exists",
       "clone_url_not_allowed",

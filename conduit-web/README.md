@@ -185,12 +185,8 @@ Settings → Workspaces stores global-profile inheritance or an explicit ordinar
 profile for each Workspace.
 
 Assistant messages pass through `src/client/chat/markdown.tsx`. Settings → UI
-exposes five selectable Markdown renderers: Marked Stable, Marked Experimental,
-Immediate Stable, Typewriter Stable, and Synthetic Experimental. New users use
-Synthetic Experimental by default. Marked Stable is the basic historical
-reference; the three Incremark modes share the parser, table projection, layout,
-reconciliation, security boundary, and final-content path. Typewriter adds the
-adaptive display queue, and Synthetic adds eager provisional KaTeX previews.
+exposes two selectable Markdown renderers: Incremark (the default) and Marked
+(the fallback).
 The renderer is lazy-loaded, strips remote images and unsafe URLs, requires
 confirmation for external links, and keeps user messages literal. Live deltas
 are coalesced into one Solid signal update per animation frame. The canonical
@@ -1079,5 +1075,5 @@ automatic discovery of Conduit's enclosing repository while allowing repositorie
 created inside the managed scope. Linked Workspaces retain their environment.
 Existing processes need a restart to inherit this setting. Shell prompts with
 their own discovery may still show the enclosing repository. This is a discovery
-boundary, not a restriction on explicit Git paths. Moving runtime data to
-`~/.conduit` is deferred.
+boundary, not a restriction on explicit Git paths. Runtime data defaults to
+`~/.conduit/data` and can be moved with `CONDUIT_DATA_ROOT`.

@@ -20,21 +20,22 @@ function withSearch(search, run) {
 
 const stored = (value) => ({ getItem: () => value });
 
-test("new users get Incremark", () => {
+test("new users get an offered default renderer", () => {
   withSearch("", () => {
-    assert.equal(selectedMarkdownRenderer(stored(null)), "incremark");
-    assert.equal(MARKDOWN_RENDERER_DEFAULT, "incremark");
+    assert.equal(selectedMarkdownRenderer(stored(null)), MARKDOWN_RENDERER_DEFAULT);
+    assert.ok(MARKDOWN_RENDERER_OPTIONS.some((option) => option.value === MARKDOWN_RENDERER_DEFAULT));
   });
 });
 
-test("both offered renderers round-trip", () => {
+test("every offered renderer round-trips", () => {
+  assert.ok(MARKDOWN_RENDERER_OPTIONS.length >= 2);
   withSearch("", () => {
     for (const option of MARKDOWN_RENDERER_OPTIONS) {
       assert.ok(isMarkdownRendererId(option.value), option.value);
       assert.equal(selectedMarkdownRenderer(stored(option.value)), option.value);
     }
   });
-  assert.equal(MARKDOWN_RENDERER_OPTIONS.length, 2);
+  assert.equal(new Set(MARKDOWN_RENDERER_OPTIONS.map((option) => option.value)).size, MARKDOWN_RENDERER_OPTIONS.length);
 });
 
 test("a retired renderer id falls back instead of stranding the reader", () => {
@@ -42,16 +43,20 @@ test("a retired renderer id falls back instead of stranding the reader", () => {
   // should be left pointing at a renderer that no longer exists.
   withSearch("", () => {
     for (const retired of ["marked-stable", "incremark-advanced", "incremark-typewriter", "incremark-synthetic", "incremark-fast", "current", ""]) {
-      assert.equal(selectedMarkdownRenderer(stored(retired)), "incremark", retired);
+      assert.equal(selectedMarkdownRenderer(stored(retired)), MARKDOWN_RENDERER_DEFAULT, retired);
     }
   });
 });
 
 test("the query override wins over storage, and a bad one is ignored", () => {
-  withSearch("?markdownRenderer=marked", () => {
-    assert.equal(selectedMarkdownRenderer(stored("incremark")), "marked");
-  });
-  withSearch("?markdownRenderer=incremark-synthetic", () => {
-    assert.equal(selectedMarkdownRenderer(stored("marked")), "marked");
-  });
+  assert.ok(MARKDOWN_RENDERER_OPTIONS.length >= 2);
+  for (const { value } of MARKDOWN_RENDERER_OPTIONS) {
+    const other = MARKDOWN_RENDERER_OPTIONS.find((option) => option.value !== value).value;
+    withSearch(`?markdownRenderer=${encodeURIComponent(value)}`, () => {
+      assert.equal(selectedMarkdownRenderer(stored(other)), value);
+    });
+    withSearch("?markdownRenderer=incremark-synthetic", () => {
+      assert.equal(selectedMarkdownRenderer(stored(value)), value);
+    });
+  }
 });

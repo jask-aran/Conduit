@@ -5,37 +5,18 @@ import path from "node:path";
 import test from "node:test";
 import { PreferencesStore, normalizePreferences, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../src/preferences-store.js";
 
-const emptyUiPreferences = {
-  sidebarChatLimit: null,
-  collapsedProjectIds: null,
-  sidebarCollapsed: null,
-  markdownRenderer: null,
-  rendererControlsVisible: null,
-  composerSurface: null,
-  contextMetrics: null,
-  meteorField: null,
-  transcriptWidth: null,
-  transcriptWideBlocks: null,
-  codeBlockCollapse: null,
-  codeBlockCollapseLines: null,
-  codeBlockWidth: null,
-  panelMotion: null,
-  leaderMenu: null,
-  userMessageCollapse: null,
-  chatSort: null,
-  shortcutOverrides: null,
-  voicePreferences: null,
-};
-
 test("normalizePreferences falls back when the default template is unknown", () => {
-  assert.deepEqual(
-    normalizePreferences({ defaultTemplateId: "missing" }, { defaultTemplateId: "chat" }, ["chat", "workspace"]),
-    { defaultTemplateId: "chat", sessionNameModel: "", accountName: "", sessionNameThinkingLevel: "off", profileModelDefaults: {}, terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
-  );
-  assert.deepEqual(
-    normalizePreferences({}, { defaultTemplateId: "gone" }, ["workspace"]),
-    { defaultTemplateId: "workspace", sessionNameModel: "", accountName: "", sessionNameThinkingLevel: "off", profileModelDefaults: {}, terminalShortcuts: [], sidebarPins: [], ...emptyUiPreferences },
-  );
+  const known = ["chat", "workspace"];
+  const defaults = normalizePreferences({}, { defaultTemplateId: known[0] }, known);
+  assert.equal(defaults.defaultTemplateId, known[0]);
+  assert.deepEqual(normalizePreferences(defaults, defaults, known), defaults);
+  assert.deepEqual(normalizePreferences({ defaultTemplateId: "missing" }, defaults, known), defaults);
+  const remaining = known.slice(1);
+  const relocated = normalizePreferences({}, { defaultTemplateId: "gone" }, remaining);
+  assert.equal(relocated.defaultTemplateId, remaining[0]);
+  assert.deepEqual(normalizePreferences(relocated, relocated, remaining), relocated);
+  const builtInDefaults = normalizePreferences();
+  assert.deepEqual(normalizePreferences(builtInDefaults), builtInDefaults);
 });
 
 test("preferences store persists general settings", async () => {

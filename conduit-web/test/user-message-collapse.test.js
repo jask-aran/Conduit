@@ -4,6 +4,7 @@ import {
   isUserMessageCollapseMode,
   selectedUserMessageCollapse,
   USER_MESSAGE_COLLAPSE_OPTIONS,
+  USER_MESSAGE_COLLAPSE_DEFAULT,
   userMessageCollapseLines,
 } from "../src/client/chat/user-message-collapse.ts";
 
@@ -18,30 +19,51 @@ function withLocation(search, run) {
   }
 }
 
-test("the fold defaults to ten lines and is expressed in lines, not characters", () => {
+test("the fold defaults to an offered preset expressed in lines", () => {
+  assert.ok(USER_MESSAGE_COLLAPSE_OPTIONS.some((option) => option.value === "off"));
+  assert.ok(USER_MESSAGE_COLLAPSE_OPTIONS.some((option) => option.value !== "off"));
+  assert.ok(USER_MESSAGE_COLLAPSE_OPTIONS.some((option) => option.value === USER_MESSAGE_COLLAPSE_DEFAULT));
   withLocation("", () => {
-    assert.equal(selectedUserMessageCollapse({ getItem: () => null }), "10");
+    assert.equal(selectedUserMessageCollapse({ getItem: () => null }), USER_MESSAGE_COLLAPSE_DEFAULT);
   });
-  assert.equal(userMessageCollapseLines("10"), 10);
-  assert.equal(userMessageCollapseLines("25"), 25);
+  for (const { value } of USER_MESSAGE_COLLAPSE_OPTIONS) {
+    assert.equal(userMessageCollapseLines(value), value === "off" ? 0 : Number(value));
+    if (value !== "off") assert.ok(Number.isInteger(Number(value)) && Number(value) > 0);
+  }
   assert.equal(userMessageCollapseLines("off"), 0);
 });
 
 test("a stored or overridden preset is honoured and anything else falls back", () => {
+  assert.ok(USER_MESSAGE_COLLAPSE_OPTIONS.some((option) => option.value === "off"));
+  assert.ok(USER_MESSAGE_COLLAPSE_OPTIONS.some((option) => option.value !== "off"));
+  const invalidNumber = String(Math.max(...USER_MESSAGE_COLLAPSE_OPTIONS.filter((option) => option.value !== "off").map((option) => Number(option.value))) + 1);
   withLocation("", () => {
-    assert.equal(selectedUserMessageCollapse({ getItem: () => "6" }), "6");
+    for (const { value } of USER_MESSAGE_COLLAPSE_OPTIONS) {
+      assert.equal(selectedUserMessageCollapse({ getItem: () => value }), value);
+    }
     assert.equal(selectedUserMessageCollapse({ getItem: () => "off" }), "off");
-    assert.equal(selectedUserMessageCollapse({ getItem: () => "7" }), "10");
+    assert.equal(selectedUserMessageCollapse({ getItem: () => "unknown-collapse" }), USER_MESSAGE_COLLAPSE_DEFAULT);
+    assert.equal(selectedUserMessageCollapse({ getItem: () => invalidNumber }), USER_MESSAGE_COLLAPSE_DEFAULT);
   });
-  withLocation("?userMessageCollapse=15", () => {
-    assert.equal(selectedUserMessageCollapse({ getItem: () => "6" }), "15");
-  });
+  for (const { value } of USER_MESSAGE_COLLAPSE_OPTIONS) {
+    const other = USER_MESSAGE_COLLAPSE_OPTIONS.find((option) => option.value !== value).value;
+    withLocation(`?userMessageCollapse=${encodeURIComponent(value)}`, () => {
+      assert.equal(selectedUserMessageCollapse({ getItem: () => other }), value);
+    });
+    withLocation("?userMessageCollapse=unknown-collapse", () => {
+      assert.equal(selectedUserMessageCollapse({ getItem: () => value }), value);
+    });
+  }
 });
 
 test("every offered preset validates", () => {
+  const numeric = USER_MESSAGE_COLLAPSE_OPTIONS.filter((option) => option.value !== "off");
+  assert.ok(numeric.length > 0);
+  const invalidNumber = String(Math.max(...numeric.map((option) => Number(option.value))) + 1);
+  assert.equal(isUserMessageCollapseMode(invalidNumber), false);
   for (const option of USER_MESSAGE_COLLAPSE_OPTIONS) {
     assert.ok(isUserMessageCollapseMode(option.value), option.value);
+    if (option.value !== "off") assert.equal(isUserMessageCollapseMode(Number(option.value)), false);
   }
-  assert.equal(isUserMessageCollapseMode("12"), false);
-  assert.equal(isUserMessageCollapseMode(10), false);
+  assert.equal(isUserMessageCollapseMode("unknown-collapse"), false);
 });

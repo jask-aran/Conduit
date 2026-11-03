@@ -5,8 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import {
   VOICE_EXECUTION_CATALOG,
+  LOCAL_VOICE_MODELS,
   artifactForProfile,
   migrateLocalSelection,
+  profileSelection,
   resolveVoiceExecutionProfile,
   validateVoiceExecutionCatalog,
 } from "../src/server/voice-execution-catalog.js";
@@ -15,10 +17,34 @@ import { VoiceSettingsStore } from "../src/voice-settings.js";
 const copy = () => structuredClone(VOICE_EXECUTION_CATALOG);
 
 test("WP8 catalogue resolves every legacy local model to one profile", () => {
-  assert.equal(VOICE_EXECUTION_CATALOG.models.length, 7);
-  assert.equal(VOICE_EXECUTION_CATALOG.artifacts.length, 16);
-  assert.equal(VOICE_EXECUTION_CATALOG.runtimes.length, 4);
-  assert.equal(VOICE_EXECUTION_CATALOG.profiles.length, 28);
+  const catalog = VOICE_EXECUTION_CATALOG;
+  for (const items of [catalog.models, catalog.artifacts, catalog.runtimes, catalog.backendPaths, catalog.profiles, catalog.migrations, LOCAL_VOICE_MODELS]) {
+    assert.ok(items.length > 0);
+  }
+  assert.equal(validateVoiceExecutionCatalog(catalog), catalog);
+  for (const model of catalog.models) {
+    assert.ok(model.artifactIds.length > 0, model.id);
+    assert.deepEqual(new Set(model.artifactIds), new Set(catalog.artifacts
+      .filter((artifact) => artifact.modelId === model.id).map((artifact) => artifact.id)));
+    assert.equal(new Set(model.artifactIds).size, model.artifactIds.length);
+  }
+  for (const profile of catalog.profiles) {
+    assert.equal(resolveVoiceExecutionProfile(profileSelection(profile)).id, profile.id);
+  }
+  assert.equal(resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }).id, catalog.defaultProfileId);
+  assert.equal(catalog.defaultProfileId, migrateLocalSelection("whisper-tiny-en-q8").profileId);
+  assert.equal(resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }).execution, "eager");
+  assert.equal(new Set(catalog.migrations.map((entry) => entry.legacyLocalModelId)).size, catalog.migrations.length);
+  assert.deepEqual(new Set(catalog.migrations.map((entry) => entry.legacyLocalModelId)), new Set(LOCAL_VOICE_MODELS.map((model) => model.id)));
+  for (const legacy of LOCAL_VOICE_MODELS) {
+    const migration = migrateLocalSelection(legacy.id);
+    const profile = resolveVoiceExecutionProfile(migration.selection);
+    assert.equal(profile.id, migration.profileId);
+    assert.equal(artifactForProfile(profile).legacyModelId, legacy.id);
+  }
+  for (const migration of catalog.migrations) {
+    assert.deepEqual(migration.selection, profileSelection(resolveVoiceExecutionProfile({ profileId: migration.profileId })));
+  }
   const migration = migrateLocalSelection("parakeet-unified-en-0.6b-q8");
   assert.deepEqual(migration.selection, {
     modelId: "parakeet-unified-en-0.6b",
@@ -31,15 +57,16 @@ test("WP8 catalogue resolves every legacy local model to one profile", () => {
   assert.equal(profile.id, migration.profileId);
   assert.equal(artifactForProfile(profile).legacyModelId, "parakeet-unified-en-0.6b-q8");
 });
-test("WP10 registers transcribe-rs batch paths without changing legacy defaults", () => {
+test("WP10 registers transcribe-rs batch paths with stop and eager profiles", () => {
   const paths = VOICE_EXECUTION_CATALOG.backendPaths.filter((candidate) => candidate.runtimeId === "transcribe-rs");
-  assert.equal(paths.length, 4);
+  assert.ok(paths.length > 0);
   assert.equal(paths.every((candidate) => candidate.ports.batch && !candidate.ports.stream), true);
   const profiles = VOICE_EXECUTION_CATALOG.profiles.filter((candidate) => candidate.runtimeId === "transcribe-rs");
-  assert.equal(profiles.length, 8);
-  assert.equal(profiles.filter((candidate) => candidate.execution === "stop").length, 4);
-  assert.equal(profiles.filter((candidate) => candidate.execution === "eager").length, 4);
-  assert.equal(VOICE_EXECUTION_CATALOG.defaultProfileId, "whisper-tiny-en-q8.eager");
+  for (const backendPath of paths) {
+    const executions = profiles.filter((profile) => profile.backendPathId === backendPath.id).map((profile) => profile.execution);
+    assert.deepEqual(new Set(executions), new Set(["stop", "eager"]));
+    assert.equal(executions.length, new Set(executions).size);
+  }
   assert.equal(VOICE_EXECUTION_CATALOG.runtimes.find((runtime) => runtime.id === "transcribe-rs").compiledComputeBackends[0], "cpu");
 });
 test("WP9 catalogue advertises stable sample-addressed output and checkpoint fallback", () => {

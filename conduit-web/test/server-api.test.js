@@ -70,8 +70,10 @@ exit 0
     cwd: path.resolve(import.meta.dirname, ".."),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
-      ...process.env,
+      ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^CONDUIT_.*(?:ROOT|FILE|DIR|DIST|PATH|TEMPLATE|COMMAND)$/.test(key))),
       HOME: home,
+      CONDUIT_DATA_ROOT: path.join(root, "data"),
+      CONDUIT_ADVERTISE_ON_LAN: "false",
       CONDUIT_HOST: "127.0.0.1",
       CONDUIT_PORT: "0",
       CONDUIT_FILES_ROOT: path.join(root, "files"),

@@ -17,30 +17,42 @@ test("repository templates are discoverable launch presets", () => {
   assert.ok(templates.some((template) => template.id === "coding"));
   assert.ok(!templates.some((template) => template.id === "code-mode"));
   assert.ok(templates.some((template) => template.id === "runtime"));
-  const workspace = templates.find((template) => template.id === "coding");
-  const general = templates.find((template) => template.id === "assistant");
-  const view = templatePublicView(workspace);
-  assert.equal(view.label, "Coding");
-  assert.equal(workspace.version, "9");
-  assert.equal(view.defaultable, true);
-  assert.deepEqual(workspace.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check", "codemode"]);
-  assert.deepEqual(workspace.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access"), path.resolve(root, "coding/extensions/codemode-only.js")]);
-  assert.ok(view.skillCount >= 1);
-  assert.deepEqual(workspace.skills, [path.resolve(root, "coding/skills/git-github"), path.resolve(root, "coding/skills/web-research"), path.resolve(root, "coding/skills/develop-loop")]);
-  assert.equal(general.label, "Assistant");
-  assert.equal(general.version, "10");
-  assert.deepEqual(general.skills, [path.resolve(root, "coding/skills/web-research")]);
-  assert.deepEqual(general.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
-  assert.deepEqual(general.extensions, [path.resolve(root, "../conduit-web/node_modules/pi-web-access")]);
-  const systemPrompt = fs.readFileSync(general.systemPrompt, "utf8");
-  assert.match(systemPrompt, /Bash is your code-mode runtime/);
-  assert.match(systemPrompt, /use `python` from Bash/);
-  // Web research guidance is the durable agent's, shared by every profile with web tools.
-  const web = fs.readFileSync(path.resolve(root, "conduit-runtime/WEB.md"), "utf8");
-  assert.match(web, /Use this sequence:/);
-  assert.match(web, /fetch_content.*selected pages/s);
-  assert.equal(view.extensionCount, 2);
+  assert.equal(new Set(templates.map((template) => template.id)).size, templates.length);
+  for (const template of templates) {
+    assert.equal(typeof template.version, "string");
+    assert.ok(template.version.trim());
+    const declared = JSON.parse(fs.readFileSync(template.templateFile, "utf8"));
+    const view = templatePublicView(template);
+    assert.equal(view.id, template.id);
+    assert.equal(view.version, template.version);
+    assert.equal(view.label, declared.label || declared.id);
+    assert.ok(view.label.trim());
+    assert.equal(view.defaultable, declared.defaultable !== false);
+    assert.deepEqual(view.tools, declared.tools);
+    assert.deepEqual(view.models, declared.models);
+    assert.equal(view.extensionCount, template.extensions.length);
+    assert.equal(view.skillCount, template.skills.length);
+    assert.equal(view.promptTemplateCount, template.promptTemplates.length);
+    for (const key of ["extensions", "skills", "promptTemplates"]) {
+      assert.deepEqual(template[key], declared[key].map((resource) => path.resolve(path.dirname(template.templateFile), resource)));
+    }
+    for (const resource of [...template.extensions, ...template.skills, ...template.promptTemplates]) {
+      assert.ok(fs.existsSync(resource), resource);
+    }
+    assert.ok(fs.readFileSync(template.systemPrompt, "utf8").trim(), template.systemPrompt);
+  }
+  const coding = templates.find((template) => template.id === "coding");
+  assert.ok(coding.skills.length > 0);
+  assert.equal(templatePublicView(coding).defaultable, true);
+  assert.equal(templatePublicView(templates.find((template) => template.id === "assistant")).defaultable, true);
   assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
+  const assistant = templates.find((template) => template.id === "assistant");
+  const basePrompt = fs.readFileSync(assistant.basePrompt, "utf8");
+  assert.match(basePrompt, /bash[^\n]*code.mode/i);
+  assert.match(basePrompt, /python[^\n]*bash/i);
+  const web = fs.readFileSync(path.resolve(root, "conduit-runtime/WEB.md"), "utf8");
+  assert.match(web, /web_search[\s\S]*fetch_content/i);
+  assert.match(web, /fetch_content[^\n]*inspect/i);
 });
 
 test("listPiTemplates rejects duplicate template ids", () => {

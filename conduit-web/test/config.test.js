@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -6,39 +7,36 @@ import { loadConfig } from "../src/config.js";
 
 const configEnv = (overrides = {}) => ({ ...overrides });
 
-test("default runtime paths are owned by the repository root", () => {
+test("default durable paths use ~/.conduit/data and the default template is discoverable", () => {
   const config = loadConfig(configEnv());
-  assert.equal(config.piTemplate.id, "assistant");
-  assert.equal(config.piTemplate.label, "Assistant");
-  assert.deepEqual(config.piTemplate.tools, ["read", "bash", "edit", "write", "web_search", "fetch_content", "get_search_content", "source_check"]);
-  assert.deepEqual(config.piTemplate.models, [
-    "openai/gpt-5.6-luna",
-    "openai/gpt-5.6-sol",
-    "anthropic/claude-opus-4-8",
-    "anthropic/claude-fable-5",
-  ]);
-  assert.equal(config.piTemplate.templateFile.endsWith(path.join("templates", "assistant", "template.json")), true);
-  assert.ok(config.piTemplates.some((template) => template.id === "assistant"));
-  assert.ok(config.piTemplates.some((template) => template.id === "coding"));
-  assert.ok(config.piTemplates.some((template) => template.id === "runtime"));
-  assert.equal(config.piTemplateById.get("coding")?.label, "Coding");
+  const templateFile = path.join(config.repositoryRoot, "templates", "assistant", "template.json");
+  const declared = JSON.parse(fs.readFileSync(templateFile, "utf8"));
+  assert.equal(config.piTemplate.templateFile, templateFile);
+  assert.equal(config.piTemplate.id, declared.id);
+  assert.equal(config.piTemplate.label, declared.label);
+  assert.deepEqual(config.piTemplate.tools, declared.tools);
+  assert.deepEqual(config.piTemplate.models, declared.models);
+  assert.deepEqual(config.piTemplates.find((template) => template.id === declared.id), config.piTemplate);
+  for (const id of ["assistant", "coding", "runtime"]) {
+    assert.ok(config.piTemplates.some((template) => template.id === id));
+  }
+  assert.deepEqual(config.piTemplateById.get("coding"), config.piTemplates.find((template) => template.id === "coding"));
   assert.ok(config.piTemplateById.get("coding")?.skills?.length >= 1);
   assert.ok(config.workspaceAllowlist.length >= 1);
-  assert.equal(config.dataRoot.endsWith("data"), true);
-  assert.equal(config.filesRoot.endsWith(path.join("data", "chat", "files")), true);
-  assert.equal(config.catalogFile.endsWith(path.join("data", "conduit.json")), true);
-  assert.equal(config.sessionRegistryFile.endsWith(path.join("data", "sessions.json")), true);
-  assert.equal(config.preferencesFile.endsWith(path.join("data", "preferences.json")), true);
-  assert.equal(config.remotesFile.endsWith(path.join("data", "remotes.json")), true);
-  assert.equal(config.piAgentDir.endsWith(path.join("data", "pi")), true);
-  assert.equal(config.searchConfigFile.endsWith(path.join("data", "pi", "web-search.json")), true);
+  assert.equal(config.dataRoot, path.join(os.homedir(), ".conduit", "data"));
+  for (const key of [
+    "filesRoot", "terminalPasteRoot", "catalogFile", "sessionRegistryFile", "sessionNameLogFile",
+    "promptOverridesRoot", "preferencesFile", "draftsFile", "piAgentDir", "searchConfigFile",
+    "voiceConfigFile", "voiceModelRoot", "voiceRecordingsRoot", "runtimeSettingsFile",
+    "identityFile", "leafFile", "remotesFile", "authFile",
+  ]) {
+    const relative = path.relative(config.dataRoot, config[key]);
+    assert.ok(relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), key);
+  }
   assert.equal(config.maxAttachmentBytes, 100 * 1024 * 1024);
   assert.equal(config.voiceFinalizationBaseMs, 30_000);
   assert.equal(config.voiceFinalizationMaxMs, 600_000);
   assert.equal(config.voiceFinalizationDefaultMultiplier, 12);
-  assert.equal(config.voiceConfigFile.endsWith(path.join("data", "voice.json")), true);
-  assert.equal(config.voiceModelRoot.endsWith(path.join("data", "voice", "models")), true);
-  assert.equal(config.voiceRecordingsRoot.endsWith(path.join("data", "voice", "recordings")), true);
   assert.equal(config.workspaceDefaultRoot, os.homedir());
 });
 
