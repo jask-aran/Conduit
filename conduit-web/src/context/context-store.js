@@ -65,6 +65,11 @@ const NOTICE_APPENDIX = { "wake-routine": "Conduit appends the routine's task bl
 const skillLabel = (name) => `${name.replace(/[-_]+/g, " ").replace(/^./, (letter) => letter.toUpperCase())} skill`;
 const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || path.basename(folder);
 const skillBody = (text) => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+const skillDescription = (text) => /^description:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || "";
+/** The index's opening: skills are listed, not pasted; the `skill` tool loads one (server/skill-tool.js). */
+export const SKILLS_INTRO = "# Skills\n\nSkills are the instructions for kinds of work: each line below says when one applies. When one fits "
+  + "what you are about to do, call `skill` with its name first and follow what it says. It is one quick call, and it beats "
+  + "working from memory. A skill may name files of its own; `skill` reads those too.";
 
 export class ContextStore {
   constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills = null }) {
@@ -245,6 +250,17 @@ export class ContextStore {
     if (item.routine || item.runRules) return this.save(id, { content: def });
     await fs.rm(path.join(this.root, `${id}.md`), { force: true }); return this.get(id);
   }
+  /** The skills `skill` can load: every enabled skill, shipped or installed, by name, with its folder and SKILL.md text. */
+  async skillsAvailable() {
+    const out = [];
+    for (const item of (await this.catalog()).values()) {
+      if (!item.skill || (this.skills && !this.skills.enabled(path.basename(item.skill)))) continue;
+      const text = await this.content(item).catch(() => null);
+      if (text !== null) out.push({ name: skillName(text, item.skill), description: skillDescription(text), folder: item.skill, text });
+    }
+    return out;
+  }
+
   /** A text block's current text, for a section Conduit places itself (the web tools). */
   async text(id) {
     const item = (await this.catalog()).get(id);
@@ -292,7 +308,8 @@ export class ContextStore {
       if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
       // An installed skill's files (scripts, references) are in its folder on the hub, which its text names relatively.
-      else if (item.skill) text = `${previousSkill ? "" : "# Skills\n\n"}## Skill: ${skillName(text, item.skill)}\n\n${item.installed ? `Its files are in ${item.skill}.\n\n` : ""}${skillBody(text)}`;
+      // A skill is a line of the index (progressive disclosure): its name and when it applies; `skill` loads the body.
+      else if (item.skill) text = `${previousSkill ? "" : `${SKILLS_INTRO}\n\n`}- **${skillName(text, item.skill)}**: ${skillDescription(text) || "(no description)"}`;
       else if (id !== "service:chat-naming") text = text.trim();
       previousSkill = Boolean(item.skill);
       if (text) sections.push({ blockId: key, label: item.label, kind: "text", part: "system", text });

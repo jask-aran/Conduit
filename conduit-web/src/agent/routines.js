@@ -230,12 +230,8 @@ export function RoutineTools(runtime) {
   const routine = defineTool({
     name: "routine",
     description: "Your routines (routines/<name>.md): list, read one, test one (runs its tasks once and shows the first message "
-      + "its run would get; moves nothing), save one (the whole file: YAML front matter, then the run's instructions; the "
-      + "person approves) or remove one (the person approves). Front matter: title; trigger { every: minutes } | { at: \"HH:MM\" } "
-      + "| { once: ISO time }; tasks, each { id, kind } with kind inbox (all?: true for handled too), calendar (account, "
-      + "calendars?, days?), chats, executor (code: a read-only program returning a JSON list of { id, title, detail?, text?, "
-      + "at?, url? }) or script (command printing that JSON); gate always | when-new | never; output jbot | inbox | both; "
-      + "model?, effort?, level?, quiet?, enabled?, context? (soul, user, memory, diary).",
+      + "its run would get; moves nothing), save one (the whole file; the person approves) or remove one (the person approves). "
+      + "Load the routines skill for the file's format before writing one.",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("list"), Type.Literal("read"), Type.Literal("test"), Type.Literal("save"), Type.Literal("remove")]),
       name: Type.Optional(Type.String({ description: "The file's name without .md: lowercase, digits and dashes." })),

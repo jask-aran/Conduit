@@ -28,8 +28,9 @@
   ],
   "skills": [
     "skills/git-github",
-    "skills/web-research",
-    "skills/develop-loop"
+    "../skills/web-research",
+    "skills/develop-loop",
+    "../skills/managed-python"
   ],
   "promptTemplates": []
 }

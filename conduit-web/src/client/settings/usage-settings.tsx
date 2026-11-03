@@ -15,6 +15,7 @@ type Diagnostics = {
   keepWarm?: { policy: { model: string; pings: number; ttlMs: number | null; intervalMs: number | null; ttlSource: "declared" | "observed" | "assumed" | null;
       gaps: number; reason: string | null } | null;
     pings: number; pingHits: number; pingCost: number; lapses: number; keptHits: number; keptMisses: number; coldHits: number; coldMisses: number; saved: number; net: number };
+  context?: { at: string; instructions: number; tools: number; toolSets: number; toolSetTokens: number; conversation: number; byTool: { name: string; tokens: number }[] } | null;
   approvals: { judged: number; outcomes: { allow?: number; deny?: number; escalate?: number }; sources: Record<string, number>;
     askedYou: number; fromRuns: number; waiting: number; judgeMs: { median: number; max: number } | null;
     judgeCost: number; perDecision: number | null; jbotCost: number; jbotRequests: number; share: number | null;
@@ -122,6 +123,22 @@ export function UsageSettings() {
           </SettingDetails>
         </Show>
       </Group>
+      <Show when={report().context}>{(context) =>
+        <Group title="jbot's context">
+          <SettingLine plain label="Instructions" state="the system prompt, about 4 characters a token"
+            title="What jbot's home thread sent with its last request, measured from the copy kept for keep-warm.">
+            <SettingValue mono>{count(context().instructions)} tokens</SettingValue>
+          </SettingLine>
+          <SettingLine plain label="Tool definitions" state={`${context().byTool.length} tools${context().toolSets > 1 ? ` · sent ${context().toolSets} times in the thread, ${count(context().toolSetTokens)} tokens` : ""}`}
+            title="A change to the tool list sends the whole set again into the conversation.">
+            <SettingValue mono>{count(context().tools)} tokens</SettingValue>
+          </SettingLine>
+          <SettingLine plain label="Conversation"><SettingValue mono>{count(context().conversation)} tokens</SettingValue></SettingLine>
+          <SettingDetails summary="Each tool">
+            <For each={context().byTool}>{(tool) => <SettingLine plain mono label={tool.name}><SettingValue mono>{count(tool.tokens)}</SettingValue></SettingLine>}</For>
+          </SettingDetails>
+        </Group>}
+      </Show>
       <Show when={report().keepWarm}>{(warm) =>
         <Group title="Keep warm">
           <Show when={warm().policy}>{(policy) =>

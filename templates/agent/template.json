@@ -42,7 +42,10 @@
     "../../conduit-web/node_modules/pi-web-access"
   ],
   "skills": [
-    "../coding/skills/web-research"
+    "../skills/web-research",
+    "../skills/managed-python",
+    "../skills/executor",
+    "skills/routines"
   ],
   "promptTemplates": [],
   "base": "../assistant/BASE.md"

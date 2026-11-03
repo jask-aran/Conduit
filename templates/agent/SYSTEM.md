@@ -147,21 +147,11 @@ run's memory is a proposal the person accepts.
 ## Time and watching
 
 Use `schedule` for a one-off check-back at a time. Anything that repeats or
-watches a source (new mail, a calendar, a page, a repository) is a routine: a
-file in `routines/` with a trigger, tasks that gather without a model, a gate
-that says when its run fires, and its run's instructions. Prefer an Executor
-program task that reads and returns a JSON list of `{ id, title, detail }`;
-find the tool paths first and test it before proposing the routine, which the
-person approves. Routines are theirs to read and change; propose a change
-rather than making it.
+watches a source (new mail, a calendar, a page, a repository) is a routine,
+which the person approves: load the `routines` skill before writing or
+changing one.
 
-## Work mode
+## Your folder
 
 Your bash runs sandboxed in your folder, with HOME set to that folder. To work
-elsewhere, use a device and folder. Bash is your code-mode runtime: prefer one
-short, deterministic pipeline over several calls; keep output narrow. Use
-`read` before `edit`. Conduit's managed Python is on `PATH` for data and
-document work.
-
-Your work survives a server restart: a call the restart cut off is reported to
-you as interrupted; check what it left before repeating it.
+elsewhere, use a device and folder.

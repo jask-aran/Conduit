@@ -69,6 +69,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const from = now - hours * 3600000;
   const inWindow = (at) => at >= from && at <= now;
   const requests = { total: 0, byModel: [], afterGap: [], misses: [] };
+  let context = null;
   const keepWarm = { policy: null, pings: 0, pingHits: 0, pingCost: 0, lapses: 0, keptHits: 0, keptMisses: 0, coldMisses: 0, coldHits: 0, saved: 0, net: 0 };
   const approvals = {
     judged: 0, outcomes: { allow: 0, deny: 0, escalate: 0 }, sources: {},
@@ -203,6 +204,26 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       }
     }
     keepWarm.net = keepWarm.saved - keepWarm.pingCost;
+    // What the home thread's last request carried (keep-warm's saved copy): sizes by part and per tool, no content.
+    const homeKey = [...sessions].find(([, cid]) => cid === String(home))?.[0];
+    if (homeKey) {
+      const saved = await fs.readFile(path.join(dataRoot, "runtime", "prefix-watch-payloads", `${homeKey.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`), "utf8").then(JSON.parse, () => null);
+      const params = saved?.params;
+      if (params) {
+        const tokens = (value) => Math.round(JSON.stringify(value ?? "").length / 4);
+        const items = Array.isArray(params.input) ? params.input : [];
+        // Tools travel as `tools`, or (Responses with tool search, as pi sends a ChatGPT sign-in) as `additional_tools`
+        // items in the conversation: a whole set again each time the tool list changes.
+        const sets = items.filter((item) => item?.type === "additional_tools");
+        const toolList = sets.length ? sets.at(-1).tools : params.tools;
+        const system = items.find((item) => item?.role === "developer" || item?.role === "system");
+        context = { at: new Date(saved.at).toISOString(), instructions: tokens(params.instructions ?? system), tools: tokens(toolList),
+          toolSets: sets.length, toolSetTokens: sets.reduce((sum, set) => sum + tokens(set), 0),
+          conversation: tokens(items) - tokens(system) - sets.reduce((sum, set) => sum + tokens(set), 0),
+          byTool: (Array.isArray(toolList) ? toolList : []).map((tool) => ({ name: usageIdentifier(tool?.name || tool?.type), tokens: tokens(tool) }))
+            .sort((a, b) => b.tokens - a.tokens) };
+      }
+    }
     requests.byModel = [...models.values()].sort((a, b) => b.requests - a.requests);
     for (const group of requests.byModel) {
       group.cachedShare = group.cacheRead / Math.max(1, group.input + group.cacheRead);
@@ -241,5 +262,5 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   approvals.share = approvals.jbotCost ? approvals.judgeCost / approvals.jbotCost : null;
   const count = (action) => action.allow + action.deny + action.escalate;
   approvals.byAction = [...actions.values()].sort((a, b) => count(b) - count(a)).slice(0, 8);
-  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, approvals };
+  return { window: { hours, from: new Date(from).toISOString(), to: new Date(now).toISOString() }, requests, keepWarm, context, approvals };
 }

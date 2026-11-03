@@ -25,7 +25,7 @@
     "../../conduit-web/node_modules/pi-web-access"
   ],
   "skills": [
-    "../coding/skills/web-research"
+    "../skills/web-research"
   ],
   "promptTemplates": [],
   "connectors": false,

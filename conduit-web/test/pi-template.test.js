@@ -49,10 +49,13 @@ test("repository templates are discoverable launch presets", () => {
   const assistant = templates.find((template) => template.id === "assistant");
   const basePrompt = fs.readFileSync(assistant.basePrompt, "utf8");
   assert.match(basePrompt, /bash[^\n]*code.mode/i);
-  assert.match(basePrompt, /python[^\n]*bash/i);
+  // Detail lives in skills the prompt lists and the model loads with `skill`: Python with the Assistant, and the web
+  // tools' order in web-research, which the web section points to.
+  const skill = (name) => fs.readFileSync(path.join(assistant.skills.find((folder) => path.basename(folder) === name), "SKILL.md"), "utf8");
+  assert.match(skill("managed-python"), /python[^\n]*bash/i);
   const web = fs.readFileSync(path.resolve(root, "conduit-runtime/WEB.md"), "utf8");
-  assert.match(web, /web_search[\s\S]*fetch_content/i);
-  assert.match(web, /fetch_content[^\n]*inspect/i);
+  assert.match(web, /web-research/);
+  assert.match(skill("web-research"), /web_search[\s\S]*fetch_content/i);
 });
 
 test("listPiTemplates rejects duplicate template ids", () => {

@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prefixWatch } from "./prefix-watch.js";
+import { SkillTool } from "./skill-tool.js";
+import { SKILLS_INTRO } from "../context/context-store.js";
 import { keepWarmPolicy, requestGaps, survivedLifetime } from "./keep-warm.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
@@ -34,7 +36,7 @@ const WEB_ACCESS = fileURLToPath(new URL("../../node_modules/pi-web-access/index
 // A template's own extension that only asked Pi for its codemode, offered alone.
 const CODEMODE_ONLY = /codemode-only\.js$/;
 // Conduit's own tool, offered under every template.
-const ALWAYS = ["ask_user"];
+const ALWAYS = ["ask_user", "skill"];
 // Reads and searches: asking again after a restart costs a request, not a side effect.
 const WEB_REPLAY_SAFE = ["web_search", "fetch_content", "get_search_content", "source_check"];
 
@@ -85,7 +87,7 @@ const askUser = (runtime) => defineTool({
 /** What Conduit tells every runtime conversation, ahead of the tools' own sections. */
 const Conduit = (runtime) => defineExtension({
   name: "conduit",
-  tools: [askUser(runtime)],
+  tools: [askUser(runtime), SkillTool(runtime)],
   sections: [
     // The working directory the tools resolve against: the chat's project.
     section("cwd", (input) => input.env?.cwd),
@@ -514,11 +516,19 @@ export class DurableRuntime {
   }
 
   /** A template's skills: name, description and body (frontmatter stripped). */
+  /** Every skill `skill` may load: the context store's (shipped and installed, enabled), else the templates'. */
+  async skillsAvailable() {
+    if (this.contextStore) return this.contextStore.skillsAvailable();
+    const seen = new Map();
+    for (const template of this.templates) for (const skill of this.skillsFor(template.id)) seen.set(skill.name, skill);
+    return [...seen.values()];
+  }
+
   skillsFor(templateId) {
     return (this.templateFor(templateId)?.skills || []).map((folder) => {
       const text = fs.readFileSync(path.join(folder, "SKILL.md"), "utf8");
       const field = (key) => new RegExp(`^${key}:\\s*(.+)$`, "m").exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "");
-      return { name: field("name") || path.basename(folder), description: field("description") || "",
+      return { name: field("name") || path.basename(folder), description: field("description") || "", folder, text,
         body: text.replace(/^---\n[\s\S]*?\n---\n/, "").trim() };
     });
   }
@@ -604,7 +614,7 @@ export class DurableRuntime {
     if (this.contextStore) instructions = await this.contextStore.assemble(isAgent ? "agent" : `profile:${template.id}`, { vars });
     else {
       const skills = this.skillsFor(template.id);
-      instructions = [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(skills.length ? ["# Skills", ...skills.map((skill) => `## Skill: ${skill.name}\n\n${skill.body}`)] : [])].filter(Boolean).join("\n\n");
+      instructions = [fs.readFileSync(template.systemPrompt, "utf8").trim(), ...(template.basePrompt ? [fs.readFileSync(template.basePrompt, "utf8").trim()] : []), ...(skills.length ? [`${SKILLS_INTRO}\n\n${skills.map((skill) => `- **${skill.name}**: ${skill.description}`).join("\n")}`] : [])].filter(Boolean).join("\n\n");
     }
     return { extensions, tools, modelTools, instructions };
   }
