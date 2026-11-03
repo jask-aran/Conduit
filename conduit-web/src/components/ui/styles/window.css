@@ -21,3 +21,6 @@
   .ui-window-controls > button:hover { background: var(--tint); color: var(--foreground); }
   .ui-window-controls > button[data-close]:hover { background: var(--destructive); color: var(--foreground); }
 }
+/* What the bar holds sizes to itself: a sidebar's control fills its row there, which here pushed the rest off. */
+.ui-title-bar .ui-server-control { width: auto; min-height: 0; }
+.ui-title-bar .ui-server-control[data-inline] .ui-server-copy > small { flex: none; }
