@@ -526,7 +526,10 @@ export async function listSchedules(agent) {
     const feed = item.feed ? { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed }
       : gathers.has(routine) ? { source: gathers.get(routine) === "script" ? "script" : "executor", lastRunAt: last?.lastAt || null, lastCount: last?.fresh || 0,
         lastError: last?.lastError || null, primed: true } : null;
-    return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" ? { cadence: wording.get(routine) } : {}) } : {}), ...(feed ? { feed } : {}) };
+    return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" ? { cadence: wording.get(routine) } : {}) } : {}),
+      // Its rules as they apply now (a quiet window resolved to the hours), for the page's day strip.
+      ...(kind === "rules" ? { rules: item.rules.map((rule) => ({ kind: rule.kind, ...(rule.everyMinutes ? { everyMinutes: rule.everyMinutes } : {}), ...(rule.at ? { at: rule.at } : {}), during: rule.during ?? null })) } : {}),
+      ...(feed ? { feed } : {}) };
   })
     .sort((a, b) => (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }

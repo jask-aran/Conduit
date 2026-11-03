@@ -12,8 +12,8 @@
 :is(.ui-dash, .ui-folder-shelf) { --dash-tile: calc(2 * var(--u-icon)); --dash-folder: calc(7.1875 * var(--u-space)); }
 /* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
 .ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: var(--dash-min); min-height: 0; flex: 1;
-  grid-template-areas: "head head" "notice notice" "main aside"; grid-template-columns: minmax(0, var(--reading-width)) var(--dash-aside);
-  grid-template-rows: auto auto minmax(var(--dash-aside), 1fr); column-gap: var(--dash-gap);
+  grid-template-areas: "head head" "notice notice" "band band" "main aside"; grid-template-columns: minmax(0, var(--reading-width)) var(--dash-aside);
+  grid-template-rows: auto auto auto minmax(var(--dash-aside), 1fr); column-gap: var(--dash-gap);
   margin: 0 0 0 max(var(--dash-gutter), calc((100% - var(--dash-max)) / 2)); padding: var(--space-3xl) 0 var(--space-2xl); }
 
 /* The head is one grid: the mark centred on both lines, the title with the quick actions at the right of its line, the
@@ -48,6 +48,7 @@
 :is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
 
 .ui-dash-notice { grid-area: notice; margin-bottom: var(--space-xl); }
+.ui-dash-band { grid-area: band; min-width: 0; margin-bottom: var(--space-2xl); }
 .ui-dash-main { display: flex; min-width: 0; min-height: 0; grid-area: main; flex-direction: column; }
 .ui-dash-composer { --composer-width: 100%; }
 /* A page's own thread over its composer: it takes the column's room before the list does, and scrolls on its own. */
@@ -182,7 +183,7 @@
 
 /* One column: everything in one flow, ordered. */
 .ui-dash[data-one-column] .ui-dash-body { display: flex; width: calc(100% - 2 * var(--dash-gutter)); flex-direction: column; }
-.ui-dash[data-one-column] .ui-dash-notice { order: 1; }
+.ui-dash[data-one-column] :is(.ui-dash-notice, .ui-dash-band) { order: 1; }
 .ui-dash[data-one-column] :is(.ui-dash-main, .ui-dash-aside) { display: contents; }
 .ui-dash[data-one-column] .ui-dash-composer { order: 2; }
 .ui-dash[data-one-column] .ui-dash-conversation { order: 1; flex: none; max-block-size: 60dvh; }

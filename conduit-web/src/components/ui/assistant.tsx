@@ -100,10 +100,11 @@ const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padSt
 
 /**
  * An agent's day on one line, midnight to midnight: quiet hours a tinted band (wrapping midnight as two), its
- * heartbeat's ticks (every `pulse` minutes, none in quiet hours), its marks (a brief, a daily task) as a tick with
- * its label over it, and now as a line in the text's colour. The hours under it.
+ * heartbeat's ticks (`ticks`, minutes of the day, as its timing rules place them; else every `pulse` minutes, none in
+ * quiet hours), its marks (a brief, a daily task) as a tick with its label over it, and now as a line in the text's
+ * colour. The hours under it.
  */
-export function DayStrip(props: { now: number; quiet?: { start: number; end: number } | null; pulse?: number | null; marks?: DayMark[]; label?: string }) {
+export function DayStrip(props: { now: number; quiet?: { start: number; end: number } | null; pulse?: number | null; ticks?: number[]; marks?: DayMark[]; label?: string }) {
   const bands = (): [number, number][] => {
     const quiet = props.quiet;
     if (!quiet || quiet.start === quiet.end) return [];
@@ -111,6 +112,7 @@ export function DayStrip(props: { now: number; quiet?: { start: number; end: num
   };
   const quietAt = (minutes: number) => bands().some(([from, to]) => minutes >= from && minutes < to);
   const ticks = () => {
+    if (props.ticks) return props.ticks;
     const every = props.pulse;
     if (!every || every < 5) return [];
     const out: number[] = [];

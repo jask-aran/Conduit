@@ -28,6 +28,8 @@ export function Dashboard(props: {
   /** QuickActions, at the title's right. */
   actions?: JSX.Element;
   notice?: JSX.Element;
+  /** Across both columns under the head (a day strip): what reads better wide than in either column. */
+  band?: JSX.Element;
   /** A conversation over the composer (DashConversation): its latest messages, the page's own thread. */
   conversation?: JSX.Element;
   /** The composer in the left column, over the list; a phone docks it at the foot instead (dock). */
@@ -41,6 +43,7 @@ export function Dashboard(props: {
     <div class="ui-dash-body">
       <header class="ui-dash-head">{props.head}{props.actions}</header>
       <Show when={props.notice}><div class="ui-dash-notice">{props.notice}</div></Show>
+      <Show when={props.band}><div class="ui-dash-band">{props.band}</div></Show>
       <div class="ui-dash-main">
         {props.conversation}
         <Show when={props.composer}><div class="ui-dash-composer">{props.composer}</div></Show>

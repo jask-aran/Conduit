@@ -185,6 +185,29 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
+  /*
+   * Where the heartbeat fires through the day, by its timing rules (schedule.js): a windowed rule wins inside its window
+   * (the narrower of two), an unwindowed one elsewhere; an interval counts from its window's start (midnight unwindowed).
+   */
+  const beatTicks = (rules: NonNullable<AgentSchedule["rules"]>) => {
+    const windowOf = (during: string | null) => during ? during.split("-").map(minutesOf) as [number, number] : null;
+    const inside = (at: number, [from, to]: [number, number]) => from < to ? at >= from && at < to : at >= from || at < to;
+    const width = ([from, to]: [number, number]) => (to - from + 1440) % 1440;
+    const winner = (at: number) => rules.filter((rule) => rule.kind === "every" && rule.everyMinutes)
+      .map((rule) => ({ rule, window: windowOf(rule.during) }))
+      .filter(({ window }) => !window || inside(at, window))
+      .sort((a, b) => (a.window ? width(a.window) : 1441) - (b.window ? width(b.window) : 1441))[0]?.rule;
+    const out = new Set<number>();
+    for (const rule of rules) {
+      if (rule.kind !== "every" || !rule.everyMinutes) continue;
+      const start = windowOf(rule.during)?.[0] ?? 0;
+      for (let step = 0; step < 1440; step += rule.everyMinutes) {
+        const at = (start + step) % 1440;
+        if (winner(at) === rule) out.add(at);
+      }
+    }
+    return [...out].sort((a, b) => a - b);
+  };
   // What runs on its clock, next first: the heartbeat, the brief, feeds filling the inbox, check-backs; over its day.
   const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
   const day = () => {
@@ -193,7 +216,7 @@ export function AgentPage(props: {
     const beat = timed().find((schedule) => clockKind(schedule) === "heartbeat");
     const marks: DayMark[] = timed().filter((schedule) => schedule.kind === "daily" && schedule.at && !schedule.feed)
       .map((schedule) => ({ at: minutesOf(schedule.at!), label: clockKind(schedule) === "brief" ? "Brief" : schedule.title, kind: clockKind(schedule) }));
-    return <DayStrip now={minutesIn(now(), zone)} marks={marks} pulse={beat?.everyMinutes ?? null}
+    return <DayStrip now={minutesIn(now(), zone)} marks={marks} pulse={beat?.everyMinutes ?? null} ticks={beat?.rules ? beatTicks(beat.rules) : undefined}
       quiet={settings?.quietHours?.enabled ? { start: minutesOf(settings.quietHours.start), end: minutesOf(settings.quietHours.end) } : null} />;
   };
   // In quiet hours the heartbeat still ticks but decides nothing until they end.
@@ -218,7 +241,6 @@ export function AgentPage(props: {
       </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" label="Timed" count={timed().length || null}>
-    {day()}
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 
@@ -343,6 +365,8 @@ export function AgentPage(props: {
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
+          // Its day across both columns: in the side column it was too narrow to read.
+          band={day()}
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer}
