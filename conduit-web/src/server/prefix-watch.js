@@ -18,16 +18,34 @@ export function prefixWatch(file) {
     saving = true;
     setTimeout(() => { saving = false; fs.writeFile(saved, JSON.stringify(Object.fromEntries(last)), () => {}); }, 1000).unref?.();
   };
-  // The last request per cache key, whole, for warmCache to send again.
+  // The last request per cache key, whole, for warmCache to send again; also on disk (the runtime DB holds the same
+  // content), so a wake after a restart can still be warmed.
   const payloads = new Map();
+  const dir = file.replace(/\.jsonl$/, "") + "-payloads";
+  const payloadFile = (key) => `${dir}/${String(key).replace(/[^A-Za-z0-9_.-]/g, "_")}.json`;
+  const pending = new Set();
+  const keep = (key) => {
+    if (pending.has(key)) return;
+    pending.add(key);
+    setTimeout(() => {
+      pending.delete(key);
+      const saved = payloads.get(key);
+      if (!saved) return;
+      fs.mkdir(dir, { recursive: true }, () => fs.writeFile(payloadFile(key), JSON.stringify(saved), () => fs.readdir(dir, (error, names) => {
+        if (error || names.length <= 50) return;
+        const byAge = names.map((name) => ({ name, at: fs.statSync(`${dir}/${name}`, { throwIfNoEntry: false })?.mtimeMs || 0 })).sort((a, b) => a.at - b.at);
+        for (const { name } of byAge.slice(0, names.length - 50)) fs.rm(`${dir}/${name}`, { force: true }, () => {});
+      })));
+    }, 1000).unref?.();
+  };
   const watch = (params, model) => {
     try {
       const key = params?.prompt_cache_key;
       if (!key) return undefined;
       const items = Array.isArray(params.input) ? params.input : Array.isArray(params.messages) ? params.messages : [];
       const now = { head: hash([params.instructions, params.tools, params.model, params.reasoning]), items: items.map(hash), types: items.map((item) => item?.type || item?.role) };
-      const previous = payloads.get(key)?.params;
-      if (!params.__warm) { payloads.set(key, { params, model, at: Date.now() }); if (payloads.size > 50) payloads.delete(payloads.keys().next().value); }
+      const previous = watch.last(key)?.params;
+      if (!params.__warm) { payloads.set(key, { params, model, at: Date.now() }); if (payloads.size > 50) payloads.delete(payloads.keys().next().value); keep(key); }
       const before = last.get(key);
       last.set(key, now);
       if (last.size > 200) last.delete(last.keys().next().value);
@@ -48,6 +66,9 @@ export function prefixWatch(file) {
     if (params?.__warm) { const { __warm, ...rest } = params; return rest; }
     return undefined;
   };
-  watch.last = (key) => payloads.get(key) || null;
+  watch.last = (key) => {
+    if (!payloads.has(key)) { try { payloads.set(key, JSON.parse(fs.readFileSync(payloadFile(key), "utf8"))); } catch { return null; } }
+    return payloads.get(key);
+  };
   return watch;
 }
