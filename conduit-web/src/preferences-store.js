@@ -7,6 +7,8 @@ import { formatKeybindings, parseKeybindings } from "./keybindings.js";
 const DEFAULTS = {
   defaultTemplateId: "assistant",
   sessionNameModel: "",
+  // The approval model (Settings › AI › Helper models: Review); "" is the naming model's.
+  reviewModel: "",
   accountName: "",
   sessionNameThinkingLevel: "off",
   profileModelDefaults: {},
@@ -218,6 +220,9 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const sessionNameModel = typeof input.sessionNameModel === "string"
     ? input.sessionNameModel.trim()
     : typeof fallback.sessionNameModel === "string" ? fallback.sessionNameModel.trim() : "";
+  const reviewModel = typeof input.reviewModel === "string"
+    ? input.reviewModel.trim()
+    : typeof fallback.reviewModel === "string" ? fallback.reviewModel.trim() : "";
   const sessionNameThinkingLevel = typeof input.sessionNameThinkingLevel === "string" && input.sessionNameThinkingLevel.trim()
     ? input.sessionNameThinkingLevel.trim()
     : typeof fallback.sessionNameThinkingLevel === "string" && fallback.sessionNameThinkingLevel.trim()
@@ -247,6 +252,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     defaultTemplateId,
     accountName,
     sessionNameModel,
+    reviewModel,
     sessionNameThinkingLevel,
     profileModelDefaults: normalizeProfileModelDefaults(input.profileModelDefaults ?? fallback.profileModelDefaults),
     terminalShortcuts,

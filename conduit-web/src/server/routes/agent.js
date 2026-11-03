@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { safeRedirectTarget } from "../../auth-middleware.js";
 import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
@@ -9,6 +10,7 @@ import { executeRoutine } from "../../agent/routines.js";
 import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
+import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { backgroundSubagents } from "../subagents.js";
 
@@ -19,6 +21,9 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent                     give this hub its agent { name? }
  * PATCH /v0/agent                    its settings (name, dial, budgetUsdPerDay, timezone, brief, heartbeat)
  * POST /v0/agent/asks/:id            decide an approval { choice }
+ * GET  /v0/agent/policy              the standing approval policy and whether it is the starter
+ * PUT  /v0/agent/policy              save approval rules { may?, always?, limits?, exact? }
+ * GET  /v0/agent/approvals           approval audit records, newest first (?limit=)
  * POST /v0/agent/threads             a side thread { title? }
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
@@ -50,6 +55,30 @@ export function registerAgentRoutes(app, { agent, backends }) {
     response.status(409).json({ error: "agent_not_enabled" });
     return false;
   };
+
+  app.get("/v0/agent/policy", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      response.json(await readPolicy(agent));
+    } catch (error) { next(error); }
+  });
+
+  app.put("/v0/agent/policy", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      response.json(await savePolicy(agent, request.body));
+    } catch (error) {
+      if (error.status === 400) return response.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+
+  app.get("/v0/agent/approvals", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      response.json({ records: await readApprovals(path.join(agent.runtime.dataRoot, "agent", "approvals"), request.query.limit) });
+    } catch (error) { next(error); }
+  });
 
   /**
    * What is under way and what needs the person. Working: its runs still going

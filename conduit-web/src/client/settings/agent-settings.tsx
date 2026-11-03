@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
+import { Button, Input, Segmented, Switch, TextArea } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { SettingLine } from "@/components/ui/overlay";
 import { api } from "../api/client";
@@ -109,6 +109,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         <SettingLine label="Executor decides" title="Executor's calls go to it unasked: reads run at once, and what Executor holds for approval (a send, a change) is what you are asked, once. Off: Conduit's list of reads decides before each call, and anything else asks.">
           <Switch label="Executor decides" checked={current().executorDecides !== false} onChange={(executorDecides) => set({ executorDecides })} />
         </SettingLine>
+        <ApprovalRules />
         <SettingLine label="Remind me" title="Every approval is pushed to your devices, a background run's too. One still waiting is pushed once more after this long.">
           <Select id="agent-remind" value={String(current().remindMinutes ?? 10)} onChange={(event) => set({ remindMinutes: Number(event.currentTarget.value) })}>
             <For each={[[0, "Never"], [5, "After 5 minutes"], [10, "After 10 minutes"], [30, "After 30 minutes"], [60, "After an hour"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
@@ -153,4 +154,45 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
   </Show>;
 
   return { autosave, Page };
+}
+
+type ApprovalPolicy = { version: string; may: string[]; always: string[]; limits: string[]; exact: string[] };
+/**
+ * The person's standing rules for the approval model (docs/plans/approval-model.md): what the agent may do, what is
+ * always theirs, and limits they set; one rule a line, in plain words. Until saved, the starter rules apply.
+ */
+function ApprovalRules() {
+  const [policy, setPolicy] = createSignal<ApprovalPolicy | null>(null);
+  const [starter, setStarter] = createSignal(false);
+  const [draft, setDraft] = createSignal({ may: "", always: "", limits: "" });
+  const [saving, setSaving] = createSignal(false);
+  const [error, setError] = createSignal("");
+  const lines = (text: string) => text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const load = (loaded: { policy: ApprovalPolicy; starter: boolean }) => {
+    setPolicy(loaded.policy); setStarter(loaded.starter);
+    setDraft({ may: loaded.policy.may.join("\n"), always: loaded.policy.always.join("\n"), limits: loaded.policy.limits.join("\n") });
+  };
+  void api<{ policy: ApprovalPolicy; starter: boolean }>("/v0/agent/policy").then(load).catch((failure) => setError((failure as Error).message));
+  const changed = () => { const current = policy(); return Boolean(current) && (starter() || draft().may !== current!.may.join("\n") || draft().always !== current!.always.join("\n") || draft().limits !== current!.limits.join("\n")); };
+  const save = async () => {
+    setSaving(true); setError("");
+    try {
+      const saved = await api<ApprovalPolicy>("/v0/agent/policy", { method: "PUT", body: JSON.stringify({ may: lines(draft().may), always: lines(draft().always), limits: lines(draft().limits) }) });
+      load({ policy: saved, starter: false });
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setSaving(false); }
+  };
+  const field = (key: "may" | "always" | "limits", label: string, title: string) =>
+    <SettingLine label={label} title={title}>
+      <TextArea id={`approval-${key}`} rows={5} value={draft()[key]} onInput={(event) => setDraft({ ...draft(), [key]: event.currentTarget.value })} />
+    </SettingLine>;
+  return <Show when={policy()} fallback={<Show when={error()}><Note tone="error">{error()}</Note></Show>}>
+    {field("may", "It may", "What the approval model may allow without asking you, one rule a line, in your own words.")}
+    {field("always", "Always yours", "What always comes to you, whatever else allows it: one class a line.")}
+    {field("limits", "Never", "Things it must not do at all (\"don't email Sam\"). Kept as rules, so a long thread cannot lose them.")}
+    <SettingLine label={starter() ? "Starter rules, not saved yet" : "Rules"} title="The approval model reads these with your own messages, never with what the agent read.">
+      <Button size="sm" variant={changed() ? "primary" : "secondary"} disabled={saving() || !changed()} onClick={() => void save()}>{starter() ? "Save these rules" : "Save"}</Button>
+    </SettingLine>
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
+  </Show>;
 }

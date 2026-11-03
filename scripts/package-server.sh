@@ -35,7 +35,7 @@ cp -R "$ROOT/conduit-web/dist" "$ROOT/conduit-web/package.json" "$ROOT/conduit-w
 # The server's source; the client's is already built into dist.
 (cd "$ROOT/conduit-web" && find src -path src/client -prune -o -path src/components -prune -o -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.json' -o -name '*.html' \) -print \
   | while read -r file; do mkdir -p "$STAGE/conduit-web/$(dirname "$file")"; cp "$file" "$STAGE/conduit-web/$file"; done)
-cp -R "$ROOT/scripts" "$ROOT/templates" "$STAGE/"
+cp -R "$ROOT/scripts" "$ROOT/templates" "$ROOT/packages" "$STAGE/"
 rm -rf "$STAGE/scripts/package-server.sh" "$STAGE/scripts/probes"
 cp "$ROOT/working-files/pyproject.toml" "$ROOT/working-files/uv.lock" "$STAGE/working-files/"
 cp "$ROOT/working-files/"*.py "$STAGE/working-files/" 2>/dev/null || true

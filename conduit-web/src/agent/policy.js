@@ -6,6 +6,9 @@ import { fieldsOf, fieldsText } from "./approval-fields.js";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
+import { createApprover, executorHolder, jsonlAudit } from "pi-durable-approver";
+import { readPolicy } from "./approval-policy.js";
+import { personWords } from "./person-words.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
@@ -129,24 +132,7 @@ const connectorRead = (name, args) => { const paths = connectorActions(name, arg
  */
 const executorGates = (runtime, name) => runtime.agent?.settings().executorDecides !== false && name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name));
 const resumeTool = (name) => name.startsWith("mcp__") && connectorTool(name) === "resume";
-/** The approval Executor's result holds, if it holds one: `{ requestId, invocation, elicitation }`. */
-function heldForApproval(result) {
-  for (const part of result?.output || result?.content || []) {
-    if (part?.type !== "text" || !String(part.text).includes("approval-required")) continue;
-    const text = String(part.text);
-    for (let at = text.indexOf("{"); at >= 0; at = text.indexOf("{", at + 1)) {
-      try {
-        const value = JSON.parse(text.slice(at));
-        if (value?.status === "approval-required" && value.requestId) return value;
-      } catch {
-        const end = text.lastIndexOf("}");
-        try { const value = JSON.parse(text.slice(at, end + 1)); if (value?.status === "approval-required" && value.requestId) return value; } catch {}
-      }
-      break;
-    }
-  }
-  return null;
-}
+const executorResume = (runtime, name) => runtime.agent?.settings().executorDecides !== false && name.startsWith("mcp__executor__") && resumeTool(name);
 const connectorName = (name) => { const connector = name.split("__")[1] || ""; return `${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}`; };
 /** An action as words: `gmail.send` → "Gmail · send", `google.api.calendar.events.calendarEventsInsert` → "Google · calendar events insert". */
 function actionWords(path) {
@@ -357,7 +343,7 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
   if (outcome.allowed) return null;
   const { ask } = outcome;
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
-  if (outcome.created) tellPerson(runtime, ask, () => runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${shown ? `${shown.title[0].toLowerCase()}${shown.title.slice(1)}` : summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id }));
+  if (outcome.created) tellPerson(runtime, ask, () => runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${shown ? `${shown.title[0].toLowerCase()}${shown.title.slice(1)}${shown.why ? `. ${shown.why}` : ""}` : summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id }));
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
   return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
 }
@@ -410,6 +396,60 @@ export function policyWraps(runtime, tools) {
 export function connectorWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => tool.name.startsWith("mcp__") && !tool.connectorReadOnly), false);
 }
+/** The thread an ask belongs to: a run's goes to the home thread, which outlives it. */
+async function threadFor(runtime, api) {
+  const described = await runtime.agent.threadOf(api.conversationId);
+  const run = described?.role === "run";
+  const home = run ? await runtime.agent.home() : null;
+  const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run, chat: described?.role === "chat" };
+  if (!thread.chatId) throw new Error("Agent thread not found");
+  return { thread, run };
+}
+
+/*
+ * The approval model (docs/plans/approval-model.md, packages/pi-durable-approver) as Conduit hosts it: Executor's
+ * held actions judged against the person's policy (Settings › Agent › Approvals) by the review model (Settings › AI ›
+ * Helper models: Review, else the naming model), what it cannot allow asked of the person as before (an ask, a push,
+ * Allow resumes it). No review model, or any failure of it: the person is asked, as without the approver.
+ */
+const readOutside = new Map();
+const OUTSIDE_MS = 15 * 60_000;
+const approvers = new WeakMap();
+function approverOf(runtime) {
+  let entry = approvers.get(runtime);
+  if (entry) return entry;
+  const approver = createApprover({
+    name: "conduit-approver",
+    model: (api) => {
+      const spec = runtime.reviewModel?.();
+      const at = spec ? spec.indexOf("/") : -1;
+      const model = at > 0 ? api.models.getModel(spec.slice(0, at), spec.slice(at + 1)) : null;
+      if (!model) throw Object.assign(new Error("No review model is set"), { retry: false });
+      return model;
+    },
+    policy: async () => (await readPolicy(runtime.agent)).policy,
+    words: (api) => personWords(runtime.agent, api.conversationId),
+    holders: [executorHolder()],
+    tool: (name) => installedTool(runtime, name),
+    escalate: async (held, verdict, api, context) => {
+      const { thread } = await threadFor(runtime, api);
+      const fields = fieldsOf(held.input);
+      const shown = { title: `Use Executor: ${actionWords(held.action)}`, service: serviceOf(held.action), lines: fields.length ? [{ fields }] : [], why: verdict.reason };
+      const waiting = await approve(runtime, api, held.resume.tool, held.resume.arguments, context, thread, shown);
+      return waiting ? { status: "pending", message: waiting.output.map((part) => part.text).join("") } : { status: "allowed" };
+    },
+    // Rule of Two: a run works on what arrived (mail, feeds, events), and a thread that read a connector lately has
+    // outside content in it; either way an action that reaches someone is the person's.
+    untrusted: async (api) => (await runtime.agent.threadOf(api.conversationId))?.role === "run"
+      || Date.now() - (readOutside.get(String(api.conversationId)) || 0) < OUTSIDE_MS,
+    audit: jsonlAudit(path.join(runtime.dataRoot, "agent", "approvals")),
+  });
+  // Wrapped per call: a connector reinstalls its tools, so a wrap kept by name would hold a stale one.
+  entry = { gate: (tool) => approver.wraps([tool])[0].wrap(tool) };
+  approvers.set(runtime, entry);
+  return entry;
+}
+
 function guard(runtime, tools, confine) {
   let helper;
   return tools.map((target) =>
@@ -417,16 +457,10 @@ function guard(runtime, tools, confine) {
       if (confine && routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
       }
-      const threadOf = async () => {
-        const described = await runtime.agent.threadOf(api.conversationId);
-        const run = described?.role === "run";
-        const home = run ? await runtime.agent.home() : null;
-        const thread = { chatId: run ? home.chat.id : described?.chatId, conversationId: run ? home.conversationId : api.conversationId, run, chat: described?.role === "chat" };
-        if (!thread.chatId) throw new Error("Agent thread not found");
-        return { thread, run };
-      };
-      if ((tool.name.startsWith("mcp__") && !executorGates(runtime, tool.name) && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
-        const { thread, run } = await threadOf();
+      // Executor's own gate decides what is held, and the approval model judges it (approverOf, below).
+      const judged = executorGates(runtime, tool.name) || executorResume(runtime, tool.name);
+      if ((tool.name.startsWith("mcp__") && !judged && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
+        const { thread, run } = await threadFor(runtime, api);
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.
         const asked = !run && runtime.agent.settings().youAsk !== false && editOnly(tool.name, args)
           && (await api.memo("personAsked", context) ?? await api.memo("personAsked", await personStarted(api, context), context));
@@ -437,18 +471,11 @@ function guard(runtime, tools, confine) {
       }
       const local = confine && PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
-      const result = await tool.execute(args, local ? { ...api, env } : api, context);
-      const held = executorGates(runtime, tool.name) ? heldForApproval(result) : null;
-      if (held) {
-        // Executor holds an action for approval: the person is asked, and Allow resumes Executor's request.
-        const { thread } = await threadOf();
-        const resume = tool.name.replace(/__[^_]+$/, "__resume");
-        const shown = presentation(tool.name, args);
-        const input = fieldsOf(held.invocation?.input);
-        const waiting = await approve(runtime, api, resume, { requestId: held.requestId, response: { action: "accept", content: {} } }, context, thread,
-          { ...shown, lines: input.length ? [{ fields: input }] : shown.lines });
-        if (waiting) return waiting;
-      }
+      const result = judged ? await approverOf(runtime).gate(tool).execute(args, api, context) : await tool.execute(args, local ? { ...api, env } : api, context);
+      // What a connector read is outside content (mail, events, files): for a while, an outward action from this
+      // conversation is the person's to approve (Rule of Two, untrustedTurn).
+      // A script's reads cannot be told from its writes, so a script counts as reading.
+      if (tool.name.startsWith("mcp__") && !result?.isError && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute")) readOutside.set(String(api.conversationId), Date.now());
       if (privateRead(tool.name, args) && !result?.isError) {
         await api.commit(async (tx) => { (await tx.doc(AgentDoc)).tainted[api.conversationId] = true; }, context);
       }

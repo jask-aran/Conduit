@@ -791,6 +791,8 @@ if (persistentAgent) {
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
   durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
+  // The approval model's model (agent/policy.js approverOf): Settings › Helper models › Review, else Naming's.
+  durableAdapter.runtime.reviewModel = () => { const preference = preferences.get(); return preference.reviewModel || preference.sessionNameModel || null; };
   // What jbot and the person say to each other, apart from its thread (agent/messages.js); it outlives a reset.
   const messageLog = await new MessageLog(path.join(config.dataRoot, "agent", "messages.jsonl")).load();
   durableAdapter.runtime.messageLog = messageLog;

@@ -106,6 +106,7 @@ interface GeneralPreferences {
   defaultTemplateId: string;
   sessionNameModel: string;
   sessionNameThinkingLevel: string;
+  reviewModel?: string;
 }
 
 
@@ -349,6 +350,11 @@ export function Settings(props: {
   const [sessionNameModel, setSessionNameModel] = createSignal("");
   const [sessionNameThinkingLevel, setSessionNameThinkingLevel] = createSignal("off");
   const [generalLoading, setGeneralLoading] = createSignal(false);
+  const [reviewModel, setReviewModel] = createSignal("");
+  const reviewAutosave = createAutosave<Pick<GeneralPreferences, "reviewModel">>({
+    save: (value) => api<GeneralPreferences>("/v0/preferences", { method: "PATCH", body: JSON.stringify(value) }),
+    onSaved: (saved) => setReviewModel(saved.reviewModel || ""),
+  });
   const namingAutosave = createAutosave<Pick<GeneralPreferences, "sessionNameModel" | "sessionNameThinkingLevel">>({
     save: (value) => api<GeneralPreferences>("/v0/preferences", { method: "PATCH", body: JSON.stringify(value) }),
     onSaved: (saved) => { setSessionNameModel(saved.sessionNameModel); setSessionNameThinkingLevel(saved.sessionNameThinkingLevel); },
@@ -1114,6 +1120,7 @@ export function Settings(props: {
       const model = loaded.sessionNameModel;
       const levels = namingModels().find((item) => item.spec === model)?.thinkingLevels || ["off"];
       setSessionNameModel(model);
+      setReviewModel(loaded.reviewModel || "");
       setSessionNameThinkingLevel(levels.includes(loaded.sessionNameThinkingLevel) ? loaded.sessionNameThinkingLevel : levels[0] || "off");
     } catch (error) { toast.error((error as Error).message); }
     finally { setGeneralLoading(false); }
@@ -1156,7 +1163,7 @@ export function Settings(props: {
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
     runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
-    models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave] },
+    models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave, reviewAutosave] },
     search: { label: "Web search", saves: [searchAutosave] },
     ui: { label: "Appearance", saves: [uiPreferenceSaves] },
     shortcuts: { label: "Shortcuts", saves: [uiPreferenceSaves] },
@@ -1584,9 +1591,13 @@ export function Settings(props: {
                 title="When a chat's context fills, its older part is summarized (compaction) by the model and effort the chat itself uses. It has no model of its own.">
                 <SettingValue>Chat's own model</SettingValue>
               </SettingLine>
-              <SettingLine plain label="Review" state={<>Not available yet</>}
-                title="A helper model that approves or flags tool calls before they ask you. Waiting on pi-durable to support it.">
-                <SettingValue>None</SettingValue>
+              <SettingLine label="Review" state={<>{reviewModel() ? "Its own model" : sessionNameModel() ? "Inherits Naming's model" : "None: every held action asks you"}</>}
+                title="The approval model: judges what the agent's tools hold for approval (an Executor send, a change) against your rules (Settings › Agent › Approvals), and asks you only for what it cannot allow. Without one, everything held asks you.">
+                <Select id="review-model" aria-label="Review model" value={reviewModel()} disabled={generalLoading()}
+                  onChange={(event) => { setReviewModel(event.currentTarget.value); reviewAutosave.edit({ reviewModel: event.currentTarget.value }, "now"); }}>
+                  <option value="">Same as Naming</option>
+                  <For each={namingModels()}>{(model) => <option value={model.spec}>{model.label || model.spec}</option>}</For>
+                </Select>
               </SettingLine>
             </Group>
             <Group title="ChatGPT Web">

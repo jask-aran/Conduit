@@ -13,6 +13,7 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * - `notices`: what the attention list says beside the work itself, newest last, at most 20 (agent.js).
  * - `tainted`: conversation id → true once it read private data (policy.js).
  * - `rules`: id → saved outward approval (policy.js).
+ * - `approvalPolicy`: the person's standing approval policy, or null for the starter (approval-policy.js).
  * - `inbox`: id → what a run reported, waiting for the heartbeat or the person (inbox.js); `heartbeatSeenAt` the
  *   newest entry a beat has looked at, `heartbeatSweptAt` its last pass over HEARTBEAT.md (schedule.js).
  * - `feedsMigrated`: true once the feeds from before routines became routine files (schedule.js).
@@ -22,7 +23,7 @@ export const AgentDoc = defineDoc({
   checkpointWhen: () => false, kind: "conduit.agent",
   version: 1,
   scope: "session",
-  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, asks: {}, inbox: {}, next: 1 }),
+  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, approvalPolicy: null, asks: {}, inbox: {}, next: 1 }),
 });
 
 /** A new id for one part of the agent's document: `${prefix}-${n}`. Call inside the commit that stores it. */

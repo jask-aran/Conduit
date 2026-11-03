@@ -242,6 +242,23 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
+  // What the approval model decided without asking (GET /v0/agent/approvals): allowed and refused, newest first, so a
+  // rule can be tightened (Settings › Agent › Approvals). Read again on the page's own clock.
+  type Decided = { at: string; held: { action: string; recipients?: string[] }; verdict: { outcome: string; reason: string; source: string } };
+  const [decided, setDecided] = createSignal<Decided[]>([]);
+  const readDecided = () => void api<{ records: Decided[] }>("/v0/agent/approvals?limit=20").then((result) => setDecided(result.records.filter((record) => record.verdict.outcome !== "escalate"))).catch(() => {});
+  readDecided();
+  createEffect(on(now, readDecided, { defer: true }));
+  const decidedGroup = () => <Show when={decided().length}>
+    <SplitGroup id="agent-decided" label="Decided for you" count={decided().length}>
+      <For each={decided().slice(0, 8)}>{(record) =>
+        <Row density="list" lead={record.verdict.outcome === "allow" ? <Icons.Check /> : <Icons.Close />} label={record.held.action}
+          context={`${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`}
+          title={record.verdict.reason} meta={age(record.at, now())} />}
+      </For>
+    </SplitGroup>
+  </Show>;
+
   // What it remembers, line by line (GET /v0/agent/memory): where each line is, what reads it, who wrote it, when and
   // where; its chat button opens the chat it was learned in; forgetting asks twice. A prototype (roadmap 19).
   type MemoryEntry = { file: string; date: string | null; section: string | null; text: string; line: string; scope: string;
@@ -329,7 +346,7 @@ export function AgentPage(props: {
           // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer}
-          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{rememberedGroup()}{memoryGroup()}</>} />
+          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{decidedGroup()}{rememberedGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>
 
