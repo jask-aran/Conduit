@@ -116,7 +116,7 @@ Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees
   chat pane's 528px minimum ending as it emptied. Decided: ease to equal shares. `closeDocument` (`client/main.tsx`)
   holds the panes at their shares while the document goes, then eases them to the row's own (`easePaneWeights`): a
   glide of about 240ms, frame by frame.
-- [ ] 6. The body of commit `9ed79305`'s message names the studied product. Reword before pushing `main`, with the
+- [x] 6. (Decided 2026-11-03: history left as it is; it was already pushed, and tracked files are clean.) The body of commit `9ed79305`'s message names the studied product. Reword before pushing `main`, with the
   other session idle.
 
 ### Browser and agents
