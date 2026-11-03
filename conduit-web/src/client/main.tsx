@@ -5721,8 +5721,13 @@ function App() {
     const owns = slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
     onMount(() => { void refreshAgent(); });
     // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
-    createEffect(on(() => agentView()?.home?.chatId, (id) => {
-      if (id && untrack(current.chat.loadedId) !== id) void agentChat(id).then((target) => current.chat.select(target.chat, target.project, { history: "none" })).catch(showError);
+    // Kept loaded while the page shows: opening the page again (its sidebar row) clears the session's chat, as any
+    // route to a page does, and the composer went with it.
+    let loading: string | null = null;
+    createEffect(on([() => agentView()?.home?.chatId, current.chat.loadedId] as const, ([id, loaded]) => {
+      if (!id || loaded === id || loading === id) return;
+      loading = id;
+      void agentChat(id).then((target) => current.chat.select(target.chat, target.project, { history: "none" })).catch(showError).finally(() => { loading = null; });
     }));
     // The page shows none of the thread: it is a tap away (Open thread).
     const openThread = () => {
