@@ -189,8 +189,10 @@ const toolCallIdsOf = (message: Message): string[] => (message.blocks || [])
   .filter((block) => block.kind === "tool_call" && typeof block.toolCallId === "string")
   .map((block) => block.toolCallId as string);
 
-const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string) =>
-  `answer:${owner ? owner.id : fallback}:${answerIndex}`;
+// Narrated rows are keyed apart from folded ones: a turn's first answer is its final answer folded and its first
+// narration shown, and a row kept across a layout change kept its other self's drawn Markdown.
+const answerDisplayKey = (owner: Message | null, answerIndex: number, fallback: string, show: boolean) =>
+  `${show ? "said" : "answer"}:${owner ? owner.id : fallback}:${answerIndex}`;
 const active = (generation: ActiveGenerationView) => !["stopped", "complete", "failed"].includes(generation.status);
 
 /**
@@ -399,7 +401,7 @@ export function buildLiveProjectionIndex(
     const answer = () => {
       if (answered || !said.length) return;
       answered = true;
-      const rowKey = answerDisplayKey(owner, answers, `live:${generation.id}`);
+      const rowKey = answerDisplayKey(owner, answers, `live:${generation.id}`, show);
       answerRowKeys.set(assistant.id, rowKey);
       if (!firstAnswerAssistantId) firstAnswerAssistantId = assistant.id;
       answerBlockIdentities.set(assistant.id, new Set(said.map((block) => block.identity)));
@@ -598,7 +600,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
       if (answered || !(text || terminalError)) return;
       answered = true;
       const content = generation.continuation && count === 0 ? mergeContinuation(generation.continuationBase || "", text) : text;
-      const key = answerDisplayKey(owner, count, `live:${generation.id}`);
+      const key = answerDisplayKey(owner, count, `live:${generation.id}`, show);
       const row = (traced: boolean): TurnRow => ({ key, displayKey: key, type: "message", traced, live: running,
         streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError) });
       count += 1;
@@ -745,7 +747,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
     } else if (speaks && !show) answering.push(assistant);
     else if (speaks) {
       if (segments.length) trace(false, false, assistant.timestamp);
-      const key = answerDisplayKey(owner, answers, `message:${assistant.id}`);
+      const key = answerDisplayKey(owner, answers, `message:${assistant.id}`, true);
       rows.push({ key, displayKey: key, type: "message", value: assistant, precedingUserId: owner?.id, traced });
       answers += 1; group += 1; segments = []; since = assistant.timestamp ?? since;
     }
@@ -765,7 +767,7 @@ function persistedRowsForTurn(turn: PersistedTurn, toolById: Map<string, ToolIte
     const hasAnswerRow = Boolean(answer && (answerText || (answer === finalAssistant && answer.stopReason === "error")));
     if (segments.length > 0 || hasAnswerRow || endedEarly) trace(true, !hasAnswerRow);
     if (hasAnswerRow && answer) {
-      const displayKey = answerDisplayKey(owner, 0, `message:${answer.id}`);
+      const displayKey = answerDisplayKey(owner, 0, `message:${answer.id}`, false);
       rows.push({ key: displayKey, displayKey, type: "message", value: answering.length === 1 ? answer : { ...answer, content: answerText },
         precedingUserId: owner?.id, traced: true });
     }
