@@ -74,7 +74,7 @@ createApprover({
 - **A person's approval is exact and one-shot**: it allows that action once and is recorded as their authorisation,
   so the same action later scores high. "Always" saves a narrow rule the person reads, never one made broad from a
   single answer.
-- **Rule of Two as a trigger**: an action in a turn that has read untrusted input, touches private data and acts
+- **Rule of Two as a trigger** (Conduit wires it from the first build, not later): an action in a turn that has read untrusted input, touches private data and acts
   outside is escalated whatever the model says.
 - **Cache allows only**, keyed on a fingerprint of the policy and model and the action's canonical form, with a TTL.
   Never denials, never escalations.
@@ -130,8 +130,9 @@ tool-permissions; nvd.nist.gov CVE-2026-48721; arXiv 2503.18813 (CaMeL), 2506.08
   - a task the agent wrote itself (a check-back, a subagent's brief): not trusted. It is the agent's own prose, and
     an injected instruction would arrive exactly that way. Its actions are judged on the person's words alone.
 - **Starter policy at Executor setup**, shown as rules the person edits before saving:
-  - may: reply in a thread the person is already in; label, archive and mark mail; create and move events on the
-    person's own calendars; draft anything;
+  - may: reply in a thread the person started or has replied in themselves (not one a stranger opened: any email
+    puts the person "in" a thread); label, archive and mark mail; create and move events on the person's own
+    calendars; draft anything;
   - always the person's: send to someone new; delete anything; pay or transfer; share a file or calendar outside;
     change account, security or forwarding settings.
 
