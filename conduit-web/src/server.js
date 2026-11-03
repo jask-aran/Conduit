@@ -1,3 +1,5 @@
+import { writePerson } from "./agent/routine-files.js";
+import { registerAccountRoutes } from "./server/routes/account.js";
 import { capabilitiesOf, hubIds } from "./place.js";
 import { projectWorkspace } from "./workspace-host.js";
 import { convertClassicChats } from "./server/convert-classic-chats.js";
@@ -692,7 +694,14 @@ registerRuntimeRoutes(app, {
   projects,
   serverIdentity,
   onServerRenamed: (name) => lanAdvertisement.rename(name),
+  // Settings › Account's name is what the agent calls the person: written into its USER.md, where its prompts read it.
+  onAccountRenamed: async (name) => {
+    const agent = backends.adapters.get("conduit-runtime")?.runtime.agent;
+    if (agent?.folder && name) await writePerson(agent.folder, { name });
+  },
 });
+
+registerAccountRoutes(app, { dataRoot: config.dataRoot });
 
 registerPiAuthRoutes(app, {
   piAuth,

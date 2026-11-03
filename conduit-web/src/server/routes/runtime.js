@@ -25,6 +25,7 @@ export function registerRuntimeRoutes(app, {
   projects,
   serverIdentity,
   onServerRenamed,
+  onAccountRenamed,
 }) {
   /*
    * Who this server is, and where else it answers.
@@ -228,6 +229,8 @@ export function registerRuntimeRoutes(app, {
         ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
         ...uiPatch,
       });
+      // The account's name is the person's: their agent knows them by it ({{person.name}}, its USER.md).
+      if (accountName != null) await Promise.resolve(onAccountRenamed?.(saved.accountName || "")).catch((error) => console.warn("[account] agent not told the name:", error?.message || error));
       response.json(saved);
     } catch (error) { next(error); }
   });

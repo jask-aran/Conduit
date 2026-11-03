@@ -92,8 +92,9 @@ export const initialsOf = (name: string) => {
  * A person's picture (the account signed in to a hub): their initials on the surface's tint -- no hue, as nothing in
  * Conduit is coloured but state. size: sm in a menu row's icon slot, md beside a line, lg where it is the subject.
  */
-export const Avatar = (props: { name: string; size?: "sm" | "md" | "lg"; label?: string }) =>
-  <span class="ui-avatar" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>{initialsOf(props.name)}</span>;
+export const Avatar = (props: { name: string; size?: "sm" | "md" | "lg"; label?: string; src?: string | null }) =>
+  <span class="ui-avatar" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>
+    <Show when={props.src} fallback={initialsOf(props.name)}><img src={props.src!} alt="" draggable={false} /></Show></span>;
 
 export function ConnectionRecovery(props: { title: string; error: string; onRetry: () => void; retryLabel?: string; embedded?: boolean }) {
   return <ConnectionScreen embedded={props.embedded}><section class="ui-connection-recovery"><h1>{props.title}</h1><p role="alert">{props.error}</p><Button onClick={props.onRetry}>{props.retryLabel ?? "Retry"}</Button></section></ConnectionScreen>;

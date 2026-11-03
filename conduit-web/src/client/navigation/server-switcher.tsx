@@ -4,7 +4,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { DropdownMenu, MenuContent, MenuSection, MenuRow, MenuRadioGroup, MenuRadioItem, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { Spinner } from "@/components/ui/controls";
 import { Avatar, ServerControl } from "@/components/ui/connection";
-import { accountName, loadAccount } from "../state/account";
+import { accountName, accountPicture, loadAccount } from "../state/account";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
 import { proveServer } from "../platform/server-proof";
@@ -248,7 +248,7 @@ export function ServerSwitcher(props: {
       </MenuSection>
       <MenuSection title="Account">
         {/* Who is signed in: the account's picture (its name's initials) and name; it is set in Settings › Account. */}
-        <MenuRow icon={<Avatar name={accountName()} />} onSelect={() => props.onOpenSettings("account")}>{accountName() || "Add your name"}</MenuRow>
+        <MenuRow icon={<Avatar name={accountName()} src={accountPicture()} />} onSelect={() => props.onOpenSettings("account")}>{accountName() || "Add your name"}</MenuRow>
         <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
         <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
         <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
