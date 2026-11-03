@@ -313,10 +313,12 @@ export class PreferencesStore {
   }
 
   /** The file's overrides into the preferences; false when there is no file. A file that is not JSON keeps the last. */
-  async readKeybindings() {
+  async readKeybindings({ ownSaves = false } = {}) {
     let text;
     try { text = await fs.readFile(this.keybindingsFile, "utf8"); }
     catch (error) { if (error?.code === "ENOENT") { this.keybindingErrors = []; return false; } throw error; }
+    // The file as Conduit last wrote it: the overrides already in hand, as recorded, are what it says.
+    if (ownSaves && text === this.keybindingsWritten) return true;
     const { overrides, errors } = parseKeybindings(text);
     this.keybindingErrors = errors;
     // A file, even an empty one, is the hub's answer: {} (none), never null, as null tells a client the hub has nothing
@@ -335,7 +337,7 @@ export class PreferencesStore {
     const reread = () => {
       timer = null;
       const before = JSON.stringify(this.preferences.shortcutOverrides ?? null);
-      void this.readKeybindings().then(() => {
+      void this.readKeybindings({ ownSaves: true }).then(() => {
         const after = this.preferences.shortcutOverrides ?? null;
         if (JSON.stringify(after) !== before) onChange(after || {});
       }).catch((error) => console.warn("Could not read keybindings.json", error.message));
@@ -361,7 +363,10 @@ export class PreferencesStore {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
       if (keybindings && (this.preferences.shortcutOverrides || await exists(this.keybindingsFile))) {
         const temp = `${this.keybindingsFile}.${process.pid}.tmp`;
-        await fs.writeFile(temp, formatKeybindings(this.preferences.shortcutOverrides || {}), "utf8");
+        // Remembered, so the watcher knows its own save: read back, a stroke's key is rebuilt from its code and would
+        // differ from what the client recorded, replacing it and telling every client of a change that is not one.
+        this.keybindingsWritten = formatKeybindings(this.preferences.shortcutOverrides || {});
+        await fs.writeFile(temp, this.keybindingsWritten, "utf8");
         await fs.rename(temp, this.keybindingsFile);
         this.keybindingErrors = [];
       }
