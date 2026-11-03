@@ -218,14 +218,14 @@
 /* A turn said as a message (Turn bubble: the agent's page, a messaging app): its answer in a hairline bubble at the
    left, no wider than most of the column, its foot under it. Its tail rises from its top-left corner, flush with its
    left edge: one stroke (::after, the line's colour through a mask of one path) going up from the corner to the tip and
-   back down to the top edge, so nothing is drawn twice where pieces would meet; under it (::before) the pane's fill
-   covers the top edge where the tail opens into the bubble. Drawn in px, a hairline's own unit: 11 wide, 12 tall. */
+   back down, easing into the top edge, so nothing is drawn twice where pieces would meet; under it (::before) the pane's fill
+   covers the top edge where the tail opens into the bubble. Drawn in px, a hairline's own unit: 14 wide, 12 tall. */
 .ui-turn[data-bubble] { --turn-step: 0px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
 .ui-turn[data-bubble] > .ui-answer { position: relative; width: fit-content; max-width: 80%; min-width: calc(1lh + 2 * var(--space-md));
   margin-top: 11px; border: var(--hairline) solid var(--border); border-radius: var(--radius-message); border-top-left-radius: 0;
   background: var(--background); padding: var(--space-md) var(--space-lg); }
-.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: -1px; left: 0; width: 10px; height: 1px; background: var(--background); }
-.ui-turn[data-bubble] > .ui-answer::after { content: ""; position: absolute; top: -12px; left: -1px; width: 11px; height: 12px; background: var(--border);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 12'%3E%3Cpath d='M0.5 11V1.5L11 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 11 12'%3E%3Cpath d='M0.5 11V1.5L11 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
+.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: -1px; left: 0; width: 13px; height: 1px; background: var(--background); }
+.ui-turn[data-bubble] > .ui-answer::after { content: ""; position: absolute; top: -12px; left: -1px; width: 14px; height: 12px; background: var(--border);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
 /* Times always shown (Transcript data-times="shown"): where messages arrive unseen, when each came is the point. */
 .ui-transcript[data-times="shown"] .ui-message-foot > time { opacity: 1; }
