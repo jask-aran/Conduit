@@ -337,10 +337,12 @@ export function Settings(props: {
   };
   // Search: every setting with a literal label (virtual:settings-index, read from this source), and each section by
   // name. A result opens its section and brings its line into view, marked for a moment.
-  // Tools opened from a connector's tool count (Account) starts at the agent's profile, whose tools those are.
-  const [toolsAtAgent, setToolsAtAgent] = createSignal(false);
-  createEffect(() => { if (section() !== "tools") setToolsAtAgent(false); });
+  // Tools opened from a connector's tool count (Account) starts at that connector's toolset.
+  const [toolsAt, setToolsAt] = createSignal<string | null>(null);
+  createEffect(() => { if (section() !== "tools") setToolsAt(null); });
   const [query, setQuery] = createSignal("");
+  const [cursor, setCursor] = createSignal(0);
+  createEffect(on(query, () => setCursor(0)));
   const results = createMemo(() => {
     const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
@@ -359,7 +361,8 @@ export function Settings(props: {
   const openResult = (result: { section: Section; label: string; group: string | null }) => {
     setQuery("");
     openSection(result.section);
-    if (result.group === null && result.label === label(result.section)) return;
+    // A section: into its page. A setting: its line, in view and marked, with focus on its control.
+    if (result.group === null && result.label === label(result.section)) { requestAnimationFrame(focusPage); return; }
     // The section renders on the next frames (some after their data): look for the line a few times.
     let tries = 0;
     const find = () => {
@@ -369,6 +372,7 @@ export function Settings(props: {
       const target = line?.closest<HTMLElement>(".ui-setting-line") ?? line;
       if (target) {
         target.scrollIntoView({ block: "center" });
+        target.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, button:not([disabled]), [tabindex="0"], [contenteditable="true"]')?.focus({ preventScroll: true });
         target.dataset.found = "";
         setTimeout(() => { delete target.dataset.found; }, 1600);
       } else if (++tries < 20) setTimeout(find, 50);
@@ -532,11 +536,42 @@ export function Settings(props: {
     }
     // A secret being entered in its row, or keys being recorded: their own Escape puts the row back, Settings stays.
     if (target?.closest("[data-credential], .ui-setting-recorder")) return;
+    // Keyboard: Escape steps back out before it closes: a search clears, a page hands focus back to its rail row.
+    if (target?.matches('[aria-label="Search settings"]') && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); return; }
+    if (!narrow() && target?.closest('[role="dialog"][aria-label="Settings"] main')) { event.preventDefault(); event.stopPropagation(); focusRail(); return; }
     event.preventDefault();
     event.stopPropagation();
     props.onOpenChange(false);
   };
+  /*
+   * Settings by keyboard: / or Ctrl+F finds (↑↓ through the results, Enter opens one); the rail moves with ↑↓ and its
+   * row is the cursor; → or Enter goes into the page, Tab from control to control (each shows its own focus); Escape
+   * steps back: page to rail, rail to closed.
+   */
+  const dialogEl = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"]');
+  const focusRail = () => dialogEl()?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+  const focusPage = () => {
+    const main = dialogEl()?.querySelector("main");
+    const first = [...(main?.querySelectorAll<HTMLElement>('input:not([type="hidden"]):not([disabled]), select, textarea, button:not([disabled]), a[href], [tabindex="0"], [contenteditable="true"]') ?? [])]
+      .find((element) => !element.closest(".ui-overlay-page-head") && element.getClientRects().length);
+    first?.focus();
+  };
+  const focusSearch = () => dialogEl()?.querySelector<HTMLInputElement>('[aria-label="Search settings"]')?.focus();
+  onMount(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!props.open || event.defaultPrevented) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!target?.closest('[role="dialog"][aria-label="Settings"]')) return;
+      const typing = target.closest("input, textarea, select, [contenteditable='true'], .cm-editor");
+      if ((event.key === "/" && !typing) || ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "f" && !target.closest(".cm-editor"))) {
+        event.preventDefault(); focusSearch();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    onCleanup(() => document.removeEventListener("keydown", onKey, true));
+  });
   const navigateSettingsTabs = (event: KeyboardEvent) => {
+    if ((event.key === "ArrowRight" || event.key === "Enter") && !narrow()) { event.preventDefault(); if (event.key === "Enter") (event.currentTarget as HTMLElement).click(); requestAnimationFrame(focusPage); return; }
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     const nav = event.currentTarget instanceof HTMLElement ? event.currentTarget.closest("nav") : null;
     const tabs = nav ? Array.from(nav.querySelectorAll<HTMLButtonElement>('[role="tab"]')) : [];
@@ -1247,12 +1282,17 @@ export function Settings(props: {
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
         <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onClear={() => setQuery("")}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && results()[0]) { event.preventDefault(); openResult(results()[0]!); }
+            if (event.key === "Enter" && results()[cursor()]) { event.preventDefault(); openResult(results()[cursor()]!); }
+            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && results().length) {
+              event.preventDefault();
+              setCursor((cursor() + (event.key === "ArrowDown" ? 1 : -1) + results().length) % results().length);
+              dialogEl()?.querySelector(`[data-result="${cursor()}"]`)?.scrollIntoView({ block: "nearest" });
+            } else if (event.key === "ArrowDown" && !query()) { event.preventDefault(); focusRail(); }
             if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
           }} />
         <Show when={query().trim()}>
           <Group kind="nav" title={results().length ? "Results" : "No setting matches"}>
-            <For each={results()}>{(result) => <Row density="nav" element="button" detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
+            <For each={results()}>{(result, index) => <Row density="nav" element="button" data-result={index()} current={index() === cursor()} tabIndex={-1} detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
               onClick={() => openResult(result)}>{result.label}</Row>}</For>
           </Group>
         </Show>
@@ -1378,9 +1418,9 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
-          <Show when={section() === "tools"}><ToolsSettings agent={toolsAtAgent()} /></Show>
+          <Show when={section() === "tools"}><ToolsSettings connector={toolsAt() ?? undefined} /></Show>
           <Show when={section() === "skills"}><SkillsSettings /></Show>
-          <Show when={section() === "account"}><AccountSettings onOpenTools={() => { setToolsAtAgent(true); openSection("tools"); }} /></Show>
+          <Show when={section() === "account"}><AccountSettings onOpenTools={(id) => { setToolsAt(id); openSection("tools"); }} /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "server"}><ServerSettings projects={props.projects} /></Show>

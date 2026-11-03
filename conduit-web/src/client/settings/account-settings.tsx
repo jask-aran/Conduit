@@ -15,7 +15,7 @@ const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch 
  * home), which their agent counts its day by and knows them by. Then their own integrations (the agent's connectors:
  * Executor, Gmail…), which act as them.
  */
-export function AccountSettings(props: { onOpenTools?: () => void } = {}) {
+export function AccountSettings(props: { onOpenTools?: (connector: string) => void } = {}) {
   const [error, setError] = createSignal("");
   onMount(() => void loadAccount());
   let chooser!: HTMLInputElement;

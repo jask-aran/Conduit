@@ -10,8 +10,8 @@ type Connector = { id: string; label: string; url: string; status: "off" | "conn
 const CONNECTOR_STATE = { off: "Not connected", connecting: "Connecting…", on: "Connected", error: "Not working" } as const;
 
 /** Account's integrations (Connectors): Connect signs in in another tab (the system browser in the apps). */
-/** onOpenTools: its tool count opens Settings › Tools at the agent's profile, where the connector's tools are listed. */
-export function ConnectorsGroup(props: { onOpenTools?: () => void } = {}) {
+/** onOpenTools: its tool count opens Settings › Tools at its toolset (its tools, and the profiles that take them up). */
+export function ConnectorsGroup(props: { onOpenTools?: (connector: string) => void } = {}) {
   const [connectors, setConnectors] = createSignal<Connector[]>([]);
   const [connecting, setConnecting] = createSignal<string | null>(null);
   // What went wrong last, by connector ("" for the list itself): said in the row until the next try.
@@ -46,7 +46,7 @@ export function ConnectorsGroup(props: { onOpenTools?: () => void } = {}) {
     <For each={connectors()}>{(connector) =>
       <SettingLine label={connector.label} title={`${connector.url}: your accounts through one MCP server, signed in once for this hub. The agent calls its tools from code; anything that is not a read asks you first.`}
         state={<>{failure()[connector.id] || (connector.status === "on"
-          ? <Show when={props.onOpenTools} fallback={`${connector.tools} tools`}><SettingStateLink onClick={() => props.onOpenTools?.()}>{connector.tools} tools</SettingStateLink></Show>
+          ? <Show when={props.onOpenTools} fallback={`${connector.tools} tools`}><SettingStateLink onClick={() => props.onOpenTools?.(connector.id)}>{connector.tools} tools</SettingStateLink></Show>
           : connector.status === "error" ? connector.error || CONNECTOR_STATE.error : CONNECTOR_STATE[connector.status])}</>}>
         <Show when={connector.status === "off" || connector.status === "error"} fallback={
           <Button size="sm" variant="destructive" outline disabled={connecting() === connector.id || connector.status === "connecting"} onClick={() => void disconnect(connector)}>Disconnect</Button>}>

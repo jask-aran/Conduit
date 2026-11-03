@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 import { Button, LiveNote, SettingDetails, SettingLine, SettingValue, Group, Loading, Note } from "@/components/ui";
 import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
@@ -17,8 +17,12 @@ const ASKS = { never: "Runs", always: "Asks first", sometimes: "Sometimes asks" 
  * AI › Tools, read-only: a profile's tools as its chats get them. Conduit decides them from the profile's template
  * (durable-runtime.js, `selectionFor`); what asks is the agent policy's (policy.js, `askOf`). Nothing here is set.
  */
-/** agent: start at the agent's profile (from a connector's tool count, in Account). */
-export function ToolsSettings(props: { agent?: boolean } = {}) {
+/** A connector (an integration declared to Conduit, Settings › Account): its toolset, which profiles consume. */
+type Connector = { id: string; label: string; status: string };
+type ConnectorTool = { name: string; description: string; readOnly?: boolean };
+
+/** connector: start at that connector's toolset (from its tool count in Account). */
+export function ToolsSettings(props: { connector?: string } = {}) {
   const [profiles, setProfiles] = createSignal<ProfileTools[] | null>(null);
   const [error, setError] = createSignal("");
   const [selected, setSelected] = createSignal("");
@@ -26,12 +30,20 @@ export function ToolsSettings(props: { agent?: boolean } = {}) {
     setError("");
     return api<{ profiles: ProfileTools[] }>("/v0/profiles/tools").then(({ profiles }) => {
       setProfiles(profiles);
-      const agent = props.agent ? profiles.find((profile) => profile.agent)?.id : undefined;
-      if (agent) setSelected(agent);
-      else if (!profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
+      if (props.connector) setSelected(`connector:${props.connector}`);
+      else if (!selected().startsWith("connector:") && !profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
     }).catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
-  onMount(() => void load());
+  // Toolsets: what is declared to Conduit, whichever profiles take it up.
+  const [connectors, setConnectors] = createSignal<Connector[]>([]);
+  const [toolset, setToolset] = createSignal<ConnectorTool[] | null>(null);
+  onMount(() => { void load(); void api<Connector[]>("/v0/agent/connectors").then((list) => setConnectors(list.filter((item) => item.status === "on"))).catch(() => {}); });
+  const connectorId = () => selected().startsWith("connector:") ? selected().slice("connector:".length) : null;
+  createEffect(on(connectorId, (id) => {
+    setToolset(null);
+    if (id) void api<ConnectorTool[]>(`/v0/agent/connectors/${encodeURIComponent(id)}/tools`).then(setToolset).catch(() => setToolset([]));
+  }));
+  const usedBy = () => { const id = connectorId(); return id ? (profiles() ?? []).filter((item) => item.tools.some((tool) => tool.name.startsWith(`mcp__${id}__`))) : []; };
   const profile = createMemo(() => profiles()?.find((item) => item.id === selected()) || null);
   const direct = createMemo(() => profile()?.tools.filter((tool) => tool.reach === "model") || []);
   const scripted = createMemo(() => profile()?.tools.filter((tool) => tool.reach === "codemode") || []);
@@ -51,15 +63,27 @@ export function ToolsSettings(props: { agent?: boolean } = {}) {
     {(list) => <>
       <Group title="Profile">
         <SettingLine label="Show tools of">
-          <Select id="tools-profile" aria-label="Profile" value={selected()} onChange={(event) => setSelected(event.currentTarget.value)}>
+          <Select id="tools-profile" aria-label="Profile or toolset" value={selected()} onChange={(event) => setSelected(event.currentTarget.value)}>
             <For each={list()}>{(item) => <option value={item.id}>{nameOf(item)}</option>}</For>
+            <For each={connectors()}>{(item) => <option value={`connector:${item.id}`}>{item.label} (toolset)</option>}</For>
           </Select>
         </SettingLine>
+        <Show when={connectorId()}>
+          <Note>{connectors().find((item) => item.id === connectorId())?.label ?? "This connector"}'s tools, declared to Conduit and taken up by {usedBy().length
+            ? usedBy().map(nameOf).join(", ") : "no profile yet"}. A profile's chats call them from codemode.</Note>
+        </Show>
         <Show when={profile()}>{(current) =>
           <Note>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.
             {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</Note>}
         </Show>
       </Group>
+      <Show when={connectorId()}>
+        <Show when={toolset()} fallback={<Loading>Loading tools…</Loading>}>{(tools) =>
+          <Group title="Its tools"><For each={tools()}>{(tool) =>
+            <SettingLine plain mono label={tool.name} title={tool.description}><SettingValue>{tool.readOnly ? "Reads" : "Can act"}</SettingValue></SettingLine>}</For>
+          </Group>}
+        </Show>
+      </Show>
       <Show when={direct().length}><Group title="Called by the model"><For each={direct()}>{line}</For></Group></Show>
       <Show when={scripted().length}><Group title="Called from codemode"><For each={scripted()}>{line}</For></Group></Show>
       <McpAccess />
