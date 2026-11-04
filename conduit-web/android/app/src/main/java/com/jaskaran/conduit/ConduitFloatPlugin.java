@@ -59,7 +59,8 @@ public class ConduitFloatPlugin extends Plugin {
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
             .put("micPermission", microphoneGranted(getContext()))
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
-            .put("holdToTalk", preferences(getContext()).getBoolean("holdToTalk", false));
+            .put("holdToTalk", preferences(getContext()).getBoolean("holdToTalk", false))
+            .put("screenContext", ConduitContext.screenReaderOn(getContext()));
     }
 
     @PluginMethod public void status(PluginCall call) { call.resolve(view()); }
@@ -168,6 +169,12 @@ public class ConduitFloatPlugin extends Plugin {
         getContext().stopService(new Intent(getContext(), ConduitFloatService.class));
         try { ConduitMediaVolume.recover(getContext()); }
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
+        call.resolve(view());
+    }
+
+    /** Android's page for Float screen context (the Accessibility service behind instant screenshots and the frost). */
+    @PluginMethod public void openScreenContextSettings(PluginCall call) {
+        ConduitContext.openScreenReaderSettings(getContext());
         call.resolve(view());
     }
 

@@ -1612,6 +1612,12 @@ export function Settings(props: {
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
+                      <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
+                        title="Float's Accessibility service: screenshots without asking each time, the text on screen with them, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
+                        <Button variant="ghost" size="sm" onClick={() => void conduitFloat.openScreenContextSettings().then(setFloatStatus).catch(floatFailure)}>
+                          {floatStatus()!.screenContext ? "Settings" : "Turn on"}
+                        </Button>
+                      </SettingLine>
                       <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
                         <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
                       </SettingLine>

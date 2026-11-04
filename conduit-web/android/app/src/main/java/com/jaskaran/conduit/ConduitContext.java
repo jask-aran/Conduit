@@ -73,8 +73,15 @@ public final class ConduitContext {
         return false;
     }
 
+    /** Android's page for Float's screen reader itself where the phone has one, else the Accessibility list. */
     public static void openScreenReaderSettings(Context context) {
-        context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        ComponentName reader = new ComponentName(context, ConduitScreenReader.class);
+        try {
+            context.startActivity(new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                .putExtra(Intent.EXTRA_COMPONENT_NAME, reader.flattenToString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException noDetails) {
+            context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        }
     }
 
     public static void screenshot(Context context, Consumer<Result> callback) {

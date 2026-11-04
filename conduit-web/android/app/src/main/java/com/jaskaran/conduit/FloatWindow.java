@@ -204,7 +204,7 @@ final class FloatWindow {
         position.height = frameHeight;
         View decor = overlayWindow.getDecorView();
         decor.animate().cancel();
-        decor.setAlpha(touched ? 1 : REST_ALPHA + (1 - REST_ALPHA) * openness);
+        decor.setAlpha(touched || attention ? 1 : REST_ALPHA + (1 - REST_ALPHA) * openness);
         overlayWindow.setAttributes(position);
         updateFrost();
         control.requestLayout();
@@ -249,7 +249,16 @@ final class FloatWindow {
         if (touched == held || (held && state != State.HANDLE)) return;
         touched = held;
         if (state != State.HANDLE || morph != null) return;
-        overlayWindow.getDecorView().animate().alpha(held ? 1 : REST_ALPHA).setDuration(held ? 90 : 260).start();
+        overlayWindow.getDecorView().animate().alpha(held || attention ? 1 : REST_ALPHA).setDuration(held ? 90 : 260).start();
+    }
+
+    /** Holding captures for the next message: at rest it stays at full strength, as while touched. */
+    private boolean attention;
+    void setAttention(boolean next) {
+        if (attention == next) return;
+        attention = next;
+        if (state != State.HANDLE || morph != null || overlayWindow == null) return;
+        overlayWindow.getDecorView().animate().alpha(attention || touched ? 1 : REST_ALPHA).setDuration(attention ? 90 : 260).start();
     }
 
     void snapToEdge() {

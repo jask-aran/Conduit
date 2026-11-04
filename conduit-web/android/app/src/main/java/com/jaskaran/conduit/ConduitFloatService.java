@@ -55,10 +55,23 @@ public class ConduitFloatService extends Service {
     /** Screenshots and photos gathered for the next message, oldest first. Sent with it, or dropped on cancel. */
     private final java.util.List<ConduitContext.Result> gathered = new java.util.ArrayList<>();
     private boolean capturing;
+    private FloatDiscard discardBubble;
+
+    /** The ✕ beside the handle while captures wait at rest; hidden while the radial, a panel or the pill is open. */
+    private void updateDiscard() {
+        if (window == null) return;
+        boolean holding = !gathered.isEmpty();
+        window.setAttention(holding);
+        boolean show = holding && !capturing && machine.state() == State.HANDLE && !appForeground
+            && (radial == null || !radial.isOpen()) && (panel == null || !panel.isOpen());
+        if (!show) { if (discardBubble != null) discardBubble.hide(); return; }
+        if (discardBubble == null) discardBubble = new FloatDiscard(this, this::dropGathered);
+        discardBubble.show(window.right(), window.handleCentre());
+    }
 
     static void setAppForeground(boolean foreground) {
         appForeground = foreground;
-        if (active != null) active.updateVisibility();
+        if (active != null) { active.updateVisibility(); active.updateDiscard(); }
     }
 
     private void updateVisibility() {
@@ -139,7 +152,11 @@ public class ConduitFloatService extends Service {
                     @Override public void onCancel() { cancel(); }
                     @Override public void onSend() { stopRecording(false); }
                     @Override public void onRetry() { retry(); }
-                    @Override public void onDragEnded() { window.snapToEdge(); }
+                    @Override public void onDragEnded() {
+                        window.snapToEdge();
+                        // The ✕ follows once the handle has settled on its edge.
+                        main.postDelayed(ConduitFloatService.this::updateDiscard, 200);
+                    }
                 });
                 show(machine.state());
             }
@@ -190,6 +207,7 @@ public class ConduitFloatService extends Service {
         if (destroyed || !machine.show(next)) return;
         if (next == State.HANDLE) liveText = "";
         window.show(next, errorText, sentAt);
+        updateDiscard();
     }
 
     private void openApp(boolean record) {
@@ -227,7 +245,7 @@ public class ConduitFloatService extends Service {
                 setTarget(FloatTarget.newChat(place.isChat ? null : place.id, place.isChat ? "New chat" : place.name));
                 if (machine.state() == State.HANDLE) beginRecording();
             }
-            @Override public void closed() {}
+            @Override public void closed() { updateDiscard(); }
         });
         panel = places;
         places.show(window.right(), Math.round(window.handleCentre()[1]));
@@ -261,7 +279,7 @@ public class ConduitFloatService extends Service {
                 closePanel();
                 FloatRecentPanel.openInConduit(ConduitFloatService.this, "", chat);
             }
-            @Override public void closed() {}
+            @Override public void closed() { updateDiscard(); }
         });
         panel = recent[0];
         recent[0].show(window.right(), Math.round(window.handleCentre()[1]));
@@ -269,8 +287,8 @@ public class ConduitFloatService extends Service {
 
     private FloatRadial radial() {
         if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
-            @Override public void chosen(FloatRadial.Slot slot) { window.lift(false); radialChosen(slot); }
-            @Override public void dismissed() { window.lift(false); }
+            @Override public void chosen(FloatRadial.Slot slot) { window.lift(false); radialChosen(slot); updateDiscard(); }
+            @Override public void dismissed() { window.lift(false); updateDiscard(); }
         });
         return radial;
     }
@@ -281,6 +299,7 @@ public class ConduitFloatService extends Service {
         int[] screen = window.screenSize();
         radial().open(window.right(), centre[0], centre[1], screen[0], screen[1]);
         window.lift(true);
+        updateDiscard();
     }
 
     /** A tap's radial: a target starts recording to it. Workspace, Recent and the context slots come with their panels. */
@@ -307,6 +326,7 @@ public class ConduitFloatService extends Service {
         if (radial != null) radial.hideNow();
         if (caption != null) caption.hide();
         window.setVisible(false);
+        updateDiscard();
         ConduitContext.screenshot(this, this::captured);
     }
 
@@ -320,12 +340,14 @@ public class ConduitFloatService extends Service {
         capturing = false;
         if (destroyed) { if (result.image != null) result.image.delete(); return; }
         updateVisibility();
+        updateDiscard();
         if (result.error != null) {
             android.widget.Toast.makeText(this, result.error, android.widget.Toast.LENGTH_SHORT).show();
             return;
         }
         gathered.add(result);
         window.setGathered(gathered.size());
+        updateDiscard();
     }
 
     /** The gathered captures as files to send, in order: each picture, then its screen text when there is some. */
@@ -350,6 +372,7 @@ public class ConduitFloatService extends Service {
         gathered.clear();
         ConduitContext.clear(this);
         if (window != null) window.setGathered(0);
+        updateDiscard();
     }
 
     /**
@@ -467,6 +490,7 @@ public class ConduitFloatService extends Service {
         if (caption != null) caption.destroy();
         if (active == this) active = null;
         if (radial != null) radial.destroy();
+        if (discardBubble != null) discardBubble.hide();
         closePanel();
         if (window != null) window.stopAnimations();
         generation++;

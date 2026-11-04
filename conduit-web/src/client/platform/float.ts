@@ -12,6 +12,8 @@ export interface FloatStatus {
   micPermission: boolean;
   /** Hold to talk: a hold on Float records at once (off by default; a tap opens the radial either way). */
   holdToTalk: boolean;
+  /** Float screen context, the Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
+  screenContext: boolean;
   /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
@@ -24,6 +26,7 @@ const nativeFloat = registerPlugin<{
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
   openOverlaySettings(): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
+  openScreenContextSettings(): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -44,6 +47,7 @@ export const conduitFloat = {
   stop: () => enqueue(() => nativeFloat.stop()),
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
+  openScreenContextSettings: () => enqueue(() => nativeFloat.openScreenContextSettings()),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
