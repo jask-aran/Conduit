@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { listRoutines, parseRoutine, readFolderFile, renderVars, splitFrontMatter, writeRoutine, writeFolderFile } from "../agent/routine-files.js";
+import { acceptSeedTemplate, seedTemplateUpdate, listRoutines, parseRoutine, readFolderFile, renderVars, splitFrontMatter, writeRoutine, writeFolderFile } from "../agent/routine-files.js";
 import { block, promptVars, routineContext } from "../agent/routines.js";
 import { render as renderMemory } from "../agent/memory.js";
 import { renderWaitingInbox } from "../agent/inbox.js";
@@ -188,7 +188,10 @@ export class ContextStore {
     const [content, def] = loaded && Object.hasOwn(loaded, "content")
       ? [loaded.content, loaded.defaultContent]
       : await Promise.all([this.content(item), this.defaultContent(item)]);
-    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
+    const relative = item.routine ? `routines/${item.routine.name}.md` : item.runRules ? "RUN.md" : null;
+    const templateUpdate = relative && def !== null && await seedTemplateUpdate(this.agent().folder, relative,
+      item.routine ? await fs.readFile(path.join(this.seedDir, relative), "utf8") : def);
+    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(templateUpdate ? { templateUpdate: true } : {}), ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
   }
   async list() {
     const agent = this.agent();
@@ -210,7 +213,7 @@ export class ContextStore {
     }
     const [documents, content, defaultContent] = await Promise.all([documentsPromise, this.content(item), this.defaultContent(item)]);
     const summary = await this.summary(item, documents, { content, defaultContent });
-    return { ...summary, content, ...(defaultContent !== null ? { defaultContent } : {}) };
+    return { ...summary, content, ...(defaultContent !== null ? { defaultContent } : {}), ...(summary.templateUpdate ? { templateText: defaultContent } : {}) };
   }
   validate(content) {
     if (typeof content !== "string" || !content.trim()) throw fail("Block content is required");
@@ -222,10 +225,18 @@ export class ContextStore {
     if (item.kind !== "text" && item.kind !== "notice") throw fail("Block is read-only");
     if (label !== undefined && (item.source !== "custom" || typeof label !== "string" || !label.trim())) throw fail("Invalid block label");
     if (content !== undefined) {
-      this.validate(content);
-      if (item.routine) await writeRoutine(this.agent().folder, { ...item.routine, body: content });
-      else if (item.runRules) await writeFolderFile(this.agent().folder, "RUN.md", content);
-      else if (item.source !== "custom" && content === await this.defaultContent(item)) await fs.rm(path.join(this.root, `${id}.md`), { force: true });
+      if (!(item.routine?.gate === "never" && content === "")) this.validate(content);
+      if (item.routine || item.runRules) {
+        const folder = this.agent().folder;
+        const relative = item.routine ? `routines/${item.routine.name}.md` : "RUN.md";
+        if (item.routine) await writeRoutine(folder, { ...item.routine, body: content });
+        else await writeFolderFile(folder, relative, content);
+        const template = await fs.readFile(path.join(this.seedDir, relative), "utf8").catch((error) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        });
+        if (template !== null) await acceptSeedTemplate(folder, relative, template);
+      } else if (item.source !== "custom" && content === await this.defaultContent(item)) await fs.rm(path.join(this.root, `${id}.md`), { force: true });
       else {
         await fs.mkdir(this.root, { recursive: true });
         const target = path.join(this.root, `${id}.md`);

@@ -207,6 +207,12 @@ routines or changes, which wait for approval. Settings › jbot shows each promp
 which blocks went in from where, and for each routine a sample first message built from its tasks' live output,
 plus fields for the USER.md front-matter values.
 
+Seeded routines and RUN.md keep their last template bytes in `.seeds/<relative path>`. On load or enable,
+routines take template changes for front-matter keys and bodies the person has not changed; Settings switches
+and times remain in place. An edited body stays in place, and Blocks offers “Use the new version” when a
+newer template waits. This reset replaces only a routine's body and keeps its front matter. SOUL.md, USER.md
+and MEMORY.md remain copy-if-missing files.
+
 Not now: conditions beyond the gate, routines chained into pipelines (an inbox-arrival trigger covers it).
 
 ## Talking to the person: the jbot message log (decided 2026-11-02)

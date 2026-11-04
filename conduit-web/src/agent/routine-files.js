@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
@@ -190,7 +191,7 @@ export function serializeRoutine(routine) {
     trigger: Array.isArray(trigger) ? trigger.map(writeTrigger) : writeTrigger(trigger),
     ...(tasks.length ? { tasks } : {}), gate, output, ...(model !== null ? { model } : {}),
     ...(effort !== null ? { effort } : {}), ...(level !== "fyi" ? { level } : {}),
-    ...(!enabled ? { enabled } : {}), ...(context.length ? { context } : {}) };
+    ...(!enabled ? { enabled } : {}), ...(routine.quiet === false ? { quiet: false } : {}), ...(context.length ? { context } : {}) };
   const doc = new YAML.Document(data);
   if (Array.isArray(trigger)) {
     for (const rule of doc.get("trigger", true).items) rule.flow = true;
@@ -305,76 +306,153 @@ export async function removeRoutine(folder, name) {
   catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
-// Committed seed bytes, plus the old migration's default-settings serialized copies (SHA-256).
-const OLD_SEEDS = {
-  heartbeat: ["0c5b4c99095960a5b50e835f2e52f03f970e0f11afb82ba715268c54d4af67c3", "fcb64153edd18c39b88661fa5adb498b9852179be7ef29b7beaa0be800b585ad",
-    "1a49c0072d7c2492d2f672ee15b092bbdb767378e6c5dd457c2bbdeea4eade0b", "7290af75c97331f32d4783c26ef6301c7caf21d638b0128eea8cb64182b4988e"],
-  "morning-brief": ["7ba36bcd56a4720beaeec5af06e706653922c0718dbd4ca8b2a388cc84b2735c", "951d7434a833c93816c91d2473534539f3acfa33b2e1914dddd6cf5c2db37c9c",
-    "d66dc906bbb0e79b7dae596a8b2bddd409c630baf0777cf39a642bcfb5b75cd0", "c9299bcbe0c150bd1e91b6fe1f7c0bd0c287f754e76787537cc3e9cd76ce5025"],
-  reflect: ["0172fa248f2822c85ee718e5351ddf062f273dc9942d5898ca42f2798be0d39e"],
+const digest = (text) => createHash("sha256").update(text).digest("hex");
+const SEED_HISTORY = new URL("../../../templates/agent/seed-history/", import.meta.url);
+const seedStatePath = (relative) => path.join(".seeds", `${relative}.state.json`);
+const isRoutineSeed = (relative) => relative.startsWith(`${ROUTINES_DIR}/`);
+const seedBody = (relative, text) => isRoutineSeed(relative) ? splitFrontMatter(text).body.trim() : text;
+const sameSeedBody = (relative, left, right) => {
+  try { return seedBody(relative, left) === seedBody(relative, right); }
+  catch { return false; } // Broken front matter is never permission to replace a body.
 };
-const SEED_RECORD = ".seeds.json";
-const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-/** Only replace a seed whose exact bytes match its recorded or historical version. */
+/** Check each directory before creating its children: no writes through an agent-made link. */
+async function seedDirectory(folder, ...parts) {
+  let directory = await fs.realpath(folder);
+  for (const part of parts) {
+    directory = path.join(directory, part);
+    await fs.mkdir(directory).catch((error) => { if (error.code !== "EEXIST") throw error; });
+    if (await fs.realpath(directory) !== directory) throw new Error(`${parts.join("/")} must not be under a link.`);
+  }
+}
+
+async function seedState(folder, relative) {
+  const text = await readFolderFile(folder, seedStatePath(relative));
+  return text === null ? {} : JSON.parse(text);
+}
+
+async function saveSeedState(folder, relative, state) {
+  await seedDirectory(folder, ".seeds", ...path.dirname(relative).split("/").filter((part) => part !== "."));
+  await writeFolderFile(folder, seedStatePath(relative), `${JSON.stringify(state)}\n`);
+}
+
+/** Pending offers survive edits and reloads, but accepting the actual template clears the offer. */
+export async function seedTemplateUpdate(folder, relative, template) {
+  const state = await seedState(folder, relative);
+  const current = await readFolderFile(folder, relative);
+  return Boolean((state.waiting || state.pending?.waiting) && current !== null && !sameSeedBody(relative, current, template));
+}
+
+export async function acceptSeedTemplate(folder, relative, template) {
+  const current = await readFolderFile(folder, relative);
+  if (current === null || !sameSeedBody(relative, current, template)) return;
+  await saveSeedState(folder, relative, {});
+  await writeFolderFile(folder, path.join(".seeds", relative), template);
+}
+
+async function historicalSeeds(historyDir, relative) {
+  const index = await fs.readFile(new URL("index.json", historyDir), "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "[]";
+    throw error;
+  });
+  const versions = [];
+  for (const commit of JSON.parse(index)) {
+    const text = await fs.readFile(new URL(`${commit}/${relative}`, historyDir), "utf8").catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (text !== null && !versions.includes(text)) versions.push(text);
+  }
+  return versions;
+}
+
+/** Upgrade RUN.md and routines from saved template bytes, independently of Settings changes. */
 export async function seedRoutines(folder, seedDir) {
   let files;
   try { files = await fs.readdir(seedDir); }
   catch (error) { if (error.code === "ENOENT") return; throw error; }
-  await fs.mkdir(path.join(folder, ROUTINES_DIR), { recursive: true });
-  const manifestPath = path.join(folder, ROUTINES_DIR, SEED_RECORD);
-  const raw = await readFolderFile(folder, ROUTINES_DIR, SEED_RECORD);
-  const records = raw === null ? {} : JSON.parse(raw);
-  if (!object(records)) throw new Error("Invalid routine seed record.");
-  const save = () => writeFile(manifestPath, `${JSON.stringify(records, null, 2)}\n`);
-  for (const file of files.filter((item) => item.endsWith(".md"))) {
-    const name = file.slice(0, -3);
-    const target = routinePath(folder, name);
-    const seed = await fs.readFile(path.join(seedDir, file));
-    const seedHash = digest(seed);
-    let current = await readFolderBytes(folder, ROUTINES_DIR, file);
-    if (current === null) {
-      try {
-        await fs.writeFile(target, seed, { flag: "wx" });
-        records[name] = { hash: seedHash };
-        await save();
-        continue;
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-        current = await readFolderBytes(folder, ROUTINES_DIR, file);
-        if (current === null) continue;
-      }
-    }
-    const currentHash = digest(current);
-    let record = records[name];
-    // A crash after replacement but before recording the new hash is recoverable.
-    if (record?.pending === currentHash) {
-      records[name] = record = { hash: currentHash };
-      await save();
-    }
-    if (!record) {
-      if (currentHash !== seedHash && !OLD_SEEDS[name]?.includes(currentHash)) continue;
-      records[name] = record = { hash: currentHash };
-      await save();
-    }
-    if (currentHash !== record.hash) {
-      if (record.pending) { records[name] = { hash: record.hash }; await save(); }
-      continue;
-    }
-    if (currentHash === seedHash) continue;
-    records[name] = { hash: currentHash, pending: seedHash };
-    await save();
-    // Recheck immediately before replacement; an intervening edit stays untouched.
-    const latest = await readFolderBytes(folder, ROUTINES_DIR, file);
-    if (latest === null || digest(latest) !== currentHash) {
-      records[name] = { hash: currentHash };
-      await save();
-      continue;
-    }
-    await writeFile(target, seed);
-    records[name] = { hash: seedHash };
-    await save();
+  await seedDirectory(folder, ROUTINES_DIR);
+  const legacyText = await readFolderFile(folder, ROUTINES_DIR, ".seeds.json");
+  const legacy = legacyText === null ? {} : JSON.parse(legacyText);
+  if (!object(legacy)) throw new Error("Invalid routine seed record.");
+  const sources = files.filter((file) => file.endsWith(".md")).map((file) => ({
+    relative: `${ROUTINES_DIR}/${file}`, source: path.join(seedDir, file),
+  }));
+  const runSeed = path.join(seedDir, "..", "RUN.md");
+  if (await fs.stat(runSeed).then(() => true, (error) => { if (error.code === "ENOENT") return false; throw error; })) {
+    sources.push({ relative: "RUN.md", source: runSeed });
   }
+  for (const { relative, source } of sources) {
+    const seed = await fs.readFile(source, "utf8");
+    let current = await readFolderFile(folder, relative);
+    let state = await seedState(folder, relative);
+    // Journal the output and its input before replacement. A crash can occur on either side of the rename.
+    if (state.pending) {
+      const pending = state.pending;
+      if (current === pending.before) {
+        await writeFolderFile(folder, relative, pending.after);
+        current = pending.after;
+      }
+      // An intervening edit is merged against the input base, including Settings-only changes before replacement.
+      const recoveredBase = current === pending.after ? pending.base ?? pending.seed : pending.previousBase;
+      if (recoveredBase !== undefined) await writeFolderFile(folder, path.join(".seeds", relative), recoveredBase);
+      state = { waiting: current !== null && !sameSeedBody(relative, current, pending.seed) };
+      await saveSeedState(folder, relative, state);
+    }
+    let base = await readFolderFile(folder, ".seeds", relative);
+    let inferredEdit = false;
+    if (base === null) {
+      const history = await historicalSeeds(SEED_HISTORY, relative);
+      const candidates = [seed, ...history];
+      const record = legacy[path.basename(relative, ".md")];
+      const hash = record?.pending === (current === null ? null : digest(current)) ? record.pending : record?.hash;
+      // Old migrations also recorded the serializer's default-settings form of the template.
+      const recorded = hash && candidates.flatMap((candidate) => {
+        try { return [candidate, serializeRoutine(parseRoutine(candidate, path.basename(relative, ".md")))]; }
+        catch { return [candidate]; }
+      }).find((candidate) => digest(candidate) === hash);
+      const matched = current === null ? seed : candidates.find((candidate) => sameSeedBody(relative, current, candidate));
+      base = recorded || matched || history.find((version) => version !== seed) || seed;
+      inferredEdit = current !== null && !recorded && !matched;
+      await saveSeedState(folder, relative, { ...state, waiting: Boolean(state.waiting || inferredEdit) });
+      await writeFolderFile(folder, path.join(".seeds", relative), base);
+    }
+    if (base === seed && current !== null) {
+      if (state.waiting && sameSeedBody(relative, current, seed)) await saveSeedState(folder, relative, {});
+      continue;
+    }
+    let after = current;
+    let waiting = Boolean(state.waiting || inferredEdit);
+    if (current === null || current === base) { after = seed; waiting = false; }
+    else if (isRoutineSeed(relative)) {
+      try {
+        const name = path.basename(relative, ".md");
+        const old = splitFrontMatter(base).data;
+        const person = splitFrontMatter(current).data;
+        const next = splitFrontMatter(seed).data;
+        const merged = {};
+        for (const key of new Set([...Object.keys(old), ...Object.keys(person), ...Object.keys(next)])) {
+          const value = isDeepStrictEqual(person[key], old[key]) ? next[key] : person[key];
+          if (value !== undefined) merged[key] = value;
+        }
+        const edited = inferredEdit || !sameSeedBody(relative, current, base);
+        const body = edited ? splitFrontMatter(current).body : splitFrontMatter(seed).body;
+        waiting = edited && !sameSeedBody(relative, current, seed);
+        after = serializeRoutine(parseRoutine(`---\n${YAML.stringify(merged)}---\n${body}`, name));
+      } catch { waiting = true; } // Invalid routines stay intact and still offer the new template.
+    } else waiting = current !== seed;
+    const nextBase = !isRoutineSeed(relative) && waiting ? base : seed;
+    await saveSeedState(folder, relative, { waiting, pending: { before: current, after, seed, previousBase: base, base: nextBase, waiting } });
+    // A concurrent edit wins. Keep the old base so the next load can merge that edit.
+    if (await readFolderFile(folder, relative) !== current) {
+      await saveSeedState(folder, relative, { waiting: true });
+      continue;
+    }
+    if (after !== current) await writeFolderFile(folder, relative, after);
+    await writeFolderFile(folder, path.join(".seeds", relative), nextBase);
+    await saveSeedState(folder, relative, { waiting });
+  }
+  if (legacyText !== null) await fs.unlink(path.join(folder, ROUTINES_DIR, ".seeds.json"));
 }
 
 export async function readPerson(folder) {

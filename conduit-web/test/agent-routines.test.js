@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendEntry } from "../src/agent/inbox.js";
 import { completeRoutine, block, executeRoutine, migrateToRoutines, routineClocks, runInstructions, triggerWords } from "../src/agent/routines.js";
+import { ContextStore } from "../src/context/context-store.js";
 import { MemoryTools, rejectProposal } from "../src/agent/memory.js";
 import { listSchedules, seedSchedules, slotFate } from "../src/agent/schedule.js";
-import { listRoutines, parseRoutine, readRoutine, ROUTINES_DIR, seedRoutines, serializeRoutine, validateRoutineGraph, writeRoutine } from "../src/agent/routine-files.js";
+import { listRoutines, parseRoutine, readRoutine, ROUTINES_DIR, seedRoutines, seedTemplateUpdate, serializeRoutine, validateRoutineGraph, writeRoutine } from "../src/agent/routine-files.js";
 import { forkRecord, forkAllows, routineCompactionGuard, routineTask, routineToolGuard, shouldCompact, startRoutine, ROUTINE_DEPTH } from "../src/agent/routine-task.js";
 import { legacyRoutineTask } from "../src/agent/legacy-routine-task.js";
 import { MessageTools } from "../src/agent/messages.js";
@@ -34,105 +35,212 @@ test("a saved routine keeps its trigger, tasks and instructions in its own file"
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const currentSeeds = new URL("../../templates/agent/seed/routines/", import.meta.url);
-// Seed bytes as shipped at each commit, frozen so the test needs no git history (CI checks out shallow).
-const oldSeed = (commit, name, encoding) => fs.readFile(new URL(`fixtures/seed-routines/${commit}/${name}.md`, import.meta.url), encoding);
-
-test("every historical seed byte version upgrades; edited and unknown files stay untouched", async (t) => {
-  const versions = {
-    heartbeat: ["b5db1bd6", "0ec426a5"], "morning-brief": ["b5db1bd6", "0ec426a5"], reflect: ["b5db1bd6"],
-  };
-  for (const [name, commits] of Object.entries(versions)) for (const commit of commits) await t.test(`${name} ${commit}`, async (t) => {
-    const { root } = await agentFixture(t);
-    const dir = path.join(root, "routines");
-    await fs.mkdir(dir);
-    const old = await oldSeed(commit, name);
-    const file = path.join(dir, `${name}.md`);
-    await fs.writeFile(file, old);
-    await seedRoutines(root, fileURLToPath(currentSeeds));
-    const seed = await fs.readFile(new URL(`${name}.md`, currentSeeds));
-    assert.deepEqual(await fs.readFile(file), seed);
-    assert.equal(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"))[name].hash, sha256(seed));
-  });
-  for (const name of ["heartbeat", "morning-brief"]) for (const commit of versions[name]) await t.test(`migrated ${name} ${commit}`, async (t) => {
-    const { root } = await agentFixture(t);
-    const dir = path.join(root, "routines");
-    await fs.mkdir(dir);
-    const old = await oldSeed(commit, name, "utf8");
-    await fs.writeFile(path.join(dir, `${name}.md`), serializeRoutine(parseRoutine(old, name)));
-    await seedRoutines(root, fileURLToPath(currentSeeds));
-    assert.deepEqual(await fs.readFile(path.join(dir, `${name}.md`)), await fs.readFile(new URL(`${name}.md`, currentSeeds)));
-  });
-  const { root } = await agentFixture(t);
-  const dir = path.join(root, "routines");
-  await fs.mkdir(dir);
-  const old = await oldSeed("0ec426a5", "morning-brief");
-  const changed = Buffer.concat([old, Buffer.from("Edited by the person.\n")]);
-  await fs.writeFile(path.join(dir, "morning-brief.md"), changed);
-  await fs.writeFile(path.join(dir, "reflect.md"), "Unknown custom routine");
-  await seedRoutines(root, fileURLToPath(currentSeeds));
-  assert.deepEqual(await fs.readFile(path.join(dir, "morning-brief.md")), changed);
-  assert.equal(await fs.readFile(path.join(dir, "reflect.md"), "utf8"), "Unknown custom routine");
-  const records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
-  assert.equal(records["morning-brief"], undefined);
-  assert.equal(records.reflect, undefined);
+// Production history is shipped with the templates; tests need no git checkout history.
+const oldSeed = (commit, name, encoding) => fs.readFile(new URL(`../../templates/agent/seed-history/${commit}/routines/${name}.md`, import.meta.url), encoding);
+const baseText = (root, relative) => fs.readFile(path.join(root, ".seeds", relative), "utf8");
+const contextStore = (agent, seedDir) => new ContextStore({
+  root: path.join(agent.folder, "context"), templates: [], agent: () => agent, seedDir,
+  chatNamingPath: path.join(seedDir, "RUN.md"), subagentPath: path.join(seedDir, "RUN.md"), webPath: path.join(seedDir, "RUN.md"),
 });
+const seedSource = async (root, content = text) => {
+  const seeds = path.join(root, "seed-source", "routines");
+  await fs.mkdir(seeds, { recursive: true });
+  await fs.writeFile(path.join(seeds, "heartbeat.md"), content);
+  await fs.writeFile(path.join(seeds, "..", "RUN.md"), "Run version one\n");
+  return seeds;
+};
 
-test("new copies track their exact bytes, upgrade later, and never replace an edited tracked file", async (t) => {
-  const { root } = await agentFixture(t);
-  const seeds = path.join(root, "seed-source");
-  const dir = path.join(root, "routines");
-  await fs.mkdir(seeds);
-  await fs.writeFile(path.join(seeds, "example.md"), "first\n");
-  await seedRoutines(root, seeds);
-  const file = path.join(dir, "example.md");
-  let records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
-  assert.equal(records.example.hash, sha256("first\n"));
-  await fs.writeFile(path.join(seeds, "example.md"), "second\n");
-  await seedRoutines(root, seeds);
-  assert.equal(await fs.readFile(file, "utf8"), "second\n");
-  records = JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8"));
-  assert.equal(records.example.hash, sha256("second\n"));
-  await fs.writeFile(file, "second\nPerson's edit\n");
-  await fs.writeFile(path.join(seeds, "example.md"), "third\n");
-  await seedRoutines(root, seeds);
-  assert.equal(await fs.readFile(file, "utf8"), "second\nPerson's edit\n");
-  assert.equal(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example.hash, sha256("second\n"));
-});
-
-test("seed tracking recovers interrupted replacement without treating an edited file as a seed", async (t) => {
-  const { root } = await agentFixture(t);
-  const seeds = path.join(root, "seed-source");
-  const dir = path.join(root, "routines");
-  await fs.mkdir(seeds);
-  await fs.mkdir(dir);
-  await fs.writeFile(path.join(seeds, "example.md"), "new\n");
-  const record = { example: { hash: sha256("old\n"), pending: sha256("new\n") } };
-  await fs.writeFile(path.join(dir, ".seeds.json"), JSON.stringify(record));
-  await fs.writeFile(path.join(dir, "example.md"), "new\n");
-  await seedRoutines(root, seeds);
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example, { hash: sha256("new\n") });
-  await fs.writeFile(path.join(dir, ".seeds.json"), JSON.stringify(record));
-  await fs.writeFile(path.join(dir, "example.md"), "person's edit\n");
-  await seedRoutines(root, seeds);
-  assert.equal(await fs.readFile(path.join(dir, "example.md"), "utf8"), "person's edit\n");
-  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, ".seeds.json"), "utf8")).example, { hash: sha256("old\n") });
-});
-
-test("agent seeding tracks default routine copies but preserves migrated settings", async (t) => {
-  const first = await agentFixture(t);
-  await first.agent.seedFolder();
-  const records = JSON.parse(await fs.readFile(path.join(first.root, "routines", ".seeds.json"), "utf8"));
-  for (const name of ["heartbeat", "morning-brief", "reflect"]) {
-    const actual = await fs.readFile(path.join(first.root, "routines", `${name}.md`));
-    assert.deepEqual(actual, await fs.readFile(new URL(`${name}.md`, currentSeeds)));
-    assert.equal(records[name].hash, sha256(actual));
+test("every shipped historical routine upgrades, including serialized Settings copies", async (t) => {
+  const history = new URL("../../templates/agent/seed-history/", import.meta.url);
+  const commits = JSON.parse(await fs.readFile(new URL("index.json", history), "utf8"));
+  for (const commit of commits) {
+    const names = await fs.readdir(new URL(`${commit}/routines/`, history)).catch(() => []);
+    for (const file of names) for (const serialized of [false, true]) await t.test(`${commit}/${file} serialized=${serialized}`, async (t) => {
+      const { root } = await agentFixture(t);
+      const name = file.slice(0, -3);
+      const old = await oldSeed(commit, name, "utf8");
+      await fs.mkdir(path.join(root, "routines"));
+      await fs.writeFile(path.join(root, "routines", file), serialized ? serializeRoutine(parseRoutine(old, name)) : old);
+      await seedRoutines(root, fileURLToPath(currentSeeds));
+      const actual = await readRoutine(root, name);
+      const seed = await fs.readFile(new URL(file, currentSeeds), "utf8");
+      assert.equal(actual.body, parseRoutine(seed, name).body);
+      assert.equal(await baseText(root, `routines/${file}`), seed);
+      assert.equal(await seedTemplateUpdate(root, `routines/${file}`, seed), false);
+    });
   }
-  const custom = await agentFixture(t, { brief: { enabled: false, at: "09:00" } });
-  await custom.agent.seedFolder();
-  const brief = await readRoutine(custom.root, "morning-brief");
-  assert.equal(brief.enabled, false);
-  assert.equal(brief.trigger.time, "09:00");
-  assert.equal(JSON.parse(await fs.readFile(path.join(custom.root, "routines", ".seeds.json"), "utf8"))["morning-brief"], undefined);
+});
+
+test("Settings flips keep their keys while a changed template updates the body and other keys", async (t) => {
+  const { root, agent } = await agentFixture(t);
+  const seeds = await seedSource(root);
+  await seedRoutines(root, seeds);
+  await agent.adjustRoutine("heartbeat", (routine) => ({ ...routine, enabled: false, trigger: { kind: "every", minutes: 45 } }));
+  const next = text.replace("every: 30", "every: 60").replace("Review arrivals", "New title").replace("gate: when-new", "before: [{ routine: reflect, ifMissedSince: last }]\ngate: when-new").replace("Review the gathered facts.", "Use conduit_inbox.");
+  await fs.writeFile(path.join(seeds, "heartbeat.md"), next);
+  await seedRoutines(root, seeds);
+  const actual = await readRoutine(root, "heartbeat");
+  assert.equal(actual.body, "Use conduit_inbox.");
+  assert.equal(actual.enabled, false);
+  assert.equal(actual.trigger.minutes, 45);
+  assert.equal(actual.title, "New title");
+  assert.deepEqual(actual.before, [{ routine: "reflect", ifMissedSince: "last" }]);
+  assert.equal(await baseText(root, "routines/heartbeat.md"), next);
+  assert.equal(await seedTemplateUpdate(root, "routines/heartbeat.md", next), false);
+});
+
+test("old Settings copies infer their historical body without a base or hash record", async (t) => {
+  const { root } = await agentFixture(t);
+  await fs.mkdir(path.join(root, "routines"));
+  for (const name of ["heartbeat", "morning-brief", "email"]) {
+    const old = await oldSeed(name === "email" ? "265b7705" : "b5db1bd6", name, "utf8");
+    const parsed = parseRoutine(old, name);
+    await writeRoutine(root, { ...parsed, enabled: !parsed.enabled });
+  }
+  await seedRoutines(root, fileURLToPath(currentSeeds));
+  for (const name of ["heartbeat", "morning-brief", "email"]) {
+    const actual = await readRoutine(root, name);
+    const old = parseRoutine(await oldSeed(name === "email" ? "265b7705" : "b5db1bd6", name, "utf8"), name);
+    const latest = parseRoutine(await fs.readFile(new URL(`${name}.md`, currentSeeds), "utf8"), name);
+    assert.equal(actual.enabled, !old.enabled);
+    assert.equal(actual.body, latest.body);
+    assert.deepEqual(actual.tasks, latest.tasks);
+    // The brief's body is unchanged across versions. The required newest match treats its missing before key as an edit.
+    assert.deepEqual(actual.before, old.body.trim() === latest.body.trim() ? old.before : latest.before);
+  }
+});
+
+test("front matter merges parsed top-level values, additions and removals", async (t) => {
+  const { root } = await agentFixture(t);
+  const original = text.replace("gate: when-new", "model: vendor/model\neffort: low\nquiet: false\ncontext: [diary]\ngate: when-new");
+  const seeds = await seedSource(root, original);
+  await seedRoutines(root, seeds);
+  const file = path.join(root, "routines", "heartbeat.md");
+  await fs.writeFile(file, original.replace("effort: low", "effort: high").replace("quiet: false\n", "").replace("trigger: { every: 30 }", "trigger:\n  every: 30"));
+  const next = original.replace("model: vendor/model\n", "").replace("effort: low\n", "").replace("context: [diary]", "context: [user]\nlevel: attention");
+  await fs.writeFile(path.join(seeds, "heartbeat.md"), next);
+  await seedRoutines(root, seeds);
+  const actual = await readRoutine(root, "heartbeat");
+  assert.equal(actual.model, null);
+  assert.equal(actual.effort, "high");
+  assert.equal(actual.quiet, true);
+  assert.deepEqual(actual.context, ["user"]);
+  assert.equal(actual.level, "attention");
+});
+
+test("edited routine bodies stay intact and offer the template until reset or an equal edit", async (t) => {
+  const { root, agent } = await agentFixture(t);
+  const seeds = await seedSource(root);
+  const store = contextStore(agent, path.dirname(seeds));
+  await seedRoutines(root, seeds);
+  await writeRoutine(root, { ...await readRoutine(root, "heartbeat"), enabled: false, body: "Person's instructions." });
+  const next = text.replace("Review the gathered facts.", "New template body.");
+  await fs.writeFile(path.join(seeds, "heartbeat.md"), next);
+  await seedRoutines(root, seeds);
+  assert.equal((await readRoutine(root, "heartbeat")).body, "Person's instructions.");
+  assert.equal((await store.get("routine-heartbeat")).templateText, "New template body.");
+  assert.equal((await store.list()).blocks.find((item) => item.id === "routine-heartbeat").templateUpdate, true);
+  assert.equal((await store.save("routine-heartbeat", { content: "Another personal edit." })).templateUpdate, true);
+  await seedRoutines(root, seeds);
+  assert.equal((await store.get("routine-heartbeat")).templateUpdate, true);
+  const reset = await store.reset("routine-heartbeat");
+  assert.equal(reset.templateUpdate, undefined);
+  assert.equal(reset.content, "New template body.");
+  assert.equal((await readRoutine(root, "heartbeat")).enabled, false);
+  assert.equal(await baseText(root, "routines/heartbeat.md"), next);
+  await writeRoutine(root, { ...await readRoutine(root, "heartbeat"), body: "Personal again." });
+  const newer = next.replace("New template body.", "Newest template body.");
+  await fs.writeFile(path.join(seeds, "heartbeat.md"), newer);
+  await seedRoutines(root, seeds);
+  assert.equal((await store.save("routine-heartbeat", { content: "  Newest template body.  " })).templateUpdate, undefined);
+});
+
+test("RUN.md upgrades untouched bytes, preserves edits and clears the offer on reset", async (t) => {
+  const { root, agent } = await agentFixture(t);
+  const seeds = await seedSource(root);
+  const store = contextStore(agent, path.dirname(seeds));
+  await seedRoutines(root, seeds);
+  await fs.writeFile(path.join(seeds, "..", "RUN.md"), "Run version two\n");
+  await seedRoutines(root, seeds);
+  assert.equal(await fs.readFile(path.join(root, "RUN.md"), "utf8"), "Run version two\n");
+  await fs.writeFile(path.join(root, "RUN.md"), "Personal run rules\n");
+  await fs.writeFile(path.join(seeds, "..", "RUN.md"), "Run version three\n");
+  await seedRoutines(root, seeds);
+  assert.equal(await fs.readFile(path.join(root, "RUN.md"), "utf8"), "Personal run rules\n");
+  assert.equal((await store.get("run-rules")).templateUpdate, true);
+  assert.equal((await store.get("run-rules")).templateText, "Run version three\n");
+  assert.equal((await store.save("run-rules", { content: "Edited again\n" })).templateUpdate, true);
+  assert.equal((await store.reset("run-rules")).templateUpdate, undefined);
+  assert.equal(await baseText(root, "RUN.md"), "Run version three\n");
+});
+
+test("RUN.md infers historical bytes and flags unknown bodies on old folders", async (t) => {
+  const commits = JSON.parse(await fs.readFile(new URL("../../templates/agent/seed-history/index.json", import.meta.url), "utf8"));
+  for (const commit of commits) await t.test(commit, async (t) => {
+    const { root } = await agentFixture(t);
+    const old = await fs.readFile(new URL(`../../templates/agent/seed-history/${commit}/RUN.md`, import.meta.url), "utf8");
+    await fs.writeFile(path.join(root, "RUN.md"), old);
+    await seedRoutines(root, fileURLToPath(currentSeeds));
+    assert.equal(await fs.readFile(path.join(root, "RUN.md"), "utf8"), await fs.readFile(new URL("../RUN.md", currentSeeds), "utf8"));
+  });
+  const { root } = await agentFixture(t);
+  await fs.mkdir(path.join(root, "routines"));
+  await fs.writeFile(path.join(root, "RUN.md"), "Unknown run rules");
+  await fs.writeFile(path.join(root, "routines", "heartbeat.md"), text);
+  await fs.writeFile(path.join(root, "routines", "reflect.md"), "Invalid custom routine");
+  await seedRoutines(root, fileURLToPath(currentSeeds));
+  const seed = await fs.readFile(new URL("heartbeat.md", currentSeeds), "utf8");
+  assert.equal((await readRoutine(root, "heartbeat")).body, routine().body);
+  assert.equal(await seedTemplateUpdate(root, "routines/heartbeat.md", seed), true);
+  assert.equal(await fs.readFile(path.join(root, "routines", "reflect.md"), "utf8"), "Invalid custom routine");
+  assert.equal(await seedTemplateUpdate(root, "RUN.md", "Current rules"), true);
+});
+
+test("hash-only records migrate from shipped content, including interrupted old replacements", async (t) => {
+  for (const pending of [false, true]) await t.test(`pending=${pending}`, async (t) => {
+    const { root } = await agentFixture(t);
+    const old = await oldSeed("0ec426a5", "heartbeat", "utf8");
+    const current = await fs.readFile(new URL("heartbeat.md", currentSeeds), "utf8");
+    await fs.mkdir(path.join(root, "routines"));
+    await fs.writeFile(path.join(root, "routines", "heartbeat.md"), pending ? current : serializeRoutine({ ...parseRoutine(old, "heartbeat"), enabled: false }));
+    await fs.writeFile(path.join(root, "routines", ".seeds.json"), JSON.stringify({ heartbeat: { hash: sha256(old), ...(pending ? { pending: sha256(current) } : {}) } }));
+    await seedRoutines(root, fileURLToPath(currentSeeds));
+    assert.equal((await readRoutine(root, "heartbeat")).body, parseRoutine(current, "heartbeat").body);
+    assert.equal((await readRoutine(root, "heartbeat")).enabled, pending);
+    assert.equal(await baseText(root, "routines/heartbeat.md"), current);
+    await assert.rejects(fs.readFile(path.join(root, "routines", ".seeds.json")), { code: "ENOENT" });
+  });
+});
+
+test("pending content journals recover before and after replacement while preserving intervening edits", async (t) => {
+  for (const position of ["before", "after", "edited", "settings"]) await t.test(position, async (t) => {
+    const { root } = await agentFixture(t);
+    const seeds = await seedSource(root);
+    await seedRoutines(root, seeds);
+    const before = text;
+    const after = text.replace("Review the gathered facts.", "New body.");
+    await fs.writeFile(path.join(seeds, "heartbeat.md"), after);
+    await fs.writeFile(path.join(root, ".seeds", "routines", "heartbeat.md.state.json"), JSON.stringify({ pending: { before, after, seed: after, waiting: false } }));
+    const actual = position === "before" ? before : position === "after" ? after : position === "settings" ? serializeRoutine({ ...routine(), enabled: false }) : text.replace("Review the gathered facts.", "Person's new body.");
+    await fs.writeFile(path.join(root, "routines", "heartbeat.md"), actual);
+    await seedRoutines(root, seeds);
+    assert.equal((await readRoutine(root, "heartbeat")).body, position === "edited" ? "Person's new body." : "New body.");
+    assert.equal(await baseText(root, "routines/heartbeat.md"), after);
+    if (position === "settings") assert.equal((await readRoutine(root, "heartbeat")).enabled, false);
+    assert.equal(await seedTemplateUpdate(root, "routines/heartbeat.md", after), position === "edited");
+  });
+});
+
+test("agent seeding tracks templates and preserves migrated settings and personal memory files", async (t) => {
+  const { root, agent } = await agentFixture(t, { brief: { enabled: false, at: "09:00" } });
+  for (const name of ["SOUL.md", "USER.md", "MEMORY.md"]) await fs.writeFile(path.join(root, name), `Personal ${name}`);
+  await agent.seedFolder();
+  assert.equal((await readRoutine(root, "morning-brief")).enabled, false);
+  assert.equal((await readRoutine(root, "morning-brief")).trigger.time, "09:00");
+  for (const name of ["heartbeat", "morning-brief", "reflect", "email"]) {
+    assert.equal(await baseText(root, `routines/${name}.md`), await fs.readFile(new URL(`${name}.md`, currentSeeds), "utf8"));
+  }
+  for (const name of ["SOUL.md", "USER.md", "MEMORY.md"]) assert.equal(await fs.readFile(path.join(root, name), "utf8"), `Personal ${name}`);
 });
 
 // listRoutines reports a bad file rather than losing its valid neighbours.

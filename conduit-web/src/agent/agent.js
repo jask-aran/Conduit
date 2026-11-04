@@ -117,7 +117,7 @@ export class PersistentAgent {
     await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
     await migrateToRoutines(this, path.join(SEED, "routines"));
     for (const entry of await fs.readdir(SEED, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
+      if (!entry.isFile() || entry.name === "RUN.md") continue;
       await fs.copyFile(path.join(SEED, entry.name), path.join(this.folder, entry.name), fs.constants.COPYFILE_EXCL).catch((error) => {
         if (error.code !== "EEXIST") throw error;
       });

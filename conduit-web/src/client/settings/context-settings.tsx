@@ -22,11 +22,11 @@ import { Row } from "@/components/ui/row";
  * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
  */
 export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "installed" | "jbot" | "custom" | "conduit";
-  description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
+  templateUpdate?: boolean; description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
   blocks: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean; subagents?: { model: string; thinkingLevel: string } | null };
-type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string };
+type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string; templateText?: string };
 /** A slot: fixed (filled into a system prompt when a thread starts; a change reaches the thread as an update notice)
  *  or current (never in a system prompt; it travels on notices). */
 export type ContextVar = { name: string; description: string; value?: string; scope?: "fixed" | "current" };
@@ -269,6 +269,10 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
         </Actions></Show>
       </>}
       status={<>
+        <Show when={loaded().templateUpdate}>
+          <StatusText>A newer template is available</StatusText>
+          <Button variant="ghost" size="sm" disabled={state() === "saving"} onClick={() => void reset()}>Use the new version</Button>
+        </Show>
         <StatusText>{tokens(live() ? (liveView() === "now" ? loaded().preview ?? "" : loaded().template ?? "").length : draft().length)}</StatusText>
         <StatusText>{live() ? loaded().tag ? `<${loaded().tag}> · filled in by Conduit` : "filled in by Conduit" : loaded().kind === "notice" ? "notice: Conduit writes it into the thread" : loaded().source === "jbot" ? "jbot's file: jbot can change it too" : SOURCE[loaded().source]}</StatusText>
       </>} />; }}</Show>;
