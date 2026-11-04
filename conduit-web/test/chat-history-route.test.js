@@ -52,9 +52,10 @@ test("history can load from the adapter without a resident session", async () =>
   }
 });
 
-async function recentFixture(t, { chats, readTranscript, adapter }) {
+async function recentFixture(t, { chats, readTranscript, adapter, chatSort }) {
   const app = express();
   registerChatRoutes(app, {
+    preferences: { get: () => ({ chatSort }) },
     projects: { list: async () => [{ id: "one", name: "One" }, { id: "two", name: "Two" }] },
     registry: { list: () => chats },
     backends: { list: () => [{ chatId: "new", status: "working" }], getByChatId: () => null,
@@ -77,6 +78,9 @@ test("recent chats span projects, sort by activity and return only assistant tex
   const get = await recentFixture(t, {
     chats: [
       { id: "old", projectId: "one", status: "active", title: "Old", lastMessageAt: "2026-01-01" },
+      { id: "archived", projectId: "one", status: "archived", lastMessageAt: "2026-12-01" },
+      { id: "draft", projectId: "one", status: "draft", lastMessageAt: "2026-12-01" },
+      { id: "missing-project", projectId: "missing", status: "active", lastMessageAt: "2026-12-01" },
       { id: "child", projectId: "one", status: "subagent", lastMessageAt: "2026-12-01" },
       { id: "hidden", projectId: "one", untracked: true, status: "active", lastMessageAt: "2026-12-01" },
       { id: "new", projectId: "two", status: "active", title: "New", lastMessageAt: "2026-02-01" },
@@ -103,12 +107,21 @@ test("recent chats span projects, sort by activity and return only assistant tex
 
 test("recent chats apply default and maximum limits before reading transcripts", async (t) => {
   let reads = 0;
+  let inFlight = 0;
+  let peak = 0;
   const get = await recentFixture(t, {
     chats: Array.from({ length: 55 }, (_, index) => ({ id: String(index), projectId: "one", status: "active", createdAt: String(index).padStart(2, "0") })),
-    readTranscript: async () => { reads++; return { messages: [] }; },
+    readTranscript: async () => {
+      reads++;
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight--;
+      return { messages: [] };
+    },
   });
   assert.equal((await get()).length, 20);
   assert.equal(reads, 20);
+  assert.equal(peak, 4);
   reads = 0;
   assert.equal((await get("?limit=500")).length, 50);
   assert.equal(reads, 50);
@@ -154,4 +167,21 @@ test("recent chats use the transcript page cursor when the latest page has no re
   });
   assert.equal((await get())[0].latestReply.text, "Last reply");
   assert.deepEqual(reads, [undefined, "older"]);
+});
+
+test("recent chats match latest and created sort rules without updatedAt", async (t) => {
+  for (const chatSort of ["latest", "created"]) {
+    const get = await recentFixture(t, {
+      chatSort,
+      chats: [
+        { id: "a", projectId: "one", status: "active", createdAt: "2026-01-01", updatedAt: "2026-12-01" },
+        { id: "b", projectId: "one", status: "active", createdAt: "2026-02-01" },
+        { id: "c", projectId: "one", status: "active", createdAt: "2026-02-01", lastMessageAt: "2026-03-01" },
+        { id: "d", projectId: "one", status: "active", createdAt: "2025-01-01", lastMessageAt: Date.parse("2026-04-01") },
+      ],
+      readTranscript: async () => ({ messages: [] }),
+    });
+    assert.deepEqual((await get()).map((chat) => chat.chatId),
+      chatSort === "latest" ? ["d", "c", "b", "a"] : ["c", "b", "a", "d"]);
+  }
 });

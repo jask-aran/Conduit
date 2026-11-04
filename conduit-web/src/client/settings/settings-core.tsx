@@ -1565,6 +1565,9 @@ export function Settings(props: {
                           </Button>
                         </SettingLine>
                       </Show>
+                      <SettingLine label="Slot names" title="Show each slot's name beside it in Float's radial.">
+                        <Switch label="Slot names" checked={floatStatus()!.slotNames} disabled={floatBusy()} onChange={(slotNames) => void conduitFloat.setSlotNames(slotNames).then(setFloatStatus).catch(floatFailure)} />
+                      </SettingLine>
                       <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
                         <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
                       </SettingLine>

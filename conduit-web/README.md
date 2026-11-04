@@ -488,7 +488,7 @@ values use the provider format and are never returned by the API.
   process view on the global runtime channel.
 - `GET /v0/profiles` lists profile identity and backend metadata
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
-- `GET /v0/chats/recent?limit=N` returns `{ chats: [{ chatId, title, projectId, projectName, lastMessageAt, liveStatus, latestReply: { text, at } | null }] }` across projects, newest activity first (default 20, max 50); reply text is plain text capped at 2000 characters. Subagent and untracked chats are excluded.
+- `GET /v0/chats/recent?limit=N` returns `{ chats: [{ chatId, title, projectId, projectName, lastMessageAt, liveStatus, latestReply: { text, at } | null }] }` across listed projects, using the dashboard/sidebar chat sort preference (latest message, falling back to creation time, or creation time; descending chat ID breaks ties; default 20, max 50). Only active, tracked chats are included; archived chats, drafts and subagents are excluded. Reply text is plain text capped at 2000 characters, with at most four chats reading replies concurrently.
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
   `?preview=1` serves supported raster images inline
 - `GET /v0/chats/:id/attachments`

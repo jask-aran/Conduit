@@ -64,9 +64,18 @@ public final class ConduitContext {
         }
     }
 
+    /**
+     * Whether the person has turned Float screen context on: the Accessibility setting itself, not whether the
+     * service is bound right now (after Conduit's process dies it is unbound for a while though still allowed).
+     */
     public static boolean screenReaderOn(Context context) {
-        AccessibilityManager manager = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         ComponentName expected = new ComponentName(context, ConduitScreenReader.class);
+        String enabled = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (enabled != null) for (String each : enabled.split(":")) {
+            ComponentName name = ComponentName.unflattenFromString(each);
+            if (expected.equals(name)) return true;
+        }
+        AccessibilityManager manager = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
         for (AccessibilityServiceInfo info : manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
             if (expected.equals(ComponentName.unflattenFromString(info.getId()))) return true;
         }
@@ -87,11 +96,8 @@ public final class ConduitContext {
         String id = register(callback);
         afterFrames(() -> {
             ConduitScreenReader reader = ConduitScreenReader.instance;
-            if (screenReaderOn(app)) {
-                if (reader == null) {
-                    fail(id, "screenshot", "Screen reader is not ready");
-                    return;
-                }
+            // Allowed but not bound yet (Android rebinds it a while after Conduit's process restarts): the consent path.
+            if (screenReaderOn(app) && reader != null) {
                 SCREENS.put(id, reader.readScreen());
                 if (Build.VERSION.SDK_INT >= 30) {
                     reader.capture(id);

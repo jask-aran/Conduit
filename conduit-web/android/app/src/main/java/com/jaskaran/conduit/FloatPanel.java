@@ -523,6 +523,9 @@ public abstract class FloatPanel {
     /** The last answer to each panel's list, so a panel opens at its full size and does not grow mid-rise. */
     private static final java.util.Map<String, Object> LAST = new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** The last answer for key, or null (another panel's list: Recent reads the places for their glyphs). */
+    static Object last(String key) { return LAST.get(key); }
+
     /** Fetches a list ahead of its panel (as the radial opens), so even a first open has its rows. */
     static <T> void warm(String key, HubCall<T> call) {
         HUB.execute(() -> { try { LAST.put(key, call.run()); } catch (ConduitHubClient.Failure | RuntimeException ignored) {} });

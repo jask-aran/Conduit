@@ -75,6 +75,7 @@ public class ConduitFloatPlugin extends Plugin {
             .put("micPermission", microphoneGranted(getContext()))
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
             .put("holdToTalk", preferences(getContext()).getBoolean("holdToTalk", false))
+            .put("slotNames", preferences(getContext()).getBoolean("slotNames", false))
             .put("screenContext", ConduitContext.screenReaderOn(getContext()));
     }
 
@@ -89,6 +90,13 @@ public class ConduitFloatPlugin extends Plugin {
             if (!"jbot".equals(target) && !"chat".equals(target)) { call.reject("Invalid hold target"); return; }
             edit.putString("holdTarget", target);
         }
+        edit.apply();
+        call.resolve(view());
+    }
+
+    @PluginMethod public void setSlotNames(PluginCall call) {
+        android.content.SharedPreferences.Editor edit = preferences(getContext()).edit();
+        if (call.hasOption("slotNames")) edit.putBoolean("slotNames", Boolean.TRUE.equals(call.getBoolean("slotNames")));
         edit.apply();
         call.resolve(view());
     }

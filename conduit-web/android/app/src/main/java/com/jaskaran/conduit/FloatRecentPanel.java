@@ -55,6 +55,29 @@ public final class FloatRecentPanel extends FloatPanel {
 
     private void refresh() { load("recent", () -> hub.recentChats(20), values -> { chats = values; showList(); }, this::refresh); }
 
+    /** The chat's place: Conduit's mark for a loose chat, a folder for a project, a workspace's own glyph and colour. */
+    private android.widget.ImageView placeGlyph(ConduitHubClient.RecentChat chat) {
+        ConduitHubClient.Place place = null;
+        Object places = FloatPanel.last("places");
+        if (places instanceof java.util.List) for (Object each : (java.util.List<?>) places)
+            if (each instanceof ConduitHubClient.Place && ((ConduitHubClient.Place) each).id.equals(chat.projectId)) place = (ConduitHubClient.Place) each;
+        android.widget.ImageView view = new android.widget.ImageView(context);
+        view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        int icon = R.drawable.ic_stat_conduit;
+        Integer colour = null;
+        if (place != null && !place.isChat) {
+            if (!place.isWorkspace) icon = FloatGlyphs.icon("folder");
+            else {
+                icon = "monogram".equals(place.appearanceMode) ? FloatGlyphs.icon("folder") : FloatGlyphs.icon(place.appearanceValue);
+                colour = FloatGlyphs.colour(place.appearanceColour);
+            }
+        } else if (place == null && !"chat".equals(chat.projectId)) icon = FloatGlyphs.icon("folder");
+        view.setImageResource(icon);
+        view.setImageTintList(android.content.res.ColorStateList.valueOf(colour != null ? colour : SECONDARY));
+        view.setContentDescription(chat.projectName);
+        return view;
+    }
+
     private void stopPulse() {
         if (pulse != null) { pulse.cancel(); pulse = null; }
         dots.clear();
@@ -76,6 +99,11 @@ public final class FloatRecentPanel extends FloatPanel {
             // Title with its time as the row's meta (Paper Mono caption, tabular) at the end; the project under it.
             LinearLayout head = new LinearLayout(context);
             head.setGravity(Gravity.CENTER_VERTICAL);
+            // The place as its glyph before the title, as the app's lists: no line of its own.
+            android.widget.ImageView glyph = placeGlyph(chat);
+            LinearLayout.LayoutParams glyphSize = new LinearLayout.LayoutParams(dp(14), dp(14));
+            glyphSize.setMargins(0, 0, dp(8), 0);
+            head.addView(glyph, glyphSize);
             head.addView(rowText(title(chat)), new LinearLayout.LayoutParams(0, -2, 1));
             LinearLayout meta = head;
             if ("running".equals(chat.liveStatus)) {
@@ -96,9 +124,6 @@ public final class FloatRecentPanel extends FloatPanel {
             time.setPadding(dp(8), 0, 0, 0);
             meta.addView(time);
             row.addView(head);
-            TextView project = detail(chat.projectName);
-            project.setPadding(0, dp(2), 0, 0);
-            row.addView(project);
             if (chat.latestReply != null) {
                 TextView preview = detail(chat.latestReply.text.replaceAll("\\s+", " "));
                 preview.setSingleLine(false);

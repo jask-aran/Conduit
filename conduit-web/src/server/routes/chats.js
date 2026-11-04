@@ -126,16 +126,33 @@ export function registerChatRoutes(app, {
       const limit = Math.min(50, Math.max(1, Math.trunc(Number(request.query.limit) || 20)));
       const places = new Map((await projects.list()).map((project) => [project.id, project]));
       const live = new Map(backends.list().map((process) => [process.chatId, process]));
-      const activity = (chat) => chat.lastMessageAt || chat.updatedAt || chat.createdAt || "";
-      const chats = registry.list().filter((chat) => chat.status !== "subagent" && !chat.untracked && places.has(chat.projectId))
+      const sort = preferences?.get().chatSort === "created" ? "created" : "latest";
+      // Match the dashboard/sidebar comparator, including numeric timestamps.
+      const activity = (chat) => {
+        const value = sort === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt;
+        if (typeof value === "string") return value;
+        if (typeof value !== "number" || !Number.isFinite(value)) return "";
+        const date = new Date(value < 1_000_000_000_000 ? value * 1_000 : value);
+        return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+      };
+      const chats = registry.list().filter((chat) => chat.status === "active" && !chat.untracked && places.has(chat.projectId))
         .sort((a, b) => activity(b).localeCompare(activity(a)) || b.id.localeCompare(a.id)).slice(0, limit);
       response.set("Cache-Control", "no-store");
-      response.json({ chats: await Promise.all(chats.map(async (chat) => ({
-        chatId: chat.id, title: chat.title || "", projectId: chat.projectId,
-        projectName: places.get(chat.projectId).name, lastMessageAt: chat.lastMessageAt || null,
-        liveStatus: live.get(chat.id)?.status || null,
-        latestReply: await latestReply(chat, places.get(chat.projectId)),
-      }))) });
+      const results = new Array(chats.length);
+      let nextIndex = 0;
+      await Promise.all(Array.from({ length: Math.min(4, chats.length) }, async () => {
+        while (nextIndex < chats.length) {
+          const index = nextIndex++;
+          const chat = chats[index];
+          results[index] = {
+            chatId: chat.id, title: chat.title || "", projectId: chat.projectId,
+            projectName: places.get(chat.projectId).name, lastMessageAt: chat.lastMessageAt || null,
+            liveStatus: live.get(chat.id)?.status || null,
+            latestReply: await latestReply(chat, places.get(chat.projectId)),
+          };
+        }
+      }));
+      response.json({ chats: results });
     } catch (error) { next(error); }
   });
 

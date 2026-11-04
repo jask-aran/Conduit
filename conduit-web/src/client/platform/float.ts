@@ -12,6 +12,8 @@ export interface FloatStatus {
   micPermission: boolean;
   /** Hold to talk: a hold on Float records at once (off by default; a tap opens the radial either way). */
   holdToTalk: boolean;
+  /** Show each slot's name beside it in Float's radial. */
+  slotNames: boolean;
   /** Float screen context, the Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
   screenContext: boolean;
   /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
@@ -29,6 +31,7 @@ const nativeFloat = registerPlugin<{
   status(): Promise<FloatStatus>;
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
   openOverlaySettings(): Promise<FloatStatus>;
+  setSlotNames(options: { slotNames: boolean }): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   openScreenContextSettings(): Promise<FloatStatus>;
   setUpScreenContext(): Promise<FloatStatus>;
@@ -62,6 +65,7 @@ export const conduitFloat = {
   /** Make Conduit the assistant, then (Samsung) the side key's press and hold, each step skippable. */
   setUpAssistant: () => enqueue(() => nativeFloat.setUpAssistant()),
   openSideKeySettings: () => enqueue(() => nativeFloat.openSideKeySettings()),
+  setSlotNames: (slotNames: boolean) => enqueue(() => nativeFloat.setSlotNames({ slotNames })),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
