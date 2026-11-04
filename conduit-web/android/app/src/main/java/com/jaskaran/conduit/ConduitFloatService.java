@@ -71,7 +71,12 @@ public class ConduitFloatService extends Service {
 
     static void setAppForeground(boolean foreground) {
         appForeground = foreground;
-        if (active != null) { active.updateVisibility(); active.updateDiscard(); }
+        if (active != null) {
+            // Conduit in front: the radial and any panel over it close (an assist from inside the app opened them).
+            if (foreground) { if (active.radial != null) active.radial.hideNow(); active.closePanel(); }
+            active.updateVisibility();
+            active.updateDiscard();
+        }
     }
 
     private void updateVisibility() {

@@ -72,8 +72,13 @@ public class ConduitFloatPlugin extends Plugin {
      * cannot change a private system setting, only read it; unreadable counts as on so the step is offered.
      */
     private boolean circleToSearchOn() {
-        try { return Settings.System.getInt(getContext().getContentResolver(), "touch_and_hold_to_search", 0) == 1; }
-        catch (RuntimeException unreadable) { return Build.MANUFACTURER.equalsIgnoreCase("samsung"); }
+        // The key is hidden from apps targeting recent Android (a read gives nothing), so on Samsung it counts as on
+        // until the person has been through Navigation bar for it.
+        String value = null;
+        try { value = Settings.System.getString(getContext().getContentResolver(), "touch_and_hold_to_search"); }
+        catch (RuntimeException unreadable) {}
+        if (value != null) return "1".equals(value);
+        return Build.MANUFACTURER.equalsIgnoreCase("samsung") && !preferences(getContext()).getBoolean("circleHandled", false);
     }
 
     private JSObject view() {
@@ -224,6 +229,7 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     @ActivityCallback private void circleReturned(PluginCall call, ActivityResult result) {
+        preferences(getContext()).edit().putBoolean("circleHandled", true).apply();
         if (call == null) { permissionFlow = false; return; }
         nextAfterAssistant(call);
     }
@@ -256,8 +262,8 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     @ActivityCallback private void restrictedReturned(PluginCall call, ActivityResult result) {
+        preferences(getContext()).edit().putBoolean("restrictedHandled", true).apply();
         if (call == null) { permissionFlow = false; return; }
-        if (restrictedSettingsBlocked()) { permissionFlow = false; call.resolve(view()); return; }
         accessibilityStep(call);
     }
 
@@ -290,15 +296,13 @@ public class ConduitFloatPlugin extends Plugin {
             .show();
     }
 
-    /** Android 13+ restricts Accessibility for an app installed from a file until App info allows it. */
+    /**
+     * Android 13+ restricts Accessibility for an app not installed from a store (a file, adb, Conduit's own updater:
+     * Conduit is never in a store) until App info's Allow restricted settings. The op itself is hidden from apps, so
+     * the step shows until the person has been through App info for it (remembered once they come back).
+     */
     static boolean restrictedSettingsBlocked(Context context) {
-        if (Build.VERSION.SDK_INT < 33) return false;
-        try {
-            android.app.AppOpsManager ops = (android.app.AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
-            int mode = ops.unsafeCheckOpNoThrow("android:access_restricted_settings",
-                context.getApplicationInfo().uid, context.getPackageName());
-            return mode != android.app.AppOpsManager.MODE_ALLOWED;
-        } catch (RuntimeException unknownOp) { return false; }
+        return Build.VERSION.SDK_INT >= 33 && !preferences(context).getBoolean("restrictedHandled", false);
     }
 
     private boolean restrictedSettingsBlocked() { return restrictedSettingsBlocked(getContext()); }
