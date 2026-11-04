@@ -1,7 +1,7 @@
 import { Frost } from "./frost";
 import { children, createComputed, createSignal, Index, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { Aura } from "./pill";
-import { glide, MoveContext } from "./motion";
+import { collapse, glide, MoveContext } from "./motion";
 
 /**
  * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
@@ -34,20 +34,20 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
   // Each holder tells the parts it holds how they move (motion.ts, MoveScope): the edit pills', the field's, the row's
   // and the track's. The edit pills are resolved under theirs.
   const under = () => !!props.under;
-  const edit = children(() => <MoveContext.Provider value={{ out: () => !shows("edit"), move: "tuck" }}>{props.edit}</MoveContext.Provider>);
+  const edit = children(() => <MoveContext.Provider value={{ out: () => !shows("edit") }}>{props.edit}</MoveContext.Provider>);
   // The captions stay mounted while they go, until their ground has faded.
   const [captions, setCaptions] = createSignal(shows("captions"));
   createComputed(() => { if (shows("captions")) setCaptions(true); });
   let root!: HTMLDivElement, fieldBox!: HTMLDivElement;
   // The field's height, kept on the root: the captions' words going are clipped above it (it grows as the transcript lands).
-  onMount(() => { const observer = new ResizeObserver(() => root.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`)); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
+  onMount(() => { onCleanup(collapse(fieldBox)); const observer = new ResizeObserver(() => root.style.setProperty("--under-field", `${fieldBox.offsetHeight}px`)); observer.observe(fieldBox); onCleanup(() => observer.disconnect()); });
   const surface = () => props.layout === "surface";
   return <div ref={root} class="ui-phone-composer" data-state={state()} data-show={PHONE_COMPOSER_STATES[state()].join(" ")} data-layout={surface() ? "surface" : undefined} data-under={props.under ? "" : undefined} data-opening={props.opening ? "" : undefined} style={{ "--voice-level": shows("orb") && props.level !== undefined ? String(props.level) : undefined }}>
     <div class="ui-composer-stack">{props.riders}</div>
     <Show when={edit()}><div class="ui-phone-edit" aria-hidden={shows("edit") ? undefined : "true"}>{edit()}</div></Show>
     <Show when={captions()}><div class="ui-voice-captions" aria-live="polite" data-leaving={shows("captions") ? undefined : ""} onAnimationEnd={(event) => { if (event.target === event.currentTarget && !shows("captions")) setCaptions(false); }}>{props.captions}</div></Show>
     <div ref={fieldBox} class="ui-phone-field" data-move="collapse" data-out={shows("field") ? undefined : ""}><MoveContext.Provider value={{ out: () => !shows("field"), under }}>{props.field}</MoveContext.Provider></div>
-    <Frost plain={!surface()} class="ui-phone-row"><MoveContext.Provider value={{ out: () => !shows("pills"), move: "tuck", under, voice: () => shows("orb") }}>{props.children}</MoveContext.Provider>
+    <Frost plain={!surface()} class="ui-phone-row"><MoveContext.Provider value={{ out: () => !shows("pills"), under, voice: () => shows("orb") }}>{props.children}</MoveContext.Provider>
       <div class="ui-voice-track" data-move={surface() ? undefined : "wipe"} data-out={shows("track") ? undefined : ""} aria-hidden={shows("track") ? undefined : "true"} onClick={() => shows("track") && props.onTrack?.()}>
         <MoveContext.Provider value={{ get out() { return surface() ? () => !shows("track") : undefined; }, voice: () => shows("orb") }}><Show when={surface()}><Aura /></Show>{props.track}</MoveContext.Provider></div></Frost>
   </div>;

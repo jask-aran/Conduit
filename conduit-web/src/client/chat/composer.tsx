@@ -135,9 +135,22 @@ export function Composer(props: {
     queueMicrotask(() => input.focus({ preventScroll: true }));
   };
   let refocusing = false;
+  // A touch anywhere outside the phone composer while typing closes it, as the native composer's does: the keyboard
+  // goes down and the composer goes idle (or stays typing with a draft). Not a menu or popover opened from it, and the
+  // touch still reaches the page (a drag scrolls the transcript).
+  onMount(() => {
+    const outside = (event: PointerEvent) => {
+      if (!voiceFirst() || nativeUp() || document.activeElement !== input) return;
+      const target = event.target as Element | null;
+      if (target?.closest(".ui-phone-composer, [data-surface='popover'], [role='menu'], [role='dialog'], [role='listbox']")) return;
+      input.blur();
+    };
+    document.addEventListener("pointerdown", outside, { capture: true, passive: true });
+    onCleanup(() => document.removeEventListener("pointerdown", outside, { capture: true }));
+  });
   // A phone has one composer, voice-first: a field over a bar of buttons.
   const voiceFirst = () => phoneLayout();
-  const phoneMode = () => !voiceFirst() ? undefined
+  const phoneMode = (focused = inputFocused(), text = hasText()) => !voiceFirst() ? undefined
     // Finishing and transcribing still look like listening, so stopping goes
     // straight to the result instead of flashing through the text row.
     // Once stopped, the row settles at once; the transcript lands when it lands.
@@ -145,7 +158,7 @@ export function Composer(props: {
     // Sent, or stop-and-send waiting on its transcript: the text pill goes at
     // once rather than holding the draft until the agent takes it.
     : sendingOut() ? "idle"
-    : inputFocused() || hasText() ? "typing" : "idle";
+    : focused || text ? "typing" : "idle";
   const [optionsOpen, setOptionsOpen] = createSignal(false);
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
@@ -901,7 +914,7 @@ export function Composer(props: {
         if (!root) throw new Error("Phone composer is not mounted");
         setNativeUp(true);
         lastNativeText = props.chat.draft();
-        nativeMirror = mirror(root, input, nativeComposer);
+        nativeMirror = mirror(root, input, nativeComposer, () => ({ empty: phoneMode(false, false) ?? "idle", text: phoneMode(false, true) ?? "idle" }));
         await nativeMirror.ready;
         nativeStarting = false;
         if (!nativeUp()) return;

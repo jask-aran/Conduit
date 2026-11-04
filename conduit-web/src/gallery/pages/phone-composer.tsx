@@ -38,7 +38,7 @@ function PhoneMotion(props: { layout?: "bar" | "surface"; initial: string }) {
   </div>;
 }
 
-export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go fold (Scroll to latest, Stop and send, Send).", rail: "Blocks",
+export const phoneComposerPage: Page = { title: "PhoneComposer", summary: "The phone's composer: Pills on the page, a PillField over a row of PillButtons, one gap apart. Its mode says what shows, and nothing reflows between them: idle (the row), typing (the field above it), listening (the voice track and captions). Circles that come and go tuck under their left neighbour (Scroll to latest, Stop and send, Send).", rail: "Blocks",
   preview: () => <div class="g-phone-composer">{phoneComposer("idle")}</div>,
   usage: `import { PhoneComposer, PillField, PillWave, Captions, PillButton, Icons } from "@/components/ui";
 

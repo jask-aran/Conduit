@@ -50,7 +50,8 @@ public class ConduitComposerPlugin extends Plugin {
     private float scale, density, restBottom, fieldWidth, minHeight, iconSize, offsetX;
     private int navBottom, imeBottom;
     private boolean changing, animating, closing, returning, seenIme;
-    private JSONObject haptics;
+    private JSONObject haptics, states, blurStates, describedRow;
+    private JSONArray describedParts;
     private ConduitMoves moves;
     private final Map<String, ConduitMoves.Part> parts = new LinkedHashMap<>();
     private boolean webFocusable, webTouchFocusable, closingSent;
@@ -79,6 +80,8 @@ public class ConduitComposerPlugin extends Plugin {
                 minHeight = (float) type.optDouble("minHeight", 44) * scale;
                 iconSize = (float) type.optDouble("iconSize", 18) * scale;
                 haptics = call.getObject("haptics");
+                states = call.getObject("states"); blurStates = call.getObject("blurStates");
+                if (states == null || blurStates == null) { call.reject("Missing composer close states"); return; }
                 JSObject spec = call.getObject("motion");
                 if (spec == null) { call.reject("Missing composer moves"); return; }
                 moves = new ConduitMoves(spec);
@@ -183,7 +186,13 @@ public class ConduitComposerPlugin extends Plugin {
                 root.post(() -> {
                     if (root == null || closing || returning) return;
                     input.requestFocus();
-                    ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
+                    /*
+                     * Through the window's insets controller, not showSoftInput: the WebView still holds the input
+                     * connection on this frame, and showSoftInput on a view that is not yet the served one is ignored
+                     * ("is not served"), leaving the keyboard to come up a second later on a retry. The controller
+                     * waits for the focused view to be served and then shows it.
+                     */
+                    androidx.core.view.WindowCompat.getInsetsController(getActivity().getWindow(), input).show(WindowInsetsCompat.Type.ime());
                     root.requestApplyInsets();
                 });
                 call.resolve();
@@ -212,10 +221,13 @@ public class ConduitComposerPlugin extends Plugin {
     private void announceClosing() {
         if (root == null || closingSent) return;
         closing = closingSent = true;
+        // Start the described close target in this UI frame, before the WebView receives closing.
+        if (describedParts != null && describedRow != null) setParts(describedParts, describedRow);
         notifyListeners("closing", value());
     }
     private void hideKeyboard() {
         if (input == null || returning) return;
+        announceClosing();
         ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0);
     }
     private boolean hitsPart(float x, float y) {
@@ -252,7 +264,41 @@ public class ConduitComposerPlugin extends Plugin {
         if (effect != null) ConduitHapticsPlugin.play(getContext(), effect.optJSONArray("steps"), effect.optString("weight", "tick"), part.view);
         JSObject event = new JSObject(); event.put("name", name); notifyListeners("action", event);
     }
+    /** The web supplies the blur rule and the library state table. Only draft presence is read locally. */
+    private JSONArray closedParts(JSONArray description, JSONObject row) {
+        // Java's trim omits some whitespace that JavaScript's draft.trim() removes.
+        boolean empty = input.getText().toString().replaceAll("^[\\x09-\\x0D\\x20\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+$", "").isEmpty();
+        JSONArray shown = states.optJSONArray(blurStates.optString(empty ? "empty" : "text"));
+        if (shown == null) throw new IllegalArgumentException("Missing composer blur target");
+        Set<String> show = new HashSet<>();
+        for (int i = 0; i < shown.length(); i++) show.add(shown.optString(i));
+        double shift = 0;
+        if (!show.contains("field")) for (int i = 0; i < description.length(); i++) {
+            JSONObject part = description.optJSONObject(i);
+            if (part != null && "holder".equals(part.optString("kind")) && !part.optBoolean("out")) {
+                JSONObject rect = part.optJSONObject("rect");
+                if (rect != null) shift = row.optDouble("y") - rect.optDouble("y");
+            }
+        }
+        JSONArray result = new JSONArray();
+        try {
+            for (int i = 0; i < description.length(); i++) {
+                JSONObject part = new JSONObject(description.getJSONObject(i).toString());
+                String kind = part.optString("kind");
+                String group = part.optBoolean("edit") ? "edit" : "field".equals(kind) || "holder".equals(kind) ? "field" : "pills";
+                // Voice and send retain their independent state, as in the web MoveScope.
+                if (!part.optBoolean("voice") && !"room".equals(kind)) part.put("out", part.optBoolean("folded") || !show.contains(group));
+                JSONObject rect = part.getJSONObject("rect");
+                if ("field".equals(group) || "edit".equals(group)) rect.put("y", rect.optDouble("y") + shift);
+                if ("holder".equals(kind) && !show.contains("field")) rect.put("height", 0);
+                result.put(part);
+            }
+        } catch (org.json.JSONException error) { throw new IllegalArgumentException("Invalid composer close parts", error); }
+        return result;
+    }
     private void setParts(JSONArray description, JSONObject row) {
+        describedParts = description; describedRow = row;
+        if (closingSent) description = closedParts(description, row);
         float bottom = (float) (row.optDouble("y") + row.optDouble("height"));
         Set<String> present = new HashSet<>();
         long roomDelay = 0;
@@ -331,6 +377,8 @@ public class ConduitComposerPlugin extends Plugin {
                     if (textChanged) input.setText(text);
                     if (textChanged || call.hasOption("selectionStart") || call.hasOption("selectionEnd")) select(start, end);
                     changing = false;
+                    JSObject nextBlurStates = call.getObject("blurStates");
+                    if (nextBlurStates != null) blurStates = nextBlurStates;
                     JSObject spec = call.getObject("motion");
                     if (spec != null) moves = new ConduitMoves(spec);
                     JSArray description = call.getArray("parts"); JSObject row = call.getObject("row");
@@ -380,7 +428,7 @@ public class ConduitComposerPlugin extends Plugin {
             View web = getBridge().getWebView();
             web.setFocusable(webFocusable); web.setFocusableInTouchMode(webTouchFocusable);
         }
-        root = field = null; input = null;
+        root = field = null; input = null; describedParts = null; describedRow = states = blurStates = null;
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::remove); }
 

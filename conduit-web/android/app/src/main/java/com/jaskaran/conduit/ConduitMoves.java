@@ -15,12 +15,13 @@ import java.util.Map;
 /** The property lists and in/out timing in components/ui/styles/motion.css. IME translation is never a move. */
 final class ConduitMoves {
     private final long quick, gentle;
-    private final Interpolator arrive, leave, change;
+    private final Interpolator arrive, leave, change, room;
     private final boolean reduced;
 
     ConduitMoves(JSONObject spec) {
         quick = Math.max(0, spec.optLong("quick")); gentle = Math.max(0, spec.optLong("gentle"));
         arrive = curve(spec.optJSONArray("arrive")); leave = curve(spec.optJSONArray("leave")); change = curve(spec.optJSONArray("change"));
+        room = curve(spec.optJSONArray("room"));
         reduced = spec.optBoolean("reducedMotion");
     }
     private static Interpolator curve(JSONArray points) {
@@ -77,24 +78,22 @@ final class ConduitMoves {
         long layoutTime = gentle, layoutDelay = roomDelay, fadeTime = out ? quick : gentle, fadeDelay = 0;
         Interpolator fadeCurve = out ? leave : arrive;
         switch (move) {
-            case "fold":
-                layoutDelay = out && folded ? quick : roomDelay;
-                fadeTime = quick; fadeDelay = out ? 0 : quick;
-                break;
             case "tuck": break;
-            case "collapse": layoutTime = 0; layoutDelay = out ? quick : 0; break;
+            case "collapse": layoutDelay = out ? quick : 0; break;
             case "wipe": fadeTime = out ? quick : 0; fadeCurve = leave; break;
             case "give": fadeTime = 0; break;
             case "fade":
-                // Visibility takes its room at once; a disappearing field keeps its geometry through its quick fade.
-                if (field && (initial || out || part.state.optBoolean("out"))) { layoutTime = 0; layoutDelay = out ? quick : 0; }
+                // The field follows its collapse holder, after its quick fade on the way out.
+                if (field) layoutDelay = out ? quick : 0;
                 break;
             default: throw new IllegalArgumentException("Unknown composer move: " + move);
         }
-        to(part, "x", x, layoutTime, layoutDelay, arrive, initial, v -> part.x = v);
-        to(part, "y", y, layoutTime, layoutDelay, arrive, initial, v -> part.y = v);
-        to(part, "width", width, layoutTime, layoutDelay, arrive, initial, v -> part.width = v);
-        to(part, "height", height, layoutTime, layoutDelay, arrive, initial, v -> part.height = v);
+        boolean fieldRoom = field || "collapse".equals(move);
+        Interpolator layoutCurve = fieldRoom ? room : arrive;
+        to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
+        to(part, "y", y, layoutTime, layoutDelay, layoutCurve, initial, v -> part.y = v);
+        to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
+        to(part, "height", field && out ? 0 : height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
         to(part, "opacity", out ? 0 : 1, fadeTime, fadeDelay, fadeCurve, initial, v -> part.opacity = v);
         to(part, "dim", state.optBoolean("under") ? .38f : 1, quick, 0, change, initial, v -> part.dim = v);
         to(part, "clip", "wipe".equals(move) && out ? 1 : 0, gentle, 0, arrive, initial, v -> part.clip = v);

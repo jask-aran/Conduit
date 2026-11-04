@@ -918,7 +918,11 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     const composerStack = transcriptRoot.closest(".ui-dash-conversation") ? null
       : transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
     // The thread reserves the composer's measured height (components/ui/dock-inset.ts, as a room's messages do).
-    const stopClearingDock = composerStack ? clearDock(transcriptRoot, composerStack, scheduleLatestButtonAnchor) : null;
+    const stopClearingDock = composerStack ? clearDock(transcriptRoot, composerStack, () => {
+      // Reserve and follow in the same resize delivery, before paint, through the field's room glide.
+      if (following()) setViewportScrollTop(viewportMaxScrollTop(), false);
+      scheduleLatestButtonAnchor();
+    }) : null;
     // The composer slides back in as a transform, which no size change reports,
     // and it is measured with that transform applied -- so again once it lands.
     const composerLanded = (event: TransitionEvent) => {

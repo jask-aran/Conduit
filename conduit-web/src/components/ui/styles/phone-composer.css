@@ -1,7 +1,7 @@
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. What shows is its state table (PHONE_COMPOSER_STATES
    in index.tsx), rendered on the root as data-show: field, pills, edit, track, captions, orb (the mic as an orb pill).
    Every move between two states follows from three moves, each a part's own -- none depends on the state it came from:
-   - In: its room at once (or it is revealed by a clip), then it fades in over the gentle duration, from the first frame.
+   - In: its room opens (the field glides, or a part is revealed by a clip), and it fades in over gentle from the first frame.
    - Out: it fades over the quick duration from the first frame; its room goes after (or, a row pill, with it: it
      slides under its left neighbour at its own size, so it is never seen squeezed).
    - In place (the mic's shape, the track's wipe, the room before the orb): over the gentle duration, from the first frame.
@@ -21,9 +21,11 @@
 .ui-phone-row > .ui-pill[data-folded] { z-index: 0; }
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { z-index: 2; }
 /* Its parts move by the library's moves (styles/motion.css); the state table says, through each holder's MoveScope,
-   which are out. The field: its own row above the controls, a collapse (its room goes once its frost has faded itself:
-   a fade). */
+   which are out. The field: a measured collapse on its holder (motion.ts). Line changes and room taken/given
+   glide over --duration-gentle on --ease-room; room given waits for its frost's quick fade. */
 .ui-phone-field { --collapse-gap: var(--space-md); }
+/* The frost fills the moving holder. Its textarea keeps its natural height, measured independently by collapse. */
+.ui-phone-field > .ui-pill-field { height: 100%; align-items: flex-start; }
 
 /* The row's pills tuck (motion.css): not shown, they fade where they stand (the track takes their place); a folded one
    (Send with nothing to send, Scroll to latest at the latest) keeps its size and slides under its left neighbour as it
@@ -97,5 +99,3 @@
 .ui-phone-composer[data-measuring], .ui-phone-composer[data-measuring] * {
   transition: none !important; animation: none !important; visibility: hidden !important;
 }
-/* Native mirroring grows the hidden frost with the native field; its text stays inside that moving frame. */
-.ui-phone-composer[data-native-mirror] .ui-pill-field { overflow: clip; }

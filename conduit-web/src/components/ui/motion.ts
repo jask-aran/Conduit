@@ -36,8 +36,6 @@ export function easing(token: `--ease-${string}`, element: Element = document.do
 export type MoveScope = {
   /** The parts are not shown: each fades itself (a voice control stays). */
   out?: Accessor<boolean>;
-  /** How a part that folds gives its room: fold (to nothing, after it fades) or tuck (under its neighbour, as it fades). */
-  move?: "fold" | "tuck";
   /** A menu opened from one of them is over the rest: they dim at once, its opener lit. */
   under?: Accessor<boolean>;
   /** The voice is on (listening): an Aura among them glows. */
@@ -57,4 +55,59 @@ export function glide(element: HTMLElement): () => void {
   });
   observer.observe(element);
   return () => observer.disconnect();
+}
+
+/** Measured collapse: content and room glide together; out waits for the content's quick fade. */
+export function collapse(holder: HTMLElement): () => void {
+  const content = holder.firstElementChild;
+  if (!(content instanceof HTMLElement)) return () => {};
+  const input = content.querySelector("textarea");
+  const measure = () => {
+    if (!input) return content.getBoundingClientRect().height;
+    const style = getComputedStyle(content);
+    return Math.max(parseFloat(style.minHeight) || 0, input.getBoundingClientRect().height
+      + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0)
+      + (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0));
+  };
+  const preference = matchMedia(REDUCED_MOTION_QUERY);
+  let out = holder.hasAttribute("data-out");
+  let height = out ? 0 : measure();
+  let margin = parseFloat(getComputedStyle(holder).marginBlockEnd) || 0;
+  let animation: Animation | undefined;
+  const overflow = holder.style.overflow;
+  const sync = () => {
+    const nextOut = holder.hasAttribute("data-out");
+    const nextHeight = nextOut ? 0 : measure();
+    const gap = parseFloat(getComputedStyle(holder.parentElement ?? holder).rowGap) || 0;
+    const nextMargin = nextOut ? -gap : 0;
+    if (height === nextHeight && margin === nextMargin && !preference.matches) return;
+    const fromHeight = animation ? holder.getBoundingClientRect().height : height;
+    const fromMargin = animation ? parseFloat(getComputedStyle(holder).marginBlockEnd) || 0 : margin;
+    animation?.cancel();
+    const delay = nextOut && !out ? duration("--duration-quick", holder) : 0;
+    out = nextOut; height = nextHeight; margin = nextMargin;
+    animation = undefined;
+    holder.style.overflow = overflow;
+    if (preference.matches) return;
+    holder.style.overflow = "clip";
+    const current = holder.animate([
+      { height: `${fromHeight}px`, marginBlockEnd: `${fromMargin}px` },
+      { height: `${height}px`, marginBlockEnd: `${margin}px` },
+    ], { duration: duration("--duration-gentle", holder), easing: easing("--ease-room", holder), delay, fill: "both" });
+    animation = current;
+    current.onfinish = () => {
+      if (animation !== current) return;
+      animation = undefined; current.cancel(); holder.style.overflow = overflow;
+    };
+  };
+  const sizes = new ResizeObserver(sync);
+  sizes.observe(content);
+  if (input) sizes.observe(input);
+  const state = new MutationObserver(sync);
+  state.observe(holder, { attributes: true, attributeFilter: ["data-out"] });
+  preference.addEventListener("change", sync);
+  return () => {
+    sizes.disconnect(); state.disconnect(); preference.removeEventListener("change", sync);
+    animation?.cancel(); holder.style.overflow = overflow;
+  };
 }

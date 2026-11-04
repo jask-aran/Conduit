@@ -28,7 +28,7 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: Pi
 /** haptic: a press that acts at once (the mic, Send, Stop) is felt on a phone (see haptics.ts). */
 export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; haptic?: Haptic; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
-  // Its moves (styles/motion.css): its scope's (fold alone, tuck in a PhoneComposer's row); out when folded, or when its
+  // Its move (styles/motion.css): a tuck, wherever it is; out when folded, or when its
   // scope's parts are out and it is not a voice control (they stay while listening); dimmed under its scope's menu
   // unless it opened it.
   const scope = useMoveScope();
@@ -38,7 +38,7 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
     onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
   } : {}) as PillAttrs;
   const pill = <Frost class="ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
-    data-haptic={props.haptic} data-move={scope.move ?? "fold"} data-out={out() ? "" : undefined} data-under={scope.under?.() && !props.open ? "" : undefined}
+    data-haptic={props.haptic} data-move="tuck" data-out={out() ? "" : undefined} data-under={scope.under?.() && !props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</Frost>;
