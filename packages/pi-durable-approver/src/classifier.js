@@ -24,13 +24,9 @@ Rate:
 - always: true if any "always" rule could reasonably apply to this action.
 - reason: one plain sentence the person will read, naming the rule that decided it.`;
 
-const QUICK = `${SYSTEM}
+const QUICK = `First pass. Reply with exactly one word: ALLOW only if the action is low risk, plainly permitted by a "may" rule, and no "always" rule or limit could apply. Otherwise reply FLAG.`;
 
-First pass. Reply with exactly one word: ALLOW only if the action is low risk, plainly permitted by a "may" rule, and no "always" rule or limit could apply. Otherwise reply FLAG.`;
-
-const FULL = `${SYSTEM}
-
-Reply with JSON only, no prose: {"risk": "...", "authorization": "...", "always": true|false, "reason": "..."}`;
+const FULL = `Reply with JSON only, no prose: {"risk": "...", "authorization": "...", "always": true|false, "reason": "..."}`;
 
 // The action may be long; past this the judge is told what it did not see, and the gate will not allow beyond low risk.
 const ACTION_MAX = 6000;
@@ -89,7 +85,7 @@ export function parseVerdict(text) {
  * One attempt at a rating: the quick pass, then the reasoned one unless the quick pass said ALLOW. `complete` is
  * `api.models.completeSimple` (pi-ai resolves the provider's auth). Throws on a provider error or a malformed reply.
  */
-export async function rate({ complete, model, policy, words, held, canonicalCommands, signal }) {
+export async function rate({ complete, model, policy, words, held, canonicalCommands, instructions = SYSTEM, signal }) {
   const { user, truncated } = promptOf(policy, words, held, canonicalCommands);
   const messages = [{ role: "user", content: user, timestamp: Date.now() }];
   // What the judge spent, both passes, as pi-ai reports it (the host counts it as it counts the agent's own requests).
@@ -103,10 +99,10 @@ export async function rate({ complete, model, policy, words, held, canonicalComm
   // The quick pass may only clear what cannot reach anyone or be lost: a truncated action, one that cannot be undone,
   // or one with recipients always gets the reasoned pass.
   const quick = !truncated && held.reversible !== false && !held.recipients?.length;
-  if (quick && /^ALLOW\.?$/i.test(await ask(QUICK, 16))) {
+  if (quick && /^ALLOW\.?$/i.test(await ask(`${instructions}\n\n${QUICK}`, 16))) {
     return { risk: "low", authorization: "high", always: false, reason: "Plainly within your rules.", truncated, passes: 1, usage };
   }
-  const full = await ask(FULL, 400);
+  const full = await ask(`${instructions}\n\n${FULL}`, 400);
   try { return { ...parseVerdict(full), truncated, passes: 2, usage }; } catch (error) { throw Object.assign(error, { usage }); }
 }
 

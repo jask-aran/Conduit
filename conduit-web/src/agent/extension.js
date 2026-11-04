@@ -1,6 +1,7 @@
-import { defineExtension, wrapSection } from "@earendil-works/pi-durable";
+import { defineExtension, section, wrapSection } from "@earendil-works/pi-durable";
 import { forkRecord, routineCompactionGuard, routineToolGuard } from "./routine-task.js";
 import { AgentDoc } from "./agent-doc.js";
+import { readPolicy, renderRules } from "./approval-policy.js";
 import { ChatTools } from "./chat-tools.js";
 import { EventTools } from "./events.js";
 import { FeedTools } from "./feeds.js";
@@ -30,7 +31,8 @@ export function AgentExtension(runtime, installed) {
     tools: own,
     hooks: [routineToolGuard(runtime), routineCompactionGuard()],
     tasks: parts.flatMap((part) => part.tasks || []),
-    sections: parts.flatMap((part) => part.sections || []),
+    // The person's approval rules (live-approval-rules), so it knows what will be asked before it tries.
+    sections: [...parts.flatMap((part) => part.sections || []), section("approval-rules", async () => runtime.agent?.enabled() ? renderRules((await readPolicy(runtime.agent)).policy) : undefined)],
     // The device tools are another extension's; the agent's own outward tools are its own.
     wraps: [...policyWraps(runtime, [...installed, ...own]), ...["agent-memory", "agent-inbox"].map((key) =>
       wrapSection(key, (source) => ({ ...source, tag: false, render: async (input, context) => {

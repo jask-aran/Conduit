@@ -464,6 +464,8 @@ values use the provider format and are never returned by the API.
 - `GET /v0/agent/connectors/:id/callback` completes OAuth with a single-use state.
 - `DELETE /v0/agent/connectors/:id` disconnects a connector.
 - `GET /v0/agent` includes asks and saved approval rules; `POST /v0/agent/asks/:id` decides an ask (`allow`, `always`, `deny`); `DELETE /v0/agent/rules/:id` removes one.
+- `PATCH /v0/agent` accepts `on` (boolean, default true) and `toolsDecide` (boolean, default true). Off pauses background schedules and drops event wakes; home and side threads, settings and reads stay available. Turning on uses the next future slot, with no backlog. `POST /v0/agent/hooks/:token`, `POST /v0/agent/wake` and `POST /v0/agent/schedules/:id/run` return 409 `{ error: "agent_off" }` while off.
+- `toolsDecide` lets connectors marked `gates: true` use their own approvals for calls, programs and resume. Executor is one such connector. The old `executorDecides` setting is accepted and migrated to `toolsDecide`; views and saved settings use only the new key.
 - `GET /v0/push` returns the hub's VAPID public key and its push subscriptions
   (host of each endpoint only: an endpoint is a capability). `POST
   /v0/push/subscriptions` `{ endpoint, keys: { p256dh, auth }, kind, label }`

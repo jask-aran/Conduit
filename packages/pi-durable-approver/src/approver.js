@@ -80,8 +80,9 @@ export function createApprover(options) {
     try {
       model = await options.model(api);
       const words = await options.words(api, context);
+      const instructions = await options.instructions?.(api, context);
       const run = await withRetry((signal) => rate({ complete: (...args) => api.models.completeSimple(...args), model, policy, words, held,
-        canonicalCommands: commands ?? undefined, signal }), { timeoutMs: options.timeoutMs, retries: options.retries, signal: api.signal });
+        canonicalCommands: commands ?? undefined, instructions, signal }), { timeoutMs: options.timeoutMs, retries: options.retries, signal: api.signal });
       rating = run.value;
       attempts = run.attempts;
     } catch (error) {

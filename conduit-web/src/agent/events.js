@@ -85,14 +85,14 @@ export function startEvents(agent, { nodeHub, backends, registry, chatLogs, onWo
   };
   let devices = availability();
   const submit = (work) => {
-    if (stopped || !agent.enabled()) return;
-    queue = queue.then(() => { if (!stopped && agent.enabled()) return work(); })
+    if (stopped || !agent.active()) return;
+    queue = queue.then(() => { if (!stopped && agent.active()) return work(); })
       .catch((error) => console.warn("[agent] event:", error));
   };
   const fire = async (event, targets, description, eventId = randomUUID()) => {
     const watches = Object.values((await agent.state()).watches);
     for (const watch of watches) {
-      if (stopped || !agent.enabled()) return;
+      if (stopped || !agent.active()) return;
       if (watch.event !== event || (watch.target !== null && !targets.includes(watch.target))) continue;
       try {
         // Reserve the cooldown before waking, including a wake skipped by the budget.
@@ -155,7 +155,7 @@ export function startEvents(agent, { nodeHub, backends, registry, chatLogs, onWo
   });
   const stopWorkspace = onWorkspaceChange((ids) => {
     try {
-      if (!agent.enabled()) return;
+      if (!agent.active()) return;
       for (const id of ids) {
         const now = Date.now();
         if (now - (workspaceTimes.get(id) || 0) < 60000) continue;
@@ -172,7 +172,7 @@ export function startEvents(agent, { nodeHub, backends, registry, chatLogs, onWo
 }
 
 export async function webhook(agent, token, body) {
-  if (!agent?.enabled()) return null;
+  if (!agent?.active()) return null;
   const hooks = (await agent.state()).hooks;
   if (!Object.hasOwn(hooks, token)) return null;
   const hook = hooks[token];

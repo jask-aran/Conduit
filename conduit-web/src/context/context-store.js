@@ -4,6 +4,7 @@ import { listRoutines, parseRoutine, readFolderFile, renderVars, splitFrontMatte
 import { block, promptVars, routineContext } from "../agent/routines.js";
 import { render as renderMemory } from "../agent/memory.js";
 import { renderWaitingInbox } from "../agent/inbox.js";
+import { readPolicy, renderRules } from "../agent/approval-policy.js";
 
 const safeId = /^[a-z][a-z0-9-]{0,63}$/;
 const fail = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
@@ -21,6 +22,8 @@ const live = {
     template: "<soul>\n{{SOUL.md}}\n</soul>\n\n<user>\n{{USER.md, without its fields}}\n</user>\n\n<memory>\n{{MEMORY.md}}\n</memory>\n\n<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>" },
   "live-inbox": { label: "Waiting inbox", tag: "agent-inbox", description: "How often the person wants interrupting, and what is unhandled in jbot's inbox. Home thread only.",
     template: "<agent-inbox>\nHow often the person wants to be interrupted: {{dial}} ({{what the dial means}}).\nUnhandled in your inbox ({{count}}). Tell the person what matters when it fits, then mark it with conduit_inbox handle:\n{{each unhandled entry, twelve at most}}\n</agent-inbox>" },
+  "live-approval-rules": { label: "Your approval rules", tag: "approval-rules", description: "What you allow, what is always yours and what it must never do (Settings › jbot › Approvals). Read by the approval model with each held action; jbot reads them too, so it knows what will be asked.",
+    template: "<approval-rules>\nIt may:\n{{may rules}}\n\nAlways yours:\n{{always rules}}\n\nNever:\n{{limits}}\n</approval-rules>" },
   "live-routine-context": { label: "Routine's context", description: "The files the routine opts into (its context: list), each in its own tag.",
     template: "<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>\n\n<{{user | memory | soul}}>\n{{the file, as it stands}}\n</{{user | memory | soul}}>" },
   "live-subagent-task": { label: "Task", description: "The task the parent hands it, whole: goal, context, constraints, what to report.",
@@ -111,6 +114,7 @@ export class ContextStore {
       const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8").catch(() => null);
       if (text !== null && !blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "installed", { file: path.join(folder, "SKILL.md"), skill: folder, installed: true, subagents: forSubagents(text) });
     }
+    add("approval-judge", "Approval model", "shipped", { file: new URL("../../../templates/approval/JUDGE.md", import.meta.url) });
     add("chat-naming", "Chat naming", "shipped", { file: this.chatNamingPath });
     add("web-tools", "Web tools", "shipped", { file: this.webPath, description: "Comes with the web tools: placed by Conduit after the document's own blocks." });
     add("subagent-brief", "Subagent brief", "shipped", { file: this.subagentPath });
@@ -137,7 +141,7 @@ export class ContextStore {
     // A profile's default: its own skills, then every skill installed on the hub (a saved document keeps its list).
     const installed = [...catalog.values()].filter((item) => item.installed).map((item) => item.id);
     const templateBlocks = (t) => [...new Set([t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`), ...installed])];
-    const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox"] : [])];
+    const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox", "live-approval-rules"] : [])];
     for (const t of this.templates) {
       if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
       else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t), [], [...(t.connectors ? ["notice-approval-allowed", "notice-approval-denied"] : []), "notice-report-subagent", "notice-stop"]);
@@ -152,6 +156,7 @@ export class ContextStore {
       for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id, ...legwork], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["notice-wake-routine"]);
     }
     add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base", ...legwork], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
+    add("service:approval", "service", "approval", "Approval model", ["approval-judge"], ["live-approval-rules"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");
     return docs.map((doc) => ({ ...doc, blocks: saved[doc.id]?.blocks || doc.blocks, subagents: saved[doc.id]?.subagents ?? null, modified: Boolean(saved[doc.id]) }));
@@ -171,6 +176,7 @@ export class ContextStore {
     const wrap = (text) => live[id].tag ? `<${live[id].tag}>\n${text}\n</${live[id].tag}>` : text;
     if (id === "live-jbot-files" && this.agent()?.folder) return wrap(await renderMemory(this.agent()));
     if (id === "live-inbox" && this.agent()?.enabled()) return wrap(await renderWaitingInbox(this.agent()));
+    if (id === "live-approval-rules" && this.agent()?.enabled()) return wrap(renderRules((await readPolicy(this.agent())).policy));
     return live[id].template;
   }
   async summary(item, docs, loaded = null) {
@@ -328,6 +334,7 @@ export class ContextStore {
     return { doc, sections };
   }
   async assemble(id, options = {}) { return (await this.textSections(id, options)).sections.map((item) => item.text).join("\n\n"); }
+  async approvalInstructions() { return this.assemble("service:approval"); }
   async preview(id) {
     const agent = this.agent();
     const [vars, catalog] = await Promise.all([

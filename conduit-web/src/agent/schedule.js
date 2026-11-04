@@ -193,7 +193,7 @@ function makeClock(runtime) {
         if (!schedule || schedule.cancelling || schedule.clock !== task.id) { await api.commit(() => terminal(), context); return; }
         const slot = task.state.checkpoint.slot;
         const fate = slotFate(schedule, slot, api.now());
-        const missed = fate !== "fire";
+        const missed = !agent.active() || Date.parse(slot) <= (agent.resumedAt || 0) || fate !== "fire";
         // Admission is idempotent. The lifecycle gathers after its prerequisites finish.
         const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
         let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
@@ -224,14 +224,16 @@ function makeClock(runtime) {
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
           // Taken already: run by hand while it was due (POST /v0/agent/schedules/:id/run).
           const taken = current.lastAt && Date.parse(current.lastAt) >= Date.parse(slot);
-          if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
-          else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, null, slot);
-          else if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
-          else if (!schedule.routine && !missed && !overBudget && !taken) {
-            await agent.spawnRun(tx, api.conversationId, {
-              key: `${current.id}:${slot}`, kind: current.feed ? "feed" : "checkback", title: current.title,
-              task: current.feed ? current.feed.source.task : current.task,
-            });
+          if (agent.active() && Date.parse(slot) > (agent.resumedAt || 0)) {
+            if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
+            else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, null, slot);
+            else if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
+            else if (!schedule.routine && !missed && !overBudget && !taken) {
+              await agent.spawnRun(tx, api.conversationId, {
+                key: `${current.id}:${slot}`, kind: current.feed ? "feed" : "checkback", title: current.title,
+                task: current.feed ? current.feed.source.task : current.task,
+              });
+            }
           }
           if (current.kind === "rules") {
             current.dailyLastAt ||= {};
@@ -367,6 +369,7 @@ export function ScheduleTools(runtime) {
 }
 
 const seeding = new WeakMap();
+const clockOn = new WeakMap();
 
 /**
  * From before routines, once: a feed that reads (a program, a script) becomes a routine file (its task, gate never,
@@ -416,6 +419,8 @@ export async function seedSchedules(agent) {
     const conversation = await harness.conversation(conversationId, agent.context);
     if (!conversation) return;
     const settings = agent.settings();
+    const resumed = clockOn.get(agent) === false && settings.on !== false;
+    clockOn.set(agent, settings.on !== false);
     await feedsToRoutines(agent, harness, conversation);
     // The routine files are the clocks the hub owns: one `r-<name>` each. A built-in schedule from before them (the
     // brief's, the heartbeat's) or one whose routine file went is removed.
@@ -425,10 +430,12 @@ export async function seedSchedules(agent) {
     for (const id of ids) {
       const old = (await agent.state()).schedules[id];
       if (old?.cancelling) continue;
-      const target = Object.hasOwn(desired, id) ? desired[id] : old?.system ? null : old;
+      let target = Object.hasOwn(desired, id) ? desired[id] : old?.system ? null : old;
+      // A one-off that passed while off is finished; recurring clocks resume at a future slot.
+      if (resumed && target?.kind === "once" && Date.parse(target.at) <= Date.now()) target = null;
       const task = old?.clock ? await harness.getTask(old.clock, agent.context) : null;
       const live = task && !task.abortRequested && !["terminal", "completing"].includes(task.state.status);
-      const changed = old && (!target || !live || task.conversationId !== conversationId || old.kind !== target.kind || old.at !== target.at || old.everyMinutes !== target.everyMinutes
+      const changed = old && (resumed || !target || !live || task.conversationId !== conversationId || old.kind !== target.kind || old.at !== target.at || old.everyMinutes !== target.everyMinutes
         || JSON.stringify(old.rules) !== JSON.stringify(target.rules)
         || (["daily", "rules"].includes(old.kind) && old.zone !== settings.timezone));
       if (old && !changed) {
@@ -452,11 +459,11 @@ export async function seedSchedules(agent) {
         const sameTime = current && current.kind === target.kind && current.at === target.at && current.everyMinutes === target.everyMinutes
           && JSON.stringify(current.rules) === JSON.stringify(target.rules)
           && (!["daily", "rules"].includes(current.kind) || current.zone === settings.timezone);
-        const item = { ...target, id, clock: null, nextAt: sameTime ? current.nextAt : null, lastAt: current?.lastAt || null,
+        const item = { ...target, id, clock: null, nextAt: sameTime && (!resumed || Date.parse(current.nextAt) > Date.now()) ? current.nextAt : null, lastAt: current?.lastAt || null,
           system: Object.hasOwn(desired, id), createdAt: current?.createdAt || new Date().toISOString(), zone: settings.timezone,
           ...(target.kind === "rules" ? { dailyLastAt: current?.dailyLastAt || {} } : {}) };
         if (!item.nextAt) {
-          const next = nextTime({ ...item, lastAt: item.kind === "daily" && !sameTime ? null : item.lastAt }, settings.timezone, Date.now());
+          const next = nextTime({ ...item, lastAt: item.kind === "daily" && !sameTime ? null : item.lastAt || (resumed && item.kind === "every" ? current?.nextAt : null) }, settings.timezone, Date.now());
           item.nextAt = next === null ? null : new Date(next).toISOString();
         }
         item.clock = await tx.createTask(makeClock(agent.runtime), { scheduleId: id }, clockOptions(conversationId));

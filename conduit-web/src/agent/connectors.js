@@ -10,6 +10,8 @@ const CALL_MS = 120_000;
 /** The MCP servers the agent can reach the person's accounts through. resourceMetadata: where the server says its
  *  OAuth is described (its 401's `resource_metadata`). */
 export const CONNECTORS = [{ id: "executor", label: "Executor", url: "https://mcp.executor.sh/mcp",
+  // Its calls answer `approval-required` for what it holds, and resume carries it out.
+  gates: true,
   resourceMetadata: "https://mcp.executor.sh/.well-known/oauth-protected-resource/mcp?elicitation_mode=model" }];
 
 export class Connectors {

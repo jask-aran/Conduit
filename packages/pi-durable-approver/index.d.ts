@@ -105,6 +105,8 @@ export interface ApproverOptions {
   /** The classifier model; the host's helper model, typically. */
   model(api: ToolExecutionApi): Model<any> | Promise<Model<any>>;
   policy(api: ToolExecutionApi, context: Context): Policy | Promise<Policy>;
+  /** Replace the shared judge instructions; both pass reply formats stay fixed in code. */
+  instructions?(api: ToolExecutionApi, context: Context): string | Promise<string>;
   /** The person's words for this call's conversation. */
   words(api: ToolExecutionApi, context: Context): PersonWords | Promise<PersonWords>;
   holders: Holder[];

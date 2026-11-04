@@ -24,13 +24,13 @@ const clock = (value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
 /** What the agent does unless the person says otherwise (agent.json in its folder). */
 export const DEFAULT_SETTINGS = Object.freeze({
   name: "Agent",
+  on: true,
   // How much reaches the person: quiet (urgent only), normal (attention and up), chatty (FYI too).
   dial: "normal",
   // In a turn the person started, edits to their own data through a connector go without an approval (policy.js).
   youAsk: true,
-  // Executor's own approvals decide what asks (policy.js): reads run, what it holds back is the ask. Off: Conduit's list
-  // of read actions decides before the call, as it did.
-  executorDecides: true,
+  // Gating connectors decide what needs approval (policy.js); otherwise Conduit's read-action list decides.
+  toolsDecide: true,
   // An ask still waiting is pushed once more after this many minutes; 0 never.
   remindMinutes: 10,
   // Background runs stop for the day once they have spent this (USD); 0 is no limit.
@@ -107,6 +107,8 @@ export class PersistentAgent {
 
   enabled() { return Boolean(this.project); }
 
+  active() { return this.enabled() && this.settings().on !== false; }
+
   /**
    * The seed files it lacks (never over the person's): memory files, RUN.md, the built-in routines. HEARTBEAT.md and
    * the brief's settings from before routines become routines/heartbeat.md and routines/morning-brief.md first.
@@ -141,6 +143,9 @@ export class PersistentAgent {
   async readSettings() {
     try { this.cached = JSON.parse(await fs.readFile(path.join(this.folder, "agent.json"), "utf8")); }
     catch { this.cached = {}; }
+    this.cached ||= {};
+    if (this.cached.toolsDecide === undefined && this.cached.executorDecides !== undefined) this.cached.toolsDecide = this.cached.executorDecides;
+    delete this.cached.executorDecides;
     return this.settings();
   }
 
@@ -155,8 +160,11 @@ export class PersistentAgent {
       next.name = name;
     }
     if (patch.dial !== undefined) { if (!DIALS.has(patch.dial)) fail("dial is quiet, normal or chatty"); next.dial = patch.dial; }
+    if (patch.on !== undefined) { if (typeof patch.on !== "boolean") fail("on is true or false"); next.on = patch.on; }
     if (patch.youAsk !== undefined) { if (typeof patch.youAsk !== "boolean") fail("youAsk is true or false"); next.youAsk = patch.youAsk; }
-    if (patch.executorDecides !== undefined) { if (typeof patch.executorDecides !== "boolean") fail("executorDecides is true or false"); next.executorDecides = patch.executorDecides; }
+    if (patch.executorDecides !== undefined) { if (typeof patch.executorDecides !== "boolean") fail("executorDecides is true or false"); next.toolsDecide = patch.executorDecides; }
+    if (patch.toolsDecide !== undefined) { if (typeof patch.toolsDecide !== "boolean") fail("toolsDecide is true or false"); next.toolsDecide = patch.toolsDecide; }
+    delete next.executorDecides;
     if (patch.remindMinutes !== undefined) {
       const minutes = Number(patch.remindMinutes);
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) fail("remindMinutes is 0 to 1440");
@@ -216,6 +224,8 @@ export class PersistentAgent {
       next.work = work;
     }
     await fs.writeFile(path.join(this.folder, "agent.json"), `${JSON.stringify(next, null, 2)}\n`);
+    // Old clock checkpoints must stay skipped while settings listeners move the clocks forward.
+    if (this.settings().on === false && next.on !== false) this.resumedAt = Date.now();
     this.cached = next;
     // The brief's and heartbeat's clocks are their routine files' now: Settings writes through to them.
     if (patch.brief) await this.adjustRoutine("morning-brief", (routine) => ({ ...routine, enabled: next.brief.enabled !== false,
@@ -350,6 +360,7 @@ export class PersistentAgent {
    */
   async wake({ key, kind, title, task }) {
     if (!this.enabled()) throw Object.assign(new Error("This hub has no agent yet"), { code: "agent_not_enabled", status: 409 });
+    if (!this.active()) return null;
     if (await this.overBudget()) {
       await this.notice("budget", `Skipped ${title || kind}: today's budget of $${this.settings().budgetUsdPerDay} is spent.`);
       return null;
@@ -357,7 +368,7 @@ export class PersistentAgent {
     const { conversationId } = await this.home();
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(conversationId, this.context);
-    return conversation.commit((tx) => this.spawnRun(tx, conversationId, { key, kind, title, task }), this.context);
+    return conversation.commit((tx) => this.active() ? this.spawnRun(tx, conversationId, { key, kind, title, task }) : null, this.context);
   }
 
   /**
@@ -365,6 +376,7 @@ export class PersistentAgent {
    * never (only the tasks). Its cursors move as a firing's would; `key` keeps a retried request to one run.
    */
   async fireRoutine(name, key) {
+    if (!this.active()) return { error: "agent_off", status: 409 };
     const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
     if (!routine) return { error: "routine_not_found", status: 404 };
     if (routine.error) return { error: routine.error, status: 400 };

@@ -28,7 +28,7 @@ const DIALS = [
 const HEARTBEATS = [30, 60, 120, 240, 480, 1440];
 const every = (minutes: number) => minutes < 60 ? `${minutes} min` : minutes === 1440 ? "Once a day" : `${minutes / 60} h`;
 
-export function createAgentSettings(options: { models: () => ModelOption[]; onManageModels?: () => void }) {
+export function createAgentSettings(options: { models: () => ModelOption[]; onManageModels?: () => void; onOpenBlock?: (id: string) => void; onOpenDocument?: (id: string) => void }) {
   const [draft, setDraft] = createSignal<Draft>({ name: "", budget: "" });
   const [enabling, setEnabling] = createSignal(false);
   const settings = () => agentView()?.settings;
@@ -105,6 +105,9 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
       <SettingLine label="Give this hub an agent"><Button size="sm" disabled={enabling()} onClick={() => void enable()}>Turn on</Button></SettingLine>
     </Group>}>{(current) => <>
       <Group title="Agent">
+        <SettingLine label="On" title={`Off: no routine, heartbeat, brief, mail check or webhook runs. Its threads and memory stay, and it still answers when you write to it.`}>
+          <Switch label="On" checked={current().on !== false} onChange={(on) => set({ on })} />
+        </SettingLine>
         <SettingLine label="Name" title="What it is called, here and in its notifications. Its home thread takes the name too." state={nameError() || undefined}>
           <Input id="agent-name" value={draft().name} maxLength={60} onInput={(event) => editName(event.currentTarget.value)} />
         </SettingLine>
@@ -116,13 +119,14 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
         </SettingLine>
       </Group>
       <Group title="Approvals">
-        <SettingLine label="What you ask, it does" title="When you ask it for something, edits to your own data (completing a task, moving an event, labelling mail) go ahead without an approval. Sending as you, deleting, and anything it starts on its own still ask.">
-          <Switch label="What you ask, it does" checked={current().youAsk !== false} onChange={(youAsk) => set({ youAsk })} />
+        <Note>When {current().name} or one of its runs does something beyond reading and its own folder, the approval model weighs it against these rules, then allows it, refuses it or asks you.</Note>
+        <ApprovalRules name={current().name} onOpenBlock={options.onOpenBlock} onOpenDocument={options.onOpenDocument} />
+        <SettingLine label="Your request is your approval" title="When you ask in your own words for something that only edits your own data (completing a task, moving an event, labelling mail), it goes ahead without asking again. Sending as you, deleting, and anything it starts on its own still go through the rules.">
+          <Switch label="Your request is your approval" checked={current().youAsk !== false} onChange={(youAsk) => set({ youAsk })} />
         </SettingLine>
-        <SettingLine label="Executor decides" title="Executor's calls go to it unasked: reads run at once, and what Executor holds for approval (a send, a change) is what you are asked, once. Off: Conduit's list of reads decides before each call, and anything else asks.">
-          <Switch label="Executor decides" checked={current().executorDecides !== false} onChange={(executorDecides) => set({ executorDecides })} />
+        <SettingLine label="Connected tools decide what is held" title="A connected tool that holds its own actions for approval (Executor does) decides what is held: its reads run at once, and what it holds goes to the approval model. Off: Conduit's list of reads decides before each call, and anything else goes to the approval model.">
+          <Switch label="Connected tools decide what is held" checked={current().toolsDecide !== false} onChange={(toolsDecide) => set({ toolsDecide })} />
         </SettingLine>
-        <ApprovalRules />
         <SettingLine label="Remind me" title="Every approval is pushed to your devices, a background run's too. One still waiting is pushed once more after this long.">
           <Select id="agent-remind" value={String(current().remindMinutes ?? 10)} onChange={(event) => set({ remindMinutes: Number(event.currentTarget.value) })}>
             <For each={[[0, "Never"], [5, "After 5 minutes"], [10, "After 10 minutes"], [30, "After 30 minutes"], [60, "After an hour"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
@@ -177,7 +181,7 @@ type ApprovalPolicy = { version: string; may: string[]; always: string[]; limits
  * The person's standing rules for the approval model (docs/plans/approval-model.md): what the agent may do, what is
  * always theirs, and limits they set; one rule a line, in plain words. Until saved, the starter rules apply.
  */
-function ApprovalRules() {
+function ApprovalRules(props: { name: string; onOpenBlock?: (id: string) => void; onOpenDocument?: (id: string) => void }) {
   const [policy, setPolicy] = createSignal<ApprovalPolicy | null>(null);
   const [starter, setStarter] = createSignal(false);
   const [draft, setDraft] = createSignal({ may: "", always: "", limits: "" });
@@ -211,6 +215,15 @@ function ApprovalRules() {
     <SettingLine label={starter() ? "Starter rules, not saved yet" : "Rules"} title="The approval model reads these with your own messages, never with what the agent read.">
       <Button size="sm" variant={changed() ? "primary" : "secondary"} disabled={saving() || !changed()} onClick={() => void save()}>{starter() ? "Save these rules" : "Save"}</Button>
     </SettingLine>
+    <Show when={props.onOpenBlock || props.onOpenDocument}>
+      <SettingLine plain label="Read by" title="The rules are one block, read by the approval model with each held action and by its own prompt, so it knows what will be asked.">
+        <Show when={props.onOpenBlock}><Button size="sm" variant="secondary" onClick={() => props.onOpenBlock?.("live-approval-rules")}>Rules block</Button></Show>
+        <Show when={props.onOpenDocument}>
+          <Button size="sm" variant="secondary" onClick={() => props.onOpenDocument?.("service:approval")}>Approval model</Button>
+          <Button size="sm" variant="secondary" onClick={() => props.onOpenDocument?.("agent")}>{props.name}'s prompt</Button>
+        </Show>
+      </SettingLine>
+    </Show>
     <Show when={error()}><Note tone="error">{error()}</Note></Show>
   </Show>;
 }

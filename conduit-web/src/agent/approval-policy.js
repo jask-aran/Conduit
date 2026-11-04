@@ -25,6 +25,12 @@ export async function readPolicy(agent) {
   return { policy: JSON.parse(JSON.stringify({ ...STARTER_POLICY, ...stored })), starter: !stored };
 }
 
+/** The rules as jbot and Settings › Blocks read them (the live block `live-approval-rules`), without their tag. */
+export function renderRules(policy) {
+  const list = (items) => items?.length ? items.map((item) => `- ${item}`).join("\n") : "(none)";
+  return `It may:\n${list(policy.may)}\n\nAlways yours:\n${list(policy.always)}\n\nNever:\n${list(policy.limits)}`;
+}
+
 export async function savePolicy(agent, patch) {
   const invalid = (message) => { throw Object.assign(new Error(message), { status: 400 }); };
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) invalid("Policy must be an object");

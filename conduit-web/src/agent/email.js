@@ -127,9 +127,11 @@ export class EmailChannel {
     return response;
   }
 
-  /** Collect what waits in the mailbox: one at a time, each written to the log before it leaves the mailbox. */
+  /** Collect what waits in the mailbox: one at a time, each written to the log before it leaves the mailbox. While
+   *  jbot is off it stays in the mailbox, collected when it is on again. */
   poll() {
     return this.polling ??= (async () => {
+      if (!this.agent.active()) return;
       const { messages } = await (await this.worker("/mail")).json();
       for (const item of messages) {
         const raw = Buffer.from(await (await this.worker(`/mail/${encodeURIComponent(item.key)}`)).arrayBuffer());

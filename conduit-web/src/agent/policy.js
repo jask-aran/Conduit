@@ -3,6 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { fieldsOf, fieldsText } from "./approval-fields.js";
+import { CONNECTORS } from "./connectors.js";
 import { serviceOf } from "./connector-services.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
@@ -125,14 +126,13 @@ const programOf = (args) => args?.code ?? args?.source ?? args?.program;
 const connectorActions = (name, args) => connectorCalls(name, args) ?? (connectorTool(name) === "execute" ? programPaths(programOf(args)) : null);
 const connectorRead = (name, args) => { const paths = connectorActions(name, args); return Boolean(paths?.length && paths.every(isReadAction)); };
 /*
- * Executor gates its own actions: a call or a program goes to it unasked, reads run at once, and an action it holds for
- * approval (a mutation) comes back `approval-required` with a request id. That answer becomes the person's ask, and
- * Allow resumes Executor's own request: one approval for each send or change, exactly the one Executor held. Conduit's
- * list of read words is not consulted for it, so a mistyped path fails as Executor's UnknownTool instead of asking.
+ * A gating connector (for example, Executor) receives calls and programs without a prior ask. It returns
+ * `approval-required` for an action it holds. That answer becomes the person's ask; Allow resumes the held request.
+ * Conduit's read-action list is not consulted, so an invalid path fails at the connector instead of asking.
  */
-const executorGates = (runtime, name) => runtime.agent?.settings().executorDecides !== false && name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name));
+const connectorGates = (runtime, name) => runtime.agent?.settings().toolsDecide !== false && name.startsWith("mcp__") && CONNECTORS.find((connector) => connector.id === name.split("__")[1])?.gates === true && ["call", "execute"].includes(connectorTool(name));
 const resumeTool = (name) => name.startsWith("mcp__") && connectorTool(name) === "resume";
-const executorResume = (runtime, name) => runtime.agent?.settings().executorDecides !== false && name.startsWith("mcp__executor__") && resumeTool(name);
+const connectorResume = (runtime, name) => runtime.agent?.settings().toolsDecide !== false && CONNECTORS.find((connector) => connector.id === name.split("__")[1])?.gates === true && resumeTool(name);
 const connectorName = (name) => { const connector = name.split("__")[1] || ""; return `${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}`; };
 /** An action as words: `gmail.send` → "Gmail · send", `google.api.calendar.events.calendarEventsInsert` → "Google · calendar events insert". */
 function actionWords(path) {
@@ -187,8 +187,8 @@ export function askOf(tool, { guarded = false } = {}) {
   const name = tool?.name || "";
   if (name.startsWith("mcp__")) {
     return tool.connectorReadOnly ? { asks: "never", when: "Marked read-only by its connector." }
-      : name.startsWith("mcp__executor__") && ["call", "execute"].includes(connectorTool(name))
-        ? { asks: "sometimes", when: "Executor decides: reads run, and what it holds for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
+      : CONNECTORS.find((connector) => connector.id === name.split("__")[1])?.gates === true && ["call", "execute"].includes(connectorTool(name))
+        ? { asks: "sometimes", when: "Connected tools decide: reads run, and what they hold for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
         : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
   }
   if (!guarded) return { asks: "never" };
@@ -428,6 +428,8 @@ function approverOf(runtime) {
       return model;
     },
     policy: async () => (await readPolicy(runtime.agent)).policy,
+    // Its instructions are the Approval model document's (Settings › Prompts), the person's to edit.
+    instructions: () => runtime.contextStore?.approvalInstructions(),
     words: (api) => personWords(runtime.agent, api.conversationId),
     holders: [executorHolder()],
     tool: (name) => installedTool(runtime, name),
@@ -467,8 +469,8 @@ function guard(runtime, tools, confine) {
       if (confine && routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
       }
-      // Executor's own gate decides what is held, and the approval model judges it (approverOf, below).
-      const judged = executorGates(runtime, tool.name) || executorResume(runtime, tool.name);
+      // The connector's own gate decides what is held, and the approval model judges it (approverOf, below).
+      const judged = connectorGates(runtime, tool.name) || connectorResume(runtime, tool.name);
       if ((tool.name.startsWith("mcp__") && !judged && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
         const { thread, run } = await threadFor(runtime, api);
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.

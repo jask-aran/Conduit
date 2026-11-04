@@ -1252,7 +1252,8 @@ export function Settings(props: {
   // Each section saved as it is edited, and how its header says so. Leaving
   // the section or closing Settings sends what is waiting rather than
   // dropping it; a failure nobody is looking at any more is said in a toast.
-  const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector });
+  const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector,
+    onOpenBlock: (id) => { setContextBlock(id); openSection("blocks"); }, onOpenDocument: (id) => { setContextDocument(id); openSection("prompts"); } });
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
     runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },

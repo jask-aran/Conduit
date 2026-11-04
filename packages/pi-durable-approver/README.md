@@ -54,6 +54,11 @@ resume an allowed action. `escalate` returns `{ status: "allowed" }`,
 `{ status: "denied", message }`, or `{ status: "pending", message }`.
 A pending answer tells the agent to wait; the host handles the later answer.
 
+`instructions(api, context)` optionally returns a string or a promise of one.
+It replaces the shared judge instructions for both passes; their reply formats
+stay fixed in code. Without it, the package uses its default instructions.
+The policy stays in the user message so the system prompt remains cacheable.
+
 Executor's holder reads `approval-required` results from its `call` and
 `execute` tools. It resumes an allowed request with the exact request id.
 It also holds agent-originated `resume` calls. The named holder holds a

@@ -299,6 +299,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
   app.post("/v0/agent/wake", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
+      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
       const task = String(request.body?.task || "").trim();
       if (!task) return response.status(400).json({ error: "invalid_task" });
       const run = await agent.wake({ key: `manual:${crypto.randomUUID()}`, kind: "manual", title: String(request.body?.title || "").trim() || undefined, task });
@@ -377,6 +378,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
   app.post("/v0/agent/schedules/:id/run", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
+      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
       const state = await agent.state();
       const schedule = state.schedules[request.params.id];
       if (!schedule) return response.status(404).json({ error: "schedule_not_found" });
@@ -534,6 +536,7 @@ export function registerAgentRoutes(app, { agent, backends }) {
   app.post("/v0/agent/hooks/:token", async (request, response, next) => {
     try {
       if (!agent.enabled()) return response.status(404).json({ error: "not_found" });
+      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
       const run = await webhook(agent, request.params.token, request.body);
       // An unknown token says no more than a missing route would.
       response.status(run === null ? 404 : 202).json(run === null ? { error: "not_found" } : { accepted: true });
