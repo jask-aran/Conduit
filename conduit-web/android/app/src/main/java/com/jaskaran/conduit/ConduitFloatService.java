@@ -254,7 +254,7 @@ public class ConduitFloatService extends Service {
     private int controlWidth() {
         // The pill: 4 + 36 (cancel) + 6 + 56 (level) + 6 + 36 (send) + 4. At rest, a 44dp bubble.
         float width = PILL;
-        if (state == State.HANDLE) width = 44;
+        if (state == State.HANDLE) width = HANDLE_W;
         else if (state == State.ERROR) {
             TextPaint text = new TextPaint();
             text.setTextSize(dp(13));
@@ -263,9 +263,11 @@ public class ConduitFloatService extends Service {
         return Math.min(availableWidth, dp(width));
     }
 
-    private int controlHeight() { return Math.min(availableHeight, dp(44)); }
+    private int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? HANDLE_H : 44)); }
     /** The pill's width in dp, and how far Float rests from the screen's edge. */
-    private static final float PILL = 148, EDGE = 8;
+    private static final float PILL = 148, EDGE = 3;
+    /** At rest: a small upright capsule, close to the edge. */
+    private static final float HANDLE_W = 32, HANDLE_H = 40;
 
     private void place() {
         if (snap != null) { snap.cancel(); snap = null; }
@@ -279,7 +281,7 @@ public class ConduitFloatService extends Service {
     private void updateFrost() {
         if (destroyed) return;
         boolean right = prefs().getBoolean("right", true);
-        float r = frameHeight / 2f;
+        float r = Math.min(frameWidth, frameHeight) / 2f;
         // Always fully round (a bubble at rest, a pill open): the window's blur follows a uniform outline.
         boolean blurred = blurEnabled;
         frost.setCornerRadii(null);
@@ -692,7 +694,7 @@ public class ConduitFloatService extends Service {
             boolean right = prefs().getBoolean("right", true);
             // The frost (fill, its one stroke, the blur) is the window's background; this draws only what sits on it.
             // A soft top highlight, inside the stroke, as v2's inset 0 1px 0 white 50%.
-            float r = h / 2, inset = dp(1);
+            float r = Math.min(w, h) / 2, inset = dp(1);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(1));
             paint.setShader(new android.graphics.LinearGradient(0, inset, 0, h / 2, 0x59ffffff, 0x00ffffff, android.graphics.Shader.TileMode.CLAMP));
@@ -702,8 +704,8 @@ public class ConduitFloatService extends Service {
             // At rest: the Conduit mark in the bubble's middle, fading as it opens.
             if (openness < 1) {
                 mark.setAlpha(Math.round(235 * (1 - Math.min(1, openness / .45f))));
-                float cx = right ? w - h / 2 : h / 2;
-                mark.setBounds(Math.round(cx - dp(10)), Math.round(h / 2 - dp(10)), Math.round(cx + dp(10)), Math.round(h / 2 + dp(10)));
+                float cx = right ? w - dp(HANDLE_W) / 2f : dp(HANDLE_W) / 2f;
+                mark.setBounds(Math.round(cx - dp(7)), Math.round(h / 2 - dp(7)), Math.round(cx + dp(7)), Math.round(h / 2 + dp(7)));
                 mark.draw(canvas);
             }
             if (state == State.HANDLE) return;
