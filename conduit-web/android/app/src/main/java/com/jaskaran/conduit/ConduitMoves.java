@@ -101,9 +101,10 @@ final class ConduitMoves {
         to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
         boolean edit = state.optBoolean("edit");
         // The edit pills fade where they stand: their holder holds them at its foot, so their room goes from above them.
-        if (!(edit && out)) to(part, "y", y, edit ? (left > 16 && !reduced ? left : layoutTime) : layoutTime, layoutDelay, edit ? (left > 16 && travelCurve != null && !reduced ? travelCurve : room) : layoutCurve, initial, v -> part.y = v);
+        // The field too: going, it keeps its size and place and fades there (motion.ts, collapse).
+        if (!((edit || field) && out)) to(part, "y", y, edit ? (left > 16 && !reduced ? left : layoutTime) : layoutTime, layoutDelay, edit ? (left > 16 && travelCurve != null && !reduced ? travelCurve : room) : layoutCurve, initial, v -> part.y = v);
         to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
-        to(part, "height", field && out ? 0 : height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
+        if (!(field && out)) to(part, "height", height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
         to(part, "opacity", out ? 0 : 1, fadeTime, fadeDelay, fadeCurve, initial, v -> part.opacity = v);
         to(part, "dim", state.optBoolean("under") ? .38f : 1, quick, 0, change, initial, v -> part.dim = v);
         to(part, "clip", "wipe".equals(move) && out ? 1 : 0, gentle, 0, arrive, initial, v -> part.clip = v);

@@ -26,6 +26,9 @@
 .ui-phone-field { --collapse-gap: var(--space-md); }
 /* The frost fills the moving holder. Its textarea keeps its natural height, measured independently by collapse. */
 .ui-phone-field > .ui-pill-field { height: 100%; align-items: flex-start; }
+/* Going, the field keeps its height at the holder's foot (motion.ts, collapse) and fades there as its room goes above it. */
+.ui-phone-field { display: flex; flex-direction: column; justify-content: flex-end; }
+.ui-phone-field > .ui-pill-field { flex: none; }
 
 /* The row's pills tuck (motion.css): not shown, they fade where they stand (the track takes their place); a folded one
    (Send with nothing to send, Scroll to latest at the latest) keeps its size and slides under its left neighbour as it

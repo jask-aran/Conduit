@@ -7,17 +7,18 @@ import { logKeyboardEvent } from "./keyboard-probe.ts";
  * pass (5-13ms on a phone): the transcript falls to every other frame at 120Hz, and further behind on anything faster.
  * Here the layout changes twice, at the travel's ends: at its start the app is laid out at the keyboard's lower
  * position (the taller of the two), at its end at the keyboard's final one. Between them what rides the keyboard --
- * the composer's dock (its riders; its field and row are drawn natively) and a transcript already at its foot -- is
+ * the composer's dock (its riders; its field and row are drawn natively) and the transcript above it -- is
  * moved by one transform animation each, on the system's own curve (CSS linear() from its samples), which the
- * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout. A transcript
- * scrolled up stays where it is.
+ * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout. Every transcript
+ * shown rides it, scrolled up or not: the transcript holds its distance from the bottom across a travel (transcript.tsx,
+ * holdAgainstKeyboard), so the layout at each end moves it by the whole travel -- in the frame its transform
+ * comes off, and so unseen. One left out of the ride stood still and then jumped by the keyboard's height at the end.
  *
  * The animation is started in phase: the shell stamps when the system began the travel (wall clock, the same one
  * Date.now reads), so a description that took a few frames to cross the bridge starts that far along, not behind.
  */
 const RIDERS = ".ui-composer-dock";
 const SCROLLERS = ".ui-chat-scroller, .ui-dash-conversation-scroll";
-const atFoot = (scroller: Element) => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 4;
 const shown = (element: Element) => element.getClientRects().length > 0;
 
 /** Whether a travel should be drawn this way now: the native composer is mirroring the web one. */
@@ -34,7 +35,7 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const low = Math.min(travel.from, travel.to);
   const easing = travelEasing(travel.curve);
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
-  const scrollers = [...document.querySelectorAll(SCROLLERS)].filter((scroller) => shown(scroller) && atFoot(scroller));
+  const scrollers = [...document.querySelectorAll(SCROLLERS)].filter(shown);
   // Where the composer's row sits at each end, measured, not computed: the keyboard's height is not its travel (the
   // navigation bar's room is given up as the keyboard takes it). The row, not the dock, whose box holds that room.
   const probe = riders[0]?.querySelector(".ui-phone-row") ?? riders[0] ?? scrollers[0];

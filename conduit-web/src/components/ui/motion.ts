@@ -100,6 +100,10 @@ export function collapse(holder: HTMLElement): () => void {
     const fromMargin = animation ? parseFloat(getComputedStyle(holder).marginBlockEnd) || 0 : margin;
     animation?.cancel();
     const delay = 0;
+    // Going, what it holds keeps the height it had and stays at its foot (the holder's own CSS) while its room goes from
+    // above it, so it fades where it stands rather than being pressed flat; coming, it fills the holder again.
+    if (nextOut && !out) content.style.height = `${fromHeight}px`;
+    else if (!nextOut) content.style.removeProperty("height");
     out = nextOut; height = nextHeight; margin = nextMargin;
     animation = undefined;
     holder.style.overflow = overflow;
