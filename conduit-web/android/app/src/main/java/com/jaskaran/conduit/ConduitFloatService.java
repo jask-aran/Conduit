@@ -223,14 +223,19 @@ public class ConduitFloatService extends Service {
     private Notification notification() {
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel("conduit_float", "Float", NotificationManager.IMPORTANCE_LOW);
+            // Minimum importance: Android requires the foreground service's notification, but it folds away with no
+            // status-bar icon. A channel's importance is fixed once made, so the old LOW channel is replaced.
+            try { manager.deleteNotificationChannel("conduit_float"); } catch (RuntimeException stillInUse) {}
+            NotificationChannel channel = new NotificationChannel("conduit_float_quiet", "Float", NotificationManager.IMPORTANCE_MIN);
             channel.setSound(null, null);
+            channel.setShowBadge(false);
             manager.createNotificationChannel(channel);
         }
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent off = PendingIntent.getService(this, 1, new Intent(this, ConduitFloatService.class).setAction(OFF), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        return new NotificationCompat.Builder(this, "conduit_float").setSmallIcon(R.drawable.ic_stat_conduit)
+        return new NotificationCompat.Builder(this, "conduit_float_quiet").setSmallIcon(R.drawable.ic_stat_conduit)
             .setContentTitle("Float").setContentIntent(open).setOngoing(true).setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN).setShowWhen(false)
             .addAction(0, "Turn off", off).build();
     }
 

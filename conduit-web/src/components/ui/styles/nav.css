@@ -151,7 +151,7 @@
 .ui-nav-pane[data-drawer] .ui-nav-brand { flex: none; height: var(--pill-slot); padding: 0 var(--space-md); }
 .ui-nav-pane[data-drawer] .ui-nav-brand > span { transform: translateY(0.16em); }
 /* NavLead: the server filling the line, its actions ghost icons at its end; a notice under it. */
-.ui-nav-lead { display: grid; gap: var(--space-xs); margin-bottom: var(--space-md); }
+.ui-nav-lead { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); margin-bottom: var(--space-md); }
 .ui-nav-lead-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-nav-lead-line > :first-child { min-width: 0; flex: 1; }
 .ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
