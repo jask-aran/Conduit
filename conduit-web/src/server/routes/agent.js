@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import express from "express";
-import { createVoiceTranscriber } from "../voice-transcription.js";
+import { voiceTranscriber } from "./voice.js";
 import path from "node:path";
 import { safeRedirectTarget } from "../../auth-middleware.js";
 import { originOfRequest } from "../../server-identity.js";
@@ -59,7 +59,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
  */
 export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime }) {
-  const transcribeVoice = createVoiceTranscriber(voiceRuntime);
+  const transcribeVoice = voiceTranscriber(voiceRuntime);
   const enabled = (response) => {
     if (agent.enabled()) return true;
     response.status(409).json({ error: "agent_not_enabled" });
@@ -272,7 +272,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (!delivery) {
         delivery = (async () => {
           const text = await transcribeVoice(request.body);
-          if (!text) throw Object.assign(new Error("Nothing was heard. Try again."), { status: 422, code: "nothing_heard" });
           // The dial can change while a cold local model transcribes the recording.
           if (!agent.enabled()) throw Object.assign(new Error("jbot is not enabled."), { status: 409, code: "agent_not_enabled" });
           if (!agent.active()) throw Object.assign(new Error("jbot is off."), { status: 409, code: "agent_off" });

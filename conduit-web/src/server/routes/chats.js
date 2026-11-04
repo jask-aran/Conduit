@@ -1,3 +1,5 @@
+import { entriesToOps } from "../../durable-adapter.js";
+import { applyTranscriptOps } from "../../transcript-fold.js";
 import { ConduitIds } from "../durable-runtime.js";
 import fs from "node:fs/promises";
 import { resolveTemplate } from "../../config.js";
@@ -83,6 +85,59 @@ export function registerChatRoutes(app, {
   };
   app.param("chatId", childWrite);
   app.param("id", childWrite);
+
+  const lastReply = (messages) => messages.findLast((message) => message.role === "assistant"
+    && !message.streaming && typeof message.content === "string" && message.content.trim());
+  const latestReply = async (chat, project) => {
+    const adapter = backends.forChat(chat);
+    let reply;
+    if (chat.backend?.implementation === "conduit-runtime") {
+      const id = Number(chat.backend.opaqueSession);
+      if (!Number.isSafeInteger(id) || id <= 0) return null;
+      const harness = await adapter.runtime.open();
+      const conversation = await harness.conversation(id, adapter.context);
+      if (!conversation) return null;
+      let cursor;
+      // Read backward in bounded pages; never reconstruct the whole conversation.
+      do {
+        const page = await conversation.entries({ order: "descending" }, 100, cursor, adapter.context);
+        reply = lastReply(applyTranscriptOps({}, entriesToOps([...page.items].reverse()
+          .filter((entry) => entry.kind === "pi.assistant"))).messages);
+        cursor = page.next;
+      } while (!reply && cursor);
+    } else {
+      let before;
+      const cursors = new Set();
+      do {
+        const projection = await adapter.readTranscript({ chatId: chat.id,
+          liveSessionId: backends.getByChatId(chat.id)?.id,
+          opaqueSession: chat.backend?.opaqueSession, project, before });
+        reply = lastReply(projection.messages || []);
+        before = projection.page?.before;
+        if (cursors.has(before)) break;
+        cursors.add(before);
+      } while (!reply && before);
+    }
+    return reply ? { text: reply.content.slice(0, 2000), at: reply.timestamp || chat.lastAssistantCompletedAt || null } : null;
+  };
+
+  app.get("/v0/chats/recent", async (request, response, next) => {
+    try {
+      const limit = Math.min(50, Math.max(1, Math.trunc(Number(request.query.limit) || 20)));
+      const places = new Map((await projects.list()).map((project) => [project.id, project]));
+      const live = new Map(backends.list().map((process) => [process.chatId, process]));
+      const activity = (chat) => chat.lastMessageAt || chat.updatedAt || chat.createdAt || "";
+      const chats = registry.list().filter((chat) => chat.status !== "subagent" && !chat.untracked && places.has(chat.projectId))
+        .sort((a, b) => activity(b).localeCompare(activity(a)) || b.id.localeCompare(a.id)).slice(0, limit);
+      response.set("Cache-Control", "no-store");
+      response.json({ chats: await Promise.all(chats.map(async (chat) => ({
+        chatId: chat.id, title: chat.title || "", projectId: chat.projectId,
+        projectName: places.get(chat.projectId).name, lastMessageAt: chat.lastMessageAt || null,
+        liveStatus: live.get(chat.id)?.status || null,
+        latestReply: await latestReply(chat, places.get(chat.projectId)),
+      }))) });
+    } catch (error) { next(error); }
+  });
 
   app.get("/v0/chats/:chatId/agents", async (request, response, next) => {
     try {

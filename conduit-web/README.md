@@ -488,6 +488,7 @@ values use the provider format and are never returned by the API.
   process view on the global runtime channel.
 - `GET /v0/profiles` lists profile identity and backend metadata
 - `GET|DELETE /v0/chats/:id` (draft cleanup requires `?ifEmpty=true`)
+- `GET /v0/chats/recent?limit=N` returns `{ chats: [{ chatId, title, projectId, projectName, lastMessageAt, liveStatus, latestReply: { text, at } | null }] }` across projects, newest activity first (default 20, max 50); reply text is plain text capped at 2000 characters. Subagent and untracked chats are excluded.
 - `PUT|GET /v0/chats/:id/attachments/:attachment-id` uploads raw bytes or downloads;
   `?preview=1` serves supported raster images inline
 - `GET /v0/chats/:id/attachments`
@@ -568,6 +569,7 @@ values use the provider format and are never returned by the API.
 - `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
   canonical local execution tuple, static execution catalogue, backend-path
   status, named adapter, endpoint, and authentication policy
+- `POST /v0/voice/transcribe` accepts a session-authenticated raw `audio/wav` body (up to 10 MB; 16 kHz mono 16-bit PCM, at most five minutes) through the hub's Voice source and returns `{ text }`; errors include `409 voice_off`, `422 nothing_heard`, and `415 invalid_audio`.
 - `POST /v0/agent/voice-message` accepts a session-authenticated raw `audio/wav`
   body (up to 10 MB; 16 kHz mono 16-bit PCM, at most five minutes). It uses the
   hub's Voice source, model and credential, then logs and delivers the transcript
