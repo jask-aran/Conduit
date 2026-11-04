@@ -305,6 +305,8 @@ public class ConduitFloatService extends Service {
 
     /** The radial around the handle; the handle stays lit while it is open, as it does while held. */
     private void openRadial() {
+        ConduitHubClient lists = hub();
+        if (lists != null) { FloatPanel.warm("places", lists::places); FloatPanel.warm("recent", () -> lists.recentChats(20)); }
         float[] centre = window.handleCentre();
         int[] screen = window.screenSize();
         radial().open(window.right(), centre[0], centre[1], screen[0], screen[1]);

@@ -33,7 +33,7 @@ public final class FloatPlacesPanel extends FloatPanel {
 
     private void refresh() {
         places = null;
-        load(hub::places, values -> {
+        load("places", hub::places, values -> {
             places = new ArrayList<>(values);
             // As the app's place picker: no folder first, then projects, then workspaces, each by name.
             places.sort(Comparator.comparing((ConduitHubClient.Place place) -> !place.isChat)

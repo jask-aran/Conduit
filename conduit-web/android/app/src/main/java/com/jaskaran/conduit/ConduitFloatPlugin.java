@@ -67,24 +67,10 @@ public class ConduitFloatPlugin extends Plugin {
         return component != null && getContext().getPackageName().equals(component.getPackageName());
     }
 
-    /**
-     * Samsung's Circle to Search (touch_and_hold_to_search) takes a long press on home before the assistant does. An app
-     * cannot change a private system setting, only read it; unreadable counts as on so the step is offered.
-     */
-    private boolean circleToSearchOn() {
-        // The key is hidden from apps targeting recent Android (a read gives nothing), so on Samsung it counts as on
-        // until the person has been through Navigation bar for it.
-        String value = null;
-        try { value = Settings.System.getString(getContext().getContentResolver(), "touch_and_hold_to_search"); }
-        catch (RuntimeException unreadable) {}
-        if (value != null) return "1".equals(value);
-        return Build.MANUFACTURER.equalsIgnoreCase("samsung") && !preferences(getContext()).getBoolean("circleHandled", false);
-    }
-
     private JSObject view() {
         return new JSObject().put("enabled", preferences(getContext()).getBoolean("enabled", false))
             .put("assistant", isAssistant())
-            .put("circleToSearch", circleToSearchOn())
+            .put("sideKey", Build.MANUFACTURER.equalsIgnoreCase("samsung") ? (sideKeyPending() ? "unset" : "set") : "none")
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
             .put("micPermission", microphoneGranted(getContext()))
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
@@ -183,21 +169,21 @@ public class ConduitFloatPlugin extends Plugin {
             startVisible(false);
             preferences(getContext()).edit().putBoolean("enabled", true).apply();
         } catch (RuntimeException error) { call.reject("Could not start Float", error); return; }
-        assistantStep(call, true);
+        thenAssistant = true;
+        screenContextStep(call);
     }
 
     /*
-     * The assistant: a long press on home hands Conduit the screen with no prompt. Make Conduit the digital assistant,
-     * then (Samsung) turn off Circle to Search, which takes the long press first and cannot be changed by an app. Then,
+     * The assistant (optional): Android hands it the screen when it is called, but will not let it call itself, so it
+     * is reached from a key. Make Conduit the digital assistant, then (Samsung) the side key's press and hold. Then,
      * when this is part of turning Float on, screen context.
      */
-    private void assistantStep(PluginCall call, boolean thenScreenContext) {
+    private void assistantStep(PluginCall call) {
         permissionFlow = true;
-        this.thenScreenContext = thenScreenContext;
-        if (isAssistant()) { circleStep(call); return; }
+        if (isAssistant()) { sideKeyStep(call); return; }
         ask("Make Conduit your assistant",
-            "A long press on home then hands Conduit what is on screen, with no prompt. Choose Conduit as the digital "
-                + "assistant app, allow Use screenshot and Use text on screen, then come back.",
+            "Optional: the side key can then open Float with the screen already taken, with its text. Choose Conduit "
+                + "as the digital assistant app, allow Use screenshot and Use text on screen, then come back.",
             "Choose", () -> {
                 try { startActivityForResult(call, new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), "assistantReturned"); }
                 catch (RuntimeException noVoiceSettings) {
@@ -207,41 +193,60 @@ public class ConduitFloatPlugin extends Plugin {
             }, call, () -> nextAfterAssistant(call));
     }
 
-    private boolean thenScreenContext;
+    /** Turning Float on: screen context, then the assistant. From a Settings row, only that row's steps. */
+    private boolean thenAssistant;
 
     @ActivityCallback private void assistantReturned(PluginCall call, ActivityResult result) {
         if (call == null) { permissionFlow = false; return; }
-        if (isAssistant()) circleStep(call); else nextAfterAssistant(call);
+        if (isAssistant()) sideKeyStep(call); else nextAfterAssistant(call);
     }
 
-    private void circleStep(PluginCall call) {
-        if (!circleToSearchOn()) { nextAfterAssistant(call); return; }
-        ask("Turn off Circle to Search",
-            "Circle to Search takes a long press on home before the assistant does. In Navigation bar, turn off "
-                + "Circle to Search, then come back.",
-            "Open Navigation bar", () -> {
-                try { startActivityForResult(call, new Intent("com.samsung.settings.NAVIGATION_BAR_SETTING"), "circleReturned"); }
-                catch (RuntimeException notSamsung) {
-                    try { startActivityForResult(call, new Intent(Settings.ACTION_DISPLAY_SETTINGS), "circleReturned"); }
-                    catch (RuntimeException none) { nextAfterAssistant(call); }
-                }
+    /**
+     * Samsung keeps a long press on home for Circle to Search; its side key can call the assistant instead: press and
+     * hold opens Float with the screen already taken. Its setting is hidden from apps, so the step shows until the
+     * person has been through the page once.
+     */
+    private void sideKeyStep(PluginCall call) {
+        if (!sideKeyPending()) { nextAfterAssistant(call); return; }
+        ask("Side key opens Float",
+            "Hold the side key on any screen to open Float with that screen already captured. In Press and hold, "
+                + "choose Digital assistant, then come back.",
+            "Open side key", () -> {
+                try { startActivityForResult(call, new Intent("com.samsung.android.intent.action.SIDE_KEY_LONG_PRESS_SETTINGS"), "sideKeyReturned"); }
+                catch (RuntimeException notSamsung) { nextAfterAssistant(call); }
             }, call, () -> nextAfterAssistant(call));
     }
 
-    @ActivityCallback private void circleReturned(PluginCall call, ActivityResult result) {
-        preferences(getContext()).edit().putBoolean("circleHandled", true).apply();
+    private boolean sideKeyPending() {
+        return Build.MANUFACTURER.equalsIgnoreCase("samsung") && !preferences(getContext()).getBoolean("sideKeyHandled", false);
+    }
+
+    @ActivityCallback private void sideKeyReturned(PluginCall call, ActivityResult result) {
+        preferences(getContext()).edit().putBoolean("sideKeyHandled", true).apply();
         if (call == null) { permissionFlow = false; return; }
         nextAfterAssistant(call);
     }
 
-    private void nextAfterAssistant(PluginCall call) {
-        if (thenScreenContext) screenContextStep(call);
-        else { permissionFlow = false; call.resolve(view()); }
+    /** Settings' Side key row: Samsung's Press and hold page. */
+    @PluginMethod public void openSideKeySettings(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try { startActivityForResult(call, new Intent("com.samsung.android.intent.action.SIDE_KEY_LONG_PRESS_SETTINGS"), "sideKeyReturned"); }
+            catch (RuntimeException notSamsung) { call.resolve(view()); }
+        });
     }
 
-    /** Settings' Assistant row: make Conduit the assistant and clear Circle to Search out of its way. */
+    private void nextAfterAssistant(PluginCall call) { permissionFlow = false; call.resolve(view()); }
+
+    /** Screen context is done or skipped: on to the assistant when turning Float on, else the flow ends. */
+    private void afterScreenContext(PluginCall call) {
+        if (thenAssistant) { thenAssistant = false; assistantStep(call); return; }
+        permissionFlow = false;
+        call.resolve(view());
+    }
+
+    /** Settings' Assistant row: make Conduit the assistant, then the side key. */
     @PluginMethod public void setUpAssistant(PluginCall call) {
-        getActivity().runOnUiThread(() -> assistantStep(call, false));
+        getActivity().runOnUiThread(() -> { thenAssistant = false; assistantStep(call); });
     }
 
     /*
@@ -250,14 +255,15 @@ public class ConduitFloatPlugin extends Plugin {
      * then Float screen context in Accessibility. Skipping leaves Float on, without instant screenshots.
      */
     private void screenContextStep(PluginCall call) {
-        if (ConduitContext.screenReaderOn(getContext())) { call.resolve(view()); return; }
+        if (ConduitContext.screenReaderOn(getContext())) { afterScreenContext(call); return; }
         permissionFlow = true;
         if (restrictedSettingsBlocked()) {
             ask("Allow restricted settings",
                 "Android holds back Accessibility for apps installed from a file. In App info, tap ⋮ at the top right, "
                     + "then Allow restricted settings, then come back.",
                 "Open App info", () -> startActivityForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:" + getContext().getPackageName())), "restrictedReturned"), call);
+                    Uri.parse("package:" + getContext().getPackageName())), "restrictedReturned"), call,
+                () -> afterScreenContext(call));
         } else accessibilityStep(call);
     }
 
@@ -273,21 +279,16 @@ public class ConduitFloatPlugin extends Plugin {
                 + "In Installed apps, turn on Float screen context, then come back.",
             "Open settings", () -> {
                 try { startActivityForResult(call, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "accessibilityReturned"); }
-                catch (RuntimeException unavailable) { permissionFlow = false; call.resolve(view()); }
-            }, call);
+                catch (RuntimeException unavailable) { afterScreenContext(call); }
+            }, call, () -> afterScreenContext(call));
     }
 
     @ActivityCallback private void accessibilityReturned(PluginCall call, ActivityResult result) {
-        permissionFlow = false;
-        if (call != null) call.resolve(view());
+        if (call == null) { permissionFlow = false; return; }
+        afterScreenContext(call);
     }
 
-    /** A step's dialog: its button runs the step; Skip ends the flow with Float on as it is. */
-    private void ask(String title, String message, String go, Runnable step, PluginCall call) {
-        ask(title, message, go, step, call, () -> { permissionFlow = false; call.resolve(view()); });
-    }
-
-    /** A step's dialog whose Skip goes on to what follows instead of ending the flow. */
+    /** A step's dialog: its button runs the step; Skip (or Back) goes on to what follows. */
     private void ask(String title, String message, String go, Runnable step, PluginCall call, Runnable skip) {
         new android.app.AlertDialog.Builder(getActivity()).setTitle(title).setMessage(message)
             .setPositiveButton(go, (dialog, which) -> step.run())
@@ -309,7 +310,7 @@ public class ConduitFloatPlugin extends Plugin {
 
     /** The screen-context steps alone, for Settings' row when Float is already on. */
     @PluginMethod public void setUpScreenContext(PluginCall call) {
-        getActivity().runOnUiThread(() -> screenContextStep(call));
+        getActivity().runOnUiThread(() -> { thenAssistant = false; screenContextStep(call); });
     }
 
     private void startVisible(boolean record) {

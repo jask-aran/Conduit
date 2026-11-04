@@ -187,6 +187,8 @@ public abstract class FloatPanel {
     }
 
     private boolean waiting;
+    /** When the opening rise ends (uptime ms); until it has started, a while from now. */
+    private volatile long settledAt = Long.MAX_VALUE / 2;
     private android.graphics.Bitmap backdrop;
     private boolean rightEdge;
     private int screenLeft, screenWidth;
@@ -238,9 +240,26 @@ public abstract class FloatPanel {
         View decor = window.getDecorView();
         decor.setAlpha(0);
         decor.setTranslationY(dp(8));
-        decor.animate().alpha(1).translationY(0).setDuration(250)
-            .setInterpolator(new PathInterpolator(.2f, .8f, .2f, 1)).start();
         onOpen();
+        // The rise starts once the window's first frame is up: its layout, fonts and backdrop upload would otherwise
+        // eat the curve's opening frames, where it moves fastest.
+        decor.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+            boolean started;
+            @Override public void onDraw() {
+                if (started) return;
+                started = true;
+                decor.post(() -> {
+                    decor.getViewTreeObserver().removeOnDrawListener(this);
+                    if (closed) return;
+                    android.view.Choreographer.getInstance().postFrameCallback(t -> {
+                        if (closed) return;
+                        settledAt = android.os.SystemClock.uptimeMillis() + 260;
+                        decor.animate().alpha(1).translationY(0).setDuration(250)
+                            .setInterpolator(new PathInterpolator(.2f, .8f, .2f, 1)).start();
+                    });
+                });
+            }
+        });
     }
 
     private void place() {
@@ -501,16 +520,30 @@ public abstract class FloatPanel {
 
     @FunctionalInterface protected interface HubCall<T> { T run() throws ConduitHubClient.Failure; }
 
-    protected final <T> void load(HubCall<T> call, Consumer<T> result, Runnable retry) {
+    /** The last answer to each panel's list, so a panel opens at its full size and does not grow mid-rise. */
+    private static final java.util.Map<String, Object> LAST = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Fetches a list ahead of its panel (as the radial opens), so even a first open has its rows. */
+    static <T> void warm(String key, HubCall<T> call) {
+        HUB.execute(() -> { try { LAST.put(key, call.run()); } catch (ConduitHubClient.Failure | RuntimeException ignored) {} });
+    }
+
+    /** The last list at once when there is one (else Loading…), then the fresh one in its place. */
+    @SuppressWarnings("unchecked")
+    protected final <T> void load(String key, HubCall<T> call, Consumer<T> result, Runnable retry) {
         int ticket = ++request;
         body.removeAllViews();
-        line("Loading…", SECONDARY);
+        Object last = LAST.get(key);
+        if (last != null) result.accept((T) last); else line("Loading…", SECONDARY);
         HUB.execute(() -> {
             try {
                 T value = call.run();
-                main.post(() -> { if (isOpen() && request == ticket) result.accept(value); });
+                LAST.put(key, value);
+                // Over a shown list, the fresh one waits for the rise to end: rebuilding rows mid-curve drops frames.
+                long wait = last == null ? 0 : Math.min(700, Math.max(0, settledAt - android.os.SystemClock.uptimeMillis()));
+                main.postDelayed(() -> { if (isOpen() && request == ticket) result.accept(value); }, wait);
             } catch (ConduitHubClient.Failure failure) {
-                main.post(() -> { if (isOpen() && request == ticket) error(failure.message, retry); });
+                main.post(() -> { if (isOpen() && request == ticket && last == null) error(failure.message, retry); });
             }
         });
     }

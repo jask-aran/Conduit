@@ -16,8 +16,8 @@ export interface FloatStatus {
   screenContext: boolean;
   /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
   assistant: boolean;
-  /** Samsung's Circle to Search is on: it takes a long press on home before the assistant. */
-  circleToSearch: boolean;
+  /** Samsung's side key press-and-hold to the assistant: "unset" until set up once, "none" off Samsung. */
+  sideKey: "set" | "unset" | "none";
   /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
@@ -34,6 +34,7 @@ const nativeFloat = registerPlugin<{
   setUpScreenContext(): Promise<FloatStatus>;
   openAssistantSettings(): Promise<FloatStatus>;
   setUpAssistant(): Promise<FloatStatus>;
+  openSideKeySettings(): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -58,8 +59,9 @@ export const conduitFloat = {
   /** Walks through what screen context needs (Allow restricted settings, then Accessibility), each step skippable. */
   setUpScreenContext: () => enqueue(() => nativeFloat.setUpScreenContext()),
   openAssistantSettings: () => enqueue(() => nativeFloat.openAssistantSettings()),
-  /** Make Conduit the assistant, then turn Circle to Search out of its way, each step skippable. */
+  /** Make Conduit the assistant, then (Samsung) the side key's press and hold, each step skippable. */
   setUpAssistant: () => enqueue(() => nativeFloat.setUpAssistant()),
+  openSideKeySettings: () => enqueue(() => nativeFloat.openSideKeySettings()),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 

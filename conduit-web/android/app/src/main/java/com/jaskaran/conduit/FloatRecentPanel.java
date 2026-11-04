@@ -53,7 +53,7 @@ public final class FloatRecentPanel extends FloatPanel {
     @Override protected void onClosed() { listener.closed(); }
     @Override protected void onClosing() { stopPulse(); }
 
-    private void refresh() { load(() -> hub.recentChats(20), values -> { chats = values; showList(); }, this::refresh); }
+    private void refresh() { load("recent", () -> hub.recentChats(20), values -> { chats = values; showList(); }, this::refresh); }
 
     private void stopPulse() {
         if (pulse != null) { pulse.cancel(); pulse = null; }

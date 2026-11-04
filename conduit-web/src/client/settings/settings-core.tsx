@@ -1545,18 +1545,26 @@ export function Settings(props: {
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
-                      <SettingLine label="Assistant" state={!floatStatus()!.assistant ? "another app" : floatStatus()!.circleToSearch ? "behind Circle to Search" : "Conduit"}
-                        title="Make Conduit the phone's digital assistant: a long press on home hands Float the screen and its text at once, with no prompt. Allow Use screenshot and Use text on screen there.">
-                        <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.assistant && !floatStatus()!.circleToSearch ? conduitFloat.openAssistantSettings() : conduitFloat.setUpAssistant()).then(setFloatStatus).catch(floatFailure)}>
-                          {floatStatus()!.assistant && !floatStatus()!.circleToSearch ? "Settings" : "Set up"}
-                        </Button>
-                      </SettingLine>
                       <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
-                        title="Float's Accessibility service: screenshots without asking each time, the text on screen with them, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
+                        title="Float's Accessibility service: Float's Screenshot at once, the text on screen with it, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
                         <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.screenContext ? conduitFloat.openScreenContextSettings() : conduitFloat.setUpScreenContext()).then(setFloatStatus).catch(floatFailure)}>
                           {floatStatus()!.screenContext ? "Settings" : "Turn on"}
                         </Button>
                       </SettingLine>
+                      <SettingLine label="Assistant" state={floatStatus()!.assistant ? "Conduit" : "another app"}
+                        title="Optional: make Conduit the phone's digital assistant so a key (the side key, below) opens Float with the screen and its text already taken. Allow Use screenshot and Use text on screen there.">
+                        <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.assistant ? conduitFloat.openAssistantSettings() : conduitFloat.setUpAssistant()).then(setFloatStatus).catch(floatFailure)}>
+                          {floatStatus()!.assistant ? "Settings" : "Set up"}
+                        </Button>
+                      </SettingLine>
+                      <Show when={floatStatus()!.assistant && floatStatus()!.sideKey !== "none"}>
+                        <SettingLine label="Side key" state={floatStatus()!.sideKey === "set" ? "set up" : "optional"}
+                          title="Hold the side key on any screen to open Float with that screen already captured: in Press and hold, choose Digital assistant.">
+                          <Button variant="ghost" size="sm" onClick={() => void conduitFloat.openSideKeySettings().then(setFloatStatus).catch(floatFailure)}>
+                            {floatStatus()!.sideKey === "set" ? "Settings" : "Set up"}
+                          </Button>
+                        </SettingLine>
+                      </Show>
                       <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
                         <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
                       </SettingLine>
