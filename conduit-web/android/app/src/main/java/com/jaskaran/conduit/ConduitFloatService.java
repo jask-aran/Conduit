@@ -13,6 +13,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -418,8 +419,10 @@ public class ConduitFloatService extends Service {
                     short sample = (short) ((buffer[i] & 255) | (buffer[i + 1] << 8));
                     sum += (double) sample * sample;
                 }
-                float rms = (float) Math.min(1, Math.sqrt(sum / (count / 2)) / 6000);
-                main.post(() -> { if (capture == current && state == State.RECORDING) { level += (rms - level) * .2212f; control.invalidate(); } });
+                // Loudness on a dB scale, as hearing goes: -54 dBFS (a quiet room) is still, -18 (close speech) is full.
+                double db = 20 * Math.log10(Math.max(1e-6, Math.sqrt(sum / Math.max(1, count / 2)) / 32768));
+                float loud = (float) Math.max(0, Math.min(1, (db + 54) / 36));
+                main.post(() -> { if (capture == current && state == State.RECORDING) { level += (loud - level) * (loud > level ? .6f : .18f); control.invalidate(); } });
             }
             if (!current.cancel && bytes > 0) {
                 file.seek(0);
@@ -627,6 +630,19 @@ public class ConduitFloatService extends Service {
         private float downX, downY;
         private int initialX, initialY;
         private boolean dragging, moved;
+        /* The Aura, as the app's (components/ui/pill.tsx): a mesh of five coloured blobs behind the frost, each circling near
+           its edge, every point their blend by distance with the hue held. Drawn small and scaled up; the level turns them
+           faster, brightens them and moves their balance. It shows while recording and drains after. */
+        private final float[][] blobs = { // from (deg), l, c, h, orbit (s a turn), swell
+            { 180, .58f, .2f, 290, 7, .5f }, { 300, .64f, .21f, 22, -9, -.35f }, { 60, .64f, .23f, 345, 11, .6f },
+            { 0, .74f, .17f, 62, -13, .45f }, { 125, .6f, .2f, 315, 8, -.3f } };
+        private final float[] turns = { 0, 1.3f, 2.6f, 3.9f, 5.2f };
+        private Bitmap aura;
+        private int[] auraPixels;
+        private float auraShown, auraLevel;
+        private long auraLast;
+        private final Paint auraPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        private final Path clip = new Path();
 
         FloatView() {
             super(ConduitFloatService.this);
@@ -689,9 +705,81 @@ public class ConduitFloatService extends Service {
             for (View button : new View[] { cancelButton, stopButton }) button.setAlpha(contentAlpha());
         }
 
+        private int gamma(double x) { return (int) Math.max(0, Math.min(255, 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(0, x), 1 / 2.4) - .055))); }
+
+        /** Steps the Aura on (dt seconds) and draws it into its small bitmap; false when it has nothing to show. */
+        private boolean stepAura(float w, float h) {
+            long now = SystemClock.uptimeMillis();
+            float dt = auraLast == 0 ? 0 : Math.min(.1f, (now - auraLast) / 1000f);
+            auraLast = now;
+            float target = state == State.RECORDING ? 1 : 0;
+            auraShown += Math.signum(target - auraShown) * Math.min(Math.abs(target - auraShown), dt / (target > 0 ? .35f : .5f));
+            auraLevel += (level - auraLevel) * Math.min(1, dt / .12f);
+            if (auraShown <= 0 && target == 0) { auraLast = 0; return false; }
+            int gw = 64, gh = Math.max(4, Math.round(64 * h / Math.max(1, w)));
+            if (aura == null || aura.getHeight() != gh) { aura = Bitmap.createBitmap(gw, gh, Bitmap.Config.ARGB_8888); auraPixels = new int[gw * gh]; }
+            float lv = auraLevel, aspect = (float) gw / gh;
+            int n = blobs.length;
+            float[] bx = new float[n], by = new float[n], br = new float[n], bl = new float[n], bc = new float[n], ba = new float[n], bb = new float[n];
+            for (int i = 0; i < n; i++) {
+                float[] blob = blobs[i];
+                turns[i] += dt * (2 * (float) Math.PI / blob[4]) * (1 + 1.5f * lv);
+                double t = turns[i], from = Math.toRadians(blob[0]), reach = .38 * (.9 + lv * blob[5] + .25 * Math.sin(2 * t));
+                bx[i] = (float) (.5 + .32 * Math.cos(from) + .14 * Math.cos(t));
+                by[i] = (float) (.5 + .36 * Math.sin(from) + .26 * Math.sin(t));
+                br[i] = (float) Math.pow(Math.max(.06, reach), 2);
+                bl[i] = blob[1] + .05f * lv; bc[i] = blob[2];
+                ba[i] = (float) Math.cos(Math.toRadians(blob[3])); bb[i] = (float) Math.sin(Math.toRadians(blob[3]));
+            }
+            // A faint ground of the middle hue everywhere, so two far hues meeting settle through it.
+            float gw0 = .18f, ga = (float) Math.cos(Math.toRadians(345)), gb = (float) Math.sin(Math.toRadians(345));
+            for (int y = 0; y < gh; y++) for (int x = 0; x < gw; x++) {
+                float u = (x + .5f) / gw, v = (y + .5f) / gh;
+                float sw = gw0, sl = gw0 * .62f, sc = gw0 * .2f, sa = gw0 * ga, sb = gw0 * gb;
+                for (int i = 0; i < n; i++) {
+                    float dx = (u - bx[i]) * Math.min(1, aspect), dy = (v - by[i]) * Math.min(1, 1 / aspect);
+                    float k = (float) Math.exp(-(dx * dx + dy * dy) / br[i]);
+                    sw += k; sl += k * bl[i]; sc += k * bc[i]; sa += k * ba[i]; sb += k * bb[i];
+                }
+                double norm = Math.hypot(sa, sb), c = sc / sw, L = sl / sw, A = c * sa / (norm == 0 ? 1 : norm), B = c * sb / (norm == 0 ? 1 : norm);
+                double l_ = L + .3963377774 * A + .2158037573 * B, m_ = L - .1055613458 * A - .0638541728 * B, s_ = L - .0894841775 * A - 1.291485548 * B;
+                double lc = l_ * l_ * l_, mc = m_ * m_ * m_, sc3 = s_ * s_ * s_;
+                auraPixels[y * gw + x] = 0xff000000 | gamma(4.0767416621 * lc - 3.3077115913 * mc + .2309699292 * sc3) << 16
+                    | gamma(-1.2684380046 * lc + 2.6097574011 * mc - .3413193965 * sc3) << 8 | gamma(-.0041960863 * lc - .7034186147 * mc + 1.707614701 * sc3);
+            }
+            aura.setPixels(auraPixels, 0, gw, 0, 0, gw, gh);
+            return true;
+        }
+
         @Override protected void onDraw(Canvas canvas) {
             float w = getWidth(), h = getHeight();
             boolean right = prefs().getBoolean("right", true);
+            // The Aura under everything, clipped to the pill, with the frost's sheen and lit rim over it.
+            if (stepAura(w, h)) {
+                float rr = Math.min(w, h) / 2;
+                clip.reset();
+                clip.addRoundRect(0, 0, w, h, rr, rr, Path.Direction.CW);
+                canvas.save();
+                canvas.clipPath(clip);
+                auraPaint.setAlpha(Math.round(255 * auraShown * Math.min(1, openness)));
+                canvas.drawBitmap(aura, null, new RectF(0, 0, w, h), auraPaint);
+                int sheen = Math.round(26 * auraShown);
+                paint.setShader(new android.graphics.LinearGradient(0, 0, 0, h * .6f, Color.argb(sheen, 255, 255, 255), 0, android.graphics.Shader.TileMode.CLAMP));
+                canvas.drawRect(0, 0, w, h, paint);
+                paint.setShader(null);
+                // The inset glow (white 14%, reaching .3 of the pill's height), as stacked strokes fading inward.
+                paint.setStyle(Paint.Style.STROKE);
+                float reach = .3f * h;
+                for (int i = 0; i < 6; i++) {
+                    float d = reach * (i + .5f) / 6, sw = reach / 6;
+                    paint.setStrokeWidth(sw);
+                    paint.setColor(Color.argb(Math.round(36 * auraShown * (1 - (i + .5f) / 6)), 255, 255, 255));
+                    canvas.drawRoundRect(d, d, w - d, h - d, Math.max(0, rr - d), Math.max(0, rr - d), paint);
+                }
+                paint.setStyle(Paint.Style.FILL);
+                canvas.restore();
+                postInvalidateOnAnimation();
+            }
             // The frost (fill, its one stroke, the blur) is the window's background; this draws only what sits on it.
             // A soft top highlight, inside the stroke, as v2's inset 0 1px 0 white 50%.
             float r = Math.min(w, h) / 2, inset = dp(1);
@@ -720,7 +808,9 @@ public class ConduitFloatService extends Service {
                 float bar = dp(3), gap = dp(4), span = bars * bar + (bars - 1) * gap, x = mid - span / 2;
                 for (int i = 0; i < bars; i++) {
                     float weight = 1 - Math.abs(i - (bars - 1) / 2f) / ((bars + 1) / 2f);
-                    float tall = Math.min(h - dp(20), dp(4) + dp(18) * level * (.35f + .65f * weight));
+                    // Each bar breathes on its own beat, so even steady speech moves the row.
+                    float wobble = .7f + .3f * (float) Math.sin(SystemClock.uptimeMillis() / 1000f * (7 + 2.3f * i) + i * 1.7f);
+                    float tall = Math.min(h - dp(14), dp(4) + dp(26) * auraLevel * (.4f + .6f * weight) * wobble);
                     canvas.drawRoundRect(x, (h - tall) / 2, x + bar, (h + tall) / 2, bar / 2, bar / 2, paint);
                     x += bar + gap;
                 }
