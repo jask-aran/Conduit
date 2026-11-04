@@ -198,8 +198,7 @@ public class ConduitFloatService extends Service {
                     discard();
                     show(State.HANDLE);
                     // The pill's ✕: back to the radial, the captures still held, to pick another target.
-                    android.util.Log.d("ConduitFloat", "cancelled, reopen " + reopenAfterCancel);
-                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { android.util.Log.d("ConduitFloat", "reopen " + machine.state() + " " + radialUp()); if (!destroyed && machine.state() == State.HANDLE) openRadial(); }, 160); }
+                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { if (!destroyed && machine.state() == State.HANDLE) openRadial(); }, 160); }
                 }
                 else if (saved) sendRecording();
                 else { discard(); show(State.ERROR); }

@@ -138,7 +138,8 @@ final class FloatView extends FrameLayout {
         stopButton.setScaleType(ImageView.ScaleType.CENTER);
         stopButton.setContentDescription("Send to jbot");
         stopButton.setBackground(roundButton(0xffe8e9eb));
-        stopButton.setOnClickListener(view -> { if (state == State.RECORDING) listener.onSend(); });
+        // this.state: a bare "state" here is the constructor's parameter (the state Float was created in).
+        stopButton.setOnClickListener(view -> { if (this.state == State.RECORDING) listener.onSend(); });
         addView(stopButton);
     }
 
