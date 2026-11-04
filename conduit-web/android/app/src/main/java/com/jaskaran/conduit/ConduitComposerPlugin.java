@@ -40,7 +40,7 @@ import java.util.List;
 /** A native copy of the phone's measured field and pills. Only inset progress moves this overlay. */
 @CapacitorPlugin(name = "ConduitComposer")
 public class ConduitComposerPlugin extends Plugin {
-    private FrameLayout root, controls, field;
+    private FrameLayout root, controls, field, edits;
     private EditText input;
     private float scale, density, restBottom, fieldGap, fieldX, fieldWidth, rowHeight, minHeight, maxHeight, iconSize;
     private int navBottom, imeBottom, fieldHeight;
@@ -84,8 +84,11 @@ public class ConduitComposerPlugin extends Plugin {
                 controls = new FrameLayout(getActivity());
                 controls.setClipChildren(false); controls.setClipToPadding(false);
                 root.addView(controls, new FrameLayout.LayoutParams(-1, Math.round(rowHeight), Gravity.BOTTOM));
+                edits = new FrameLayout(getActivity());
+                edits.setClipChildren(false); edits.setClipToPadding(false);
+                root.addView(edits, new FrameLayout.LayoutParams(-1, 0, Gravity.BOTTOM));
                 field = new FrameLayout(getActivity());
-                field.setBackground(new Frost((float) type.optDouble("radius", 18) * scale));
+                field.setBackground(new Frost((float) type.optDouble("radius", 18) * scale, 0xff3b3a3d));
                 root.addView(field, new FrameLayout.LayoutParams(Math.round(fieldWidth), Math.round(minHeight), Gravity.BOTTOM | Gravity.LEFT));
                 input = new EditText(getActivity()) {
                     @Override protected void onSelectionChanged(int start, int end) {
@@ -128,7 +131,8 @@ public class ConduitComposerPlugin extends Plugin {
                     }
                     public void afterTextChanged(Editable text) {}
                 });
-                setPills(call.getArray("pills", new JSArray()), webOrigin[0] - contentOrigin[0]);
+                setPills(controls, call.getArray("pills", new JSArray()), webOrigin[0] - contentOrigin[0], (float) row.optDouble("y") + (float) row.optDouble("height"), false);
+                setPills(edits, call.getArray("editPills", new JSArray()), webOrigin[0] - contentOrigin[0], (float) box.optDouble("y"), true);
                 ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
                     if (!animating) { move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
                     return insets;
@@ -185,6 +189,8 @@ public class ConduitComposerPlugin extends Plugin {
         FrameLayout.LayoutParams row = (FrameLayout.LayoutParams) controls.getLayoutParams(); row.bottomMargin = Math.round(restBottom); controls.setLayoutParams(row);
         FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) field.getLayoutParams();
         box.leftMargin = Math.round(fieldX); box.bottomMargin = Math.round(restBottom + rowHeight + fieldGap); box.height = height; field.setLayoutParams(box);
+        FrameLayout.LayoutParams editBox = (FrameLayout.LayoutParams) edits.getLayoutParams();
+        editBox.bottomMargin = box.bottomMargin + height; edits.setLayoutParams(editBox);
         if (height != fieldHeight) {
             fieldHeight = height; JSObject event = new JSObject(); event.put("height", height / scale); notifyListeners("height", event);
         }
@@ -194,8 +200,9 @@ public class ConduitComposerPlugin extends Plugin {
         input.measure(View.MeasureSpec.makeMeasureSpec(Math.round(fieldWidth), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         place(Math.round(Math.max(minHeight, Math.min(maxHeight, input.getMeasuredHeight()))));
     }
-    private void setPills(JSONArray pills, int offsetX) {
-        controls.removeAllViews();
+    private void setPills(FrameLayout holder, JSONArray pills, int offsetX, float bottom, boolean edit) {
+        holder.removeAllViews();
+        int extent = 0;
         for (int i = 0; i < pills.length(); i++) {
             JSONObject pill = pills.optJSONObject(i); if (pill == null) continue;
             JSONObject rect = pill.optJSONObject("rect"); if (rect == null) continue;
@@ -209,12 +216,17 @@ public class ConduitComposerPlugin extends Plugin {
                 case "send": icon = R.drawable.composer_send; break;
                 case "stop": icon = R.drawable.composer_stop; break;
                 case "latest": icon = R.drawable.composer_latest; break;
+                case "undo": icon = R.drawable.composer_undo; break;
+                case "delete": icon = R.drawable.composer_delete; break;
+                case "left": icon = R.drawable.composer_left; break;
+                case "right": icon = R.drawable.composer_right; break;
+                case "select": icon = R.drawable.composer_select; break;
                 default: continue;
             }
             ImageButton button = new ImageButton(getActivity());
-            button.setBackground(new Frost(Math.round(rowHeight / 2)));
             button.setImageResource(icon); button.setImageTintList(ColorStateList.valueOf(0xffe8e9eb));
             int h = Math.round((float) rect.optDouble("height") * scale), w = Math.round((float) rect.optDouble("width") * scale);
+            button.setBackground(new Frost(h / 2f, edit ? 0xff3b3a3d : 0xff38393c));
             button.setPadding(Math.max(0, Math.round((w - iconSize) / 2)), Math.max(0, Math.round((h - iconSize) / 2)), Math.max(0, Math.round((w - iconSize) / 2)), Math.max(0, Math.round((h - iconSize) / 2)));
             button.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
             button.setContentDescription(pill.optString("label")); button.setEnabled(pill.optBoolean("enabled")); button.setAlpha(button.isEnabled() ? 1 : .45f);
@@ -229,21 +241,33 @@ public class ConduitComposerPlugin extends Plugin {
                 JSObject event = new JSObject(); event.put("name", name); notifyListeners("action", event);
             });
             FrameLayout.LayoutParams box = new FrameLayout.LayoutParams(w, h, Gravity.LEFT | Gravity.BOTTOM);
-            box.leftMargin = offsetX + Math.round((float) rect.optDouble("x") * scale); controls.addView(button, box);
+            box.leftMargin = offsetX + Math.round((float) rect.optDouble("x") * scale); box.bottomMargin = Math.round((bottom - (float) rect.optDouble("y") - (float) rect.optDouble("height")) * scale);
+            extent = Math.max(extent, box.bottomMargin + h);
+            holder.addView(button, box);
+        }
+        if (edit) {
+            FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) holder.getLayoutParams();
+            box.height = extent; holder.setLayoutParams(box);
         }
     }
     @PluginMethod public void update(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             if (input != null && !returning) {
                 String text = call.getString("text");
-                if (text != null && !text.contentEquals(input.getText())) {
-                    changing = true; int start = input.getSelectionStart(), end = input.getSelectionEnd();
-                    input.setText(text); select(start, end); changing = false; grow();
-                }
-                JSArray pills = call.getArray("pills");
-                if (pills != null) {
+                boolean textChanged = text != null && !text.contentEquals(input.getText());
+                int start = call.getInt("selectionStart", input.getSelectionStart());
+                int end = call.getInt("selectionEnd", input.getSelectionEnd());
+                changing = true;
+                if (textChanged) input.setText(text);
+                if (textChanged || call.hasOption("selectionStart") || call.hasOption("selectionEnd")) select(start, end);
+                changing = false;
+                if (textChanged) grow();
+                JSArray pills = call.getArray("pills"), editPills = call.getArray("editPills");
+                JSObject row = call.getObject("row"), box = call.getObject("field");
+                if (pills != null && row != null || editPills != null && box != null) {
                     int[] web = new int[2], host = new int[2]; getBridge().getWebView().getLocationInWindow(web); root.getLocationInWindow(host);
-                    setPills(pills, web[0] - host[0]);
+                    if (pills != null && row != null) setPills(controls, pills, web[0] - host[0], (float) row.optDouble("y") + (float) row.optDouble("height"), false);
+                    if (editPills != null && box != null) setPills(edits, editPills, web[0] - host[0], (float) box.optDouble("y"), true);
                 }
                 Double height = call.getDouble("fieldHeight");
                 if (height != null) place(Math.round(Math.max(minHeight, Math.min(maxHeight, height.floatValue() * scale))));
@@ -284,26 +308,44 @@ public class ConduitComposerPlugin extends Plugin {
             ViewCompat.setWindowInsetsAnimationCallback(root, null); ViewCompat.setOnApplyWindowInsetsListener(root, null);
             ((ViewGroup) root.getParent()).removeView(root);
         }
-        root = controls = field = null; input = null; fieldHeight = 0;
+        root = controls = field = edits = null; input = null; fieldHeight = 0;
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::remove); }
 
-    /** Float's dense core, white fill and stroke, with an inset top highlight; no cross-window blur. */
+    /** One .ui-frost layer: Frost plain gives the row no extra material (frost.tsx).
+     * Flat reference fills use C = alpha * white + (1 - alpha) * pageGround, alpha = 43/255
+     * (--frost-fill, foundations.css). The effective backdrops inferred from the supplied phone samples
+     * are #131216 for the field/edit pills and #101115 for the row: #3b3a3d and #38393c.
+     * Border = white at 77/255 over that fill; inset highlights = white at 50% / 10%.
+     * frost.css paints the fill under the border; its inset shadows start INSIDE that border.
+     * There is no dense core and no vertical sheen gradient on these controls.
+     */
     private class Frost extends Drawable {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final float radius;
-        Frost(float radius) { this.radius = radius; }
+        private final int fill;
+        Frost(float radius, int fill) { this.radius = radius; this.fill = fill; }
         @Override public void draw(Canvas canvas) {
-            RectF box = new RectF(getBounds()); float inset = density;
-            paint.setStyle(Paint.Style.FILL); paint.setColor(ColorUtils.compositeColors(0x2bffffff, 0xfa3a3b3f)); canvas.drawRoundRect(box, radius, radius, paint);
-            box.inset(inset / 2, inset / 2); paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(inset); paint.setColor(0x4dffffff); canvas.drawRoundRect(box, radius, radius, paint);
-            Path clip = new Path(); box.inset(inset / 2, inset / 2); clip.addRoundRect(box, Math.max(0, radius - inset), Math.max(0, radius - inset), Path.Direction.CW);
-            canvas.save(); canvas.clipPath(clip);
-            paint.setShader(new android.graphics.LinearGradient(0, box.top, 0, box.centerY(), 0x80ffffff, 0x00ffffff, android.graphics.Shader.TileMode.CLAMP));
-            canvas.drawRoundRect(box, Math.max(0, radius - inset), Math.max(0, radius - inset), paint);
-            paint.setShader(new android.graphics.LinearGradient(0, box.centerY(), 0, box.bottom, 0x00ffffff, 0x1affffff, android.graphics.Shader.TileMode.CLAMP));
-            canvas.drawRoundRect(box, Math.max(0, radius - inset), Math.max(0, radius - inset), paint);
-            paint.setShader(null); canvas.restore();
+            RectF box = new RectF(getBounds());
+            // scale is the real physical-pixels/CSS-pixel ratio, including WebView zoom.
+            float line = scale;
+            paint.setStyle(Paint.Style.FILL); paint.setColor(fill);
+            canvas.drawRoundRect(box, radius, radius, paint);
+            box.inset(line / 2, line / 2);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(line);
+            paint.setColor(ColorUtils.compositeColors(0x4dffffff, fill));
+            canvas.drawRoundRect(box, Math.max(0, radius - line / 2), Math.max(0, radius - line / 2), paint);
+            box.inset(line / 2, line / 2);
+            Path inside = new Path();
+            inside.addRoundRect(box, Math.max(0, radius - line), Math.max(0, radius - line), Path.Direction.CW);
+            // CSS inset shadows: subtract the same rounded box shifted by one CSS px.
+            // This follows the curved rim too, with no blur or vertical sheen gradient.
+            Path shifted = new Path(inside), highlight = new Path(inside);
+            shifted.offset(0, line); highlight.op(shifted, Path.Op.DIFFERENCE);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(ColorUtils.compositeColors(0x80ffffff, fill)); canvas.drawPath(highlight, paint);
+            shifted.set(inside); shifted.offset(0, -line); highlight.set(inside); highlight.op(shifted, Path.Op.DIFFERENCE);
+            paint.setColor(ColorUtils.compositeColors(0x1affffff, fill)); canvas.drawPath(highlight, paint);
         }
         @Override public void setAlpha(int alpha) {}
         @Override public void setColorFilter(android.graphics.ColorFilter filter) {}

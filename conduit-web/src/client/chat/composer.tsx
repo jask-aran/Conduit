@@ -306,7 +306,14 @@ export function Composer(props: {
     undoStack.push({ text, start: input?.selectionStart ?? text.length, end: input?.selectionEnd ?? text.length });
     if (undoStack.length > 100) undoStack.shift();
   };
-  const placeCursor = (start: number, end = start) => queueMicrotask(() => { input.focus({ preventScroll: true }); input.setSelectionRange(start, end); });
+  const placeCursor = (start: number, end = start) => queueMicrotask(() => {
+    if (!nativeUp()) input.focus({ preventScroll: true });
+    input.setSelectionRange(start, end);
+    if (nativeUp()) {
+      lastNativeText = props.chat.draft();
+      void nativeComposer.update({ text: props.chat.draft(), selectionStart: input.selectionStart, selectionEnd: input.selectionEnd });
+    }
+  });
   const editDraft = (text: string, cursor: number) => {
     snapshot(true);
     restoringDraft = true;
@@ -847,7 +854,7 @@ export function Composer(props: {
     nativeFrame = requestAnimationFrame(() => {
       if (!nativeUp() || nativeStarting) return;
       const geometry = measureNativeComposer(input);
-      void nativeComposer.update({ pills: geometry.pills, fieldHeight: geometry.field.height }).catch(() => void nativeComposer.end());
+      void nativeComposer.update({ pills: geometry.pills, editPills: geometry.editPills, field: geometry.field, row: geometry.row, fieldHeight: geometry.field.height }).catch(() => void nativeComposer.end());
     });
   };
   const finishNativeTyping = async (event: ComposerInput) => {
@@ -898,6 +905,7 @@ export function Composer(props: {
             }
             else if (name === "stop") void props.chat.stop();
             else if (name === "latest") scrollToLatest();
+            else if (name === "undo" || name === "delete" || name === "left" || name === "right" || name === "select") editActions[name === "select" ? "end" : name]();
             else { nativeAction = name; void nativeComposer.end(); }
           }),
         ]);
@@ -907,7 +915,7 @@ export function Composer(props: {
         resize();
         const geometry = measureNativeComposer(input);
         nativeRoot = input.closest(".ui-phone-composer");
-        nativeParts = [...(nativeRoot?.querySelectorAll<HTMLElement>(":scope > .ui-phone-field, :scope > .ui-phone-row") ?? [])]
+        nativeParts = [...(nativeRoot?.querySelectorAll<HTMLElement>(":scope > .ui-phone-field, :scope > .ui-phone-row, :scope > .ui-phone-edit") ?? [])]
           .map((element) => ({ element, visibility: element.style.visibility }));
         for (const { element } of nativeParts) element.style.visibility = "hidden";
         setNativeUp(true);
@@ -918,9 +926,9 @@ export function Composer(props: {
         if (!nativeUp()) return;
         if (nativeDisposed || nativeChat !== props.chat.loadedId()) { await nativeComposer.end(); return; }
         nativeWatch = new ResizeObserver(syncNativeGeometry);
-        if (nativeRoot) for (const element of nativeRoot.querySelectorAll(".ui-pill, .ui-phone-row")) nativeWatch.observe(element);
+        if (nativeRoot) for (const element of nativeRoot.querySelectorAll(".ui-pill, .ui-phone-row, .ui-phone-edit")) nativeWatch.observe(element);
         nativeAttributes = new MutationObserver(syncNativeGeometry);
-        if (nativeRoot) nativeAttributes.observe(nativeRoot, { subtree: true, attributes: true, attributeFilter: ["disabled", "aria-label", "data-folded"] });
+        if (nativeRoot) nativeAttributes.observe(nativeRoot, { subtree: true, attributes: true, attributeFilter: ["disabled", "aria-label", "data-folded", "data-show", "data-opening"] });
         syncNativeGeometry();
       } catch {
         restoreWebComposer(); setNativeUp(false); nativeStarting = false;
