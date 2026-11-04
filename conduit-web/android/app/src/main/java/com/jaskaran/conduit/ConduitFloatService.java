@@ -256,6 +256,7 @@ public class ConduitFloatService extends Service {
         // The pill: 4 + 36 (cancel) + 6 + 56 (level) + 6 + 36 (send) + 4. At rest, a 44dp bubble.
         float width = PILL;
         if (state == State.HANDLE) width = HANDLE_W;
+        else if (sending()) width = SENDING;
         else if (state == State.ERROR) {
             TextPaint text = new TextPaint();
             text.setTextSize(dp(13));
@@ -264,7 +265,11 @@ public class ConduitFloatService extends Service {
         return Math.min(availableWidth, dp(width));
     }
 
-    private int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? HANDLE_H : 44)); }
+    private int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? HANDLE_H : sending() ? SENDING : 44)); }
+    /** Sent off: the pill gathers into a small round bubble, a spinner and then a tick, and goes back to rest. */
+    private boolean sending() { return state == State.STOPPING || state == State.SENDING || state == State.SENT; }
+    private static final float SENDING = 40;
+    private long sentAt;
     /** The pill's width in dp, and how far Float rests from the screen's edge. */
     private static final float PILL = 148, EDGE = 3;
     /** At rest: a small upright capsule, close to the edge. */
@@ -546,8 +551,9 @@ public class ConduitFloatService extends Service {
                 if (destroyed || sending != generation) return;
                 if (sent) {
                     discard();
+                    sentAt = SystemClock.uptimeMillis();
                     show(State.SENT);
-                    main.postDelayed(() -> { if (!destroyed && sending == generation) show(State.HANDLE); }, 700);
+                    main.postDelayed(() -> { if (!destroyed && sending == generation) show(State.HANDLE); }, 1000);
                 } else show(State.ERROR);
             });
         });
@@ -676,12 +682,9 @@ public class ConduitFloatService extends Service {
         }
 
         void buttons() {
-            boolean open = state == State.RECORDING || state == State.STOPPING || state == State.SENDING || state == State.SENT;
-            cancelButton.setVisibility(state == State.HANDLE ? GONE : VISIBLE);
-            stopButton.setVisibility(open ? VISIBLE : GONE);
-            // Sending and sent show in the send button's place, so the pill keeps its size until it closes.
-            stopButton.setImageResource(state == State.SENT ? R.drawable.float_check : R.drawable.float_send);
-            stopButton.setImageAlpha(state == State.STOPPING || state == State.SENDING ? 0 : 255);
+            // Sending and sent are the small bubble's own drawing; the buttons are the pill's.
+            cancelButton.setVisibility(state == State.RECORDING || state == State.ERROR ? VISIBLE : GONE);
+            stopButton.setVisibility(state == State.RECORDING ? VISIBLE : GONE);
             stopButton.setEnabled(state == State.RECORDING);
         }
 
@@ -815,19 +818,37 @@ public class ConduitFloatService extends Service {
                     x += bar + gap;
                 }
             } else if (state == State.STOPPING || state == State.SENDING) {
-                // A spinner in the send button's place (its arrow is hidden), dark on the light button.
-                paint.setColor(Color.argb(alpha, 20, 21, 24));
+                // The small bubble: a light spinner in its middle.
+                paint.setColor(Color.argb(Math.round(alpha * .9f), 232, 233, 235));
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(2));
                 paint.setStrokeCap(Paint.Cap.ROUND);
-                float cx = offset + width - dp(22);
-                canvas.drawArc(cx - dp(7), h / 2 - dp(7), cx + dp(7), h / 2 + dp(7), (SystemClock.uptimeMillis() % 900) * .4f, 250, false, paint);
+                float cx = offset + width / 2f;
+                canvas.drawArc(cx - dp(8), h / 2 - dp(8), cx + dp(8), h / 2 + dp(8), (SystemClock.uptimeMillis() % 900) * .4f, 250, false, paint);
                 paint.setStrokeCap(Paint.Cap.BUTT);
                 paint.setStyle(Paint.Style.FILL);
-                // The level row at rest, quiet, so the middle does not jump empty.
-                paint.setColor(Color.argb(Math.round(alpha * .45f), 232, 233, 235));
-                for (int i = 0; i < 7; i++) { float x = mid - dp(23.5f) + i * dp(7); canvas.drawRoundRect(x, h / 2 - dp(2), x + dp(3), h / 2 + dp(2), dp(1.5f), dp(1.5f), paint); }
                 postInvalidateOnAnimation();
+            } else if (state == State.SENT) {
+                // The tick draws itself on (220ms, decelerating), then holds until Float goes back to rest.
+                float t = Math.min(1, (SystemClock.uptimeMillis() - sentAt) / 220f), drawn = 1 - (1 - t) * (1 - t) * (1 - t);
+                float cx = offset + width / 2f, cy = h / 2;
+                Path tick = new Path();
+                tick.moveTo(cx - dp(6), cy + dp(.5f));
+                tick.lineTo(cx - dp(1.75f), cy + dp(4.5f));
+                tick.lineTo(cx + dp(6.5f), cy - dp(4.5f));
+                android.graphics.PathMeasure measure = new android.graphics.PathMeasure(tick, false);
+                Path part = new Path();
+                measure.getSegment(0, measure.getLength() * drawn, part, true);
+                paint.setColor(Color.argb(alpha, 232, 233, 235));
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(2.25f));
+                paint.setStrokeCap(Paint.Cap.ROUND);
+                paint.setStrokeJoin(Paint.Join.ROUND);
+                canvas.drawPath(part, paint);
+                paint.setStrokeCap(Paint.Cap.BUTT);
+                paint.setStrokeJoin(Paint.Join.MITER);
+                paint.setStyle(Paint.Style.FILL);
+                if (t < 1) postInvalidateOnAnimation();
             } else if (state == State.ERROR) {
                 text.setTextSize(dp(13));
                 text.setColor(Color.argb(alpha, 232, 233, 235));
