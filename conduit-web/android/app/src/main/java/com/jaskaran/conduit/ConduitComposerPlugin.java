@@ -317,7 +317,6 @@ public class ConduitComposerPlugin extends Plugin {
         for (int i = 0; i < description.length(); i++) {
             JSONObject state = description.optJSONObject(i); if (state == null) continue;
             ConduitMoves.Part old = parts.get(state.optString("id"));
-            if (old != null && old.state != null && !old.state.optBoolean("folded") && state.optBoolean("folded") && "fold".equals(state.optString("move"))) roomDelay = moves.quick();
         }
         for (int i = 0; i < description.length(); i++) {
             JSONObject state = description.optJSONObject(i); if (state == null) continue;

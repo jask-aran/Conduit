@@ -57,7 +57,8 @@ export function glide(element: HTMLElement): () => void {
   return () => observer.disconnect();
 }
 
-/** Measured collapse: content and room glide together; out waits for the content's quick fade. */
+/** Measured collapse: content and room glide together, from the first frame both ways (the content fades over the
+ *  quick duration as its room goes), so what moves with the room -- a transcript above the composer -- makes one move. */
 export function collapse(holder: HTMLElement): () => void {
   const content = holder.firstElementChild;
   if (!(content instanceof HTMLElement)) return () => {};
@@ -84,7 +85,7 @@ export function collapse(holder: HTMLElement): () => void {
     const fromHeight = animation ? holder.getBoundingClientRect().height : height;
     const fromMargin = animation ? parseFloat(getComputedStyle(holder).marginBlockEnd) || 0 : margin;
     animation?.cancel();
-    const delay = nextOut && !out ? duration("--duration-quick", holder) : 0;
+    const delay = 0;
     out = nextOut; height = nextHeight; margin = nextMargin;
     animation = undefined;
     holder.style.overflow = overflow;

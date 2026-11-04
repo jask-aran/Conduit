@@ -79,12 +79,12 @@ final class ConduitMoves {
         Interpolator fadeCurve = out ? leave : arrive;
         switch (move) {
             case "tuck": break;
-            case "collapse": layoutDelay = out ? quick : 0; break;
+            case "collapse": layoutDelay = 0; break;
             case "wipe": fadeTime = out ? quick : 0; fadeCurve = leave; break;
             case "give": fadeTime = 0; break;
             case "fade":
                 // The field follows its collapse holder, after its quick fade on the way out.
-                if (field) layoutDelay = out ? quick : 0;
+                if (field) layoutDelay = 0;
                 break;
             default: throw new IllegalArgumentException("Unknown composer move: " + move);
         }
@@ -93,7 +93,7 @@ final class ConduitMoves {
         to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
         // Edit pills sit above the holder and travel with its delayed room, independently of their fade.
         boolean edit = state.optBoolean("edit");
-        to(part, "y", y, layoutTime, edit && fieldOut ? quick : layoutDelay, edit ? room : layoutCurve, initial, v -> part.y = v);
+        to(part, "y", y, layoutTime, layoutDelay, edit ? room : layoutCurve, initial, v -> part.y = v);
         to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
         to(part, "height", field && out ? 0 : height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
         to(part, "opacity", out ? 0 : 1, fadeTime, fadeDelay, fadeCurve, initial, v -> part.opacity = v);

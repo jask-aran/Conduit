@@ -8,14 +8,15 @@
  * Which move a part makes follows from what happens to its room, so each part has one way to go:
  *   - its room goes to a neighbour: tuck (every pill that comes and goes with what there is: Send, Stop, Scroll to latest)
  *   - something else takes its place where it stands: fade (pills under the voice track, the edit pills over the field)
- *   - it holds others and its room goes: collapse (the phone composer's field)
+ *   - it holds others and its room goes: collapse (the phone composer's field and its edit pills)
  *
  *   fade      comes and goes where it stands: in over the gentle duration from its first frame, out over the quick one
  *   tuck      a part in a row that goes keeps its size and slides under its left neighbour (--tuck-size, --tuck-gap) as
  *             it fades, its room going with the fade, so a neighbour that takes the room grows in the same move; in, the
  *             same backwards -- never seen squeezed
- *   collapse  a holder glides its height and room over gentle on ease-room, including content changes; out waits
- *             until what it holds has faded (each a fade of its own), in starts at once (measured by motion.ts)
+ *   collapse  a holder glides its height and room over gentle on ease-room, including content changes, from the
+ *             first frame both ways: out, what it holds fades over the quick duration as its room goes (measured by
+ *             motion.ts), so whatever moves with the room makes one move
  *   wipe      revealed by a clip opening from its end over the gentle duration (shown at once); out, it fades over the
  *             quick one as the clip closes (--wipe-radius rounds the clip)
  *   give      room handed between neighbours by grow: whatever takes it grows as the other gives it

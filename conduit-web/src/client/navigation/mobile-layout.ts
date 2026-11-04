@@ -1,5 +1,6 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
+import { travelsWithoutLayout, travelWithoutLayout } from "./keyboard-travel.ts";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -303,6 +304,7 @@ export function bindVisualViewportShell(): () => void {
      * itself.
      */
     let lastDurationMs = 250;
+    let travel: ReturnType<typeof travelWithoutLayout> | null = null;
     let lastCurve: number[] = [0, 1];
     const stopDrawing = () => {
       if (drawing) cancelAnimationFrame(drawing);
@@ -324,7 +326,7 @@ export function bindVisualViewportShell(): () => void {
         ): Promise<{ remove(): void }>;
         addListener(
           event: "keyboardAnimation",
-          handler: (info: { from: number; to: number; durationMs: number; curve: number[] }) => void,
+          handler: (info: { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number }) => void,
         ): Promise<{ remove(): void }>;
       }>("ConduitKeyboard");
       const animation = await plugin.addListener("keyboardAnimation", (info) => {
@@ -350,6 +352,14 @@ export function bindVisualViewportShell(): () => void {
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
+        // With the native composer up, the travel has no layout in it (keyboard-travel.ts).
+        travel?.cancel();
+        travel = null;
+        if (travelsWithoutLayout()) {
+          travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt },
+            (height) => { shellKeyboard = height; noteKeyboardFrame(true); sync(); });
+          return;
+        }
         const draw = () => {
           const t = (performance.now() - began) / durationMs;
           shellKeyboard = info.from + (info.to - info.from) * along(curve, t);
@@ -375,6 +385,11 @@ export function bindVisualViewportShell(): () => void {
          * bridge's worth of lag inside a dozen frames without any of them
          * being visible as a step.
          */
+        // A travel without layout lands itself; the system's end only says where.
+        if (travel?.running) {
+          if (!info.animating) { travelling = false; travel.settle(info.height); logKeyboardEvent("ime-end", Math.round(info.height)); }
+          return;
+        }
         if (travelling && info.animating) {
           const fraction = Math.min(1, Math.max(0, info.fraction));
           if (info.fraction >= 0 && travelDuration > 0) {

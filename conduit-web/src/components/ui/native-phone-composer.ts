@@ -60,7 +60,7 @@ export function describe(root: HTMLElement) {
     const rowBox = row.getBoundingClientRect(), liveBox = liveRow.getBoundingClientRect();
     const dx = liveBox.x - rowBox.x, dy = liveBox.bottom - rowBox.bottom;
     const rect = (element: Element): Rect => { const r = element.getBoundingClientRect(); return { x: r.x + dx, y: r.y + dy, width: r.width, height: r.height }; };
-    const selector = ".ui-phone-edit > .ui-pill, .ui-phone-field, .ui-phone-field > .ui-pill-field, .ui-phone-row > .ui-pill, .ui-phone-row > .ui-pill-room";
+    const selector = ".ui-phone-edit-pills > .ui-pill, .ui-phone-field, .ui-phone-field > .ui-pill-field, .ui-phone-row > .ui-pill, .ui-phone-row > .ui-pill-room";
     const nodes = [...copy.querySelectorAll<HTMLElement>(selector)], liveNodes = [...root.querySelectorAll<HTMLElement>(selector)];
     const parts = nodes.map((element, index) => {
       const button = element.querySelector("button"), textarea = element.querySelector("textarea");
@@ -153,7 +153,11 @@ export function mirror(root: HTMLElement, input: HTMLTextAreaElement, plugin: Na
         placeholder: input.placeholder, colours: fieldColours(input), states: PHONE_COMPOSER_STATES, blurStates: blurStates(), motion: motionSpec(root), haptics });
       if (stopped) { await plugin.end(); return; }
       ready = true; preference.addEventListener("change", sync);
-      sizes.observe(root); for (const element of root.querySelectorAll(".ui-pill, .ui-phone-field, .ui-phone-row")) sizes.observe(element);
+      // Only what changes where the parts end up: the row's width and the draft's lines. Not the parts that move
+      // (a gliding field, a tucking pill): they resize every frame of their move, and describing the composer (a copy
+      // laid out) on each of those frames cost the frame -- the transcript fell to every other frame. State changes come
+      // through the attributes.
+      for (const element of [root.querySelector(".ui-phone-row"), input]) if (element) sizes.observe(element);
       attributes.observe(root, { subtree: true, attributes: true, childList: true }); sync();
     } catch (error) { restore(); throw error; }
   };

@@ -190,6 +190,8 @@ public class ConduitKeyboardPlugin extends Plugin {
         }
         payload.put("curve", curve);
         payload.put("here", here);
+        // When the system began it (wall clock: the page reads the same one), so the page can start in phase.
+        payload.put("startedAt", System.currentTimeMillis());
         notifyListeners("keyboardAnimation", payload);
     }
 
