@@ -195,8 +195,11 @@ public class ConduitFloatPlugin extends Plugin {
     private void accessibilityStep(PluginCall call) {
         ask("Turn on Float screen context",
             "Screenshots without asking each time, the text on screen with them, and Float's frosted panels. "
-                + "Turn on Float screen context, then come back.",
-            "Open settings", () -> startActivityForResult(call, screenContextIntent(), "accessibilityReturned"), call);
+                + "In Installed apps, turn on Float screen context, then come back.",
+            "Open settings", () -> {
+                try { startActivityForResult(call, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "accessibilityReturned"); }
+                catch (RuntimeException unavailable) { permissionFlow = false; call.resolve(view()); }
+            }, call);
     }
 
     @ActivityCallback private void accessibilityReturned(PluginCall call, ActivityResult result) {
@@ -211,13 +214,6 @@ public class ConduitFloatPlugin extends Plugin {
             .setNegativeButton("Skip", (dialog, which) -> { permissionFlow = false; call.resolve(view()); })
             .setOnCancelListener(dialog -> { permissionFlow = false; call.resolve(view()); })
             .show();
-    }
-
-    private Intent screenContextIntent() {
-        android.content.ComponentName reader = new android.content.ComponentName(getContext(), ConduitScreenReader.class);
-        Intent details = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, reader.flattenToString());
-        return details.resolveActivity(getContext().getPackageManager()) != null ? details : new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
     }
 
     /** Android 13+ restricts Accessibility for an app installed from a file until App info allows it. */

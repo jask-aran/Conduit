@@ -73,15 +73,13 @@ public final class ConduitContext {
         return false;
     }
 
-    /** Android's page for Float's screen reader itself where the phone has one, else the Accessibility list. */
+    /**
+     * Android's Accessibility list. (Its page for one service, ACCESSIBILITY_DETAILS_SETTINGS, resolves on Samsung but
+     * refuses apps with a SecurityException.)
+     */
     public static void openScreenReaderSettings(Context context) {
-        ComponentName reader = new ComponentName(context, ConduitScreenReader.class);
-        try {
-            context.startActivity(new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-                .putExtra(Intent.EXTRA_COMPONENT_NAME, reader.flattenToString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch (RuntimeException noDetails) {
-            context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        }
+        try { context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+        catch (RuntimeException unavailable) { /* No settings app to open. */ }
     }
 
     public static void screenshot(Context context, Consumer<Result> callback) {
