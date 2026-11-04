@@ -83,11 +83,11 @@ final class FloatView extends FrameLayout {
         void onSend();
         void onRetry();
         void onDragEnded();
-        /** Held still at rest for HOLD_MS: a hold begins (it records; the radial opens around the finger). */
+        /** Held still at rest for HOLD_MS, with Hold to talk on: a hold begins (the recorder pill opens). */
         void onHoldStart();
         /** The held finger moved, in screen pixels. */
         void onHoldMove(float rawX, float rawY);
-        /** The hold let go; cancelled when the gesture was taken away (the system cancelled it). */
+        /** The hold let go; cancelled when dragged well away first, or when the system took the gesture away. */
         void onHoldEnd(boolean cancelled);
     }
     /** How long a still press at rest waits before it is a hold rather than a tap. */
@@ -260,8 +260,7 @@ final class FloatView extends FrameLayout {
             clip.addRoundRect(0, 0, w, h, rr, rr, Path.Direction.CW);
             canvas.save();
             canvas.clipPath(clip);
-            // A hold listens at the handle's size, so its Aura shows without the pill's openness.
-            auraPaint.setAlpha(Math.round(255 * auraShown * Math.min(1, window.held() ? 1 : window.openness)));
+            auraPaint.setAlpha(Math.round(255 * auraShown * Math.min(1, window.openness)));
             canvas.drawBitmap(aura, null, auraBounds, auraPaint);
             int sheen = Math.round(26 * auraShown);
             if (sheen != sheenBucket) {
@@ -394,7 +393,7 @@ final class FloatView extends FrameLayout {
             dragging = false; moved = false; holding = false;
             window.lift(true);
             removeCallbacks(holdStart);
-            if (state == State.HANDLE) postDelayed(holdStart, HOLD_MS);
+            if (state == State.HANDLE && window.prefs().getBoolean("holdToTalk", false)) postDelayed(holdStart, HOLD_MS);
         } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
             float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
             if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop() && !holding) {
@@ -426,7 +425,8 @@ final class FloatView extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 removeCallbacks(holdStart);
                 window.lift(false);
-                if (holding) { holding = false; listener.onHoldEnd(false); return true; }
+                // Let go after dragging well away from where the hold began: cancelled.
+                if (holding) { holding = false; listener.onHoldEnd(Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(80)); return true; }
                 if (dragging) listener.onDragEnded();
                 else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) listener.onCancel();
                 else if (!moved) performClick();

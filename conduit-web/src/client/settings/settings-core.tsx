@@ -487,9 +487,9 @@ export function Settings(props: {
     catch (error) { floatFailure(error); refreshFloat(); }
     finally { setFloatBusy(false); }
   };
-  const changeFloatHoldTarget = async (holdTarget: FloatHoldTarget) => {
+  const changeFloatHold = async (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => {
     setFloatError("");
-    try { setFloatStatus(await conduitFloat.setHoldTarget(holdTarget)); }
+    try { setFloatStatus(await conduitFloat.setHold(options)); }
     catch (error) { floatFailure(error); }
   };
   const allowFloatOverlay = async () => {
@@ -1605,19 +1605,24 @@ export function Settings(props: {
 
                 <Group title="Input">
                   <Show when={installedClientKind === "android"}>
-                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send, or hold it to talk.">
+                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send.">
                       <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
                         <Button variant="ghost" size="sm" disabled={floatBusy()} onClick={() => void allowFloatOverlay()}>Allow</Button>
                       </Show>
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
-                      <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say. Slide onto another target while holding to send it there instead.">
-                        <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHoldTarget(holdTarget)} options={[
-                          { value: "jbot", label: "jbot" },
-                          { value: "chat", label: "New chat" },
-                        ]} />
+                      <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
+                        <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
                       </SettingLine>
+                      <Show when={floatStatus()!.holdToTalk}>
+                        <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say.">
+                          <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHold({ holdTarget })} options={[
+                            { value: "jbot", label: "jbot" },
+                            { value: "chat", label: "New chat" },
+                          ]} />
+                        </SettingLine>
+                      </Show>
                     </Show>
                     <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
                   </Show>

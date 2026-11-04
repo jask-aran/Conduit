@@ -10,7 +10,9 @@ export interface FloatStatus {
   enabled: boolean;
   overlayPermission: boolean;
   micPermission: boolean;
-  /** What a hold on Float talks to before a slot is chosen. */
+  /** Hold to talk: a hold on Float records at once (off by default; a tap opens the radial either way). */
+  holdToTalk: boolean;
+  /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
 export type FloatHoldTarget = "jbot" | "chat";
@@ -21,7 +23,7 @@ const nativeFloat = registerPlugin<{
   status(): Promise<FloatStatus>;
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
   openOverlaySettings(): Promise<FloatStatus>;
-  setHoldTarget(options: { holdTarget: FloatHoldTarget }): Promise<FloatStatus>;
+  setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -42,7 +44,7 @@ export const conduitFloat = {
   stop: () => enqueue(() => nativeFloat.stop()),
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
-  setHoldTarget: (holdTarget: FloatHoldTarget) => enqueue(() => nativeFloat.setHoldTarget({ holdTarget })),
+  setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
 // This module lives for the page's lifetime, including when Settings is closed.

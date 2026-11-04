@@ -3,156 +3,183 @@ package com.jaskaran.conduit;
 import android.animation.ValueAnimator;
 import android.app.Dialog;
 import android.content.Context;
-import android.graphics.Canvas;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.RectF;
-import android.graphics.drawable.Drawable;
+import android.graphics.Typeface;
 import android.os.Build;
-import android.os.SystemClock;
-import android.text.TextPaint;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 /**
- * Float's radial: a fan of slots opening inward from Float's edge, centred on the handle. The outer arc holds the four
- * targets (jbot nearest the top); the inner arc holds Screenshot and Camera when it was opened by a tap, or Cancel alone
- * while a hold records. See docs/plans/float.md.
+ * Float's radial: what a tap on the handle opens. A semicircle of the four targets opens inward from Float's edge,
+ * centred on the handle (jbot, New chat, Workspace, Recent from the top); further out, Screenshot and Camera. See
+ * docs/plans/float.md.
  *
- * Its own full-screen overlay window. Opened by a tap it takes touches itself (a tap on a slot chooses it, anywhere else
- * closes); opened by a hold the finger still belongs to the handle's window, so it takes no touches and the handle feeds
- * it the finger's screen position through {@link #track} and {@link #release}.
+ * Each slot is its own small overlay window in v2's frost (FloatFrost), so the system blurs what is behind each one, as
+ * it does behind Float's pill. Under them a transparent full-screen window takes the touches: a press on a slot lifts
+ * it and names it; letting go on it chooses it; letting go anywhere else closes the radial.
  */
 final class FloatRadial {
     enum Slot {
         JBOT("jbot", R.drawable.ic_stat_conduit), NEW_CHAT("New chat", R.drawable.float_new_chat),
         WORKSPACE("Workspace", R.drawable.float_workspace), RECENT("Recent", R.drawable.float_recent),
-        SCREENSHOT("Screenshot", R.drawable.float_screenshot), CAMERA("Camera", R.drawable.float_camera),
-        CANCEL("Cancel", R.drawable.float_cancel);
+        SCREENSHOT("Screenshot", R.drawable.float_screenshot), CAMERA("Camera", R.drawable.float_camera);
         final String label; final int icon;
         Slot(String label, int icon) { this.label = label; this.icon = icon; }
         boolean target() { return ordinal() <= RECENT.ordinal(); }
     }
 
     interface Listener {
-        /** The slot under the finger changed (null: none). */
-        default void hover(Slot slot) {}
-        /** Opened by a tap: a slot was tapped. The radial has started closing. */
+        /** A slot was chosen. The radial has started closing. */
         void chosen(Slot slot);
-        /** Opened by a tap: a tap fell outside every slot. The radial has started closing. */
+        /** Let go outside every slot. The radial has started closing. */
         void dismissed();
     }
 
-    private static final Slot[] TARGETS = { Slot.JBOT, Slot.NEW_CHAT, Slot.WORKSPACE, Slot.RECENT };
-    private static final Slot[] CONTEXT = { Slot.SCREENSHOT, Slot.CAMERA };
-    private static final Slot[] HOLDING = { Slot.CANCEL };
-    /** dp: arc radii, a slot's diameter, how near a finger must be to count as on it, the screen margin kept clear. */
-    private static final float OUTER = 96, INNER = 54, SLOT = 48, REACH = 34, MARGIN = 8;
-    /** Degrees each side of the inward direction the outer arc spreads; the inner arc's pair sits at ±INNER_SPREAD. */
-    private static final float SPREAD = 66, INNER_SPREAD = 30;
-    private static final long OPEN_MS = 220, CLOSE_MS = 160, STAGGER_MS = 18;
+    private static final Slot[] SLOTS = Slot.values();
+    /** dp: the targets' arc, the context pair's arc, a slot's diameter, how near a finger counts, the margin kept. */
+    private static final float INNER = 78, OUTER = 136, SLOT = 44, REACH = 30, MARGIN = 10;
+    /** Degrees from the inward direction: the targets fan across ±TARGET_SPREAD, the context pair sits at ±OUTER_SPREAD. */
+    private static final float TARGET_SPREAD = 72, OUTER_SPREAD = 22;
+    /** v2's popover motion: rise in on --ease-arrive over --duration-gentle, drop out on --ease-leave over --duration-quick. */
+    private static final long OPEN_MS = 250, CLOSE_MS = 150, STAGGER_MS = 22;
+    private static final int ROW = 0xade8e9eb, FOREGROUND = 0xffe8e9eb;
 
     private final Context context;
     private final Listener listener;
-    private final Dialog dialog;
-    private final Window window;
-    private final RadialView view;
-    private Slot[] slots = new Slot[0];
-    private float[] slotX = new float[0], slotY = new float[0];
+    private final WindowManager manager;
+    private final Dialog catcher;
+    private final Dialog[] slotWindows = new Dialog[SLOTS.length];
+    private final FloatFrost[] slotFrost = new FloatFrost[SLOTS.length];
+    private final ImageView[] icons = new ImageView[SLOTS.length];
+    private final Dialog label;
+    private final TextView labelText;
+    private final FloatFrost labelFrost;
+    private final float[] slotX = new float[SLOTS.length], slotY = new float[SLOTS.length];
     private float anchorX, anchorY;
-    private boolean holding, open;
+    private boolean open, closing, blurred;
     private Slot hovered;
-    /** 0 closed .. 1 open, the whole fan's progress; each slot reads it with its own stagger. */
     private float shown;
     private ValueAnimator motion;
-    private long motionStart;
-    private boolean closing;
+    private final PathInterpolator arrive = new PathInterpolator(.2f, .8f, .2f, 1f), leave = new PathInterpolator(.4f, 0f, 1f, 1f);
 
     FloatRadial(Context context, Listener listener) {
         this.context = context;
         this.listener = listener;
-        view = new RadialView(context);
-        dialog = new Dialog(context, R.style.ConduitFloatTheme);
+        manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+        View touches = new View(context) {
+            @Override public boolean onTouchEvent(MotionEvent event) { return touch(event); }
+        };
+        catcher = overlay(touches, true);
+        Typeface geist = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.composer_geist);
+        for (Slot slot : SLOTS) {
+            int i = slot.ordinal();
+            ImageView icon = new ImageView(context);
+            icon.setImageResource(slot.icon);
+            icon.setImageTintList(ColorStateList.valueOf(ROW));
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int pad = dp(slot == Slot.JBOT ? 12 : 13);
+            icon.setPadding(pad, pad, pad, pad);
+            icons[i] = icon;
+            slotFrost[i] = new FloatFrost(-1, dp(.8f));
+            slotWindows[i] = overlay(icon, false);
+            slotWindows[i].getWindow().setBackgroundDrawable(slotFrost[i]);
+        }
+        labelText = new TextView(context);
+        labelText.setTextSize(13.5f);
+        labelText.setTextColor(FOREGROUND);
+        labelText.setTypeface(Build.VERSION.SDK_INT >= 28 ? Typeface.create(geist, 500, false) : geist);
+        labelText.setPadding(dp(10), dp(5), dp(10), dp(5));
+        labelText.setSingleLine(true);
+        labelFrost = new FloatFrost(-1, dp(.8f));
+        label = overlay(labelText, false);
+        label.getWindow().setBackgroundDrawable(labelFrost);
+    }
+
+    private int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
+
+    /** A Dialog as an overlay window placed in screen pixels; touchable only for the catcher. */
+    private Dialog overlay(View content, boolean touchable) {
+        Dialog dialog = new Dialog(context, R.style.ConduitFloatTheme);
         dialog.setCancelable(false);
-        window = dialog.getWindow();
+        Window window = dialog.getWindow();
         window.setType(Build.VERSION.SDK_INT >= 26
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE);
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | (touchable ? 0 : WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE));
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-        window.setContentView(view);
+        window.setContentView(content);
         window.getDecorView().setPadding(0, 0, 0, 0);
         WindowManager.LayoutParams position = window.getAttributes();
         position.format = PixelFormat.TRANSLUCENT;
-        position.width = WindowManager.LayoutParams.MATCH_PARENT;
-        position.height = WindowManager.LayoutParams.MATCH_PARENT;
+        position.gravity = Gravity.TOP | Gravity.LEFT;
+        position.windowAnimations = 0;
+        if (touchable) {
+            position.width = WindowManager.LayoutParams.MATCH_PARENT;
+            position.height = WindowManager.LayoutParams.MATCH_PARENT;
+        }
         if (Build.VERSION.SDK_INT >= 28)
             position.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         if (Build.VERSION.SDK_INT >= 30) position.setFitInsetsTypes(0);
         window.setAttributes(position);
+        return dialog;
     }
-
-    private float dp(float value) { return value * context.getResources().getDisplayMetrics().density; }
 
     boolean isOpen() { return open; }
 
     /**
      * Opens around the handle. right: Float sits on the right edge; centreX/centreY: the handle's centre in screen
-     * pixels; screenWidth/screenHeight: the whole screen in pixels; hold: opened by a hold (no touches, Cancel inside).
+     * pixels; screenWidth/screenHeight: the whole screen in pixels.
      */
-    void open(boolean right, float centreX, float centreY, int screenWidth, int screenHeight, boolean hold) {
-        holding = hold;
+    void open(boolean right, float centreX, float centreY, int screenWidth, int screenHeight) {
         hovered = null;
         anchorX = centreX;
         anchorY = centreY;
-        Slot[] inner = hold ? HOLDING : CONTEXT;
-        slots = new Slot[TARGETS.length + inner.length];
-        System.arraycopy(TARGETS, 0, slots, 0, TARGETS.length);
-        System.arraycopy(inner, 0, slots, TARGETS.length, inner.length);
-        slotX = new float[slots.length];
-        slotY = new float[slots.length];
+        blurred = Build.VERSION.SDK_INT >= 31 && manager.isCrossWindowBlurEnabled();
         layout(right, screenWidth, screenHeight);
-        setTouchable(!hold);
-        if (!dialog.isShowing()) dialog.show();
+        if (!catcher.isShowing()) catcher.show();
+        for (int i = 0; i < SLOTS.length; i++) {
+            slotFrost[i].setBlurred(blurred);
+            icons[i].setImageTintList(ColorStateList.valueOf(ROW));
+            WindowManager.LayoutParams p = slotWindows[i].getWindow().getAttributes();
+            p.width = p.height = dp(SLOT);
+            slotWindows[i].getWindow().setAttributes(p);
+            if (!slotWindows[i].isShowing()) slotWindows[i].show();
+        }
         open = true;
+        closing = false;
         animate(true);
     }
 
-    /** The fan's slots, turned away from the top or bottom of the screen just enough that every slot stays on it. */
+    /** The fan, turned away from the screen's top or bottom just enough that every slot stays on it. */
     private void layout(boolean right, int width, int height) {
-        float inward = right ? 180 : 0, margin = dp(MARGIN) + dp(SLOT) / 2;
-        // Turn in 4° steps toward the screen's middle until every slot fits; the inward direction is never passed by
-        // more than the spread, so the fan still opens away from the edge.
-        // Angles are counter-clockwise with y up: on the right edge a larger angle points lower, on the left a smaller one.
+        float inward = right ? 180 : 0, margin = dp(MARGIN) + dp(SLOT) / 2f;
+        // Angles counter-clockwise with y up: on the right edge a larger angle points lower, on the left a smaller one.
         float towardMiddle = anchorY < height / 2f ? (right ? 1 : -1) : (right ? -1 : 1);
         for (float turn = 0; turn <= 80; turn += 4) {
             place(inward + towardMiddle * turn, right);
             boolean fits = true;
-            for (int i = 0; i < slots.length; i++)
+            for (int i = 0; i < SLOTS.length; i++)
                 if (slotY[i] < margin || slotY[i] > height - margin || slotX[i] < margin || slotX[i] > width - margin) fits = false;
             if (fits) return;
         }
     }
 
     private void place(float centre, boolean right) {
-        // Angles counter-clockwise, y up (put() flips to the screen's y). jbot first, nearest the top: on the right edge
-        // the fan's top end is centre - SPREAD (pointing up-left), on the left edge centre + SPREAD (up-right).
+        // From the top: on the right edge the fan's top end is centre - spread (up-left), on the left centre + spread.
         float sign = right ? -1 : 1;
-        for (int i = 0; i < TARGETS.length; i++) {
-            float angle = centre + sign * (SPREAD - 2 * SPREAD * i / (TARGETS.length - 1));
-            put(i, angle, OUTER);
-        }
-        int inner = slots.length - TARGETS.length;
-        for (int j = 0; j < inner; j++) {
-            float angle = inner == 1 ? centre : centre + sign * (INNER_SPREAD - 2 * INNER_SPREAD * j / (inner - 1));
-            put(TARGETS.length + j, angle, INNER);
-        }
+        for (int i = 0; i < 4; i++) put(i, centre + sign * (TARGET_SPREAD - 2 * TARGET_SPREAD * i / 3), INNER);
+        put(Slot.SCREENSHOT.ordinal(), centre + sign * OUTER_SPREAD, OUTER);
+        put(Slot.CAMERA.ordinal(), centre - sign * OUTER_SPREAD, OUTER);
     }
 
     private void put(int index, float degrees, float radius) {
@@ -161,184 +188,123 @@ final class FloatRadial {
         slotY[index] = anchorY - (float) Math.sin(a) * dp(radius);
     }
 
-    /** While a hold records: the finger's screen position. Returns the slot under it (null: none). */
-    Slot track(float rawX, float rawY) {
-        if (!open || closing) return null;
-        int[] origin = new int[2];
-        view.getLocationOnScreen(origin);
-        hoverSlot(slotAt(rawX - origin[0], rawY - origin[1]));
-        return hovered;
-    }
-
-    /** A hold let go (or locked onto a slot): the slot it ended on, and the radial closes. */
-    Slot release() {
-        Slot slot = hovered;
-        close();
-        return slot;
-    }
-
     void close() {
         if (!open || closing) return;
         closing = true;
-        setTouchable(false);
+        hover(null);
         animate(false);
     }
 
     /** Gone this instant, with no fade: before a screenshot, so the radial is not in it. */
     void hideNow() {
         if (motion != null) motion.cancel();
-        open = false;
-        closing = false;
+        open = closing = false;
         hovered = null;
         shown = 0;
-        if (dialog.isShowing()) dialog.dismiss();
+        dismissAll();
     }
 
-    void destroy() {
-        if (motion != null) motion.cancel();
-        open = false;
-        if (dialog.isShowing()) dialog.dismiss();
+    void destroy() { hideNow(); }
+
+    private void dismissAll() {
+        if (label.isShowing()) label.dismiss();
+        for (Dialog slot : slotWindows) if (slot.isShowing()) slot.dismiss();
+        if (catcher.isShowing()) catcher.dismiss();
     }
 
     private Slot slotAt(float x, float y) {
         Slot best = null;
         float nearest = dp(REACH);
-        for (int i = 0; i < slots.length; i++) {
+        for (int i = 0; i < SLOTS.length; i++) {
             float d = (float) Math.hypot(x - slotX[i], y - slotY[i]);
-            if (d <= nearest) { nearest = d; best = slots[i]; }
+            if (d <= nearest) { nearest = d; best = SLOTS[i]; }
         }
         return best;
     }
 
-    private void hoverSlot(Slot slot) {
-        if (slot == hovered) return;
-        hovered = slot;
-        if (slot != null) view.performHapticFeedback(Build.VERSION.SDK_INT >= 27
-            ? HapticFeedbackConstants.TEXT_HANDLE_MOVE : HapticFeedbackConstants.CLOCK_TICK);
-        listener.hover(slot);
-        view.invalidate();
+    private boolean touch(MotionEvent event) {
+        if (closing || !open) return true;
+        Slot under = slotAt(event.getRawX(), event.getRawY());
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: case MotionEvent.ACTION_MOVE: hover(under); return true;
+            case MotionEvent.ACTION_UP:
+                close();
+                if (under != null) listener.chosen(under);
+                else listener.dismissed();
+                return true;
+            case MotionEvent.ACTION_CANCEL: hover(null); return true;
+            default: return true;
+        }
     }
 
-    private void setTouchable(boolean touchable) {
-        WindowManager.LayoutParams position = window.getAttributes();
-        if (touchable) position.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        else position.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        window.setAttributes(position);
+    /** The slot under the finger lifts (white icon, a little larger) and its name shows beside it, inward. */
+    private void hover(Slot slot) {
+        if (slot == hovered) return;
+        if (hovered != null) icons[hovered.ordinal()].setImageTintList(ColorStateList.valueOf(ROW));
+        hovered = slot;
+        if (slot == null) { if (label.isShowing()) label.dismiss(); frame(); return; }
+        icons[slot.ordinal()].setImageTintList(ColorStateList.valueOf(FOREGROUND));
+        icons[slot.ordinal()].performHapticFeedback(Build.VERSION.SDK_INT >= 27
+            ? HapticFeedbackConstants.TEXT_HANDLE_MOVE : HapticFeedbackConstants.CLOCK_TICK);
+        labelText.setText(slot.label);
+        labelText.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int w = labelText.getMeasuredWidth(), h = labelText.getMeasuredHeight();
+        int i = slot.ordinal();
+        boolean leftward = slotX[i] <= anchorX;
+        WindowManager.LayoutParams p = label.getWindow().getAttributes();
+        p.width = w;
+        p.height = h;
+        p.x = Math.round(leftward ? slotX[i] - dp(SLOT) / 2f - dp(8) - w : slotX[i] + dp(SLOT) / 2f + dp(8));
+        p.y = Math.round(slotY[i] - h / 2f);
+        labelFrost.setBlurred(blurred);
+        if (Build.VERSION.SDK_INT >= 31) label.getWindow().setBackgroundBlurRadius(blurred ? dp(24) : 0);
+        label.getWindow().setAttributes(p);
+        if (!label.isShowing()) label.show();
+        frame();
     }
 
     private void animate(boolean opening) {
         if (motion != null) motion.cancel();
         closing = !opening;
-        float from = shown, to = opening ? 1 : 0;
-        long stagger = STAGGER_MS * Math.max(0, slots.length - 1);
-        motion = ValueAnimator.ofFloat(from, to);
-        motion.setDuration((opening ? OPEN_MS : CLOSE_MS) + stagger);
+        motion = ValueAnimator.ofFloat(shown, opening ? 1 : 0);
+        motion.setDuration((opening ? OPEN_MS : CLOSE_MS) + STAGGER_MS * (SLOTS.length - 1));
         motion.setInterpolator(new android.view.animation.LinearInterpolator());
-        motion.addUpdateListener(animation -> { shown = (float) animation.getAnimatedValue(); view.invalidate(); });
+        motion.addUpdateListener(animation -> { shown = (float) animation.getAnimatedValue(); frame(); });
         motion.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean cancelled;
             @Override public void onAnimationCancel(android.animation.Animator animation) { cancelled = true; }
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 if (cancelled || opening) return;
-                open = false;
-                closing = false;
+                open = closing = false;
                 hovered = null;
-                if (dialog.isShowing()) dialog.dismiss();
+                dismissAll();
             }
         });
-        motionStart = SystemClock.uptimeMillis();
         motion.start();
     }
 
-    /** The view: dense frost circles (one window cannot blur under each slot), each slot's icon, the hovered one's name. */
-    private final class RadialView extends View {
-        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), rim = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final PathInterpolator curve = new PathInterpolator(.2f, 0f, 0f, 1f);
-        private final Drawable[] icons = new Drawable[Slot.values().length];
-        private final RectF box = new RectF();
-
-        RadialView(Context context) {
-            super(context);
-            rim.setStyle(Paint.Style.STROKE);
-            rim.setStrokeWidth(dp(1));
-            text.setTextSize(dp(13));
-            text.setColor(0xffe8e9eb);
-            for (Slot slot : Slot.values()) icons[slot.ordinal()] = context.getDrawable(slot.icon).mutate();
-        }
-
-        /** A slot's own progress: the fan's, delayed by its place (inner first on open, so it grows outward). */
-        private float progress(int index) {
-            long total = (closing ? CLOSE_MS : OPEN_MS) + STAGGER_MS * Math.max(0, slots.length - 1);
-            int order = index >= TARGETS.length ? index - TARGETS.length : index + (slots.length - TARGETS.length);
-            float delay = STAGGER_MS * order / (float) total, span = 1 - STAGGER_MS * Math.max(0, slots.length - 1) / (float) total;
+    /** Each slot travels out from the handle on its own delay (targets first, then the context pair further out). */
+    private void frame() {
+        long total = (closing ? CLOSE_MS : OPEN_MS) + STAGGER_MS * (SLOTS.length - 1);
+        float span = 1 - STAGGER_MS * (SLOTS.length - 1) / (float) total;
+        for (int i = 0; i < SLOTS.length; i++) {
+            float delay = STAGGER_MS * i / (float) total;
             float local = Math.max(0, Math.min(1, (shown - delay) / Math.max(.01f, span)));
-            return curve.getInterpolation(local);
+            float p = closing ? 1 - leave.getInterpolation(1 - local) : arrive.getInterpolation(local);
+            boolean hot = SLOTS[i] == hovered;
+            int size = dp(SLOT);
+            float x = anchorX + (slotX[i] - anchorX) * p, y = anchorY + (slotY[i] - anchorY) * p;
+            Window window = slotWindows[i].getWindow();
+            WindowManager.LayoutParams lp = window.getAttributes();
+            lp.x = Math.round(x - size / 2f);
+            lp.y = Math.round(y - size / 2f);
+            window.setAttributes(lp);
+            View decor = window.getDecorView();
+            decor.setAlpha(Math.min(1, p * 1.6f));
+            float scale = (.7f + .3f * p) * (hot ? 1.1f : 1);
+            decor.setScaleX(scale);
+            decor.setScaleY(scale);
+            if (Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(blurred ? Math.round(dp(24) * p) : 0);
         }
-
-        @Override protected void onDraw(Canvas canvas) {
-            int[] origin = new int[2];
-            getLocationOnScreen(origin);
-            float ax = anchorX - origin[0], ay = anchorY - origin[1];
-            for (int i = 0; i < slots.length; i++) {
-                float p = progress(i);
-                if (p <= 0) continue;
-                Slot slot = slots[i];
-                boolean hot = slot == hovered;
-                float x = ax + (slotX[i] - origin[0] - ax) * p, y = ay + (slotY[i] - origin[1] - ay) * p;
-                float r = dp(SLOT) / 2 * (.6f + .4f * p) * (hot ? 1.12f : 1);
-                int alpha = Math.round(255 * Math.min(1, p * 1.4f));
-                // Frost without blur: v2's white fill over the dark core, the denser no-blur ground; brighter when hot.
-                fill.setColor(androidx.core.graphics.ColorUtils.compositeColors(hot ? 0x47ffffff : 0x2bffffff, 0xfa3a3b3f));
-                fill.setAlpha(alpha);
-                canvas.drawCircle(x, y, r, fill);
-                rim.setColor(Color.argb(Math.round(alpha * .3f), 255, 255, 255));
-                canvas.drawCircle(x, y, r - dp(.5f), rim);
-                Drawable icon = icons[slot.ordinal()];
-                int half = Math.round(dp(slot == Slot.JBOT ? 12 : 11) * (hot ? 1.08f : 1));
-                icon.setTint(slot == Slot.CANCEL && hot ? 0xffff8a80 : 0xffe8e9eb);
-                icon.setAlpha(alpha);
-                icon.setBounds(Math.round(x - half), Math.round(y - half), Math.round(x + half), Math.round(y + half));
-                icon.draw(canvas);
-                if (hot && p >= 1) drawLabel(canvas, slot.label, x, y, r, ax);
-            }
-        }
-
-        /** The hovered slot's name, in a small frost pill on its inward side, away from the screen's edge. */
-        private void drawLabel(Canvas canvas, String name, float x, float y, float r, float ax) {
-            float w = text.measureText(name) + dp(20), h = dp(26), gap = dp(8);
-            boolean leftward = x <= ax; // on the right edge the slots lie left of the handle: the name goes further left
-            float left = leftward ? x - r - gap - w : x + r + gap;
-            box.set(left, y - h / 2, left + w, y + h / 2);
-            label.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff, 0xfa3a3b3f));
-            canvas.drawRoundRect(box, h / 2, h / 2, label);
-            canvas.drawText(name, box.left + dp(10), y - (text.ascent() + text.descent()) / 2, text);
-        }
-
-        @Override public boolean onTouchEvent(MotionEvent event) {
-            if (holding || closing) return false;
-            int[] origin = new int[2];
-            getLocationOnScreen(origin);
-            Slot under = slotAt(event.getRawX() - origin[0], event.getRawY() - origin[1]);
-            switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                case MotionEvent.ACTION_MOVE:
-                    hoverSlot(under);
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    hoverSlot(null);
-                    close();
-                    if (under != null) { performClick(); listener.chosen(under); }
-                    else listener.dismissed();
-                    return true;
-                case MotionEvent.ACTION_CANCEL:
-                    hoverSlot(null);
-                    return true;
-                default: return true;
-            }
-        }
-
-        @Override public boolean performClick() { return super.performClick(); }
     }
 }

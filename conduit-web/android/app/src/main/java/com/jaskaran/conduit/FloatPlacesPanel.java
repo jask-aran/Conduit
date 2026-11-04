@@ -27,8 +27,9 @@ public final class FloatPlacesPanel extends FloatPanel {
         super(context, hub);
         this.listener = listener;
         heading("New chat in", null);
-        search = input("Search");
+        search = input("Search places");
         top.addView(search);
+        top.addView(rule());
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { if (places != null) render(); }
@@ -61,20 +62,17 @@ public final class FloatPlacesPanel extends FloatPanel {
             if (!name.toLowerCase(Locale.ROOT).contains(query)) continue;
             String heading = place.isChat ? null : place.isWorkspace ? "Workspaces" : "Projects";
             if (heading != null && !heading.equals(group)) {
-                TextView label = text(heading, 12, SECONDARY);
-                label.setPadding(dp(16), dp(count == 0 ? 4 : 12), dp(16), dp(4));
+                TextView label = label(heading);
+                label.setPadding(dp(8), dp(count == 0 ? 6 : 14), dp(8), dp(6));
                 body.addView(label);
                 group = heading;
             }
             LinearLayout row = column();
             rowStyle(row);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            TextView title = text(name, 15, PRIMARY);
-            title.setSingleLine(true);
-            title.setEllipsize(TextUtils.TruncateAt.END);
-            row.addView(title);
+            row.addView(rowText(name));
             String detail = place.isChat ? "No project" : place.deviceName;
-            if (detail != null) row.addView(text(detail, 13, SECONDARY));
+            if (detail != null) row.addView(detail(detail));
             row.setOnClickListener(v -> { close(); listener.placeChosen(place); });
             body.addView(row);
             count++;

@@ -132,9 +132,9 @@ public class ConduitFloatService extends Service {
                     @Override public void onPlacementChanged() { updateCaption(); }
                 });
                 window.create(machine.state(), new FloatView.Listener() {
-                    @Override public void onTap() { openRadial(false); }
+                    @Override public void onTap() { openRadial(); }
                     @Override public void onHoldStart() { holdStarted(); }
-                    @Override public void onHoldMove(float rawX, float rawY) { if (radial != null) radial.track(rawX, rawY); }
+                    @Override public void onHoldMove(float rawX, float rawY) {}
                     @Override public void onHoldEnd(boolean cancelled) { holdEnded(cancelled); }
                     @Override public void onCancel() { cancel(); }
                     @Override public void onSend() { stopRecording(false); }
@@ -269,16 +269,18 @@ public class ConduitFloatService extends Service {
 
     private FloatRadial radial() {
         if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
-            @Override public void chosen(FloatRadial.Slot slot) { radialChosen(slot); }
-            @Override public void dismissed() {}
+            @Override public void chosen(FloatRadial.Slot slot) { window.lift(false); radialChosen(slot); }
+            @Override public void dismissed() { window.lift(false); }
         });
         return radial;
     }
 
-    private void openRadial(boolean hold) {
+    /** The radial around the handle; the handle stays lit while it is open, as it does while held. */
+    private void openRadial() {
         float[] centre = window.handleCentre();
         int[] screen = window.screenSize();
-        radial().open(window.right(), centre[0], centre[1], screen[0], screen[1], hold);
+        radial().open(window.right(), centre[0], centre[1], screen[0], screen[1]);
+        window.lift(true);
     }
 
     /** A tap's radial: a target starts recording to it. Workspace, Recent and the context slots come with their panels. */
@@ -349,36 +351,20 @@ public class ConduitFloatService extends Service {
         if (window != null) window.setGathered(0);
     }
 
-    /** A hold records at once, to the hold's target, with the radial around the finger to lock it elsewhere. */
+    /**
+     * Hold to talk (a setting, off by default): a hold opens the recorder pill at once, to the hold's target; letting
+     * go sends; letting go after dragging well away cancels.
+     */
     private void holdStarted() {
         if (machine.state() != State.HANDLE) return;
         setTarget(targetFor(holdTarget()));
-        window.setHeld(true);
         beginRecording();
-        if (machine.state() == State.RECORDING) openRadial(true);
-        else window.setHeld(false);
     }
 
-    /**
-     * The hold let go. On Cancel (or taken away): discarded. On a target: locked to it, hands free, the pill open with
-     * Send. Anywhere else: sent to the hold's target.
-     */
     private void holdEnded(boolean cancelled) {
-        FloatRadial.Slot slot = radial == null ? null : radial.release();
-        if (machine.state() != State.RECORDING) { window.setHeld(false); return; }
-        if (cancelled || slot == FloatRadial.Slot.CANCEL) {
-            window.setHeld(false);
-            cancel();
-        } else if (slot != null && slot.target()) {
-            // Locked: it keeps recording, hands free. Workspace and Recent then ask where.
-            window.setHeld(false);
-            if (slot == FloatRadial.Slot.WORKSPACE) openPlaces();
-            else if (slot == FloatRadial.Slot.RECENT) openRecent();
-            else setTarget(targetFor(slot));
-        } else {
-            window.setHeld(false);
-            stopRecording(false);
-        }
+        if (machine.state() != State.RECORDING) return;
+        if (cancelled) cancel();
+        else stopRecording(false);
     }
 
     private void beginRecording() {

@@ -46,6 +46,9 @@ public final class FloatRecentPanel extends FloatPanel {
         heading("Recent", null);
     }
 
+    /** A little wider than a menu: each row carries a reply's first lines. */
+    @Override protected int width() { return 288; }
+
     @Override protected void onOpen() { refresh(); }
     @Override protected void onClosed() { listener.closed(); }
     @Override protected void onClosing() { stopPulse(); }
@@ -70,16 +73,11 @@ public final class FloatRecentPanel extends FloatPanel {
         for (ConduitHubClient.RecentChat chat : chats) {
             LinearLayout row = column();
             rowStyle(row);
-            TextView title = text(title(chat), 15, PRIMARY);
-            title.setSingleLine(true);
-            title.setEllipsize(TextUtils.TruncateAt.END);
-            row.addView(title);
-            LinearLayout meta = new LinearLayout(context);
-            meta.setGravity(Gravity.CENTER_VERTICAL);
-            TextView project = text(chat.projectName, 13, SECONDARY);
-            project.setSingleLine(true);
-            project.setEllipsize(TextUtils.TruncateAt.END);
-            meta.addView(project, new LinearLayout.LayoutParams(0, -2, 1));
+            // Title with its time as the row's meta (Paper Mono caption, tabular) at the end; the project under it.
+            LinearLayout head = new LinearLayout(context);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            head.addView(rowText(title(chat)), new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout meta = head;
             if ("running".equals(chat.liveStatus)) {
                 View dot = new View(context);
                 GradientDrawable circle = new GradientDrawable();
@@ -93,15 +91,21 @@ public final class FloatRecentPanel extends FloatPanel {
                 meta.addView(dot, size);
                 dots.add(dot);
             }
-            TextView time = text(relativeTime(chat.lastMessageAt), 13, SECONDARY);
-            time.setPadding(dp(4), 0, 0, 0);
+            TextView time = detail(relativeTime(chat.lastMessageAt));
+            time.setTypeface(paperMono);
+            time.setPadding(dp(8), 0, 0, 0);
             meta.addView(time);
-            row.addView(meta);
+            row.addView(head);
+            TextView project = detail(chat.projectName);
+            project.setPadding(0, dp(2), 0, 0);
+            row.addView(project);
             if (chat.latestReply != null) {
-                TextView preview = text(chat.latestReply.text, 13, SECONDARY);
+                TextView preview = detail(chat.latestReply.text.replaceAll("\\s+", " "));
+                preview.setSingleLine(false);
                 preview.setMaxLines(2);
                 preview.setEllipsize(TextUtils.TruncateAt.END);
-                preview.setPadding(0, dp(4), 0, 0);
+                preview.setLineSpacing(0, 1.2f);
+                preview.setPadding(0, dp(4), 0, dp(2));
                 row.addView(preview);
             }
             row.setOnClickListener(v -> showReply(chat));
@@ -122,12 +126,13 @@ public final class FloatRecentPanel extends FloatPanel {
         selected = chat;
         heading(title(chat), this::showList);
         body.removeAllViews();
-        TextView reply = text(FloatMarkdown.render(context, chat.latestReply == null ? "No reply yet" : chat.latestReply.text), 15, PRIMARY);
-        reply.setPadding(dp(16), dp(8), dp(16), dp(16));
-        reply.setLineSpacing(0, 1.15f);
+        TextView reply = text(FloatMarkdown.render(context, chat.latestReply == null ? "No reply yet" : chat.latestReply.text), 14, PRIMARY);
+        reply.setPadding(dp(8), dp(4), dp(8), dp(10));
+        reply.setLineSpacing(0, 1.4f);
         body.addView(reply);
         scroll.scrollTo(0, 0);
         footer.removeAllViews();
+        footer.addView(rule());
         open = button("Open in Conduit", () -> listener.openInConduit(chat));
         footer.addView(open);
         LinearLayout compose = new LinearLayout(context);
@@ -139,16 +144,18 @@ public final class FloatRecentPanel extends FloatPanel {
             submit();
             return true;
         });
-        compose.addView(answer, new LinearLayout.LayoutParams(0, dp(48), 1));
-        send = icon(R.drawable.float_send, "Send answer", true);
-        send.setOnClickListener(v -> submit());
-        compose.addView(send, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        compose.addView(answer, new LinearLayout.LayoutParams(0, dp(40), 1));
         mic = icon(R.drawable.float_mic, "Answer by voice", false);
         mic.setOnClickListener(v -> { close(); listener.answerByVoice(chat); });
-        compose.addView(mic, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        compose.addView(mic, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        send = icon(R.drawable.float_send, "Send answer", true);
+        send.setOnClickListener(v -> submit());
+        LinearLayout.LayoutParams sendSize = new LinearLayout.LayoutParams(dp(30), dp(30));
+        sendSize.setMargins(dp(4), 0, dp(2), 0);
+        compose.addView(send, sendSize);
         footer.addView(compose);
-        status = text("", 13, SECONDARY);
-        status.setPadding(dp(16), dp(4), dp(16), dp(8));
+        status = text("", 12, SECONDARY);
+        status.setPadding(dp(8), dp(2), dp(8), dp(4));
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         status.setVisibility(View.GONE);
         footer.addView(status);
@@ -157,16 +164,17 @@ public final class FloatRecentPanel extends FloatPanel {
     private ImageButton icon(int drawable, String description, boolean filled) {
         ImageButton button = new ImageButton(context);
         button.setImageResource(drawable);
-        button.setImageTintList(ColorStateList.valueOf(filled ? 0xff3a3b3f : SECONDARY));
+        // --control-sm squares: the mic quiet with the wash; send the primary button, light with a dark arrow.
+        button.setImageTintList(ColorStateList.valueOf(filled ? 0xff141518 : SECONDARY));
         button.setContentDescription(description);
-        rowStyle(button);
-        button.setPadding(dp(15), dp(15), dp(15), dp(15));
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        button.setPadding(dp(7), dp(7), dp(7), dp(7));
         if (filled) {
             GradientDrawable circle = new GradientDrawable();
             circle.setShape(GradientDrawable.OVAL);
             circle.setColor(PRIMARY);
-            button.setBackground(new android.graphics.drawable.InsetDrawable(circle, dp(8)));
-        }
+            button.setBackground(circle);
+        } else wash(button);
         return button;
     }
 

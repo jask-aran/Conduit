@@ -28,9 +28,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
-/** One-use native overlay. Construct and show on the main thread; coordinates are pixels. */
+/**
+ * One-use native overlay in v2's popover language (popover.css .ui-menu, read off the phone's WebView): 240dp wide,
+ * radius 14, a 6dp frost inset, FloatFrost with the system's blur; 40dp rows of Geist 13.5 at weight 500 in the
+ * foreground at 68%, washed white 7% at radius 8 while pressed; section labels in Paper Mono 10 uppercase. It rises
+ * in 8dp over 250ms on --ease-arrive and drops back over 150ms on --ease-leave. Construct and show on the main thread.
+ */
 public abstract class FloatPanel {
-    protected static final int PRIMARY = 0xffe8e9eb, SECONDARY = 0x99e8e9eb;
+    /** --foreground; a row's resting text (the foreground at 68%, over frost); --muted-foreground; --tint. */
+    protected static final int PRIMARY = 0xffe8e9eb, ROW = 0xade8e9eb, SECONDARY = 0xff8d8f94, TINT = 0x12ffffff;
+    protected final Typeface geist, paperMono;
     private static final ExecutorService HUB = Executors.newSingleThreadExecutor();
     protected final Handler main = new Handler(Looper.getMainLooper());
     protected final Context context;
@@ -41,7 +48,7 @@ public abstract class FloatPanel {
     private final Dialog dialog;
     private final Window window;
     private final WindowManager manager;
-    private final GradientDrawable frost = new GradientDrawable();
+    private final FloatFrost frost;
     private Consumer<Boolean> blurListener;
     private boolean shown, closed, stoppingInput, imeVisible;
     private int screenTop, screenHeight, centerY, request, keyboardInset;
@@ -49,6 +56,9 @@ public abstract class FloatPanel {
     protected FloatPanel(Context context, ConduitHubClient hub) {
         this.context = context;
         this.hub = hub;
+        geist = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.composer_geist);
+        paperMono = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.float_paper_mono);
+        frost = new FloatFrost(dp(14), Math.max(1, dp(.8f)));
         manager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         root = new LinearLayout(context) {
             @Override protected void onMeasure(int w, int h) {
@@ -79,12 +89,12 @@ public abstract class FloatPanel {
             }
         };
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(0, dp(8), 0, dp(8));
+        root.setPadding(dp(6), dp(6), dp(6), dp(6));
         root.setFocusableInTouchMode(true);
         root.setClipToOutline(true);
         root.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(20));
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(14));
             }
         });
         header = column();
@@ -117,14 +127,15 @@ public abstract class FloatPanel {
         window.setContentView(root);
         View decor = window.getDecorView();
         decor.setPadding(0, 0, 0, 0);
+        // The popover's lift: 0 8px 32px black at 10%.
+        decor.setElevation(dp(8));
+        if (Build.VERSION.SDK_INT >= 28) { decor.setOutlineAmbientShadowColor(0x1a000000); decor.setOutlineSpotShadowColor(0x1a000000); }
         dialog.setOnDismissListener(ignored -> {
             closed = true;
             stopInput();
             releaseBlur();
             onClosed();
         });
-        frost.setCornerRadius(dp(20));
-        frost.setStroke(dp(1), 0x4dffffff);
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> place());
         root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
             if (!shown || closed) return;
@@ -167,13 +178,14 @@ public abstract class FloatPanel {
         }
         screenTop = bounds.top;
         screenHeight = bounds.height();
-        int width = Math.min(Math.max(1, bounds.width() - dp(32)), dp(360));
+        int width = Math.min(Math.max(1, bounds.width() - dp(32)), dp(width()));
         WindowManager.LayoutParams p = window.getAttributes();
         p.format = PixelFormat.TRANSLUCENT;
         p.width = width;
         p.height = -2;
         p.gravity = Gravity.TOP | (right ? Gravity.RIGHT : Gravity.LEFT);
-        p.x = dp(16);
+        // Beside Float's handle (6dp off the edge, 32dp wide) with 8dp between.
+        p.x = dp(46);
         p.y = Math.max(dp(16), this.centerY);
         p.windowAnimations = 0;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -191,9 +203,9 @@ public abstract class FloatPanel {
         root.requestFocus();
         View decor = window.getDecorView();
         decor.setAlpha(0);
-        decor.setTranslationX(dp(right ? 6 : -6));
-        decor.animate().alpha(1).translationX(0).setDuration(180)
-            .setInterpolator(new PathInterpolator(.2f, 0, 0, 1)).start();
+        decor.setTranslationY(dp(8));
+        decor.animate().alpha(1).translationY(0).setDuration(250)
+            .setInterpolator(new PathInterpolator(.2f, .8f, .2f, 1)).start();
         onOpen();
     }
 
@@ -204,8 +216,11 @@ public abstract class FloatPanel {
         if (p.y != y) { p.y = y; window.setAttributes(p); }
     }
 
+    /** The panel's width in dp: v2's phone menu cap (--measure-sm). */
+    protected int width() { return 240; }
+
     private void updateBlur(boolean blurred) {
-        frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff, blurred ? 0xe63a3b3f : 0xfa3a3b3f));
+        frost.setBlurred(blurred);
         if (Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(blurred ? dp(24) : 0);
     }
 
@@ -227,30 +242,34 @@ public abstract class FloatPanel {
         onClosing();
         if (!shown) { onClosed(); return; }
         window.getDecorView().animate().cancel();
-        window.getDecorView().animate().alpha(0).setDuration(140).withEndAction(dialog::dismiss).start();
+        window.getDecorView().animate().alpha(0).translationY(dp(8)).setDuration(150)
+            .setInterpolator(new PathInterpolator(.4f, 0, 1, 1)).withEndAction(dialog::dismiss).start();
     }
 
     protected abstract void onOpen();
     protected abstract void onClosed();
     protected void onClosing() {}
 
+    /** The popover's title (.ui-title): its label face, muted, 6/8 padding; a back chevron before it when it has one. */
     protected final void heading(String title, Runnable back) {
         header.removeAllViews();
         LinearLayout line = new LinearLayout(context);
         line.setGravity(Gravity.CENTER_VERTICAL);
         if (back != null) {
-            TextView button = button("‹", back);
-            button.setTextSize(26);
-            button.setContentDescription("Back");
-            line.addView(button, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            android.widget.ImageView chevron = new android.widget.ImageView(context);
+            chevron.setImageResource(R.drawable.float_back);
+            chevron.setImageTintList(android.content.res.ColorStateList.valueOf(SECONDARY));
+            chevron.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+            chevron.setContentDescription("Back");
+            chevron.setOnClickListener(v -> back.run());
+            wash(chevron);
+            line.addView(chevron, new LinearLayout.LayoutParams(dp(30), dp(30)));
         }
-        TextView label = text(title, 15, PRIMARY);
-        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        label.setSingleLine(true);
-        label.setEllipsize(TextUtils.TruncateAt.END);
-        label.setPadding(back == null ? dp(16) : 0, 0, dp(16), 0);
-        label.setGravity(Gravity.CENTER_VERTICAL);
-        line.addView(label, new LinearLayout.LayoutParams(0, dp(48), 1));
+        TextView name = label(title);
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        name.setPadding(dp(back == null ? 8 : 4), dp(6), dp(8), dp(6));
+        line.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         header.addView(line);
     }
 
@@ -263,56 +282,98 @@ public abstract class FloatPanel {
 
     protected final int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
 
-    protected final TextView text(CharSequence value, int sp, int color) {
+    protected final Typeface face(int weight) {
+        return Build.VERSION.SDK_INT >= 28 ? Typeface.create(geist, weight, false) : geist;
+    }
+
+    protected final TextView text(CharSequence value, float sp, int color) {
         TextView view = new TextView(context);
         view.setText(value);
         view.setTextSize(sp);
         view.setTextColor(color);
+        view.setTypeface(face(400));
+        view.setIncludeFontPadding(false);
         view.setHighlightColor(0x33ffffff);
         return view;
     }
 
-    protected final void rowStyle(View view) {
-        view.setMinimumHeight(dp(48));
-        view.setPadding(dp(16), dp(8), dp(16), dp(8));
+    /** A row's title: --text-row, weight 500 over frost, the foreground at 68%. */
+    protected final TextView rowText(CharSequence value) {
+        TextView view = text(value, 13.5f, ROW);
+        view.setTypeface(face(500));
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        return view;
+    }
+
+    /** A row's second line or meta (.ui-detail): --text-caption, muted. */
+    protected final TextView detail(CharSequence value) {
+        TextView view = text(value, 12, SECONDARY);
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        return view;
+    }
+
+    /** A section's label: Paper Mono 10, uppercase, tracked .07em, muted. */
+    protected final TextView label(String value) {
+        TextView view = text(value.toUpperCase(java.util.Locale.ROOT), 10, SECONDARY);
+        view.setTypeface(paperMono);
+        view.setLetterSpacing(.07f);
+        return view;
+    }
+
+    /** The pressed wash: --tint at --radius-control. */
+    protected final void wash(View view) {
         GradientDrawable wash = new GradientDrawable();
-        wash.setColor(0x12ffffff);
-        wash.setCornerRadius(dp(12));
+        wash.setColor(TINT);
+        wash.setCornerRadius(dp(8));
         StateListDrawable states = new StateListDrawable();
-        states.addState(new int[] {android.R.attr.state_pressed}, new InsetDrawable(wash, dp(4)));
-        states.addState(new int[] {android.R.attr.state_focused}, new InsetDrawable(wash, dp(4)));
+        states.addState(new int[] {android.R.attr.state_pressed}, wash);
+        states.addState(new int[] {android.R.attr.state_focused}, wash);
         view.setBackground(states);
     }
 
+    /** A menu row (.ui-row[data-density=menu]): 40dp tall on a phone, padding 6/8, the pressed wash. */
+    protected final void rowStyle(View view) {
+        view.setMinimumHeight(dp(40));
+        view.setPadding(dp(8), dp(6), dp(8), dp(6));
+        wash(view);
+    }
+
+    /** An action as a menu row: its name in the row's voice. */
     protected final TextView button(String label, Runnable action) {
-        TextView button = text(label, 13, SECONDARY);
+        TextView button = rowText(label);
         rowStyle(button);
-        button.setGravity(Gravity.CENTER);
+        button.setGravity(Gravity.CENTER_VERTICAL);
         button.setOnClickListener(v -> action.run());
         return button;
     }
 
+    /** A section rule (.ui-section + .ui-section): a hairline of --tint across the whole panel, 6dp each side. */
+    protected final View rule() {
+        View rule = new View(context);
+        rule.setBackgroundColor(TINT);
+        LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(-1, Math.max(1, dp(.5f)));
+        size.setMargins(-dp(6), dp(6), -dp(6), dp(6));
+        rule.setLayoutParams(size);
+        return rule;
+    }
+
     protected final EditText input(String hint) {
+        // The search section (.ui-search): no box, --text-row, the hint muted; its rule follows it.
         EditText field = new EditText(context);
-        field.setTextSize(15);
+        field.setTypeface(face(400));
+        field.setTextSize(13.5f);
         field.setTextColor(PRIMARY);
         field.setHintTextColor(SECONDARY);
         field.setHighlightColor(0x33ffffff);
         field.setHint(hint);
         field.setSingleLine(true);
-        android.graphics.drawable.ShapeDrawable underline = new android.graphics.drawable.ShapeDrawable(
-                new android.graphics.drawable.shapes.RectShape()) {
-            @Override protected void onDraw(android.graphics.drawable.shapes.Shape shape,
-                    android.graphics.Canvas canvas, android.graphics.Paint paint) {
-                canvas.drawRect(0, getBounds().height() - dp(1), getBounds().width(), getBounds().height(), paint);
-            }
-        };
-        underline.getPaint().setColor(0x33ffffff);
-        field.setBackground(underline);
+        field.setBackground(null);
         if (Build.VERSION.SDK_INT >= 29) {
             GradientDrawable cursor = new GradientDrawable();
             cursor.setColor(PRIMARY);
-            cursor.setSize(dp(2), dp(20));
+            cursor.setSize(Math.max(1, dp(1.5f)), dp(16));
             field.setTextCursorDrawable(cursor);
             GradientDrawable handle = new GradientDrawable();
             handle.setShape(GradientDrawable.OVAL);
@@ -322,8 +383,8 @@ public abstract class FloatPanel {
             field.setTextSelectHandleLeft(handle.getConstantState().newDrawable());
             field.setTextSelectHandleRight(handle.getConstantState().newDrawable());
         }
-        field.setMinimumHeight(dp(48));
-        field.setPadding(dp(16), 0, dp(16), 0);
+        field.setMinimumHeight(dp(40));
+        field.setPadding(dp(8), 0, dp(8), 0);
         field.setOnFocusChangeListener((v, focused) -> {
             if (focused && !closed) {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
@@ -349,9 +410,11 @@ public abstract class FloatPanel {
         }
     }
 
+    /** A note (.ui-note[data-note=menu]): --text-caption at row padding, muted, or the foreground for an error. */
     protected final void line(String value, int color) {
-        TextView view = text(value, color == PRIMARY ? 15 : 13, color);
-        view.setPadding(dp(16), dp(8), dp(16), dp(8));
+        TextView view = text(value, 12, color);
+        view.setLineSpacing(0, 1.35f);
+        view.setPadding(dp(8), dp(6), dp(8), dp(6));
         body.addView(view);
     }
 

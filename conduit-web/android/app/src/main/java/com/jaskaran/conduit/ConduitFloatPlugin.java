@@ -58,16 +58,22 @@ public class ConduitFloatPlugin extends Plugin {
         return new JSObject().put("enabled", preferences(getContext()).getBoolean("enabled", false))
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
             .put("micPermission", microphoneGranted(getContext()))
-            .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot");
+            .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
+            .put("holdToTalk", preferences(getContext()).getBoolean("holdToTalk", false));
     }
 
     @PluginMethod public void status(PluginCall call) { call.resolve(view()); }
 
-    /** What a hold on Float talks to before a slot is chosen: "jbot", or "chat" for a new chat with no project. */
-    @PluginMethod public void setHoldTarget(PluginCall call) {
-        String target = call.getString("holdTarget", "jbot");
-        if (!"jbot".equals(target) && !"chat".equals(target)) { call.reject("Invalid hold target"); return; }
-        preferences(getContext()).edit().putString("holdTarget", target).apply();
+    /** Hold to talk (off by default) and what a hold talks to: "jbot", or "chat" for a new chat with no project. */
+    @PluginMethod public void setHold(PluginCall call) {
+        android.content.SharedPreferences.Editor edit = preferences(getContext()).edit();
+        if (call.hasOption("holdToTalk")) edit.putBoolean("holdToTalk", Boolean.TRUE.equals(call.getBoolean("holdToTalk")));
+        if (call.hasOption("holdTarget")) {
+            String target = call.getString("holdTarget", "jbot");
+            if (!"jbot".equals(target) && !"chat".equals(target)) { call.reject("Invalid hold target"); return; }
+            edit.putString("holdTarget", target);
+        }
+        edit.apply();
         call.resolve(view());
     }
 
