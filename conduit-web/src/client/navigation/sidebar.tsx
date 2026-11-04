@@ -219,6 +219,18 @@ export function Sidebar(props: {
   let publishingSidebarPreference = false;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
+  // The phone drawer turns inert (and back) only at rest, never as it starts to move: inert restyles every row in it
+  // (~1200 elements), which cost the slide its first frames on a phone. drawerSettled is the drawer's state at rest: it
+  // stays inert while opening until it has landed (then takes touches and focus), and live while shutting until off screen.
+  const [drawerSettled, setDrawerSettled] = createSignal(false);
+  let settleTimer = 0;
+  const settleDrawer = () => {
+    window.clearTimeout(settleTimer);
+    const open = props.mobileOpen;
+    if (drawerSettled() === open) return;
+    setDrawerSettled(open);
+    if (open && phoneLayout()) focusFirst(sidebarRoot);
+  };
   const cancelSidebarEdgeMotion = () => {
     if (sidebarEdgeRaf) {
       cancelAnimationFrame(sidebarEdgeRaf);
@@ -475,9 +487,14 @@ export function Sidebar(props: {
   });
   createEffect(() => {
     const open = props.mobileOpen;
+    if (open !== mobileWasOpen) {
+      window.clearTimeout(settleTimer);
+      // The drawer's transitionend settles it; this catches reduced motion and an interrupted slide.
+      settleTimer = window.setTimeout(settleDrawer, 400);
+    }
     if (open && !mobileWasOpen) {
       mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      queueMicrotask(() => focusFirst(sidebarRoot));
+      if (!phoneLayout()) queueMicrotask(() => focusFirst(sidebarRoot));
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
@@ -1090,14 +1107,17 @@ export function Sidebar(props: {
   // The two halves: Chat (projects and chats, the hub's) and Work (workspaces, terminals and harnesses, by machine).
   const areas = [{ value: "conduit" as const, label: "Chat", icon: <Icons.Dashboard /> }, { value: "computer" as const, label: "Work", icon: <Icons.Monitor /> }];
   return <>
-    <Show when={props.mobileOpen}>
-      <Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} />
+    <Show when={phoneLayout()} fallback={<Show when={props.mobileOpen}><Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} /></Show>}>
+      <Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} open={props.mobileOpen} />
     </Show>
     <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => { sidebarList = element; }} data-region="sidebar"
       data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
-      aria-hidden={phoneLayout() && !props.mobileOpen ? true : undefined} inert={phoneLayout() && !props.mobileOpen ? true : undefined}
-      onTransitionEnd={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}
+      aria-hidden={phoneLayout() && !drawerSettled() ? true : undefined} inert={phoneLayout() && !drawerSettled() ? true : undefined}
+      onTransitionEnd={(event) => {
+        if (event.target === sidebarRoot && event.propertyName === "transform") settleDrawer();
+        if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.();
+      }}
       onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}
       head={<>
         {/* A phone's open sidebar has no toggle: a swipe or the backdrop closes it. */}

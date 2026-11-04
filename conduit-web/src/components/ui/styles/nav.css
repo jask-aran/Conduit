@@ -141,10 +141,12 @@
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
 
-/* A phone's: a drawer over the page, the whole width, and no foot. The head is the wordmark on the ground and the
+/* A phone's: a drawer over the page, 80% of its width with the page dimmed beside it, and no foot. The head is the wordmark on the ground and the
    switch, a frost pill; the server is the list's first line (NavLead), so what it says never moves the head. */
-.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 100vw; background: var(--frame); transform: translateX(-102%); transition: transform var(--duration-quick) var(--ease-change); }
-.ui-nav-pane[data-drawer="open"] { transform: translateX(0); }
+.ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: var(--layer-drawer); width: 80vw; border-inline-end: var(--hairline) solid var(--border); background: var(--frame); transform: translateX(-102%);
+  /* Its own layer while shut too, so a slide starts already painted. */
+  will-change: transform; transition: transform var(--duration-quick) var(--ease-leave); }
+.ui-nav-pane[data-drawer="open"] { transform: translateX(0); transition: transform var(--duration-gentle) var(--ease-arrive); }
 .ui-nav-pane[data-drawer] .ui-nav-pane-body { width: 100%; height: var(--app-height, 100dvh); padding-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)); background: var(--frame); overscroll-behavior: contain; }
 .ui-nav-pane[data-drawer] .ui-nav-list { overscroll-behavior: contain; padding-bottom: var(--space-lg); }
 .ui-nav-pane[data-drawer] .ui-nav-head { min-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); justify-content: space-between; padding: var(--space-md) var(--space-md) var(--space-xs); }

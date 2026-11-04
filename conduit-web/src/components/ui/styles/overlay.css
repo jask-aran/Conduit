@@ -10,6 +10,9 @@
 .ui-backdrop { display: none; position: fixed; inset: 0; z-index: calc(var(--layer-drawer) - 1); border: 0; padding: 0; background: var(--dim); cursor: pointer; -webkit-tap-highlight-color: transparent;
   animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
 .ui-backdrop[data-layer="panel"] { z-index: calc(var(--layer-panel) - 1); }
+/* Kept mounted with its drawer: it fades in as the drawer opens and out as it shuts, on the drawer's own timing. */
+.ui-backdrop[data-fade] { animation: none; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-leave); }
+.ui-backdrop[data-fade="open"] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 [data-density="phone"] .ui-backdrop { display: block; }
 @media (--conduit-phone-layout) { .ui-backdrop { display: block; } }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, var(--measure-2xl)), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }

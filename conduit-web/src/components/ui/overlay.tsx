@@ -22,9 +22,11 @@ export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: 
 }
 
 /** Backdrop: the page dimmed under a phone's drawer (layer: the sidebar's, or the workspace panel's), a tap on it
- *  dismissing the drawer; it fades in. */
-export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDismiss: () => void }) =>
-  <button type="button" class="ui-backdrop" data-layer={props.layer} aria-label={props.label} onClick={() => props.onDismiss()} />;
+ *  dismissing the drawer; it fades in. open: kept mounted and fading both ways with its drawer (the sidebar), rather
+ *  than mounted while open. */
+export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDismiss: () => void; open?: boolean }) =>
+  <button type="button" class="ui-backdrop" data-layer={props.layer} aria-label={props.label} onClick={() => props.onDismiss()}
+    data-fade={props.open === undefined ? undefined : props.open ? "open" : "shut"} aria-hidden={props.open === false ? true : undefined} tabIndex={props.open === false ? -1 : undefined} />;
 
 /** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
  *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
