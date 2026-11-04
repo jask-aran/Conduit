@@ -75,11 +75,20 @@ public final class ConduitHubClient {
         public final String id;
         public final String name;
         public final boolean isChat;
+        /** A Workspace (a folder in Work, on this machine or a device), as opposed to a project in Chat. */
+        public final boolean isWorkspace;
+        /** The device it lives on when that is not the hub's own machine; null on the hub. */
+        public final String deviceName;
 
         private Place(JSONObject value) throws Exception {
             id = value.getString("id");
             name = value.getString("name");
             isChat = "chat".equals(value.optString("slug"));
+            isWorkspace = "workspace".equals(value.optString("kind"));
+            JSONObject device = value.optJSONObject("capabilities") == null ? null
+                : value.getJSONObject("capabilities").optJSONObject("device");
+            deviceName = device == null || device.optBoolean("local", true) || device.optString("name", "").isEmpty()
+                ? null : device.getString("name");
         }
     }
 
