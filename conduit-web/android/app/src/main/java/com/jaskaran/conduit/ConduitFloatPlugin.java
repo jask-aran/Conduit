@@ -54,20 +54,32 @@ public class ConduitFloatPlugin extends Plugin {
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
     }
 
-    private JSObject view() {
-        boolean assistant;
+
+    /** Conduit holds the assistant role (or, before roles, is the assistant setting). */
+    private boolean isAssistant() {
         if (Build.VERSION.SDK_INT >= 29) {
             android.app.role.RoleManager roles = getContext().getSystemService(android.app.role.RoleManager.class);
-            assistant = roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)
+            return roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)
                 && roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
-        } else {
-            String selected = Settings.Secure.getString(getContext().getContentResolver(), "assistant");
-            android.content.ComponentName component = selected == null ? null
-                : android.content.ComponentName.unflattenFromString(selected);
-            assistant = component != null && getContext().getPackageName().equals(component.getPackageName());
         }
+        String selected = Settings.Secure.getString(getContext().getContentResolver(), "assistant");
+        android.content.ComponentName component = selected == null ? null : android.content.ComponentName.unflattenFromString(selected);
+        return component != null && getContext().getPackageName().equals(component.getPackageName());
+    }
+
+    /**
+     * Samsung's Circle to Search (touch_and_hold_to_search) takes a long press on home before the assistant does. An app
+     * cannot change a private system setting, only read it; unreadable counts as on so the step is offered.
+     */
+    private boolean circleToSearchOn() {
+        try { return Settings.System.getInt(getContext().getContentResolver(), "touch_and_hold_to_search", 0) == 1; }
+        catch (RuntimeException unreadable) { return Build.MANUFACTURER.equalsIgnoreCase("samsung"); }
+    }
+
+    private JSObject view() {
         return new JSObject().put("enabled", preferences(getContext()).getBoolean("enabled", false))
-            .put("assistant", assistant)
+            .put("assistant", isAssistant())
+            .put("circleToSearch", circleToSearchOn())
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
             .put("micPermission", microphoneGranted(getContext()))
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
@@ -166,7 +178,64 @@ public class ConduitFloatPlugin extends Plugin {
             startVisible(false);
             preferences(getContext()).edit().putBoolean("enabled", true).apply();
         } catch (RuntimeException error) { call.reject("Could not start Float", error); return; }
-        screenContextStep(call);
+        assistantStep(call, true);
+    }
+
+    /*
+     * The assistant: a long press on home hands Conduit the screen with no prompt. Make Conduit the digital assistant,
+     * then (Samsung) turn off Circle to Search, which takes the long press first and cannot be changed by an app. Then,
+     * when this is part of turning Float on, screen context.
+     */
+    private void assistantStep(PluginCall call, boolean thenScreenContext) {
+        permissionFlow = true;
+        this.thenScreenContext = thenScreenContext;
+        if (isAssistant()) { circleStep(call); return; }
+        ask("Make Conduit your assistant",
+            "A long press on home then hands Conduit what is on screen, with no prompt. Choose Conduit as the digital "
+                + "assistant app, allow Use screenshot and Use text on screen, then come back.",
+            "Choose", () -> {
+                try { startActivityForResult(call, new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), "assistantReturned"); }
+                catch (RuntimeException noVoiceSettings) {
+                    try { startActivityForResult(call, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), "assistantReturned"); }
+                    catch (RuntimeException none) { nextAfterAssistant(call); }
+                }
+            }, call, () -> nextAfterAssistant(call));
+    }
+
+    private boolean thenScreenContext;
+
+    @ActivityCallback private void assistantReturned(PluginCall call, ActivityResult result) {
+        if (call == null) { permissionFlow = false; return; }
+        if (isAssistant()) circleStep(call); else nextAfterAssistant(call);
+    }
+
+    private void circleStep(PluginCall call) {
+        if (!circleToSearchOn()) { nextAfterAssistant(call); return; }
+        ask("Turn off Circle to Search",
+            "Circle to Search takes a long press on home before the assistant does. In Navigation bar, turn off "
+                + "Circle to Search, then come back.",
+            "Open Navigation bar", () -> {
+                try { startActivityForResult(call, new Intent("com.samsung.settings.NAVIGATION_BAR_SETTING"), "circleReturned"); }
+                catch (RuntimeException notSamsung) {
+                    try { startActivityForResult(call, new Intent(Settings.ACTION_DISPLAY_SETTINGS), "circleReturned"); }
+                    catch (RuntimeException none) { nextAfterAssistant(call); }
+                }
+            }, call, () -> nextAfterAssistant(call));
+    }
+
+    @ActivityCallback private void circleReturned(PluginCall call, ActivityResult result) {
+        if (call == null) { permissionFlow = false; return; }
+        nextAfterAssistant(call);
+    }
+
+    private void nextAfterAssistant(PluginCall call) {
+        if (thenScreenContext) screenContextStep(call);
+        else { permissionFlow = false; call.resolve(view()); }
+    }
+
+    /** Settings' Assistant row: make Conduit the assistant and clear Circle to Search out of its way. */
+    @PluginMethod public void setUpAssistant(PluginCall call) {
+        getActivity().runOnUiThread(() -> assistantStep(call, false));
     }
 
     /*
@@ -207,12 +276,17 @@ public class ConduitFloatPlugin extends Plugin {
         if (call != null) call.resolve(view());
     }
 
-    /** A step's dialog: Continue runs it, Skip ends the flow with Float on as it is. */
+    /** A step's dialog: its button runs the step; Skip ends the flow with Float on as it is. */
     private void ask(String title, String message, String go, Runnable step, PluginCall call) {
+        ask(title, message, go, step, call, () -> { permissionFlow = false; call.resolve(view()); });
+    }
+
+    /** A step's dialog whose Skip goes on to what follows instead of ending the flow. */
+    private void ask(String title, String message, String go, Runnable step, PluginCall call, Runnable skip) {
         new android.app.AlertDialog.Builder(getActivity()).setTitle(title).setMessage(message)
             .setPositiveButton(go, (dialog, which) -> step.run())
-            .setNegativeButton("Skip", (dialog, which) -> { permissionFlow = false; call.resolve(view()); })
-            .setOnCancelListener(dialog -> { permissionFlow = false; call.resolve(view()); })
+            .setNegativeButton("Skip", (dialog, which) -> skip.run())
+            .setOnCancelListener(dialog -> skip.run())
             .show();
     }
 

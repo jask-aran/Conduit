@@ -16,6 +16,8 @@ export interface FloatStatus {
   screenContext: boolean;
   /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
   assistant: boolean;
+  /** Samsung's Circle to Search is on: it takes a long press on home before the assistant. */
+  circleToSearch: boolean;
   /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
@@ -31,6 +33,7 @@ const nativeFloat = registerPlugin<{
   openScreenContextSettings(): Promise<FloatStatus>;
   setUpScreenContext(): Promise<FloatStatus>;
   openAssistantSettings(): Promise<FloatStatus>;
+  setUpAssistant(): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -55,6 +58,8 @@ export const conduitFloat = {
   /** Walks through what screen context needs (Allow restricted settings, then Accessibility), each step skippable. */
   setUpScreenContext: () => enqueue(() => nativeFloat.setUpScreenContext()),
   openAssistantSettings: () => enqueue(() => nativeFloat.openAssistantSettings()),
+  /** Make Conduit the assistant, then turn Circle to Search out of its way, each step skippable. */
+  setUpAssistant: () => enqueue(() => nativeFloat.setUpAssistant()),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
