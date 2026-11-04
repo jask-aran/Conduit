@@ -224,12 +224,17 @@
    left edge: one stroke (::after, the line's colour through a mask of one path) going up from the corner to the tip and
    back down, easing into the top edge, so nothing is drawn twice where pieces would meet; under it (::before) the pane's fill
    covers the top edge where the tail opens into the bubble. As wide as a messaging app's: about two thirds of the
-   room, capped at a line's length. Drawn in px, a hairline's own unit: 14 wide, 12 tall. */
+   room (most of it on a phone, as a messaging app's), capped at a line's length. Nothing fills it: the hairline is the
+   bubble, and what is behind the pane (the meteors) shows through. Drawn in px, a hairline's own unit: 14 wide, 12 tall. */
 .ui-turn[data-bubble] { --turn-step: 0px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
 .ui-turn[data-bubble] > .ui-answer { position: relative; width: fit-content; max-width: min(65%, var(--measure-2xl)); min-width: calc(1lh + 2 * var(--space-md));
   margin-top: 11px; border: var(--hairline) solid var(--border); border-radius: var(--radius-message); border-top-left-radius: 0;
-  background: var(--background); padding: var(--space-md) var(--space-lg); }
-.ui-turn[data-bubble] > .ui-answer::before { content: ""; position: absolute; top: -1px; left: 0; width: 13px; height: 1px; background: var(--background); }
+  background: transparent; padding: var(--space-md) var(--space-lg);
+  /* The top edge's first 13px are cut away where the tail opens into the bubble (nothing is painted over them, so what
+     is behind shows through); the clip keeps the tail above the box. */
+  clip-path: polygon(-2px -13px, 15px -13px, 15px 0, 100% 0, 100% 100%, 0 100%, 0 0, 1px 0, 1px 1px, 13px 1px, 13px 0, -2px 0); }
+@media (--conduit-phone-layout) { .ui-turn[data-bubble] > .ui-answer { max-width: min(85%, var(--measure-2xl)); } }
+[data-density="phone"] .ui-turn[data-bubble] > .ui-answer { max-width: min(85%, var(--measure-2xl)); }
 .ui-turn[data-bubble] > .ui-answer::after { content: ""; position: absolute; top: -12px; left: -1px; width: 14px; height: 12px; background: var(--border);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
 /* Times always shown (Transcript data-times="shown"): where messages arrive unseen, when each came is the point. */

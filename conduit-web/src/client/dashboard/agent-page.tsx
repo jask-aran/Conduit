@@ -247,12 +247,14 @@ export function AgentPage(props: {
     return [...out].sort((a, b) => a - b);
   };
   // What runs on its clock, next first: the heartbeat, the brief, feeds filling the inbox, check-backs; over its day.
-  const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
+  // On first by when they next run, then the ones switched off (dimmed, no clock).
+  const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => Number(!!a.off) - Number(!!b.off) || (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
+  const clocked = () => timed().filter((schedule) => !schedule.off);
   const day = () => {
     const settings = view()?.settings;
     const zone = settings?.timezone;
-    const beat = timed().find((schedule) => clockKind(schedule) === "heartbeat");
-    const marks: DayMark[] = timed().filter((schedule) => schedule.kind === "daily" && schedule.at && !schedule.feed)
+    const beat = clocked().find((schedule) => clockKind(schedule) === "heartbeat");
+    const marks: DayMark[] = clocked().filter((schedule) => schedule.kind === "daily" && schedule.at && !schedule.feed)
       .map((schedule) => ({ at: minutesOf(schedule.at!), label: clockKind(schedule) === "brief" ? "Brief" : schedule.title, kind: clockKind(schedule) }));
     return <DayStrip now={minutesIn(now(), zone)} marks={marks} pulse={beat?.everyMinutes ?? null} ticks={beat?.rules ? beatTicks(beat.rules) : undefined}
       quiet={settings?.quietHours?.enabled ? { start: minutesOf(settings.quietHours.start), end: minutesOf(settings.quietHours.end) } : null} />;
@@ -269,6 +271,7 @@ export function AgentPage(props: {
     const quiet = () => clockKind(schedule) === "heartbeat" && quietUntil() ? `Quiet until ${quietUntil()}` : undefined;
     const status = () => !feed ? undefined : feed.lastError ? "Last check failed" : !feed.primed ? "First check soon"
       : `${feed.lastCount ? `${feed.lastCount} new` : "Nothing new"} ${age(feed.lastRunAt, now())}`.trim();
+    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} next="Off" off />;
     return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
       actions={<>
@@ -278,7 +281,7 @@ export function AgentPage(props: {
         onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></IconButton> : undefined}
       </>} />;
   };
-  const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={timed().length || null}>
+  const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 

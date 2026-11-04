@@ -14,7 +14,7 @@ export type AgentWork = { model: string; thinkingLevel: string };
 export type AgentWorkKind = "brief" | "heartbeat" | "other";
 export type AgentRunKind = "manual" | "schedule" | "checkback" | "brief" | "heartbeat" | "webhook" | "event" | string;
 export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string; level?: string | null; conversationId: number }
-export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; cadence?: string; nextAt?: string | null; lastAt?: string | null; system?: boolean; routine?: string; task?: string | null;
+export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; cadence?: string; nextAt?: string | null; lastAt?: string | null; system?: boolean; routine?: string; task?: string | null; /** A routine switched off: listed, dimmed, with no clock. */ off?: boolean;
   /** A routine with several timing rules: each as it applies now, `during` a local "HH:MM-HH:MM" window or null. */
   rules?: Array<{ kind: string; everyMinutes?: number; at?: string; during: string | null }>;
   /** A feed (feeds.js): what it reads from and how its last run went. */

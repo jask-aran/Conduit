@@ -503,7 +503,10 @@ export async function listSchedules(agent) {
   const gathers = new Map(routines.filter((routine) => routine.gate === "never")
     .map((routine) => [routine.name, routine.tasks[0]?.kind]));
   const wording = new Map(routines.map((routine) => [routine.name, triggerWords(routine.trigger)]));
-  return Object.values(state.schedules).map((item) => {
+  // A routine switched off has no clock; it is listed as off (the page dims it), so turning it off never hides it.
+  const off = routines.filter((routine) => routine.enabled === false && !state.schedules[`r-${routine.name}`])
+    .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null, lastAt: null, routine: routine.name, cadence: wording.get(routine.name), off: true }));
+  return [...Object.values(state.schedules).map((item) => {
     const { id, title, kind, at, everyMinutes, lastAt, system, routine } = item;
     const next = item.nextAt ? Date.parse(item.nextAt) : item.kind === "rules" && item.nextAt === null ? null : nextTime(item, zone, now);
     const nextAt = next === null ? null : new Date(next).toISOString();
@@ -515,6 +518,6 @@ export async function listSchedules(agent) {
       // Its rules as they apply now (a quiet window resolved to the hours), for the page's day strip.
       ...(kind === "rules" ? { rules: item.rules.map((rule) => ({ kind: rule.kind, ...(rule.everyMinutes ? { everyMinutes: rule.everyMinutes } : {}), ...(rule.at ? { at: rule.at } : {}), during: rule.during ?? null })) } : {}),
       ...(feed ? { feed } : {}) };
-  })
-    .sort((a, b) => (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
+  }), ...off]
+    .sort((a, b) => Number(!!a.off) - Number(!!b.off) || (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }
