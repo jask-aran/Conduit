@@ -1,4 +1,4 @@
-import { audioInputConstraints, formatMicrophoneError, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
+import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
 import { dictationSocketUrl } from "../api/transport";
 
@@ -563,6 +563,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       requested.then(
         (acquired) => {
           diagnostics?.requestResolved();
+          if (!reuseStream) microphoneOpened();
           if (permission !== requested || stopRequested || state !== "starting") {
             if (!reuseStream) stopStream(acquired);
           }

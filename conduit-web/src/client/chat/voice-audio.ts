@@ -106,13 +106,20 @@ export function rematchInputDevice(settings: { inputDeviceId: string; inputDevic
   return devices.find((device) => device.deviceId && device.label === settings.inputDeviceLabel)?.deviceId ?? null;
 }
 
-export async function listAudioInputDevices(): Promise<AudioInputDevice[]> {
+/** Called each time dictation opens the microphone: the device then names its microphones without opening one more. */
+const micOpened = new Set<() => void>();
+export const onMicrophoneOpened = (listener: () => void) => { micOpened.add(listener); return () => micOpened.delete(listener); };
+export const microphoneOpened = () => { for (const listener of micOpened) listener(); };
+
+/** openForNames: false never opens the microphone (at startup, where opening it takes the phone's audio and pauses
+ *  the person's music); the list may then come back without ids or names. */
+export async function listAudioInputDevices({ openForNames = true }: { openForNames?: boolean } = {}): Promise<AudioInputDevice[]> {
   let devices = await mediaDevices().enumerateDevices();
   // A freshly loaded page (a reload after a reconnect, say) is shown the
   // microphones without ids or names until it has opened one, so a saved
   // choice reads as missing. With the grant already held, open one for an
   // instant to see them -- this is all on the device, not the server.
-  if (devices.some((device) => device.kind === "audioinput" && !device.deviceId) && await microphoneGranted()) {
+  if (openForNames && devices.some((device) => device.kind === "audioinput" && !device.deviceId) && await microphoneGranted()) {
     try {
       const stream = await mediaDevices().getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());

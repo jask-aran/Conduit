@@ -64,7 +64,7 @@ import {
   type MarkdownRendererId,
 } from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
-import { listAudioInputDevices, rematchInputDevice } from "./chat/voice-audio";
+import { listAudioInputDevices, onMicrophoneOpened, rematchInputDevice } from "./chat/voice-audio";
 import { installedClientKind } from "./platform/installed-client";
 import { Transcript } from "./chat/transcript";
 import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
@@ -624,22 +624,21 @@ function App() {
   const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
   // A phone with nothing chosen takes its speakerphone microphone rather than
   // whatever Bluetooth headset happens to be connected.
-  onMount(() => {
-    if (voiceSettings().inputDeviceId || !(installedClientKind === "android" || isMobileLayout())) return;
-    void listAudioInputDevices().then((devices) => {
-      const speaker = devices.find((device) => device.deviceId && /speaker/i.test(device.label));
-      if (speaker && !voiceSettings().inputDeviceId) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: speaker.deviceId, inputDeviceLabel: speaker.label });
-    }).catch(() => {});
-  });
-  // Find the chosen microphone again if this device gave it a new id.
-  onMount(() => {
+  // Both read the device's microphones without opening one (opening one at startup takes the phone's audio and pauses
+  // the person's music), and again whenever dictation has the microphone open, when the device names them freely.
+  const reconcileMicrophones = () => {
     const saved = voiceSettings();
-    if (!saved.inputDeviceId || !saved.inputDeviceLabel) return;
-    void listAudioInputDevices().then((devices) => {
+    const pickSpeaker = !saved.inputDeviceId && (installedClientKind === "android" || isMobileLayout());
+    if (!pickSpeaker && !(saved.inputDeviceId && saved.inputDeviceLabel)) return;
+    void listAudioInputDevices({ openForNames: false }).then((devices) => {
+      const speaker = pickSpeaker && devices.find((device) => device.deviceId && /speaker/i.test(device.label));
+      if (speaker && !voiceSettings().inputDeviceId) return updateVoiceSettings({ ...voiceSettings(), inputDeviceId: speaker.deviceId, inputDeviceLabel: speaker.label });
       const moved = rematchInputDevice(voiceSettings(), devices);
       if (moved) updateVoiceSettings({ ...voiceSettings(), inputDeviceId: moved });
     }).catch(() => {});
-  });
+  };
+  onMount(reconcileMicrophones);
+  onCleanup(onMicrophoneOpened(reconcileMicrophones));
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
