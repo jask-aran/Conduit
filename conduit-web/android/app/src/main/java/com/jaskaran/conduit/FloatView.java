@@ -111,14 +111,8 @@ final class FloatView extends FrameLayout {
     private final android.text.TextPaint badgeText = new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
     void setGathered(int count) { if (gathered != count) { gathered = count; invalidate(); } }
 
-    /** Where the recording goes, drawn after Cancel: the radial's chosen slot lands here. */
-    private Drawable targetIcon;
-    void setTarget(int icon, String name) {
-        targetIcon = getContext().getDrawable(icon).mutate();
-        targetIcon.setTint(0xff8d8f94);
-        stopButton.setContentDescription("Send to " + name);
-        invalidate();
-    }
+    /** Where the recording goes (its bubble sits under the pill, the radial's): for Send's spoken name. */
+    void setTarget(int icon, String name) { stopButton.setContentDescription("Send to " + name); }
     private long sentAt;
 
     FloatView(Context context, FloatWindow window, Listener listener, State state) {
@@ -330,14 +324,6 @@ final class FloatView extends FrameLayout {
         int alpha = Math.round(255 * contentAlpha());
         // The middle: after cancel (ends at 40) and the target glyph (40 + 26), before send (width - 40).
         float from = offset + dp(46), to = offset + width - dp(46), mid = (from + to) / 2;
-        if (state == State.RECORDING && targetIcon != null) {
-            float gx = offset + dp(53), size = dp(18);
-            targetIcon.setBounds(Math.round(gx - size / 2), Math.round(h / 2 - size / 2), Math.round(gx + size / 2), Math.round(h / 2 + size / 2));
-            targetIcon.setAlpha(alpha);
-            targetIcon.draw(canvas);
-            from = offset + dp(66);
-            mid = (from + to) / 2;
-        }
         if (state == State.RECORDING) {
             paint.setColor(Color.argb(alpha, 232, 233, 235));
             int bars = 7;

@@ -82,6 +82,7 @@ public class ConduitFloatService extends Service {
         if (show) captures.show(thumbs, window.right(), card);
         else if (holding && (state == State.SENDING || state == State.SENT)) captures.sendAway();
         else captures.hide();
+        updateVisibility();
     }
 
     static void setAppForeground(boolean foreground) {
@@ -94,8 +95,64 @@ public class ConduitFloatService extends Service {
         }
     }
 
+    /** Settings changed an option Float shows by (Only on side key). */
+    static void optionsChanged() { if (active != null) active.updateDiscard(); }
+
+    /** Called up by the side key while Only on side key is on; it goes again once Float is back at rest and empty. */
+    private boolean summoned;
+    /** This dictation came from the side key: the next side key press sends it. */
+    private boolean sideKeyRecording;
+    /** Between the side key and the radial it opens (the capture is still landing). */
+    private boolean summoning;
+
+    private boolean atRest() {
+        return machine.state() == State.HANDLE && !radialUp() && (panel == null || !panel.isOpen()) && gathered.isEmpty()
+            && !capturing && !summoning;
+    }
+
     private void updateVisibility() {
-        if (window != null) window.setVisible(!(appForeground && machine.state() == State.HANDLE));
+        if (window == null) return;
+        boolean onlySideKey = prefs().getBoolean("sideKeyOnly", false) && prefs().getBoolean("sideKeyHandled", false);
+        if (onlySideKey && summoned && atRest()) summoned = false;
+        boolean hidden = (appForeground && machine.state() == State.HANDLE) || (onlySideKey && !summoned && atRest());
+        window.setVisible(!hidden);
+    }
+
+    /**
+     * The side key (Conduit as the assistant) handed Float the screen. While a side-key dictation runs, it sends it.
+     * Otherwise Float shows (Only on side key), keeps the screenshot when Side key screenshot is on, then opens the
+     * radial, or goes straight into dictation when Side key dictates is on.
+     */
+    private void sideKey(ConduitContext.Result result) {
+        State state = machine.state();
+        if (state != State.HANDLE) {
+            if (result.image != null) result.image.delete();
+            if (state == State.RECORDING && sideKeyRecording) stopRecording(false);
+            return;
+        }
+        summoned = true;
+        summoning = true;
+        updateVisibility();
+        boolean dictate = prefs().getBoolean("sideKeyDictates", false);
+        Runnable next = () -> {
+            summoning = false;
+            if (machine.state() == State.HANDLE && !radialUp()) { if (dictate) sideKeyDictation(); else openRadial(); }
+            updateVisibility();
+        };
+        if (prefs().getBoolean("sideKeyScreenshot", true) && result.error == null && result.image != null) captured(result, next);
+        else { if (result.image != null) result.image.delete(); next.run(); }
+    }
+
+    private void sideKeyDictation() {
+        FloatRadial.Slot slot = "chat".equals(prefs().getString("sideKeyTarget", "jbot")) ? FloatRadial.Slot.NEW_CHAT : FloatRadial.Slot.JBOT;
+        openRadial();
+        window.lift(false);
+        setTarget(targetFor(slot));
+        radial.dictate(slot);
+        radial.setTargetIcon(slot == FloatRadial.Slot.JBOT ? R.drawable.ic_stat_conduit : R.drawable.float_new_chat);
+        window.performHapticFeedback();
+        sideKeyRecording = true;
+        beginRecording();
     }
 
     private SharedPreferences prefs() { return ConduitFloatPlugin.preferences(this); }
@@ -127,7 +184,8 @@ public class ConduitFloatService extends Service {
                     discard();
                     show(State.HANDLE);
                     // The pill's ✕: back to the radial, the captures still held, to pick another target.
-                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { if (!destroyed && machine.state() == State.HANDLE) openRadial(); }, 160); }
+                    android.util.Log.d("ConduitFloat", "cancelled, reopen " + reopenAfterCancel);
+                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { android.util.Log.d("ConduitFloat", "reopen " + machine.state() + " " + radialUp()); if (!destroyed && machine.state() == State.HANDLE) openRadial(); }, 160); }
                 }
                 else if (saved) sendRecording();
                 else { discard(); show(State.ERROR); }
@@ -139,7 +197,7 @@ public class ConduitFloatService extends Service {
         });
         sender = new FloatSender(this, worker, main);
         // The assistant (a long press on home) hands Float the screen: held like a screenshot, then where it goes.
-        FloatAssist.receive(result -> main.post(() -> captured(result, true)));
+        FloatAssist.receive(result -> main.post(() -> sideKey(result)));
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -240,6 +298,7 @@ public class ConduitFloatService extends Service {
     private void show(State next) {
         if (destroyed || !machine.show(next)) return;
         if (next == State.HANDLE) liveText = "";
+        if (next != State.RECORDING) sideKeyRecording = false;
         // The dictation's Screenshot and Camera go with the recording.
         if (next != State.RECORDING && radial != null && radial.isDictating()) radial.close();
         window.show(next, errorText, sentAt);
@@ -290,6 +349,24 @@ public class ConduitFloatService extends Service {
         places.show(window.right(), Math.round(window.handleCentre()[1]));
     }
 
+    /** A dictation's target bubble: jbot or any place for a new chat; the words keep coming meanwhile. */
+    private void openSendTo() {
+        closePanel();
+        FloatPlacesPanel places = new FloatPlacesPanel(this, hub(), new FloatPlacesPanel.Listener() {
+            @Override public void placeChosen(ConduitHubClient.Place place) {
+                FloatTarget next = place == null ? FloatTarget.jbot()
+                    : FloatTarget.newChat(place.isChat ? null : place.id, place.isChat ? "New chat" : place.name);
+                setTarget(next);
+                if (radial != null) radial.setTargetIcon(place == null ? R.drawable.ic_stat_conduit
+                    : place.isChat ? R.drawable.float_new_chat : FloatGlyphs.icon(place.isWorkspace && !"monogram".equals(place.appearanceMode) ? place.appearanceValue : "folder"));
+                updateCaption();
+            }
+            @Override public void closed() { updateDiscard(); }
+        }, true);
+        panel = places;
+        places.show(window.right(), Math.round(window.handleCentre()[1]));
+    }
+
     /** Recent: the latest replies; answer one by voice (records to that chat) or by typing (sent at once). */
     private void openRecent() {
         closePanel();
@@ -328,7 +405,9 @@ public class ConduitFloatService extends Service {
         if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
             @Override public void chosen(FloatRadial.Slot slot) { radialChosen(slot); updateDiscard(); }
             @Override public void dismissed() { window.lift(false); updateDiscard(); }
-            @Override public void discard() { dropGathered(); radial.close(); window.lift(false); updateDiscard(); }
+            // Clears what is held; the radial stays open to pick where the next message goes.
+            @Override public void discard() { dropGathered(); updateDiscard(); }
+            @Override public void retarget() { openSendTo(); }
         });
         return radial;
     }
@@ -356,8 +435,8 @@ public class ConduitFloatService extends Service {
         switch (slot) {
             case JBOT: case NEW_CHAT:
                 setTarget(targetFor(slot));
-                float[] glyph = window.targetGlyph();
-                radial.dictate(slot, glyph[0], glyph[1]);
+                radial.dictate(slot);
+                radial.setTargetIcon(slot == FloatRadial.Slot.JBOT ? R.drawable.ic_stat_conduit : R.drawable.float_new_chat);
                 beginRecording();
                 break;
             // The radial has gone at once (not faded): the panel takes the screen behind it as its frost.
@@ -390,24 +469,25 @@ public class ConduitFloatService extends Service {
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
         setAway(true);
-        ConduitContext.screenshot(this, result -> captured(result, false));
+        ConduitContext.screenshot(this, result -> captured(result, null));
     }
 
     private void photo() {
         if (busyCapturing()) return;
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
-        ConduitContext.photo(this, result -> captured(result, false));
+        ConduitContext.photo(this, result -> captured(result, null));
     }
 
     /** A capture arrived: Float comes back, the flash and the copy flying into the card, then it is held. */
-    private void captured(ConduitContext.Result result, boolean thenOpen) {
+    private void captured(ConduitContext.Result result, Runnable then) {
         capturing = false;
         if (destroyed) { if (result.image != null) result.image.delete(); return; }
         setAway(false);
         if (result.error != null || result.image == null) {
             if (result.error != null) android.widget.Toast.makeText(this, result.error, android.widget.Toast.LENGTH_SHORT).show();
             updateDiscard();
+            if (then != null) then.run();
             return;
         }
         boolean flash = !"photo".equals(result.kind);
@@ -426,7 +506,7 @@ public class ConduitFloatService extends Service {
                     gathered.add(result);
                     thumbs.add(mini);
                     updateDiscard();
-                    if (thenOpen && machine.state() == State.HANDLE && !radialUp()) openRadial();
+                    if (then != null) then.run();
                 });
             });
         });

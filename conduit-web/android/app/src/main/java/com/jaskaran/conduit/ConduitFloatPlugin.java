@@ -76,6 +76,10 @@ public class ConduitFloatPlugin extends Plugin {
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
             .put("holdToTalk", preferences(getContext()).getBoolean("holdToTalk", false))
             .put("slotNames", preferences(getContext()).getBoolean("slotNames", false))
+            .put("sideKeyOnly", preferences(getContext()).getBoolean("sideKeyOnly", false))
+            .put("sideKeyScreenshot", preferences(getContext()).getBoolean("sideKeyScreenshot", true))
+            .put("sideKeyDictates", preferences(getContext()).getBoolean("sideKeyDictates", false))
+            .put("sideKeyTarget", "chat".equals(preferences(getContext()).getString("sideKeyTarget", "jbot")) ? "chat" : "jbot")
             .put("screenContext", ConduitContext.screenReaderOn(getContext()));
     }
 
@@ -91,6 +95,17 @@ public class ConduitFloatPlugin extends Plugin {
             edit.putString("holdTarget", target);
         }
         edit.apply();
+        call.resolve(view());
+    }
+
+    /** The side key's options: Float only on the side key, whether it screenshots, whether it dictates and to where. */
+    @PluginMethod public void setSideKey(PluginCall call) {
+        android.content.SharedPreferences.Editor edit = preferences(getContext()).edit();
+        for (String key : new String[] { "sideKeyOnly", "sideKeyScreenshot", "sideKeyDictates" })
+            if (call.hasOption(key)) edit.putBoolean(key, Boolean.TRUE.equals(call.getBoolean(key)));
+        if (call.hasOption("sideKeyTarget")) edit.putString("sideKeyTarget", "chat".equals(call.getString("sideKeyTarget")) ? "chat" : "jbot");
+        edit.apply();
+        ConduitFloatService.optionsChanged();
         call.resolve(view());
     }
 

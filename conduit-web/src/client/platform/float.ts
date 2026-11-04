@@ -14,6 +14,13 @@ export interface FloatStatus {
   holdToTalk: boolean;
   /** Show each slot's name beside it in Float's radial. */
   slotNames: boolean;
+  /** Float stays out of sight until the side key calls it. */
+  sideKeyOnly: boolean;
+  /** The side key takes a screenshot as it opens Float. */
+  sideKeyScreenshot: boolean;
+  /** The side key starts dictating (to sideKeyTarget); a second press sends. */
+  sideKeyDictates: boolean;
+  sideKeyTarget: FloatHoldTarget;
   /** Float screen context, the Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
   screenContext: boolean;
   /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
@@ -32,6 +39,7 @@ const nativeFloat = registerPlugin<{
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
   openOverlaySettings(): Promise<FloatStatus>;
   setSlotNames(options: { slotNames: boolean }): Promise<FloatStatus>;
+  setSideKey(options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   openScreenContextSettings(): Promise<FloatStatus>;
   setUpScreenContext(): Promise<FloatStatus>;
@@ -66,6 +74,8 @@ export const conduitFloat = {
   setUpAssistant: () => enqueue(() => nativeFloat.setUpAssistant()),
   openSideKeySettings: () => enqueue(() => nativeFloat.openSideKeySettings()),
   setSlotNames: (slotNames: boolean) => enqueue(() => nativeFloat.setSlotNames({ slotNames })),
+  setSideKey: (options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }) =>
+    enqueue(() => nativeFloat.setSideKey(options)),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 

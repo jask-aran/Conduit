@@ -496,6 +496,11 @@ export function Settings(props: {
     try { setFloatStatus(await conduitFloat.setHold(options)); }
     catch (error) { floatFailure(error); }
   };
+  const changeSideKey = async (options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }) => {
+    setFloatError("");
+    try { setFloatStatus(await conduitFloat.setSideKey(options)); }
+    catch (error) { floatFailure(error); }
+  };
   const allowFloatOverlay = async () => {
     setFloatBusy(true);
     setFloatError("");
@@ -1564,6 +1569,24 @@ export function Settings(props: {
                             {floatStatus()!.sideKey === "set" ? "Settings" : "Set up"}
                           </Button>
                         </SettingLine>
+                        <Show when={floatStatus()!.sideKey === "set"}>
+                          <SettingLine label="Only on side key" title="Float stays out of sight until you hold the side key, and goes again once you are done.">
+                            <Switch label="Only on side key" checked={floatStatus()!.sideKeyOnly} disabled={floatBusy()} onChange={(sideKeyOnly) => void changeSideKey({ sideKeyOnly })} />
+                          </SettingLine>
+                          <SettingLine label="Side key screenshot" title="Holding the side key takes a screenshot of what is on screen as Float opens.">
+                            <Switch label="Side key screenshot" checked={floatStatus()!.sideKeyScreenshot} disabled={floatBusy()} onChange={(sideKeyScreenshot) => void changeSideKey({ sideKeyScreenshot })} />
+                          </SettingLine>
+                          <SettingLine label="Side key dictates" title="Holding the side key starts dictating at once; hold it again to send. (Android does not tell apps when the key is let go.)">
+                            <Switch label="Side key dictates" checked={floatStatus()!.sideKeyDictates} disabled={floatBusy()} onChange={(sideKeyDictates) => void changeSideKey({ sideKeyDictates })} />
+                          </SettingLine>
+                          <Show when={floatStatus()!.sideKeyDictates}>
+                            <SettingLine label="Side key talks to" title="Where a side-key dictation goes.">
+                              <Segmented label="Side key talks to" value={floatStatus()!.sideKeyTarget} disabled={floatBusy()} onChange={(sideKeyTarget: FloatHoldTarget) => void changeSideKey({ sideKeyTarget })} options={[
+                                { value: "jbot", label: "jbot" }, { value: "chat", label: "New chat" },
+                              ]} />
+                            </SettingLine>
+                          </Show>
+                        </Show>
                       </Show>
                       <SettingLine label="Slot names" title="Show each slot's name beside it in Float's radial.">
                         <Switch label="Slot names" checked={floatStatus()!.slotNames} disabled={floatBusy()} onChange={(slotNames) => void conduitFloat.setSlotNames(slotNames).then(setFloatStatus).catch(floatFailure)} />

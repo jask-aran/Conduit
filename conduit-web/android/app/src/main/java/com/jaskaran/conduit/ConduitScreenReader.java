@@ -112,7 +112,9 @@ public final class ConduitScreenReader extends AccessibilityService {
     private static final java.util.concurrent.Executor BACKDROP = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     /** The screen, blurred at an eighth of its size, for Float's frost; called back on this worker thread. */
-    void backdrop(java.util.function.Consumer<Bitmap> done) {
+    void backdrop(java.util.function.Consumer<Bitmap> done) { backdrop(done, true); }
+
+    private void backdrop(java.util.function.Consumer<Bitmap> done, boolean retry) {
         if (Build.VERSION.SDK_INT < 30) { done.accept(null); return; }
         try {
             takeScreenshot(Display.DEFAULT_DISPLAY, BACKDROP, new TakeScreenshotCallback() {
@@ -135,7 +137,12 @@ public final class ConduitScreenReader extends AccessibilityService {
                     }
                     done.accept(small);
                 }
-                @Override public void onFailure(int errorCode) { done.accept(null); }
+                @Override public void onFailure(int errorCode) {
+                    // Android allows one screenshot a third of a second: right after a capture, try once more.
+                    if (retry && errorCode == ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT)
+                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> backdrop(done, false), 340);
+                    else done.accept(null);
+                }
             });
         } catch (RuntimeException e) { done.accept(null); }
     }

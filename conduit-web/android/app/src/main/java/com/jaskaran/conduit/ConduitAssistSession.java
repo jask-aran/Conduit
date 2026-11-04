@@ -47,7 +47,9 @@ public final class ConduitAssistSession extends VoiceInteractionSession {
     }
 
     @Override public void onHandleAssist(AssistState state) {
-        if (state.isFocused()) acceptStructure(state.getAssistStructure());
+        // The focused window's structure; when none is focused (the home screen), the last one, so the capture
+        // does not wait out the timeout.
+        if (state.isFocused() || (!assistArrived && state.getIndex() == state.getCount() - 1)) acceptStructure(state.getAssistStructure());
     }
 
     @SuppressWarnings("deprecation")

@@ -50,6 +50,8 @@ final class FloatRadial {
         void dismissed();
         /** The ✕ under the held captures. */
         void discard();
+        /** The dictation's target bubble: choose where the words go instead. */
+        void retarget();
     }
 
     private static final Slot[] SLOTS = Slot.values();
@@ -70,7 +72,10 @@ final class FloatRadial {
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Dialog dialog;
+    /** The full-screen window (the open arc), and the small one the dictation's row is handed to. */
     private final Surface surface;
+    private final Surface[] rowSurfaces = new Surface[3];
+    private final Dialog[] rowDialogs = new Dialog[3];
     private final FloatFrost frost = new FloatFrost(-1, 1);
     private final Drawable[] icons = new Drawable[SLOTS.length];
     private final Drawable cross;
@@ -109,7 +114,17 @@ final class FloatRadial {
         names.setColor(ICON);
         names.setShadowLayer(dp(6), 0, dp(1), 0xcc000000);
         surface = new Surface(context);
-        dialog = new Dialog(context, R.style.ConduitFloatTheme);
+        for (int k = 0; k < 3; k++) rowSurfaces[k] = new Surface(context);
+        dialog = overlay(surface);
+        WindowManager.LayoutParams full = dialog.getWindow().getAttributes();
+        full.x = full.y = 0;
+        full.width = full.height = WindowManager.LayoutParams.MATCH_PARENT;
+        dialog.getWindow().setAttributes(full);
+        for (int k = 0; k < 3; k++) rowDialogs[k] = overlay(rowSurfaces[k]);
+    }
+
+    private Dialog overlay(Surface content) {
+        Dialog dialog = new Dialog(context, R.style.ConduitFloatTheme);
         dialog.setCancelable(false);
         Window window = dialog.getWindow();
         window.setType(Build.VERSION.SDK_INT >= 26
@@ -118,7 +133,7 @@ final class FloatRadial {
             | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-        window.setContentView(surface);
+        window.setContentView(content);
         window.getDecorView().setPadding(0, 0, 0, 0);
         WindowManager.LayoutParams p = window.getAttributes();
         p.format = PixelFormat.TRANSLUCENT;
@@ -128,7 +143,14 @@ final class FloatRadial {
             p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         if (Build.VERSION.SDK_INT >= 30) p.setFitInsetsTypes(0);
         window.setAttributes(p);
+        return dialog;
     }
+
+    private void invalidateAll() { surface.invalidate(); for (Surface row : rowSurfaces) row.invalidate(); }
+
+    private boolean rowShowing() { for (Dialog row : rowDialogs) if (row.isShowing()) return true; return false; }
+
+    private void dismissRows() { for (Dialog row : rowDialogs) if (row.isShowing()) row.dismiss(); }
 
     private int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
 
@@ -155,7 +177,6 @@ final class FloatRadial {
         mode = Mode.OPEN;
         closing = false;
         shown = 0;
-        fullScreen();
         // The frost's ground: the screen as it is now, before anything of the radial is on it.
         int ticket = ++request;
         ConduitScreenReader reader = ConduitScreenReader.instance;
@@ -172,28 +193,31 @@ final class FloatRadial {
     }
 
     private void reveal() {
-        if (mode != Mode.OPEN) return;
+        if (mode == Mode.CLOSED) return;
         if (!dialog.isShowing()) dialog.show();
-        animateShown(1, OPEN_MS);
+        // Back from a dictation's row: the full window is up and drawing, so the row's can go.
+        if (rowShowing()) surface.postOnAnimation(() -> { if (mode != Mode.DICTATING) dismissRows(); });
+        if (mode == Mode.OPEN) animateShown(1, OPEN_MS);
     }
 
     private void setBackdrop(Bitmap next) {
         if (backdrop != null && backdrop != next) backdrop.recycle();
         backdrop = next;
         frost.setBackdrop(next);
-        surface.invalidate();
+        invalidateAll();
     }
 
     /** Captures came or went while open: the ✕ follows. */
     void setHeld(boolean held, float[] discardCentre) {
         this.held = held;
         if (discardCentre != null) { discardX = discardCentre[0]; discardY = discardCentre[1]; }
-        surface.invalidate();
+        invalidateAll();
     }
 
     /** Out of sight for a capture (a frame or two), then back exactly as it was. */
     void setHidden(boolean hidden) {
         if (dialog.isShowing()) surface.setVisibility(hidden ? View.INVISIBLE : View.VISIBLE);
+        for (int k = 0; k < 3; k++) if (rowDialogs[k].isShowing()) rowSurfaces[k].setVisibility(hidden ? View.INVISIBLE : View.VISIBLE);
         // The screen changes under a screenshot's flash; the next open takes a fresh backdrop.
         if (!hidden && mode == Mode.CLOSED) setBackdrop(null);
     }
@@ -225,19 +249,30 @@ final class FloatRadial {
      * jbot or New chat was chosen: the chosen slot flies into the pill's start (pillX, pillY: its target glyph), the
      * other targets shrink away, and Screenshot and Camera stay where they are for the dictation.
      */
-    void dictate(Slot slot, float pillX, float pillY) {
+    void dictate(Slot slot) {
         if (mode != Mode.OPEN) return;
+        // From wherever each slot is this instant (the arc may still be opening): no jump to the arc first.
+        for (int i = 0; i < SLOTS.length; i++) {
+            float p = progress(i);
+            startX[i] = anchorX + (slotX[i] - anchorX) * p;
+            startY[i] = anchorY + (slotY[i] - anchorY) * p;
+            startAlpha[i] = Math.min(1, p * 1.6f);
+            startScale[i] = .7f + .3f * p;
+        }
+        // The dictation's row under the pill, beside the captures' column: the target (tap it to send elsewhere),
+        // then Screenshot and Camera.
+        float inward = right ? -1 : 1;
+        for (int k = 0; k < 3; k++) { rowX[k] = anchorX + inward * dp(ROW_START + k * ROW_STEP); rowY[k] = anchorY + dp(ROW_DOWN); }
         cancelMotion();
         shown = 1;
         closing = false;
         mode = Mode.DICTATING;
         chosen = slot;
-        pillTargetX = pillX;
-        pillTargetY = pillY;
+        targetIcon = null;
         dictation = ValueAnimator.ofFloat(0, 1);
         dictation.setDuration(DICTATE_MS);
         dictation.setInterpolator(new android.view.animation.LinearInterpolator());
-        dictation.addUpdateListener(a -> { dictated = (float) a.getAnimatedValue(); surface.invalidate(); });
+        dictation.addUpdateListener(a -> { dictated = (float) a.getAnimatedValue(); invalidateAll(); });
         dictation.addListener(new android.animation.AnimatorListenerAdapter() {
             boolean cancelled;
             @Override public void onAnimationCancel(android.animation.Animator animation) { cancelled = true; }
@@ -245,31 +280,56 @@ final class FloatRadial {
         });
         dictation.start();
     }
-    private float pillTargetX, pillTargetY;
+    /** dp: the row's distance under the handle's centre, its first slot's from the handle's centre, the step. */
+    private static final float ROW_DOWN = 50, ROW_START = 44, ROW_STEP = 48;
+    private final float[] rowX = new float[3], rowY = new float[3];
+    private final float[] startX = new float[SLOTS.length], startY = new float[SLOTS.length],
+        startAlpha = new float[SLOTS.length], startScale = new float[SLOTS.length];
+
+    /** The row position of slot i while dictating, or -1 when it has none (the targets not chosen). */
+    private int rowOf(int i) {
+        if (SLOTS[i] == chosen) return 0;
+        if (SLOTS[i] == Slot.SCREENSHOT) return 1;
+        if (SLOTS[i] == Slot.CAMERA) return 2;
+        return -1;
+    }
+
+    /** Retargeted while dictating: the bubble shows the new target's icon. */
+    void setTargetIcon(int icon) {
+        targetIcon = context.getDrawable(icon).mutate();
+        targetIcon.setTint(ICON);
+        invalidateAll();
+    }
+    private Drawable targetIcon;
 
     /** Dictating: the window covers only Screenshot and Camera, so the rest of the screen is the app's again. */
     private void shrinkToContext() {
         if (mode != Mode.DICTATING) return;
+        // Not a resize of the full window (the system moves a window a frame before it redraws, so they would jump):
+        // each of the three goes to a small window of its own, and once those have drawn, the
+        // full-screen one goes.
         int half = dp(SLOT) / 2 + dp(4);
-        int s = Slot.SCREENSHOT.ordinal(), c = Slot.CAMERA.ordinal();
-        int left = Math.round(Math.min(slotX[s], slotX[c])) - half, top = Math.round(Math.min(slotY[s], slotY[c])) - half;
-        int w = Math.round(Math.abs(slotX[s] - slotX[c])) + 2 * half, h = Math.round(Math.abs(slotY[s] - slotY[c])) + 2 * half;
-        if (labels) { int extra = dp(110); w += extra; if (right) left -= extra; }
-        setWindow(left, top, w, h);
-    }
-
-    private void fullScreen() {
-        setWindow(0, 0, WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
-    }
-
-    private void setWindow(int x, int y, int w, int h) {
-        originX = w == WindowManager.LayoutParams.MATCH_PARENT ? 0 : x;
-        originY = h == WindowManager.LayoutParams.MATCH_PARENT ? 0 : y;
-        Window window = dialog.getWindow();
-        WindowManager.LayoutParams p = window.getAttributes();
-        p.x = originX; p.y = originY; p.width = w; p.height = h;
-        window.setAttributes(p);
-        surface.invalidate();
+        for (int k = 0; k < 3; k++) {
+            Window window = rowDialogs[k].getWindow();
+            WindowManager.LayoutParams p = window.getAttributes();
+            p.x = Math.round(rowX[k]) - half; p.y = Math.round(rowY[k]) - half; p.width = p.height = 2 * half;
+            window.setAttributes(p);
+            rowSurfaces[k].setVisibility(View.VISIBLE);
+            if (!rowDialogs[k].isShowing()) rowDialogs[k].show();
+            rowSurfaces[k].invalidate();
+        }
+        Surface last = rowSurfaces[2];
+        last.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+            boolean done;
+            @Override public void onDraw() {
+                if (done) return;
+                done = true;
+                last.post(() -> {
+                    last.getViewTreeObserver().removeOnDrawListener(this);
+                    last.postOnAnimation(() -> { if (mode == Mode.DICTATING && dialog.isShowing()) dialog.dismiss(); });
+                });
+            }
+        });
     }
 
     /** Closes with the drop motion (from the open arc or the dictation's pair). */
@@ -289,7 +349,9 @@ final class FloatRadial {
         shown = 0;
         chosen = pressed = null;
         if (dialog.isShowing()) dialog.dismiss();
+        dismissRows();
         surface.setVisibility(View.VISIBLE);
+        for (Surface row : rowSurfaces) row.setVisibility(View.VISIBLE);
         setBackdrop(null);
     }
 
@@ -306,7 +368,7 @@ final class FloatRadial {
         motion = ValueAnimator.ofFloat(from, to);
         motion.setDuration(ms + STAGGER_MS * (SLOTS.length - 1));
         motion.setInterpolator(new android.view.animation.LinearInterpolator());
-        motion.addUpdateListener(a -> { shown = (float) a.getAnimatedValue(); surface.invalidate(); });
+        motion.addUpdateListener(a -> { shown = (float) a.getAnimatedValue(); invalidateAll(); });
         motion.addListener(new android.animation.AnimatorListenerAdapter() {
             boolean cancelled;
             @Override public void onAnimationCancel(android.animation.Animator animation) { cancelled = true; }
@@ -330,7 +392,11 @@ final class FloatRadial {
     private Slot slotAt(float x, float y) {
         float reach = dp(SLOT) / 2f + dp(6);
         for (int i = 0; i < SLOTS.length; i++) {
-            if (mode == Mode.DICTATING && SLOTS[i].target()) continue;
+            if (mode == Mode.DICTATING) {
+                int k = rowOf(i);
+                if (k >= 0 && Math.hypot(x - rowX[k], y - rowY[k]) <= reach) return SLOTS[i];
+                continue;
+            }
             if (Math.hypot(x - slotX[i], y - slotY[i]) <= reach) return SLOTS[i];
         }
         return null;
@@ -350,11 +416,11 @@ final class FloatRadial {
                 pressedDiscard = pressed == null && onDiscard(x, y);
                 if (pressed != null || pressedDiscard) surface.performHapticFeedback(Build.VERSION.SDK_INT >= 27
                     ? HapticFeedbackConstants.TEXT_HANDLE_MOVE : HapticFeedbackConstants.CLOCK_TICK);
-                surface.invalidate();
+                invalidateAll();
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop() * 2) {
-                    if (pressed != null || pressedDiscard) { pressed = null; pressedDiscard = false; surface.invalidate(); }
+                    if (pressed != null || pressedDiscard) { pressed = null; pressedDiscard = false; invalidateAll(); }
                 }
                 return true;
             case MotionEvent.ACTION_UP: {
@@ -363,25 +429,26 @@ final class FloatRadial {
                 boolean moved = Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop() * 2;
                 pressed = null;
                 pressedDiscard = false;
-                surface.invalidate();
+                invalidateAll();
                 if (closing || mode == Mode.CLOSED) return true;
-                if (tapped != null) {
+                if (tapped != null && mode == Mode.DICTATING && tapped == chosen) listener.retarget();
+                else if (tapped != null) {
                     if (tapped.target() && tapped != Slot.JBOT && tapped != Slot.NEW_CHAT) hideNow();
                     listener.chosen(tapped);
                 } else if (discard) listener.discard();
                 else if (mode == Mode.OPEN && !moved) { close(); listener.dismissed(); }
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: pressed = null; pressedDiscard = false; surface.invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: pressed = null; pressedDiscard = false; invalidateAll(); return true;
             default: return true;
         }
     }
 
-    private void paint(Canvas canvas) {
+    private void paint(Canvas canvas, View on) {
         if (mode == Mode.CLOSED) return;
         canvas.save();
-        // Where the window really is this frame (a resize lands a frame after it is asked for).
-        surface.getLocationOnScreen(at);
+        // Everything is placed in screen pixels; each window draws its own part of the screen.
+        on.getLocationOnScreen(at);
         canvas.translate(-at[0], -at[1]);
         int size = dp(SLOT);
         float dictateIn = arrive.getInterpolation(Math.min(1, dictated)), dictateOut = leave.getInterpolation(Math.min(1, dictated));
@@ -390,27 +457,35 @@ final class FloatRadial {
             float p = progress(i);
             float x = anchorX + (slotX[i] - anchorX) * p, y = anchorY + (slotY[i] - anchorY) * p;
             float alpha = Math.min(1, p * 1.6f), scale = .7f + .3f * p;
-            if (mode == Mode.DICTATING && SLOTS[i].target()) {
-                if (SLOTS[i] == chosen) {
-                    // Into the pill's target glyph, shrinking to its size and fading as the pill's own draws in.
-                    x += (pillTargetX - x) * dictateIn;
-                    y += (pillTargetY - y) * dictateIn;
-                    scale *= 1 - .55f * dictateIn;
-                    alpha *= 1 - dictateOut;
+            if (mode == Mode.DICTATING) {
+                int k = rowOf(i);
+                x = startX[i]; y = startY[i]; alpha = startAlpha[i]; scale = startScale[i];
+                // Closing from the dictation's row: they fade where they are (the row's window is only that big).
+                float fade = closing ? shown : 1;
+                if (k >= 0) {
+                    // Into the row under the pill, on the rise curve, coming up to full as it goes.
+                    x += (rowX[k] - x) * dictateIn;
+                    y += (rowY[k] - y) * dictateIn;
+                    alpha += (1 - alpha) * dictateIn;
+                    scale += (1 - scale) * dictateIn;
+                    alpha *= fade;
                 } else {
                     scale *= 1 - .6f * dictateOut;
                     alpha *= 1 - dictateOut;
+                    if (alpha <= .01f) continue;
                 }
-                if (alpha <= .01f) continue;
             }
             if (SLOTS[i] == pressed) scale *= .92f;
-            drawSlot(canvas, i, x, y, size * scale, alpha, SLOTS[i] == pressed);
+            if (mode == Mode.DICTATING && SLOTS[i] == chosen && targetIcon != null) {
+                drawRound(canvas, x, y, size * scale, alpha, SLOTS[i] == pressed);
+                drawIcon(canvas, targetIcon, x, y, size * scale * .45f, alpha);
+            } else drawSlot(canvas, i, x, y, size * scale, alpha, SLOTS[i] == pressed);
             labelX[i] = x; labelY[i] = y; labelSize[i] = size; labelAlpha[i] = alpha;
         }
         // Names after every slot, so none lies under a neighbour's bubble.
         for (int i = 0; i < SLOTS.length && labels; i++) {
             float x = labelX[i], y = labelY[i], slot = labelSize[i], alpha = labelAlpha[i];
-            if (alpha > .01f && !(mode == Mode.DICTATING && SLOTS[i].target())) {
+            if (alpha > .01f && mode != Mode.DICTATING) {
                 names.setAlpha(Math.round(255 * alpha * .92f));
                 // Outward along the slot's own direction from the handle, so a name never lies over its neighbour.
                 float w = names.measureText(SLOTS[i].label), dx = x - anchorX, dy = y - anchorY;
@@ -463,7 +538,7 @@ final class FloatRadial {
 
     private final class Surface extends View {
         Surface(Context context) { super(context); setLayerType(LAYER_TYPE_HARDWARE, null); }
-        @Override protected void onDraw(Canvas canvas) { paint(canvas); }
+        @Override protected void onDraw(Canvas canvas) { paint(canvas, this); }
         @Override public boolean onTouchEvent(MotionEvent event) { return touch(event); }
     }
 }

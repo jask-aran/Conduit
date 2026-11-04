@@ -22,11 +22,16 @@ public final class FloatPlacesPanel extends FloatPanel {
     private final Listener listener;
     private List<ConduitHubClient.Place> places;
 
-    public FloatPlacesPanel(Context context, ConduitHubClient hub, Listener listener) {
+    public FloatPlacesPanel(Context context, ConduitHubClient hub, Listener listener) { this(context, hub, listener, false); }
+
+    /** withJbot: a dictation's "Send to": jbot first, then every place a new chat can go (placeChosen(null) is jbot). */
+    public FloatPlacesPanel(Context context, ConduitHubClient hub, Listener listener, boolean withJbot) {
         super(context, hub);
         this.listener = listener;
-        heading("New chat in", null);
+        this.withJbot = withJbot;
+        heading(withJbot ? "Send to" : "New chat in", null);
     }
+    private final boolean withJbot;
 
     @Override protected void onOpen() { refresh(); }
     @Override protected void onClosed() { listener.closed(); }
@@ -46,6 +51,11 @@ public final class FloatPlacesPanel extends FloatPanel {
     /** As the app's PROJECT menu (PlaceList, place-picker.tsx): each place's glyph and name, one row each. */
     private void render() {
         body.removeAllViews();
+        if (withJbot) {
+            LinearLayout jbot = iconRow(R.drawable.ic_stat_conduit, null, "jbot", null);
+            jbot.setOnClickListener(v -> { close(); listener.placeChosen(null); });
+            body.addView(jbot);
+        }
         for (ConduitHubClient.Place place : places) {
             LinearLayout row;
             if (place.isChat) row = iconRow(R.drawable.ic_stat_conduit, null, "No folder", null);

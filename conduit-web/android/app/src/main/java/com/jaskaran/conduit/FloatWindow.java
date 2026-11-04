@@ -119,14 +119,12 @@ final class FloatWindow {
 
     void setGathered(int count) { if (control != null) control.setGathered(count); }
 
-    void setTarget(int icon, String name) { if (control != null) control.setTarget(icon, name); }
-
-    /** Where the pill's target glyph sits on screen (pixels): the radial's chosen slot flies there. */
-    float[] targetGlyph() {
-        float[] centre = handleCentre();
-        float x = right() ? screenSize()[0] - dp(EDGE + 53) : dp(EDGE + 53);
-        return new float[] { x, centre[1] };
+    void performHapticFeedback() {
+        if (control != null) control.performHapticFeedback(Build.VERSION.SDK_INT >= 30
+            ? android.view.HapticFeedbackConstants.CONFIRM : android.view.HapticFeedbackConstants.LONG_PRESS);
     }
+
+    void setTarget(int icon, String name) { if (control != null) control.setTarget(icon, name); }
 
     /** The handle's height in pixels at rest. */
     float handleHeight() { return dp(HANDLE_H); }
@@ -179,7 +177,7 @@ final class FloatWindow {
     private boolean sending() { return state == State.STOPPING || state == State.SENDING || state == State.SENT; }
     private static final float SENDING = 40;
     /** The pill's width in dp, and how far Float rests from the screen's edge. */
-    static final float PILL = 176, EDGE = 6;
+    static final float PILL = 148, EDGE = 6;
     /** At rest it dims well back, out of the way; a touch brings it up while held, and opening brings it up with the pill. */
     private static final float REST_ALPHA = .42f;
     private boolean touched;
