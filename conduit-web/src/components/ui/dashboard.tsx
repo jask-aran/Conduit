@@ -2,6 +2,7 @@ import * as Icons from "./icons";
 import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Row, type RowProps } from "./row";
+import { clearDock } from "./dock-inset";
 
 
 /*
@@ -72,7 +73,21 @@ export function DashConversation(props: { label: string; open?: { label: string;
     const tree = new MutationObserver(watch);
     tree.observe(scroller, { childList: true, subtree: true, characterData: true });
     watch();
-    onCleanup(() => { sizes.disconnect(); tree.disconnect(); });
+    // A room's messages scroll under its composer's dock as a thread's do, and reserve its measured height the same
+    // way (dock-inset.ts); the dock may arrive after the messages, so it is looked for until it does.
+    // Looked for a frame on, once the messages are in the page (at mount they may not be yet).
+    let stopClearing: (() => void) | null = null;
+    let room: HTMLElement | null = null;
+    const findDock = () => {
+      const dock = stopClearing ? null : room?.querySelector<HTMLElement>(".ui-composer-dock");
+      if (dock) { stopClearing = clearDock(scroller, dock, follow); docks.disconnect(); }
+    };
+    const docks = new MutationObserver(findDock);
+    const frame = requestAnimationFrame(() => {
+      room = scroller.closest<HTMLElement>(".ui-dash[data-room]");
+      if (room) { docks.observe(room, { childList: true, subtree: true }); findDock(); }
+    });
+    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); docks.disconnect(); stopClearing?.(); });
   });
   return <section class="ui-dash-conversation" aria-label={props.label}>
     <div ref={scroller} class="ui-dash-conversation-scroll" data-scrolls={props.scrolls ? "" : undefined} role={props.scrolls ? undefined : "log"} onScroll={() => { pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 8; }}>{props.children}</div>

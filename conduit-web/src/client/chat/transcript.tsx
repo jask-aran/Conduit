@@ -7,6 +7,7 @@ import { createComputed, createEffect, createMemo, createRenderEffect, createSig
 import type { BooleanCapability, Message, ToolItem } from "../api/contracts";
 import { isChatContentActivity, type TranscriptSource } from "./transcript-source";
 import type { TurnArtifactSummary } from "../api/live-events";
+import { clearDock } from "@/components/ui/dock-inset";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
@@ -879,7 +880,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     window.addEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
     let latestButtonAnchorFrame: number | null = null;
-    let composerBlockSize = -1;
     const syncLatestButtonAnchor = () => {
       latestButtonAnchorFrame = null;
       // The horizontal anchor follows the centred composer through CSS. Only
@@ -917,39 +917,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // In a page's conversation (DashConversation) the composer is under the transcript, not over it: nothing to clear.
     const composerStack = transcriptRoot.closest(".ui-dash-conversation") ? null
       : transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
-    // The composer floats over the bottom of the transcript, so the thread has
-    // to reserve its height itself. A fixed reservation only ever matched the
-    // resting composer: a multi-line draft, attachments, or the queued-message
-    // card each grew the stack over the newest output and left it covered.
-    // Reserving the measured height instead makes the thread taller, which the
-    // tail spring reads as the bottom moving and follows -- so the output steps
-    // up out of the way while the card is there, and back down when it goes.
-    const COMPOSER_CLEARANCE_PX = 40;
-    const syncComposerInset = (blockSize: number) => {
-      // Dictating on a phone, the text pill folds away under captions that
-      // float where it was: the room is still taken, so the thread keeps it
-      // rather than following the composer down and back up.
-      const current = parseFloat(transcriptRoot.style.getPropertyValue("--transcript-composer-inset")) || 0;
-      if (composerStack?.querySelector('.ui-phone-composer[data-state="listening"]') && blockSize + COMPOSER_CLEARANCE_PX < current) return;
-      const inset = `${Math.round(blockSize + COMPOSER_CLEARANCE_PX)}px`;
-      if (transcriptRoot.style.getPropertyValue("--transcript-composer-inset") === inset) return;
-      transcriptRoot.style.setProperty("--transcript-composer-inset", inset);
-    };
-    const composerResizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      const blockSize = entry?.borderBoxSize[0]?.blockSize ?? entry?.contentRect.height ?? 0;
-      if (Math.abs(blockSize - composerBlockSize) < 0.5) return;
-      composerBlockSize = blockSize;
-      syncComposerInset(blockSize);
-      scheduleLatestButtonAnchor();
-    });
-    // Border box, because the only thing the keyboard changes about the stack
-    // is its padding. The pill inside it stays 46px tall whether or not the
-    // navigation bar is owed room underneath, so a content-box observation --
-    // the default -- reports once when it is attached and never again, and the
-    // thread goes on reserving the resting height while the composer sits a
-    // navigation bar higher. That gap was the one visible under the keyboard.
-    if (composerStack) composerResizeObserver.observe(composerStack, { box: "border-box" });
+    // The thread reserves the composer's measured height (components/ui/dock-inset.ts, as a room's messages do).
+    const stopClearingDock = composerStack ? clearDock(transcriptRoot, composerStack, scheduleLatestButtonAnchor) : null;
     // The composer slides back in as a transform, which no size change reports,
     // and it is measured with that transform applied -- so again once it lands.
     const composerLanded = (event: TransitionEvent) => {
@@ -1233,7 +1202,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       window.removeEventListener("keydown", onKeyDown, { capture: true });
       viewport.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("focus", onPageFocus);
-      composerResizeObserver.disconnect();
+      stopClearingDock?.();
       composerStack?.removeEventListener("transitionend", composerLanded);
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
       scrollerResizeObserver.disconnect();

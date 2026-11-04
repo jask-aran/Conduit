@@ -216,6 +216,11 @@
 .ui-dash[data-room] { --dash-aside: 0px; --dash-gap: 0px; --dash-min: 0px; }
 .ui-dash[data-room] .ui-dash-body { grid-template-areas: "head" "notice" "band" "main"; grid-template-columns: minmax(0, var(--reading-width)); grid-template-rows: auto auto auto minmax(0, 1fr); }
 .ui-dash[data-room] .ui-dash-conversation { flex: 1 1 0; max-block-size: none; }
+/* A phone's room scrolls as a thread does: the messages run under the composer's dock (its own gradient at the foot),
+   the last one clearing its measured height (DashConversation, dock-inset.ts), as a thread clears it. */
+.ui-dash[data-room][data-compact] .ui-dash-body { padding-bottom: 0; }
+.ui-dash[data-room][data-compact] .ui-dash-conversation { margin-bottom: 0; }
+.ui-dash[data-room][data-compact] .ui-dash-conversation-scroll { padding-bottom: var(--transcript-composer-inset, calc(6.25 * var(--u-space) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))); }
 /* A room's head is a line, not a page's masthead: its actions are icon buttons beside the name, on a phone too. */
 .ui-dash[data-room] .ui-dash-head { margin-bottom: var(--space-lg); }
 .ui-dash[data-room][data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph title actions" "glyph status actions"; }
