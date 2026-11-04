@@ -1,7 +1,7 @@
 import { isPhoneVoice, loadVoiceDictationSettings } from "./voice-dictation.js";
 import { installedClientKind } from "../platform/installed-client";
 import { lowerOtherAudio, restoreOtherAudio } from "../platform/audio-ducking";
-import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
+import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, shouldSwapToSpeakerphone, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
 import { dictationSocketUrl } from "../api/transport";
 
@@ -572,20 +572,47 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       const constraints = audioInputConstraints(inputDeviceId, captureProfile);
       diagnostics?.requestStarted(constraints, captureProfile);
       if (reuseStream) diagnostics?.microphoneReused();
-      const requested = reuseStream
+      const opened = reuseStream
         ? Promise.resolve(stream!)
         : navigator.mediaDevices.getUserMedia(constraints).catch((error: unknown) => {
           if (!preferSpeakerphone || !inputDeviceId || stopRequested || state !== "starting" || !isUnavailableAudioInputError(error)) throw error;
           return navigator.mediaDevices.getUserMedia(audioInputConstraints("", captureProfile));
         });
+      const currentRequest = () => permission === requested && !stopRequested && state === "starting";
+      const requested: Promise<MediaStream> = opened.then(async (acquired) => {
+        if (reuseStream) return acquired;
+        await microphoneOpened();
+        if (!currentRequest()) return acquired;
+        const speakerphoneId = loadVoiceDictationSettings().speakerphoneId;
+        if (shouldSwapToSpeakerphone(preferSpeakerphone, speakerphoneId, acquired.getAudioTracks()[0]?.getSettings().deviceId)) {
+          const speakerConstraints = audioInputConstraints(speakerphoneId, captureProfile);
+          let replacement: MediaStream;
+          try {
+            diagnostics?.requestStarted(speakerConstraints, captureProfile);
+            replacement = await navigator.mediaDevices.getUserMedia(speakerConstraints);
+          } catch {
+            // Keep the working stream if the speakerphone cannot open.
+            return acquired;
+          }
+          if (!currentRequest()) {
+            stopStream(replacement);
+            return acquired;
+          }
+          stopStream(acquired);
+          acquired = replacement;
+          requestedStreamDeviceId = speakerphoneId;
+          await microphoneOpened();
+        }
+        return acquired;
+      });
       permission = requested;
       requested.then(
         (acquired) => {
-          diagnostics?.requestResolved();
-          if (!reuseStream) microphoneOpened();
           if (permission !== requested || stopRequested || state !== "starting") {
             if (!reuseStream) stopStream(acquired);
+            return;
           }
+          diagnostics?.requestResolved();
         },
         (error) => {
           if (permission !== requested || stopRequested) return;

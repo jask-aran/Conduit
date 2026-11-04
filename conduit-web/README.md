@@ -568,6 +568,18 @@ values use the provider format and are never returned by the API.
 - `GET|PUT /v0/voice/settings` reads or updates the redacted voice source,
   canonical local execution tuple, static execution catalogue, backend-path
   status, named adapter, endpoint, and authentication policy
+- `POST /v0/agent/voice-message` accepts a session-authenticated raw `audio/wav`
+  body (up to 10 MB; 16 kHz mono 16-bit PCM, at most five minutes). It uses the
+  hub's Voice source, model and credential, then logs and delivers the transcript
+  to jbot's home thread exactly like `POST /v0/agent/messages`, on the `app`
+  channel with `via: "voice"`. Returns `{ text }`; `409 agent_not_enabled`,
+  `agent_off` or `voice_off`, and `422 nothing_heard` leave the message unsent.
+  Android's jbot bubble uses the origin's WebView cookie when present; the bundled
+  installed client otherwise reads its existing native session from secure storage.
+  The bubble keeps one `X-Conduit-Voice-Id` per recording so a lost reply can be
+  retried without delivering the same message twice. An enabled idle handle returns after reboot. Android 14+ requires the app to
+  open before microphone access can resume; the first handle tap opens it and starts
+  recording. A completed failed recording stays in private app cache for one retry.
 - `POST /v0/voice/test` tests the effective endpoint without disclosing its
   credential; `DELETE /v0/voice/credential` removes a stored remote secret
 - `POST /v0/voice/model/install`, `POST /v0/voice/model/cancel`, and

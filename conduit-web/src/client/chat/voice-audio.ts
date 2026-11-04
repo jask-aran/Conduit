@@ -1,4 +1,4 @@
-import { isPhoneVoice, loadVoiceDictationSettings, saveVoiceDictationSettings } from "./voice-dictation.js";
+import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./voice-dictation.js";
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { installedClientKind } from "../platform/installed-client.ts";
 
@@ -127,15 +127,35 @@ export function rememberMicrophones(settings: Pick<VoiceDictationSettings, "inpu
   return patch;
 }
 
-/** Called each time dictation opens the microphone: the device then names its microphones without opening one more. */
-const micOpened = new Set<() => void>();
-export const onMicrophoneOpened = (listener: () => void) => { micOpened.add(listener); return () => micOpened.delete(listener); };
-export const microphoneOpened = () => {
-  if (isPhoneVoice()) void listAudioInputDevices({ openForNames: false }).then((devices) => {
+export function shouldSwapToSpeakerphone(preferSpeakerphone: boolean, speakerphoneId: string, openedDeviceId: string | undefined): boolean {
+  return preferSpeakerphone && speakerphoneId !== "" && openedDeviceId !== speakerphoneId;
+}
+
+/** Refresh names without opening a microphone, including when permission changes. */
+async function refreshMicrophones() {
+  try {
+    const devices = await listAudioInputDevices({ openForNames: false });
     const settings = loadVoiceDictationSettings();
     const patch = rememberMicrophones(settings, devices);
     if (Object.keys(patch).length) saveVoiceDictationSettings({ ...settings, ...patch });
-  }).catch(() => {});
+  } catch { /* Discovery must not prevent dictation. */ }
+}
+
+if (typeof navigator !== "undefined" && navigator.permissions) {
+  void navigator.permissions.query({ name: "microphone" as PermissionName }).then((status) => {
+    const refreshIfGranted = () => {
+      if (status.state === "granted") void refreshMicrophones();
+    };
+    status.addEventListener("change", refreshIfGranted);
+    refreshIfGranted();
+  }).catch(() => { /* Some browsers do not expose microphone permission. */ });
+}
+
+/** Called each time dictation opens the microphone: await the names before choosing the capture stream. */
+const micOpened = new Set<() => void>();
+export const onMicrophoneOpened = (listener: () => void) => { micOpened.add(listener); return () => micOpened.delete(listener); };
+export const microphoneOpened = async () => {
+  await refreshMicrophones();
   for (const listener of micOpened) listener();
 };
 

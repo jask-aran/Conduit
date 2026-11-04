@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { calculateFinalizationTimeoutMs } from "../src/server/dictation-stream.js";
@@ -16,6 +17,20 @@ import {
   shouldAutoSend,
   shouldReportNoSignal,
 } from "../src/client/chat/voice-dictation.js";
+
+const audioSource = await readFile(new URL("../src/client/chat/voice-audio.ts", import.meta.url), "utf8");
+const swapStart = audioSource.indexOf("export function shouldSwapToSpeakerphone(");
+const swapEnd = audioSource.indexOf("\n}", swapStart) + 2;
+const { shouldSwapToSpeakerphone } = await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(audioSource.slice(swapStart, swapEnd)))}`);
+
+test("speakerphone swap requires the phone preference and a known different device", () => {
+  assert.equal(shouldSwapToSpeakerphone(true, "speaker", "headset"), true);
+  assert.equal(shouldSwapToSpeakerphone(true, "new-speaker", "old-speaker"), true);
+  assert.equal(shouldSwapToSpeakerphone(true, "speaker", undefined), true);
+  assert.equal(shouldSwapToSpeakerphone(true, "speaker", "speaker"), false);
+  assert.equal(shouldSwapToSpeakerphone(true, "", "headset"), false);
+  assert.equal(shouldSwapToSpeakerphone(false, "speaker", "headset"), false);
+});
 
 test("dictation draft replacement preserves manual text and replaces provisional text in place", () => {
   const range = beginDictatedRange("ask  please", 4);

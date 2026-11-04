@@ -817,7 +817,7 @@ if (persistentAgent) {
   lifetime.own("jbot email", emailChannel, (owned) => owned.stop());
   void mirrorHomeThread(persistentAgent, messageLog).then((unsubscribe) => lifetime.own("jbot message log", { stop: unsubscribe }, (owned) => owned.stop()))
     .catch((error) => console.error("[agent] message log mirror did not start", error));
-  registerAgentRoutes(app, { agent: persistentAgent, backends, hubId: serverIdentity.id });
+  registerAgentRoutes(app, { agent: persistentAgent, backends, hubId: serverIdentity.id, voiceRuntime });
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
   lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());

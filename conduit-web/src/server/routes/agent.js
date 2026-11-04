@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import express from "express";
+import { createVoiceTranscriber } from "../voice-transcription.js";
 import path from "node:path";
 import { safeRedirectTarget } from "../../auth-middleware.js";
 import { originOfRequest } from "../../server-identity.js";
@@ -40,6 +42,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
+ * POST /v0/agent/voice-message      a PCM WAV recording: transcribed, logged via voice, then given to the same home thread
  * POST /v0/agent/inbox              add context as the signed-in person { title, headline, body?, level, kind?, for? }
  * PATCH /v0/agent/inbox/:id         { action: handle|reopen|address|dismiss, outcome?, for? }
  * DELETE /v0/agent/inbox/:id        hard delete, person only
@@ -55,7 +58,8 @@ import { backgroundSubagents } from "../subagents.js";
  * DELETE /v0/agent/connectors/:id    disconnect
  * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
  */
-export function registerAgentRoutes(app, { agent, backends, hubId }) {
+export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime }) {
+  const transcribeVoice = createVoiceTranscriber(voiceRuntime);
   const enabled = (response) => {
     if (agent.enabled()) return true;
     response.status(409).json({ error: "agent_not_enabled" });
@@ -226,20 +230,65 @@ export function registerAgentRoutes(app, { agent, backends, hubId }) {
     } catch (error) { next(error); }
   });
 
+  const deliverMessage = async (text, via = "app", id = `in:${crypto.randomUUID()}`) => {
+    const log = agent.runtime.messageLog;
+    if (!log) throw Object.assign(new Error("The message log is not ready."), { status: 503 });
+    const home = await agent.home();
+    // Keep the authenticated app channel: person-words.js trusts its claimed entries.
+    // Voice is the input method, not a new reply transport.
+    const message = log.append({ id, at: new Date().toISOString(),
+      channel: "app", via, direction: "in", sender: "person", body: text, conversationId: home.conversationId });
+    agent.chatHost.say(home.chat.id, text).catch((error) => {
+      log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } }));
+    });
+    return message;
+  };
+
   app.post("/v0/agent/messages", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
-      const log = agent.runtime.messageLog;
       const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
-      if (!log || !text) return response.status(400).json({ error: "Say something", code: "empty_message" });
-      const home = await agent.home();
-      // Logged first, so a busy or slow thread never loses it; the thread's copy is matched back to it (claim).
-      const message = log.append({ id: `in:${crypto.randomUUID()}`, at: new Date().toISOString(), direction: "in", sender: "person", body: text, conversationId: home.conversationId });
-      response.status(201).json({ message });
-      agent.chatHost.say(home.chat.id, text).catch((error) => {
-        log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } }));
-      });
+      if (!agent.runtime.messageLog || !text) return response.status(400).json({ error: "Say something", code: "empty_message" });
+      response.status(201).json({ message: await deliverMessage(text) });
     } catch (error) { next(error); }
+  });
+
+  const voiceRequests = new Map();
+  // Global session authentication runs before agent routes. JSON middleware leaves audio/wav untouched.
+  app.post("/v0/agent/voice-message", (request, response, next) => {
+    if (!enabled(response)) return;
+    if (!agent.active()) return response.status(409).json({ error: "agent_off" });
+    if (!request.is("audio/wav")) return response.status(415).json({ error: "invalid_audio", message: "Send an audio/wav recording." });
+    next();
+  }, express.raw({ type: "audio/wav", limit: "10mb" }), async (request, response, next) => {
+    try {
+      const key = request.get("X-Conduit-Voice-Id");
+      if (key && !/^[a-f0-9-]{36}$/i.test(key)) return response.status(400).json({ error: "invalid_voice_id" });
+      const id = key ? `in:voice:${key}` : `in:${crypto.randomUUID()}`;
+      // A lost HTTP reply must not turn the bubble's one retry into a second person message.
+      const existing = agent.runtime.messageLog?.messages.find((message) => message.id === id);
+      if (existing) return response.json({ text: existing.body });
+      let delivery = voiceRequests.get(id);
+      if (!delivery) {
+        delivery = (async () => {
+          const text = await transcribeVoice(request.body);
+          if (!text) throw Object.assign(new Error("Nothing was heard. Try again."), { status: 422, code: "nothing_heard" });
+          // The dial can change while a cold local model transcribes the recording.
+          if (!agent.enabled()) throw Object.assign(new Error("jbot is not enabled."), { status: 409, code: "agent_not_enabled" });
+          if (!agent.active()) throw Object.assign(new Error("jbot is off."), { status: 409, code: "agent_off" });
+          await deliverMessage(text, "voice", id);
+          return text;
+        })();
+        voiceRequests.set(id, delivery);
+      }
+      try { response.json({ text: await delivery }); }
+      finally { if (voiceRequests.get(id) === delivery) voiceRequests.delete(id); }
+    } catch (error) {
+      if (Number.isInteger(error.status) && error.status >= 400 && error.status < 600) {
+        return response.status(error.status).json({ error: error.code || "voice_failed", message: error.message });
+      }
+      next(error);
+    }
   });
 
   // Serialize local settings and remote setup so overlapping requests cannot replace each other's secret.
