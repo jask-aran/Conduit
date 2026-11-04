@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // home thread's. `other`: check-backs, events, webhooks and runs started by hand.
   work: { brief: null, heartbeat: null, other: null },
 });
-const LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh"]);
+const LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const WORK = ["brief", "heartbeat", "other"];
 
 /**

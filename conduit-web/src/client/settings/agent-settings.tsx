@@ -6,7 +6,7 @@ import { SettingLine, SettingWide } from "@/components/ui/overlay";
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView, type AgentWorkKind } from "../state/agent";
-import type { ModelOption } from "../api/contracts";
+import type { ModelOption, ModelState } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
 import { createAutosave } from "./autosave";
 import { Group } from "@/components/ui/group";
@@ -27,9 +27,6 @@ const DIALS = [
 ] as const;
 const HEARTBEATS = [30, 60, 120, 240, 480, 1440];
 const every = (minutes: number) => minutes < 60 ? `${minutes} min` : minutes === 1440 ? "Once a day" : `${minutes / 60} h`;
-
-/* "Same as jbot": the home thread's model, whatever it is when the run starts. */
-const SAME = (name: string): ModelOption => ({ provider: `${name}'s thread`, id: "", spec: "", label: `Same as ${name}`, thinkingLevels: [] });
 
 export function createAgentSettings(options: { models: () => ModelOption[]; onManageModels?: () => void }) {
   const [draft, setDraft] = createSignal<Draft>({ name: "", budget: "" });
@@ -56,7 +53,14 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
   const editName = (name: string) => { setDraft({ ...draft(), name }); if (nameError()) return autosave.hold(); edit({ name: name.trim() }); };
   const editBudget = (budget: string) => { setDraft({ ...draft(), budget }); if (budgetError()) return autosave.hold(); edit({ budgetUsdPerDay: Number(budget) }); };
   const set = (patch: Partial<Settings>) => edit(patch, "now");
-  // The model and effort one kind of background run uses; "Same as jbot" stores nothing.
+  // jbot's own model and effort (its home thread's): what a run "Same as jbot" uses, shown in the disabled selector.
+  const [home, setHome] = createSignal<{ model: string; thinkingLevel: string } | null>(null);
+  createEffect(on(() => agentView()?.home?.chatId, (chatId) => {
+    if (!chatId) return setHome(null);
+    void api<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`).then((state) => setHome({ model: state.model, thinkingLevel: state.thinkingLevel }), () => {});
+  }));
+  // The model and effort one kind of background run uses: the standard model selector, under a "Same as jbot"
+  // switch that, on, stores nothing (the run takes jbot's model when it starts) and holds the selector on jbot's.
   const Work = (line: { kind: AgentWorkKind; label: string; title: string }) => {
     const current = () => settings()!;
     const choice = () => current().work?.[line.kind] ?? null;
@@ -64,16 +68,29 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
     const setWork = (value: { model: string; thinkingLevel: string } | null) => set({ work: { [line.kind]: value } as Settings["work"] });
     const levels = (spec: string) => options.models().find((model) => model.spec === spec)?.thinkingLevels || ["off"];
     const choose = (spec: string) => {
-      if (!spec) return setWork(null);
       const keep = choice()?.thinkingLevel;
       const allowed = levels(spec);
       setWork({ model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" });
     };
-    return <SettingLine plain label={line.label} title={line.title}>
-      <ModelSelector models={[SAME(current().name), ...options.models()]} model={choice()?.model ?? ""} thinkingLevel={choice()?.thinkingLevel ?? ""}
-        quiet={choice() ? undefined : ""} onModelChange={choose} onManageModels={options.onManageModels}
-        onThinkingLevelChange={(thinkingLevel) => choice() && setWork({ ...choice()!, thinkingLevel })} />
-    </SettingLine>;
+    // Off: starts from jbot's own choice, which the person then changes.
+    const same = (on: boolean) => {
+      if (on) return setWork(null);
+      const start = home() ?? { model: options.models()[0]?.spec ?? "", thinkingLevel: "" };
+      if (!start.model) return;
+      const allowed = levels(start.model);
+      setWork({ model: start.model, thinkingLevel: allowed.includes(start.thinkingLevel) ? start.thinkingLevel : allowed.includes("medium") ? "medium" : allowed[0] || "off" });
+    };
+    const shown = () => choice() ?? home();
+    return <>
+      <SettingLine label={`${line.label} uses ${current().name}'s model`} title={`On: it uses ${current().name}'s own model and effort, whatever they are when it starts.`}>
+        <Switch label={`${line.label} uses ${current().name}'s model`} checked={!choice()} onChange={same} />
+      </SettingLine>
+      <SettingLine plain label={`${line.label} model`} title={line.title}>
+        <ModelSelector models={options.models()} model={shown()?.model ?? ""} thinkingLevel={shown()?.thinkingLevel ?? ""} disabled={!choice()} placement="bottom-end"
+          onModelChange={choose} onManageModels={options.onManageModels}
+          onThinkingLevelChange={(thinkingLevel) => choice() && setWork({ ...choice()!, thinkingLevel })} />
+      </SettingLine>
+    </>;
   };
 
   const enable = async () => {
@@ -123,7 +140,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           <SettingLine label="Brief at">
             <Input id="agent-brief-at" type="time" value={current().brief.at} onChange={(event) => { if (/^\d\d:\d\d$/.test(event.currentTarget.value)) set({ brief: { ...current().brief, at: event.currentTarget.value } }); }} />
           </SettingLine>
-          <Work kind="brief" label="Brief model" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
+          <Work kind="brief" label="Brief" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
         </Show>
         <SettingLine label="Heartbeat" title="It looks at its inbox on this clock and calls a model only when something new came in. It speaks up only when something is worth it.">
           <Switch label="Heartbeat" checked={current().heartbeat.enabled} onChange={(enabled) => set({ heartbeat: { ...current().heartbeat, enabled } })} />
@@ -134,7 +151,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
               <For each={HEARTBEATS.includes(current().heartbeat.everyMinutes) ? HEARTBEATS : [current().heartbeat.everyMinutes, ...HEARTBEATS]}>{(minutes) => <option value={String(minutes)}>{every(minutes)}</option>}</For>
             </Select>
           </SettingLine>
-          <Work kind="heartbeat" label="Heartbeat model" title="Runs often and usually finds nothing: a quick, cheap model fits." />
+          <Work kind="heartbeat" label="Heartbeat" title="Runs often and usually finds nothing: a quick, cheap model fits." />
         </Show>
         <SettingLine label="Quiet hours" title="No heartbeat in these hours. Something urgent still reaches you.">
           <Switch label="Quiet hours" checked={current().quietHours.enabled} onChange={(enabled) => set({ quietHours: { ...current().quietHours, enabled } })} />

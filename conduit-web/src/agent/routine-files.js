@@ -137,7 +137,7 @@ export function routineProblem(routine) {
   if (routine.model !== null && (typeof routine.model !== "string" || !/^[^\s/]+\/[^\s/]+$/.test(routine.model))) {
     return "Model must be provider/model.";
   }
-  if (routine.effort !== null && !["off", "minimal", "low", "medium", "high", "xhigh"].includes(routine.effort)) {
+  if (routine.effort !== null && !["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(routine.effort)) {
     return "Invalid effort.";
   }
   if (!["fyi", "attention", "urgent"].includes(routine.level)) return "Invalid level.";
