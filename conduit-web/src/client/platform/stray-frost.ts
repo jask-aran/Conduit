@@ -32,7 +32,8 @@ export function watchStrayFrost() {
     for (const element of document.querySelectorAll('[data-surface="frost"], .ui-frost')) {
       if (seen.has(element) || element.closest(".ui-phone-row")) continue;
       const r = element.getBoundingClientRect();
-      if (r.top < floor || r.width < 60 || r.height < 8) continue;
+      // Below the screen is scrolled out of view (a long conversation), not parked under the row.
+      if (r.top < floor || r.top >= innerHeight || r.width < 60 || r.height < 8) continue;
       if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
       const at = `${r.left},${r.top}`;
       now.set(element, at);

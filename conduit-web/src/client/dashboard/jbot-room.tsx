@@ -1,9 +1,9 @@
 import { onCleanup, onMount, Show, type JSX } from "solid-js";
-import { AgentAvatar, Icons, SheetFill } from "@/components/ui";
+import { AgentAvatar, IconButton, Icons, SheetFill } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
-import { SplitDashboard, SplitEmpty, SplitHeader, SplitQuickActions } from "./primitives/split";
+import { SplitDashboard, SplitEmpty, SplitHeader } from "./primitives/split";
 
 const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };
 
@@ -39,10 +39,11 @@ export function JbotRoom(props: {
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <SplitDashboard page="Agent" room label={`Messages with ${name()}`}
           header={<SplitHeader title={name()} glyph={<AgentAvatar />} context={[DIAL[agentView()?.settings?.dial || ""], spent(), running()]} />}
-          quickActions={<SplitQuickActions items={[
-            { icon: <Icons.Agent />, label: `${name()}'s page`, onClick: props.onOpenPage },
-            ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
-          ]} />}
+          // Two small buttons beside the name: tiles took a row of the phone's screen from the messages.
+          quickActions={<div class="ui-dash-room-actions">
+            <IconButton label={`${name()}'s page`} onClick={props.onOpenPage}><Icons.Agent /></IconButton>
+            <Show when={props.onOpenThread}><IconButton label="Open thread" onClick={() => props.onOpenThread?.()}><Icons.Chat /></IconButton></Show>
+          </div>}
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer} />
       </Show>

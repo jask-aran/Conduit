@@ -216,3 +216,7 @@
 .ui-dash[data-room] { --dash-aside: 0px; --dash-gap: 0px; --dash-min: 0px; }
 .ui-dash[data-room] .ui-dash-body { grid-template-areas: "head" "notice" "band" "main"; grid-template-columns: minmax(0, var(--reading-width)); grid-template-rows: auto auto auto minmax(0, 1fr); }
 .ui-dash[data-room] .ui-dash-conversation { flex: 1 1 0; }
+/* A room's head is a line, not a page's masthead: its actions are icon buttons beside the name, on a phone too. */
+.ui-dash[data-room] .ui-dash-head { margin-bottom: var(--space-lg); }
+.ui-dash[data-room][data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph title actions" "glyph status actions"; }
+.ui-dash-room-actions { display: flex; grid-area: actions; justify-self: end; gap: var(--space-xs); }
