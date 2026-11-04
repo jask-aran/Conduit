@@ -117,6 +117,8 @@ final class FloatWindow {
 
     void updateLevel(float loud) { control.updateLevel(loud); }
 
+    void setGathered(int count) { if (control != null) control.setGathered(count); }
+
     int top() { return position.y; }
 
     void refreshPlacement() { place(); listener.onRefresh(); }

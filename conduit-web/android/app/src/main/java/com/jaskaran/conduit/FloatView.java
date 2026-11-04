@@ -105,6 +105,11 @@ final class FloatView extends FrameLayout {
     private State state = State.HANDLE;
     private String errorText = "Couldn't send — open Conduit";
     private float level;
+    /** How many captures (screenshots, photos) Float is holding for the next message; shown as a badge at rest. */
+    private int gathered;
+    private final Paint badgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final android.text.TextPaint badgeText = new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+    void setGathered(int count) { if (gathered != count) { gathered = count; invalidate(); } }
     private long sentAt;
 
     FloatView(Context context, FloatWindow window, Listener listener, State state) {
@@ -293,8 +298,23 @@ final class FloatView extends FrameLayout {
         if (window.openness < 1) {
             mark.setAlpha(Math.round(235 * (1 - Math.min(1, window.openness / .45f))));
             float cx = right ? w - dp(HANDLE_W) / 2f : dp(HANDLE_W) / 2f;
-            mark.setBounds(Math.round(cx - dp(12)), Math.round(h / 2 - dp(12)), Math.round(cx + dp(12)), Math.round(h / 2 + dp(12)));
+            // With captures held, the mark steps down and smaller to make room for their count above it.
+            float half = dp(gathered > 0 ? 9 : 12), cy = h / 2 + (gathered > 0 ? dp(5) : 0);
+            mark.setBounds(Math.round(cx - half), Math.round(cy - half), Math.round(cx + half), Math.round(cy + half));
             mark.draw(canvas);
+            if (gathered > 0) {
+                float by = dp(10), radius = dp(7);
+                int fade = Math.round(255 * (1 - Math.min(1, window.openness / .45f)));
+                badgePaint.setColor(0xffe8e9eb);
+                badgePaint.setAlpha(fade);
+                canvas.drawCircle(cx, by, radius, badgePaint);
+                badgeText.setTextSize(dp(10));
+                badgeText.setFakeBoldText(true);
+                badgeText.setColor(0xff141518);
+                badgeText.setAlpha(fade);
+                String count = gathered > 9 ? "9+" : String.valueOf(gathered);
+                canvas.drawText(count, cx - badgeText.measureText(count) / 2, by - (badgeText.ascent() + badgeText.descent()) / 2, badgeText);
+            }
         }
         if (state == State.HANDLE) return;
         int width = window.controlWidth();

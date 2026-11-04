@@ -51,6 +51,9 @@ public class ConduitFloatService extends Service {
     private FloatRadial radial;
     /** Where the message being recorded goes: the radial's choice, or the hold's default until a slot locks it. */
     private FloatRadial.Slot target = FloatRadial.Slot.JBOT;
+    /** Screenshots and photos gathered for the next message, oldest first. Sent with it, or dropped on cancel. */
+    private final java.util.List<ConduitContext.Result> gathered = new java.util.ArrayList<>();
+    private boolean capturing;
 
     static void setAppForeground(boolean foreground) {
         appForeground = foreground;
@@ -218,8 +221,48 @@ public class ConduitFloatService extends Service {
         switch (slot) {
             case JBOT: case NEW_CHAT: target = slot; beginRecording(); break;
             case WORKSPACE: case RECENT: openApp(false); break;
+            case SCREENSHOT: screenshot(); break;
+            case CAMERA: photo(); break;
             default: break;
         }
+    }
+
+    /**
+     * A screenshot of what is under Float: Float, its caption and the radial leave the screen first (ConduitContext
+     * waits two frames), and come back with the capture held for the next message.
+     */
+    private void screenshot() {
+        if (capturing) return;
+        capturing = true;
+        if (radial != null) radial.hideNow();
+        if (caption != null) caption.hide();
+        window.setVisible(false);
+        ConduitContext.screenshot(this, this::captured);
+    }
+
+    private void photo() {
+        if (capturing) return;
+        capturing = true;
+        ConduitContext.photo(this, this::captured);
+    }
+
+    private void captured(ConduitContext.Result result) {
+        capturing = false;
+        if (destroyed) { if (result.image != null) result.image.delete(); return; }
+        updateVisibility();
+        if (result.error != null) {
+            android.widget.Toast.makeText(this, result.error, android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        gathered.add(result);
+        window.setGathered(gathered.size());
+    }
+
+    /** The gathered captures are spent (sent) or let go (cancelled). */
+    private void dropGathered() {
+        gathered.clear();
+        ConduitContext.clear(this);
+        if (window != null) window.setGathered(0);
     }
 
     /** A hold records at once, to the hold's target, with the radial around the finger to lock it elsewhere. */
@@ -307,6 +350,7 @@ public class ConduitFloatService extends Service {
         generation++;
         sender.cancel();
         discard();
+        dropGathered();
         recorder.restoreVolume();
         show(State.HANDLE);
     }

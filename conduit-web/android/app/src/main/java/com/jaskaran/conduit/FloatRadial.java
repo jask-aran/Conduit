@@ -184,6 +184,16 @@ final class FloatRadial {
         animate(false);
     }
 
+    /** Gone this instant, with no fade: before a screenshot, so the radial is not in it. */
+    void hideNow() {
+        if (motion != null) motion.cancel();
+        open = false;
+        closing = false;
+        hovered = null;
+        shown = 0;
+        if (dialog.isShowing()) dialog.dismiss();
+    }
+
     void destroy() {
         if (motion != null) motion.cancel();
         open = false;
