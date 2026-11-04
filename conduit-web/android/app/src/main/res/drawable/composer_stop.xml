@@ -1,0 +1,4 @@
+<!-- Lucide square (ISC), from the installed lucide-solid package. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="34.2857" android:viewportHeight="34.2857">
+    <group android:translateX="5.14285" android:translateY="5.14285"><path android:strokeColor="#FFE8E9EB" android:strokeWidth="0" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#FFE8E9EB" android:pathData="M5,3h14a2,2 0,0 1,2,2v14a2,2 0,0 1,-2,2h-14a2,2 0,0 1,-2,-2v-14a2,2 0,0 1,2,-2z"/></group>
+</vector>

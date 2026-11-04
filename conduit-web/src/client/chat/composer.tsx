@@ -3,6 +3,9 @@ import { Icons } from "@/components/ui";
 import { haptic } from "@/components/ui/haptics";
 import { pickPhotos } from "../platform/photos";
 import { openNativeCamera } from "../platform/camera";
+import { composerKind, measureNativeComposer, nativeComposer, nativeComposerAvailable, type ComposerAction, type ComposerInput } from "../platform/native-composer";
+import { hapticSteps } from "@/components/ui/haptics";
+import type { PluginListenerHandle } from "@capacitor/core";
 import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
@@ -117,9 +120,11 @@ export function Composer(props: {
      on the text pill places the cursor (where dictation will land) or starts
      a selection, with inputmode="none" keeping the keyboard down. */
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
+  const [nativeUp, setNativeUp] = createSignal(false);
   const [sendingTake, setSendingTake] = createSignal<DictationTake | null>(null);
   const sendingOut = () => Boolean(sendingTake()) || props.chat.generation() === "submitting";
   const toggleKeyboard = () => {
+    if (startNativeTyping()) return;
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
     // Focused with the keyboard down and nothing left (a dictation cleared
     // out): the button closes the edit row and text pill, back to idle.
@@ -139,6 +144,7 @@ export function Composer(props: {
     : ["starting", "listening"].includes(dictationState()) ? "listening"
     // Sent, or stop-and-send waiting on its transcript: the text pill goes at
     // once rather than holding the draft until the agent takes it.
+    : nativeUp() ? "typing"
     : sendingOut() ? "idle"
     : inputFocused() || hasText() ? "typing" : "idle";
   const [optionsOpen, setOptionsOpen] = createSignal(false);
@@ -581,6 +587,9 @@ export function Composer(props: {
     if (!cameraHold) return;
     cameraPointerCancel();
     haptic("press");
+    cameraTap();
+  };
+  const cameraTap = () => {
     void openNativeCamera().then((answer) => {
       if (answer instanceof File) addPhotos([answer]);
       else if (answer === "full" || answer === "failed") cameraInput.click();
@@ -808,8 +817,136 @@ export function Composer(props: {
     });
   });
 
+  let nativeStarting = false;
+  let nativeDisposed = false;
+  let nativeChat: string | null = null;
+  let nativeAction: ComposerAction | null = null;
+  let nativeListeners: PluginListenerHandle[] = [];
+  let nativeRoot: Element | null = null;
+  let nativeParts: { element: HTMLElement; visibility: string }[] = [];
+  let nativeWatch: ResizeObserver | null = null;
+  let nativeAttributes: MutationObserver | null = null;
+  let nativeFrame = 0;
+  const restoreWebComposer = () => {
+    for (const { element, visibility } of nativeParts) element.style.visibility = visibility;
+    nativeParts = [];
+    nativeWatch?.disconnect(); nativeAttributes?.disconnect();
+    cancelAnimationFrame(nativeFrame);
+    nativeRoot = null;
+  };
+  let lastNativeText = "";
+  const mirrorNativeInput = (event: ComposerInput) => {
+    // Native selection must be in the textarea before change() takes its undo snapshot.
+    input.value = event.text;
+    input.setSelectionRange(event.selectionStart, event.selectionEnd);
+    lastNativeText = event.text;
+    if (props.chat.draft() !== event.text) change(event.text);
+  };
+  const syncNativeGeometry = () => {
+    cancelAnimationFrame(nativeFrame);
+    nativeFrame = requestAnimationFrame(() => {
+      if (!nativeUp() || nativeStarting) return;
+      const geometry = measureNativeComposer(input);
+      void nativeComposer.update({ pills: geometry.pills, fieldHeight: geometry.field.height }).catch(() => void nativeComposer.end());
+    });
+  };
+  const finishNativeTyping = async (event: ComposerInput) => {
+    if (!nativeUp()) return;
+    if (!nativeDisposed && nativeChat === props.chat.loadedId()) mirrorNativeInput(event);
+    nativeStarting = true;
+    restoreWebComposer();
+    setNativeUp(false); setInputFocused(false); setKeyboardWanted(false);
+    // end() acknowledges ended: the overlay remains at rest until the web row is visible.
+    await nativeComposer.end();
+    for (const listener of nativeListeners) void listener.remove();
+    nativeListeners = [];
+    nativeStarting = false;
+    const action = nativeAction; nativeAction = null;
+    if (nativeDisposed || nativeChat !== props.chat.loadedId()) return;
+    if (action === "attach") {
+      const trigger = input.closest(".ui-phone-composer")?.querySelector<HTMLButtonElement>('button[aria-label="Message options"]');
+      // Kobalte opens touch triggers on click only after pointerdown records the pointer type.
+      trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch", button: 0 }));
+      trigger?.click();
+    }
+    else if (action === "camera") cameraTap();
+    else if (action === "mic") toggleDictation();
+  };
+  const startNativeTyping = () => {
+    if (!voiceFirst() || composerKind() !== "native" || !nativeComposerAvailable() || input.disabled) return false;
+    if (nativeUp() || nativeStarting) return true;
+    nativeStarting = true;
+    nativeChat = props.chat.loadedId();
+    setInputFocused(true); setKeyboardWanted(true);
+    void (async () => {
+      try {
+        // Register every event before begin can focus the EditText and start the IME.
+        const listeners = await Promise.allSettled([
+          nativeComposer.addListener("input", (event) => { if (nativeUp() && nativeChat === props.chat.loadedId()) mirrorNativeInput(event); }),
+          nativeComposer.addListener("height", () => { if (nativeUp()) { scheduleResize(); syncNativeGeometry(); } }),
+          nativeComposer.addListener("ended", (event) => { void finishNativeTyping(event); }),
+          nativeComposer.addListener("action", ({ name }) => {
+            if (!nativeUp() || nativeChat !== props.chat.loadedId()) return;
+            if (name === "send") {
+              if (canSend()) void sendMessage().then(() => {
+                if (nativeUp()) void nativeComposer.update({ text: props.chat.draft() });
+              }, () => {
+                toast.error("Message could not be sent.");
+                if (nativeUp()) void nativeComposer.update({ text: props.chat.draft() });
+              });
+              else void nativeComposer.update({ text: props.chat.draft() });
+            }
+            else if (name === "stop") void props.chat.stop();
+            else if (name === "latest") scrollToLatest();
+            else { nativeAction = name; void nativeComposer.end(); }
+          }),
+        ]);
+        nativeListeners = listeners.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+        if (listeners.some((result) => result.status === "rejected")) throw new Error("Composer listener unavailable");
+        if (nativeDisposed || nativeChat !== props.chat.loadedId()) throw new Error("Composer changed");
+        resize();
+        const geometry = measureNativeComposer(input);
+        nativeRoot = input.closest(".ui-phone-composer");
+        nativeParts = [...(nativeRoot?.querySelectorAll<HTMLElement>(":scope > .ui-phone-field, :scope > .ui-phone-row") ?? [])]
+          .map((element) => ({ element, visibility: element.style.visibility }));
+        for (const { element } of nativeParts) element.style.visibility = "hidden";
+        setNativeUp(true);
+        lastNativeText = props.chat.draft();
+        await nativeComposer.begin({ ...geometry, text: props.chat.draft(), selectionStart: input.selectionStart, selectionEnd: input.selectionEnd,
+          placeholder: input.placeholder, press: hapticSteps("press") });
+        nativeStarting = false;
+        if (!nativeUp()) return;
+        if (nativeDisposed || nativeChat !== props.chat.loadedId()) { await nativeComposer.end(); return; }
+        nativeWatch = new ResizeObserver(syncNativeGeometry);
+        if (nativeRoot) for (const element of nativeRoot.querySelectorAll(".ui-pill, .ui-phone-row")) nativeWatch.observe(element);
+        nativeAttributes = new MutationObserver(syncNativeGeometry);
+        if (nativeRoot) nativeAttributes.observe(nativeRoot, { subtree: true, attributes: true, attributeFilter: ["disabled", "aria-label", "data-folded"] });
+        syncNativeGeometry();
+      } catch {
+        restoreWebComposer(); setNativeUp(false); nativeStarting = false;
+        for (const listener of nativeListeners) void listener.remove();
+        nativeListeners = [];
+        if (!nativeDisposed && nativeChat === props.chat.loadedId()) input.focus({ preventScroll: true });
+      }
+    })();
+    return true;
+  };
+  createEffect(() => {
+    const text = props.chat.draft();
+    const chat = props.chat.loadedId();
+    if (!nativeUp()) return;
+    if (chat !== nativeChat) { void nativeComposer.end(); return; }
+    if (!nativeStarting && text !== lastNativeText) void nativeComposer.update({ text }).catch(() => void nativeComposer.end());
+  });
+  onCleanup(() => {
+    nativeDisposed = true;
+    restoreWebComposer();
+    if (nativeUp()) void nativeComposer.end();
+    else for (const listener of nativeListeners) void listener.remove();
+  });
+
   const field = () => <>
-    <TextArea ref={input} rows={1} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
+    <TextArea ref={input} rows={1} onPointerDown={(event) => { if (startNativeTyping()) event.preventDefault(); }} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the

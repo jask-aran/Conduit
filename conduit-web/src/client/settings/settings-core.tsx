@@ -67,6 +67,7 @@ import { OverlayDialog } from "@/components/ui/dialog";
 import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
+import { COMPOSER_KINDS, composerKind, saveComposerKind } from "../platform/native-composer";
 import { KEYBOARD_MOTIONS, keyboardMotion, saveKeyboardMotion, type KeyboardMotion } from "../navigation/keyboard-compositor";
 import { HAPTIC_STRENGTHS, hapticStrength, saveHapticStrength, type HapticStrength } from "@/components/ui/haptics";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
@@ -322,6 +323,7 @@ export function Settings(props: {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [hapticChoice, setHapticChoice] = createSignal<HapticStrength>(hapticStrength());
+  const [composerChoice, setComposerChoice] = createSignal(composerKind());
   const [keyboardChoice, setKeyboardChoice] = createSignal<KeyboardMotion>(keyboardMotion());
   const [transcriptScaleChoice, setTranscriptScaleChoice] = createSignal(transcriptScale());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
@@ -1394,6 +1396,11 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
                   <Show when={touchOnly()}>
+                    <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android. This choice applies to this device.">
+                      <Select id="composer-kind" aria-label="Composer" value={composerChoice()} onChange={(event) => setComposerChoice(saveComposerKind(event.currentTarget.value === "native" ? "native" : "web"))}>
+                        <For each={COMPOSER_KINDS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                      </Select>
+                    </SettingLine>
                     <SettingLine label="Keyboard motion" title="How the composer rides the on-screen keyboard: on the compositor (the spike), or the page laid out every frame (as before). The palette's Switch keyboard motion flips it.">
                       <Select id="keyboard-motion" aria-label="Keyboard motion" value={keyboardChoice()} onChange={(event) => setKeyboardChoice(saveKeyboardMotion(event.currentTarget.value as KeyboardMotion))}>
                         <For each={KEYBOARD_MOTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>

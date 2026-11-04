@@ -79,6 +79,7 @@ import { isLeaderMenuMode, LEADER_MENU_STORAGE_KEY, selectedLeaderMenu, setLeade
 import type { PaletteActions, PaletteContext } from "./palette/command-registry";
 import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
+import { composerKind, saveComposerKind } from "./platform/native-composer";
 import { compositorKeyboard, saveKeyboardMotion } from "./navigation/keyboard-compositor.ts";
 import { beginEdgeSwipe, swipeBlocked, type EdgeSwipe } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
@@ -5217,6 +5218,10 @@ function App() {
     keyboardPath: () => {
       const next = saveKeyboardMotion(compositorKeyboard() ? "layout" : "compositor");
       toast.success(next === "compositor" ? "Keyboard motion: compositor (the spike)." : "Keyboard motion: per-frame layout (as before).");
+    },
+    composerPath: () => {
+      const next = saveComposerKind(composerKind() === "web" ? "native" : "web");
+      toast.success(next === "native" ? "Composer: Native while typing." : "Composer: Web.");
     },
     keyboardTour: startKeyboardTour,
     delete: () => runSidebar("delete-chat", focusedTarget()),
