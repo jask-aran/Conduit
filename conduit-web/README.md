@@ -459,6 +459,12 @@ values use the provider format and are never returned by the API.
   unanswered for `hostUiTimeoutMs` (given at creation, default ten minutes) is
   cancelled, as a dismissed card would be. Runs are not auto-named unless
   created with `autoName: true`.
+- `GET /v0/agent/email` returns mailbox status, address, Worker URL, person and allow lists, send setting, collection time/error, setup resource IDs, `tokenUrl` and permission labels. It excludes secrets and tokens.
+- `POST /v0/agent/email/setup` accepts `{ token, address, person: [string], hubUrl }` and provisions the Cloudflare mailbox. The token stays in memory for this request only. Returns `{ steps, email }`; a failed step returns 400 with the same shape and instructions. Enable Email Routing and R2 in Cloudflare first.
+- `PATCH /v0/agent/email` accepts `{ person?, allow?, send? }` and edits local settings. Allow entries are addresses or `@domain`; new person addresses need verification in Cloudflare before replies can go out.
+- `POST /v0/agent/email/check` awaits a mailbox poll and returns status. When the agent is off, it checks the connection and leaves mail in the mailbox.
+- `DELETE /v0/agent/email` accepts `{ token }`, removes this hub's routing rule and Worker, and deletes local settings. Returns `{ steps, email }`; a failed step returns 400. The R2 bucket stays because it may hold mail.
+- These email settings routes require a session and return 409 `{ error: "agent_not_enabled" }` when the agent is not enabled. The Worker uses `POST /v0/agent/email/wake` with the mailbox secret to request collection.
 - `GET /v0/agent/connectors` lists connector status.
 - `POST /v0/agent/connectors/:id/connect` starts OAuth.
 - `GET /v0/agent/connectors/:id/callback` completes OAuth with a single-use state.

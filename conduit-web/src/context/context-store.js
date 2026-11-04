@@ -23,7 +23,7 @@ const live = {
   "live-inbox": { label: "Waiting inbox", tag: "agent-inbox", description: "How often the person wants interrupting, and what is unhandled in jbot's inbox. Home thread only.",
     template: "<agent-inbox>\nHow often the person wants to be interrupted: {{dial}} ({{what the dial means}}).\nUnhandled in your inbox ({{count}}). Tell the person what matters when it fits, then mark it with conduit_inbox handle:\n{{each unhandled entry, twelve at most}}\n</agent-inbox>" },
   "live-approval-rules": { label: "Your approval rules", tag: "approval-rules", description: "What you allow, what is always yours and what it must never do (Settings › jbot › Approvals). Read by the approval model with each held action; jbot reads them too, so it knows what will be asked.",
-    template: "<approval-rules>\nIt may:\n{{may rules}}\n\nAlways yours:\n{{always rules}}\n\nNever:\n{{limits}}\n</approval-rules>" },
+    template: "<approval-rules>\nIt may:\n{{may rules}}\n\nAlways yours:\n{{always rules}}\n\nNever:\n{{limits}}\n\nYour direct instructions: {{whether they need an approval}}\n\nConnected tools: {{whether they decide what is held}}\n</approval-rules>" },
   "live-routine-context": { label: "Routine's context", description: "The files the routine opts into (its context: list), each in its own tag.",
     template: "<diary day=\"{{today}}\">\n{{today's diary}}\n</diary>\n\n<{{user | memory | soul}}>\n{{the file, as it stands}}\n</{{user | memory | soul}}>" },
   "live-subagent-task": { label: "Task", description: "The task the parent hands it, whole: goal, context, constraints, what to report.",
@@ -176,7 +176,7 @@ export class ContextStore {
     const wrap = (text) => live[id].tag ? `<${live[id].tag}>\n${text}\n</${live[id].tag}>` : text;
     if (id === "live-jbot-files" && this.agent()?.folder) return wrap(await renderMemory(this.agent()));
     if (id === "live-inbox" && this.agent()?.enabled()) return wrap(await renderWaitingInbox(this.agent()));
-    if (id === "live-approval-rules" && this.agent()?.enabled()) return wrap(renderRules((await readPolicy(this.agent())).policy));
+    if (id === "live-approval-rules" && this.agent()?.enabled()) return wrap(renderRules((await readPolicy(this.agent())).policy, this.agent().settings()));
     return live[id].template;
   }
   async summary(item, docs, loaded = null) {

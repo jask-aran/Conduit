@@ -286,10 +286,16 @@ reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. Th
 
 ### Email, built (2026-11-02)
 
-- **Mailbox**: Email Routing sends `jbot@jask-aran.com` to the `jbot-mail` Worker (`workers/jbot-mail`), which keeps
-  each message whole in R2 until the hub collects it (each minute; the hub may sleep or move networks). The hub holds
-  only the Worker's URL and a shared secret (`data/agent/email.json`), and sends through it (the Email Service send
-  binding: free to verified addresses such as the person's own; to anyone else needs Workers Paid).
+- **Mailbox**: the hub provisions Email Routing, an R2 bucket and a mailbox Worker from a Cloudflare API token
+  supplied to `POST /v0/agent/email/setup`. The token stays in memory for that request. Email Routing and R2 must
+  already be enabled in Cloudflare. The release includes `templates/agent/mailbox/worker.js`; `workers/jbot-mail`
+  is for local Wrangler work. Each address and hub installation ID selects a stable Worker/bucket name. Setup
+  repairs existing resources and can move an address's routing rule to another hub. Mail stays whole in R2 until
+  the hub collects it each minute; a public HTTPS hub URL also permits a wake request. `data/agent/email.json`
+  (mode 0600) holds the address, Worker URL, shared secret, person/allow lists, send setting and setup resource IDs.
+  Replies use Cloudflare's verified destination addresses; setup requests verification for each person address.
+  The email API provides status, local edits, a collection check and removal. Removal retains the R2 bucket because
+  it may hold mail, and preserves routing rules that now point to another hub.
 - **Rooms**: one per email thread, followed by Message-ID, In-Reply-To and References. A message keeps its native form
   (headers, and the original, HTML and attachments saved in jbot's folder under `mail/`); jbot is given the text,
   the HTML turned to Markdown when there is no text part.

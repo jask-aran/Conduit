@@ -32,7 +32,7 @@ export function AgentExtension(runtime, installed) {
     hooks: [routineToolGuard(runtime), routineCompactionGuard()],
     tasks: parts.flatMap((part) => part.tasks || []),
     // The person's approval rules (live-approval-rules), so it knows what will be asked before it tries.
-    sections: [...parts.flatMap((part) => part.sections || []), section("approval-rules", async () => runtime.agent?.enabled() ? renderRules((await readPolicy(runtime.agent)).policy) : undefined)],
+    sections: [...parts.flatMap((part) => part.sections || []), section("approval-rules", async () => runtime.agent?.enabled() ? renderRules((await readPolicy(runtime.agent)).policy, runtime.agent.settings()) : undefined)],
     // The device tools are another extension's; the agent's own outward tools are its own.
     wraps: [...policyWraps(runtime, [...installed, ...own]), ...["agent-memory", "agent-inbox"].map((key) =>
       wrapSection(key, (source) => ({ ...source, tag: false, render: async (input, context) => {

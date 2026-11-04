@@ -61,11 +61,32 @@ export class EmailChannel {
     this.config = null;
     this.timer = null;
     this.polling = null;
+    this.lastCollectedAt = null;
+    this.lastError = null;
   }
 
   async load() {
     this.config = await fs.promises.readFile(this.file, "utf8").then(JSON.parse).catch(() => null);
     return this;
+  }
+
+  async reload() {
+    this.stop();
+    await this.polling?.catch(() => {});
+    await this.load();
+    this.lastCollectedAt = null;
+    this.lastError = null;
+    this.start();
+    return this;
+  }
+
+  get status() {
+    const config = this.config;
+    const setup = config?.setup;
+    return { configured: this.ready, address: config?.address || null, worker: config?.worker || null,
+      person: config?.person || [], allow: config?.allow || [], send: config?.send === true,
+      lastCollectedAt: this.lastCollectedAt, lastError: this.lastError,
+      setup: setup ? { accountId: setup.accountId, zoneId: setup.zoneId, domain: setup.domain, script: setup.script, bucket: setup.bucket } : null };
   }
 
   /** Whether a bearer header carries the mailbox's shared secret (compared in constant time). */
@@ -129,16 +150,22 @@ export class EmailChannel {
 
   /** Collect what waits in the mailbox: one at a time, each written to the log before it leaves the mailbox. While
    *  jbot is off it stays in the mailbox, collected when it is on again. */
-  poll() {
+  poll({ check = false } = {}) {
     return this.polling ??= (async () => {
-      if (!this.agent.active()) return;
+      if (!this.ready || (!this.agent.active() && !check)) return;
       const { messages } = await (await this.worker("/mail")).json();
+      if (!this.agent.active()) { this.lastCollectedAt = new Date().toISOString(); this.lastError = null; return; }
       for (const item of messages) {
         const raw = Buffer.from(await (await this.worker(`/mail/${encodeURIComponent(item.key)}`)).arrayBuffer());
         await this.receive(raw);
         await this.worker(`/mail/${encodeURIComponent(item.key)}`, { method: "DELETE" });
       }
-    })().finally(() => { this.polling = null; });
+      this.lastCollectedAt = new Date().toISOString();
+      this.lastError = null;
+    })().catch((error) => {
+      this.lastError = String(error?.message || error).split(this.config?.secret || "\0").join("[redacted]");
+      throw error;
+    }).finally(() => { this.polling = null; });
   }
 
   /** An email in: its room, its own form kept, then a message in the log and a prompt in jbot's home thread. */

@@ -13,6 +13,7 @@ import { decide } from "../../agent/asks.js";
 import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
 import { addInboxEntry, appendEntry, deleteInboxEntry, editInboxEntries } from "../../agent/inbox.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
+import { emailView, setupEmail, patchEmail, removeEmail } from "../../agent/email-setup.js";
 import { backgroundSubagents } from "../subagents.js";
 
 /**
@@ -54,7 +55,7 @@ import { backgroundSubagents } from "../subagents.js";
  * DELETE /v0/agent/connectors/:id    disconnect
  * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
  */
-export function registerAgentRoutes(app, { agent, backends }) {
+export function registerAgentRoutes(app, { agent, backends, hubId }) {
   const enabled = (response) => {
     if (agent.enabled()) return true;
     response.status(409).json({ error: "agent_not_enabled" });
@@ -239,6 +240,43 @@ export function registerAgentRoutes(app, { agent, backends }) {
         log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } }));
       });
     } catch (error) { next(error); }
+  });
+
+  // Serialize local settings and remote setup so overlapping requests cannot replace each other's secret.
+  let emailChanges = Promise.resolve();
+  const emailChannel = () => agent.runtime.messageLog.channels.email;
+  const changeEmail = (action) => {
+    const result = emailChanges.then(action);
+    emailChanges = result.catch(() => {});
+    return result;
+  };
+  app.get("/v0/agent/email", (request, response) => {
+    if (!enabled(response)) return;
+    response.json(emailView(emailChannel()));
+  });
+  app.post("/v0/agent/email/setup", async (request, response) => {
+    if (!enabled(response)) return;
+    const result = await changeEmail(() => setupEmail({ channel: emailChannel(), hubId,
+      token: request.body?.token, address: request.body?.address, person: request.body?.person, hubUrl: request.body?.hubUrl }));
+    response.status(result.status).json({ steps: result.steps, email: result.email });
+  });
+  app.patch("/v0/agent/email", async (request, response, next) => {
+    if (!enabled(response)) return;
+    try { response.json(await changeEmail(() => patchEmail(emailChannel(), request.body))); }
+    catch (error) {
+      if (error.status === 400) return response.status(400).json({ error: error.message });
+      next(error);
+    }
+  });
+  app.post("/v0/agent/email/check", async (request, response) => {
+    if (!enabled(response)) return;
+    await changeEmail(() => emailChannel().poll({ check: true }).catch(() => {}));
+    response.json(emailView(emailChannel()));
+  });
+  app.delete("/v0/agent/email", async (request, response) => {
+    if (!enabled(response)) return;
+    const result = await changeEmail(() => removeEmail({ channel: emailChannel(), token: request.body?.token }));
+    response.status(result.status).json({ steps: result.steps, email: result.email });
   });
 
   // jbot's mailbox has mail (workers/jbot-mail): collect it now rather than at the next minute. The Worker proves itself

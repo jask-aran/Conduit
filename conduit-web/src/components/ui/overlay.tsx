@@ -202,7 +202,7 @@ export const SettingTitle = (props: { value: string; label: string; editable?: b
 /** A setting: its name (state that matters muted after it), then its control in the one control column.
  *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
 /** mono: the name is data (a model id, a tool's name), in the data face. */
-export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element }) => {
+export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element; context?: { label: string; kind: "block" | "document"; onOpen: () => void }[] }) => {
   const inner = () => <><span data-mono={props.mono ? "" : undefined}>{props.label}<Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
   // A label hands a click anywhere on it to its control: right for a field, a switch or a menu, wrong for a button that
   // acts (Disconnect, Remove). A click on the line, not on the button itself, is not that button's.
@@ -211,7 +211,16 @@ export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; pl
     if (control instanceof HTMLButtonElement && !control.matches("[aria-haspopup], [role='switch'], [role='combobox'], [role='checkbox']")
       && !(event.target as Element).closest("button, a, input, select, textarea")) event.preventDefault();
   };
-  return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title} onClick={guard}>{inner()}</label>;
+  return <>
+    {props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title} onClick={guard}>{inner()}</label>}
+    <Show when={props.context?.length}>
+      <div class="ui-setting-context"><span>In context:</span><For each={props.context}>{(item) =>
+        <button type="button" class="ui-setting-context-link" onClick={item.onOpen}>
+          <Show when={item.kind === "block"} fallback={<Icons.FileText aria-hidden="true" />}><Icons.Boxes aria-hidden="true" /></Show>{item.label}
+        </button>
+      }</For></div>
+    </Show>
+  </>;
 };
 /**
  * A credential: its name and how it is held (state), then its actions: the caller's own first (actions: Sign in),

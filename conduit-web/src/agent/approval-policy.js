@@ -25,10 +25,20 @@ export async function readPolicy(agent) {
   return { policy: JSON.parse(JSON.stringify({ ...STARTER_POLICY, ...stored })), starter: !stored };
 }
 
-/** The rules as jbot and Settings › Blocks read them (the live block `live-approval-rules`), without their tag. */
-export function renderRules(policy) {
+/**
+ * The rules as jbot and Settings › Blocks read them (the live block `live-approval-rules`), without their tag: the
+ * person's three lists, then how the gate treats their direct instructions and the tools that hold their own actions
+ * (Settings › jbot: "No approval for your direct instructions", "Connected tools decide what is held").
+ */
+export function renderRules(policy, settings = {}) {
   const list = (items) => items?.length ? items.map((item) => `- ${item}`).join("\n") : "(none)";
-  return `It may:\n${list(policy.may)}\n\nAlways yours:\n${list(policy.always)}\n\nNever:\n${list(policy.limits)}`;
+  const direct = settings.youAsk !== false
+    ? "When the person asks you directly for an edit to their own data (completing a task, moving an event, labelling mail), it goes ahead without an approval. Sending as them, deleting, and anything you start yourself still go through these rules."
+    : "Even what the person asks you for directly goes through these rules.";
+  const tools = settings.toolsDecide !== false
+    ? "A connected tool that holds its own actions (Executor) decides what is held: its reads run at once, and what it holds is judged against these rules."
+    : "Conduit's list of reads decides before each connected tool's call: anything else is judged against these rules before it runs.";
+  return `It may:\n${list(policy.may)}\n\nAlways yours:\n${list(policy.always)}\n\nNever:\n${list(policy.limits)}\n\nYour direct instructions: ${direct}\n\nConnected tools: ${tools}`;
 }
 
 export async function savePolicy(agent, patch) {
