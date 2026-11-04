@@ -1,6 +1,7 @@
 package com.jaskaran.conduit;
 
 import android.animation.ValueAnimator;
+import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -11,10 +12,16 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Outline;
 import android.graphics.PixelFormat;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Rect;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
@@ -25,13 +32,20 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.view.WindowInsets;
 import android.view.WindowMetrics;
 import android.webkit.CookieManager;
@@ -51,21 +65,34 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import org.json.JSONTokener;
 
-public class ConduitBubbleService extends Service {
-    static final String VISIBLE = "conduit.bubble.VISIBLE";
-    static final String RESTORE = "conduit.bubble.RESTORE";
-    private static final String OFF = "conduit.bubble.OFF";
+public class ConduitFloatService extends Service {
+    static final String VISIBLE = "conduit.float.VISIBLE";
+    static final String RESTORE = "conduit.float.RESTORE";
+    private static final String OFF = "conduit.float.OFF";
     private static final int NOTIFICATION = 4103;
     private static final int MAX_PCM_BYTES = 16_000 * 2 * 300;
     private static boolean appForeground;
-    private static ConduitBubbleService active;
+    private static ConduitFloatService active;
     private enum State { HANDLE, RECORDING, STOPPING, SENDING, ERROR, SENT }
-    private final String volumeOwner = "bubble:" + java.util.UUID.randomUUID();
+    private final String volumeOwner = "float:" + java.util.UUID.randomUUID();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private WindowManager windows;
     private WindowManager.LayoutParams position;
-    private BubbleView bubble;
+    private FloatView control;
+    private Dialog overlay;
+    private Window overlayWindow;
+    private final GradientDrawable frost = new GradientDrawable() {
+        @Override public void getOutline(Outline outline) {
+            super.getOutline(outline);
+            outline.setAlpha(1); // The translucent stroke must not suppress the lift shadow.
+        }
+    };
+    private java.util.function.Consumer<Boolean> blurListener;
+    private boolean blurEnabled;
+    private ValueAnimator morph;
+    private int frameWidth, frameHeight;
+    private float openness;
     private State state = State.HANDLE;
     /** What the pill says when a send fails: the hub's own message, or why it could not be reached. */
     private volatile String errorText = "Couldn't send — open Conduit";
@@ -85,10 +112,11 @@ public class ConduitBubbleService extends Service {
     }
 
     private void updateVisibility() {
-        if (bubble != null) bubble.setVisibility(appForeground && state == State.HANDLE ? View.GONE : View.VISIBLE);
+        if (overlayWindow != null) overlayWindow.getDecorView().setVisibility(
+            appForeground && state == State.HANDLE ? View.GONE : View.VISIBLE);
     }
 
-    private SharedPreferences prefs() { return ConduitBubblePlugin.preferences(this); }
+    private SharedPreferences prefs() { return ConduitFloatPlugin.preferences(this); }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     @Override public void onCreate() {
@@ -97,7 +125,11 @@ public class ConduitBubbleService extends Service {
         try { ConduitMediaVolume.recover(this); }
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
         windows = (WindowManager) getSystemService(WINDOW_SERVICE);
-        recording = new File(getCacheDir(), "jbot-bubble.wav");
+        recording = new File(getCacheDir(), "float.wav");
+        File previous = new File(getCacheDir(), "jbot-bubble.wav");
+        if (!recording.exists() && previous.exists() && !previous.renameTo(recording)) {
+            prefs().edit().remove("recordingComplete").apply();
+        }
         // A complete WAV survives service/process death for an explicit retry, never an automatic send.
         if (recording.length() > 44 && prefs().getBoolean("recordingComplete", false)) state = State.ERROR;
         else recording.delete();
@@ -110,7 +142,7 @@ public class ConduitBubbleService extends Service {
             return START_NOT_STICKY;
         }
         if (!prefs().getBoolean("enabled", false) || !Settings.canDrawOverlays(this)
-            || !ConduitBubblePlugin.microphoneGranted(this)) {
+            || !ConduitFloatPlugin.microphoneGranted(this)) {
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -125,21 +157,46 @@ public class ConduitBubbleService extends Service {
             else if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification,
                 microphoneReady ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
             else startForeground(NOTIFICATION, notification);
-            if (bubble == null) {
-                bubble = new BubbleView();
-                position = new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                    Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                    PixelFormat.TRANSLUCENT);
+            if (control == null) {
+                control = new FloatView();
+                // A Dialog supplies the public Window background-blur API to this service overlay.
+                overlay = new Dialog(this, R.style.ConduitFloatTheme);
+                overlay.setCancelable(false);
+                overlayWindow = overlay.getWindow();
+                overlayWindow.setType(Build.VERSION.SDK_INT >= 26
+                    ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE);
+                overlayWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);
+                overlayWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                overlayWindow.setBackgroundDrawable(frost);
+                overlayWindow.setContentView(control);
+                View decor = overlayWindow.getDecorView();
+                decor.setPadding(0, 0, 0, 0);
+                decor.setElevation(dp(8));
+                if (Build.VERSION.SDK_INT >= 28) {
+                    decor.setOutlineAmbientShadowColor(0x1a000000);
+                    decor.setOutlineSpotShadowColor(0x1a000000);
+                }
+                position = overlayWindow.getAttributes();
+                position.format = PixelFormat.TRANSLUCENT;
                 if (Build.VERSION.SDK_INT >= 30) {
                     position.setFitInsetsTypes(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                     position.setFitInsetsIgnoringVisibility(true);
                 }
                 place();
-                windows.addView(bubble, position);
-                bubble.setOnApplyWindowInsetsListener((view, insets) -> {
+                frameWidth = controlWidth();
+                frameHeight = controlHeight();
+                openness = state == State.HANDLE ? 0 : 1;
+                updateFrame();
+                overlay.show();
+                if (Build.VERSION.SDK_INT >= 31) {
+                    blurListener = enabled -> { blurEnabled = enabled; updateFrost(); };
+                    windows.addCrossWindowBlurEnabledListener(main::post, blurListener);
+                    blurEnabled = windows.isCrossWindowBlurEnabled();
+                    updateFrost();
+                }
+                control.setOnApplyWindowInsetsListener((view, insets) -> {
                     view.post(() -> {
-                        if (!destroyed && updateBounds()) { place(); windows.updateViewLayout(bubble, position); }
+                        if (!destroyed && updateBounds()) { place(); show(state); }
                     });
                     return insets;
                 });
@@ -159,14 +216,14 @@ public class ConduitBubbleService extends Service {
     private Notification notification() {
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel("jbot_bubble", "jbot bubble", NotificationManager.IMPORTANCE_LOW);
+            NotificationChannel channel = new NotificationChannel("conduit_float", "Float", NotificationManager.IMPORTANCE_LOW);
             channel.setSound(null, null);
             manager.createNotificationChannel(channel);
         }
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        PendingIntent off = PendingIntent.getService(this, 1, new Intent(this, ConduitBubbleService.class).setAction(OFF), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        return new NotificationCompat.Builder(this, "jbot_bubble").setSmallIcon(R.drawable.ic_stat_conduit)
-            .setContentTitle("jbot bubble").setContentIntent(open).setOngoing(true).setSilent(true)
+        PendingIntent off = PendingIntent.getService(this, 1, new Intent(this, ConduitFloatService.class).setAction(OFF), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new NotificationCompat.Builder(this, "conduit_float").setSmallIcon(R.drawable.ic_stat_conduit)
+            .setContentTitle("Float").setContentIntent(open).setOngoing(true).setSilent(true)
             .addAction(0, "Turn off", off).build();
     }
 
@@ -179,9 +236,9 @@ public class ConduitBubbleService extends Service {
                 WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             width = metrics.getBounds().width() - insets.left - insets.right;
             height = metrics.getBounds().height() - insets.top - insets.bottom;
-        } else if (bubble != null && bubble.isAttachedToWindow()) {
+        } else if (control != null && control.isAttachedToWindow()) {
             Rect frame = new Rect();
-            bubble.getWindowVisibleDisplayFrame(frame);
+            control.getWindowVisibleDisplayFrame(frame);
             width = frame.width();
             height = frame.height();
         }
@@ -193,43 +250,102 @@ public class ConduitBubbleService extends Service {
         return changed;
     }
 
-    private int bubbleWidth() {
-        return Math.min(availableWidth, dp(state == State.HANDLE ? 24 : state == State.ERROR ? 304 : 232));
+    private int controlWidth() {
+        float width = 152;
+        if (state == State.HANDLE) width = 28;
+        else if (state == State.STOPPING || state == State.SENDING || state == State.SENT) width = 116;
+        else if (state == State.ERROR) {
+            TextPaint text = new TextPaint();
+            text.setTextSize(dp(12));
+            width = Math.max(152, Math.min(304, 56 + text.measureText(errorText) / getResources().getDisplayMetrics().density));
+        }
+        return Math.min(availableWidth, dp(width));
     }
 
-    private int bubbleHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? 64 : 56)); }
+    private int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? 52 : 44)); }
 
     private void place() {
         if (snap != null) { snap.cancel(); snap = null; }
         updateBounds();
         position.gravity = Gravity.TOP | (prefs().getBoolean("right", true) ? Gravity.RIGHT : Gravity.LEFT);
         position.x = 0;
-        position.y = Math.round(Math.max(0, availableHeight - bubbleHeight())
+        position.y = Math.round(Math.max(0, availableHeight - controlHeight())
             * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
+    }
+
+    private void updateFrost() {
+        if (destroyed) return;
+        boolean right = prefs().getBoolean("right", true);
+        float r = frameHeight / 2f;
+        float edge = r * openness;
+        // Android's public background blur supports a uniform round-rect outline only.
+        // Keep the half-stadium and its transition on the fill fallback, without rectangular blur fringes.
+        boolean blurred = blurEnabled && openness == 1;
+        if (openness == 1) {
+            frost.setCornerRadii(null);
+            frost.setCornerRadius(r);
+        } else frost.setCornerRadii(right ? new float[] { r, r, edge, edge, edge, edge, r, r }
+            : new float[] { edge, edge, r, r, r, r, edge, edge });
+        // v2's white fill over its dark core ground; a denser core when blur is unavailable.
+        frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
+            blurred ? 0xe63a3b3f : 0xfa3a3b3f));
+        frost.setStroke(dp(1), 0x4dffffff);
+        if (Build.VERSION.SDK_INT >= 31) overlayWindow.setBackgroundBlurRadius(blurred ? dp(24) : 0);
+        control.invalidate();
+    }
+
+    private void updateFrame() {
+        position.width = frameWidth;
+        position.height = frameHeight;
+        overlayWindow.setAttributes(position);
+        updateFrost();
+        control.requestLayout();
     }
 
     @Override public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
-        if (bubble != null) { place(); windows.updateViewLayout(bubble, position); }
+        if (control != null) { place(); show(state); }
     }
 
     private void show(State next) {
         if (destroyed) return;
+        if (morph != null) { morph.cancel(); morph = null; }
         state = next;
         level = 0;
-        place();
-        bubble.setContentDescription(next == State.HANDLE ? "Talk to jbot. Drag to move."
-            : next == State.RECORDING ? "Recording. Stop or cancel." : next == State.ERROR ? "Couldn't send. Tap to retry or open Conduit."
-            : next == State.SENT ? "Sent to jbot" : "Sending to jbot");
-        bubble.requestLayout();
-        bubble.invalidate();
+        control.buttons();
+        control.setClickable(next == State.HANDLE || next == State.ERROR);
+        control.setContentDescription(next == State.HANDLE ? "Float. Talk to jbot. Drag to move."
+            : next == State.RECORDING ? "Recording" : next == State.ERROR ? errorText + ". Tap to retry or open Conduit."
+            : next == State.SENT ? "Sent" : "Sending to jbot");
         updateVisibility();
-        windows.updateViewLayout(bubble, position);
+        int startY = position.y;
+        place();
+        int targetY = position.y;
+        int startWidth = frameWidth, startHeight = frameHeight;
+        int targetWidth = controlWidth(), targetHeight = controlHeight();
+        float startOpen = openness, targetOpen = next == State.HANDLE ? 0 : 1;
+        if (startWidth == targetWidth && startHeight == targetHeight) {
+            openness = targetOpen;
+            updateFrame();
+            return;
+        }
+        morph = ValueAnimator.ofFloat(0, 1);
+        morph.setDuration(180);
+        morph.setInterpolator(new DecelerateInterpolator());
+        morph.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            frameWidth = Math.round(startWidth + (targetWidth - startWidth) * progress);
+            frameHeight = Math.round(startHeight + (targetHeight - startHeight) * progress);
+            position.y = Math.round(startY + (targetY - startY) * progress);
+            openness = startOpen + (targetOpen - startOpen) * progress;
+            updateFrame();
+        });
+        morph.start();
     }
 
     private void openApp(boolean record) {
         startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra("conduit.bubble.record", record));
+            .putExtra("conduit.float.record", record));
     }
 
     private void applyVolume() {
@@ -277,6 +393,7 @@ public class ConduitBubbleService extends Service {
         } catch (Exception error) {
             if (audio != null) audio.release();
             ConduitMediaVolume.restoreSafely(this, volumeOwner);
+            errorText = "Microphone is unavailable";
             show(State.ERROR);
         }
     }
@@ -286,7 +403,7 @@ public class ConduitBubbleService extends Service {
         try (RandomAccessFile file = new RandomAccessFile(recording, "rw")) {
             file.setLength(0);
             file.write(new byte[44]);
-            byte[] buffer = new byte[3200];
+            byte[] buffer = new byte[640]; // 20ms of PCM; the meter smooths these real RMS samples over 80ms.
             int bytes = 0;
             while (!current.stop && bytes < MAX_PCM_BYTES) {
                 int count = current.audio.read(buffer, 0, Math.min(buffer.length, MAX_PCM_BYTES - bytes));
@@ -302,7 +419,7 @@ public class ConduitBubbleService extends Service {
                     sum += (double) sample * sample;
                 }
                 float rms = (float) Math.min(1, Math.sqrt(sum / (count / 2)) / 6000);
-                main.post(() -> { if (capture == current && state == State.RECORDING) { level = rms; bubble.invalidate(); } });
+                main.post(() -> { if (capture == current && state == State.RECORDING) { level += (rms - level) * .2212f; control.invalidate(); } });
             }
             if (!current.cancel && bytes > 0) {
                 file.seek(0);
@@ -362,7 +479,7 @@ public class ConduitBubbleService extends Service {
     }
 
     private void workerDisconnect(HttpURLConnection connection) {
-        new Thread(connection::disconnect, "jbot-bubble-cancel").start();
+        new Thread(connection::disconnect, "float-cancel").start();
     }
 
     private void sendRecording() {
@@ -427,7 +544,7 @@ public class ConduitBubbleService extends Service {
                 if (sent) {
                     discard();
                     show(State.SENT);
-                    main.postDelayed(() -> { if (!destroyed && sending == generation) show(State.HANDLE); }, 1600);
+                    main.postDelayed(() -> { if (!destroyed && sending == generation) show(State.HANDLE); }, 700);
                 } else show(State.ERROR);
             });
         });
@@ -445,7 +562,7 @@ public class ConduitBubbleService extends Service {
                 message = json.optString("message", "");
             }
         } catch (Exception ignored) {}
-        if (!message.isEmpty()) return message.length() > 60 ? message.substring(0, 57) + "…" : message;
+        if (!message.isEmpty()) return message.replaceAll("[\\r\\n]+", " ");
         switch (code) {
             case "voice_off": return "Voice is off in Conduit's settings";
             case "nothing_heard": return "Didn't catch anything";
@@ -479,6 +596,8 @@ public class ConduitBubbleService extends Service {
         destroyed = true;
         if (active == this) active = null;
         if (snap != null) snap.cancel();
+        if (morph != null) morph.cancel();
+        if (Build.VERSION.SDK_INT >= 31 && blurListener != null) windows.removeCrossWindowBlurEnabledListener(blurListener);
         generation++;
         main.removeCallbacksAndMessages(null);
         if (capture != null) {
@@ -492,60 +611,145 @@ public class ConduitBubbleService extends Service {
         // Preserve only a failed, completed recording while enabled. Turning off also discards the retry.
         if (!prefs().getBoolean("enabled", false)) discard();
         worker.shutdown();
-        if (bubble != null && bubble.isAttachedToWindow()) windows.removeView(bubble);
+        if (overlay != null) overlay.dismiss();
         stopForeground(true);
         super.onDestroy();
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
-    /** A single tightly bounded native window; everything outside it remains touchable. */
-    private final class BubbleView extends View {
+    /** One bounded overlay window, with separate accessible Cancel and Stop buttons. */
+    private final class FloatView extends FrameLayout {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private final Drawable mark = getDrawable(R.drawable.ic_stat_conduit).mutate();
+        private final ImageButton cancelButton, stopButton;
         private float downX, downY;
         private int initialX, initialY;
         private boolean dragging, moved;
-        BubbleView() {
-            super(ConduitBubbleService.this);
+
+        FloatView() {
+            super(ConduitFloatService.this);
+            setWillNotDraw(false);
             setClickable(true);
-            setContentDescription("Talk to jbot. Drag to move.");
-            setElevation(dp(6));
+            cancelButton = new ImageButton(getContext());
+            cancelButton.setImageResource(R.drawable.ic_stat_conduit);
+            cancelButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            cancelButton.setPadding(dp(6), dp(6), dp(6), dp(6));
+            cancelButton.setContentDescription("Cancel");
+            cancelButton.setBackground(roundButton(0x18ffffff, 0x1affffff));
+            cancelButton.setOnClickListener(view -> cancel());
+            addView(cancelButton);
+            stopButton = new ImageButton(getContext());
+            stopButton.setImageResource(R.drawable.float_stop);
+            stopButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+            stopButton.setPadding(dp(11), dp(11), dp(11), dp(11));
+            stopButton.setContentDescription("Stop recording and send");
+            stopButton.setBackground(roundButton(0xffe5484d, 0xff922e33));
+            stopButton.setOnClickListener(view -> stopRecording(false));
+            addView(stopButton);
         }
+
+        private GradientDrawable roundButton(int fill, int stroke) {
+            GradientDrawable background = new GradientDrawable();
+            background.setShape(GradientDrawable.OVAL);
+            background.setColor(fill);
+            background.setStroke(dp(1), stroke);
+            return background;
+        }
+
+        void buttons() {
+            cancelButton.setVisibility(state == State.HANDLE ? GONE : VISIBLE);
+            stopButton.setVisibility(state == State.RECORDING ? VISIBLE : GONE);
+        }
+
         @Override protected void onMeasure(int width, int height) {
-            setMeasuredDimension(bubbleWidth(), bubbleHeight());
+            int button = MeasureSpec.makeMeasureSpec(dp(36), MeasureSpec.EXACTLY);
+            cancelButton.measure(button, button);
+            stopButton.measure(button, button);
+            setMeasuredDimension(frameWidth, frameHeight);
         }
+
+        @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            // Keep expanded content at its final width while the window opens from its edge.
+            int width = state == State.HANDLE ? dp(152) : controlWidth();
+            int offset = prefs().getBoolean("right", true) ? getWidth() - width : 0;
+            int y = (getHeight() - dp(36)) / 2;
+            cancelButton.layout(offset + dp(4), y, offset + dp(40), y + dp(36));
+            stopButton.layout(offset + width - dp(40), y, offset + width - dp(4), y + dp(36));
+            float alpha = Math.max(0, (openness - .3f) / .7f);
+            for (View button : new View[] { cancelButton, stopButton }) {
+                button.setAlpha(alpha);
+                button.setScaleX(.86f + .14f * openness);
+                button.setScaleY(.86f + .14f * openness);
+                button.setTranslationX((prefs().getBoolean("right", true) ? 1 : -1) * dp(6) * (1 - openness));
+            }
+        }
+
         @Override protected void onDraw(Canvas canvas) {
             float w = getWidth(), h = getHeight();
-            paint.setColor(Color.rgb(20, 20, 22));
-            canvas.drawRoundRect(0, 0, w, h, dp(28), dp(28), paint);
-            paint.setColor(Color.rgb(214, 214, 219));
-            if (state == State.HANDLE) {
-                canvas.drawRoundRect(dp(10), dp(21), dp(14), dp(43), dp(2), dp(2), paint);
-                return;
-            }
-            // Person glyph, live level dots, stop, cancel. All controls stay in this window.
-            canvas.drawCircle(dp(26), dp(21), dp(4), paint);
-            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2));
-            canvas.drawArc(dp(19), dp(28), dp(33), dp(39), 190, 160, false, paint);
+            boolean right = prefs().getBoolean("right", true);
+            float r = h / 2, edge = r * openness;
+            Path shape = new Path();
+            shape.addRoundRect(new RectF(dp(1.5f), dp(1.5f), w - dp(1.5f), h - dp(1.5f)),
+                right ? new float[] {r,r,edge,edge,edge,edge,r,r} : new float[] {edge,edge,r,r,r,r,edge,edge}, Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(shape);
+            // Inner top and bottom highlights share the frost's curved edge.
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1));
+            paint.setColor(0x80ffffff);
+            canvas.save();
+            canvas.clipRect(0, 0, w, h / 2);
+            canvas.drawPath(shape, paint);
+            canvas.restore();
+            paint.setColor(0x1affffff);
+            canvas.clipRect(0, h / 2, w, h);
+            canvas.drawPath(shape, paint);
+            canvas.restore();
             paint.setStyle(Paint.Style.FILL);
-            if (state == State.RECORDING) {
-                for (int i = 0; i < 7; i++) {
-                    float wave = 1 - Math.abs(i - 3) / 4f;
-                    canvas.drawCircle(dp(54 + i * 13), h / 2, dp(2 + level * wave * 4), paint);
-                }
-                paint.setColor(Color.rgb(221, 66, 71));
-                canvas.drawCircle(w - dp(56), h / 2, dp(17), paint);
-                paint.setColor(Color.WHITE);
-                canvas.drawRoundRect(w - dp(61), h / 2 - dp(5), w - dp(51), h / 2 + dp(5), dp(1), dp(1), paint);
-            } else {
-                paint.setTextSize(dp(12));
-                canvas.drawText(state == State.SENT ? "Sent to jbot" : state == State.ERROR ? errorText : "Sending…", dp(43), h / 2 + dp(4), paint);
+            if (openness < 1) {
+                mark.setAlpha(Math.round(255 * (1 - openness)));
+                int x = Math.round(right ? w - dp(28) : 0);
+                mark.setBounds(x + dp(4), Math.round(h / 2) - dp(10), x + dp(24), Math.round(h / 2) + dp(10));
+                mark.draw(canvas);
             }
-            paint.setColor(Color.rgb(180, 180, 185));
-            paint.setStrokeWidth(dp(1.5f));
-            canvas.drawLine(w - dp(24), h / 2 - dp(4), w - dp(16), h / 2 + dp(4), paint);
-            canvas.drawLine(w - dp(24), h / 2 + dp(4), w - dp(16), h / 2 - dp(4), paint);
+            if (state == State.HANDLE) return;
+            canvas.save();
+            int width = controlWidth();
+            float offset = right ? w - width : 0;
+            canvas.translate(offset + (right ? 1 : -1) * dp(6) * (1 - openness), 0);
+            canvas.scale(.86f + .14f * openness, .86f + .14f * openness, right ? width : 0, h / 2);
+            int alpha = Math.round(255 * Math.max(0, (openness - .3f) / .7f));
+            paint.setColor(Color.argb(alpha, 244, 244, 246));
+            if (state == State.RECORDING) {
+                for (int i = 0; i < 9; i++) {
+                    float weight = 1 - Math.abs(i - 4) / 5f;
+                    float bar = dp(3) + dp(20) * level * weight;
+                    float x = dp(44 + i * 8);
+                    canvas.drawRoundRect(x, (h - bar) / 2, x + dp(3), (h + bar) / 2, dp(1.5f), dp(1.5f), paint);
+                }
+            } else if (state == State.STOPPING || state == State.SENDING) {
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(2));
+                paint.setStrokeCap(Paint.Cap.ROUND);
+                float x = dp(76);
+                canvas.drawArc(x - dp(6), h / 2 - dp(6), x + dp(6), h / 2 + dp(6),
+                    (SystemClock.uptimeMillis() % 900) * .4f, 250, false, paint);
+                paint.setStrokeCap(Paint.Cap.BUTT);
+                paint.setStyle(Paint.Style.FILL);
+                postInvalidateOnAnimation();
+            } else {
+                text.setTextSize(dp(12));
+                text.setColor(Color.argb(alpha, 244, 244, 246));
+                CharSequence message = state == State.SENT ? "Sent" : TextUtils.ellipsize(errorText, text,
+                    Math.max(0, width - dp(56)), TextUtils.TruncateAt.END);
+                float x = state == State.SENT ? dp(76) - text.measureText("Sent") / 2 : dp(44);
+                canvas.drawText(message.toString(), x, h / 2 - (text.ascent() + text.descent()) / 2, text);
+            }
+            canvas.restore();
         }
+
         @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
             super.onInitializeAccessibilityNodeInfo(info);
             if (state != State.HANDLE) info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_DISMISS);
@@ -557,13 +761,11 @@ public class ConduitBubbleService extends Service {
         @Override public boolean performClick() {
             super.performClick();
             if (state == State.HANDLE) beginRecording();
-            else if (state == State.RECORDING) stopRecording(false);
             else if (state == State.ERROR) {
                 if (!prefs().getBoolean("recordingRetried", false) && prefs().getBoolean("recordingComplete", false)) {
                     prefs().edit().putBoolean("recordingRetried", true).apply();
                     sendRecording();
-                }
-                else openApp(false);
+                } else openApp(false);
             }
             return true;
         }
@@ -571,30 +773,42 @@ public class ConduitBubbleService extends Service {
         private void snapToEdge() {
             boolean right = position.x + getWidth() / 2f > availableWidth / 2f;
             prefs().edit().putBoolean("right", right)
-                .putFloat("y", position.y / (float) Math.max(1, availableHeight - bubbleHeight())).apply();
-            // Change gravity without moving the window, then animate its distance from that edge.
+                .putFloat("y", position.y / (float) Math.max(1, availableHeight - controlHeight())).apply();
             if (right) position.x = Math.max(0, availableWidth - getWidth() - position.x);
             position.gravity = Gravity.TOP | (right ? Gravity.RIGHT : Gravity.LEFT);
+            updateFrost();
             snap = ValueAnimator.ofInt(position.x, 0);
             snap.setDuration(180);
+            snap.setInterpolator(new DecelerateInterpolator());
             snap.addUpdateListener(animation -> {
                 position.x = (int) animation.getAnimatedValue();
-                windows.updateViewLayout(this, position);
+                overlayWindow.setAttributes(position);
             });
             snap.start();
         }
 
+        @Override public boolean onInterceptTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                if (snap != null) { snap.cancel(); snap = null; }
+                downX = event.getRawX(); downY = event.getRawY(); initialY = position.y;
+                initialX = (position.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.RIGHT
+                    ? availableWidth - getWidth() - position.x : position.x;
+                dragging = false; moved = false;
+            } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
+                if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop()) moved = true;
+                if (moved && state == State.HANDLE) dragging = true;
+                if (dragging || distance > dp(60)) return true;
+            }
+            return super.onInterceptTouchEvent(event);
+        }
+
         @Override public boolean onTouchEvent(MotionEvent event) {
             switch (event.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                    if (snap != null) { snap.cancel(); snap = null; }
-                    downX = event.getRawX(); downY = event.getRawY(); initialY = position.y;
-                    initialX = (position.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.RIGHT
-                        ? availableWidth - getWidth() - position.x : position.x;
-                    dragging = false; moved = false;
-                    return true;
+                case MotionEvent.ACTION_DOWN: return true;
                 case MotionEvent.ACTION_MOVE:
-                    if (Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                    float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
+                    if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
                         moved = true;
                         if (state == State.HANDLE) dragging = true;
                     }
@@ -602,17 +816,13 @@ public class ConduitBubbleService extends Service {
                         position.x = Math.max(0, Math.min(availableWidth - getWidth(), initialX + Math.round(event.getRawX() - downX)));
                         position.y = Math.max(0, Math.min(availableHeight - getHeight(), initialY + Math.round(event.getRawY() - downY)));
                         position.gravity = Gravity.TOP | Gravity.LEFT;
-                        windows.updateViewLayout(this, position);
+                        overlayWindow.setAttributes(position);
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
-                    if (dragging) {
-                        snapToEdge();
-                    } else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) cancel();
-                    else if (!moved) {
-                        if (state != State.HANDLE && event.getX() > getWidth() - dp(40)) cancel();
-                        else if (state != State.RECORDING || event.getX() > getWidth() - dp(80)) performClick();
-                    }
+                    if (dragging) snapToEdge();
+                    else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) cancel();
+                    else if (!moved) performClick();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     if (dragging) snapToEdge();

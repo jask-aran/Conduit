@@ -67,7 +67,7 @@ import { OverlayDialog } from "@/components/ui/dialog";
 import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
-import { jbotBubble, type JbotBubbleStatus } from "../platform/jbot-bubble";
+import { conduitFloat, type FloatStatus } from "../platform/float";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
@@ -456,38 +456,38 @@ export function Settings(props: {
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
   const [voiceDraft, setVoiceDraft] = createSignal<VoiceDictationSettings>({ ...props.voiceSettings });
-  const [bubbleStatus, setBubbleStatus] = createSignal<JbotBubbleStatus | null>(null);
-  const [bubbleBusy, setBubbleBusy] = createSignal(false);
-  const [bubbleError, setBubbleError] = createSignal("");
-  const bubbleFailure = (error: unknown) => setBubbleError(error instanceof Error ? error.message : "Could not update jbot bubble.");
-  const refreshBubble = () => {
+  const [floatStatus, setFloatStatus] = createSignal<FloatStatus | null>(null);
+  const [floatBusy, setFloatBusy] = createSignal(false);
+  const [floatError, setFloatError] = createSignal("");
+  const floatFailure = (error: unknown) => setFloatError(error instanceof Error ? error.message : "Could not update Float.");
+  const refreshFloat = () => {
     if (installedClientKind !== "android") return;
-    void jbotBubble.status().then(setBubbleStatus).catch(bubbleFailure);
+    void conduitFloat.status().then(setFloatStatus).catch(floatFailure);
   };
   createEffect(() => {
     if (!props.open || section() !== "voice" || installedClientKind !== "android") return;
-    refreshBubble();
-    const visible = () => { if (document.visibilityState === "visible") refreshBubble(); };
-    window.addEventListener("focus", refreshBubble);
+    refreshFloat();
+    const visible = () => { if (document.visibilityState === "visible") refreshFloat(); };
+    window.addEventListener("focus", refreshFloat);
     document.addEventListener("visibilitychange", visible);
     onCleanup(() => {
-      window.removeEventListener("focus", refreshBubble);
+      window.removeEventListener("focus", refreshFloat);
       document.removeEventListener("visibilitychange", visible);
     });
   });
-  const changeBubble = async (enabled: boolean) => {
-    setBubbleBusy(true);
-    setBubbleError("");
-    try { setBubbleStatus(await (enabled ? jbotBubble.start(voiceDraft()) : jbotBubble.stop())); }
-    catch (error) { bubbleFailure(error); refreshBubble(); }
-    finally { setBubbleBusy(false); }
+  const changeFloat = async (enabled: boolean) => {
+    setFloatBusy(true);
+    setFloatError("");
+    try { setFloatStatus(await (enabled ? conduitFloat.start(voiceDraft()) : conduitFloat.stop())); }
+    catch (error) { floatFailure(error); refreshFloat(); }
+    finally { setFloatBusy(false); }
   };
-  const allowBubbleOverlay = async () => {
-    setBubbleBusy(true);
-    setBubbleError("");
-    try { setBubbleStatus(await jbotBubble.openOverlaySettings()); }
-    catch (error) { bubbleFailure(error); }
-    finally { setBubbleBusy(false); }
+  const allowFloatOverlay = async () => {
+    setFloatBusy(true);
+    setFloatError("");
+    try { setFloatStatus(await conduitFloat.openOverlaySettings()); }
+    catch (error) { floatFailure(error); }
+    finally { setFloatBusy(false); }
   };
   const [warmMicrophoneActive, setWarmMicrophoneActive] = createSignal(isWarmMicrophoneActive());
   const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
@@ -985,9 +985,9 @@ export function Settings(props: {
     const next = { ...voiceDraft(), ...patch };
     setVoiceDraft(next);
     voiceDraftAutosave.edit(next, "now");
-    if (installedClientKind === "android" && bubbleStatus()?.enabled
+    if (installedClientKind === "android" && floatStatus()?.enabled
       && (patch.otherAudio !== undefined || patch.otherAudioLevel !== undefined)) {
-      void jbotBubble.start(next).then(setBubbleStatus).catch(bubbleFailure);
+      void conduitFloat.start(next).then(setFloatStatus).catch(floatFailure);
     }
   };
   // The server's: a choice at once, typing after a pause. A custom endpoint
@@ -1583,13 +1583,13 @@ export function Settings(props: {
 
                 <Group title="Input">
                   <Show when={installedClientKind === "android"}>
-                    <SettingLine label="jbot bubble" title="A small handle at the edge of your screen, over any app: tap it to talk to jbot.">
-                      <Show when={bubbleStatus() && !bubbleStatus()!.overlayPermission}>
-                        <Button variant="ghost" size="sm" disabled={bubbleBusy()} onClick={() => void allowBubbleOverlay()}>Allow</Button>
+                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to talk to jbot.">
+                      <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
+                        <Button variant="ghost" size="sm" disabled={floatBusy()} onClick={() => void allowFloatOverlay()}>Allow</Button>
                       </Show>
-                      <Switch label="jbot bubble" checked={bubbleStatus()?.enabled ?? false} disabled={bubbleBusy() || !bubbleStatus()} onChange={(enabled) => void changeBubble(enabled)} />
+                      <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
-                    <Show when={bubbleError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
+                    <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
                   </Show>
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">

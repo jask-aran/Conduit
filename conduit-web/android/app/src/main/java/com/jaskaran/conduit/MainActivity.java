@@ -62,7 +62,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ConduitDiscoveryPlugin.class);
         registerPlugin(ConduitKeyboardPlugin.class);
         registerPlugin(ConduitAudioPlugin.class);
-        registerPlugin(ConduitBubblePlugin.class);
+        registerPlugin(ConduitFloatPlugin.class);
         registerPlugin(ConduitTlsPlugin.class);
         registerPlugin(ConduitUpdaterPlugin.class);
         registerPlugin(ConduitPushPlugin.class);
@@ -118,14 +118,14 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onResume() {
-        ConduitBubbleService.setAppForeground(true);
+        ConduitFloatService.setAppForeground(true);
         super.onResume();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        ConduitBubbleService.setAppForeground(false);
+        ConduitFloatService.setAppForeground(false);
     }
 
     @Override

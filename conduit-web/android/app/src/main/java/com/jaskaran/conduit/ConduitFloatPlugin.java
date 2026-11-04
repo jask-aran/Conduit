@@ -18,16 +18,31 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "ConduitBubble", permissions = {
+@CapacitorPlugin(name = "ConduitFloat", permissions = {
     @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO })
 })
-public class ConduitBubblePlugin extends Plugin {
-    static final String PREFS = "conduit-bubble";
+public class ConduitFloatPlugin extends Plugin {
+    static final String PREFS = "conduit-float";
     private boolean permissionFlow;
     private boolean pendingRecord;
 
-    static SharedPreferences preferences(Context context) {
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    static synchronized SharedPreferences preferences(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!prefs.getBoolean("migrated", false)) {
+            SharedPreferences.Editor edit = prefs.edit();
+            // Read the old store once; an old enabled flag must never re-enable Float later.
+            for (java.util.Map.Entry<String, ?> entry : context.getSharedPreferences("conduit-bubble", Context.MODE_PRIVATE).getAll().entrySet()) {
+                String key = entry.getKey();
+                if (prefs.contains(key)) continue;
+                Object value = entry.getValue();
+                if (value instanceof Boolean) edit.putBoolean(key, (Boolean) value);
+                else if (value instanceof String) edit.putString(key, (String) value);
+                else if (value instanceof Integer) edit.putInt(key, (Integer) value);
+                else if (value instanceof Float) edit.putFloat(key, (Float) value);
+            }
+            if (!edit.putBoolean("migrated", true).commit()) throw new IllegalStateException("Could not migrate Float settings");
+        }
+        return prefs;
     }
 
     static boolean microphoneGranted(Context context) {
@@ -63,7 +78,7 @@ public class ConduitBubblePlugin extends Plugin {
                 } else requireMicrophone(call);
             } catch (Exception error) {
                 permissionFlow = false;
-                call.reject("Could not start jbot bubble", error);
+                call.reject("Could not start Float", error);
             }
         });
     }
@@ -104,7 +119,7 @@ public class ConduitBubblePlugin extends Plugin {
         if (call == null) { permissionFlow = false; return; }
         if (!Settings.canDrawOverlays(getContext())) {
             permissionFlow = false;
-            call.reject("Allow display over other apps to use jbot bubble");
+            call.reject("Allow display over other apps to use Float");
             return;
         }
         requireMicrophone(call);
@@ -118,16 +133,16 @@ public class ConduitBubblePlugin extends Plugin {
     @PermissionCallback private void microphoneReturned(PluginCall call) {
         permissionFlow = false;
         if (call == null) return;
-        if (!microphoneGranted(getContext())) { call.reject("Allow microphone access to use jbot bubble"); return; }
+        if (!microphoneGranted(getContext())) { call.reject("Allow microphone access to use Float"); return; }
         try {
             startVisible(false);
             preferences(getContext()).edit().putBoolean("enabled", true).apply();
             call.resolve(view());
-        } catch (RuntimeException error) { call.reject("Could not start jbot bubble", error); }
+        } catch (RuntimeException error) { call.reject("Could not start Float", error); }
     }
 
     private void startVisible(boolean record) {
-        Intent intent = new Intent(getContext(), ConduitBubbleService.class).setAction(ConduitBubbleService.VISIBLE)
+        Intent intent = new Intent(getContext(), ConduitFloatService.class).setAction(ConduitFloatService.VISIBLE)
             .putExtra("record", record);
         if (Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(intent);
         else getContext().startService(intent);
@@ -135,7 +150,7 @@ public class ConduitBubblePlugin extends Plugin {
 
     @PluginMethod public void stop(PluginCall call) {
         preferences(getContext()).edit().putBoolean("enabled", false).apply();
-        getContext().stopService(new Intent(getContext(), ConduitBubbleService.class));
+        getContext().stopService(new Intent(getContext(), ConduitFloatService.class));
         try { ConduitMediaVolume.recover(getContext()); }
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
         call.resolve(view());
@@ -150,17 +165,17 @@ public class ConduitBubblePlugin extends Plugin {
     }
 
     @Override protected void handleOnNewIntent(Intent intent) {
-        pendingRecord |= intent != null && intent.getBooleanExtra("conduit.bubble.record", false);
+        pendingRecord |= intent != null && intent.getBooleanExtra("conduit.float.record", false);
     }
 
     @Override protected void handleOnResume() {
         if (permissionFlow || !preferences(getContext()).getBoolean("enabled", false)
             || !Settings.canDrawOverlays(getContext()) || !microphoneGranted(getContext())) return;
         Intent launch = getActivity().getIntent();
-        boolean record = pendingRecord || (launch != null && launch.getBooleanExtra("conduit.bubble.record", false));
+        boolean record = pendingRecord || (launch != null && launch.getBooleanExtra("conduit.float.record", false));
         pendingRecord = false;
-        if (record && launch != null) launch.removeExtra("conduit.bubble.record");
+        if (record && launch != null) launch.removeExtra("conduit.float.record");
         try { startVisible(record); }
-        catch (RuntimeException error) { android.util.Log.w("ConduitBubble", "Open Conduit to restore jbot bubble"); }
+        catch (RuntimeException error) { android.util.Log.w("ConduitFloat", "Open Conduit to restore Float"); }
     }
 }

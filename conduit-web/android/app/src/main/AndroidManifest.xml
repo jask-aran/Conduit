@@ -33,12 +33,12 @@
 
         <receiver android:name=".ConduitPushAnswerReceiver" android:exported="false" />
 
-        <service android:name=".ConduitBubbleService" android:exported="false"
+        <service android:name=".ConduitFloatService" android:exported="false"
             android:foregroundServiceType="microphone|specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Persistent user-enabled voice handle over other apps; idle after boot until the app establishes microphone access." />
         </service>
-        <receiver android:name=".ConduitBubbleBootReceiver" android:exported="false">
+        <receiver android:name=".ConduitFloatBootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
 

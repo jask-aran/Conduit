@@ -574,7 +574,7 @@ values use the provider format and are never returned by the API.
   to jbot's home thread exactly like `POST /v0/agent/messages`, on the `app`
   channel with `via: "voice"`. Returns `{ text }`; `409 agent_not_enabled`,
   `agent_off` or `voice_off`, and `422 nothing_heard` leave the message unsent.
-  Android's jbot bubble uses the origin's WebView cookie when present; the bundled
+  Android's Float uses the origin's WebView cookie when present; the bundled
   installed client otherwise reads its existing native session from secure storage.
   The bubble keeps one `X-Conduit-Voice-Id` per recording so a lost reply can be
   retried without delivering the same message twice. An enabled idle handle returns after reboot. Android 14+ requires the app to

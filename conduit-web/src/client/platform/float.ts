@@ -5,20 +5,20 @@ import { httpUrl } from "../api/transport.js";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { activeOrigin } from "./servers";
 
-export type JbotBubbleAudio = Pick<VoiceDictationSettings, "otherAudio" | "otherAudioLevel">;
-export interface JbotBubbleStatus {
+export type FloatAudio = Pick<VoiceDictationSettings, "otherAudio" | "otherAudioLevel">;
+export interface FloatStatus {
   enabled: boolean;
   overlayPermission: boolean;
   micPermission: boolean;
 }
 
-const bubble = registerPlugin<{
-  start(options: JbotBubbleAudio & { origin: string; tokenOrigin: string }): Promise<JbotBubbleStatus>;
-  stop(): Promise<JbotBubbleStatus>;
-  status(): Promise<JbotBubbleStatus>;
+const nativeFloat = registerPlugin<{
+  start(options: FloatAudio & { origin: string; tokenOrigin: string }): Promise<FloatStatus>;
+  stop(): Promise<FloatStatus>;
+  status(): Promise<FloatStatus>;
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
-  openOverlaySettings(): Promise<JbotBubbleStatus>;
-}>("ConduitBubble");
+  openOverlaySettings(): Promise<FloatStatus>;
+}>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
 let pending: Promise<unknown> = Promise.resolve();
@@ -28,16 +28,16 @@ function enqueue<T>(action: () => Promise<T>): Promise<T> {
   return result;
 }
 
-export const jbotBubble = {
-  start(settings: JbotBubbleAudio) {
+export const conduitFloat = {
+  start(settings: FloatAudio) {
     // Dial the selected path, but read the secure token under the server's stable origin.
     const origin = new URL(httpUrl("/")).origin;
     const tokenOrigin = activeOrigin() || origin;
-    return enqueue(() => bubble.start({ otherAudio: settings.otherAudio, otherAudioLevel: settings.otherAudioLevel, origin, tokenOrigin }));
+    return enqueue(() => nativeFloat.start({ otherAudio: settings.otherAudio, otherAudioLevel: settings.otherAudioLevel, origin, tokenOrigin }));
   },
-  stop: () => enqueue(() => bubble.stop()),
-  status: () => enqueue(() => bubble.status()),
-  openOverlaySettings: () => enqueue(() => bubble.openOverlaySettings()),
+  stop: () => enqueue(() => nativeFloat.stop()),
+  status: () => enqueue(() => nativeFloat.status()),
+  openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
 };
 
 // This module lives for the page's lifetime, including when Settings is closed.
@@ -46,5 +46,5 @@ if (installedClientKind === "android") createRoot(() => createEffect(() => {
   let origin = "";
   try { if (tokenOrigin) origin = new URL(httpUrl("/")).origin; }
   catch { return; } // No selected route yet; follow the next path update.
-  void enqueue(() => bubble.setOrigin({ origin, tokenOrigin })).catch(() => {});
+  void enqueue(() => nativeFloat.setOrigin({ origin, tokenOrigin })).catch(() => {});
 }));
