@@ -56,7 +56,7 @@ final class ConduitMoves {
     private interface Setter { void set(float value); }
     private void to(Part part, String key, float target, long time, long delay, Interpolator curve, boolean initial, Setter set) {
         Float previous = part.targets.get(key);
-        if (!initial && previous != null && previous == target && !reduced) return;
+        if (!initial && previous != null && Math.abs(previous - target) < .01f && !reduced) return;
         ValueAnimator old = part.running.remove(key);
         if (old != null) old.cancel();
         part.targets.put(key, target);
@@ -71,7 +71,7 @@ final class ConduitMoves {
     }
     /** Rects are the row's solved flex layout: circles keep size while tucking; grow hands remaining room to the mic.
      * Each geometric channel retains its current value on reversal and ignores unchanged destinations. */
-    void update(Part part, JSONObject state, float x, float y, float width, float height, long roomDelay) {
+    void update(Part part, JSONObject state, float x, float y, float width, float height, long roomDelay, boolean fieldOut) {
         boolean initial = part.state == null, out = state.optBoolean("out"), folded = state.optBoolean("folded");
         boolean field = "field".equals(state.optString("kind"));
         String move = state.optString("move");
@@ -91,7 +91,9 @@ final class ConduitMoves {
         boolean fieldRoom = field || "collapse".equals(move);
         Interpolator layoutCurve = fieldRoom ? room : arrive;
         to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
-        to(part, "y", y, layoutTime, layoutDelay, layoutCurve, initial, v -> part.y = v);
+        // Edit pills sit above the holder and travel with its delayed room, independently of their fade.
+        boolean edit = state.optBoolean("edit");
+        to(part, "y", y, layoutTime, edit && fieldOut ? quick : layoutDelay, edit ? room : layoutCurve, initial, v -> part.y = v);
         to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
         to(part, "height", field && out ? 0 : height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
         to(part, "opacity", out ? 0 : 1, fadeTime, fadeDelay, fadeCurve, initial, v -> part.opacity = v);

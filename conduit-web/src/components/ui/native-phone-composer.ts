@@ -87,11 +87,29 @@ export function describe(root: HTMLElement) {
         radius: parseFloat(fieldStyle.borderRadius), iconSize: icon ? icon.getBoundingClientRect().width : 18 } };
   } finally { copy.remove(); }
 }
+/** Resolve the WebView's default selection and the textarea's caret into sRGB for the native field. */
+function fieldColours(input: HTMLTextAreaElement) {
+  const probe = document.createElement("span");
+  probe.style.color = "Highlight"; input.parentElement?.append(probe);
+  const systemHighlight = getComputedStyle(probe).color; probe.remove();
+  const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Cannot read composer colours");
+  const colour = (value: string) => {
+    context.clearRect(0, 0, 1, 1); context.fillStyle = value; context.fillRect(0, 0, 1, 1);
+    const [r = 0, g = 0, b = 0, a = 0] = context.getImageData(0, 0, 1, 1).data;
+    return { r, g, b, a };
+  };
+  const selected = colour(getComputedStyle(input, "::selection").backgroundColor);
+  const style = getComputedStyle(input);
+  return { selection: selected.a ? selected : colour(systemHighlight),
+    caret: colour(style.caretColor === "auto" ? style.color : style.caretColor) };
+}
 export type NativeComposerPart = ReturnType<typeof describe>["parts"][number];
 type Description = ReturnType<typeof describe>;
 type BlurStates = { empty: PhoneState; text: PhoneState };
 export type NativePhoneComposerPlugin = {
-  begin(options: ComposerInput & Description & { placeholder: string; states: typeof PHONE_COMPOSER_STATES; blurStates: BlurStates; motion: ReturnType<typeof motionSpec>; haptics: Partial<Record<Haptic, ReturnType<typeof hapticSteps>>> }): Promise<void>;
+  begin(options: ComposerInput & Description & { placeholder: string; colours: ReturnType<typeof fieldColours>; states: typeof PHONE_COMPOSER_STATES; blurStates: BlurStates; motion: ReturnType<typeof motionSpec>; haptics: Partial<Record<Haptic, ReturnType<typeof hapticSteps>>> }): Promise<void>;
   update(options: Partial<ComposerInput> & Partial<Pick<Description, "parts" | "state" | "show" | "row">> & { motion?: ReturnType<typeof motionSpec>; blurStates?: BlurStates }): Promise<void>;
   end(): Promise<void>;
   addListener(name: "input" | "ended" | "closing", listener: (event: ComposerInput) => void): Promise<PluginListenerHandle>;
@@ -132,7 +150,7 @@ export function mirror(root: HTMLElement, input: HTMLTextAreaElement, plugin: Na
       for (const part of description.parts) if (part.haptic) haptics[part.haptic] = hapticSteps(part.haptic);
       for (const { element } of hidden) element.style.visibility = "hidden";
       await plugin.begin({ ...description, text: input.value, selectionStart: input.selectionStart, selectionEnd: input.selectionEnd,
-        placeholder: input.placeholder, states: PHONE_COMPOSER_STATES, blurStates: blurStates(), motion: motionSpec(root), haptics });
+        placeholder: input.placeholder, colours: fieldColours(input), states: PHONE_COMPOSER_STATES, blurStates: blurStates(), motion: motionSpec(root), haptics });
       if (stopped) { await plugin.end(); return; }
       ready = true; preference.addEventListener("change", sync);
       sizes.observe(root); for (const element of root.querySelectorAll(".ui-pill, .ui-phone-field, .ui-phone-row")) sizes.observe(element);

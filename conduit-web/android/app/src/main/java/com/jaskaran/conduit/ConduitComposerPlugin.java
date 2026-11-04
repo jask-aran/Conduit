@@ -49,7 +49,7 @@ public class ConduitComposerPlugin extends Plugin {
     private EditText input;
     private float scale, density, restBottom, fieldWidth, minHeight, iconSize, offsetX;
     private int navBottom, imeBottom;
-    private boolean changing, animating, closing, returning, seenIme;
+    private boolean changing, animating, closing, returning, seenIme, hideRequested;
     private JSONObject haptics, states, blurStates, describedRow;
     private JSONArray describedParts;
     private ConduitMoves moves;
@@ -88,7 +88,7 @@ public class ConduitComposerPlugin extends Plugin {
                 webFocusable = web.isFocusable(); webTouchFocusable = web.isFocusableInTouchMode();
                 web.setFocusableInTouchMode(false); web.setFocusable(false);
                 closingSent = false;
-                seenIme = closing = returning = animating = false;
+                seenIme = closing = returning = animating = hideRequested = false;
                 WindowInsetsCompat initial = ViewCompat.getRootWindowInsets(content);
                 navBottom = initial == null ? 0 : initial.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
                 imeBottom = initial == null ? 0 : initial.getInsets(WindowInsetsCompat.Type.ime()).bottom;
@@ -118,9 +118,11 @@ public class ConduitComposerPlugin extends Plugin {
                 };
                 input.setBackground(null);
                 input.setTextColor(0xffe8e9eb); input.setHintTextColor(0xff888a8e);
-                input.setHighlightColor(0x33e8e9eb);
+                JSObject colours = call.getObject("colours");
+                JSONObject selection = colours == null ? null : colours.optJSONObject("selection"), caret = colours == null ? null : colours.optJSONObject("caret");
+                if (selection != null) input.setHighlightColor(ColorUtils.compositeColors(colour(selection), 0xff3b3a3d));
                 if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    GradientDrawable cursor = new GradientDrawable(); cursor.setColor(0xffe8e9eb); cursor.setSize(Math.max(1, Math.round(density)), 1);
+                    GradientDrawable cursor = new GradientDrawable(); cursor.setColor(caret == null ? 0xffe8e9eb : colour(caret)); cursor.setSize(Math.max(1, Math.round(scale)), 1);
                     input.setTextCursorDrawable(cursor);
                     for (Drawable handle : new Drawable[] { input.getTextSelectHandle(), input.getTextSelectHandleLeft(), input.getTextSelectHandleRight() })
                         if (handle != null) handle.setTint(0xffe8e9eb);
@@ -200,6 +202,9 @@ public class ConduitComposerPlugin extends Plugin {
         });
     }
 
+    private static int colour(JSONObject value) {
+        return android.graphics.Color.argb(value.optInt("a", 255), value.optInt("r"), value.optInt("g"), value.optInt("b"));
+    }
     private void select(int start, int end) {
         start = Math.max(0, Math.min(input.length(), start));
         input.setSelection(start, Math.max(start, Math.min(input.length(), end)));
@@ -227,7 +232,7 @@ public class ConduitComposerPlugin extends Plugin {
     }
     private void hideKeyboard() {
         if (input == null || returning) return;
-        announceClosing();
+        hideRequested = true;
         ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0);
     }
     private boolean hitsPart(float x, float y) {
@@ -298,10 +303,17 @@ public class ConduitComposerPlugin extends Plugin {
     }
     private void setParts(JSONArray description, JSONObject row) {
         describedParts = description; describedRow = row;
+        // Outside taps can reach the WebView before the IME starts. Keep its target for onStart.
+        if (hideRequested && !closingSent) return;
         if (closingSent) description = closedParts(description, row);
         float bottom = (float) (row.optDouble("y") + row.optDouble("height"));
         Set<String> present = new HashSet<>();
         long roomDelay = 0;
+        boolean fieldOut = false;
+        for (int i = 0; i < description.length(); i++) {
+            JSONObject state = description.optJSONObject(i);
+            if (state != null && "holder".equals(state.optString("kind"))) fieldOut = state.optBoolean("out");
+        }
         for (int i = 0; i < description.length(); i++) {
             JSONObject state = description.optJSONObject(i); if (state == null) continue;
             ConduitMoves.Part old = parts.get(state.optString("id"));
@@ -358,7 +370,7 @@ public class ConduitComposerPlugin extends Plugin {
                 moves.seed(part, state, offsetX + (float) current.optDouble("x") * scale, startY,
                     (float) current.optDouble("width") * scale, (float) current.optDouble("height") * scale, (float) presentation.optDouble("opacity", 1));
             }
-            moves.update(part, state, x, y, (float) rect.optDouble("width") * scale, height, roomDelay);
+            moves.update(part, state, x, y, (float) rect.optDouble("width") * scale, height, roomDelay, fieldOut);
             part.view.setZ(state.optBoolean("edit") ? 6 : "field".equals(kind) ? 2 : state.optBoolean("folded") ? 3 : state.optBoolean("voice") && state.optBoolean("stretch") ? 5 : 4);
         }
         for (String id : new HashSet<>(parts.keySet())) if (!present.contains(id)) {
