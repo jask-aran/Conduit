@@ -59,14 +59,24 @@ const hasNative = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvaila
 /* A browser has only a vibration: a few milliseconds by the strongest step's primitive. */
 const BROWSER_MS: Record<string, number> = { tick: 6, "low-tick": 6, click: 10, "quick-rise": 10, "quick-fall": 8, "slow-rise": 14, spin: 14, thud: 16 };
 
+/** An effect at this device's strength, as the native player takes it: its steps scaled, and the predefined effect
+ *  nearest it (the heaviest step's) for an actuator without the primitives. null when silent. */
+function scaledEffect(effect: HapticEffect): { steps: Step[]; weight: string } | null {
+  const gain = HAPTIC_STRENGTHS.find((option) => option.value === hapticStrength())!.gain;
+  if (!gain) return null;
+  const scaled = steps(effect).map((step) => ({ ...step, scale: Math.min(1, step.scale * gain) }));
+  if (!scaled.length) return null;
+  const weight = scaled.some((step) => step.primitive === "thud") ? "heavy" : scaled.some((step) => step.primitive !== "tick" && step.primitive !== "low-tick") ? "click" : "tick";
+  return { steps: scaled, weight };
+}
+/** A kind's effect for a native piece to play itself (the camera card's shutter); null where a touch is not felt. */
+export function hapticSteps(kind: Haptic) { return touchOnly() ? scaledEffect(HAPTIC_EFFECT[kind]) : null; }
+
 /** Plays an effect token at this device's strength (the gallery plays them directly). */
 export function playEffect(effect: HapticEffect) {
-  const gain = HAPTIC_STRENGTHS.find((option) => option.value === hapticStrength())!.gain;
-  if (!gain) return;
-  const scaled = steps(effect).map((step) => ({ ...step, scale: Math.min(1, step.scale * gain) }));
-  if (!scaled.length) return;
-  // The nearest predefined effect where the primitives are missing: the heaviest step's.
-  const weight = scaled.some((step) => step.primitive === "thud") ? "heavy" : scaled.some((step) => step.primitive !== "tick" && step.primitive !== "low-tick") ? "click" : "tick";
+  const scaledOne = scaledEffect(effect);
+  if (!scaledOne) return;
+  const { steps: scaled, weight } = scaledOne;
   if (hasNative()) { void native.play({ steps: scaled, weight }).catch(() => undefined); return; }
   if (typeof navigator.vibrate !== "function") return;
   const top = scaled.reduce((best, step) => step.scale > best.scale ? step : best);

@@ -64,6 +64,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ConduitAudioPlugin.class);
         registerPlugin(ConduitFloatPlugin.class);
         registerPlugin(ConduitHapticsPlugin.class);
+        registerPlugin(ConduitPhotosPlugin.class);
+        registerPlugin(ConduitCameraPlugin.class);
         registerPlugin(ConduitTlsPlugin.class);
         registerPlugin(ConduitUpdaterPlugin.class);
         registerPlugin(ConduitPushPlugin.class);

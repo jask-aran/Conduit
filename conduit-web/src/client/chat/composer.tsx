@@ -1,6 +1,9 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { Button as LibraryButton, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
+import { haptic } from "@/components/ui/haptics";
+import { pickPhotos } from "../platform/photos";
+import { openNativeCamera } from "../platform/camera";
+import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
@@ -557,19 +560,32 @@ export function Composer(props: {
     else await props.chat.send(mode);
   };
 
+  // The camera button. Tap: the Viewfinder, the camera in a card (its Full camera, or a camera it can't open, hands
+  // over to the platform's own through cameraInput). Hold: the platform's photo picker (photoInput in a browser);
+  // Attach files in the plus menu keeps the whole file picker.
   let cameraInput!: HTMLInputElement;
+  let photoInput!: HTMLInputElement;
+  const [viewfinder, setViewfinder] = createSignal(false);
   let cameraHold: ReturnType<typeof setTimeout> | null = null;
-  let cameraHeld = false;
+  const addPhotos = (files: File[]) => { if (files.length) props.attachments.addFiles(files); };
+  const pickPhotosHeld = async () => {
+    const picked = await pickPhotos().catch(() => null);
+    if (picked) addPhotos(picked); else photoInput.click();
+  };
   const cameraPointerDown = (event: PointerEvent) => {
     event.preventDefault();
-    cameraHeld = false;
-    cameraHold = setTimeout(() => { cameraHold = null; cameraHeld = true; props.onOpenAttachments(); }, 450);
+    cameraHold = setTimeout(() => { cameraHold = null; haptic("hold"); void pickPhotosHeld(); }, 450);
   };
   const cameraPointerCancel = () => { if (cameraHold) clearTimeout(cameraHold); cameraHold = null; };
   const cameraPointerUp = () => {
     if (!cameraHold) return;
     cameraPointerCancel();
-    if (!cameraHeld) cameraInput.click();
+    haptic("press");
+    void openNativeCamera().then((answer) => {
+      if (answer instanceof File) addPhotos([answer]);
+      else if (answer === "full" || answer === "failed") cameraInput.click();
+      else if (answer === null) { if (typeof navigator.mediaDevices?.getUserMedia === "function") setViewfinder(true); else cameraInput.click(); }
+    }).catch(() => cameraInput.click());
   };
   const attach = () => {
     setSlashOpen(false);
@@ -853,9 +869,10 @@ export function Composer(props: {
     edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
     <MobileComposerOptions composer={props} onOpenChange={setOptionsOpen} />
     <Show when={props.attachmentsSupported !== false}>
-      {/* Tap: the camera, through the platform's own capture. Hold: the same picker as Attach files. */}
-      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; if (files.length) props.attachments.addFiles(files); }} />
-      <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ title: "Take a photo (hold to choose files)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
+      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
+      <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
+      <Show when={viewfinder()}><Viewfinder onCapture={(file) => addPhotos([file])} onFull={() => cameraInput.click()} onClose={() => setViewfinder(false)} /></Show>
+      <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ title: "Take a photo (hold to choose photos)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
     </Show>
     <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<Icons.Keyboard />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
     <PillButton folded={!latestAway()} label="Scroll to latest" icon={<Icons.ArrowDown />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />

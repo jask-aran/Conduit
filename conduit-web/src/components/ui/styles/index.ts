@@ -38,6 +38,7 @@
  *   leader          Leader, Crumbs, Spotlight
  *   tour            TourCard (the keyboard tour), its fixed Spotlight
  *   pill            Pill*, Aura
+ *   viewfinder      Viewfinder (the camera, picture in picture)
  *   phone-composer  PhoneComposer
  *   composer        DesktopComposer, Toolbar
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
@@ -89,6 +90,7 @@ import "./workbench.css";
 import "./leader.css";
 import "./tour.css";
 import "./pill.css";
+import "./viewfinder.css";
 import "./phone-composer.css";
 import "./composer.css";
 import "./rider.css";

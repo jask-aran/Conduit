@@ -1,5 +1,6 @@
 import {
   ActivityIcon,
+  SwitchCameraIcon,
   MailIcon,
   AlarmClockIcon,
   HeartPulseIcon,
@@ -211,6 +212,7 @@ export const Keyboard = KeyboardIcon;
 export const LogOut = LogOutIcon;
 /** Expand a pane or attachment. */
 export const Maximize = Maximize2Icon;
+export const SwitchCamera = SwitchCameraIcon;
 /** A message or agent narration. */
 export const Message = MessageSquareTextIcon;
 /** Feedback on something said (a message's foot). */
