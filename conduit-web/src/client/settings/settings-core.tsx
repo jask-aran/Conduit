@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, SparklesIcon } from "lucide-solid";
+import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
@@ -72,13 +72,16 @@ import { HAPTIC_STRENGTHS, hapticStrength, saveHapticStrength, type HapticStreng
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
 import { conduitFloat, type FloatHoldTarget, type FloatStatus } from "../platform/float";
 
-const sectionGroups = [
-  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
+const allSectionGroups = [
+  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }, { id: "phone", label: "Phone", icon: SmartphoneIcon }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Browser", icon: Icons.Browser }] },
 ] as const;
-type VisibleSection = typeof sectionGroups[number]["sections"][number]["id"];
+type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
+/** Phone holds what only the Android app has (Float), so only the Android app lists it. */
+const sectionGroups = allSectionGroups.map((group) => ({ ...group,
+  sections: group.sections.filter((item) => item.id !== "phone" || installedClientKind === "android") }));
 type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
@@ -87,6 +90,7 @@ const sectionLabels: Record<Section, string> = {
   account: "Account",
   ui: "Appearance",
   shortcuts: "Shortcuts",
+  phone: "Phone",
   models: "Models",
   prompts: "Prompts",
   blocks: "Blocks",
@@ -470,7 +474,7 @@ export function Settings(props: {
     void conduitFloat.status().then(setFloatStatus).catch(floatFailure);
   };
   createEffect(() => {
-    if (!props.open || section() !== "voice" || installedClientKind !== "android") return;
+    if (!props.open || section() !== "phone" || installedClientKind !== "android") return;
     refreshFloat();
     const visible = () => { if (document.visibilityState === "visible") refreshFloat(); };
     window.addEventListener("focus", refreshFloat);
@@ -1532,6 +1536,36 @@ export function Settings(props: {
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
               </Select></SettingLine></Group>}</Show></Show>
           </Show>
+          <Show when={section() === "phone"}>
+              <Group title="Float">
+                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send.">
+                      <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
+                        <Button variant="ghost" size="sm" disabled={floatBusy()} onClick={() => void allowFloatOverlay()}>Allow</Button>
+                      </Show>
+                      <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
+                    </SettingLine>
+                    <Show when={floatStatus()?.enabled}>
+                      <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
+                        title="Float's Accessibility service: screenshots without asking each time, the text on screen with them, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
+                        <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.screenContext ? conduitFloat.openScreenContextSettings() : conduitFloat.setUpScreenContext()).then(setFloatStatus).catch(floatFailure)}>
+                          {floatStatus()!.screenContext ? "Settings" : "Turn on"}
+                        </Button>
+                      </SettingLine>
+                      <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
+                        <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
+                      </SettingLine>
+                      <Show when={floatStatus()!.holdToTalk}>
+                        <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say.">
+                          <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHold({ holdTarget })} options={[
+                            { value: "jbot", label: "jbot" },
+                            { value: "chat", label: "New chat" },
+                          ]} />
+                        </SettingLine>
+                      </Show>
+                    </Show>
+                    <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
+              </Group>
+          </Show>
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<Loading>Loading voice settings…</Loading>}><Note tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></Note></Show>}>
               <>
@@ -1604,34 +1638,7 @@ export function Settings(props: {
                 </Group>
 
                 <Group title="Input">
-                  <Show when={installedClientKind === "android"}>
-                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send.">
-                      <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
-                        <Button variant="ghost" size="sm" disabled={floatBusy()} onClick={() => void allowFloatOverlay()}>Allow</Button>
-                      </Show>
-                      <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
-                    </SettingLine>
-                    <Show when={floatStatus()?.enabled}>
-                      <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
-                        title="Float's Accessibility service: screenshots without asking each time, the text on screen with them, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
-                        <Button variant="ghost" size="sm" onClick={() => void conduitFloat.openScreenContextSettings().then(setFloatStatus).catch(floatFailure)}>
-                          {floatStatus()!.screenContext ? "Settings" : "Turn on"}
-                        </Button>
-                      </SettingLine>
-                      <SettingLine label="Hold to talk" title="Hold Float to record at once; let go to send.">
-                        <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
-                      </SettingLine>
-                      <Show when={floatStatus()!.holdToTalk}>
-                        <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say.">
-                          <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHold({ holdTarget })} options={[
-                            { value: "jbot", label: "jbot" },
-                            { value: "chat", label: "New chat" },
-                          ]} />
-                        </SettingLine>
-                      </Show>
-                    </Show>
-                    <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
-                  </Show>
+
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">
                       <Switch label="Prefer speakerphone" disabled={audioInputBusy()} checked={voiceDraft().preferSpeakerphone} onChange={(preferSpeakerphone) => updateVoiceDraft({ preferSpeakerphone })} />

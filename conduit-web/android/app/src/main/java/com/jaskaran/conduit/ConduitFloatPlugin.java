@@ -153,8 +153,77 @@ public class ConduitFloatPlugin extends Plugin {
         try {
             startVisible(false);
             preferences(getContext()).edit().putBoolean("enabled", true).apply();
-            call.resolve(view());
-        } catch (RuntimeException error) { call.reject("Could not start Float", error); }
+        } catch (RuntimeException error) { call.reject("Could not start Float", error); return; }
+        screenContextStep(call);
+    }
+
+    /*
+     * The rest of turning Float on, one step at a time, each introduced by a short dialog that says what to tap and
+     * can be skipped: an app installed from an APK first needs App info > ⋮ > Allow restricted settings (Android 13+),
+     * then Float screen context in Accessibility. Skipping leaves Float on, without instant screenshots.
+     */
+    private void screenContextStep(PluginCall call) {
+        if (ConduitContext.screenReaderOn(getContext())) { call.resolve(view()); return; }
+        permissionFlow = true;
+        if (restrictedSettingsBlocked()) {
+            ask("Allow restricted settings",
+                "Android holds back Accessibility for apps installed from a file. In App info, tap ⋮ at the top right, "
+                    + "then Allow restricted settings, then come back.",
+                "Open App info", () -> startActivityForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getContext().getPackageName())), "restrictedReturned"), call);
+        } else accessibilityStep(call);
+    }
+
+    @ActivityCallback private void restrictedReturned(PluginCall call, ActivityResult result) {
+        if (call == null) { permissionFlow = false; return; }
+        if (restrictedSettingsBlocked()) { permissionFlow = false; call.resolve(view()); return; }
+        accessibilityStep(call);
+    }
+
+    private void accessibilityStep(PluginCall call) {
+        ask("Turn on Float screen context",
+            "Screenshots without asking each time, the text on screen with them, and Float's frosted panels. "
+                + "Turn on Float screen context, then come back.",
+            "Open settings", () -> startActivityForResult(call, screenContextIntent(), "accessibilityReturned"), call);
+    }
+
+    @ActivityCallback private void accessibilityReturned(PluginCall call, ActivityResult result) {
+        permissionFlow = false;
+        if (call != null) call.resolve(view());
+    }
+
+    /** A step's dialog: Continue runs it, Skip ends the flow with Float on as it is. */
+    private void ask(String title, String message, String go, Runnable step, PluginCall call) {
+        new android.app.AlertDialog.Builder(getActivity()).setTitle(title).setMessage(message)
+            .setPositiveButton(go, (dialog, which) -> step.run())
+            .setNegativeButton("Skip", (dialog, which) -> { permissionFlow = false; call.resolve(view()); })
+            .setOnCancelListener(dialog -> { permissionFlow = false; call.resolve(view()); })
+            .show();
+    }
+
+    private Intent screenContextIntent() {
+        android.content.ComponentName reader = new android.content.ComponentName(getContext(), ConduitScreenReader.class);
+        Intent details = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, reader.flattenToString());
+        return details.resolveActivity(getContext().getPackageManager()) != null ? details : new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+    }
+
+    /** Android 13+ restricts Accessibility for an app installed from a file until App info allows it. */
+    static boolean restrictedSettingsBlocked(Context context) {
+        if (Build.VERSION.SDK_INT < 33) return false;
+        try {
+            android.app.AppOpsManager ops = (android.app.AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+            int mode = ops.unsafeCheckOpNoThrow("android:access_restricted_settings",
+                context.getApplicationInfo().uid, context.getPackageName());
+            return mode != android.app.AppOpsManager.MODE_ALLOWED;
+        } catch (RuntimeException unknownOp) { return false; }
+    }
+
+    private boolean restrictedSettingsBlocked() { return restrictedSettingsBlocked(getContext()); }
+
+    /** The screen-context steps alone, for Settings' row when Float is already on. */
+    @PluginMethod public void setUpScreenContext(PluginCall call) {
+        getActivity().runOnUiThread(() -> screenContextStep(call));
     }
 
     private void startVisible(boolean record) {

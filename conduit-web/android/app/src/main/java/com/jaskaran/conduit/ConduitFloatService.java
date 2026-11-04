@@ -113,6 +113,11 @@ public class ConduitFloatService extends Service {
             }
         });
         sender = new FloatSender(this, worker, main);
+        // The assistant (a long press on home) hands Float the screen: held like a screenshot, then where it goes.
+        FloatAssist.receive(result -> main.post(() -> {
+            captured(result);
+            if (result.error == null && window != null && machine.state() == State.HANDLE) openRadial();
+        }));
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -486,6 +491,7 @@ public class ConduitFloatService extends Service {
 
     @Override public void onDestroy() {
         destroyed = true;
+        FloatAssist.receive(null);
         if (live != null) { live.close(); live = null; }
         if (caption != null) caption.destroy();
         if (active == this) active = null;

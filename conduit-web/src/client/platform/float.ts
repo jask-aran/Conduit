@@ -27,6 +27,7 @@ const nativeFloat = registerPlugin<{
   openOverlaySettings(): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   openScreenContextSettings(): Promise<FloatStatus>;
+  setUpScreenContext(): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -48,6 +49,8 @@ export const conduitFloat = {
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
   openScreenContextSettings: () => enqueue(() => nativeFloat.openScreenContextSettings()),
+  /** Walks through what screen context needs (Allow restricted settings, then Accessibility), each step skippable. */
+  setUpScreenContext: () => enqueue(() => nativeFloat.setUpScreenContext()),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
