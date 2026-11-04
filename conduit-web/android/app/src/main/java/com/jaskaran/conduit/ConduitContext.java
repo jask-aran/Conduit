@@ -156,6 +156,19 @@ public final class ConduitContext {
         IMAGES.execute(() -> encode(context, id, kind, bitmap, screen, at));
     }
 
+    /** Main thread only. Takes ownership of bitmap; returns on the main thread, including text on failure. */
+    static void fromAssistant(Context context, Bitmap bitmap, Screen screen, long at, Consumer<Result> callback) {
+        if (bitmap == null) {
+            callback.accept(new Result("screenshot", null, screen, at,
+                context.getString(R.string.assistant_screenshot_unavailable)));
+            return;
+        }
+        String id = register(result -> callback.accept(result.error == null ? result
+            : new Result("screenshot", null, screen, at, result.error)));
+        SCREENS.put(id, screen);
+        save(context.getApplicationContext(), id, "screenshot", bitmap, at);
+    }
+
     static void savePhoto(Context context, String id, File source, long at) {
         IMAGES.execute(() -> {
             Bitmap bitmap = null;

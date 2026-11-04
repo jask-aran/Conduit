@@ -1545,6 +1545,12 @@ export function Settings(props: {
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
+                      <SettingLine label="Assistant" state={floatStatus()!.assistant ? "Conduit" : "another app"}
+                        title="Make Conduit the phone's digital assistant: a long press on home hands Float the screen and its text at once, with no prompt. Allow Use screenshot and Use text on screen there.">
+                        <Button variant="ghost" size="sm" onClick={() => void conduitFloat.openAssistantSettings().then(setFloatStatus).catch(floatFailure)}>
+                          {floatStatus()!.assistant ? "Settings" : "Choose"}
+                        </Button>
+                      </SettingLine>
                       <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
                         title="Float's Accessibility service: screenshots without asking each time, the text on screen with them, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
                         <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.screenContext ? conduitFloat.openScreenContextSettings() : conduitFloat.setUpScreenContext()).then(setFloatStatus).catch(floatFailure)}>

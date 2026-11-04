@@ -14,6 +14,8 @@ export interface FloatStatus {
   holdToTalk: boolean;
   /** Float screen context, the Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
   screenContext: boolean;
+  /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
+  assistant: boolean;
   /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
@@ -28,6 +30,7 @@ const nativeFloat = registerPlugin<{
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   openScreenContextSettings(): Promise<FloatStatus>;
   setUpScreenContext(): Promise<FloatStatus>;
+  openAssistantSettings(): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -51,6 +54,7 @@ export const conduitFloat = {
   openScreenContextSettings: () => enqueue(() => nativeFloat.openScreenContextSettings()),
   /** Walks through what screen context needs (Allow restricted settings, then Accessibility), each step skippable. */
   setUpScreenContext: () => enqueue(() => nativeFloat.setUpScreenContext()),
+  openAssistantSettings: () => enqueue(() => nativeFloat.openAssistantSettings()),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 

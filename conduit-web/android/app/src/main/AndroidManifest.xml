@@ -33,6 +33,25 @@
 
         <receiver android:name=".ConduitPushAnswerReceiver" android:exported="false" />
 
+        <service android:name=".ConduitAssistService" android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data android:name="android.voice_interaction"
+                android:resource="@xml/conduit_assistant" />
+        </service>
+        <!-- Keep the session in the app process: FloatAssist holds its capture in memory. -->
+        <service android:name=".ConduitAssistSessionService" android:exported="true"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service android:name=".ConduitAssistRecognitionService" android:exported="true"
+            android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
         <service android:name=".ConduitFloatService" android:exported="false"
             android:foregroundServiceType="microphone|specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

@@ -8,4 +8,5 @@
     <string name="context_screen_reader_description">Lets Float take a screenshot and read the text on screen when you ask it to. Nothing is read otherwise.</string>
     <string name="context_capture_channel">Float screenshots</string>
     <string name="context_capture_notification">Taking a screenshot</string>
+    <string name="assistant_screenshot_unavailable">Screenshot unavailable. In Settings > Apps > Default apps > Digital assistant, turn on Use screenshot and Use text on screen. The app or device policy can also block capture.</string>
 </resources>

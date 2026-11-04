@@ -55,7 +55,19 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     private JSObject view() {
+        boolean assistant;
+        if (Build.VERSION.SDK_INT >= 29) {
+            android.app.role.RoleManager roles = getContext().getSystemService(android.app.role.RoleManager.class);
+            assistant = roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)
+                && roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
+        } else {
+            String selected = Settings.Secure.getString(getContext().getContentResolver(), "assistant");
+            android.content.ComponentName component = selected == null ? null
+                : android.content.ComponentName.unflattenFromString(selected);
+            assistant = component != null && getContext().getPackageName().equals(component.getPackageName());
+        }
         return new JSObject().put("enabled", preferences(getContext()).getBoolean("enabled", false))
+            .put("assistant", assistant)
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
             .put("micPermission", microphoneGranted(getContext()))
             .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot")
@@ -249,6 +261,16 @@ public class ConduitFloatPlugin extends Plugin {
 
     @PluginMethod public void openOverlaySettings(PluginCall call) {
         getActivity().runOnUiThread(() -> startActivityForResult(call, overlayIntent(), "settingsReturned"));
+    }
+
+    @PluginMethod public void openAssistantSettings(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            try {
+                startActivityForResult(call, new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), "settingsReturned");
+            } catch (android.content.ActivityNotFoundException noVoiceSettings) {
+                startActivityForResult(call, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), "settingsReturned");
+            }
+        });
     }
 
     @ActivityCallback private void settingsReturned(PluginCall call, ActivityResult result) {
