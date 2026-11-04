@@ -1,5 +1,6 @@
 package com.jaskaran.conduit;
 
+import android.animation.ValueAnimator;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -14,6 +15,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -30,6 +32,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.view.WindowInsets;
+import android.view.WindowMetrics;
 import android.webkit.CookieManager;
 import androidx.core.app.NotificationCompat;
 import java.io.File;
@@ -53,6 +57,8 @@ public class ConduitBubbleService extends Service {
     private static final String OFF = "conduit.bubble.OFF";
     private static final int NOTIFICATION = 4103;
     private static final int MAX_PCM_BYTES = 16_000 * 2 * 300;
+    private static boolean appForeground;
+    private static ConduitBubbleService active;
     private enum State { HANDLE, RECORDING, STOPPING, SENDING, ERROR, SENT }
     private final String volumeOwner = "bubble:" + java.util.UUID.randomUUID();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -68,12 +74,24 @@ public class ConduitBubbleService extends Service {
     private volatile boolean destroyed;
     private volatile int generation;
     private float level;
+    private int availableWidth, availableHeight;
+    private ValueAnimator snap;
+
+    static void setAppForeground(boolean foreground) {
+        appForeground = foreground;
+        if (active != null) active.updateVisibility();
+    }
+
+    private void updateVisibility() {
+        if (bubble != null) bubble.setVisibility(appForeground && state == State.HANDLE ? View.GONE : View.VISIBLE);
+    }
 
     private SharedPreferences prefs() { return ConduitBubblePlugin.preferences(this); }
     private int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 
     @Override public void onCreate() {
         super.onCreate();
+        active = this;
         try { ConduitMediaVolume.recover(this); }
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
         windows = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -111,8 +129,18 @@ public class ConduitBubbleService extends Service {
                     Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT);
+                if (Build.VERSION.SDK_INT >= 30) {
+                    position.setFitInsetsTypes(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                    position.setFitInsetsIgnoringVisibility(true);
+                }
                 place();
                 windows.addView(bubble, position);
+                bubble.setOnApplyWindowInsetsListener((view, insets) -> {
+                    view.post(() -> {
+                        if (!destroyed && updateBounds()) { place(); windows.updateViewLayout(bubble, position); }
+                    });
+                    return insets;
+                });
                 show(state);
             }
             if (state == State.RECORDING) applyVolume();
@@ -140,11 +168,42 @@ public class ConduitBubbleService extends Service {
             .addAction(0, "Turn off", off).build();
     }
 
+    private boolean updateBounds() {
+        int width = getResources().getDisplayMetrics().widthPixels;
+        int height = getResources().getDisplayMetrics().heightPixels;
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowMetrics metrics = windows.getCurrentWindowMetrics();
+            android.graphics.Insets insets = metrics.getWindowInsets().getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            width = metrics.getBounds().width() - insets.left - insets.right;
+            height = metrics.getBounds().height() - insets.top - insets.bottom;
+        } else if (bubble != null && bubble.isAttachedToWindow()) {
+            Rect frame = new Rect();
+            bubble.getWindowVisibleDisplayFrame(frame);
+            width = frame.width();
+            height = frame.height();
+        }
+        width = Math.max(1, width);
+        height = Math.max(1, height);
+        boolean changed = width != availableWidth || height != availableHeight;
+        availableWidth = width;
+        availableHeight = height;
+        return changed;
+    }
+
+    private int bubbleWidth() {
+        return Math.min(availableWidth, dp(state == State.HANDLE ? 24 : state == State.ERROR ? 304 : 232));
+    }
+
+    private int bubbleHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? 64 : 56)); }
+
     private void place() {
+        if (snap != null) { snap.cancel(); snap = null; }
+        updateBounds();
         position.gravity = Gravity.TOP | (prefs().getBoolean("right", true) ? Gravity.RIGHT : Gravity.LEFT);
         position.x = 0;
-        int height = getResources().getDisplayMetrics().heightPixels;
-        position.y = Math.round(Math.max(0, height - dp(100)) * prefs().getFloat("y", .45f));
+        position.y = Math.round(Math.max(0, availableHeight - bubbleHeight())
+            * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
     }
 
     @Override public void onConfigurationChanged(Configuration configuration) {
@@ -156,11 +215,14 @@ public class ConduitBubbleService extends Service {
         if (destroyed) return;
         state = next;
         level = 0;
-        bubble.setContentDescription(next == State.HANDLE ? "Talk to jbot. Long press to move."
+        place();
+        bubble.setContentDescription(next == State.HANDLE ? "Talk to jbot. Drag to move."
             : next == State.RECORDING ? "Recording. Stop or cancel." : next == State.ERROR ? "Couldn't send. Tap to retry or open Conduit."
             : next == State.SENT ? "Sent to jbot" : "Sending to jbot");
         bubble.requestLayout();
         bubble.invalidate();
+        updateVisibility();
+        windows.updateViewLayout(bubble, position);
     }
 
     private void openApp(boolean record) {
@@ -386,6 +448,8 @@ public class ConduitBubbleService extends Service {
 
     @Override public void onDestroy() {
         destroyed = true;
+        if (active == this) active = null;
+        if (snap != null) snap.cancel();
         generation++;
         main.removeCallbacksAndMessages(null);
         if (capture != null) {
@@ -410,18 +474,16 @@ public class ConduitBubbleService extends Service {
     private final class BubbleView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private float downX, downY;
-        private int initialY;
+        private int initialX, initialY;
         private boolean dragging, moved;
-        private final Runnable longPress = () -> { if (!moved && state == State.HANDLE) { dragging = true; performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } };
         BubbleView() {
             super(ConduitBubbleService.this);
             setClickable(true);
-            setContentDescription("Talk to jbot. Long press to move.");
+            setContentDescription("Talk to jbot. Drag to move.");
             setElevation(dp(6));
         }
         @Override protected void onMeasure(int width, int height) {
-            int available = getResources().getDisplayMetrics().widthPixels - dp(8);
-            setMeasuredDimension(state == State.HANDLE ? dp(24) : Math.min(available, dp(state == State.ERROR ? 304 : 232)), dp(state == State.HANDLE ? 64 : 56));
+            setMeasuredDimension(bubbleWidth(), bubbleHeight());
         }
         @Override protected void onDraw(Canvas canvas) {
             float w = getWidth(), h = getHeight();
@@ -476,31 +538,47 @@ public class ConduitBubbleService extends Service {
             }
             return true;
         }
+
+        private void snapToEdge() {
+            boolean right = position.x + getWidth() / 2f > availableWidth / 2f;
+            prefs().edit().putBoolean("right", right)
+                .putFloat("y", position.y / (float) Math.max(1, availableHeight - bubbleHeight())).apply();
+            // Change gravity without moving the window, then animate its distance from that edge.
+            if (right) position.x = Math.max(0, availableWidth - getWidth() - position.x);
+            position.gravity = Gravity.TOP | (right ? Gravity.RIGHT : Gravity.LEFT);
+            snap = ValueAnimator.ofInt(position.x, 0);
+            snap.setDuration(180);
+            snap.addUpdateListener(animation -> {
+                position.x = (int) animation.getAnimatedValue();
+                windows.updateViewLayout(this, position);
+            });
+            snap.start();
+        }
+
         @Override public boolean onTouchEvent(MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (snap != null) { snap.cancel(); snap = null; }
                     downX = event.getRawX(); downY = event.getRawY(); initialY = position.y;
+                    initialX = (position.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.RIGHT
+                        ? availableWidth - getWidth() - position.x : position.x;
                     dragging = false; moved = false;
-                    if (state == State.HANDLE) main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     if (Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
                         moved = true;
-                        main.removeCallbacks(longPress);
+                        if (state == State.HANDLE) dragging = true;
                     }
                     if (dragging) {
-                        int height = getResources().getDisplayMetrics().heightPixels;
-                        position.y = Math.max(0, Math.min(height - getHeight(), initialY + Math.round(event.getRawY() - downY)));
-                        boolean right = event.getRawX() > getResources().getDisplayMetrics().widthPixels / 2f;
-                        position.gravity = Gravity.TOP | (right ? Gravity.RIGHT : Gravity.LEFT);
+                        position.x = Math.max(0, Math.min(availableWidth - getWidth(), initialX + Math.round(event.getRawX() - downX)));
+                        position.y = Math.max(0, Math.min(availableHeight - getHeight(), initialY + Math.round(event.getRawY() - downY)));
+                        position.gravity = Gravity.TOP | Gravity.LEFT;
                         windows.updateViewLayout(this, position);
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
-                    main.removeCallbacks(longPress);
                     if (dragging) {
-                        prefs().edit().putBoolean("right", (position.gravity & Gravity.RIGHT) == Gravity.RIGHT)
-                            .putFloat("y", Math.min(1, position.y / (float) Math.max(1, getResources().getDisplayMetrics().heightPixels - dp(100)))).apply();
+                        snapToEdge();
                     } else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) cancel();
                     else if (!moved) {
                         if (state != State.HANDLE && event.getX() > getWidth() - dp(40)) cancel();
@@ -508,7 +586,8 @@ public class ConduitBubbleService extends Service {
                     }
                     return true;
                 case MotionEvent.ACTION_CANCEL:
-                    main.removeCallbacks(longPress);
+                    if (dragging) snapToEdge();
+                    dragging = false;
                     return true;
                 default: return true;
             }

@@ -117,6 +117,18 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
+    public void onResume() {
+        ConduitBubbleService.setAppForeground(true);
+        super.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        ConduitBubbleService.setAppForeground(false);
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         ConduitPushPlugin.handleIntent(this, intent);
