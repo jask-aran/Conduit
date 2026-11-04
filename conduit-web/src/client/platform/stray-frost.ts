@@ -1,9 +1,11 @@
 import { clientBuild } from "./build-info.ts";
+import { api } from "../api/client";
 
 /**
  * A temporary watch for a frost seen parked below the phone composer's row ("under the nav bar"), which no headless
  * state reproduces. Builds that are not releases, phone layout only: twice a second, any visible frost that sits still with its top
- * below the row is outlined, and a note at the top of the screen names it (screenshot the note). Remove once found.
+ * below the row is outlined, a note at the top of the screen names it, and the hub keeps a report of it with what was
+ * around it (client-reports/stray-frost.jsonl). Remove once found.
  */
 export function watchStrayFrost() {
   if (clientBuild.release || typeof document === "undefined") return;
@@ -22,6 +24,30 @@ export function watchStrayFrost() {
     const motion = element.getAnimations({ subtree: false }).map((a) => (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "script").join(",");
     return `${new Date().toLocaleTimeString()} · ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)} of ${innerWidth}×${innerHeight} · op ${style.opacity} · tf ${style.transform} · ${motion || "still"}\n${chain.join("\n  < ")}`;
   };
+  const scrolledPast = (element: Element) => {
+    for (let node = element.parentElement; node; node = node.parentElement) {
+      const overflow = getComputedStyle(node).overflowY;
+      if ((overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight + 1) return true;
+    }
+    return false;
+  };
+  // Each catch goes to the hub too (<data>/client-reports/stray-frost.jsonl), with what was around it, so a catch on
+  // a phone no one screenshotted is still there to read.
+  const report = (element: Element, said: string) => {
+    const r = element.getBoundingClientRect();
+    const around = (node: Element | null) => node ? { tag: node.tagName.toLowerCase(), class: node.className.toString(), rect: (({ left, top, width, height }) => ({ left, top, width, height }))(node.getBoundingClientRect()) } : null;
+    const body = {
+      build: clientBuild, url: location.pathname, viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio, visual: visualViewport ? { height: visualViewport.height, offsetTop: visualViewport.offsetTop } : null },
+      said, rect: { left: r.left, top: r.top, width: r.width, height: r.height },
+      style: (({ opacity, transform, translate, position, display, visibility }) => ({ opacity, transform, translate, position, display, visibility }))(getComputedStyle(element)),
+      animations: element.getAnimations({ subtree: true }).map((a) => ({ name: (a as CSSAnimation).animationName ?? (a as CSSTransition).transitionProperty ?? "script", state: a.playState, time: a.currentTime })),
+      html: element.outerHTML.slice(0, 6000),
+      parents: (() => { const out = []; for (let node = element.parentElement; node && out.length < 10; node = node.parentElement) out.push(around(node)); return out; })(),
+      row: around(document.querySelector(".ui-phone-row")), composer: document.querySelector(".ui-phone-composer")?.getAttribute("data-state") ?? null,
+      keyboard: document.documentElement.style.getPropertyValue("--keyboard-height") || null,
+    };
+    void api("/v0/client-reports/stray-frost", { method: "POST", body: JSON.stringify(body) }).catch(() => undefined);
+  };
   // In idle time: reading boxes lays the page out, which mid-move cost a frame.
   const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 0);
   setInterval(() => idle(() => {
@@ -35,6 +61,9 @@ export function watchStrayFrost() {
       // Below the screen is scrolled out of view (a long conversation), not parked under the row.
       if (r.top < floor || r.top >= innerHeight || r.width < 60 || r.height < 8) continue;
       if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      // Content that scrolls under the composer (a thread's or a room's messages, left mid-scroll) is not parked: its
+      // scroller goes on below it.
+      if (scrolledPast(element)) continue;
       const at = `${r.left},${r.top}`;
       now.set(element, at);
       if (last.get(element) !== at) continue;
@@ -44,6 +73,7 @@ export function watchStrayFrost() {
       note.style.cssText = "position:fixed;z-index:2147483647;top:env(safe-area-inset-top,0px);left:0;right:0;margin:0;padding:8px;background:#400;color:#fff;font:11px/1.35 monospace;white-space:pre-wrap;max-height:40vh;overflow:auto";
       note.textContent = `Stray frost (tap to close)\n${describe(element)}\n\n${note.textContent?.replace(/^Stray frost \(tap to close\)\n/, "") ?? ""}`;
       console.warn("[stray-frost]", describe(element), element);
+      report(element, describe(element));
     }
     last = now;
   }), 500);

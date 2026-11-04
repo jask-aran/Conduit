@@ -107,6 +107,7 @@ import { VoiceSettingsStore } from "./voice-settings.js";
 import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ContextStore } from "./context/context-store.js";
 import { registerContextRoutes } from "./server/routes/context.js";
+import { registerClientReportRoutes } from "./server/routes/client-reports.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
@@ -666,6 +667,7 @@ for (const adapter of backends.instances()) {
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerContextRoutes(app, { contextStore });
+registerClientReportRoutes(app, { dataRoot: config.dataRoot });
 // Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
 const uiControl = new UiControl({ runtimeHub });
 mcpRuntime.uiControl = uiControl;
