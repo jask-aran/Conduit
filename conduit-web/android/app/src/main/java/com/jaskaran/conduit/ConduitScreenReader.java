@@ -103,6 +103,39 @@ public final class ConduitScreenReader extends AccessibilityService {
         } finally { for (AccessibilityNodeInfo child : children) child.recycle(); }
     }
 
+    /**
+     * The screen as a frost backdrop: one screenshot, an eighth of its size, blurred (three box passes, close to a
+     * Gaussian of v2's 24px blur). Float's windows have no system blur on phones without cross-window blur (Samsung),
+     * so FloatFrost draws this behind itself instead, as backdrop-filter does in the app. Null when it cannot be had.
+     */
+    void backdrop(java.util.function.Consumer<Bitmap> done) {
+        if (Build.VERSION.SDK_INT < 30) { done.accept(null); return; }
+        try {
+            takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+                @Override public void onSuccess(ScreenshotResult result) {
+                    Bitmap small = null;
+                    try (HardwareBuffer buffer = result.getHardwareBuffer()) {
+                        Bitmap hardware = Bitmap.wrapHardwareBuffer(buffer, result.getColorSpace());
+                        if (hardware == null) { done.accept(null); return; }
+                        Bitmap full;
+                        try { full = hardware.copy(Bitmap.Config.ARGB_8888, false); } finally { hardware.recycle(); }
+                        if (full == null) { done.accept(null); return; }
+                        small = Bitmap.createScaledBitmap(full, Math.max(1, full.getWidth() / 8), Math.max(1, full.getHeight() / 8), true);
+                        if (small != full) full.recycle();
+                        float density = getResources().getDisplayMetrics().density;
+                        // 24 CSS px of blur at the device's density, an eighth of it here; box passes of a third each.
+                        FloatFrost.blur(small, Math.max(1, Math.round(24 * density / 8 / 3)));
+                    } catch (RuntimeException | OutOfMemoryError e) {
+                        if (small != null) small.recycle();
+                        small = null;
+                    }
+                    done.accept(small);
+                }
+                @Override public void onFailure(int errorCode) { done.accept(null); }
+            });
+        } catch (RuntimeException e) { done.accept(null); }
+    }
+
     void capture(String id) {
         if (Build.VERSION.SDK_INT < 30) return;
         try {

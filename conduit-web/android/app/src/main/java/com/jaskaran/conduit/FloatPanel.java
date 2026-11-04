@@ -132,6 +132,8 @@ public abstract class FloatPanel {
         if (Build.VERSION.SDK_INT >= 28) { decor.setOutlineAmbientShadowColor(0x1a000000); decor.setOutlineSpotShadowColor(0x1a000000); }
         dialog.setOnDismissListener(ignored -> {
             closed = true;
+            frost.setBackdrop(null);
+            if (backdrop != null) { backdrop.recycle(); backdrop = null; }
             stopInput();
             releaseBlur();
             onClosed();
@@ -160,8 +162,38 @@ public abstract class FloatPanel {
         }
     }
 
+    /**
+     * Shows the panel. With the screen reader on, it first takes the screen behind it as its frost backdrop (Float's
+     * windows get no system blur on phones without cross-window blur); the panel waits for it at most 400ms.
+     */
     public final void show(boolean right, int centerY) {
+        if (closed || shown || waiting) return;
+        ConduitScreenReader reader = ConduitScreenReader.instance;
+        boolean wantsBlur = !(Build.VERSION.SDK_INT >= 31 && manager.isCrossWindowBlurEnabled());
+        if (wantsBlur && reader != null && Build.VERSION.SDK_INT >= 30 && ConduitContext.screenReaderOn(context)) {
+            waiting = true;
+            final boolean[] done = { false };
+            Runnable reveal = () -> { if (!done[0]) { done[0] = true; waiting = false; reveal(right, centerY); } };
+            main.postDelayed(reveal, 400);
+            ConduitContext.afterFrames(() -> reader.backdrop(bitmap -> main.post(() -> {
+                if (done[0] || closed) { if (bitmap != null) bitmap.recycle(); return; }
+                backdrop = bitmap;
+                frost.setBackdrop(bitmap);
+                reveal.run();
+            })));
+            return;
+        }
+        reveal(right, centerY);
+    }
+
+    private boolean waiting;
+    private android.graphics.Bitmap backdrop;
+    private boolean rightEdge;
+    private int screenLeft, screenWidth;
+
+    private void reveal(boolean right, int centerY) {
         if (closed || shown) return;
+        rightEdge = right;
         this.centerY = centerY;
         Rect bounds;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -178,6 +210,8 @@ public abstract class FloatPanel {
         }
         screenTop = bounds.top;
         screenHeight = bounds.height();
+        screenLeft = bounds.left;
+        screenWidth = bounds.width();
         int width = Math.min(Math.max(1, bounds.width() - dp(32)), dp(width()));
         WindowManager.LayoutParams p = window.getAttributes();
         p.format = PixelFormat.TRANSLUCENT;
@@ -214,6 +248,8 @@ public abstract class FloatPanel {
         WindowManager.LayoutParams p = window.getAttributes();
         int y = Math.max(dp(16), Math.min(centerY - root.getHeight() / 2, screenHeight - keyboardInset - dp(16) - root.getHeight()));
         if (p.y != y) { p.y = y; window.setAttributes(p); }
+        // The window's top-left on screen, for the frost's backdrop.
+        frost.setOrigin(rightEdge ? screenLeft + screenWidth - p.x - p.width : screenLeft + p.x, screenTop + y);
     }
 
     /** The panel's width in dp: v2's phone menu cap (--measure-sm). */
@@ -338,6 +374,45 @@ public abstract class FloatPanel {
         view.setMinimumHeight(dp(40));
         view.setPadding(dp(8), dp(6), dp(8), dp(6));
         wash(view);
+    }
+
+    /**
+     * A menu row with its icon slot (.ui-icon, 16dp, muted at rest; a workspace's glyph keeps its colour), its label,
+     * and its meta at the end (.ui-meta: muted Paper Mono caption).
+     */
+    protected final LinearLayout iconRow(int icon, Integer colour, CharSequence name, String meta) {
+        android.widget.ImageView glyph = new android.widget.ImageView(context);
+        glyph.setImageResource(icon);
+        glyph.setImageTintList(android.content.res.ColorStateList.valueOf(colour == null ? SECONDARY : colour));
+        glyph.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        return leadRow(glyph, name, meta);
+    }
+
+    /** A workspace's monogram in its icon slot: its letters in its colour, bold, filling the 16dp square. */
+    protected final TextView monogram(String letters, int colour) {
+        TextView mark = text(letters, letters.length() > 1 ? 9 : 11, colour);
+        mark.setTypeface(face(700));
+        mark.setGravity(Gravity.CENTER);
+        return mark;
+    }
+
+    protected final LinearLayout leadRow(View lead, CharSequence name, String meta) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        rowStyle(row);
+        LinearLayout.LayoutParams slot = new LinearLayout.LayoutParams(dp(16), dp(16));
+        slot.setMarginEnd(dp(8));
+        row.addView(lead, slot);
+        row.addView(rowText(name), new LinearLayout.LayoutParams(0, -2, 1));
+        if (meta != null) {
+            TextView end = detail(meta);
+            end.setTypeface(paperMono);
+            end.setPadding(dp(8), 0, 0, 0);
+            row.addView(end);
+        }
+        return row;
     }
 
     /** An action as a menu row: its name in the row's voice. */

@@ -79,16 +79,32 @@ public final class ConduitHubClient {
         public final boolean isWorkspace;
         /** The device it lives on when that is not the hub's own machine; null on the hub. */
         public final String deviceName;
+        public final String appearanceMode;
+        public final String appearanceValue;
+        public final String appearanceColour;
 
         private Place(JSONObject value) throws Exception {
             id = value.getString("id");
             name = value.getString("name");
             isChat = "chat".equals(value.optString("slug"));
-            isWorkspace = "workspace".equals(value.optString("kind"));
+            // As the app's isWorkspace (place-picker.tsx): its kind, or a folder linked, created or cloned in.
+            String origin = value.optString("origin", "");
+            isWorkspace = "workspace".equals(value.optString("kind"))
+                || "linked".equals(origin) || "created".equals(origin) || "cloned".equals(origin);
             JSONObject device = value.optJSONObject("capabilities") == null ? null
                 : value.getJSONObject("capabilities").optJSONObject("device");
             deviceName = device == null || device.optBoolean("local", true) || device.optString("name", "").isEmpty()
                 ? null : device.getString("name");
+            JSONObject appearance = isWorkspace ? value.optJSONObject("workspaceAppearance") : null;
+            String marker = appearance == null ? "" : appearance.optString("value", "");
+            String monogram = FloatGlyphs.trim(marker);
+            boolean hasMonogram = appearance != null && "monogram".equals(appearance.optString("mode"))
+                && !monogram.isEmpty();
+            appearanceMode = !isWorkspace ? null : hasMonogram ? "monogram" : "icon";
+            appearanceValue = !isWorkspace ? null : hasMonogram
+                ? monogram.substring(0, monogram.offsetByCodePoints(0, Math.min(2, monogram.codePointCount(0, monogram.length()))))
+                : FloatGlyphs.iconId(marker);
+            appearanceColour = !isWorkspace ? null : FloatGlyphs.colourId(appearance == null ? null : appearance.optString("color", ""));
         }
     }
 

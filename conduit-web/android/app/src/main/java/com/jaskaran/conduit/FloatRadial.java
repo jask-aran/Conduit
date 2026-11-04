@@ -46,9 +46,9 @@ final class FloatRadial {
 
     private static final Slot[] SLOTS = Slot.values();
     /** dp: the targets' arc, the context pair's arc, a slot's diameter, how near a finger counts, the margin kept. */
-    private static final float INNER = 78, OUTER = 136, SLOT = 44, REACH = 30, MARGIN = 10;
+    private static final float INNER = 60, OUTER = 110, SLOT = 40, REACH = 26, MARGIN = 10;
     /** Degrees from the inward direction: the targets fan across ±TARGET_SPREAD, the context pair sits at ±OUTER_SPREAD. */
-    private static final float TARGET_SPREAD = 72, OUTER_SPREAD = 22;
+    private static final float TARGET_SPREAD = 72, OUTER_SPREAD = 18;
     /** v2's popover motion: rise in on --ease-arrive over --duration-gentle, drop out on --ease-leave over --duration-quick. */
     private static final long OPEN_MS = 250, CLOSE_MS = 150, STAGGER_MS = 22;
     private static final int ROW = 0xade8e9eb, FOREGROUND = 0xffe8e9eb;
@@ -86,7 +86,7 @@ final class FloatRadial {
             icon.setImageResource(slot.icon);
             icon.setImageTintList(ColorStateList.valueOf(ROW));
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int pad = dp(slot == Slot.JBOT ? 12 : 13);
+            int pad = dp(slot == Slot.JBOT ? 10 : 11);
             icon.setPadding(pad, pad, pad, pad);
             icons[i] = icon;
             slotFrost[i] = new FloatFrost(-1, dp(.8f));

@@ -288,8 +288,9 @@ public class ConduitFloatService extends Service {
         if (machine.state() != State.HANDLE) return;
         switch (slot) {
             case JBOT: case NEW_CHAT: setTarget(targetFor(slot)); beginRecording(); break;
-            case WORKSPACE: openPlaces(); break;
-            case RECENT: openRecent(); break;
+            // Gone at once, not faded: the panel may take the screen behind it as its frost.
+            case WORKSPACE: radial.hideNow(); openPlaces(); break;
+            case RECENT: radial.hideNow(); openRecent(); break;
             case SCREENSHOT: screenshot(); break;
             case CAMERA: photo(); break;
             default: break;
