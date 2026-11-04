@@ -46,6 +46,7 @@ import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.view.WindowInsets;
 import android.view.WindowMetrics;
 import android.webkit.CookieManager;
@@ -251,24 +252,26 @@ public class ConduitFloatService extends Service {
     }
 
     private int controlWidth() {
-        float width = 152;
-        if (state == State.HANDLE) width = 28;
-        else if (state == State.STOPPING || state == State.SENDING || state == State.SENT) width = 116;
+        // The pill: 4 + 36 (cancel) + 6 + 56 (level) + 6 + 36 (send) + 4. At rest, a 44dp bubble.
+        float width = PILL;
+        if (state == State.HANDLE) width = 44;
         else if (state == State.ERROR) {
             TextPaint text = new TextPaint();
-            text.setTextSize(dp(12));
-            width = Math.max(152, Math.min(304, 56 + text.measureText(errorText) / getResources().getDisplayMetrics().density));
+            text.setTextSize(dp(13));
+            width = Math.max(PILL, Math.min(304, 4 + 36 + 10 + 12 + text.measureText(errorText) / getResources().getDisplayMetrics().density));
         }
         return Math.min(availableWidth, dp(width));
     }
 
-    private int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? 52 : 44)); }
+    private int controlHeight() { return Math.min(availableHeight, dp(44)); }
+    /** The pill's width in dp, and how far Float rests from the screen's edge. */
+    private static final float PILL = 148, EDGE = 8;
 
     private void place() {
         if (snap != null) { snap.cancel(); snap = null; }
         updateBounds();
         position.gravity = Gravity.TOP | (prefs().getBoolean("right", true) ? Gravity.RIGHT : Gravity.LEFT);
-        position.x = 0;
+        position.x = dp(EDGE);
         position.y = Math.round(Math.max(0, availableHeight - controlHeight())
             * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
     }
@@ -277,15 +280,10 @@ public class ConduitFloatService extends Service {
         if (destroyed) return;
         boolean right = prefs().getBoolean("right", true);
         float r = frameHeight / 2f;
-        float edge = r * openness;
-        // Android's public background blur supports a uniform round-rect outline only.
-        // Keep the half-stadium and its transition on the fill fallback, without rectangular blur fringes.
-        boolean blurred = blurEnabled && openness == 1;
-        if (openness == 1) {
-            frost.setCornerRadii(null);
-            frost.setCornerRadius(r);
-        } else frost.setCornerRadii(right ? new float[] { r, r, edge, edge, edge, edge, r, r }
-            : new float[] { edge, edge, r, r, r, r, edge, edge });
+        // Always fully round (a bubble at rest, a pill open): the window's blur follows a uniform outline.
+        boolean blurred = blurEnabled;
+        frost.setCornerRadii(null);
+        frost.setCornerRadius(r);
         // v2's white fill over its dark core ground; a denser core when blur is unavailable.
         frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
             blurred ? 0xe63a3b3f : 0xfa3a3b3f));
@@ -330,8 +328,8 @@ public class ConduitFloatService extends Service {
             return;
         }
         morph = ValueAnimator.ofFloat(0, 1);
-        morph.setDuration(180);
-        morph.setInterpolator(new DecelerateInterpolator());
+        morph.setDuration(220);
+        morph.setInterpolator(new android.view.animation.PathInterpolator(.2f, 0f, 0f, 1f));
         morph.addUpdateListener(animation -> {
             float progress = (float) animation.getAnimatedValue();
             frameWidth = Math.round(startWidth + (targetWidth - startWidth) * progress);
@@ -632,35 +630,41 @@ public class ConduitFloatService extends Service {
             super(ConduitFloatService.this);
             setWillNotDraw(false);
             setClickable(true);
+            // Conduit's dark tokens: foreground oklch(.93) ~ #e8e9eb, background oklch(.186) ~ #141518, tint white 7%.
             cancelButton = new ImageButton(getContext());
-            cancelButton.setImageResource(R.drawable.ic_stat_conduit);
-            cancelButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-            cancelButton.setPadding(dp(6), dp(6), dp(6), dp(6));
+            cancelButton.setImageResource(R.drawable.float_cancel);
+            cancelButton.setImageTintList(ColorStateList.valueOf(0xbfe8e9eb));
+            cancelButton.setScaleType(ImageView.ScaleType.CENTER);
             cancelButton.setContentDescription("Cancel");
-            cancelButton.setBackground(roundButton(0x18ffffff, 0x1affffff));
+            cancelButton.setBackground(roundButton(0x12ffffff));
             cancelButton.setOnClickListener(view -> cancel());
             addView(cancelButton);
+            // Send, as the phone composer's Stop and send: the primary button, light with a dark arrow.
             stopButton = new ImageButton(getContext());
-            stopButton.setImageResource(R.drawable.float_stop);
-            stopButton.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-            stopButton.setPadding(dp(11), dp(11), dp(11), dp(11));
-            stopButton.setContentDescription("Stop recording and send");
-            stopButton.setBackground(roundButton(0xffe5484d, 0xff922e33));
-            stopButton.setOnClickListener(view -> stopRecording(false));
+            stopButton.setImageResource(R.drawable.float_send);
+            stopButton.setImageTintList(ColorStateList.valueOf(0xff141518));
+            stopButton.setScaleType(ImageView.ScaleType.CENTER);
+            stopButton.setContentDescription("Send to jbot");
+            stopButton.setBackground(roundButton(0xffe8e9eb));
+            stopButton.setOnClickListener(view -> { if (state == State.RECORDING) stopRecording(false); });
             addView(stopButton);
         }
 
-        private GradientDrawable roundButton(int fill, int stroke) {
+        private GradientDrawable roundButton(int fill) {
             GradientDrawable background = new GradientDrawable();
             background.setShape(GradientDrawable.OVAL);
             background.setColor(fill);
-            background.setStroke(dp(1), stroke);
             return background;
         }
 
         void buttons() {
+            boolean open = state == State.RECORDING || state == State.STOPPING || state == State.SENDING || state == State.SENT;
             cancelButton.setVisibility(state == State.HANDLE ? GONE : VISIBLE);
-            stopButton.setVisibility(state == State.RECORDING ? VISIBLE : GONE);
+            stopButton.setVisibility(open ? VISIBLE : GONE);
+            // Sending and sent show in the send button's place, so the pill keeps its size until it closes.
+            stopButton.setImageResource(state == State.SENT ? R.drawable.float_check : R.drawable.float_send);
+            stopButton.setImageAlpha(state == State.STOPPING || state == State.SENDING ? 0 : 255);
+            stopButton.setEnabled(state == State.RECORDING);
         }
 
         @Override protected void onMeasure(int width, int height) {
@@ -670,84 +674,74 @@ public class ConduitFloatService extends Service {
             setMeasuredDimension(frameWidth, frameHeight);
         }
 
+        /** How far the content has faded in: it waits until the pill is mostly open, and leaves first on close. */
+        private float contentAlpha() { return Math.max(0, Math.min(1, (openness - .45f) / .55f)); }
+
         @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-            // Keep expanded content at its final width while the window opens from its edge.
-            int width = state == State.HANDLE ? dp(152) : controlWidth();
+            // The content keeps its final place while the window grows out from the bubble's edge.
+            int width = state == State.HANDLE ? dp(PILL) : controlWidth();
             int offset = prefs().getBoolean("right", true) ? getWidth() - width : 0;
             int y = (getHeight() - dp(36)) / 2;
             cancelButton.layout(offset + dp(4), y, offset + dp(40), y + dp(36));
             stopButton.layout(offset + width - dp(40), y, offset + width - dp(4), y + dp(36));
-            float alpha = Math.max(0, (openness - .3f) / .7f);
-            for (View button : new View[] { cancelButton, stopButton }) {
-                button.setAlpha(alpha);
-                button.setScaleX(.86f + .14f * openness);
-                button.setScaleY(.86f + .14f * openness);
-                button.setTranslationX((prefs().getBoolean("right", true) ? 1 : -1) * dp(6) * (1 - openness));
-            }
+            for (View button : new View[] { cancelButton, stopButton }) button.setAlpha(contentAlpha());
         }
 
         @Override protected void onDraw(Canvas canvas) {
             float w = getWidth(), h = getHeight();
             boolean right = prefs().getBoolean("right", true);
-            float r = h / 2, edge = r * openness;
-            Path shape = new Path();
-            shape.addRoundRect(new RectF(dp(1.5f), dp(1.5f), w - dp(1.5f), h - dp(1.5f)),
-                right ? new float[] {r,r,edge,edge,edge,edge,r,r} : new float[] {edge,edge,r,r,r,r,edge,edge}, Path.Direction.CW);
-            canvas.save();
-            canvas.clipPath(shape);
-            // Inner top and bottom highlights share the frost's curved edge.
+            // The frost (fill, its one stroke, the blur) is the window's background; this draws only what sits on it.
+            // A soft top highlight, inside the stroke, as v2's inset 0 1px 0 white 50%.
+            float r = h / 2, inset = dp(1);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(1));
-            paint.setColor(0x80ffffff);
-            canvas.save();
-            canvas.clipRect(0, 0, w, h / 2);
-            canvas.drawPath(shape, paint);
-            canvas.restore();
-            paint.setColor(0x1affffff);
-            canvas.clipRect(0, h / 2, w, h);
-            canvas.drawPath(shape, paint);
-            canvas.restore();
+            paint.setShader(new android.graphics.LinearGradient(0, inset, 0, h / 2, 0x59ffffff, 0x00ffffff, android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(inset + dp(.5f), inset + dp(.5f), w - inset - dp(.5f), h - inset - dp(.5f), r - inset, r - inset, paint);
+            paint.setShader(null);
             paint.setStyle(Paint.Style.FILL);
+            // At rest: the Conduit mark in the bubble's middle, fading as it opens.
             if (openness < 1) {
-                mark.setAlpha(Math.round(255 * (1 - openness)));
-                int x = Math.round(right ? w - dp(28) : 0);
-                mark.setBounds(x + dp(4), Math.round(h / 2) - dp(10), x + dp(24), Math.round(h / 2) + dp(10));
+                mark.setAlpha(Math.round(235 * (1 - Math.min(1, openness / .45f))));
+                float cx = right ? w - h / 2 : h / 2;
+                mark.setBounds(Math.round(cx - dp(10)), Math.round(h / 2 - dp(10)), Math.round(cx + dp(10)), Math.round(h / 2 + dp(10)));
                 mark.draw(canvas);
             }
             if (state == State.HANDLE) return;
-            canvas.save();
             int width = controlWidth();
             float offset = right ? w - width : 0;
-            canvas.translate(offset + (right ? 1 : -1) * dp(6) * (1 - openness), 0);
-            canvas.scale(.86f + .14f * openness, .86f + .14f * openness, right ? width : 0, h / 2);
-            int alpha = Math.round(255 * Math.max(0, (openness - .3f) / .7f));
-            paint.setColor(Color.argb(alpha, 244, 244, 246));
+            int alpha = Math.round(255 * contentAlpha());
+            // The middle: between cancel (ends at 40) and send (starts at width - 40), with 6dp clear on each side.
+            float from = offset + dp(46), to = offset + width - dp(46), mid = (from + to) / 2;
             if (state == State.RECORDING) {
-                for (int i = 0; i < 9; i++) {
-                    float weight = 1 - Math.abs(i - 4) / 5f;
-                    float bar = dp(3) + dp(20) * level * weight;
-                    float x = dp(44 + i * 8);
-                    canvas.drawRoundRect(x, (h - bar) / 2, x + dp(3), (h + bar) / 2, dp(1.5f), dp(1.5f), paint);
+                paint.setColor(Color.argb(alpha, 232, 233, 235));
+                int bars = 7;
+                float bar = dp(3), gap = dp(4), span = bars * bar + (bars - 1) * gap, x = mid - span / 2;
+                for (int i = 0; i < bars; i++) {
+                    float weight = 1 - Math.abs(i - (bars - 1) / 2f) / ((bars + 1) / 2f);
+                    float tall = Math.min(h - dp(20), dp(4) + dp(18) * level * (.35f + .65f * weight));
+                    canvas.drawRoundRect(x, (h - tall) / 2, x + bar, (h + tall) / 2, bar / 2, bar / 2, paint);
+                    x += bar + gap;
                 }
             } else if (state == State.STOPPING || state == State.SENDING) {
+                // A spinner in the send button's place (its arrow is hidden), dark on the light button.
+                paint.setColor(Color.argb(alpha, 20, 21, 24));
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(2));
                 paint.setStrokeCap(Paint.Cap.ROUND);
-                float x = dp(76);
-                canvas.drawArc(x - dp(6), h / 2 - dp(6), x + dp(6), h / 2 + dp(6),
-                    (SystemClock.uptimeMillis() % 900) * .4f, 250, false, paint);
+                float cx = offset + width - dp(22);
+                canvas.drawArc(cx - dp(7), h / 2 - dp(7), cx + dp(7), h / 2 + dp(7), (SystemClock.uptimeMillis() % 900) * .4f, 250, false, paint);
                 paint.setStrokeCap(Paint.Cap.BUTT);
                 paint.setStyle(Paint.Style.FILL);
+                // The level row at rest, quiet, so the middle does not jump empty.
+                paint.setColor(Color.argb(Math.round(alpha * .45f), 232, 233, 235));
+                for (int i = 0; i < 7; i++) { float x = mid - dp(23.5f) + i * dp(7); canvas.drawRoundRect(x, h / 2 - dp(2), x + dp(3), h / 2 + dp(2), dp(1.5f), dp(1.5f), paint); }
                 postInvalidateOnAnimation();
-            } else {
-                text.setTextSize(dp(12));
-                text.setColor(Color.argb(alpha, 244, 244, 246));
-                CharSequence message = state == State.SENT ? "Sent" : TextUtils.ellipsize(errorText, text,
-                    Math.max(0, width - dp(56)), TextUtils.TruncateAt.END);
-                float x = state == State.SENT ? dp(76) - text.measureText("Sent") / 2 : dp(44);
-                canvas.drawText(message.toString(), x, h / 2 - (text.ascent() + text.descent()) / 2, text);
+            } else if (state == State.ERROR) {
+                text.setTextSize(dp(13));
+                text.setColor(Color.argb(alpha, 232, 233, 235));
+                CharSequence message = TextUtils.ellipsize(errorText, text, Math.max(0, width - dp(4 + 36 + 10 + 12)), TextUtils.TruncateAt.END);
+                canvas.drawText(message.toString(), offset + dp(50), h / 2 - (text.ascent() + text.descent()) / 2, text);
             }
-            canvas.restore();
         }
 
         @Override public void onInitializeAccessibilityNodeInfo(android.view.accessibility.AccessibilityNodeInfo info) {
@@ -777,7 +771,7 @@ public class ConduitFloatService extends Service {
             if (right) position.x = Math.max(0, availableWidth - getWidth() - position.x);
             position.gravity = Gravity.TOP | (right ? Gravity.RIGHT : Gravity.LEFT);
             updateFrost();
-            snap = ValueAnimator.ofInt(position.x, 0);
+            snap = ValueAnimator.ofInt(position.x, dp(EDGE));
             snap.setDuration(180);
             snap.setInterpolator(new DecelerateInterpolator());
             snap.addUpdateListener(animation -> {
