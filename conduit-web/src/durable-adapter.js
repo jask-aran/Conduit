@@ -644,7 +644,11 @@ export class DurableAdapter extends EventEmitter {
     const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
     const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
     const settings = await this.runtime.agentFor(templateId, { roaming, fixedVars: noticeState?.prompt });
-    if (templateId === "agent" && stored?.instructions !== undefined) settings.instructions = stored.instructions;
+    // jbot's prompt is assembled with the variables fixed at its thread's start (noticeState.prompt), so it changes only
+    // when its documents do (the template shipped, the person's Prompts): then the thread takes the new one on its next
+    // configure (a restart, a refresh), one cache miss for a real change. A thread from before fixed variables keeps the
+    // instructions it stored, since assembling them now would carry this moment's time and miss the cache every time.
+    if (templateId === "agent" && stored?.instructions !== undefined && !noticeState?.prompt) settings.instructions = stored.instructions;
     return settings;
   }
 
