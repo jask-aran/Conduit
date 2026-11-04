@@ -271,7 +271,10 @@ public class ConduitFloatService extends Service {
     private static final float SENDING = 40;
     private long sentAt;
     /** The pill's width in dp, and how far Float rests from the screen's edge. */
-    private static final float PILL = 148, EDGE = 3;
+    private static final float PILL = 148, EDGE = 6;
+    /** At rest it dims well back, out of the way; a touch brings it up while held, and opening brings it up with the pill. */
+    private static final float REST_ALPHA = .42f;
+    private boolean touched;
     /** At rest: a small upright capsule, close to the edge. */
     private static final float HANDLE_W = 32, HANDLE_H = 40;
 
@@ -296,13 +299,16 @@ public class ConduitFloatService extends Service {
         frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
             blurred ? 0xe63a3b3f : 0xfa3a3b3f));
         frost.setStroke(dp(1), 0x4dffffff);
-        if (Build.VERSION.SDK_INT >= 31) overlayWindow.setBackgroundBlurRadius(blurred ? dp(24) : 0);
+        if (Build.VERSION.SDK_INT >= 31) overlayWindow.setBackgroundBlurRadius(blurred ? Math.round(dp(24) * openness) : 0);
         control.invalidate();
     }
 
     private void updateFrame() {
         position.width = frameWidth;
         position.height = frameHeight;
+        View decor = overlayWindow.getDecorView();
+        decor.animate().cancel();
+        decor.setAlpha(touched ? 1 : REST_ALPHA + (1 - REST_ALPHA) * openness);
         overlayWindow.setAttributes(position);
         updateFrost();
         control.requestLayout();
@@ -318,6 +324,7 @@ public class ConduitFloatService extends Service {
         if (morph != null) { morph.cancel(); morph = null; }
         state = next;
         level = 0;
+        if (next != State.HANDLE) touched = false;
         control.buttons();
         control.setClickable(next == State.HANDLE || next == State.ERROR);
         control.setContentDescription(next == State.HANDLE ? "Float. Talk to jbot. Drag to move."
@@ -796,7 +803,7 @@ public class ConduitFloatService extends Service {
             if (openness < 1) {
                 mark.setAlpha(Math.round(235 * (1 - Math.min(1, openness / .45f))));
                 float cx = right ? w - dp(HANDLE_W) / 2f : dp(HANDLE_W) / 2f;
-                mark.setBounds(Math.round(cx - dp(7)), Math.round(h / 2 - dp(7)), Math.round(cx + dp(7)), Math.round(h / 2 + dp(7)));
+                mark.setBounds(Math.round(cx - dp(12)), Math.round(h / 2 - dp(12)), Math.round(cx + dp(12)), Math.round(h / 2 + dp(12)));
                 mark.draw(canvas);
             }
             if (state == State.HANDLE) return;
@@ -877,6 +884,14 @@ public class ConduitFloatService extends Service {
             return true;
         }
 
+        /** Held at rest it comes up to full; let go it settles back (opening takes over through updateFrame). */
+        private void lift(boolean held) {
+            if (touched == held || (held && state != State.HANDLE)) return;
+            touched = held;
+            if (state != State.HANDLE || morph != null) return;
+            overlayWindow.getDecorView().animate().alpha(held ? 1 : REST_ALPHA).setDuration(held ? 90 : 260).start();
+        }
+
         private void snapToEdge() {
             boolean right = position.x + getWidth() / 2f > availableWidth / 2f;
             prefs().edit().putBoolean("right", right)
@@ -901,6 +916,7 @@ public class ConduitFloatService extends Service {
                 initialX = (position.gravity & Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.RIGHT
                     ? availableWidth - getWidth() - position.x : position.x;
                 dragging = false; moved = false;
+                lift(true);
             } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
                 float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
                 if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop()) moved = true;
@@ -927,11 +943,13 @@ public class ConduitFloatService extends Service {
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
+                    lift(false);
                     if (dragging) snapToEdge();
                     else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) cancel();
                     else if (!moved) performClick();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
+                    lift(false);
                     if (dragging) snapToEdge();
                     dragging = false;
                     return true;
