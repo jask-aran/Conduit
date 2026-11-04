@@ -83,9 +83,25 @@ final class FloatView extends FrameLayout {
         void onSend();
         void onRetry();
         void onDragEnded();
+        /** Held still at rest for HOLD_MS: a hold begins (it records; the radial opens around the finger). */
+        void onHoldStart();
+        /** The held finger moved, in screen pixels. */
+        void onHoldMove(float rawX, float rawY);
+        /** The hold let go; cancelled when the gesture was taken away (the system cancelled it). */
+        void onHoldEnd(boolean cancelled);
     }
+    /** How long a still press at rest waits before it is a hold rather than a tap. */
+    private static final long HOLD_MS = 250;
+    private boolean holding;
+    private final Runnable holdStart = () -> {
+        if (this.state != State.HANDLE || this.moved || this.holding) return;
+        holding = true;
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        listenerHoldStart();
+    };
     private final FloatWindow window;
     private final Listener listener;
+    private void listenerHoldStart() { listener.onHoldStart(); }
     private State state = State.HANDLE;
     private String errorText = "Couldn't send — open Conduit";
     private float level;
@@ -239,7 +255,8 @@ final class FloatView extends FrameLayout {
             clip.addRoundRect(0, 0, w, h, rr, rr, Path.Direction.CW);
             canvas.save();
             canvas.clipPath(clip);
-            auraPaint.setAlpha(Math.round(255 * auraShown * Math.min(1, window.openness)));
+            // A hold listens at the handle's size, so its Aura shows without the pill's openness.
+            auraPaint.setAlpha(Math.round(255 * auraShown * Math.min(1, window.held() ? 1 : window.openness)));
             canvas.drawBitmap(aura, null, auraBounds, auraPaint);
             int sheen = Math.round(26 * auraShown);
             if (sheen != sheenBucket) {
@@ -354,12 +371,17 @@ final class FloatView extends FrameLayout {
             window.startDrag();
             downX = event.getRawX(); downY = event.getRawY(); initialY = window.top();
             initialX = window.left();
-            dragging = false; moved = false;
+            dragging = false; moved = false; holding = false;
             window.lift(true);
+            removeCallbacks(holdStart);
+            if (state == State.HANDLE) postDelayed(holdStart, HOLD_MS);
         } else if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
             float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
-            if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop()) moved = true;
-            if (moved && state == State.HANDLE) dragging = true;
+            if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop() && !holding) {
+                moved = true;
+                removeCallbacks(holdStart);
+            }
+            if (moved && state == State.HANDLE && !holding) dragging = true;
             if (dragging || distance > dp(60)) return true;
         }
         return super.onInterceptTouchEvent(event);
@@ -369,9 +391,11 @@ final class FloatView extends FrameLayout {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: return true;
             case MotionEvent.ACTION_MOVE:
+                if (holding) { listener.onHoldMove(event.getRawX(), event.getRawY()); return true; }
                 float distance = (float) Math.hypot(event.getRawX() - downX, event.getRawY() - downY);
                 if (distance > ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
                     moved = true;
+                    removeCallbacks(holdStart);
                     if (state == State.HANDLE) dragging = true;
                 }
                 if (dragging) {
@@ -380,13 +404,17 @@ final class FloatView extends FrameLayout {
                 }
                 return true;
             case MotionEvent.ACTION_UP:
+                removeCallbacks(holdStart);
                 window.lift(false);
+                if (holding) { holding = false; listener.onHoldEnd(false); return true; }
                 if (dragging) listener.onDragEnded();
                 else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) listener.onCancel();
                 else if (!moved) performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                removeCallbacks(holdStart);
                 window.lift(false);
+                if (holding) { holding = false; listener.onHoldEnd(true); return true; }
                 if (dragging) listener.onDragEnded();
                 dragging = false;
                 return true;

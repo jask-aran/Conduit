@@ -151,7 +151,7 @@ final class FloatWindow {
     int controlWidth() {
         // The pill: 4 + 36 (cancel) + 6 + 56 (level) + 6 + 36 (send) + 4. At rest, a 44dp bubble.
         float width = PILL;
-        if (state == State.HANDLE) width = HANDLE_W;
+        if (state == State.HANDLE || held) width = HANDLE_W;
         else if (sending()) width = SENDING;
         else if (state == State.ERROR) {
             widthText.setTextSize(dp(13));
@@ -160,7 +160,7 @@ final class FloatWindow {
         return Math.min(availableWidth, dp(width));
     }
 
-    int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? HANDLE_H : sending() ? SENDING : 44)); }
+    int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE || held ? HANDLE_H : sending() ? SENDING : 44)); }
     /** Sent off: the pill gathers into a small round bubble, a spinner and then a tick, and goes back to rest. */
     private boolean sending() { return state == State.STOPPING || state == State.SENDING || state == State.SENT; }
     private static final float SENDING = 40;
@@ -202,7 +202,7 @@ final class FloatWindow {
         position.height = frameHeight;
         View decor = overlayWindow.getDecorView();
         decor.animate().cancel();
-        decor.setAlpha(touched ? 1 : REST_ALPHA + (1 - REST_ALPHA) * openness);
+        decor.setAlpha(touched || held ? 1 : REST_ALPHA + (1 - REST_ALPHA) * openness);
         overlayWindow.setAttributes(position);
         updateFrost();
         control.requestLayout();
@@ -213,7 +213,7 @@ final class FloatWindow {
         if (morph != null) { morph.cancel(); morph = null; }
         state = next;
         this.errorText = errorText;
-        if (next != State.HANDLE) touched = false;
+        if (next != State.HANDLE && !held) touched = false;
         control.show(next, errorText, sentAt);
         listener.onVisibilityChanged();
         int startY = position.y;
@@ -222,7 +222,7 @@ final class FloatWindow {
         listener.onPlacementChanged();
         int startWidth = frameWidth, startHeight = frameHeight;
         int targetWidth = controlWidth(), targetHeight = controlHeight();
-        float startOpen = openness, targetOpen = next == State.HANDLE ? 0 : 1;
+        float startOpen = openness, targetOpen = next == State.HANDLE || held ? 0 : 1;
         if (startWidth == targetWidth && startHeight == targetHeight) {
             openness = targetOpen;
             updateFrame();
@@ -266,6 +266,40 @@ final class FloatWindow {
         });
         snap.start();
     }
+
+    /**
+     * Held: a hold is recording with the finger still down. Float keeps the handle's size (the pill would cover the
+     * radial's slots) at full strength, its Aura showing it listens; letting go of the hold opens the pill or sends.
+     */
+    private boolean held;
+    boolean held() { return held; }
+    void setHeld(boolean next) {
+        if (held == next) return;
+        held = next;
+        if (state != State.HANDLE) listener.onRefresh();
+    }
+
+    /** The handle's centre on screen, in pixels: where the radial opens. */
+    float[] handleCentre() {
+        int[] at = new int[2];
+        control.getLocationOnScreen(at);
+        boolean right = prefs().getBoolean("right", true);
+        float half = dp(HANDLE_W) / 2f;
+        return new float[] { at[0] + (right ? control.getWidth() - half : half), at[1] + control.getHeight() / 2f };
+    }
+
+    /** The whole screen in pixels (the radial's window covers all of it). */
+    int[] screenSize() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            Rect bounds = windows.getCurrentWindowMetrics().getBounds();
+            return new int[] { bounds.width(), bounds.height() };
+        }
+        android.util.DisplayMetrics metrics = new android.util.DisplayMetrics();
+        windows.getDefaultDisplay().getRealMetrics(metrics);
+        return new int[] { metrics.widthPixels, metrics.heightPixels };
+    }
+
+    boolean right() { return prefs().getBoolean("right", true); }
 
     void startDrag() { if (snap != null) { snap.cancel(); snap = null; } }
 

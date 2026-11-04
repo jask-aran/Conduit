@@ -48,6 +48,9 @@ public class ConduitFloatService extends Service {
     private volatile boolean destroyed;
     private volatile int generation;
     private long sentAt;
+    private FloatRadial radial;
+    /** Where the message being recorded goes: the radial's choice, or the hold's default until a slot locks it. */
+    private FloatRadial.Slot target = FloatRadial.Slot.JBOT;
 
     static void setAppForeground(boolean foreground) {
         appForeground = foreground;
@@ -125,7 +128,10 @@ public class ConduitFloatService extends Service {
                     @Override public void onPlacementChanged() { updateCaption(); }
                 });
                 window.create(machine.state(), new FloatView.Listener() {
-                    @Override public void onTap() { beginRecording(); }
+                    @Override public void onTap() { openRadial(false); }
+                    @Override public void onHoldStart() { holdStarted(); }
+                    @Override public void onHoldMove(float rawX, float rawY) { if (radial != null) radial.track(rawX, rawY); }
+                    @Override public void onHoldEnd(boolean cancelled) { holdEnded(cancelled); }
                     @Override public void onCancel() { cancel(); }
                     @Override public void onSend() { stopRecording(false); }
                     @Override public void onRetry() { retry(); }
@@ -185,6 +191,64 @@ public class ConduitFloatService extends Service {
     private void openApp(boolean record) {
         startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("conduit.float.record", record));
+    }
+
+    /** What a hold talks to before a slot is chosen: Settings' choice, jbot unless it says a new chat. */
+    private FloatRadial.Slot holdTarget() {
+        return "chat".equals(prefs().getString("holdTarget", "jbot")) ? FloatRadial.Slot.NEW_CHAT : FloatRadial.Slot.JBOT;
+    }
+
+    private FloatRadial radial() {
+        if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
+            @Override public void chosen(FloatRadial.Slot slot) { radialChosen(slot); }
+            @Override public void dismissed() {}
+        });
+        return radial;
+    }
+
+    private void openRadial(boolean hold) {
+        float[] centre = window.handleCentre();
+        int[] screen = window.screenSize();
+        radial().open(window.right(), centre[0], centre[1], screen[0], screen[1], hold);
+    }
+
+    /** A tap's radial: a target starts recording to it. Workspace, Recent and the context slots come with their panels. */
+    private void radialChosen(FloatRadial.Slot slot) {
+        if (machine.state() != State.HANDLE) return;
+        switch (slot) {
+            case JBOT: case NEW_CHAT: target = slot; beginRecording(); break;
+            case WORKSPACE: case RECENT: openApp(false); break;
+            default: break;
+        }
+    }
+
+    /** A hold records at once, to the hold's target, with the radial around the finger to lock it elsewhere. */
+    private void holdStarted() {
+        if (machine.state() != State.HANDLE) return;
+        target = holdTarget();
+        window.setHeld(true);
+        beginRecording();
+        if (machine.state() == State.RECORDING) openRadial(true);
+        else window.setHeld(false);
+    }
+
+    /**
+     * The hold let go. On Cancel (or taken away): discarded. On a target: locked to it, hands free, the pill open with
+     * Send. Anywhere else: sent to the hold's target.
+     */
+    private void holdEnded(boolean cancelled) {
+        FloatRadial.Slot slot = radial == null ? null : radial.release();
+        if (machine.state() != State.RECORDING) { window.setHeld(false); return; }
+        if (cancelled || slot == FloatRadial.Slot.CANCEL) {
+            window.setHeld(false);
+            cancel();
+        } else if (slot != null && slot.target()) {
+            target = slot;
+            window.setHeld(false);
+        } else {
+            window.setHeld(false);
+            stopRecording(false);
+        }
     }
 
     private void beginRecording() {
@@ -275,6 +339,7 @@ public class ConduitFloatService extends Service {
         if (live != null) { live.close(); live = null; }
         if (caption != null) caption.destroy();
         if (active == this) active = null;
+        if (radial != null) radial.destroy();
         if (window != null) window.stopAnimations();
         generation++;
         main.removeCallbacksAndMessages(null);

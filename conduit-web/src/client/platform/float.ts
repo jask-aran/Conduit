@@ -10,7 +10,10 @@ export interface FloatStatus {
   enabled: boolean;
   overlayPermission: boolean;
   micPermission: boolean;
+  /** What a hold on Float talks to before a slot is chosen. */
+  holdTarget: FloatHoldTarget;
 }
+export type FloatHoldTarget = "jbot" | "chat";
 
 const nativeFloat = registerPlugin<{
   start(options: FloatAudio & { origin: string; tokenOrigin: string }): Promise<FloatStatus>;
@@ -18,6 +21,7 @@ const nativeFloat = registerPlugin<{
   status(): Promise<FloatStatus>;
   setOrigin(options: { origin: string; tokenOrigin: string }): Promise<void>;
   openOverlaySettings(): Promise<FloatStatus>;
+  setHoldTarget(options: { holdTarget: FloatHoldTarget }): Promise<FloatStatus>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -38,6 +42,7 @@ export const conduitFloat = {
   stop: () => enqueue(() => nativeFloat.stop()),
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
+  setHoldTarget: (holdTarget: FloatHoldTarget) => enqueue(() => nativeFloat.setHoldTarget({ holdTarget })),
 };
 
 // This module lives for the page's lifetime, including when Settings is closed.

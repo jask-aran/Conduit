@@ -57,10 +57,19 @@ public class ConduitFloatPlugin extends Plugin {
     private JSObject view() {
         return new JSObject().put("enabled", preferences(getContext()).getBoolean("enabled", false))
             .put("overlayPermission", Settings.canDrawOverlays(getContext()))
-            .put("micPermission", microphoneGranted(getContext()));
+            .put("micPermission", microphoneGranted(getContext()))
+            .put("holdTarget", "chat".equals(preferences(getContext()).getString("holdTarget", "jbot")) ? "chat" : "jbot");
     }
 
     @PluginMethod public void status(PluginCall call) { call.resolve(view()); }
+
+    /** What a hold on Float talks to before a slot is chosen: "jbot", or "chat" for a new chat with no project. */
+    @PluginMethod public void setHoldTarget(PluginCall call) {
+        String target = call.getString("holdTarget", "jbot");
+        if (!"jbot".equals(target) && !"chat".equals(target)) { call.reject("Invalid hold target"); return; }
+        preferences(getContext()).edit().putString("holdTarget", target).apply();
+        call.resolve(view());
+    }
 
     @PluginMethod public void start(PluginCall call) {
         getActivity().runOnUiThread(() -> {

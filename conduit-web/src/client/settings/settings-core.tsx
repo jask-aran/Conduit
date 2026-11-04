@@ -70,7 +70,7 @@ import { touchOnly } from "@/components/ui/layout";
 import { COMPOSER_KINDS, composerKind, saveComposerKind } from "../platform/native-composer";
 import { HAPTIC_STRENGTHS, hapticStrength, saveHapticStrength, type HapticStrength } from "@/components/ui/haptics";
 import { uiPreferenceSaves } from "../preferences/ui-preferences";
-import { conduitFloat, type FloatStatus } from "../platform/float";
+import { conduitFloat, type FloatHoldTarget, type FloatStatus } from "../platform/float";
 
 const sectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
@@ -486,6 +486,11 @@ export function Settings(props: {
     try { setFloatStatus(await (enabled ? conduitFloat.start(voiceDraft()) : conduitFloat.stop())); }
     catch (error) { floatFailure(error); refreshFloat(); }
     finally { setFloatBusy(false); }
+  };
+  const changeFloatHoldTarget = async (holdTarget: FloatHoldTarget) => {
+    setFloatError("");
+    try { setFloatStatus(await conduitFloat.setHoldTarget(holdTarget)); }
+    catch (error) { floatFailure(error); }
   };
   const allowFloatOverlay = async () => {
     setFloatBusy(true);
@@ -1600,12 +1605,20 @@ export function Settings(props: {
 
                 <Group title="Input">
                   <Show when={installedClientKind === "android"}>
-                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to talk to jbot.">
+                    <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send, or hold it to talk.">
                       <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
                         <Button variant="ghost" size="sm" disabled={floatBusy()} onClick={() => void allowFloatOverlay()}>Allow</Button>
                       </Show>
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
+                    <Show when={floatStatus()?.enabled}>
+                      <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say. Slide onto another target while holding to send it there instead.">
+                        <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHoldTarget(holdTarget)} options={[
+                          { value: "jbot", label: "jbot" },
+                          { value: "chat", label: "New chat" },
+                        ]} />
+                      </SettingLine>
+                    </Show>
                     <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
                   </Show>
                   <Show when={isPhoneVoice()}>
