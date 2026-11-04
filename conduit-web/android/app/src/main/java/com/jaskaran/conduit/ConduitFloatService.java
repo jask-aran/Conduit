@@ -258,6 +258,23 @@ public class ConduitFloatService extends Service {
         window.setGathered(gathered.size());
     }
 
+    /** The gathered captures as files to send, in order: each picture, then its screen text when there is some. */
+    private java.util.List<File> gatheredFiles() {
+        java.util.List<File> files = new java.util.ArrayList<>();
+        for (ConduitContext.Result result : gathered) {
+            files.add(result.image);
+            if (result.screenText == null || result.screenText.isEmpty()) continue;
+            File words = new File(result.image.getParentFile(), result.image.getName().replace(".jpg", "") + ".txt");
+            if (!words.exists()) {
+                String head = result.appLabel == null ? "" : "On screen in " + result.appLabel + ":\n\n";
+                try { java.nio.file.Files.write(words.toPath(), (head + result.screenText).getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+                catch (java.io.IOException failed) { continue; }
+            }
+            files.add(words);
+        }
+        return files;
+    }
+
     /** The gathered captures are spent (sent) or let go (cancelled). */
     private void dropGathered() {
         gathered.clear();
@@ -300,10 +317,16 @@ public class ConduitFloatService extends Service {
         recorder.begin(generation + 1);
     }
 
+    /** The radial's slot as a send target. Workspace and Recent bring their own once their panels choose one. */
+    private FloatTarget targetFor(FloatRadial.Slot slot) {
+        return slot == FloatRadial.Slot.NEW_CHAT ? FloatTarget.newChat(null, "New chat") : FloatTarget.jbot();
+    }
+
     private void recordingStarted(FloatRecorder.Capture next) {
         generation = next.generation;
         capture = next;
         prefs().edit().putBoolean("recordingComplete", false)
+            .putString("recordingTarget", targetFor(target).toJson())
             .putBoolean("recordingRetried", false).putString("recordingId", java.util.UUID.randomUUID().toString())
             .putString("recordingOrigin", prefs().getString("origin", ""))
             .putString("recordingTokenOrigin", prefs().getString("tokenOrigin", "")).commit();
@@ -341,7 +364,8 @@ public class ConduitFloatService extends Service {
     private void discard() {
         if (live != null) { live.close(); live = null; }
         recording.delete();
-        prefs().edit().remove("recordingComplete").remove("recordingOrigin").remove("recordingTokenOrigin").remove("recordingRetried").remove("recordingId").apply();
+        try { FloatSender.clearDelivery(this); } catch (IllegalStateException ignored) {}
+        prefs().edit().remove("recordingTarget").remove("recordingComplete").remove("recordingOrigin").remove("recordingTokenOrigin").remove("recordingRetried").remove("recordingId").apply();
     }
 
     private void cancel() {
@@ -363,13 +387,15 @@ public class ConduitFloatService extends Service {
         String origin = prefs().getString("recordingOrigin", "");
         String tokenOrigin = prefs().getString("recordingTokenOrigin", origin);
         String recordingId = prefs().getString("recordingId", "");
-        sender.send(recording, origin, tokenOrigin, recordingId, () -> !destroyed && sending == generation,
+        FloatTarget to = FloatTarget.fromJson(prefs().getString("recordingTarget", null));
+        sender.send(to, recording, null, gatheredFiles(), recordingId, origin, tokenOrigin, () -> !destroyed && sending == generation,
             new FloatSender.Listener() {
                 @Override public void onFailureText(String text) { errorText = text; }
-                @Override public void onComplete(boolean sent) {
+                @Override public void onComplete(boolean sent, String chatIdOrNull) {
                     if (destroyed || sending != generation) return;
                     if (sent) {
                         discard();
+                        dropGathered();
                         sentAt = SystemClock.uptimeMillis();
                         show(State.SENT);
                         main.postDelayed(() -> { if (!destroyed && sending == generation) show(State.HANDLE); }, 1000);
