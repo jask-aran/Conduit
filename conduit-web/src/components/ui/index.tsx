@@ -44,6 +44,7 @@ export * from "./tour";
 export * from "./pill";
 export * from "./viewfinder";
 export * from "./phone-composer";
+export * from "./native-phone-composer";
 export * from "./composer";
 export * from "./rider";
 export * from "./transcript";

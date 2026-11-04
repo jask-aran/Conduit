@@ -14,6 +14,7 @@ import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -36,16 +37,23 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
-/** A native copy of the phone's measured field and pills. Only inset progress moves this overlay. */
+/** The library PhoneComposer's described parts. Only inset progress moves the overlay itself. */
 @CapacitorPlugin(name = "ConduitComposer")
 public class ConduitComposerPlugin extends Plugin {
-    private FrameLayout root, controls, field, edits;
+    private FrameLayout root, field;
     private EditText input;
-    private float scale, density, restBottom, fieldGap, fieldX, fieldWidth, rowHeight, minHeight, maxHeight, iconSize;
-    private int navBottom, imeBottom, fieldHeight;
+    private float scale, density, restBottom, fieldWidth, minHeight, iconSize, offsetX;
+    private int navBottom, imeBottom;
     private boolean changing, animating, closing, returning, seenIme;
-    private JSONObject press;
+    private JSONObject haptics;
+    private ConduitMoves moves;
+    private final Map<String, ConduitMoves.Part> parts = new LinkedHashMap<>();
+    private boolean webFocusable, webTouchFocusable, closingSent;
 
     @PluginMethod public void begin(PluginCall call) {
         getActivity().runOnUiThread(() -> {
@@ -66,28 +74,37 @@ public class ConduitComposerPlugin extends Plugin {
                 web.getLocationInWindow(webOrigin); content.getLocationInWindow(contentOrigin);
                 float viewportBottom = webOrigin[1] - contentOrigin[1] + (float) viewport.optDouble("height") * scale;
                 restBottom = content.getHeight() - viewportBottom + ((float) viewport.optDouble("height") - (float) row.optDouble("y") - (float) row.optDouble("height")) * scale;
-                rowHeight = (float) row.optDouble("height") * scale;
-                fieldX = webOrigin[0] - contentOrigin[0] + (float) box.optDouble("x") * scale;
                 fieldWidth = (float) box.optDouble("width") * scale;
-                fieldGap = ((float) row.optDouble("y") - (float) box.optDouble("y") - (float) box.optDouble("height")) * scale;
+                offsetX = webOrigin[0] - contentOrigin[0];
                 minHeight = (float) type.optDouble("minHeight", 44) * scale;
-                maxHeight = (float) type.optDouble("maxHeight", 192) * scale;
                 iconSize = (float) type.optDouble("iconSize", 18) * scale;
-                press = call.getObject("press");
+                haptics = call.getObject("haptics");
+                JSObject spec = call.getObject("motion");
+                if (spec == null) { call.reject("Missing composer moves"); return; }
+                moves = new ConduitMoves(spec);
+                webFocusable = web.isFocusable(); webTouchFocusable = web.isFocusableInTouchMode();
+                web.setFocusableInTouchMode(false); web.setFocusable(false);
+                closingSent = false;
                 seenIme = closing = returning = animating = false;
                 WindowInsetsCompat initial = ViewCompat.getRootWindowInsets(content);
                 navBottom = initial == null ? 0 : initial.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
                 imeBottom = initial == null ? 0 : initial.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-                root = new FrameLayout(getActivity());
+                root = new FrameLayout(getActivity()) {
+                    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+                        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && !hitsPart(event.getX(), event.getY())) hideKeyboard();
+                        // An unhandled touch falls through to the WebView, including the complete scroll gesture.
+                        return super.dispatchTouchEvent(event);
+                    }
+                };
                 root.setClipChildren(false); root.setClipToPadding(false);
                 content.addView(root, new FrameLayout.LayoutParams(-1, -1));
-                controls = new FrameLayout(getActivity());
-                controls.setClipChildren(false); controls.setClipToPadding(false);
-                root.addView(controls, new FrameLayout.LayoutParams(-1, Math.round(rowHeight), Gravity.BOTTOM));
-                edits = new FrameLayout(getActivity());
-                edits.setClipChildren(false); edits.setClipToPadding(false);
-                root.addView(edits, new FrameLayout.LayoutParams(-1, 0, Gravity.BOTTOM));
-                field = new FrameLayout(getActivity());
+                field = new FrameLayout(getActivity()) {
+                    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+                        ConduitMoves.Part part = parts.get("field");
+                        if (closing || returning || part != null && part.state != null && part.state.optBoolean("out")) return false;
+                        return super.dispatchTouchEvent(event);
+                    }
+                };
                 field.setBackground(new Frost((float) type.optDouble("radius", 18) * scale, 0xff3b3a3d));
                 root.addView(field, new FrameLayout.LayoutParams(Math.round(fieldWidth), Math.round(minHeight), Gravity.BOTTOM | Gravity.LEFT));
                 input = new EditText(getActivity()) {
@@ -105,7 +122,9 @@ public class ConduitComposerPlugin extends Plugin {
                     for (Drawable handle : new Drawable[] { input.getTextSelectHandle(), input.getTextSelectHandleLeft(), input.getTextSelectHandleRight() })
                         if (handle != null) handle.setTint(0xffe8e9eb);
                 }
-                input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+                // The web textarea's own EditorInfo (read from dumpsys input_method), so the keyboard shows the same layout either
+                // way and a hand back to the WebView never swaps it.
+                input.setInputType(0x22c0a1);
                 input.setSingleLine(false); input.setHorizontallyScrolling(false);
                 Typeface geist = androidx.core.content.res.ResourcesCompat.getFont(getContext(), R.font.composer_geist);
                 input.setTypeface(android.os.Build.VERSION.SDK_INT >= 28 ? Typeface.create(geist, type.optInt("weight", 400), false) : geist);
@@ -113,7 +132,7 @@ public class ConduitComposerPlugin extends Plugin {
                 input.setIncludeFontPadding(false);
                 input.setMinHeight(0); input.setMinimumHeight(0);
                 input.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
-                input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+                input.setImeOptions(0x12000001);
                 input.setLineSpacing((float) type.optDouble("lineHeight", 22.4) * scale - input.getPaint().getFontSpacing(), 1);
                 int px = Math.round((float) type.optDouble("paddingX", 14) * scale);
                 int py = Math.round((float) type.optDouble("paddingY", 9.8) * scale);
@@ -127,19 +146,26 @@ public class ConduitComposerPlugin extends Plugin {
                 input.addTextChangedListener(new TextWatcher() {
                     public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                     public void onTextChanged(CharSequence s, int start, int before, int count) {
-                        if (!changing) { emitInput(); grow(); }
+                        if (!changing) emitInput();
                     }
                     public void afterTextChanged(Editable text) {}
                 });
-                setPills(controls, call.getArray("pills", new JSArray()), webOrigin[0] - contentOrigin[0], (float) row.optDouble("y") + (float) row.optDouble("height"), false);
-                setPills(edits, call.getArray("editPills", new JSArray()), webOrigin[0] - contentOrigin[0], (float) box.optDouble("y"), true);
+                setParts(call.getArray("parts", new JSArray()), row);
                 ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-                    if (!animating) { move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
+                    if (!animating) { if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
                     return insets;
                 });
                 ViewCompat.setWindowInsetsAnimationCallback(root, new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
                     @Override public void onPrepare(WindowInsetsAnimationCompat animation) {
                         if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) animating = true;
+                    }
+                    @Override public WindowInsetsAnimationCompat.BoundsCompat onStart(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
+                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0 && root != null) {
+                            // Insets at onStart contain the destination. Do not change the per-frame tracking below.
+                            WindowInsetsCompat target = ViewCompat.getRootWindowInsets(root);
+                            if (target != null && !target.isVisible(WindowInsetsCompat.Type.ime())) announceClosing();
+                        }
+                        return bounds;
                     }
                     @Override public WindowInsetsCompat onProgress(WindowInsetsCompat insets, List<WindowInsetsAnimationCompat> running) {
                         move(insets); return insets;
@@ -154,7 +180,6 @@ public class ConduitComposerPlugin extends Plugin {
                         }
                     }
                 });
-                grow();
                 root.post(() -> {
                     if (root == null || closing || returning) return;
                     input.requestFocus();
@@ -184,95 +209,135 @@ public class ConduitComposerPlugin extends Plugin {
         root.setTranslationY(-Math.max(0, imeBottom - navBottom));
         if (seenIme && !animating && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
     }
-    private void place(int height) {
-        if (root == null) return;
-        FrameLayout.LayoutParams row = (FrameLayout.LayoutParams) controls.getLayoutParams(); row.bottomMargin = Math.round(restBottom); controls.setLayoutParams(row);
-        FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) field.getLayoutParams();
-        box.leftMargin = Math.round(fieldX); box.bottomMargin = Math.round(restBottom + rowHeight + fieldGap); box.height = height; field.setLayoutParams(box);
-        FrameLayout.LayoutParams editBox = (FrameLayout.LayoutParams) edits.getLayoutParams();
-        editBox.bottomMargin = box.bottomMargin + height; edits.setLayoutParams(editBox);
-        if (height != fieldHeight) {
-            fieldHeight = height; JSObject event = new JSObject(); event.put("height", height / scale); notifyListeners("height", event);
+    private void announceClosing() {
+        if (root == null || closingSent) return;
+        closing = closingSent = true;
+        notifyListeners("closing", value());
+    }
+    private void hideKeyboard() {
+        if (input == null || returning) return;
+        ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0);
+    }
+    private boolean hitsPart(float x, float y) {
+        for (ConduitMoves.Part part : parts.values()) {
+            if (part.state == null || part.state.optBoolean("out") || part.state.optBoolean("hidden") || !part.view.isEnabled() || part.opacity == 0) continue;
+            if (!"pill".equals(part.state.optString("kind")) && !"field".equals(part.state.optString("kind"))) continue;
+            if (x >= part.x && x < part.x + part.width && y >= part.y && y < part.y + part.height) return true;
+        }
+        return false;
+    }
+    private int icon(String name) {
+        switch (name) {
+            case "attach": return R.drawable.composer_plus;
+            case "camera": return R.drawable.composer_camera;
+            case "keyboard": return R.drawable.composer_keyboard;
+            case "mic": return R.drawable.composer_mic;
+            case "send": return R.drawable.composer_send;
+            case "stop": return R.drawable.composer_stop;
+            case "latest": return R.drawable.composer_latest;
+            case "undo": return R.drawable.composer_undo;
+            case "delete": return R.drawable.composer_delete;
+            case "left": return R.drawable.composer_left;
+            case "right": return R.drawable.composer_right;
+            case "select": return R.drawable.composer_select;
+            default: return 0;
         }
     }
-    private void grow() {
-        if (input == null) return;
-        input.measure(View.MeasureSpec.makeMeasureSpec(Math.round(fieldWidth), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        place(Math.round(Math.max(minHeight, Math.min(maxHeight, input.getMeasuredHeight()))));
+    private void tap(ConduitMoves.Part part) {
+        if (closing || returning || part.state == null || part.state.optBoolean("out") || part.state.optBoolean("disabled")) return;
+        // The input event precedes the action, so send and edit use the latest selection without logging the draft.
+        emitInput();
+        String name = part.state.optString("action");
+        JSONObject effect = haptics == null ? null : haptics.optJSONObject(part.state.optString("haptic"));
+        if (effect != null) ConduitHapticsPlugin.play(getContext(), effect.optJSONArray("steps"), effect.optString("weight", "tick"), part.view);
+        JSObject event = new JSObject(); event.put("name", name); notifyListeners("action", event);
     }
-    private void setPills(FrameLayout holder, JSONArray pills, int offsetX, float bottom, boolean edit) {
-        holder.removeAllViews();
-        int extent = 0;
-        for (int i = 0; i < pills.length(); i++) {
-            JSONObject pill = pills.optJSONObject(i); if (pill == null) continue;
-            JSONObject rect = pill.optJSONObject("rect"); if (rect == null) continue;
-            String name = pill.optString("name");
-            int icon;
-            switch (name) {
-                case "attach": icon = R.drawable.composer_plus; break;
-                case "camera": icon = R.drawable.composer_camera; break;
-                case "keyboard": icon = R.drawable.composer_keyboard; break;
-                case "mic": icon = R.drawable.composer_mic; break;
-                case "send": icon = R.drawable.composer_send; break;
-                case "stop": icon = R.drawable.composer_stop; break;
-                case "latest": icon = R.drawable.composer_latest; break;
-                case "undo": icon = R.drawable.composer_undo; break;
-                case "delete": icon = R.drawable.composer_delete; break;
-                case "left": icon = R.drawable.composer_left; break;
-                case "right": icon = R.drawable.composer_right; break;
-                case "select": icon = R.drawable.composer_select; break;
-                default: continue;
+    private void setParts(JSONArray description, JSONObject row) {
+        float bottom = (float) (row.optDouble("y") + row.optDouble("height"));
+        Set<String> present = new HashSet<>();
+        long roomDelay = 0;
+        for (int i = 0; i < description.length(); i++) {
+            JSONObject state = description.optJSONObject(i); if (state == null) continue;
+            ConduitMoves.Part old = parts.get(state.optString("id"));
+            if (old != null && old.state != null && !old.state.optBoolean("folded") && state.optBoolean("folded") && "fold".equals(state.optString("move"))) roomDelay = moves.quick();
+        }
+        for (int i = 0; i < description.length(); i++) {
+            JSONObject state = description.optJSONObject(i); if (state == null) continue;
+            String id = state.optString("id"), kind = state.optString("kind");
+            JSONObject rect = state.optJSONObject("rect"); if (rect == null) continue;
+            present.add(id);
+            ConduitMoves.Part part = parts.get(id);
+            boolean added = part == null;
+            if (part == null) {
+                View view;
+                if ("field".equals(kind)) view = field;
+                else if ("pill".equals(kind)) {
+                    ImageButton button = new ImageButton(getActivity()) {
+                        @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+                            super.onSizeChanged(w, h, oldw, oldh);
+                            int px = Math.max(0, Math.round((w - iconSize) / 2)), py = Math.max(0, Math.round((h - iconSize) / 2));
+                            setPadding(px, py, px, py);
+                        }
+                    };
+                    button.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                    button.setImageTintList(ColorStateList.valueOf(0xffe8e9eb));
+                    button.setBackground(new Frost((float) rect.optDouble("height") * scale / 2, state.optBoolean("edit") ? 0xff3b3a3d : 0xff38393c));
+                    view = button;
+                } else view = new View(getActivity());
+                if (view != field) root.addView(view, new FrameLayout.LayoutParams(0, 0));
+                part = new ConduitMoves.Part(view); parts.put(id, part);
+                ConduitMoves.Part target = part;
+                if (view instanceof ImageButton) view.setOnClickListener(v -> tap(target));
             }
-            ImageButton button = new ImageButton(getActivity());
-            button.setImageResource(icon); button.setImageTintList(ColorStateList.valueOf(0xffe8e9eb));
-            int h = Math.round((float) rect.optDouble("height") * scale), w = Math.round((float) rect.optDouble("width") * scale);
-            button.setBackground(new Frost(h / 2f, edit ? 0xff3b3a3d : 0xff38393c));
-            button.setPadding(Math.max(0, Math.round((w - iconSize) / 2)), Math.max(0, Math.round((h - iconSize) / 2)), Math.max(0, Math.round((w - iconSize) / 2)), Math.max(0, Math.round((h - iconSize) / 2)));
-            button.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-            button.setContentDescription(pill.optString("label")); button.setEnabled(pill.optBoolean("enabled")); button.setAlpha(button.isEnabled() ? 1 : .45f);
-            button.setOnClickListener(view -> {
-                if (closing || returning) return;
-                // Send the latest selection and text before any action can send or close the draft.
-                emitInput();
-                if (pill.optBoolean("press") && press != null) ConduitHapticsPlugin.play(getContext(), press.optJSONArray("steps"), press.optString("weight", "click"), view);
-                if ("send".equals(name)) {
-                    changing = true; input.setText(""); changing = false; grow();
+            if (part.view instanceof ImageButton) {
+                ImageButton button = (ImageButton) part.view;
+                if (part.state == null || !part.state.optString("icon").equals(state.optString("icon")) || part.state.optLong("spin") != state.optLong("spin")) {
+                    if ("spinner".equals(state.optString("icon"))) button.setImageDrawable(new Spinner(state.optLong("spin")));
+                    else button.setImageResource(icon(state.optString("icon")));
                 }
-                JSObject event = new JSObject(); event.put("name", name); notifyListeners("action", event);
-            });
-            FrameLayout.LayoutParams box = new FrameLayout.LayoutParams(w, h, Gravity.LEFT | Gravity.BOTTOM);
-            box.leftMargin = offsetX + Math.round((float) rect.optDouble("x") * scale); box.bottomMargin = Math.round((bottom - (float) rect.optDouble("y") - (float) rect.optDouble("height")) * scale);
-            extent = Math.max(extent, box.bottomMargin + h);
-            holder.addView(button, box);
+                Drawable glyph = button.getDrawable();
+                if (glyph != null) glyph.setAlpha(Math.round(255 * (float) state.optDouble("contentOpacity", 1)));
+                button.setContentDescription(state.optString("label"));
+            }
+            if ("field".equals(kind)) { input.setEnabled(!state.optBoolean("disabled")); input.setContentDescription(state.optString("label")); input.setHint(state.optString("placeholder")); }
+            part.clipRadius = (float) state.optDouble("clipRadius") * scale;
+            float x = offsetX + (float) rect.optDouble("x") * scale;
+            float height = (float) rect.optDouble("height") * scale;
+            float y = root.getLayoutParams().height == -1 ? ((View) root.getParent()).getHeight() : root.getHeight();
+            y -= restBottom + (bottom - (float) rect.optDouble("y")) * scale;
+            JSONObject presentation = state.optJSONObject("presentation");
+            JSONObject current = presentation == null ? null : presentation.optJSONObject("rect");
+            if (added && current != null) {
+                float startY = ((View) root.getParent()).getHeight() - restBottom - (bottom - (float) current.optDouble("y")) * scale;
+                moves.seed(part, state, offsetX + (float) current.optDouble("x") * scale, startY,
+                    (float) current.optDouble("width") * scale, (float) current.optDouble("height") * scale, (float) presentation.optDouble("opacity", 1));
+            }
+            moves.update(part, state, x, y, (float) rect.optDouble("width") * scale, height, roomDelay);
+            part.view.setZ(state.optBoolean("edit") ? 6 : "field".equals(kind) ? 2 : state.optBoolean("folded") ? 3 : state.optBoolean("voice") && state.optBoolean("stretch") ? 5 : 4);
         }
-        if (edit) {
-            FrameLayout.LayoutParams box = (FrameLayout.LayoutParams) holder.getLayoutParams();
-            box.height = extent; holder.setLayoutParams(box);
+        for (String id : new HashSet<>(parts.keySet())) if (!present.contains(id)) {
+            ConduitMoves.Part part = parts.remove(id); part.cancel(); root.removeView(part.view);
         }
     }
     @PluginMethod public void update(PluginCall call) {
         getActivity().runOnUiThread(() -> {
-            if (input != null && !returning) {
-                String text = call.getString("text");
-                boolean textChanged = text != null && !text.contentEquals(input.getText());
-                int start = call.getInt("selectionStart", input.getSelectionStart());
-                int end = call.getInt("selectionEnd", input.getSelectionEnd());
-                changing = true;
-                if (textChanged) input.setText(text);
-                if (textChanged || call.hasOption("selectionStart") || call.hasOption("selectionEnd")) select(start, end);
-                changing = false;
-                if (textChanged) grow();
-                JSArray pills = call.getArray("pills"), editPills = call.getArray("editPills");
-                JSObject row = call.getObject("row"), box = call.getObject("field");
-                if (pills != null && row != null || editPills != null && box != null) {
-                    int[] web = new int[2], host = new int[2]; getBridge().getWebView().getLocationInWindow(web); root.getLocationInWindow(host);
-                    if (pills != null && row != null) setPills(controls, pills, web[0] - host[0], (float) row.optDouble("y") + (float) row.optDouble("height"), false);
-                    if (editPills != null && box != null) setPills(edits, editPills, web[0] - host[0], (float) box.optDouble("y"), true);
+            try {
+                if (input != null && !returning) {
+                    String text = call.getString("text");
+                    boolean textChanged = text != null && !text.contentEquals(input.getText());
+                    int start = call.getInt("selectionStart", input.getSelectionStart());
+                    int end = call.getInt("selectionEnd", input.getSelectionEnd());
+                    changing = true;
+                    if (textChanged) input.setText(text);
+                    if (textChanged || call.hasOption("selectionStart") || call.hasOption("selectionEnd")) select(start, end);
+                    changing = false;
+                    JSObject spec = call.getObject("motion");
+                    if (spec != null) moves = new ConduitMoves(spec);
+                    JSArray description = call.getArray("parts"); JSObject row = call.getObject("row");
+                    if (description != null && row != null) setParts(description, row);
                 }
-                Double height = call.getDouble("fieldHeight");
-                if (height != null) place(Math.round(Math.max(minHeight, Math.min(maxHeight, height.floatValue() * scale))));
-            }
-            call.resolve();
+                call.resolve();
+            } catch (Exception error) { call.reject("Cannot update native composer", error); }
         });
     }
     @PluginMethod public void end(PluginCall call) {
@@ -300,6 +365,7 @@ public class ConduitComposerPlugin extends Plugin {
     }
     private void atRest() {
         if (root == null || returning) return;
+        announceClosing();
         returning = true; root.setTranslationY(0); input.clearFocus();
         notifyListeners("ended", value());
     }
@@ -308,9 +374,36 @@ public class ConduitComposerPlugin extends Plugin {
             ViewCompat.setWindowInsetsAnimationCallback(root, null); ViewCompat.setOnApplyWindowInsetsListener(root, null);
             ((ViewGroup) root.getParent()).removeView(root);
         }
-        root = controls = field = edits = null; input = null; fieldHeight = 0;
+        for (ConduitMoves.Part part : parts.values()) part.cancel();
+        parts.clear();
+        if (root != null) {
+            View web = getBridge().getWebView();
+            web.setFocusable(webFocusable); web.setFocusableInTouchMode(webTouchFocusable);
+        }
+        root = field = null; input = null;
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::remove); }
+
+    /** The library's waiting ring. It is an effect on --duration-spin, separate from the named moves. */
+    private class Spinner extends Drawable implements Runnable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final long duration, began = android.os.SystemClock.uptimeMillis();
+        private int alpha = 255;
+        Spinner(long duration) { this.duration = Math.max(1, duration); }
+        @Override public void draw(Canvas canvas) {
+            RectF box = new RectF(getBounds()); box.inset(scale / 2, scale / 2);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(scale);
+            paint.setColor(0xffe8e9eb); paint.setAlpha(Math.round(alpha * .08f)); canvas.drawOval(box, paint);
+            paint.setAlpha(alpha);
+            float turn = (android.os.SystemClock.uptimeMillis() - began) % duration * 360f / duration;
+            canvas.drawArc(box, turn - 135, 90, false, paint);
+            if (getCallback() instanceof View) ((View) getCallback()).postOnAnimation(this);
+        }
+        @Override public void run() { invalidateSelf(); }
+        @Override public void setAlpha(int value) { alpha = value; invalidateSelf(); }
+        @Override public void setColorFilter(android.graphics.ColorFilter filter) { paint.setColorFilter(filter); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
 
     /** One .ui-frost layer: Frost plain gives the row no extra material (frost.tsx).
      * Flat reference fills use C = alpha * white + (1 - alpha) * pageGround, alpha = 43/255

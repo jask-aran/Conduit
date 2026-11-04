@@ -92,3 +92,10 @@
 
 /* Captions are the draft's words: the transcript's face. */
 .ui-voice-captions { font-family: var(--font-transcript); }
+
+/* Only the inert native measurement copy: leave the live tree's transitions untouched. */
+.ui-phone-composer[data-measuring], .ui-phone-composer[data-measuring] * {
+  transition: none !important; animation: none !important; visibility: hidden !important;
+}
+/* Native mirroring grows the hidden frost with the native field; its text stays inside that moving frame. */
+.ui-phone-composer[data-native-mirror] .ui-pill-field { overflow: clip; }

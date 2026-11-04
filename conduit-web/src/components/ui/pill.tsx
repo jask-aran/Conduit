@@ -38,7 +38,7 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
     onClick: (event: MouseEvent) => { haptic(props.haptic!); const click = props.button?.onClick; if (typeof click === "function") (click as (event: MouseEvent) => void)(event); },
   } : {}) as PillAttrs;
   const pill = <Frost class="ui-pill" data-solo="" data-stretch={props.stretch ? "" : undefined} data-folded={props.folded ? "" : undefined} data-voice={props.voice || mic ? "" : undefined} data-open={props.open ? "" : undefined}
-    data-move={scope.move ?? "fold"} data-out={out() ? "" : undefined} data-under={scope.under?.() && !props.open ? "" : undefined}
+    data-haptic={props.haptic} data-move={scope.move ?? "fold"} data-out={out() ? "" : undefined} data-under={scope.under?.() && !props.open ? "" : undefined}
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</Frost>;

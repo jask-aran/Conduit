@@ -3,8 +3,8 @@ import { Icons } from "@/components/ui";
 import { haptic } from "@/components/ui/haptics";
 import { pickPhotos } from "../platform/photos";
 import { openNativeCamera } from "../platform/camera";
-import { composerKind, measureNativeComposer, nativeComposer, nativeComposerAvailable, type ComposerAction, type ComposerInput } from "../platform/native-composer";
-import { hapticSteps } from "@/components/ui/haptics";
+import { composerKind, nativeComposer, nativeComposerAvailable, type ComposerAction, type ComposerInput } from "../platform/native-composer";
+import { mirror } from "@/components/ui/native-phone-composer";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { latestAway, scrollToLatest } from "./latest-away";
@@ -144,7 +144,6 @@ export function Composer(props: {
     : ["starting", "listening"].includes(dictationState()) ? "listening"
     // Sent, or stop-and-send waiting on its transcript: the text pill goes at
     // once rather than holding the draft until the agent takes it.
-    : nativeUp() ? "typing"
     : sendingOut() ? "idle"
     : inputFocused() || hasText() ? "typing" : "idle";
   const [optionsOpen, setOptionsOpen] = createSignal(false);
@@ -829,18 +828,8 @@ export function Composer(props: {
   let nativeChat: string | null = null;
   let nativeAction: ComposerAction | null = null;
   let nativeListeners: PluginListenerHandle[] = [];
-  let nativeRoot: Element | null = null;
-  let nativeParts: { element: HTMLElement; visibility: string }[] = [];
-  let nativeWatch: ResizeObserver | null = null;
-  let nativeAttributes: MutationObserver | null = null;
-  let nativeFrame = 0;
-  const restoreWebComposer = () => {
-    for (const { element, visibility } of nativeParts) element.style.visibility = visibility;
-    nativeParts = [];
-    nativeWatch?.disconnect(); nativeAttributes?.disconnect();
-    cancelAnimationFrame(nativeFrame);
-    nativeRoot = null;
-  };
+  let nativeMirror: ReturnType<typeof mirror> | null = null;
+  const restoreWebComposer = () => { nativeMirror?.restore(); nativeMirror = null; };
   let lastNativeText = "";
   const mirrorNativeInput = (event: ComposerInput) => {
     // Native selection must be in the textarea before change() takes its undo snapshot.
@@ -848,14 +837,6 @@ export function Composer(props: {
     input.setSelectionRange(event.selectionStart, event.selectionEnd);
     lastNativeText = event.text;
     if (props.chat.draft() !== event.text) change(event.text);
-  };
-  const syncNativeGeometry = () => {
-    cancelAnimationFrame(nativeFrame);
-    nativeFrame = requestAnimationFrame(() => {
-      if (!nativeUp() || nativeStarting) return;
-      const geometry = measureNativeComposer(input);
-      void nativeComposer.update({ pills: geometry.pills, editPills: geometry.editPills, field: geometry.field, row: geometry.row, fieldHeight: geometry.field.height }).catch(() => void nativeComposer.end());
-    });
   };
   const finishNativeTyping = async (event: ComposerInput) => {
     if (!nativeUp()) return;
@@ -890,7 +871,10 @@ export function Composer(props: {
         // Register every event before begin can focus the EditText and start the IME.
         const listeners = await Promise.allSettled([
           nativeComposer.addListener("input", (event) => { if (nativeUp() && nativeChat === props.chat.loadedId()) mirrorNativeInput(event); }),
-          nativeComposer.addListener("height", () => { if (nativeUp()) { scheduleResize(); syncNativeGeometry(); } }),
+          nativeComposer.addListener("closing", (event) => {
+            if (!nativeUp() || nativeChat !== props.chat.loadedId()) return;
+            mirrorNativeInput(event); setInputFocused(false); setKeyboardWanted(false);
+          }),
           nativeComposer.addListener("ended", (event) => { void finishNativeTyping(event); }),
           nativeComposer.addListener("action", ({ name }) => {
             if (!nativeUp() || nativeChat !== props.chat.loadedId()) return;
@@ -913,23 +897,15 @@ export function Composer(props: {
         if (listeners.some((result) => result.status === "rejected")) throw new Error("Composer listener unavailable");
         if (nativeDisposed || nativeChat !== props.chat.loadedId()) throw new Error("Composer changed");
         resize();
-        const geometry = measureNativeComposer(input);
-        nativeRoot = input.closest(".ui-phone-composer");
-        nativeParts = [...(nativeRoot?.querySelectorAll<HTMLElement>(":scope > .ui-phone-field, :scope > .ui-phone-row, :scope > .ui-phone-edit") ?? [])]
-          .map((element) => ({ element, visibility: element.style.visibility }));
-        for (const { element } of nativeParts) element.style.visibility = "hidden";
+        const root = input.closest<HTMLElement>(".ui-phone-composer");
+        if (!root) throw new Error("Phone composer is not mounted");
         setNativeUp(true);
         lastNativeText = props.chat.draft();
-        await nativeComposer.begin({ ...geometry, text: props.chat.draft(), selectionStart: input.selectionStart, selectionEnd: input.selectionEnd,
-          placeholder: input.placeholder, press: hapticSteps("press") });
+        nativeMirror = mirror(root, input, nativeComposer);
+        await nativeMirror.ready;
         nativeStarting = false;
         if (!nativeUp()) return;
         if (nativeDisposed || nativeChat !== props.chat.loadedId()) { await nativeComposer.end(); return; }
-        nativeWatch = new ResizeObserver(syncNativeGeometry);
-        if (nativeRoot) for (const element of nativeRoot.querySelectorAll(".ui-pill, .ui-phone-row, .ui-phone-edit")) nativeWatch.observe(element);
-        nativeAttributes = new MutationObserver(syncNativeGeometry);
-        if (nativeRoot) nativeAttributes.observe(nativeRoot, { subtree: true, attributes: true, attributeFilter: ["disabled", "aria-label", "data-folded", "data-show", "data-opening"] });
-        syncNativeGeometry();
       } catch {
         restoreWebComposer(); setNativeUp(false); nativeStarting = false;
         for (const listener of nativeListeners) void listener.remove();
@@ -1011,13 +987,13 @@ export function Composer(props: {
     field={<PillField>{field()}</PillField>}
     track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
     captions={<Show when={captionLead() || dictatedText()}><Captions lead={captionLead()} words={dictatedText().split(/(?<=\s)/)} ref={announceCaptions} /></Show>}
-    edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
+    edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton haptic="select" label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
     <MobileComposerOptions composer={props} onOpenChange={setOptionsOpen} />
     <Show when={props.attachmentsSupported !== false}>
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
       <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
       <Show when={viewfinder()}><Viewfinder onCapture={(file) => addPhotos([file])} onFull={() => cameraInput.click()} onClose={() => setViewfinder(false)} /></Show>
-      <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ title: "Take a photo (hold to choose photos)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
+      <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ "data-haptic": "press", title: "Take a photo (hold to choose photos)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
     </Show>
     <PillButton label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<Icons.Keyboard />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
     <PillButton folded={!latestAway()} label="Scroll to latest" icon={<Icons.ArrowDown />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
