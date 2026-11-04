@@ -1,5 +1,6 @@
 import { logKeyboardEvent } from "./keyboard-probe.ts";
 import { settleRooms } from "@/components/ui/motion";
+import { latestAway } from "../chat/latest-away";
 
 /** Said at a travel's start, before its end is measured: a hide takes the composer out of typing now (composer.tsx). */
 export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
@@ -13,10 +14,14 @@ export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
  * position (the taller of the two), at its end at the keyboard's final one. Between them what rides the keyboard --
  * the composer's dock (its riders; its field and row are drawn natively) and the transcript above it -- is
  * moved by one transform animation each, on the system's own curve (CSS linear() from its samples), which the
- * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout. Every transcript
- * shown rides it, scrolled up or not: the transcript holds its distance from the bottom across a travel (transcript.tsx,
- * holdAgainstKeyboard), so the layout at each end moves it by the whole travel -- in the frame its transform
- * comes off, and so unseen. One left out of the ride stood still and then jumped by the keyboard's height at the end.
+ * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout.
+ *
+ * What a transcript does follows one rule, the same one that shows Scroll to latest (latestAway): at the bottom (no
+ * pill) it rides the keyboard, held against the composer; scrolled up (the pill showing) it does not move at all --
+ * the keyboard and composer come up over it, and what is being read stays where it is. The transcript's own hold
+ * (transcript.tsx, holdAgainstKeyboard) keeps the same rule, so neither the ride nor the layout at the ends moves it.
+ * The one thing that can still shift one scrolled up is the scroller growing as the keyboard leaves past the end of
+ * what there is to show (its scroll clamped); that shift is put on the travel too, from where it was back to rest.
  *
  * The animation is started in phase: the shell stamps when the system began the travel (wall clock, the same one
  * Date.now reads), so a description that took a few frames to cross the bridge starts that far along, not behind.
@@ -39,7 +44,13 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const low = Math.min(travel.from, travel.to);
   const easing = travelEasing(travel.curve);
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
-  const scrollers = [...document.querySelectorAll(SCROLLERS)].filter(shown);
+  const away = latestAway();
+  const scrollers = away ? [] : [...document.querySelectorAll(SCROLLERS)].filter(shown);
+  // Scrolled up: marked, so the transcript's hold leaves it be, and its scroll read so a clamp can be carried.
+  // The element that scrolls: a thread's viewport inside its scroller, a room's scroller itself.
+  const still = away ? [...document.querySelectorAll<HTMLElement>(".ui-chat-viewport, .ui-dash-conversation-scroll")].filter(shown) : [];
+  for (const scroller of still) scroller.setAttribute("data-keyboard-away", "");
+  const scrolls = still.map((scroller) => scroller.scrollTop);
   // Where the composer's top sits at each end, measured, not computed: what rides the keyboard -- the riders at the
   // dock's top, and a transcript held against the composer -- moves with it, and it moves by the keyboard's travel
   // (less the navigation bar's room, given up as the keyboard takes it) and by the rooms the composer's own change
@@ -51,8 +62,16 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   document.dispatchEvent(new CustomEvent(KEYBOARD_TRAVEL_EVENT, { detail: { hiding: travel.to < travel.from } }));
   settleRooms();
   const atTo = top(travel.to), atLow = top(low);
+  // Laid out at the lower keyboard (the taller scroller) for the travel: any clamp has happened now.
+  const clamps = still.map((scroller, index) => ({ scroller, shift: (scrolls[index] ?? scroller.scrollTop) - scroller.scrollTop }))
+    .filter(({ shift }) => shift > 0.5);
   const duration = Math.max(1, travel.durationMs);
   const along = travel.startedAt ? Math.min(duration - 1, Math.max(0, Date.now() - travel.startedAt)) : 0;
+  const clamped = clamps.map(({ scroller, shift }) => {
+    const animation = scroller.animate([{ transform: `translateY(${-shift}px)` }, { transform: "none" }], { duration, easing, fill: "forwards" });
+    animation.currentTime = along;
+    return animation;
+  });
   const animations = [...riders, ...scrollers].map((element) => {
     const animation = element.animate(
       [{ transform: `translateY(${atFrom - atLow}px)` }, { transform: `translateY(${atTo - atLow}px)` }],
@@ -68,14 +87,19 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
     done = true;
     // The final layout and the transforms' removal in one task, so one frame shows both.
     setKeyboard(landAt);
-    for (const animation of animations) animation.cancel();
+    for (const animation of [...animations, ...clamped]) animation.cancel();
+    for (const scroller of still) scroller.removeAttribute("data-keyboard-away");
   };
-  void Promise.all(animations.map((animation) => animation.finished)).then(land, () => undefined);
-  if (!animations.length) window.setTimeout(land, duration - along);
+  void Promise.all([...animations, ...clamped].map((animation) => animation.finished)).then(land, () => undefined);
+  if (!animations.length && !clamped.length) window.setTimeout(land, duration - along);
   return {
     get running() { return !done; },
     /** The system reported where the keyboard ended: land there (now, if this travel has already landed). */
     settle(height: number) { landAt = height; if (done) setKeyboard(height); },
-    cancel() { if (done) return; done = true; for (const animation of animations) animation.cancel(); },
+    cancel() {
+      if (done) return; done = true;
+      for (const animation of [...animations, ...clamped]) animation.cancel();
+      for (const scroller of still) scroller.removeAttribute("data-keyboard-away");
+    },
   };
 }

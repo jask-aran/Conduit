@@ -1013,6 +1013,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         heldGap = -1;
         return;
       }
+      // Scrolled up (Scroll to latest showing): the keyboard comes up over the transcript and it does not move -- the
+      // one rule for what being at the bottom means (navigation/keyboard-travel.ts). Its scroll is left as it is.
+      if (latestAway() || viewport.hasAttribute("data-keyboard-away")) {
+        intendedScrollTop = -1;
+        heldGap = -1;
+        return;
+      }
       const max = Math.max(0, content - height);
       // Anything that moved the thread other than the last correction -- a
       // finger, a fold, a new message -- is where the thread actually is now,
