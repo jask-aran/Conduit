@@ -99,6 +99,10 @@ public class ConduitFloatService extends Service {
     /** What the pill says when a send fails: the hub's own message, or why it could not be reached. */
     private volatile String errorText = "Couldn't send — open Conduit";
     private Capture capture;
+    private String liveText = "";
+    private volatile ConduitFloatLive live;
+    /** The words heard so far, beside the pill, when the voice model transcribes live. */
+    private ConduitFloatCaption caption;
     private File recording;
     private volatile HttpURLConnection uploading;
     private boolean microphoneReady;
@@ -190,6 +194,7 @@ public class ConduitFloatService extends Service {
                 openness = state == State.HANDLE ? 0 : 1;
                 updateFrame();
                 overlay.show();
+                caption = new ConduitFloatCaption(this);
                 if (Build.VERSION.SDK_INT >= 31) {
                     blurListener = enabled -> { blurEnabled = enabled; updateFrost(); };
                     windows.addCrossWindowBlurEnabledListener(main::post, blurListener);
@@ -319,8 +324,17 @@ public class ConduitFloatService extends Service {
         if (control != null) { place(); show(state); }
     }
 
+    /** The caption shows while listening and as it stops, once there are words. */
+    private void updateCaption() {
+        if (caption == null) return;
+        if ((state == State.RECORDING || state == State.STOPPING) && !liveText.isEmpty())
+            caption.show(liveText, prefs().getBoolean("right", true), dp(EDGE), position.y, controlHeight(), availableHeight, blurEnabled);
+        else caption.hide();
+    }
+
     private void show(State next) {
         if (destroyed) return;
+        if (next == State.HANDLE) liveText = "";
         if (morph != null) { morph.cancel(); morph = null; }
         state = next;
         level = 0;
@@ -334,6 +348,7 @@ public class ConduitFloatService extends Service {
         int startY = position.y;
         place();
         int targetY = position.y;
+        updateCaption();
         int startWidth = frameWidth, startHeight = frameHeight;
         int targetWidth = controlWidth(), targetHeight = controlHeight();
         float startOpen = openness, targetOpen = next == State.HANDLE ? 0 : 1;
@@ -370,12 +385,14 @@ public class ConduitFloatService extends Service {
     private static final class Capture {
         final AudioRecord audio;
         final int generation;
+        ConduitFloatLive live;
         volatile boolean stop, cancel;
         Capture(AudioRecord audio, int generation) { this.audio = audio; this.generation = generation; }
     }
 
     private void beginRecording() {
         if (!microphoneReady) { openApp(true); return; }
+        liveText = "";
         AudioRecord audio = null;
         try {
             int bufferSize = AudioRecord.getMinBufferSize(16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
@@ -402,6 +419,21 @@ public class ConduitFloatService extends Service {
                 .putString("recordingOrigin", prefs().getString("origin", ""))
                 .putString("recordingTokenOrigin", prefs().getString("tokenOrigin", "")).commit();
             show(State.RECORDING);
+            try {
+                if (live != null) live.close();
+                String origin = prefs().getString("recordingOrigin", "");
+                String tokenOrigin = prefs().getString("recordingTokenOrigin", origin);
+                String cookie = CookieManager.getInstance().getCookie(origin);
+                final ConduitFloatLive[] client = new ConduitFloatLive[1];
+                client[0] = new ConduitFloatLive(origin, cookie, () -> nativeToken(tokenOrigin), text -> main.post(() -> {
+                    if (!destroyed && live == client[0] && state != State.HANDLE) {
+                        liveText = text;
+                        updateCaption();
+                    }
+                }));
+                live = next.live = client[0];
+                client[0].start();
+            } catch (Exception ignored) { /* Live preview is optional. */ }
             worker.execute(() -> record(next));
         } catch (Exception error) {
             if (audio != null) audio.release();
@@ -425,6 +457,8 @@ public class ConduitFloatService extends Service {
                     break;
                 }
                 file.write(buffer, 0, count);
+                try { if (current.live != null) current.live.audio(buffer, count); }
+                catch (RuntimeException ignored) { /* Never interrupt the WAV. */ }
                 bytes += count;
                 double sum = 0;
                 for (int i = 0; i + 1 < count; i += 2) {
@@ -444,6 +478,10 @@ public class ConduitFloatService extends Service {
         } catch (Exception error) {
             // Keep credentials and provider replies out of the log.
         } finally {
+            if (current.live != null) {
+                if (current.cancel) current.live.close();
+                else current.live.stop();
+            }
             try { current.audio.stop(); } catch (RuntimeException ignored) {}
             current.audio.release();
             ConduitMediaVolume.restoreSafely(this, volumeOwner);
@@ -471,6 +509,10 @@ public class ConduitFloatService extends Service {
     private void stopRecording(boolean cancel) {
         Capture current = capture;
         if (current == null) return;
+        if (current.live != null) {
+            if (cancel) current.live.close();
+            else current.live.stop();
+        }
         current.cancel |= cancel;
         current.stop = true;
         try { current.audio.stop(); } catch (RuntimeException ignored) {}
@@ -479,11 +521,13 @@ public class ConduitFloatService extends Service {
     }
 
     private void discard() {
+        if (live != null) { live.close(); live = null; }
         recording.delete();
         prefs().edit().remove("recordingComplete").remove("recordingOrigin").remove("recordingTokenOrigin").remove("recordingRetried").remove("recordingId").apply();
     }
 
     private void cancel() {
+        if (live != null) { live.close(); live = null; }
         if (capture != null) { stopRecording(true); return; }
         generation++;
         HttpURLConnection connection = uploading;
@@ -610,6 +654,8 @@ public class ConduitFloatService extends Service {
 
     @Override public void onDestroy() {
         destroyed = true;
+        if (live != null) { live.close(); live = null; }
+        if (caption != null) caption.destroy();
         if (active == this) active = null;
         if (snap != null) snap.cancel();
         if (morph != null) morph.cancel();

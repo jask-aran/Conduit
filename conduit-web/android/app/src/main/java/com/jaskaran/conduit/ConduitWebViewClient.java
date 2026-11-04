@@ -131,28 +131,32 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
      * against the address, as the page's requests do not check it either.
      */
     static void trustPaired(javax.net.ssl.HttpsURLConnection connection) throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean vouched = new java.util.concurrent.atomic.AtomicBoolean();
+        connection.setSSLSocketFactory(pairedSocketFactory(vouched));
+        javax.net.ssl.HostnameVerifier names = javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier();
+        connection.setHostnameVerifier((host, session) -> vouched.get() || names.verify(host, session));
+    }
+
+    static javax.net.ssl.SSLSocketFactory pairedSocketFactory(java.util.concurrent.atomic.AtomicBoolean vouched) throws Exception {
         javax.net.ssl.TrustManagerFactory factory = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
         factory.init((java.security.KeyStore) null);
         javax.net.ssl.X509TrustManager system = null;
         for (javax.net.ssl.TrustManager manager : factory.getTrustManagers()) if (manager instanceof javax.net.ssl.X509TrustManager) system = (javax.net.ssl.X509TrustManager) manager;
         final javax.net.ssl.X509TrustManager platform = system;
-        final boolean[] vouched = { false };
         javax.net.ssl.X509TrustManager paired = new javax.net.ssl.X509TrustManager() {
             @Override public void checkClientTrusted(X509Certificate[] chain, String type) throws java.security.cert.CertificateException { platform.checkClientTrusted(chain, type); }
             @Override public void checkServerTrusted(X509Certificate[] chain, String type) throws java.security.cert.CertificateException {
                 try { platform.checkServerTrusted(chain, type); }
                 catch (java.security.cert.CertificateException refused) {
                     if (chain == null || chain.length == 0 || vouchingIdentity(chain[0]) == null) throw refused;
-                    vouched[0] = true;
+                    vouched.set(true);
                 }
             }
             @Override public X509Certificate[] getAcceptedIssuers() { return platform.getAcceptedIssuers(); }
         };
         javax.net.ssl.SSLContext context = javax.net.ssl.SSLContext.getInstance("TLS");
         context.init(null, new javax.net.ssl.TrustManager[] { paired }, null);
-        connection.setSSLSocketFactory(context.getSocketFactory());
-        javax.net.ssl.HostnameVerifier names = javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier();
-        connection.setHostnameVerifier((host, session) -> vouched[0] || names.verify(host, session));
+        return context.getSocketFactory();
     }
 
     /** Ed25519 SubjectPublicKeyInfo: this fixed prefix, then the 32-byte key. */
