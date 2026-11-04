@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { createEffect, on } from "solid-js";
 import { touchOnly } from "./layout";
 
 /**
@@ -14,7 +15,7 @@ import { touchOnly } from "./layout";
  * - press (click): a PillButton that acts at once (the mic, Send, Stop: its haptic prop);
  * - hold (thud): a long press opening a context menu;
  * - fold (tick): what an Expand or Disclosure holds opening or shutting;
- * - open (click): the phone's drawer opening (a tap on its toggle, or a swipe in from the edge);
+ * - open (click): an overlay opening (a menu, submenu, popover, dialog, the phone's drawer: a tap or a swipe in);
  * - dismiss (settle): an overlay closing (a menu, submenu, popover, dialog, the phone's drawer).
  * fold, open and dismiss are felt only just after a touch, so what opens or closes on its own (rows a search filters in,
  * a drawer shut by navigation from the keyboard) is not. Only a touch screen with nothing that hovers feels them.
@@ -73,11 +74,22 @@ export function playEffect(effect: HapticEffect) {
 }
 
 let touchedAt = -Infinity;
+// One feel per touch: a piece told both by its own change and by its owner's (an overlay's open prop and its
+// onOpenChange) is felt once.
+let last = { kind: "", at: -Infinity };
 // Down as well as up: a tap outside a menu closes it on the way down.
 const touched = (event: PointerEvent) => { if (event.pointerType === "touch") touchedAt = performance.now(); };
 if (typeof addEventListener === "function") for (const type of ["pointerdown", "pointerup"] as const) addEventListener(type, touched, { capture: true, passive: true });
 export function haptic(kind: Haptic) {
   if (!touchOnly()) return;
-  if ((kind === "fold" || kind === "open" || kind === "dismiss") && performance.now() - touchedAt > 600) return;
+  const now = performance.now();
+  if ((kind === "fold" || kind === "open" || kind === "dismiss") && now - touchedAt > 600) return;
+  if (last.kind === kind && now - last.at < 120) return;
+  last = { kind, at: now };
   playEffect(HAPTIC_EFFECT[kind]);
+}
+
+/** An overlay's own haptics, whoever opens or shuts it: felt opening and shutting (just after a touch). */
+export function overlayHaptics(open: () => boolean | undefined) {
+  createEffect(on(open, (now, was) => { if (now && !was) haptic("open"); else if (!now && was) haptic("dismiss"); }, { defer: true }));
 }

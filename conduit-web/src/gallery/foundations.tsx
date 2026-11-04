@@ -576,7 +576,7 @@ const KINDS: { kind: Haptic; what: string; pieces: string }[] = [
   { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop" },
   { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen" },
   { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure" },
-  { kind: "open", what: "the phone's drawer opening, just after a touch", pieces: "NavPane (drawer): its toggle, a swipe in" },
+  { kind: "open", what: "an overlay opening, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer" },
   { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer" },
 ];
 
