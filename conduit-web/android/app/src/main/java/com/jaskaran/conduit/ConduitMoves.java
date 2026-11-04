@@ -17,6 +17,11 @@ final class ConduitMoves {
     private final long quick, gentle;
     private final Interpolator arrive, leave, change, room;
     private final boolean reduced;
+    /** The keyboard's travel under way, if any: a room given during it takes its end and its curve. */
+    private long travelEnds = 0; private Interpolator travelCurve = null;
+    void travel(long durationMs, Interpolator curve) {
+        travelEnds = android.os.SystemClock.uptimeMillis() + durationMs; travelCurve = curve;
+    }
 
     ConduitMoves(JSONObject spec) {
         quick = Math.max(0, spec.optLong("quick")); gentle = Math.max(0, spec.optLong("gentle"));
@@ -90,10 +95,13 @@ final class ConduitMoves {
         }
         boolean fieldRoom = field || "collapse".equals(move);
         Interpolator layoutCurve = fieldRoom ? room : arrive;
+        long left = travelEnds - android.os.SystemClock.uptimeMillis();
+        if (fieldRoom && left > 16 && !reduced) { layoutTime = left; layoutCurve = travelCurve != null ? travelCurve : room; }
+
         to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
-        // Edit pills sit above the holder and travel with its delayed room, independently of their fade.
         boolean edit = state.optBoolean("edit");
-        to(part, "y", y, layoutTime, layoutDelay, edit ? room : layoutCurve, initial, v -> part.y = v);
+        // The edit pills fade where they stand: their holder holds them at its foot, so their room goes from above them.
+        if (!(edit && out)) to(part, "y", y, edit ? (left > 16 && !reduced ? left : layoutTime) : layoutTime, layoutDelay, edit ? (left > 16 && travelCurve != null && !reduced ? travelCurve : room) : layoutCurve, initial, v -> part.y = v);
         to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
         to(part, "height", field && out ? 0 : height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);
         to(part, "opacity", out ? 0 : 1, fadeTime, fadeDelay, fadeCurve, initial, v -> part.opacity = v);

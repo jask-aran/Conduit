@@ -82,9 +82,10 @@
 .ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; }
 .ui-phone-composer[data-layout="surface"][data-show~="track"] .ui-voice-track { right: 0; }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur): their scope's. */
-.ui-phone-edit { position: relative; --collapse-gap: var(--space-md); }
+.ui-phone-edit { position: relative; display: flex; flex-direction: column; justify-content: flex-end; --collapse-gap: var(--space-md); }
 /* In the composer's flow, a collapse (motion.css) as the field is: its room is the composer's, so the dock's height --
-   and so the transcript's inset above it -- includes it while it shows, and gives it back in one glide as it goes. */
+   and so the transcript's inset above it -- includes it while it shows, and gives it back in one glide as it goes. Its
+   pills sit at its foot, so they fade where they stand as the room goes from above them. */
 .ui-phone-edit-pills { display: flex; gap: var(--space-md); pointer-events: none; }
 .ui-phone-composer[data-show~="edit"] .ui-phone-edit-pills > .ui-pill { pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) {

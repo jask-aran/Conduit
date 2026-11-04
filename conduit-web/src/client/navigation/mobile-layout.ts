@@ -1,6 +1,7 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
-import { travelsWithoutLayout, travelWithoutLayout } from "./keyboard-travel.ts";
+import { travelEasing, travelsWithoutLayout, travelWithoutLayout } from "./keyboard-travel.ts";
+import { keyboardTravel } from "@/components/ui/motion";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -352,6 +353,8 @@ export function bindVisualViewportShell(): () => void {
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
+        // Rooms given meanwhile (the composer's field going) glide on the keyboard's time (motion.ts).
+        keyboardTravel(durationMs - (info.startedAt ? Math.min(durationMs, Math.max(0, Date.now() - info.startedAt)) : 0), travelEasing(curve));
         // With the native composer up, the travel has no layout in it (keyboard-travel.ts).
         travel?.cancel();
         travel = null;

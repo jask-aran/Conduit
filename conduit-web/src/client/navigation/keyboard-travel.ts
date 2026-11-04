@@ -23,13 +23,16 @@ const shown = (element: Element) => element.getClientRects().length > 0;
 /** Whether a travel should be drawn this way now: the native composer is mirroring the web one. */
 export const travelsWithoutLayout = () => !!document.querySelector(".ui-phone-composer[data-native-mirror]");
 
+/** The system's curve as CSS: linear() through its samples. */
+export const travelEasing = (curve: number[]) => CSS.supports("animation-timing-function", "linear(0, 1)") && curve.length >= 2
+  ? `linear(${curve.map((value) => Math.min(1.5, Math.max(-0.5, value))).join(", ")})` : "cubic-bezier(.2, 0, 0, 1)";
+
 export type Travel = { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number };
 
 /** One travel. `setKeyboard(height)` sets the shell's keyboard height and lays the app out for it. */
 export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number) => void) {
   const low = Math.min(travel.from, travel.to);
-  const easing = CSS.supports("animation-timing-function", "linear(0, 1)") && travel.curve.length >= 2
-    ? `linear(${travel.curve.map((value) => Math.min(1.5, Math.max(-0.5, value))).join(", ")})` : "cubic-bezier(.2, 0, 0, 1)";
+  const easing = travelEasing(travel.curve);
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
   const scrollers = [...document.querySelectorAll(SCROLLERS)].filter((scroller) => shown(scroller) && atFoot(scroller));
   // Where the composer's row sits at each end, measured, not computed: the keyboard's height is not its travel (the

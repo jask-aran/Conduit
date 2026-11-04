@@ -4,6 +4,12 @@ const config: CapacitorConfig = {
   appId: "com.jaskaran.conduit",
   appName: "Conduit",
   webDir: "dist",
+  /*
+   * No bridge logging, in any build. Debug builds otherwise write every plugin call and event to logcat -- the
+   * keyboard's every frame, and the native composer's draft text with each keystroke -- which is both the person's
+   * words in a system log and a console write on every frame of a travel.
+   */
+  loggingBehavior: "none",
   android: {
     /*
      * The shell's page is `https://localhost`, so a call to a plain-HTTP

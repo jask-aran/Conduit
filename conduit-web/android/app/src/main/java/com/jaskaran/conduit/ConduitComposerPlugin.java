@@ -166,9 +166,13 @@ public class ConduitComposerPlugin extends Plugin {
                     }
                     @Override public WindowInsetsAnimationCompat.BoundsCompat onStart(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
                         if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0 && root != null) {
+                            // A room given while the keyboard travels goes on the keyboard's own time and curve (motion.ts, travel).
+                            if (moves != null && animation.getDurationMillis() > 0) moves.travel(animation.getDurationMillis(), animation.getInterpolator());
                             // Insets at onStart contain the destination. Do not change the per-frame tracking below.
                             WindowInsetsCompat target = ViewCompat.getRootWindowInsets(root);
-                            if (target != null && !target.isVisible(WindowInsetsCompat.Type.ime())) announceClosing();
+                            // Only a hide of this composer's own keyboard: moving focus off the WebView can run a hide of
+                            // the keyboard that was there before, which is not the person closing this one.
+                            if (target != null && !target.isVisible(WindowInsetsCompat.Type.ime()) && seenIme) announceClosing();
                         }
                         return bounds;
                     }
@@ -181,20 +185,14 @@ public class ConduitComposerPlugin extends Plugin {
                         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
                         if (insets != null) {
                             move(insets);
-                            if (!insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
+                            // As at onStart: the end of a hide that ran before this composer's keyboard came up is not its close.
+                            if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
                         }
                     }
                 });
                 root.post(() -> {
                     if (root == null || closing || returning) return;
-                    input.requestFocus();
-                    /*
-                     * Through the window's insets controller, not showSoftInput: the WebView still holds the input
-                     * connection on this frame, and showSoftInput on a view that is not yet the served one is ignored
-                     * ("is not served"), leaving the keyboard to come up a second later on a retry. The controller
-                     * waits for the focused view to be served and then shows it.
-                     */
-                    androidx.core.view.WindowCompat.getInsetsController(getActivity().getWindow(), input).show(WindowInsetsCompat.Type.ime());
+                    focusAndShow(0);
                     root.requestApplyInsets();
                 });
                 call.resolve();
@@ -421,6 +419,24 @@ public class ConduitComposerPlugin extends Plugin {
             }
             call.resolve();
         });
+    }
+    /*
+     * The field takes focus, then the keyboard is asked for -- in that order, and only once the field holds the input
+     * connection. Asked for any sooner the system shows a keyboard attached to nothing (a TYPE_NULL editor: Gboard
+     * draws its number row, the field has no caret), and the first tap on the field then attaches it, swapping the
+     * layout and the keyboard's height. A frame or two can pass before focus moves off the WebView, so this checks each
+     * frame, for a few.
+     */
+    private void focusAndShow(int attempt) {
+        if (root == null || closing || returning || input == null) return;
+        InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (!input.isFocused()) input.requestFocus();
+        if (input.isFocused() && imm.isActive(input)) {
+            androidx.core.view.WindowCompat.getInsetsController(getActivity().getWindow(), input).show(WindowInsetsCompat.Type.ime());
+            return;
+        }
+        if (attempt < 12) android.view.Choreographer.getInstance().postFrameCallback(time -> focusAndShow(attempt + 1));
+        else androidx.core.view.WindowCompat.getInsetsController(getActivity().getWindow(), input).show(WindowInsetsCompat.Type.ime());
     }
     private void atRest() {
         if (root == null || returning) return;

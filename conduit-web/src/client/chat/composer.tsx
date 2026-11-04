@@ -837,6 +837,8 @@ export function Composer(props: {
   });
 
   let nativeStarting = false;
+  let reopenNative = false;
+  let nativeClosing = false;
   let nativeDisposed = false;
   let nativeChat: string | null = null;
   let nativeAction: ComposerAction | null = null;
@@ -861,9 +863,11 @@ export function Composer(props: {
     await nativeComposer.end();
     for (const listener of nativeListeners) void listener.remove();
     nativeListeners = [];
-    nativeStarting = false;
+    nativeStarting = false; nativeClosing = false;
     const action = nativeAction; nativeAction = null;
     if (nativeDisposed || nativeChat !== props.chat.loadedId()) return;
+    // The keyboard pill tapped while the native composer was still handing back: open it again now.
+    if (reopenNative) { reopenNative = false; if (!action || action === "keyboard") { startNativeTyping(); return; } }
     if (action === "attach") {
       const trigger = input.closest(".ui-phone-composer")?.querySelector<HTMLButtonElement>('button[aria-label="Message options"]');
       // Kobalte opens touch triggers on click only after pointerdown records the pointer type.
@@ -875,8 +879,10 @@ export function Composer(props: {
   };
   const startNativeTyping = () => {
     if (!voiceFirst() || composerKind() !== "native" || !nativeComposerAvailable() || input.disabled) return false;
-    if (nativeUp() || nativeStarting) return true;
-    nativeStarting = true;
+    if (nativeUp() && !nativeStarting) { if (nativeClosing) reopenNative = true; return true; }
+    // Handing back (the close's slide and the swap at rest): a tap now is not lost, it opens again once that is done.
+    if (nativeStarting) { if (!nativeUp()) reopenNative = true; return true; }
+    nativeStarting = true; nativeClosing = false;
     nativeChat = props.chat.loadedId();
     setInputFocused(true); setKeyboardWanted(true);
     void (async () => {
@@ -885,6 +891,7 @@ export function Composer(props: {
         const listeners = await Promise.allSettled([
           nativeComposer.addListener("input", (event) => { if (nativeUp() && nativeChat === props.chat.loadedId()) mirrorNativeInput(event); }),
           nativeComposer.addListener("closing", (event) => {
+            nativeClosing = true;
             if (!nativeUp() || nativeChat !== props.chat.loadedId()) return;
             mirrorNativeInput(event); setInputFocused(false); setKeyboardWanted(false);
           }),
@@ -903,6 +910,7 @@ export function Composer(props: {
             else if (name === "stop") void props.chat.stop();
             else if (name === "latest") scrollToLatest();
             else if (name === "undo" || name === "delete" || name === "left" || name === "right" || name === "select") editActions[name === "select" ? "end" : name]();
+            else if (name === "keyboard" && nativeClosing) reopenNative = true;
             else { nativeAction = name; void nativeComposer.end(); }
           }),
         ]);
