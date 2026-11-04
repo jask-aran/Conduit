@@ -18,8 +18,9 @@ import { agentView } from "../state/agent";
 import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
-import { formatMicrophoneError, hasAudioSignal, rematchInputDevice, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
-import { shortcutFromKeyboardEvent } from "../chat/voice-dictation";
+import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
+import { installedClientKind } from "../platform/installed-client";
+import { isPhoneVoice, shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
 import { createVoiceWaveformController } from "../chat/voice-waveform";
@@ -59,7 +60,7 @@ import {
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
 import settingsIndex from "virtual:settings-index";
-import { Button, Input, TextArea, Spinner, Segmented, Switch } from "@/components/ui/controls";
+import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { OverlayDialog } from "@/components/ui/dialog";
@@ -918,8 +919,8 @@ export function Settings(props: {
       const devices = await listAudioInputDevices();
       setAudioInputDevices(devices);
       setAudioInputStatus("ready");
-      const moved = rematchInputDevice(voiceDraft(), devices);
-      if (moved) updateVoiceDraft({ inputDeviceId: moved });
+      const patch = rememberMicrophones(voiceDraft(), devices);
+      if (Object.keys(patch).length) updateVoiceDraft(patch);
     } catch (error) {
       setAudioInputError(formatMicrophoneError(error));
       setAudioInputStatus("error");
@@ -1145,7 +1146,7 @@ export function Settings(props: {
     clearAudioInputTest();
     setAudioInputSignalDetected(false);
     audioInputWaveform.reset();
-    const selectedDeviceId = voiceDraft().inputDeviceId;
+    const selectedDeviceId = isPhoneVoice() && voiceDraft().preferSpeakerphone ? voiceDraft().speakerphoneId : voiceDraft().inputDeviceId;
     let session: AudioInputTestSession | null = null;
     try {
       session = beginAudioInputTest(selectedDeviceId, {
@@ -1543,13 +1544,22 @@ export function Settings(props: {
                 </Group>
 
                 <Group title="Input">
+                  <Show when={isPhoneVoice()}>
+                    <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">
+                      <Switch label="Prefer speakerphone" disabled={audioInputBusy()} checked={voiceDraft().preferSpeakerphone} onChange={(preferSpeakerphone) => updateVoiceDraft({ preferSpeakerphone })} />
+                    </SettingLine>
+                  </Show>
+                  <Show when={!isPhoneVoice() || !voiceDraft().preferSpeakerphone}>
                   <SettingLine plain label="Microphone">
                       <Select ref={voiceInputSelect} id="voice-input-device" aria-label="Microphone" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => { const deviceId = event.currentTarget.value; updateVoiceDraft({ inputDeviceId: deviceId, inputDeviceLabel: audioInputDevices().find((device) => device.deviceId === deviceId)?.label || "" }); }}>
                         <option value="">System default</option>
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
-                        <For each={audioInputDevices()}>{(device) => <option value={device.deviceId}>{device.label}</option>}</For>
+                        <For each={audioInputDevices()}>{(device, index) => <option value={device.deviceId}>{microphoneName(device, index())}</option>}</For>
                       </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><Icons.Refresh /></Button>
+                  </SettingLine>
+                  </Show>
+                  <SettingLine plain label="Test microphone">
                       <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <Icons.Stop /> : <Icons.Play />}</Button></Show>
                       <Button variant="ghost" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
                   </SettingLine>
@@ -1558,6 +1568,20 @@ export function Settings(props: {
                     <SettingLine plain label={audioInputBusy() ? (audioInputSignalDetected() ? "Signal" : "Listening…") : audioInputTest()!.signalDetected ? "Signal" : "No signal"} state={<>level {Math.round(audioInputWaveform.level() * 100)}% · peak {Math.round(audioInputWaveform.peak() * 100)}%</>}></SettingLine><SettingWide><VoiceWaveform history={audioInputWaveform.history} level={audioInputWaveform.level} peak={audioInputWaveform.peak} state={audioInputBusy() ? "listening" : "stopped"} variant="compact" barDensity={3} ariaLabel="Microphone input level" /></SettingWide>
                   </Show>
                   <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <Note tone="error">{message()}</Note>}</Show>
+                  <Show when={installedClientKind === "android"}>
+                    <SettingLine plain label="Other audio while listening">
+                      <Segmented arrows label="Other audio while listening" value={voiceDraft().otherAudio} onChange={(otherAudio) => updateVoiceDraft({ otherAudio })} options={[
+                        { value: "keep", label: "Keep" },
+                        { value: "lower", label: "Lower" },
+                        { value: "mute", label: "Mute" },
+                      ]} />
+                    </SettingLine>
+                    <Show when={voiceDraft().otherAudio === "lower"}>
+                      <SettingLine plain label="Lowered to">
+                        <Slider label="Lowered to" value={String(voiceDraft().otherAudioLevel)} onChange={(value) => updateVoiceDraft({ otherAudioLevel: Number(value) })} options={Array.from({ length: 16 }, (_, index) => { const value = 5 + index * 5; return { value: String(value), label: `${value}%` }; })} />
+                      </SettingLine>
+                    </Show>
+                  </Show>
                   <SettingLine plain label="Capture">
                     <Segmented arrows label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
                       { value: "raw", label: "Raw" },

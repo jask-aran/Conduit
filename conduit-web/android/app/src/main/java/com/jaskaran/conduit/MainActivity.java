@@ -61,6 +61,7 @@ public class MainActivity extends BridgeActivity {
         ConduitUpdaterPlugin.revertUnconfirmed(this);
         registerPlugin(ConduitDiscoveryPlugin.class);
         registerPlugin(ConduitKeyboardPlugin.class);
+        registerPlugin(ConduitAudioPlugin.class);
         registerPlugin(ConduitTlsPlugin.class);
         registerPlugin(ConduitUpdaterPlugin.class);
         registerPlugin(ConduitPushPlugin.class);

@@ -5,6 +5,10 @@ export interface VoiceDictationSettings {
   inputDeviceId: string;
   /** The chosen microphone's name: Android hands out new ids, so the id alone is lost. */
   inputDeviceLabel?: string;
+  preferSpeakerphone: boolean;
+  speakerphoneId: string;
+  otherAudio: "keep" | "lower" | "mute";
+  otherAudioLevel: number;
   captureProfile: "raw" | "processed";
   warmMicrophone: boolean;
 }

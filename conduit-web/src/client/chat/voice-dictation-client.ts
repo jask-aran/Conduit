@@ -1,3 +1,6 @@
+import { isPhoneVoice, loadVoiceDictationSettings } from "./voice-dictation.js";
+import { installedClientKind } from "../platform/installed-client";
+import { lowerOtherAudio, restoreOtherAudio } from "../platform/audio-ducking";
 import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
 import { dictationSocketUrl } from "../api/transport";
@@ -267,6 +270,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
 
   const stopCapture = ({ retainWarm = false, closeContext = false } = {}) => {
     captureAcceptingAudio = false;
+    restoreOtherAudio();
     if (captureStartedAt !== null && captureStoppedAt === null) captureStoppedAt = performance.now();
     diagnostics?.captureStopped();
     resolveCaptureDrain();
@@ -321,6 +325,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   };
 
   const onStopWarmMicrophone = () => {
+    restoreOtherAudio();
     releaseWarmAfterStop = true;
     if (["starting", "listening"].includes(state)) {
       requestStop();
@@ -331,6 +336,13 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   };
   let requestStop: () => void = () => {};
   window.addEventListener(WARM_MICROPHONE_STOP_EVENT, onStopWarmMicrophone);
+  const onVisibilityChanged = () => {
+    if (document.hidden) onStopWarmMicrophone();
+  };
+  if (installedClientKind === "android") {
+    window.addEventListener("pagehide", onStopWarmMicrophone);
+    document.addEventListener("visibilitychange", onVisibilityChanged);
+  }
 
   const transmitAudio = (buffer: ArrayBuffer) => {
     const currentSocket = socket;
@@ -435,6 +447,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
         if (state !== "starting") return;
         captureStartedAt = performance.now();
         captureStoppedAt = null;
+        if (!stopRequested && !document.hidden) lowerOtherAudio(loadVoiceDictationSettings());
         setState("listening");
       };
       processor.port.onmessage = (event: MessageEvent<ArrayBuffer | { type: string; buffer?: ArrayBuffer; rms?: number; peak?: number }>) => {
@@ -490,6 +503,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
 
   const stop = () => {
     if (!["starting", "listening"].includes(state)) return;
+    restoreOtherAudio();
     diagnostics?.stopRequested();
     stopRequested = true;
     // Stop has ended the capture window. The worklet may still flush its final
@@ -531,7 +545,9 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     }
     diagnostics = diagnosticsFactory?.(acceptedAt) || null;
     try {
-      const inputDeviceId = options.getInputDeviceId?.() || "";
+      const voiceSettings = loadVoiceDictationSettings();
+      const preferSpeakerphone = isPhoneVoice() && voiceSettings.preferSpeakerphone;
+      const inputDeviceId = preferSpeakerphone ? voiceSettings.speakerphoneId : options.getInputDeviceId?.() || "";
       const captureProfile = normalizeVoiceCaptureProfile(options.getCaptureProfile?.());
       requestedStreamDeviceId = inputDeviceId;
       requestedStreamProfile = captureProfile;
@@ -558,7 +574,10 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
       if (reuseStream) diagnostics?.microphoneReused();
       const requested = reuseStream
         ? Promise.resolve(stream!)
-        : navigator.mediaDevices.getUserMedia(constraints);
+        : navigator.mediaDevices.getUserMedia(constraints).catch((error: unknown) => {
+          if (!preferSpeakerphone || !inputDeviceId || stopRequested || state !== "starting" || !isUnavailableAudioInputError(error)) throw error;
+          return navigator.mediaDevices.getUserMedia(audioInputConstraints("", captureProfile));
+        });
       permission = requested;
       requested.then(
         (acquired) => {
@@ -666,6 +685,8 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     stopCapture({ closeContext: true });
     closeSocket();
     window.removeEventListener(WARM_MICROPHONE_STOP_EVENT, onStopWarmMicrophone);
+    window.removeEventListener("pagehide", onStopWarmMicrophone);
+    document.removeEventListener("visibilitychange", onVisibilityChanged);
     setState("idle");
   };
 

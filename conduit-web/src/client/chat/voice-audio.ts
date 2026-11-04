@@ -1,3 +1,5 @@
+import { isPhoneVoice, loadVoiceDictationSettings, saveVoiceDictationSettings } from "./voice-dictation.js";
+import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { installedClientKind } from "../platform/installed-client.ts";
 
 export interface AudioInputDevice {
@@ -106,10 +108,36 @@ export function rematchInputDevice(settings: { inputDeviceId: string; inputDevic
   return devices.find((device) => device.deviceId && device.label === settings.inputDeviceLabel)?.deviceId ?? null;
 }
 
+/** Display names only. Keep device.label unchanged for rematching. */
+export function microphoneName(device: AudioInputDevice, index = 0): string {
+  if (/^speakerphone$/i.test(device.label)) return "Phone (bottom mic)";
+  if (/^headset earpiece$/i.test(device.label)) return "Phone (top mic)";
+  if (/^bluetooth headset$/i.test(device.label)) return "Bluetooth headset";
+  return device.label || `Microphone ${index + 1}`;
+}
+
+export function rememberMicrophones(settings: Pick<VoiceDictationSettings, "inputDeviceId" | "inputDeviceLabel" | "speakerphoneId">, devices: AudioInputDevice[]): Partial<VoiceDictationSettings> {
+  const patch: Partial<VoiceDictationSettings> = {};
+  const speaker = devices.find((device) => device.deviceId && /^speakerphone$/i.test(device.label));
+  // An anonymous list does not prove that a remembered device is gone.
+  if (speaker && speaker.deviceId !== settings.speakerphoneId) patch.speakerphoneId = speaker.deviceId;
+  else if (!speaker && settings.speakerphoneId && devices.some((device) => device.label)) patch.speakerphoneId = "";
+  const moved = rematchInputDevice(settings, devices);
+  if (moved) patch.inputDeviceId = moved;
+  return patch;
+}
+
 /** Called each time dictation opens the microphone: the device then names its microphones without opening one more. */
 const micOpened = new Set<() => void>();
 export const onMicrophoneOpened = (listener: () => void) => { micOpened.add(listener); return () => micOpened.delete(listener); };
-export const microphoneOpened = () => { for (const listener of micOpened) listener(); };
+export const microphoneOpened = () => {
+  if (isPhoneVoice()) void listAudioInputDevices({ openForNames: false }).then((devices) => {
+    const settings = loadVoiceDictationSettings();
+    const patch = rememberMicrophones(settings, devices);
+    if (Object.keys(patch).length) saveVoiceDictationSettings({ ...settings, ...patch });
+  }).catch(() => {});
+  for (const listener of micOpened) listener();
+};
 
 /** openForNames: false never opens the microphone (at startup, where opening it takes the phone's audio and pauses
  *  the person's music); the list may then come back without ids or names. */
@@ -129,10 +157,12 @@ export async function listAudioInputDevices({ openForNames = true }: { openForNa
     }
   }
   return devices
-    .filter((device) => device.kind === "audioinput")
-    .map((device, index) => ({
+    .filter((device) => device.kind === "audioinput" && device.deviceId !== ""
+      && !(!device.label && ["default", "communications"].includes(device.deviceId))
+      && !/^(system default|default)(\s*[-–].*)?$/i.test(device.label))
+    .map((device) => ({
       deviceId: device.deviceId,
-      label: device.label || `Microphone ${index + 1}`,
+      label: device.label,
       groupId: device.groupId,
     }));
 }

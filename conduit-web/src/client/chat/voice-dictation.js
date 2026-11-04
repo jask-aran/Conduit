@@ -1,5 +1,10 @@
+import { Capacitor } from "@capacitor/core";
+import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
+
+export const isPhoneVoice = () => !(typeof window !== "undefined" && window.__TAURI_INTERNALS__) && (Capacitor.isNativePlatform() || (typeof matchMedia === "function" && matchMedia(PHONE_LAYOUT_QUERY).matches));
+
 export const VOICE_DICTATION_STORAGE_KEY = "conduit:voice-dictation";
-export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", captureProfile: "raw", warmMicrophone: false });
+export const DEFAULT_VOICE_DICTATION_SETTINGS = Object.freeze({ shortcut: "Ctrl+Shift+D", activation: "push_to_talk", autoSend: false, inputDeviceId: "", captureProfile: "raw", warmMicrophone: false, preferSpeakerphone: isPhoneVoice(), speakerphoneId: "", otherAudio: "lower", otherAudioLevel: 30 });
 const LEGACY_DEFAULT_SHORTCUT = "Super+D";
 
 export const NO_SIGNAL_ERROR_MIN_DURATION_MS = 5_000;
@@ -68,6 +73,10 @@ export function releasesShortcut(event, shortcut) {
     || (released === "shift" && parts.modifiers.has("Shift"));
 }
 
+function normalizeOtherAudioLevel(value) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(5, Math.min(80, Math.round(value))) : 30;
+}
+
 /** @typedef {import("./voice-dictation-types.ts").VoiceDictationSettings} VoiceDictationSettings */
 
 /** @param {Storage=} storage @returns {VoiceDictationSettings} */
@@ -83,9 +92,13 @@ export function loadVoiceDictationSettings(storage = globalThis.localStorage) {
       inputDeviceLabel: typeof stored?.inputDeviceLabel === "string" ? stored.inputDeviceLabel : "",
       captureProfile: stored?.captureProfile === "processed" ? "processed" : "raw",
       warmMicrophone: stored?.warmMicrophone === true,
+      preferSpeakerphone: typeof stored?.preferSpeakerphone === "boolean" ? stored.preferSpeakerphone : isPhoneVoice(),
+      speakerphoneId: typeof stored?.speakerphoneId === "string" ? stored.speakerphoneId : "",
+      otherAudio: stored?.otherAudio === "keep" || stored?.otherAudio === "mute" ? stored.otherAudio : "lower",
+      otherAudioLevel: normalizeOtherAudioLevel(stored?.otherAudioLevel),
     };
   } catch {
-    return { ...DEFAULT_VOICE_DICTATION_SETTINGS };
+    return { ...DEFAULT_VOICE_DICTATION_SETTINGS, inputDeviceLabel: "", preferSpeakerphone: isPhoneVoice() };
   }
 }
 
@@ -99,6 +112,10 @@ export function saveVoiceDictationSettings(settings, storage = globalThis.localS
     inputDeviceLabel: typeof settings.inputDeviceLabel === "string" ? settings.inputDeviceLabel : "",
     captureProfile: settings.captureProfile === "processed" ? "processed" : "raw",
     warmMicrophone: settings.warmMicrophone === true,
+    preferSpeakerphone: typeof settings.preferSpeakerphone === "boolean" ? settings.preferSpeakerphone : isPhoneVoice(),
+    speakerphoneId: typeof settings.speakerphoneId === "string" ? settings.speakerphoneId : "",
+    otherAudio: settings.otherAudio === "keep" || settings.otherAudio === "mute" ? settings.otherAudio : "lower",
+    otherAudioLevel: normalizeOtherAudioLevel(settings.otherAudioLevel),
   };
   storage?.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(normalized));
   if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: {
