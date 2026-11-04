@@ -138,6 +138,13 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
     }
 
     static javax.net.ssl.SSLSocketFactory pairedSocketFactory(java.util.concurrent.atomic.AtomicBoolean vouched) throws Exception {
+        javax.net.ssl.SSLContext context = javax.net.ssl.SSLContext.getInstance("TLS");
+        context.init(null, new javax.net.ssl.TrustManager[] { pairedTrust(vouched) }, null);
+        return context.getSocketFactory();
+    }
+
+    /** The platform's trust, or a certificate the hub's attestation vouches for (which sets vouched). */
+    static javax.net.ssl.X509TrustManager pairedTrust(java.util.concurrent.atomic.AtomicBoolean vouched) throws Exception {
         javax.net.ssl.TrustManagerFactory factory = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
         factory.init((java.security.KeyStore) null);
         javax.net.ssl.X509TrustManager system = null;
@@ -154,9 +161,7 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
             }
             @Override public X509Certificate[] getAcceptedIssuers() { return platform.getAcceptedIssuers(); }
         };
-        javax.net.ssl.SSLContext context = javax.net.ssl.SSLContext.getInstance("TLS");
-        context.init(null, new javax.net.ssl.TrustManager[] { paired }, null);
-        return context.getSocketFactory();
+        return paired;
     }
 
     /** Ed25519 SubjectPublicKeyInfo: this fixed prefix, then the 32-byte key. */

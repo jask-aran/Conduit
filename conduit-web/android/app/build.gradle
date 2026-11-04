@@ -77,6 +77,8 @@ dependencies {
     // Ed25519 verification of the leaf attestation: the platform offers it
     // only on some images (ConduitWebViewClient).
     implementation "com.google.crypto.tink:tink-android:1.23.0"
+    // Float's live transcription socket (ConduitFloatLive); the app already carries the Kotlin stdlib it needs.
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation("org.unifiedpush.android:connector:3.3.5") {
         exclude group: "com.google.crypto.tink", module: "tink"
     }
