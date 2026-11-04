@@ -696,6 +696,9 @@ public class ConduitFloatService extends Service {
             { 180, .58f, .2f, 290, 7, .5f }, { 300, .64f, .21f, 22, -9, -.35f }, { 60, .64f, .23f, 345, 11, .6f },
             { 0, .74f, .17f, 62, -13, .45f }, { 125, .6f, .2f, 315, 8, -.3f } };
         private final float[] turns = { 0, 1.3f, 2.6f, 3.9f, 5.2f };
+        /* Scale: the blobs' size against the surface (the app's is 1); tempo: how fast they turn. At the app's size they
+           blend into one still gradient across a pill this small, so Float's are smaller and quicker. */
+        private static final float AURA_SCALE = .45f, AURA_TEMPO = 2.2f;
         private Bitmap aura;
         private int[] auraPixels;
         private float auraShown, auraLevel;
@@ -779,11 +782,11 @@ public class ConduitFloatService extends Service {
             float[] bx = new float[n], by = new float[n], br = new float[n], bl = new float[n], bc = new float[n], ba = new float[n], bb = new float[n];
             for (int i = 0; i < n; i++) {
                 float[] blob = blobs[i];
-                turns[i] += dt * (2 * (float) Math.PI / blob[4]) * (1 + 1.5f * lv);
-                double t = turns[i], from = Math.toRadians(blob[0]), reach = .38 * (.9 + lv * blob[5] + .25 * Math.sin(2 * t));
+                turns[i] += AURA_TEMPO * dt * (2 * (float) Math.PI / blob[4]) * (1 + 1.5f * lv);
+                double t = turns[i], from = Math.toRadians(blob[0]), reach = AURA_SCALE * .38 * (.9 + lv * blob[5] + .25 * Math.sin(2 * t));
                 bx[i] = (float) (.5 + .32 * Math.cos(from) + .14 * Math.cos(t));
                 by[i] = (float) (.5 + .36 * Math.sin(from) + .26 * Math.sin(t));
-                br[i] = (float) Math.pow(Math.max(.06, reach), 2);
+                br[i] = (float) Math.pow(Math.max(.06 * AURA_SCALE, reach), 2);
                 bl[i] = blob[1] + .05f * lv; bc[i] = blob[2];
                 ba[i] = (float) Math.cos(Math.toRadians(blob[3])); bb[i] = (float) Math.sin(Math.toRadians(blob[3]));
             }
