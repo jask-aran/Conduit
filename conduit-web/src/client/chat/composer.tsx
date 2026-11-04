@@ -1,6 +1,8 @@
 import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { haptic } from "@/components/ui/haptics";
+import { expectKeyboardTravel } from "@/components/ui/motion";
+import { KEYBOARD_TRAVEL_EVENT } from "../navigation/keyboard-travel";
 import { pickPhotos } from "../platform/photos";
 import { openNativeCamera } from "../platform/camera";
 import { composerKind, nativeComposer, nativeComposerAvailable, type ComposerAction, type ComposerInput } from "../platform/native-composer";
@@ -839,6 +841,16 @@ export function Composer(props: {
   let nativeStarting = false;
   let reopenNative = false;
   let nativeClosing = false;
+  // A keyboard hide starting with the native composer up takes it out of typing now, before the travel measures where
+  // it ends (keyboard-travel.ts), so the field's going rides the same motion; the closing event after is then a no-op.
+  onMount(() => {
+    const travel = (event: Event) => {
+      if (!(event as CustomEvent<{ hiding: boolean }>).detail.hiding || !nativeUp() || nativeClosing) return;
+      nativeClosing = true; setInputFocused(false); setKeyboardWanted(false);
+    };
+    document.addEventListener(KEYBOARD_TRAVEL_EVENT, travel);
+    onCleanup(() => document.removeEventListener(KEYBOARD_TRAVEL_EVENT, travel));
+  });
   let nativeDisposed = false;
   let nativeChat: string | null = null;
   let nativeAction: ComposerAction | null = null;
@@ -884,7 +896,6 @@ export function Composer(props: {
     if (nativeStarting) { if (!nativeUp()) reopenNative = true; return true; }
     nativeStarting = true; nativeClosing = false;
     nativeChat = props.chat.loadedId();
-    setInputFocused(true); setKeyboardWanted(true);
     void (async () => {
       try {
         // Register every event before begin can focus the EditText and start the IME.
@@ -922,6 +933,9 @@ export function Composer(props: {
         if (!root) throw new Error("Phone composer is not mounted");
         setNativeUp(true);
         lastNativeText = props.chat.draft();
+        // Into typing only now, in the task that hands the composer to native and hides this one: flipped on the tap,
+        // the web composer's field and edit pills faded in for the frames the listeners took to register.
+        expectKeyboardTravel(); setInputFocused(true); setKeyboardWanted(true);
         nativeMirror = mirror(root, input, nativeComposer, () => ({ empty: phoneMode(false, false) ?? "idle", text: phoneMode(false, true) ?? "idle" }));
         await nativeMirror.ready;
         nativeStarting = false;

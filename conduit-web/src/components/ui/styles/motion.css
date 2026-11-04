@@ -11,9 +11,11 @@
  *   - it holds others and its room goes: collapse (the phone composer's field and its edit pills)
  *
  *   fade      comes and goes where it stands: in over the gentle duration from its first frame, out over the quick one
- *   tuck      a part in a row that goes keeps its size and slides under its left neighbour (--tuck-size, --tuck-gap) as
- *             it fades, its room going with the fade, so a neighbour that takes the room grows in the same move; in, the
- *             same backwards -- never seen squeezed
+ *   tuck      a part in a row that goes keeps its size and slides under its left neighbour (--tuck-size, --tuck-gap),
+ *             its room going with it, so a neighbour that takes the room grows in the same move -- never seen squeezed,
+ *             and never seen meeting its neighbour: out, it fades first (quick, decelerating) and slides half a quick
+ *             duration after, nearly gone before it reaches it; in, it slides out from under it first and fades in once
+ *             clear, half a quick duration on
  *   collapse  a holder glides its height and room over gentle on ease-room, including content changes, from the
  *             first frame both ways: out, what it holds fades over the quick duration as its room goes (measured by
  *             motion.ts), so whatever moves with the room makes one move
@@ -32,8 +34,8 @@
   transition: width var(--duration-gentle) var(--ease-arrive) var(--fold-delay), min-width var(--duration-gentle) var(--ease-arrive) var(--fold-delay),
     margin var(--duration-gentle) var(--ease-arrive) var(--fold-delay), flex-grow var(--duration-gentle) var(--ease-arrive),
     opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
-[data-move="tuck"] { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: 0s; }
-[data-move="tuck"][data-out] { opacity: 0; pointer-events: none; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
+[data-move="tuck"] { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: calc(var(--duration-quick) / 2); --fold-delay: 0s; }
+[data-move="tuck"][data-out] { opacity: 0; pointer-events: none; --fade: var(--duration-quick); --fade-ease: var(--ease-arrive); --fade-delay: 0s; --fold-delay: calc(var(--duration-quick) / 2); }
 [data-move="tuck"][data-folded] { min-width: var(--tuck-size, var(--pill-size)); margin-inline-start: calc(-1 * (var(--tuck-size, var(--pill-size)) + var(--tuck-gap, var(--space-md)))); overflow: clip; }
 
 /* motion.ts measures the content and animates height and the gap from the current presentation. */

@@ -47,6 +47,8 @@ import java.util.Set;
 public class ConduitComposerPlugin extends Plugin {
     private FrameLayout root, field;
     private EditText input;
+    /** The motion tokens the moves were built from. */
+    private String motionSpec = null;
     private float scale, density, restBottom, fieldWidth, minHeight, iconSize, offsetX;
     private int navBottom, imeBottom;
     private boolean changing, animating, closing, returning, seenIme, hideRequested;
@@ -84,7 +86,8 @@ public class ConduitComposerPlugin extends Plugin {
                 if (states == null || blurStates == null) { call.reject("Missing composer close states"); return; }
                 JSObject spec = call.getObject("motion");
                 if (spec == null) { call.reject("Missing composer moves"); return; }
-                moves = new ConduitMoves(spec);
+                moves = new ConduitMoves(spec); motionSpec = spec.toString();
+                moves.expectTravel();
                 webFocusable = web.isFocusable(); webTouchFocusable = web.isFocusableInTouchMode();
                 web.setFocusableInTouchMode(false); web.setFocusable(false);
                 closingSent = false;
@@ -389,7 +392,9 @@ public class ConduitComposerPlugin extends Plugin {
                     JSObject nextBlurStates = call.getObject("blurStates");
                     if (nextBlurStates != null) blurStates = nextBlurStates;
                     JSObject spec = call.getObject("motion");
-                    if (spec != null) moves = new ConduitMoves(spec);
+                    // Rebuilt only when the tokens change (reduced motion switched): rebuilding on every update dropped
+                    // what the moves were holding for the keyboard's travel.
+                    if (spec != null && !spec.toString().equals(motionSpec)) { motionSpec = spec.toString(); moves = new ConduitMoves(spec); }
                     JSArray description = call.getArray("parts"); JSObject row = call.getObject("row");
                     if (description != null && row != null) setParts(description, row);
                 }

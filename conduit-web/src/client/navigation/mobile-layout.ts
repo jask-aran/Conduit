@@ -354,15 +354,18 @@ export function bindVisualViewportShell(): () => void {
         stopDrawing();
         travelling = true;
         // Rooms given meanwhile (the composer's field going) glide on the keyboard's time (motion.ts).
-        keyboardTravel(durationMs - (info.startedAt ? Math.min(durationMs, Math.max(0, Date.now() - info.startedAt)) : 0), travelEasing(curve));
-        // With the native composer up, the travel has no layout in it (keyboard-travel.ts).
+        const travelLeft = durationMs - (info.startedAt ? Math.min(durationMs, Math.max(0, Date.now() - info.startedAt)) : 0);
+        // With the native composer up, the travel has no layout in it (keyboard-travel.ts), and carries the rooms too:
+        // it measures before they are told.
         travel?.cancel();
         travel = null;
         if (travelsWithoutLayout()) {
           travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt },
             (height) => { shellKeyboard = height; noteKeyboardFrame(true); sync(); });
+          keyboardTravel(travelLeft, travelEasing(curve));
           return;
         }
+        keyboardTravel(travelLeft, travelEasing(curve));
         const draw = () => {
           const t = (performance.now() - began) / durationMs;
           shellKeyboard = info.from + (info.to - info.from) * along(curve, t);

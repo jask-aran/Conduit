@@ -1,4 +1,8 @@
 import { logKeyboardEvent } from "./keyboard-probe.ts";
+import { settleRooms } from "@/components/ui/motion";
+
+/** Said at a travel's start, before its end is measured: a hide takes the composer out of typing now (composer.tsx). */
+export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
 
 /**
  * The keyboard's travel with no layout in it, while the native composer is up (components/ui/native-phone-composer.ts).
@@ -36,11 +40,17 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const easing = travelEasing(travel.curve);
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
   const scrollers = [...document.querySelectorAll(SCROLLERS)].filter(shown);
-  // Where the composer's row sits at each end, measured, not computed: the keyboard's height is not its travel (the
-  // navigation bar's room is given up as the keyboard takes it). The row, not the dock, whose box holds that room.
-  const probe = riders[0]?.querySelector(".ui-phone-row") ?? riders[0] ?? scrollers[0];
-  const foot = (height: number) => { setKeyboard(height); return probe ? probe.getBoundingClientRect().bottom : 0; };
-  const atFrom = foot(travel.from), atTo = foot(travel.to), atLow = foot(low);
+  // Where the composer's top sits at each end, measured, not computed: what rides the keyboard -- the riders at the
+  // dock's top, and a transcript held against the composer -- moves with it, and it moves by the keyboard's travel
+  // (less the navigation bar's room, given up as the keyboard takes it) and by the rooms the composer's own change
+  // takes or gives (the field, the edit pills). Measured once as it starts, then again with the composer's change
+  // made and its rooms settled at once (they are hidden: the native composer draws them), so all of it rides here.
+  const probe = riders[0]?.querySelector(".ui-phone-composer") ?? riders[0] ?? scrollers[0];
+  const top = (height: number) => { setKeyboard(height); return probe ? probe.getBoundingClientRect().top : 0; };
+  const atFrom = top(travel.from);
+  document.dispatchEvent(new CustomEvent(KEYBOARD_TRAVEL_EVENT, { detail: { hiding: travel.to < travel.from } }));
+  settleRooms();
+  const atTo = top(travel.to), atLow = top(low);
   const duration = Math.max(1, travel.durationMs);
   const along = travel.startedAt ? Math.min(duration - 1, Math.max(0, Date.now() - travel.startedAt)) : 0;
   const animations = [...riders, ...scrollers].map((element) => {

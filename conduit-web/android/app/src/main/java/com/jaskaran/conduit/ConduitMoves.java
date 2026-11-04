@@ -21,6 +21,29 @@ final class ConduitMoves {
     private long travelEnds = 0; private Interpolator travelCurve = null;
     void travel(long durationMs, Interpolator curve) {
         travelEnds = android.os.SystemClock.uptimeMillis() + durationMs; travelCurve = curve;
+        release();
+    }
+    /*
+     * Opening, the keyboard is expected: the field's and the edit pills' arrival (their room and their fade) waits for
+     * it, so the composer, the keyboard and the transcript make one motion on the keyboard's curve, instead of the
+     * composer starting on the tap and the keyboard a beat later. Released by the travel, or after a while without one
+     * (a hardware keyboard).
+     */
+    private final java.util.List<Runnable> held = new java.util.ArrayList<>();
+    private static boolean arrives(JSONObject state) {
+        return !state.optBoolean("out") && ("field".equals(state.optString("kind")) || "holder".equals(state.optString("kind")) || state.optBoolean("edit"));
+    }
+    private boolean expecting = false;
+    private final android.os.Handler later = new android.os.Handler(android.os.Looper.getMainLooper());
+    void expectTravel() {
+        expecting = true;
+        later.removeCallbacksAndMessages(null);
+        later.postDelayed(this::release, 400);
+    }
+    private void release() {
+        expecting = false; later.removeCallbacksAndMessages(null);
+        java.util.List<Runnable> now = new java.util.ArrayList<>(held); held.clear();
+        for (Runnable run : now) run.run();
     }
 
     ConduitMoves(JSONObject spec) {
@@ -34,6 +57,8 @@ final class ConduitMoves {
         return new PathInterpolator((float) points.optDouble(0), (float) points.optDouble(1), (float) points.optDouble(2), (float) points.optDouble(3));
     }
     static final class Part {
+        /** Arriving, held for the keyboard's travel (ConduitMoves.expectTravel). */
+        boolean waiting;
         final View view;
         JSONObject state;
         final Map<String, ValueAnimator> running = new HashMap<>();
@@ -54,6 +79,8 @@ final class ConduitMoves {
     /** Begin at the live web presentation, including an entrance already in progress. */
     void seed(Part part, JSONObject state, float x, float y, float width, float height, float opacity) {
         part.state = state;
+        // Arriving while a keyboard is expected: seeded unseen, and held for the travel (update).
+        if (expecting && arrives(state)) { part.waiting = true; opacity = 0; }
         part.x = x; part.y = y; part.width = width; part.height = height; part.opacity = opacity;
         part.values.put("x", x); part.values.put("y", y); part.values.put("width", width); part.values.put("height", height);
         part.values.put("opacity", opacity);
@@ -77,13 +104,24 @@ final class ConduitMoves {
     /** Rects are the row's solved flex layout: circles keep size while tucking; grow hands remaining room to the mic.
      * Each geometric channel retains its current value on reversal and ignores unchanged destinations. */
     void update(Part part, JSONObject state, float x, float y, float width, float height, long roomDelay, boolean fieldOut) {
+        boolean arriving = arrives(state) && (part.state == null || part.state.optBoolean("out") || part.waiting);
+        if (expecting && arriving) {
+            // Unseen where it starts, and moved when the keyboard moves.
+            if (part.state == null) part.opacity = 0;
+            part.waiting = true; part.draw();
+            held.add(() -> { part.waiting = false; update(part, state, x, y, width, height, roomDelay, fieldOut); });
+            return;
+        }
         boolean initial = part.state == null, out = state.optBoolean("out"), folded = state.optBoolean("folded");
         boolean field = "field".equals(state.optString("kind"));
         String move = state.optString("move");
         long layoutTime = gentle, layoutDelay = roomDelay, fadeTime = out ? quick : gentle, fadeDelay = 0;
         Interpolator fadeCurve = out ? leave : arrive;
         switch (move) {
-            case "tuck": break;
+            case "tuck":
+                // As motion.css: out, it fades first and slides half a quick duration after; in, it slides first and fades in once clear.
+                if (out) { fadeCurve = arrive; layoutDelay = Math.max(layoutDelay, quick / 2); } else fadeDelay = quick / 2;
+                break;
             case "collapse": layoutDelay = 0; break;
             case "wipe": fadeTime = out ? quick : 0; fadeCurve = leave; break;
             case "give": fadeTime = 0; break;
