@@ -430,7 +430,7 @@ public class ConduitFloatService extends Service {
                 String tokenOrigin = prefs().getString("recordingTokenOrigin", origin);
                 String cookie = CookieManager.getInstance().getCookie(origin);
                 final ConduitFloatLive[] client = new ConduitFloatLive[1];
-                client[0] = new ConduitFloatLive(origin, cookie, () -> nativeToken(tokenOrigin), text -> main.post(() -> {
+                client[0] = new ConduitFloatLive(origin, cookie, () -> ConduitHubAuth.nativeToken(ConduitFloatService.this, tokenOrigin), text -> main.post(() -> {
                     if (!destroyed && live == client[0] && state != State.HANDLE) {
                         liveText = text;
                         updateCaption();
@@ -554,33 +554,17 @@ public class ConduitFloatService extends Service {
         String origin = prefs().getString("recordingOrigin", "");
         String tokenOrigin = prefs().getString("recordingTokenOrigin", origin);
         String recordingId = prefs().getString("recordingId", "");
-        // CookieManager's own cookie for this exact origin, never logged or sent across a redirect.
-        String cookie = CookieManager.getInstance().getCookie(origin);
         worker.execute(() -> {
             boolean success = false;
             HttpURLConnection connection = null;
             try {
                 if (destroyed || sending != generation) return;
-                connection = (HttpURLConnection) new URL(origin + "/v0/agent/voice-message").openConnection();
+                connection = ConduitHubAuth.open(ConduitFloatService.this, origin, tokenOrigin, "/v0/agent/voice-message", "POST");
                 uploading = connection;
-                if (connection instanceof javax.net.ssl.HttpsURLConnection)
-                    ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
-                connection.setInstanceFollowRedirects(false);
                 connection.setConnectTimeout(15_000);
                 connection.setReadTimeout(610_000);
-                connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "audio/wav");
                 if (!recordingId.isEmpty()) connection.setRequestProperty("X-Conduit-Voice-Id", recordingId);
-                boolean hasCookie = cookie != null && !cookie.isEmpty();
-                if (hasCookie) connection.setRequestProperty("Cookie", cookie);
-                String token = null;
-                try { token = nativeToken(tokenOrigin); }
-                catch (Exception error) { if (!hasCookie) throw error; }
-                // A stale cookie from an older shell must not hide the installed client's current session.
-                if (token != null) {
-                    connection.setRequestProperty("Origin", "https://localhost");
-                    connection.setRequestProperty("Authorization", "Bearer " + token);
-                } else if (!hasCookie) throw new IllegalStateException("Open Conduit to sign in");
                 connection.setDoOutput(true);
                 connection.setFixedLengthStreamingMode(recording.length());
                 if (destroyed || sending != generation) return;
@@ -636,25 +620,6 @@ public class ConduitFloatService extends Service {
             case "agent_not_enabled": return "This hub has no jbot";
             default: return status >= 500 ? "Conduit hit an error — try again" : "Couldn't send — open Conduit";
         }
-    }
-
-    /** Read the existing secure-storage entry; do not duplicate a native session in plain preferences. */
-    private String nativeToken(String origin) throws Exception {
-        // Matches native-auth-client.ts and @aparajita/capacitor-secure-storage's Android AES/GCM format.
-        String key = "capacitor-storage_conduit.native.bearer-token." + origin.replaceAll("[^a-zA-Z0-9.\\-]+", "-");
-        String stored = getSharedPreferences("WSSecureStorageSharedPreferences", MODE_PRIVATE).getString(key, null);
-        if (stored == null) return null;
-        String[] parts = stored.split("\u0010");
-        if (parts.length != 2) return null;
-        KeyStore store = KeyStore.getInstance("AndroidKeyStore");
-        store.load(null);
-        KeyStore.Entry entry = store.getEntry(key, null);
-        if (!(entry instanceof KeyStore.SecretKeyEntry)) return null;
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, ((KeyStore.SecretKeyEntry) entry).getSecretKey(),
-            new GCMParameterSpec(128, Base64.decode(parts[1], Base64.DEFAULT)));
-        Object value = new JSONTokener(new String(cipher.doFinal(Base64.decode(parts[0], Base64.DEFAULT)), StandardCharsets.UTF_8)).nextValue();
-        return value instanceof String && ((String) value).matches("[A-Za-z0-9_-]{32,256}") ? (String) value : null;
     }
 
     @Override public void onDestroy() {
