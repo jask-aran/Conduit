@@ -76,7 +76,7 @@ final class FloatRadial {
     private final Surface surface;
     private final Surface[] rowSurfaces = new Surface[3];
     private final Dialog[] rowDialogs = new Dialog[3];
-    private final FloatFrost frost = new FloatFrost(-1, 1);
+    private final FloatFrost frost;
     private final Drawable[] icons = new Drawable[SLOTS.length];
     private final Drawable cross;
     private final Paint names = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -102,6 +102,9 @@ final class FloatRadial {
     FloatRadial(Context context, Listener listener) {
         this.context = context;
         this.listener = listener;
+        // As bright as the handle, with its 1dp hairline.
+        frost = new FloatFrost(-1, dp(1));
+        frost.setLifted(true);
         for (Slot slot : SLOTS) {
             icons[slot.ordinal()] = context.getDrawable(slot.icon).mutate();
             icons[slot.ordinal()].setTint(ICON);

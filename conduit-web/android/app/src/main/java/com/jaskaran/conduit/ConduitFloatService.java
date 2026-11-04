@@ -32,6 +32,8 @@ public class ConduitFloatService extends Service {
     private static ConduitFloatService active;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    /** Captures' miniatures, off the worker (which sends and records, and may be busy for seconds). */
+    private static final ExecutorService THUMBS = Executors.newSingleThreadExecutor();
     private final FloatMachine machine = new FloatMachine();
     private FloatWindow window;
     private FloatRecorder recorder;
@@ -491,7 +493,7 @@ public class ConduitFloatService extends Service {
             return;
         }
         boolean flash = !"photo".equals(result.kind);
-        worker.execute(() -> {
+        THUMBS.execute(() -> {
             android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
             options.inSampleSize = 4;
             android.graphics.Bitmap thumb;

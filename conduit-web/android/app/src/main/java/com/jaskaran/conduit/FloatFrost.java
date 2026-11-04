@@ -38,6 +38,14 @@ final class FloatFrost extends Drawable {
     private final android.graphics.Rect source = new android.graphics.Rect();
     private final Path clip = new Path();
 
+    /**
+     * Lifted: Float's own controls (the radial's slots), as bright as its handle: over the blurred screen, the
+     * handle's ground (#3a3b3f) at 80% before the white fill, so a dark screen behind does not sink them.
+     */
+    private boolean lifted;
+    void setLifted(boolean lifted) { this.lifted = lifted; invalidateSelf(); }
+    private static final int LIFT = 0xcc3a3b3f;
+
     /** Draws this blurred screenshot behind the frost, as backdrop-filter does; null goes back to the ground. */
     void setBackdrop(android.graphics.Bitmap blurredScreen) { backdrop = blurredScreen; invalidateSelf(); }
     /** Where the window's top-left is on screen, in pixels, so the right part of the backdrop shows. */
@@ -81,7 +89,7 @@ final class FloatFrost extends Drawable {
         return radius < 0 ? Math.min(getBounds().width(), getBounds().height()) / 2f : radius;
     }
 
-    private int fill() { return ColorUtils.compositeColors(FILL, blurred ? GROUND_OVER_BLUR : GROUND); }
+    private int fill() { return ColorUtils.compositeColors(FILL, lifted ? 0xfa3a3b3f : blurred ? GROUND_OVER_BLUR : GROUND); }
 
     private int faded(int colour) { return ColorUtils.setAlphaComponent(colour, Math.round((colour >>> 24) * alpha / 255f)); }
 
@@ -123,6 +131,7 @@ final class FloatFrost extends Drawable {
         backdropPaint.setAlpha(alpha);
         canvas.drawBitmap(backdrop, source, bounds, backdropPaint);
         paint.setStyle(Paint.Style.FILL);
+        if (lifted) { paint.setColor(faded(LIFT)); canvas.drawRect(bounds, paint); }
         paint.setColor(faded(FILL));
         canvas.drawRect(bounds, paint);
         canvas.restore();
