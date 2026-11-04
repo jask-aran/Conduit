@@ -179,7 +179,8 @@ export function AgentPage(props: {
   const [readingEntry, setReadingEntry] = createSignal<AgentInboxEntry | null>(null);
   const [adding, setAdding] = createSignal(false);
   const [note, setNote] = createSignal("");
-  const routines = createMemo(() => timed().filter((rule) => rule.routine).map((rule) => ({ id: rule.routine!, title: rule.title })));
+  // A function, not a memo: `timed` is declared below, and a memo would read it now.
+  const routines = () => timed().filter((rule) => rule.routine).map((rule) => ({ id: rule.routine!, title: rule.title }));
   const routineTitle = (id: string) => routines().find((routine) => routine.id === id)?.title || id;
   const editEntry = (entry: AgentInboxEntry, body: Record<string, unknown>) => act(`inbox:${entry.id}`, () =>
     api(`/v0/agent/inbox/${encodeURIComponent(entry.id)}`, { method: "PATCH", body: JSON.stringify(body) }));
