@@ -341,9 +341,12 @@ export class DurableRuntime {
       install(defineExtension({ name: "ui", tools: [UiTool(this)] }));
       const web = await this.webTools();
       if (web) install(web);
-      install(createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
+      const codemode = createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
         instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with conduit_ui, view browser:hub)",
-        instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] }));
+        instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] });
+      install(defineExtension({ ...codemode, sections: [...codemode.sections,
+        section("connector-instructions", () => this.contextStore?.connectorInstructions() || undefined, { tag: false }),
+      ] }));
       this.refreshConnectors();
       // The hub's browser (browser-host.js): agent-browser's own MCP tools, from codemode, once its server answers.
       install(defineExtension({ name: "browser", tools: [] }));

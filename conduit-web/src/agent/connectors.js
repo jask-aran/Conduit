@@ -17,7 +17,7 @@ export const CONNECTORS = [{ id: "executor", label: "Executor", url: "https://mc
 export class Connectors {
   constructor(agent) {
     this.agent = agent;
-    this.entries = new Map(CONNECTORS.map((info) => [info.id, { info, status: "off", tools: [] }]));
+    this.entries = new Map(CONNECTORS.map((info) => [info.id, { info, status: "off", tools: [], instructions: null }]));
     this.pending = new Map();
   }
   entry(id) {
@@ -62,6 +62,7 @@ export class Connectors {
   }
   /** What one connected tool says it does, for a look at what the account reaches. */
   describe(id) { return this.entry(id).tools.map((tool) => ({ name: tool.label, description: tool.description, readOnly: tool.connectorReadOnly })); }
+  instructions(id) { const entry = this.entry(id); return entry.status === "on" ? entry.instructions : null; }
   tools() { return [...this.entries.values()].flatMap((entry) => entry.tools); }
   /** Wait for one still coming up (the hub starting, a reconnect) before anything says it is not connected. */
   async ready(id, timeoutMs = 15_000) {
@@ -106,7 +107,7 @@ export class Connectors {
             } };
         });
         if (!entry.authorized) { await client.close(); return; }
-        const old = entry.client; entry.client = client; entry.tools = tools; entry.status = "on";
+        const old = entry.client; entry.client = client; entry.tools = tools; entry.instructions = client.instructions ?? null; entry.status = "on";
         client.onClose(() => { if (entry.client === client && entry.authorized) { entry.status = "error"; entry.error = "Connector connection closed"; } });
         await this.agent.runtime.refreshConnectors?.();
         if (old) await old.close().catch(() => {});
@@ -155,7 +156,7 @@ export class Connectors {
     const entry = this.entry(id); entry.authorized = false;
     for (const [key, pending] of this.pending) if (pending.id === id) this.pending.delete(key);
     if (entry.connecting) await entry.connecting;
-    const client = entry.client; entry.client = null; entry.tools = []; entry.status = "off"; delete entry.error;
+    const client = entry.client; entry.client = null; entry.tools = []; entry.instructions = null; entry.status = "off"; delete entry.error;
     await this.agent.runtime.refreshConnectors?.();
     await client?.close().catch(() => {});
     await fs.unlink(this.file(entry)).catch((error) => { if (error.code !== "ENOENT") throw error; });

@@ -140,6 +140,8 @@ Belongs in a user-facing README with diagrams later; this is the record.
   text: `{{person.name}}`, `{{assistant.name}}`, `{{timezone}}`, `{{home}}`, `{{now}}`. Their store is the front
   matter of USER.md, so the person (through Settings) or jbot (through memory) changes them and the UI and jbot's
   context follow at once.
+Skills form one live block after a role's text blocks. Each document keeps an ordered `skills` list; the skill texts remain separate editable blocks. The `skill` tool loads a body on request. A skill with `load: auto` also loads before a matching tool result when its last load is outside the current context or at least 50,000 context tokens old. Connector instructions follow the codemode tools, using the instructions each connected server sent at initialization.
+
 - **Entry**: one item in the inbox: source, time, level, headline, body (the facts and numbered links), handled
   or not. Tasks produce entries.
 - **Report**: a run's final answer to jbot: complete and specific, links included, never addressed to the

@@ -5,11 +5,12 @@ import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
 import { Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
-import { StatusText } from "@/components/ui/file";
+import { FileView, StatusText } from "@/components/ui/file";
+import { FileBody } from "@/components/ui/viewer";
 import { Group } from "@/components/ui/group";
 import { Loading, Note } from "@/components/ui/state";
 import { Actions, IconButton } from "@/components/ui/actions";
-import { Heading } from "@/components/ui/header";
+import { Heading, PaneHeader } from "@/components/ui/header";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import type { ModelOption } from "../api/contracts";
@@ -22,10 +23,10 @@ import { Row } from "@/components/ui/row";
  * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
  */
 export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "installed" | "jbot" | "custom" | "conduit";
-  templateUpdate?: boolean; description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
+  skill?: boolean; templateUpdate?: boolean; description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
-  blocks: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean; subagents?: { model: string; thinkingLevel: string } | null };
+  blocks: string[]; skills: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean; subagents?: { model: string; thinkingLevel: string } | null };
 type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string; templateText?: string };
 /** A slot: fixed (filled into a system prompt when a thread starts; a change reaches the thread as an update notice)
  *  or current (never in a system prompt; it travels on notices). */
@@ -80,7 +81,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const details = createBlockDetails(props.context);
   const documents = () => props.context.data()?.documents ?? [];
   const current = createMemo(() => props.context.document(props.documentId) ?? documents()[0]);
-  const texts = () => (props.context.data()?.blocks ?? []).filter((block) => block.kind === "text" && block.id !== "web-tools");
+  const texts = () => (props.context.data()?.blocks ?? []).filter((block) => block.kind === "text" && !block.skill && block.id !== "web-tools");
   createEffect(() => { if (!props.context.document(props.documentId) && documents()[0]) props.onDocument(documents()[0]!.id); });
   const every = () => { const doc = current(); return doc ? [...doc.blocks, ...doc.live, ...doc.first, ...(doc.notices ?? [])] : []; };
   createEffect(() => { if (!every().includes(chosen())) setChosen(current()?.blocks[0] ?? ""); });
@@ -90,11 +91,11 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     if (!id) return setDetail(null);
     void details(id).then((loaded) => { if (chosen() === id) setDetail(loaded); }, (cause) => setFailure(String(cause?.message || cause)));
   });
-  const save = async (blocks: string[]) => {
+  const save = async (blocks: string[], skills = current()?.skills ?? []) => {
     const doc = current();
     if (!doc) return;
     setBusy(true); setFailure("");
-    try { await api(`/v0/context/documents/${encodeURIComponent(doc.id)}`, { method: "PUT", body: JSON.stringify({ blocks }) }); await props.context.load(); }
+    try { await api(`/v0/context/documents/${encodeURIComponent(doc.id)}`, { method: "PUT", body: JSON.stringify({ blocks, skills }) }); await props.context.load(); }
     catch (cause) { setFailure(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); }
   };
@@ -143,16 +144,48 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     <option value="">{pickProps.title}</option>
     <For each={others()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
   </Select>;
+  const [chosenSkill, setChosenSkill] = createSignal("");
+  const skillAt = () => current()?.skills.indexOf(chosenSkill()) ?? -1;
+  const editSkills = (change: (list: string[]) => void) => {
+    const doc = current();
+    if (!doc) return;
+    const list = [...doc.skills]; change(list); void save(doc.blocks, list);
+  };
+  const skillChoices = () => (props.context.data()?.blocks ?? []).filter((block) => block.skill && !current()?.skills.includes(block.id));
+  const Skills = () => <FileView>
+    <PaneHeader kind="file"><Heading kind="editor" live>Skills</Heading>
+    <Actions kind="editor">
+      <Select look="icon" icon={<Icons.Add />} search="Search skills" title="Add a skill" aria-label="Add a skill" value="" disabled={busy()}
+        onChange={(event) => { const id = event.currentTarget.value; if (id) editSkills((list) => list.splice(skillAt() + 1, 0, id)); setChosenSkill(id); }}>
+        <option value="">Add a skill</option>
+        <For each={skillChoices()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
+      </Select>
+      <IconButton kind="file" label="Move up" disabled={busy() || skillAt() <= 0} onClick={() => editSkills((list) => {
+        const at = skillAt(); const [id] = list.splice(at, 1); list.splice(at - 1, 0, id!);
+      })}><Icons.ArrowUp /></IconButton>
+      <IconButton kind="file" label="Move down" disabled={busy() || skillAt() < 0 || skillAt() >= (current()?.skills.length ?? 0) - 1} onClick={() => editSkills((list) => {
+        const at = skillAt(); const [id] = list.splice(at, 1); list.splice(at + 1, 0, id!);
+      })}><Icons.ArrowDown /></IconButton>
+      <IconButton kind="file" label="Remove from this document" disabled={busy() || skillAt() < 0} onClick={() => editSkills((list) => list.splice(skillAt(), 1))}><Icons.Close /></IconButton>
+    </Actions></PaneHeader>
+    <FileBody><ChainMap label="Skills this role can load">
+      <For each={current()?.skills}>{(id, index) => <>
+        <Show when={index() > 0}><ChainGap /></Show>
+        <ChainLink index={index() + 1} name={props.context.block(id)?.label ?? id} current={chosenSkill() === id} onSelect={() => setChosenSkill(id)} />
+        <Row density="nav" element="button" end={<Icons.ChevronRight />} title="Open skill in Blocks" onClick={() => props.onEditBlock(id)}>Open in Blocks</Row>
+      </>}</For>
+    </ChainMap></FileBody>
+  </FileView>;
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
     return <ChainLink index={index} live={block()?.kind === "live"} notice={block()?.kind === "notice"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : block()!.kind === "notice" && block()!.modified ? "changed" : undefined : SOURCE[block()!.source]) : "missing"}
       size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); }} />; };
-  const Detail = () => <Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(block) => {
+  const Detail = () => <Show when={chosen() !== "live-skills"} fallback={<Skills />}><Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(block) => {
     const live = () => block().kind === "live";
     const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
     return <TextEditor fill readOnly label={`${block().label} ${live() ? liveView() === "now" ? "as it stands now" : "template" : "text"}`} value={shown()}
       head={<>
         <Heading kind="editor" live={live()}>{block().label}</Heading>
-        <Show when={live() && block().preview && block().preview !== block().template}>
+        <Show when={live() && block().preview !== undefined && block().preview !== block().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
         <Actions kind="editor">
@@ -174,7 +207,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         </>}>
           <StatusText>{block().tag ? `<${block().tag}> · filled in by Conduit` : "filled in by Conduit"}</StatusText>
         </Show>
-      </>} />; }}</Show>;
+      </>} />; }}</Show></Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<Loading>Loading documents…</Loading>}><Note tone="error">{props.context.error()}</Note></Show>}>
     <Show when={current()}>{(doc) => <Workbench label="Prompts">
       <WorkbenchTitle meta={`${ROLE_KIND[doc().role.kind]} · ${ROLE_STARTS[doc().role.kind]}${doc().modified ? " · changed" : ""}`}
@@ -259,7 +292,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       onChange={(value) => { setDraft(value); setState("idle"); }} onSave={save}
       head={<>
         <Heading kind="editor" live={live()}>{live() ? "Template" : loaded().kind === "notice" ? "Notice" : "Text"}</Heading>
-        <Show when={live() && loaded().preview && loaded().preview !== loaded().template}>
+        <Show when={live() && loaded().preview !== undefined && loaded().preview !== loaded().template}>
           <Segmented size="sm" label="Show" value={liveView()} onChange={setLiveView} options={[{ value: "template", label: "Template" }, { value: "now", label: "Now" }]} />
         </Show>
         <Show when={!live()}><Actions kind="editor">

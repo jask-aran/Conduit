@@ -8,12 +8,21 @@ import { readPolicy, renderRules } from "../agent/approval-policy.js";
 
 const safeId = /^[a-z][a-z0-9-]{0,63}$/;
 const fail = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
+/** The index's opening: skills are listed, not pasted; the `skill` tool loads one (server/skill-tool.js). */
+export const SKILLS_INTRO = "# Skills\n\nSkills are the instructions for kinds of work: each line below says when one applies. When one fits "
+  + "what you are about to do, call `skill` with its name first and follow what it says. It is one quick call, and it beats "
+  + "working from memory. A skill may name files of its own; `skill` reads those too.";
+
 /*
  * What Conduit fills in when the model runs: blocks too, but templates -- the tags the model reads them in and the
  * slots ({{…}}) Conduit fills each turn. `tag` is the section's own tag (pi-durable wraps a section in it); the
  * template is written out whole so the page shows exactly the shape the model gets.
  */
 const live = {
+  "live-skills": { label: "Skills", description: "The skills this role can load: one line each, built from Settings › Skills and the role's skills. `skill` loads one.",
+    template: `${SKILLS_INTRO}\n\n- **{{name}}**: {{description}}` },
+  "live-connector-instructions": { label: "Connector instructions", description: "What each connected tool's own server says about using it, as it sends it when Conduit connects.",
+    template: '<connector name="{{connector name}}">\n{{server instructions}}\n</connector>' },
   "live-working-folder": { label: "Working folder", tag: "cwd", description: "The folder the thread works in: its project's, on whichever device holds it.",
     template: "<cwd>\n{{working folder}}\n</cwd>" },
   "live-codemode-tools": { label: "Codemode tools", tag: "codemode", description: "Every tool the thread has, as functions a script can call; connected accounts' actions under their namespace.",
@@ -71,10 +80,6 @@ const skillBody = (text) => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 const skillDescription = (text) => /^description:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || "";
 /** Whether a skill is offered to subagents and runs too: unless its front matter says `subagents: false`. */
 const forSubagents = (text) => { try { return splitFrontMatter(text).data?.subagents !== false; } catch { return true; } };
-/** The index's opening: skills are listed, not pasted; the `skill` tool loads one (server/skill-tool.js). */
-export const SKILLS_INTRO = "# Skills\n\nSkills are the instructions for kinds of work: each line below says when one applies. When one fits "
-  + "what you are about to do, call `skill` with its name first and follow what it says. It is one quick call, and it beats "
-  + "working from memory. A skill may name files of its own; `skill` reads those too.";
 
 export class ContextStore {
   constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills = null }) {
@@ -137,11 +142,15 @@ export class ContextStore {
   async documents(catalog) {
     catalog ||= await this.catalog();
     const docs = [];
-    const add = (id, kind, roleId, label, blocks, sections = [], first = [], notices = []) => docs.push({ id, label, role: { kind, id: roleId, label }, blocks, live: sections, first, notices });
+    const isSkill = (id) => Boolean(catalog.get(id)?.skill) || id.startsWith("skill-");
+    const add = (id, kind, roleId, label, blocks, sections = [], first = [], notices = []) => docs.push({
+      id, label, role: { kind, id: roleId, label }, blocks: blocks.filter((key) => !isSkill(key)),
+      skills: blocks.filter(isSkill), live: [...(kind !== "service" ? ["live-skills"] : []), ...sections], first, notices,
+    });
     // A profile's default: its own skills, then every skill installed on the hub (a saved document keeps its list).
     const installed = [...catalog.values()].filter((item) => item.installed).map((item) => item.id);
     const templateBlocks = (t) => [...new Set([t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`), ...installed])];
-    const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox", "live-approval-rules"] : [])];
+    const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools", "live-connector-instructions"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox", "live-approval-rules"] : [])];
     for (const t of this.templates) {
       if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
       else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t), [], [...(t.connectors ? ["notice-approval-allowed", "notice-approval-denied"] : []), "notice-report-subagent", "notice-stop"]);
@@ -159,7 +168,21 @@ export class ContextStore {
     add("service:approval", "service", "approval", "Approval model", ["approval-judge"], ["live-approval-rules"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");
-    return docs.map((doc) => ({ ...doc, blocks: saved[doc.id]?.blocks || doc.blocks, subagents: saved[doc.id]?.subagents ?? null, modified: Boolean(saved[doc.id]) }));
+    let migrated = false;
+    for (const stored of Object.values(saved)) {
+      if (!Array.isArray(stored.blocks) || !stored.blocks.some(isSkill)) continue;
+      stored.skills ??= stored.blocks.filter(isSkill);
+      stored.blocks = stored.blocks.filter((key) => !isSkill(key));
+      migrated = true;
+    }
+    if (migrated) await this.writeJson("documents.json", saved);
+    return docs.map((doc) => {
+      const stored = saved[doc.id];
+      const blocks = stored?.blocks || doc.blocks;
+      return { ...doc, blocks: blocks.filter((key) => !isSkill(key)),
+        skills: stored?.skills ?? (stored?.blocks ? blocks.filter(isSkill) : doc.skills),
+        subagents: stored?.subagents ?? null, modified: Boolean(stored) };
+    });
   }
   async content(item) {
     if (item.routine) return item.routine.body;
@@ -174,13 +197,15 @@ export class ContextStore {
   /** A live block as it stands now, in its section's tag as the model gets it; its template where it changes each thread. */
   async previewLive(id) {
     const wrap = (text) => live[id].tag ? `<${live[id].tag}>\n${text}\n</${live[id].tag}>` : text;
+    if (id === "live-skills") return this.skillIndex([...(await this.catalog()).values()].filter((item) => item.skill).map((item) => item.id));
+    if (id === "live-connector-instructions") return this.connectorInstructions();
     if (id === "live-jbot-files" && this.agent()?.folder) return wrap(await renderMemory(this.agent()));
     if (id === "live-inbox" && this.agent()?.enabled()) return wrap(await renderWaitingInbox(this.agent()));
     if (id === "live-approval-rules" && this.agent()?.enabled()) return wrap(renderRules((await readPolicy(this.agent())).policy, this.agent().settings()));
     return live[id].template;
   }
   async summary(item, docs, loaded = null) {
-    const usedBy = docs.filter((doc) => [...doc.blocks, ...doc.live, ...doc.first, ...doc.notices].includes(item.id)).map((doc) => doc.id);
+    const usedBy = docs.filter((doc) => [...doc.blocks, ...doc.skills, ...doc.live, ...doc.first, ...doc.notices].includes(item.id)).map((doc) => doc.id);
     if (item.kind === "live") {
       const preview = loaded && Object.hasOwn(loaded, "preview") ? loaded.preview : await this.previewLive(item.id);
       return { id: item.id, label: item.label, kind: item.kind, source: item.source, description: item.description, tag: item.tag, template: item.template, modified: false, editable: false, resettable: false, deletable: false, chars: preview.length, usedBy };
@@ -191,7 +216,7 @@ export class ContextStore {
     const relative = item.routine ? `routines/${item.routine.name}.md` : item.runRules ? "RUN.md" : null;
     const templateUpdate = relative && def !== null && await seedTemplateUpdate(this.agent().folder, relative,
       item.routine ? await fs.readFile(path.join(this.seedDir, relative), "utf8") : def);
-    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(templateUpdate ? { templateUpdate: true } : {}), ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
+    return { id: item.id, label: item.label, kind: item.kind, source: item.source, ...(item.skill ? { skill: true } : {}), ...(templateUpdate ? { templateUpdate: true } : {}), ...(item.description ? { description: item.description } : {}), ...(item.kind === "notice" ? { slots: item.slots, ...(item.appendix ? { appendix: item.appendix } : {}) } : {}), modified: def !== null && content !== def, editable: true, resettable: def !== null, deletable: item.source === "custom" && !usedBy.length, chars: content.length, usedBy };
   }
   async list() {
     const agent = this.agent();
@@ -283,7 +308,7 @@ export class ContextStore {
       let data = {};
       try { data = splitFrontMatter(text).data || {}; } catch { /* a skill with broken front matter still loads by name */ }
       out.push({ name: skillName(text, item.skill), description: skillDescription(text), folder: item.skill, text,
-        nudge: Array.isArray(data.nudge) ? data.nudge : [], subagents: data.subagents !== false });
+        load: data.load === "auto" ? "auto" : "nudge", nudge: Array.isArray(data.nudge) ? data.nudge : [], subagents: data.subagents !== false });
     }
     return out;
   }
@@ -306,43 +331,65 @@ export class ContextStore {
   }
   async saveDocument(id, input = {}) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Invalid document settings");
-    const { blocks, subagents } = input;
+    const { blocks, skills, subagents } = input;
     await this.document(id); const catalog = await this.catalog();
-    if (blocks !== undefined && (!Array.isArray(blocks) || !blocks.length || blocks.some((key) => typeof key !== "string" || catalog.get(key)?.kind !== "text"))) throw fail("Document needs at least one text block");
+    if (blocks !== undefined && (!Array.isArray(blocks) || !blocks.length || blocks.some((key) => typeof key !== "string" || (catalog.get(key)?.kind !== "text" || catalog.get(key)?.skill)))) throw fail("Document needs at least one text block");
+    if (skills !== undefined && (!Array.isArray(skills) || skills.some((key) => typeof key !== "string" || !catalog.get(key)?.skill))) throw fail("Invalid document skills");
     if (subagents !== undefined && subagents !== null && (typeof subagents !== "object" || Array.isArray(subagents)
       || Object.keys(subagents).length !== 2 || typeof subagents.model !== "string" || !/^[^/\s]+\/\S+$/.test(subagents.model)
       || !["off", "minimal", "low", "medium", "high", "max", "xhigh"].includes(subagents.thinkingLevel))) throw fail("Invalid subagents settings");
-    if (blocks === undefined && subagents === undefined) throw fail("Document needs blocks or subagents");
-    const saved = await this.json("documents.json"); saved[id] = { ...saved[id], ...(blocks !== undefined ? { blocks } : {}), ...(subagents !== undefined ? { subagents } : {}) }; await this.writeJson("documents.json", saved); return this.document(id);
+    if (blocks === undefined && skills === undefined && subagents === undefined) throw fail("Document needs blocks, skills or subagents");
+    const saved = await this.json("documents.json");
+    const current = await this.document(id);
+    saved[id] = { ...saved[id], blocks: blocks ?? current.blocks, skills: skills ?? current.skills, ...(subagents !== undefined ? { subagents } : {}) }; await this.writeJson("documents.json", saved); return this.document(id);
   }
   async resetDocument(id) {
     await this.document(id); const saved = await this.json("documents.json");
-    if (saved[id]) { delete saved[id].blocks; if (!Object.keys(saved[id]).length) delete saved[id]; }
+    if (saved[id]) { delete saved[id].blocks; delete saved[id].skills; if (!Object.keys(saved[id]).length) delete saved[id]; }
     await this.writeJson("documents.json", saved); return this.document(id);
   }
   async textSections(id, { vars, catalog: loadedCatalog } = {}) {
     const catalog = loadedCatalog || await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);
     if (!doc) throw fail("Unknown document", 404);
-    const sections = []; let previousSkill = false;
+    const sections = [];
     // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
     // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
     // A skill turned off in Settings › Skills is left out wherever it is placed.
-    const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text"
-      && !(item.skill && this.skills && !this.skills.enabled(path.basename(item.skill)))
-      && !(item.skill && item.subagents === false && (id === "subagent" || id.startsWith("run:"))));
+    const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text");
     const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
     for (const [index, { key, item }] of blocks.entries()) {
       let text = contents[index];
       if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
-      // An installed skill's files (scripts, references) are in its folder on the hub, which its text names relatively.
-      // A skill is a line of the index (progressive disclosure): its name and when it applies; `skill` loads the body.
-      else if (item.skill) text = `${previousSkill ? "" : `${SKILLS_INTRO}\n\n`}- **${skillName(text, item.skill)}**: ${skillDescription(text) || "(no description)"}`;
       else if (id !== "service:chat-naming") text = text.trim();
-      previousSkill = Boolean(item.skill);
       if (text) sections.push({ blockId: key, label: item.label, kind: "text", part: "system", text });
     }
+    if (doc.live.includes("live-skills")) {
+      const text = await this.skillIndex(doc.skills, { id, vars, catalog });
+      if (text) sections.push({ blockId: "live-skills", label: "Skills", kind: "live", part: "system", text });
+    }
     return { doc, sections };
+  }
+  /** One index, in the system instructions after the role's text blocks; preserve the old separators. */
+  async skillIndex(ids, { id, vars, catalog } = {}) {
+    catalog ||= await this.catalog();
+    const entries = [];
+    for (const key of ids) {
+      const item = catalog.get(key);
+      if (!item?.skill || (this.skills && !this.skills.enabled(path.basename(item.skill)))
+        || (item.subagents === false && (id === "subagent" || id?.startsWith("run:")))) continue;
+      let text = await this.content(item);
+      if (vars && (id === "agent" || id?.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
+      entries.push(`- **${skillName(text, item.skill)}**: ${skillDescription(text) || "(no description)"}`);
+    }
+    return entries.length ? `${SKILLS_INTRO}\n\n${entries.join("\n\n")}` : "";
+  }
+  connectorInstructions() {
+    const connectors = this.agent()?.connectors;
+    return (connectors?.list() || []).flatMap(({ id, label, status }) => {
+      const text = status === "on" && connectors.instructions(id);
+      return text ? [block("connector", { name: label }, text)] : [];
+    }).join("\n\n");
   }
   async assemble(id, options = {}) { return (await this.textSections(id, options)).sections.map((item) => item.text).join("\n\n"); }
   async approvalInstructions() { return this.assemble("service:approval"); }
@@ -354,6 +401,7 @@ export class ContextStore {
     ]);
     const { doc, sections } = await this.textSections(id, { vars, catalog });
     for (const [part, ids] of [["system", doc.live], ["first", doc.first], ["notice", doc.notices]]) for (const blockId of ids) {
+      if (blockId === "live-skills") continue; // Already placed in the system instructions.
       const routine = blockId === "live-routine-context" ? catalog.get(`routine-${doc.role.id}`)?.routine : null;
       const item = catalog.get(blockId);
       if (item?.kind === "notice") { const sample = { ...(vars || {}), now: vars?.now || new Date().toLocaleString(), task: "The task", reason: "The person asked for this run", event: "An event", routine: { title: "Routine", name: "routine" }, report: "The report", title: "Run", ask: { title: "Approval", id: "a-1" }, assistant: { name: "jbot" }, message: "Message", changes: "the person is now Sam" }; sections.push({ blockId, label: item.label, kind: "notice", part, text: renderVars(await this.content(item), sample) }); continue; }
