@@ -7,6 +7,10 @@
 
 /** jbot's home thread has a path of its own; its chat is known once the agent's view loads, and kept for a reload. */
 export const JBOT_THREAD_PATH = "/jbot/thread";
+/** The messages and dashboard are separate documents; /agent keeps its dashboard destination. */
+export function pathJbotPage(pathname = location.pathname): "jbot" | "agent" | null {
+  return pathname === "/jbot" ? "jbot" : pathname === "/jbot/page" || pathname === "/agent" ? "agent" : null;
+}
 const JBOT_HOME_KEY = "conduit.jbot.home";
 let jbotHome: string | null = (() => { try { return localStorage.getItem(JBOT_HOME_KEY); } catch { return null; } })();
 export function setJbotHome(id: string | null) {

@@ -22,6 +22,8 @@ export function Dashboard(props: {
   oneColumn?: boolean;
   /** The left column holds several groups at their own size, scrolling together, instead of one list filling it. */
   stacked?: boolean;
+  /** A room: the conversation and its composer alone, one column at reading width, the conversation filling the height. */
+  room?: boolean;
   ref?: (element: HTMLElement) => void;
   /** A DashHeader. */
   head: JSX.Element;
@@ -39,7 +41,7 @@ export function Dashboard(props: {
   /** After the body: a phone's composer at the foot. */
   dock?: JSX.Element;
 }) {
-  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
       <header class="ui-dash-head">{props.head}{props.actions}</header>
       <Show when={props.notice}><div class="ui-dash-notice">{props.notice}</div></Show>
@@ -49,7 +51,7 @@ export function Dashboard(props: {
         <Show when={props.composer}><div class="ui-dash-composer">{props.composer}</div></Show>
         {props.list}
       </div>
-      <div class="ui-dash-aside">{props.aside}</div>
+      <Show when={!props.room}><div class="ui-dash-aside">{props.aside}</div></Show>
     </div>
     {props.dock}
   </section>;

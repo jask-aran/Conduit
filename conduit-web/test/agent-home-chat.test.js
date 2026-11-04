@@ -4,9 +4,10 @@ import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 import { createEffect, createRoot, createSignal, on, onCleanup } from "solid-js/dist/solid.js";
 
-// Run the page's actual home-thread effect without mounting the app or its UI.
+// Run the messages page's actual home-thread effect without mounting the app or its UI.
 const source = fs.readFileSync(new URL("../src/client/main.tsx", import.meta.url), "utf8");
-const start = source.indexOf("    let loading: string | null = null;", source.indexOf("const renderAgent ="));
+const routes = await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(fs.readFileSync(new URL("../src/client/api/routes.ts", import.meta.url), "utf8")))}`);
+const start = source.indexOf("    let loading: string | null = null;", source.indexOf("const renderJbot ="));
 assert.ok(start >= 0);
 const end = source.indexOf("    // The page shows none of the thread:", start);
 assert.ok(end > start);
@@ -32,12 +33,28 @@ function page(loaded = "home") {
 const flush = async () => { for (let i = 0; i < 5; i += 1) await Promise.resolve(); };
 const home = { chat: { id: "home" }, project: { id: "agent" } };
 
+test("/jbot opens messages; /jbot/page and /agent open the dashboard", () => {
+  assert.equal(routes.pathJbotPage("/jbot"), "jbot");
+  assert.equal(routes.pathJbotPage("/jbot/page"), "agent");
+  assert.equal(routes.pathJbotPage("/agent"), "agent");
+  assert.equal(routes.pathJbotPage("/jbot/thread"), null);
+  routes.setJbotHome("home");
+  assert.equal(routes.chatPath("home"), "/jbot/thread");
+  assert.equal(routes.pathChatId("/jbot/thread"), "home");
+});
+
+test("/jbot/page has no home-thread loader or composer", () => {
+  const dashboard = source.slice(source.indexOf("  const renderAgent ="), source.indexOf("  const renderJbot ="));
+  assert.match(dashboard, /<AgentPage/);
+  assert.doesNotMatch(dashboard, /createEffect|PageComposer|current\.chat/);
+});
+
 test("opening a run does not reselect home when active-chat reset clears loadedId", async () => {
   const state = page();
   try {
     state.setNavigatingId("run");
     state.setLoadedId(null);
-    state.dispose(); // The route commit unmounts the agent page.
+    state.dispose(); // The route commit unmounts /jbot.
     state.setLoadedId("run");
     state.setNavigatingId(null);
     for (const resolve of state.lookups) resolve(home);
@@ -48,7 +65,7 @@ test("opening a run does not reselect home when active-chat reset clears loadedI
   } finally { state.dispose(); }
 });
 
-test("a pending home lookup cannot select after the agent page closes", async () => {
+test("a pending home lookup cannot select after /jbot closes", async () => {
   const state = page(null);
   try {
     assert.equal(state.lookups.length, 1);
@@ -72,7 +89,7 @@ test("a pending home lookup cannot replace a run selection before its route comm
   } finally { state.dispose(); }
 });
 
-test("the agent page still restores home after its session is cleared", async () => {
+test("/jbot still restores home after its session is cleared", async () => {
   const state = page();
   try {
     state.setLoadedId(null);

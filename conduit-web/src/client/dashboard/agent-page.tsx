@@ -7,16 +7,13 @@ import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
 import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
-import { JbotMessages, useJbotMessages } from "./jbot-messages";
-import type { MarkdownRendererId } from "../chat/markdown-settings";
+import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
 import { GroupAction } from "@/components/ui/dashboard";
 
 /**
- * The hub's persistent agent's page (docs/plans/persistent-agent.md): its messages with the person (the message log's
- * app room) and the composer under them; beside them, what needs the person, what it is doing and will do, what came
- * in, its threads and files. Open thread shows the thread underneath. On the dashboards' split layout, as a place's
- * page is.
+ * The agent's dashboard: what needs the person, its work and schedule, its inbox, threads and memory.
+ * Messages opens its app room; Open thread opens the home thread underneath.
  */
 
 const RUN_KIND: Record<string, string> = {
@@ -66,14 +63,8 @@ export function AgentPage(props: {
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
-  markdownRenderer: MarkdownRendererId;
-  /** The home thread's composer: what the person says in the app room, with every composer feature. */
-  composer?: JSX.Element;
-  /** The home thread at work, and a key that moves with what it says: the stream follows both. */
-  working?: boolean;
-  threadChanged?: unknown;
+  onOpenMessages: () => void;
 }) {
-  const log = useJbotMessages(() => props.threadChanged);
   const [now, setNow] = createSignal(Date.now());
   // A run's chat, by its conversation: run ids (bg-1, bg-2…) are counted again and repeat; a conversation never does.
   const [runChats, setRunChats] = createSignal(new Map<string, string>());
@@ -84,6 +75,7 @@ export function AgentPage(props: {
 
   // While the page is open it follows the agent closely; the sidebar's minute is too slow to watch a run finish.
   onMount(() => {
+    setAgentDashboardLaidOut(true);
     void refreshAgent();
     const tick = window.setInterval(() => { setNow(Date.now()); if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
@@ -197,7 +189,7 @@ export function AgentPage(props: {
   const entryContext = (entry: AgentInboxEntry) => entry.status === "handled"
     ? `${entry.title} · ${entry.outcome === "dismissed" ? "dismissed" : "handled"}`
     : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
-  const inboxGroup = () => <SplitGroup id="agent-inbox" label="Context inbox" count={unhandled() || null}
+  const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null}
     actions={<GroupAction onClick={() => setAdding(true)}>Add</GroupAction>}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
@@ -225,7 +217,7 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  const workingGroup = () => <SplitGroup id="agent-working" label="Working on" count={working()?.runs.length || null}>
+  const workingGroup = () => <SplitGroup id="agent-working" order="first" label="Working on" count={working()?.runs.length || null}>
     <Show when={working()?.runs.length} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
       <For each={working()?.runs}>{(run) => runRow(run, true)}</For>
     </Show>
@@ -286,12 +278,12 @@ export function AgentPage(props: {
         onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></IconButton> : undefined}
       </>} />;
   };
-  const timedGroup = () => <SplitGroup id="agent-timed" label="Timed" count={timed().length || null}>
+  const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={timed().length || null}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 
   const watchesGroup = () => <Show when={working()?.watches.length}>
-    <SplitGroup id="agent-watches" label="Watching" count={working()?.watches.length}>
+    <SplitGroup id="agent-watches" order="rest" label="Watching" count={working()?.watches.length}>
       <For each={working()?.watches}>{(watch) =>
         <Row density="list" lead={watch.kind === "webhook" ? <Icons.ExternalLink /> : <Icons.Focus />} label={watch.title}
           context={watch.kind === "webhook" ? "Webhook" : watch.event?.replace(/_/g, " ")} meta={age(watch.lastFiredAt, now())} />}
@@ -301,7 +293,7 @@ export function AgentPage(props: {
 
   // What it may do without asking: each rule an Always on an approval saved, removable here.
   const rulesGroup = () => <Show when={view()?.rules?.length}>
-    <SplitGroup id="agent-rules" label="Allowed" count={view()?.rules?.length}>
+    <SplitGroup id="agent-rules" order="rest" label="Allowed" count={view()?.rules?.length}>
       <For each={view()?.rules}>{(rule) =>
         <Row density="list" lead={<Icons.Permissions />} label={rule.label} title={rule.label} context={age(rule.createdAt, now())}
           meta={<IconButton kind="dash" aria-label="Stop allowing" title="Stop allowing" disabled={busy() !== null}
@@ -318,7 +310,7 @@ export function AgentPage(props: {
   readDecided();
   createEffect(on(now, readDecided, { defer: true }));
   const decidedGroup = () => <Show when={decided().length}>
-    <SplitGroup id="agent-decided" label="Decided for you" count={decided().length}>
+    <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decided().length}>
       <For each={decided().slice(0, 8)}>{(record) =>
         <Row density="list" lead={record.verdict.outcome === "allow" ? <Icons.Check /> : <Icons.Close />} label={record.held.action}
           context={`${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`}
@@ -352,7 +344,7 @@ export function AgentPage(props: {
     ? `${entry.provenance.accepted ? "kept by you, from" : "from"} ${entry.provenance.from} · ${age(entry.provenance.at, now())}`
     : "written by you";
   const rememberedGroup = () => <Show when={remembered()}>{(entries) =>
-    <SplitGroup id="agent-remembered" label="Remembered" count={entries().length || null}
+    <SplitGroup id="agent-remembered" order="rest" label="Remembered" count={entries().length || null}
       more={rememberedOrder().length > 6 && !allRemembered() ? <SplitGroupMore count={rememberedOrder().length - 6} onClick={() => setAllRemembered(true)}>Show all</SplitGroupMore> : undefined}>
       <Show when={entries().length} fallback={<SplitEmpty>Nothing remembered yet.</SplitEmpty>}>
         <For each={allRemembered() ? rememberedOrder() : rememberedOrder().slice(0, 6)}>{(entry) =>
@@ -369,13 +361,13 @@ export function AgentPage(props: {
   </Show>;
 
   // Its memory is files in its folder, read and edited where any file is.
-  const memoryGroup = () => <SplitGroup id="agent-memory" label="Memory">
+  const memoryGroup = () => <SplitGroup id="agent-memory" order="rest" label="Memory">
     <For each={MEMORY}>{(file) =>
       <Row density="list" element="button" onClick={() => props.onOpenFile(file.path)} lead={<Icons.FileText />} label={file.label} context={file.context} />}
     </For>
   </SplitGroup>;
 
-  const recentGroup = () => <SplitGroup id="agent-recent" label="Recent" count={working()?.recent.length || null}>
+  const recentGroup = () => <SplitGroup id="agent-recent" order="rest" label="Recent" count={working()?.recent.length || null}>
     <Show when={working()?.recent.length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
       <For each={working()?.recent}>{(run) => runRow(run, false)}</For>
     </Show>
@@ -383,7 +375,7 @@ export function AgentPage(props: {
 
   // Its threads: home, where it talks to the person, then the side threads it or they started.
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
-  const threadsGroup = () => <SplitGroup id="agent-threads" label="Threads" count={threads().length + (view()?.home ? 1 : 0)}>
+  const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)}>
     <Show when={view()?.home}>{(home) =>
       <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} label="Home" context="Where it talks to you" />}
     </Show>
@@ -400,12 +392,13 @@ export function AgentPage(props: {
   const running = () => working()?.runs.length ? `${working()!.runs.length} running` : null;
 
   return <>
-    {props.header(name())}
+    {props.header(`${name()}'s page`)}
     <Show when={view()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <SplitDashboard page="Agent" label={`${name()}'s page`} onNeed={props.onNeed}
           header={<SplitHeader title={name()} kind="Agent" glyph={<AgentAvatar />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
+            { icon: <Icons.Chat />, label: "Messages", onClick: props.onOpenMessages },
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
@@ -413,10 +406,9 @@ export function AgentPage(props: {
           notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
           // Its day across both columns: in the side column it was too narrow to read.
           band={day()}
-          // Its messages and the composer in the main column; what waits on the person, its work, threads and files beside.
-          conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
-          composer={props.composer}
-          aside={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{decidedGroup()}{rememberedGroup()}{memoryGroup()}</>} />
+          stacked
+          list={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}</>}
+          aside={<>{recentGroup()}{threadsGroup()}{watchesGroup()}{rulesGroup()}{decidedGroup()}{rememberedGroup()}{memoryGroup()}</>} />
       </Show>
     </Show>
 

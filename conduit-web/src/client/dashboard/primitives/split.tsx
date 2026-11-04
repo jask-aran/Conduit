@@ -104,6 +104,8 @@ export function SplitDashboard(props: {
   /** Dashboard's `stacked`: several groups in the left column. */
   stacked?: boolean;
   aside?: JSX.Element;
+  /** Dashboard's `room`: the conversation and composer alone (jbot's messages). */
+  room?: boolean;
   /** What its two columns need, as measured: a document that declares its width, so the pane holding it keeps it. */
   onNeed?: (width: number) => void;
 }) {
@@ -154,7 +156,7 @@ export function SplitDashboard(props: {
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); });
   });
   // A phone docks the composer at the foot, as a chat does (ComposerDock, as the chat's).
-  return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()} stacked={props.stacked}
+  return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()} stacked={props.stacked} room={props.room}
     head={props.header} actions={props.quickActions} notice={props.notice} band={props.band} conversation={props.conversation} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
     dock={<Show when={phone() && props.composer}><ComposerDock data-dash-dock="">{props.composer}</ComposerDock></Show>} /></Phone.Provider>;
 }

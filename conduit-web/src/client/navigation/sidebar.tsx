@@ -1196,7 +1196,7 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "conduit"}>
         <Row density="nav" element="button" lead={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</Row>
-        <Show when={agentView()?.enabled}><Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:agent" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row></Show>
+        <Show when={agentView()?.enabled}><Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:jbot" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row></Show>
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>
         <Show when={props.onNewPane}><Row density="nav" element="button" lead={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</Row></Show>
         <Show when={pinnedItems().length}>

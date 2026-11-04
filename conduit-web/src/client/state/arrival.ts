@@ -5,3 +5,5 @@ import { createSignal } from "solid-js";
  * page: its messages read and the markdown renderer that draws them loaded (dashboard/jbot-messages.tsx sets it).
  */
 export const [agentPageLaidOut, setAgentPageLaidOut] = createSignal(false);
+/** The dashboard has no message log or home-thread composer to wait for. */
+export const [agentDashboardLaidOut, setAgentDashboardLaidOut] = createSignal(false);

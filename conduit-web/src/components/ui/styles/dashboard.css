@@ -210,3 +210,9 @@
 @media (prefers-reduced-motion: reduce) { .ui-group-toggle > svg, .ui-folder-mark [data-part="front"] { transition: none; } }
 .ui-change-status[data-conflict] { color: var(--destructive); }
 .ui-row:where([data-density="list"])[data-change-row][data-selected] { background: var(--tint); }
+
+/* A room (Dashboard room): the page's conversation and composer alone, at reading width, the conversation taking the
+   height the head leaves; on a phone the composer docks at the foot as a dashboard's does. */
+.ui-dash[data-room] { --dash-aside: 0px; --dash-gap: 0px; --dash-min: 0px; }
+.ui-dash[data-room] .ui-dash-body { grid-template-areas: "head" "notice" "band" "main"; grid-template-columns: minmax(0, var(--reading-width)); grid-template-rows: auto auto auto minmax(0, 1fr); }
+.ui-dash[data-room] .ui-dash-conversation { flex: 1 1 0; }
