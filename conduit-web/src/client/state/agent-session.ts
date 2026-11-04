@@ -55,6 +55,8 @@ export function createAgentSession(deps: {
   onEvent: (data: string, chatId: string) => void;
   /** The chat has no agent: none running, or the one it had is gone. */
   onLost: () => void;
+  /** An attach-only request confirmed there is no process. */
+  onAbsent: (chatId: string) => void;
   onError: (error: unknown) => void;
 }) {
   let socket: WebSocket | null = null;
@@ -285,6 +287,7 @@ export function createAgentSession(deps: {
         if ((error as { error?: string } | null)?.error === "no_live_process") {
           pendingRecord = null;
           deps.onLost();
+          deps.onAbsent(chatId);
           return null;
         }
         throw error;

@@ -26,6 +26,34 @@ const runtimeHistory = () => [
     text: "The conversation history before this point was compacted into the following summary:\n\n<summary>\nKept context\n</summary>" }], timestamp: 1004 }),
 ];
 
+test("durable event overflow restores the completed call and settles the turn", async () => {
+  const call = "script";
+  const entries = [
+    runtimeEntry(1, "conduit.user", { role: "user", content: "Create event" }, { messageId: "u1", text: "Create event" }),
+    runtimeEntry(2, "pi.assistant", { role: "assistant", stopReason: "toolUse", timestamp: 1000,
+      content: [{ type: "toolCall", id: call, name: "codemode", arguments: { code: "text(await tools.mcp__executor__call({}));" } }] }),
+    runtimeEntry(3, "pi.tool-result", { role: "toolResult", toolCallId: call, toolName: "codemode", isError: false,
+      content: [{ type: "text", text: "Created" }], details: { calls: [{ name: "mcp__executor__call", args: "{}", status: "ok" }] } }),
+    runtimeEntry(4, "pi.assistant", { role: "assistant", stopReason: "stop", timestamp: 1001, content: [{ type: "text", text: "Done" }] }),
+  ];
+  const events = [];
+  const adapter = Object.create(DurableAdapter.prototype);
+  adapter.runtime = { harness: { snapshot: async () => ({ messages: {} }) } };
+  adapter.publish = (_record, event) => events.push(event);
+  adapter.publishUsage = async () => {};
+  const record = { conversationId: 42, generationSeq: 0, active: true, stopping: false, readOnly: true,
+    generation: { id: "g1" }, hostUiRequests: [], turn: { generationId: "g1", inputs: [1], prompts: ["u1"],
+      last: null, messageId: null, tools: new Map([[call, { name: "codemode", opened: true, output: "" }]]) } };
+  await adapter.translate(record, { type: "snapshot", entries, tools: [], usage: {} });
+  const restored = events.find((event) => event.type === "transcript_sync");
+  assert.equal(restored.tools[0].done, true);
+  assert.equal(restored.tools[0].calls[0].done, true);
+  assert.equal(restored.tools[0].calls[0].isError, false);
+  assert.equal(record.active, false);
+  assert.ok(events.some((event) => event.type === "status" && event.phase === "settled"));
+  assert.ok(!events.some((event) => event.op === "tool.close" && event.cancelled));
+});
+
 test("runtime context, notes and local flags survive the same fold on reload and live placement", async () => {
   const entries = runtimeHistory();
   const reopened = applyTranscriptOps({}, entriesToOps(entries)).messages;

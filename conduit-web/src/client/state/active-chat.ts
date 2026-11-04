@@ -246,7 +246,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let navigationRequest: Promise<void> | null = null;
 
   let currentGeneration: string | null = null;
-  let stopRequest: { generationId: string | null } | null = null;
+  let stopRequest: { generationId: string | null; sent?: boolean } | null = null;
   let selectionToken = 0;
   let navigationToken = 0;
   let liveOpening: LiveOpening | null = null;
@@ -371,6 +371,18 @@ export function createActiveChat(options: ActiveChatOptions) {
       catch (error) { onError(error); }
     },
     onLost: () => { setLive(null); if (liveOpening?.transcriptReady) finishLiveAttach(); },
+    onAbsent: (chatId) => {
+      stopRequest = null;
+      currentGeneration = null;
+      generationStore.clear();
+      setActiveGeneration(null);
+      setActiveGenerationChange(null);
+      resetLiveFlags();
+      setGeneration("idle");
+      void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chatId)}`).then((detail) => {
+        if (selectedId() === chatId && !live() && generation() === "idle") applyDetail(detail, true);
+      }).catch(onError);
+    },
     onError: (error) => { finishLiveAttach(); onError(error); },
   });
   const ensureAgent = session.ensure;
@@ -627,7 +639,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     else if (turnOpen || session.active) setGeneration("active");
     else {
       // A stop owed to a prompt whose turn has not started yet still stands.
-      if (stopRequest?.generationId) stopRequest = null;
+      if (stopRequest?.generationId || stopRequest?.sent) stopRequest = null;
       currentGeneration = null;
       setGeneration("idle");
     }
@@ -1252,12 +1264,15 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const stop = () => {
     if (!streaming()) return;
+    const active = generation() === "active";
     stopRequest = { generationId: currentGeneration };
     setGeneration("stopping");
     // The server clears the queue before it stops, so what was queued comes
     // back to the composer rather than being sent after the stop.
     clearQueue();
     if (stopRequest.generationId) session.sendWhenReady({ type: "stop_generation", generationId: stopRequest.generationId });
+    else if (active && session.isOpen()) { stopRequest.sent = true; session.send({ type: "stop_generation" }); }
+    else if (!session.isOpen()) void session.ensure({ intent: "open" }).catch(onError);
   };
 
   const regenerate = async (entryId: string) => {

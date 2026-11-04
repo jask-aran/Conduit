@@ -924,6 +924,45 @@ export class DurableAdapter extends EventEmitter {
   /** One committed event, in Conduit's words. */
   async translate(record, event) {
     switch (event.type) {
+      case "snapshot": {
+        // watchEvents replaces queued events with a snapshot on overflow. Rebuild what those events would have stated.
+        if (!record.turn && event.run) await this.resumeTurn(record, event);
+        const turn = record.turn;
+        const identity = await this.runtime.harness.snapshot(ConduitIds, record.conversationId, this.context);
+        const ops = entriesToOps(event.entries, identity?.messages || {}, event.tools || []);
+        if (event.run && turn) {
+          // The current prompt is still open, even if its latest committed entry has an answer or tool call.
+          const index = ops.findLastIndex((op) => op.op === "turn.settle" && turn.prompts.includes(op.promptId));
+          if (index >= 0) ops.splice(index, 1);
+        }
+        const projection = applyTranscriptOps({}, ops);
+        this.publish(record, { type: "transcript_sync", generationId: null, replace: true, ...projection });
+        if (turn) {
+          for (const entry of event.entries) {
+            const result = entry.kind === "pi.tool-result" && entry.model?.[0];
+            if (result && turn.tools.get(result.toolCallId)?.opened) {
+              this.toolEnded(record, { toolCallId: result.toolCallId, toolName: result.toolName, entry });
+            }
+          }
+          for (const slot of event.tools || []) {
+            if (slot.status === "done" || turn.tools.get(slot.callId)?.opened) continue;
+            const projected = projection.tools.find((tool) => tool.toolCallId === slot.callId);
+            const scriptCalls = slot.name === "codemode" ? createScriptCalls(SCRIPT_TOOLS) : null;
+            turn.tools.set(slot.callId, { name: slot.name, input: projected?.input || {}, messageId: projected?.messageId || null,
+              details: slot.details, opened: true, output: slot.output || "", ...(scriptCalls ? { scriptCalls } : {}) });
+          }
+          for (const slot of event.nestedTools || []) {
+            const parent = turn.tools.get(slot.parentCallId);
+            if (slot.status === "running" && parent?.scriptCalls) parent.scriptCalls.start(slot.parentCallId, slot.callId, slot.name, slot.arguments);
+          }
+          const prompt = event.entries.findLastIndex((entry) => turn.prompts.includes(entry.data?.messageId));
+          const last = event.entries.slice(prompt + 1).findLast((entry) => entry.kind === "pi.assistant");
+          if (last?.model?.[0]) turn.last = last.model[0];
+          if (!event.run) this.finish(record);
+        }
+        record.usage = event.usage;
+        break;
+      }
       case "run_start": {
         const turn = record.turn?.inputs.length === 0 && record.active ? record.turn : this.beginTurn(record, event.inputs);
         turn.inputs = [...event.inputs];

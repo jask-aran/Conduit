@@ -385,7 +385,9 @@ export function createLiveSessionStream({
       if (capabilities.steer || capabilities.followUpQueue) {
         await clearQueuedMessages(record, adapter).catch((error) => console.warn("Could not clear the queue before stopping", error.message));
       }
-      return adapter.cancel(record.id, stoppedGenerationId);
+      const result = await adapter.cancel(record.id, stoppedGenerationId);
+      if (!record.active) adapter.publish(record, { type: "runtime_state", session: adapter.view(record) });
+      return result;
     }
     if (command.type === "fork_and_prompt") {
       if (!adapter.getCapabilities().fork) throw Object.assign(new Error("This agent does not support forks"), { code: "fork_unsupported", status: 409 });
