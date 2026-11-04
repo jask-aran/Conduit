@@ -80,7 +80,6 @@ import type { PaletteActions, PaletteContext } from "./palette/command-registry"
 import { bindVisualViewportShell, focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, setMobileOverlayKind } from "./navigation/mobile-layout";
 import { toggleKeyboardProbe } from "./navigation/keyboard-probe.ts";
 import { composerKind, saveComposerKind } from "./platform/native-composer";
-import { compositorKeyboard, saveKeyboardMotion } from "./navigation/keyboard-compositor.ts";
 import { beginEdgeSwipe, swipeBlocked, type EdgeSwipe } from "./navigation/mobile-swipe";
 import { bindOverlayScrollbars } from "./navigation/overlay-scrollbars";
 
@@ -5215,10 +5214,6 @@ function App() {
     keyboardProbe: () => toast.success(toggleKeyboardProbe()
       ? "Keyboard measurements on. Open a chat and tap the composer."
       : "Keyboard measurements off."),
-    keyboardPath: () => {
-      const next = saveKeyboardMotion(compositorKeyboard() ? "layout" : "compositor");
-      toast.success(next === "compositor" ? "Keyboard motion: compositor (the spike)." : "Keyboard motion: per-frame layout (as before).");
-    },
     composerPath: () => {
       const next = saveComposerKind(composerKind() === "web" ? "native" : "web");
       toast.success(next === "native" ? "Composer: Native while typing." : "Composer: Web.");

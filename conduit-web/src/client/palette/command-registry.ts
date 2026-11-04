@@ -70,7 +70,6 @@ export interface PaletteActions {
   updateApp: () => void;
   resetAppCache: () => void;
   keyboardProbe: () => void;
-  keyboardPath: () => void;
   composerPath: () => void;
   keyboardTour: () => void;
   delete: () => void;
@@ -151,7 +150,7 @@ const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
   [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
   [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
-  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.keyboardPath]: "app", [COMMAND_IDS.composerPath]: "app", [COMMAND_IDS.keyboardTour]: "app",
+  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.composerPath]: "app", [COMMAND_IDS.keyboardTour]: "app",
 };
 
 export function paletteGroupOf(command: { id?: string; group?: string; destructive?: boolean }): string {
@@ -263,7 +262,6 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   // Available everywhere, including the shell: it is the client without an
   // address bar that the numbers are hardest to get out of.
   [COMMAND_IDS.keyboardProbe]: { isAvailable: () => true, run: (actions) => actions.keyboardProbe() },
-  [COMMAND_IDS.keyboardPath]: { isAvailable: () => true, run: (actions) => actions.keyboardPath() },
   [COMMAND_IDS.composerPath]: { isAvailable: () => true, run: (actions) => actions.composerPath() },
   // Desktop only: on a phone the keys mean nothing.
   [COMMAND_IDS.keyboardTour]: { isAvailable: () => typeof matchMedia !== "function" || !matchMedia(PHONE_LAYOUT_QUERY).matches, run: (actions) => actions.keyboardTour() },

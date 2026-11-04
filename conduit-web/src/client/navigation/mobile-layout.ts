@@ -1,6 +1,5 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
-import { compositorKeyboard, travelOnCompositor } from "./keyboard-compositor.ts";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -304,8 +303,6 @@ export function bindVisualViewportShell(): () => void {
      * itself.
      */
     let lastDurationMs = 250;
-    let compositor: ReturnType<typeof travelOnCompositor> | null = null;
-    let caughtUp = false;
     let lastCurve: number[] = [0, 1];
     const stopDrawing = () => {
       if (drawing) cancelAnimationFrame(drawing);
@@ -353,15 +350,6 @@ export function bindVisualViewportShell(): () => void {
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
-        // SPIKE: the travel on the compositor instead (keyboard-compositor.ts); the layout moves only at its ends.
-        compositor?.cancel();
-        compositor = null;
-        if (compositorKeyboard()) {
-          compositor = travelOnCompositor({ from: info.from, to: info.to, durationMs, curve },
-            (height) => { shellKeyboard = height; noteKeyboardFrame(true); sync(); });
-          caughtUp = false;
-          return;
-        }
         const draw = () => {
           const t = (performance.now() - began) / durationMs;
           shellKeyboard = info.from + (info.to - info.from) * along(curve, t);
@@ -387,15 +375,6 @@ export function bindVisualViewportShell(): () => void {
          * bridge's worth of lag inside a dozen frames without any of them
          * being visible as a step.
          */
-        // SPIKE: a compositor travel lands itself; the system's progress only winds its clock forward, once.
-        if (compositor?.running) {
-          if (info.animating && !caughtUp && info.fraction >= 0 && travelDuration > 0) {
-            caughtUp = true;
-            compositor.catchUp(info.fraction * travelDuration - (performance.now() - began));
-          }
-          if (!info.animating) { travelling = false; compositor.settle(info.height); logKeyboardEvent("ime-end", Math.round(info.height)); }
-          return;
-        }
         if (travelling && info.animating) {
           const fraction = Math.min(1, Math.max(0, info.fraction));
           if (info.fraction >= 0 && travelDuration > 0) {
