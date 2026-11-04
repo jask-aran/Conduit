@@ -4,4 +4,8 @@
     <string name="title_activity_main">Conduit</string>
     <string name="package_name">com.jaskaran.conduit</string>
     <string name="custom_url_scheme">com.jaskaran.conduit</string>
+    <string name="context_screen_reader_label">Float screen context</string>
+    <string name="context_screen_reader_description">Lets Float take a screenshot and read the text on screen when you ask it to. Nothing is read otherwise.</string>
+    <string name="context_capture_channel">Float screenshots</string>
+    <string name="context_capture_notification">Taking a screenshot</string>
 </resources>

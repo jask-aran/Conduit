@@ -42,6 +42,25 @@
             <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
         </receiver>
 
+        <service android:name=".ConduitScreenReader"
+            android:label="@string/context_screen_reader_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice"
+                android:resource="@xml/conduit_screen_reader" />
+        </service>
+        <service android:name=".ConduitProjectionService" android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        <activity android:name=".ConduitProjectionActivity" android:exported="false"
+            android:theme="@style/ConduitFloatTheme" android:excludeFromRecents="true"
+            android:taskAffinity="" />
+        <activity android:name=".ConduitCameraActivity" android:exported="false"
+            android:theme="@style/ConduitFloatTheme" android:excludeFromRecents="true"
+            android:taskAffinity="" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -52,6 +71,8 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
     </application>
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Permissions -->
 
