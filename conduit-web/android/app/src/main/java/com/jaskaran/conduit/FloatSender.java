@@ -126,10 +126,14 @@ final class FloatSender {
     }
 
     /** Remove delivery progress on success, cancel or discard; recording preferences are separate. */
-    static synchronized void clearDelivery(Context context) {
+    static synchronized void clearDelivery(Context context) { clearDelivery(context, null); }
+
+    /** One delivery's progress (all of them when deliveryId is null). */
+    static synchronized void clearDelivery(Context context, String deliveryId) {
         SharedPreferences prefs = ConduitFloatPlugin.preferences(context);
         SharedPreferences.Editor edit = prefs.edit();
-        for (String key : prefs.getAll().keySet()) if (key.startsWith("delivery.")) edit.remove(key);
+        String prefix = deliveryId == null ? "delivery." : "delivery." + deliveryId + ".";
+        for (String key : prefs.getAll().keySet()) if (key.startsWith(prefix)) edit.remove(key);
         save(edit);
     }
 

@@ -50,7 +50,8 @@ public class ConduitFloatService extends Service {
     private long sentAt;
     private FloatRadial radial;
     /** Where the message being recorded goes: the radial's choice, or the hold's default until a slot locks it. */
-    private FloatRadial.Slot target = FloatRadial.Slot.JBOT;
+    private FloatTarget target = FloatTarget.jbot();
+    private FloatPanel panel;
     /** Screenshots and photos gathered for the next message, oldest first. Sent with it, or dropped on cancel. */
     private final java.util.List<ConduitContext.Result> gathered = new java.util.ArrayList<>();
     private boolean capturing;
@@ -201,6 +202,71 @@ public class ConduitFloatService extends Service {
         return "chat".equals(prefs().getString("holdTarget", "jbot")) ? FloatRadial.Slot.NEW_CHAT : FloatRadial.Slot.JBOT;
     }
 
+    /** Where the message goes now; while recording, it travels with the recording (a retry goes to the same place). */
+    private void setTarget(FloatTarget next) {
+        target = next;
+        if (capture != null || machine.state() == State.RECORDING)
+            prefs().edit().putString("recordingTarget", next.toJson()).apply();
+    }
+
+    private ConduitHubClient hub() {
+        String origin = prefs().getString("origin", "");
+        return new ConduitHubClient(this, origin, prefs().getString("tokenOrigin", origin));
+    }
+
+    private void closePanel() {
+        if (panel != null && panel.isOpen()) panel.close();
+        panel = null;
+    }
+
+    /** Workspace: where a new chat goes. Chosen while recording (a locked hold), it retargets; at rest, it records. */
+    private void openPlaces() {
+        closePanel();
+        FloatPlacesPanel places = new FloatPlacesPanel(this, hub(), new FloatPlacesPanel.Listener() {
+            @Override public void placeChosen(ConduitHubClient.Place place) {
+                setTarget(FloatTarget.newChat(place.isChat ? null : place.id, place.isChat ? "New chat" : place.name));
+                if (machine.state() == State.HANDLE) beginRecording();
+            }
+            @Override public void closed() {}
+        });
+        panel = places;
+        places.show(window.right(), Math.round(window.handleCentre()[1]));
+    }
+
+    /** Recent: the latest replies; answer one by voice (records to that chat) or by typing (sent at once). */
+    private void openRecent() {
+        closePanel();
+        final FloatRecentPanel[] recent = new FloatRecentPanel[1];
+        recent[0] = new FloatRecentPanel(this, hub(), new FloatRecentPanel.Listener() {
+            @Override public void answerByVoice(ConduitHubClient.RecentChat chat) {
+                closePanel();
+                setTarget(FloatTarget.chat(chat.chatId, chat.title));
+                if (machine.state() == State.HANDLE) beginRecording();
+            }
+            @Override public void answerTyped(ConduitHubClient.RecentChat chat, String text) {
+                String origin = prefs().getString("origin", "");
+                String delivery = java.util.UUID.randomUUID().toString();
+                sender.send(FloatTarget.chat(chat.chatId, chat.title), null, text, gatheredFiles(),
+                    delivery, origin, prefs().getString("tokenOrigin", origin),
+                    () -> !destroyed, new FloatSender.Listener() {
+                        private String failure = "Couldn't send";
+                        @Override public void onFailureText(String line) { failure = line; }
+                        @Override public void onComplete(boolean sent, String chatIdOrNull) {
+                            try { FloatSender.clearDelivery(ConduitFloatService.this, delivery); } catch (IllegalStateException ignored) {}
+                            if (sent) { dropGathered(); recent[0].sent(); } else recent[0].failed(failure);
+                        }
+                    });
+            }
+            @Override public void openInConduit(ConduitHubClient.RecentChat chat) {
+                closePanel();
+                FloatRecentPanel.openInConduit(ConduitFloatService.this, "", chat);
+            }
+            @Override public void closed() {}
+        });
+        panel = recent[0];
+        recent[0].show(window.right(), Math.round(window.handleCentre()[1]));
+    }
+
     private FloatRadial radial() {
         if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
             @Override public void chosen(FloatRadial.Slot slot) { radialChosen(slot); }
@@ -219,8 +285,9 @@ public class ConduitFloatService extends Service {
     private void radialChosen(FloatRadial.Slot slot) {
         if (machine.state() != State.HANDLE) return;
         switch (slot) {
-            case JBOT: case NEW_CHAT: target = slot; beginRecording(); break;
-            case WORKSPACE: case RECENT: openApp(false); break;
+            case JBOT: case NEW_CHAT: setTarget(targetFor(slot)); beginRecording(); break;
+            case WORKSPACE: openPlaces(); break;
+            case RECENT: openRecent(); break;
             case SCREENSHOT: screenshot(); break;
             case CAMERA: photo(); break;
             default: break;
@@ -285,7 +352,7 @@ public class ConduitFloatService extends Service {
     /** A hold records at once, to the hold's target, with the radial around the finger to lock it elsewhere. */
     private void holdStarted() {
         if (machine.state() != State.HANDLE) return;
-        target = holdTarget();
+        setTarget(targetFor(holdTarget()));
         window.setHeld(true);
         beginRecording();
         if (machine.state() == State.RECORDING) openRadial(true);
@@ -303,8 +370,11 @@ public class ConduitFloatService extends Service {
             window.setHeld(false);
             cancel();
         } else if (slot != null && slot.target()) {
-            target = slot;
+            // Locked: it keeps recording, hands free. Workspace and Recent then ask where.
             window.setHeld(false);
+            if (slot == FloatRadial.Slot.WORKSPACE) openPlaces();
+            else if (slot == FloatRadial.Slot.RECENT) openRecent();
+            else setTarget(targetFor(slot));
         } else {
             window.setHeld(false);
             stopRecording(false);
@@ -326,7 +396,7 @@ public class ConduitFloatService extends Service {
         generation = next.generation;
         capture = next;
         prefs().edit().putBoolean("recordingComplete", false)
-            .putString("recordingTarget", targetFor(target).toJson())
+            .putString("recordingTarget", target.toJson())
             .putBoolean("recordingRetried", false).putString("recordingId", java.util.UUID.randomUUID().toString())
             .putString("recordingOrigin", prefs().getString("origin", ""))
             .putString("recordingTokenOrigin", prefs().getString("tokenOrigin", "")).commit();
@@ -364,7 +434,7 @@ public class ConduitFloatService extends Service {
     private void discard() {
         if (live != null) { live.close(); live = null; }
         recording.delete();
-        try { FloatSender.clearDelivery(this); } catch (IllegalStateException ignored) {}
+        try { FloatSender.clearDelivery(this, prefs().getString("recordingId", null)); } catch (IllegalStateException ignored) {}
         prefs().edit().remove("recordingTarget").remove("recordingComplete").remove("recordingOrigin").remove("recordingTokenOrigin").remove("recordingRetried").remove("recordingId").apply();
     }
 
@@ -410,6 +480,7 @@ public class ConduitFloatService extends Service {
         if (caption != null) caption.destroy();
         if (active == this) active = null;
         if (radial != null) radial.destroy();
+        closePanel();
         if (window != null) window.stopAnimations();
         generation++;
         main.removeCallbacksAndMessages(null);
