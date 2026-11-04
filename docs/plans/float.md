@@ -32,10 +32,11 @@ message for jbot. This plan makes it the phone's way to send anything to any cha
 - [x] 0a. Split the service into service, `FloatMachine`, `FloatRecorder`, `FloatSender`, `FloatWindow`, `FloatView`;
       no allocation per frame in drawing. No change in behaviour.
 - [x] 0b. `ConduitHubClient` over the general routes; `POST /v0/voice/transcribe`; recent chats with the latest reply.
-- [ ] 1. Hold, the radial, locking, the default-target setting (done, untried on a device); sending to the chosen target;
-      errors that keep what was gathered and say what to do.
-- [ ] 2. Context: Accessibility service, MediaProjection fallback, camera activity, the tray of thumbnails.
-- [ ] 3. Native Workspace… and Recent… panels, and answering from the reply view.
+- [x] 1. Hold, the radial, locking, the default-target setting; sending to the chosen target. (Untried on a device.)
+- [ ] 1b. Errors that keep what was gathered and say what to do; a nudge toward the screen reader.
+- [x] 2. Context: Accessibility service, MediaProjection fallback, camera activity, the tray of thumbnails.
+- [x] 3. Native Workspace… and Recent… panels, and answering from the reply view. (Untried on a device.)
+- [ ] 4. On the phone: every gesture, panel and capture, then the look.
 
 ## The radial (phase 1 sketch)
 
