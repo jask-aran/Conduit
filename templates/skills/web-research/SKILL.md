@@ -7,19 +7,21 @@ nudge: [fetch_content, get_search_content, source_check]
 
 # Web research
 
-Use the configured web tools. Never use Bash or `curl` as a second search path,
-and never put secrets in URLs or logs.
+Use the configured web tools. Which search provider answers, and what it falls
+back to, is the web tools' own configuration: never name a provider in a call
+unless the person asks for one. Never use Bash or `curl` as a second search
+path, and never put secrets in URLs or logs.
 
 ## Pick a tier before the first call
 
-- **Quick (default).** One `web_search` call with one or two focused queries,
-  default provider. Answer from the results; fetch a page only when the
+- **Quick (default).** One `web_search` call with one or two focused queries.
+  Answer from the results; fetch a page only when the
   snippets do not answer. A few seconds.
 - **Deep.** When the person asks you to research, compare, look into or find
   the best of something; when stakes are high (health, legal, money, safety,
   purchases); when the topic is niche; or when quick results are thin or
   conflict. Say in a line that you are digging deeper, then call `web_search`
-  with `provider: "openai"` and two to four distinct query angles, fetch the
+  with two to four distinct query angles, fetch the
   key pages with `fetch_content`, follow promising leads, and use
   `source_check` for the claims the answer rests on. Stop once the evidence
   settles the question.

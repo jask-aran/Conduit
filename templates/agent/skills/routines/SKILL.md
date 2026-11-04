@@ -3,6 +3,7 @@ name: routines
 description: Before setting up anything that repeats or watches a source (new mail, a calendar, a page, a repository, a price) - writing, testing, changing or removing a routine. The routine file format, task kinds and gates; schedule is only for a one-off check-back.
 # Only jbot writes routines: its runs and subagents do not.
 subagents: false
+load: auto
 nudge:
   - routine: save
   - routine: test
