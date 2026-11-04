@@ -287,7 +287,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (Number.isInteger(error.status) && error.status >= 400 && error.status < 600) {
         return response.status(error.status).json({ error: error.code || "voice_failed", message: error.message });
       }
-      next(error);
+      // A transcription provider's own failure: said plainly to the bubble, which shows it.
+      console.error("[agent] voice message failed", error?.message || error);
+      response.status(502).json({ error: "voice_failed", message: `Transcription failed: ${String(error?.message || error).slice(0, 120)}` });
     }
   });
 

@@ -67,6 +67,8 @@ public class ConduitBubbleService extends Service {
     private WindowManager.LayoutParams position;
     private BubbleView bubble;
     private State state = State.HANDLE;
+    /** What the pill says when a send fails: the hub's own message, or why it could not be reached. */
+    private volatile String errorText = "Couldn't send — open Conduit";
     private Capture capture;
     private File recording;
     private volatile HttpURLConnection uploading;
@@ -249,7 +251,9 @@ public class ConduitBubbleService extends Service {
         try {
             int bufferSize = AudioRecord.getMinBufferSize(16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
             if (bufferSize <= 0) throw new IllegalStateException("Microphone is unavailable");
-            audio = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16_000,
+            // MIC, as the app's own dictation records: VOICE_RECOGNITION moved a Bluetooth headset to its call profile and
+            // dropped music to call quality.
+            audio = new AudioRecord(MediaRecorder.AudioSource.MIC, 16_000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(bufferSize, 6400));
             if (audio.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("Microphone is unavailable");
             AudioManager manager = (AudioManager) getSystemService(AUDIO_SERVICE);
@@ -409,8 +413,10 @@ public class ConduitBubbleService extends Service {
                 }
                 int status = connection.getResponseCode();
                 success = status >= 200 && status < 300;
+                if (!success) errorText = failureText(status, connection);
             } catch (Exception error) {
                 // The retry retains the private WAV. No cookie, token, audio, or response body enters a log.
+                errorText = "Couldn't reach Conduit";
             } finally {
                 if (connection != null) connection.disconnect();
                 uploading = null;
@@ -425,6 +431,29 @@ public class ConduitBubbleService extends Service {
                 } else show(State.ERROR);
             });
         });
+    }
+
+    /** The hub answers `{ error, message }`; the pill shows its message, a plain line per code when it has none. */
+    private static String failureText(int status, HttpURLConnection connection) {
+        if (status == 401 || status == 403) return "Sign in to Conduit again";
+        String code = "", message = "";
+        try (java.io.InputStream in = connection.getErrorStream()) {
+            if (in != null) {
+                byte[] body = in.readAllBytes();
+                org.json.JSONObject json = new org.json.JSONObject(new String(body, java.nio.charset.StandardCharsets.UTF_8));
+                code = json.optString("error", "");
+                message = json.optString("message", "");
+            }
+        } catch (Exception ignored) {}
+        if (!message.isEmpty()) return message.length() > 60 ? message.substring(0, 57) + "…" : message;
+        switch (code) {
+            case "voice_off": return "Voice is off in Conduit's settings";
+            case "nothing_heard": return "Didn't catch anything";
+            case "voice_unavailable": return "Voice isn't available on the hub";
+            case "agent_off": return "jbot is off";
+            case "agent_not_enabled": return "This hub has no jbot";
+            default: return status >= 500 ? "Conduit hit an error — try again" : "Couldn't send — open Conduit";
+        }
     }
 
     /** Read the existing secure-storage entry; do not duplicate a native session in plain preferences. */
@@ -510,7 +539,7 @@ public class ConduitBubbleService extends Service {
                 canvas.drawRoundRect(w - dp(61), h / 2 - dp(5), w - dp(51), h / 2 + dp(5), dp(1), dp(1), paint);
             } else {
                 paint.setTextSize(dp(12));
-                canvas.drawText(state == State.SENT ? "Sent to jbot" : state == State.ERROR ? "Couldn't send — open Conduit" : "Sending…", dp(43), h / 2 + dp(4), paint);
+                canvas.drawText(state == State.SENT ? "Sent to jbot" : state == State.ERROR ? errorText : "Sending…", dp(43), h / 2 + dp(4), paint);
             }
             paint.setColor(Color.rgb(180, 180, 185));
             paint.setStrokeWidth(dp(1.5f));
