@@ -56,12 +56,15 @@ final class FloatRadial {
 
     private static final Slot[] SLOTS = Slot.values();
     /** dp: the arc's radius, a slot's diameter, the ✕'s, the margin kept from the screen's edges. */
-    private static final float RADIUS = 104, SLOT = 40, DISCARD = 32, MARGIN = 10;
+    private static final float RADIUS = 108, SLOT = 40, DISCARD = 24, MARGIN = 10;
+    /** dp the arc's centre sits under the handle's: the arc swings back toward the edge at the bottom, below the ✕. */
+    private static final float DROP = 40;
     /**
-     * Degrees from the inward direction, top first: four targets 27° apart (40dp slots with 8dp between at this
-     * radius), a 32° gap, the context pair. The arc leans up: under the handle is the column of held captures and ✕.
+     * Degrees from the inward direction around a centre DROP under the handle, top first: four targets 32° apart, a
+     * 38° step to the context pair. Symmetric: jbot and Camera both end at the screen's edge, the column of held
+     * captures and ✕ inside the arc between them.
      */
-    private static final float[] ANGLES = { 88, 61, 34, 7, -25, -52 };
+    private static final float[] ANGLES = { 86, 54, 22, -10, -48, -86 };
     /** v2's popover motion: rise in on --ease-arrive over --duration-gentle, drop out on --ease-leave over --duration-quick. */
     private static final long OPEN_MS = 250, CLOSE_MS = 150, STAGGER_MS = 18, DICTATE_MS = 220;
     private static final int ICON = 0xffe8e9eb;
@@ -149,6 +152,74 @@ final class FloatRadial {
         return dialog;
     }
 
+    private static void reappear(View view, boolean hidden) {
+        view.animate().cancel();
+        if (hidden) { view.setVisibility(View.INVISIBLE); return; }
+        if (view.getVisibility() == View.VISIBLE) return;
+        view.setAlpha(0);
+        view.setVisibility(View.VISIBLE);
+        view.animate().alpha(1).setDuration(180).setInterpolator(new PathInterpolator(.2f, .8f, .2f, 1f)).start();
+    }
+
+    /**
+     * A capture landing while the arc is open: the flash and the copy flying into the card drawn in this window,
+     * under the slots, so the arc stays in sight (FloatShot's window would cover it). done runs once it has landed.
+     */
+    boolean playShot(Bitmap copy, boolean flash, android.graphics.Rect card, Runnable done) {
+        if (mode != Mode.OPEN || closing || !dialog.isShowing()) return false;
+        if (shotMotion != null) shotMotion.cancel();
+        shotCopy = copy; shotFlash = flash; shotCard = card; shotT = 0;
+        long total = copy != null ? 480 : 180;
+        shotMotion = ValueAnimator.ofFloat(0, total);
+        shotMotion.setDuration(total);
+        shotMotion.setInterpolator(new android.view.animation.LinearInterpolator());
+        shotMotion.addUpdateListener(a -> { shotT = (float) a.getAnimatedValue(); surface.invalidate(); });
+        shotMotion.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                shotCopy = null; shotT = -1;
+                surface.performHapticFeedback(Build.VERSION.SDK_INT >= 30 ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.VIRTUAL_KEY);
+                done.run();
+                surface.invalidate();
+            }
+        });
+        shotMotion.start();
+        return true;
+    }
+    private ValueAnimator shotMotion;
+    private Bitmap shotCopy;
+    private boolean shotFlash;
+    private android.graphics.Rect shotCard;
+    private float shotT = -1;
+    private final Paint shotPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG), shotLine = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final android.graphics.RectF shotBox = new android.graphics.RectF();
+    private final android.graphics.Path shotClip = new android.graphics.Path();
+
+    /** FloatShot's drawing, in screen pixels: the copy from the full screen into the card, then the flash over it. */
+    private void paintShot(Canvas canvas) {
+        if (shotT < 0) return;
+        int w = surface.getWidth(), h = surface.getHeight();
+        if (shotCopy != null && !shotCopy.isRecycled()) {
+            float p = arrive.getInterpolation(Math.max(0, Math.min(1, (shotT - 60) / 420f)));
+            shotBox.set(shotCard.left * p, shotCard.top * p, w + (shotCard.right - w) * p, h + (shotCard.bottom - h) * p);
+            float r = dp(28) + (dp(9) - dp(28)) * p;
+            shotClip.reset();
+            shotClip.addRoundRect(shotBox, r, r, android.graphics.Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(shotClip);
+            canvas.drawBitmap(shotCopy, null, shotBox, shotPaint);
+            canvas.restore();
+            shotLine.setStyle(Paint.Style.STROKE);
+            shotLine.setStrokeWidth(Math.max(1, dp(.8f)));
+            shotLine.setColor(0x4dffffff);
+            canvas.drawRoundRect(shotBox, r, r, shotLine);
+        }
+        if (shotFlash && shotT < 180) {
+            float f = shotT / 180f, a = f < .35f ? f / .35f : 1 - (f - .35f) / .65f;
+            wash.setColor(Color.argb(Math.round(255 * .22f * a), 255, 255, 255));
+            canvas.drawRect(0, 0, w, h, wash);
+        }
+    }
+
     private void invalidateAll() { surface.invalidate(); for (Surface row : rowSurfaces) row.invalidate(); }
 
     private boolean rowShowing() { for (Dialog row : rowDialogs) if (row.isShowing()) return true; return false; }
@@ -219,23 +290,26 @@ final class FloatRadial {
 
     /** Out of sight for a capture (a frame or two), then back exactly as it was. */
     void setHidden(boolean hidden) {
-        if (dialog.isShowing()) surface.setVisibility(hidden ? View.INVISIBLE : View.VISIBLE);
-        for (int k = 0; k < 3; k++) if (rowDialogs[k].isShowing()) rowSurfaces[k].setVisibility(hidden ? View.INVISIBLE : View.VISIBLE);
+        // Back after the capture: faded in with the shutter's flash, not popped.
+        if (dialog.isShowing()) reappear(surface, hidden);
+        for (int k = 0; k < 3; k++) if (rowDialogs[k].isShowing()) reappear(rowSurfaces[k], hidden);
         // The screen changes under a screenshot's flash; the next open takes a fresh backdrop.
         if (!hidden && mode == Mode.CLOSED) setBackdrop(null);
     }
 
     /** The arc, turned away from the screen's top or bottom just enough that every slot stays on it. */
     private void layout(int width, int height) {
-        float margin = dp(MARGIN) + dp(SLOT) / 2f;
+        // Top and bottom keep MARGIN; the sides only Float's own edge gap (the arc's ends sit at the screen's edge).
+        float margin = dp(MARGIN) + dp(SLOT) / 2f, side = dp(FloatWindow.EDGE) + dp(SLOT) / 2f - dp(1);
         float towardMiddle = anchorY < height / 2f ? -1 : 1;
         for (float turn = 0; turn <= 80; turn += 4) {
             place(towardMiddle * turn);
             boolean fits = true;
             for (int i = 0; i < SLOTS.length; i++)
-                if (slotY[i] < margin || slotY[i] > height - margin || slotX[i] < margin || slotX[i] > width - margin) fits = false;
+                if (slotY[i] < margin || slotY[i] > height - margin || slotX[i] < side || slotX[i] > width - side) fits = false;
             if (fits) return;
         }
+        place(0);
     }
 
     /** turn: degrees the whole arc turns, positive toward the top. */
@@ -244,7 +318,7 @@ final class FloatRadial {
             double a = Math.toRadians(ANGLES[i] + turn);
             float inward = right ? -1 : 1;
             slotX[i] = anchorX + inward * (float) Math.cos(a) * dp(RADIUS);
-            slotY[i] = anchorY - (float) Math.sin(a) * dp(RADIUS);
+            slotY[i] = anchorY + dp(DROP) - (float) Math.sin(a) * dp(RADIUS);
         }
     }
 
@@ -406,7 +480,8 @@ final class FloatRadial {
     }
 
     private boolean onDiscard(float x, float y) {
-        return held && mode == Mode.OPEN && Math.hypot(x - discardX, y - discardY) <= dp(DISCARD) / 2f + dp(6);
+        // The touch target is larger than the ✕ drawn: 22dp out from its centre.
+        return held && mode == Mode.OPEN && Math.hypot(x - discardX, y - discardY) <= dp(22);
     }
 
     private boolean touch(MotionEvent event) {
@@ -453,6 +528,7 @@ final class FloatRadial {
         // Everything is placed in screen pixels; each window draws its own part of the screen.
         on.getLocationOnScreen(at);
         canvas.translate(-at[0], -at[1]);
+        if (on == surface) paintShot(canvas);
         int size = dp(SLOT);
         float dictateIn = arrive.getInterpolation(Math.min(1, dictated)), dictateOut = leave.getInterpolation(Math.min(1, dictated));
         java.util.Arrays.fill(labelAlpha, 0);
@@ -504,7 +580,7 @@ final class FloatRadial {
             float p = progress(0);
             float d = dp(DISCARD) * (.7f + .3f * p) * (pressedDiscard ? .92f : 1);
             drawRound(canvas, discardX, discardY, d, Math.min(1, p * 1.6f), pressedDiscard);
-            drawIcon(canvas, cross, discardX, discardY, dp(13), Math.min(1, p * 1.6f));
+            drawIcon(canvas, cross, discardX, discardY, dp(10), Math.min(1, p * 1.6f));
         }
         canvas.restore();
     }

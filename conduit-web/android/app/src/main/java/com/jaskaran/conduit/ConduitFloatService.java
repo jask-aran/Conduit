@@ -77,7 +77,7 @@ public class ConduitFloatService extends Service {
         State state = machine.state();
         window.setAttention(holding || radialUp());
         android.graphics.Rect card = FloatCaptures.cardRect(this, window.handleCentre(), window.handleHeight());
-        if (radial != null) radial.setHeld(holding, FloatCaptures.discardCentre(this, card));
+        if (radial != null) radial.setHeld(holding, FloatCaptures.discardCentre(this, card, gathered.size()));
         boolean show = holding && !appForeground
             && (state == State.HANDLE || state == State.RECORDING || state == State.STOPPING || state == State.ERROR);
         if (captures == null) captures = new FloatCaptures(this, () -> { if (machine.state() == State.HANDLE && !radialUp()) openRadial(); });
@@ -116,7 +116,7 @@ public class ConduitFloatService extends Service {
         if (window == null) return;
         boolean onlySideKey = prefs().getBoolean("sideKeyOnly", false) && prefs().getBoolean("sideKeyHandled", false);
         if (onlySideKey && summoned && atRest()) summoned = false;
-        boolean hidden = (appForeground && machine.state() == State.HANDLE) || (onlySideKey && !summoned && atRest());
+        boolean hidden = away || (appForeground && machine.state() == State.HANDLE) || (onlySideKey && !summoned && atRest());
         window.setVisible(!hidden);
     }
 
@@ -143,6 +143,18 @@ public class ConduitFloatService extends Service {
         };
         if (prefs().getBoolean("sideKeyScreenshot", true) && result.error == null && result.image != null) captured(result, next);
         else { if (result.image != null) result.image.delete(); next.run(); }
+    }
+
+    /**
+     * A dictation that did not start from the radial's own target (Workspace, Recent, a hold): the dictation's row
+     * still comes up under the pill, its target bubble (slot's place, icon) with Screenshot and Camera.
+     */
+    private void dictationRow(FloatRadial.Slot slot, int icon) {
+        if (!radialUp()) openRadial();
+        window.lift(false);
+        radial.dictate(slot);
+        radial.setTargetIcon(icon);
+        updateDiscard();
     }
 
     private void sideKeyDictation() {
@@ -343,7 +355,11 @@ public class ConduitFloatService extends Service {
         FloatPlacesPanel places = new FloatPlacesPanel(this, hub(), new FloatPlacesPanel.Listener() {
             @Override public void placeChosen(ConduitHubClient.Place place) {
                 setTarget(FloatTarget.newChat(place.isChat ? null : place.id, place.isChat ? "New chat" : place.name));
-                if (machine.state() == State.HANDLE) beginRecording();
+                if (machine.state() == State.HANDLE) {
+                    dictationRow(FloatRadial.Slot.WORKSPACE, place.isChat ? R.drawable.float_new_chat
+                        : FloatGlyphs.icon(place.isWorkspace && !"monogram".equals(place.appearanceMode) ? place.appearanceValue : "folder"));
+                    beginRecording();
+                }
             }
             @Override public void closed() { updateDiscard(); }
         });
@@ -377,7 +393,7 @@ public class ConduitFloatService extends Service {
             @Override public void answerByVoice(ConduitHubClient.RecentChat chat) {
                 closePanel();
                 setTarget(FloatTarget.chat(chat.chatId, chat.title));
-                if (machine.state() == State.HANDLE) beginRecording();
+                if (machine.state() == State.HANDLE) { dictationRow(FloatRadial.Slot.RECENT, R.drawable.float_recent); beginRecording(); }
             }
             @Override public void answerTyped(ConduitHubClient.RecentChat chat, String text) {
                 String origin = prefs().getString("origin", "");
@@ -422,7 +438,7 @@ public class ConduitFloatService extends Service {
         int[] screen = window.screenSize();
         android.graphics.Rect card = FloatCaptures.cardRect(this, centre, window.handleHeight());
         radial().open(window.right(), centre[0], centre[1], screen[0], screen[1], !gathered.isEmpty(),
-            FloatCaptures.discardCentre(this, card));
+            FloatCaptures.discardCentre(this, card, gathered.size()));
         window.lift(true);
         updateDiscard();
     }
@@ -449,7 +465,11 @@ public class ConduitFloatService extends Service {
     }
 
     /** Everything of Float off the screen for a capture (a frame or two), or back as it was. */
+    /** Off the screen for a capture: nothing may bring the handle back meanwhile. */
+    private boolean away;
+
     private void setAway(boolean away) {
+        this.away = away;
         if (radial != null) radial.setHidden(away);
         if (captures != null) captures.setHidden(away);
         if (away) { if (caption != null) caption.hide(); window.setVisible(false); }
@@ -458,7 +478,7 @@ public class ConduitFloatService extends Service {
 
     /** A capture that never came back (a consent left open, a camera closed oddly) does not block the next one. */
     private boolean busyCapturing() {
-        if (capturing && SystemClock.uptimeMillis() - capturingSince > 15000) capturing = false;
+        if (capturing && SystemClock.uptimeMillis() - capturingSince > 15000) { capturing = false; setAway(false); }
         return capturing;
     }
 
@@ -471,6 +491,8 @@ public class ConduitFloatService extends Service {
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
         setAway(true);
+        // Never left off the screen: back after 15s whatever happens to the capture.
+        main.postDelayed(() -> { if (away) { capturing = false; setAway(false); } }, 15000);
         ConduitContext.screenshot(this, result -> captured(result, null));
     }
 
@@ -504,12 +526,14 @@ public class ConduitFloatService extends Service {
                 if (destroyed) return;
                 if (shot == null) shot = new FloatShot(this);
                 android.graphics.Rect card = FloatCaptures.cardRect(this, window.handleCentre(), window.handleHeight());
-                shot.play(mini, flash, card, () -> {
+                Runnable land = () -> {
                     gathered.add(result);
                     thumbs.add(mini);
                     updateDiscard();
                     if (then != null) then.run();
-                });
+                };
+                // Over the open arc, the radial draws it under its slots; otherwise its own window over everything.
+                if (radial == null || !radial.playShot(mini, flash, card, land)) shot.play(mini, flash, card, land);
             });
         });
     }
@@ -548,6 +572,7 @@ public class ConduitFloatService extends Service {
     private void holdStarted() {
         if (machine.state() != State.HANDLE) return;
         setTarget(targetFor(holdTarget()));
+        dictationRow(holdTarget(), holdTarget() == FloatRadial.Slot.JBOT ? R.drawable.ic_stat_conduit : R.drawable.float_new_chat);
         beginRecording();
     }
 

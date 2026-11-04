@@ -44,7 +44,7 @@ final class FloatFrost extends Drawable {
      */
     private boolean lifted;
     void setLifted(boolean lifted) { this.lifted = lifted; invalidateSelf(); }
-    private static final int LIFT = 0xcc3a3b3f;
+    private static final int LIFT = 0x8c3a3b3f;
 
     /** Draws this blurred screenshot behind the frost, as backdrop-filter does; null goes back to the ground. */
     void setBackdrop(android.graphics.Bitmap blurredScreen) { backdrop = blurredScreen; invalidateSelf(); }

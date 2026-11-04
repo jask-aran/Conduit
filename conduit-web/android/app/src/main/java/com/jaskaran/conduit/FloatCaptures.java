@@ -76,9 +76,10 @@ final class FloatCaptures {
     }
 
     /** The ✕'s centre while the radial is open: under the card, in the same column. */
-    static float[] discardCentre(Context context, Rect card) {
+    static float[] discardCentre(Context context, Rect card, int held) {
         float d = context.getResources().getDisplayMetrics().density;
-        return new float[] { card.exactCenterX(), card.bottom + 2 * PEEK * d + GAP * d + 16 * d };
+        int peeks = Math.max(0, Math.min(2, held - 1));
+        return new float[] { card.exactCenterX(), card.bottom + peeks * PEEK * d + GAP * d + 12 * d };
     }
 
     /** The held captures' miniatures, oldest first; empty hides the card. */
@@ -111,7 +112,15 @@ final class FloatCaptures {
     }
 
     /** Out of sight for a capture, then back. */
-    void setHidden(boolean hidden) { if (dialog.isShowing()) card.setVisibility(hidden ? View.INVISIBLE : View.VISIBLE); }
+    void setHidden(boolean hidden) {
+        if (!dialog.isShowing()) return;
+        card.animate().cancel();
+        if (hidden) { card.setVisibility(View.INVISIBLE); return; }
+        if (card.getVisibility() == View.VISIBLE) return;
+        card.setAlpha(0);
+        card.setVisibility(View.VISIBLE);
+        card.animate().alpha(1).setDuration(180).start();
+    }
 
     /** Sent: the cards go up into the pill's bubble, then the card is gone. */
     void sendAway() {

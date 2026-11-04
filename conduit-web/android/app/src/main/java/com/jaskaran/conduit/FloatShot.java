@@ -96,6 +96,7 @@ final class FloatShot {
         if (Build.VERSION.SDK_INT >= 30) p.setFitInsetsTypes(0);
         window.setAttributes(p);
         dialog.show();
+        view.setAlpha(0);
         long total = bitmap != null ? FLY_DELAY + FLY_MS : FLASH_MS;
         ValueAnimator motion = ValueAnimator.ofFloat(0, total);
         motion.setDuration(total);
@@ -109,6 +110,14 @@ final class FloatShot {
                 view.postOnAnimation(dialog::dismiss);
             }
         });
-        motion.start();
+        // From the window's first drawn frame: started before it is up, the flash's peak would be spent unseen.
+        view.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+            boolean started;
+            @Override public void onDraw() {
+                if (started) return;
+                started = true;
+                view.post(() -> { view.getViewTreeObserver().removeOnDrawListener(this); view.setAlpha(1); motion.start(); });
+            }
+        });
     }
 }
