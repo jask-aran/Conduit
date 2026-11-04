@@ -119,11 +119,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-control > input.ui-input { width: var(--setting-control-width, var(--measure-md)); min-width: 0; max-width: 100%; flex: 0 1 auto; }
 /* A segmented switch is as wide as its words (its segments even), not stretched to a field's width. */
 .ui-setting-control > .ui-seg { width: max-content; max-width: 100%; flex: 0 1 auto; }
-.ui-setting-context { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-md); min-width: 0; padding: 0 var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-setting-context-link { display: inline-flex; align-items: center; gap: var(--space-xs); min-width: 0; max-width: 100%; border: 0; padding: 0; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
-.ui-setting-context-link > svg { width: var(--icon-sm); height: var(--icon-sm); flex-shrink: 0; }
-.ui-setting-context-link:focus-visible { color: var(--foreground); }
-@media (hover: hover) { .ui-setting-context-link:hover { color: var(--foreground); } }
+/* A setting's context mark: after its name, muted, brightening to say it opens what the setting changes. */
+.ui-setting-context { display: inline-flex; vertical-align: middle; margin-left: var(--space-xs); color: var(--muted-foreground); cursor: pointer; }
+.ui-setting-context > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-setting-context:focus-visible, .ui-setting-context[data-expanded] { color: var(--foreground); outline: none; }
+@media (hover: hover) { .ui-setting-context:hover { color: var(--foreground); } }
 /* What a line holds besides a field: a value read, not set; a link out; a note or details under
    it; something at the page's width; waiting. All in the row's voice, muted, on the surface's tint. */
 .ui-setting-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
