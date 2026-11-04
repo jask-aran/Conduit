@@ -46,3 +46,11 @@ message for jbot. This plan makes it the phone's way to send anything to any cha
   a small frost caption. Near the top or bottom of the screen the fan turns so every slot stays on screen.
 - A tap outside closes it, keeping what was gathered (a count badge on the handle). Opening and closing reuse the
   morph's curve; slots arrive staggered by a few ms from the handle outward.
+
+## Known gaps
+
+- `POST /v0/chats/:id/prompt` does not dedupe by `messageId`. Float's sender records each step per delivery and never
+  repeats a finished one, but when a prompt's outcome is unknown (the connection dropped after sending) it refuses the
+  retry rather than risk a second message. A general fix: the hub recognises a `clientUserMessageId` it has already
+  taken for that chat.
+- jbot's routes take text only, so pictures go to chats, not to jbot.
