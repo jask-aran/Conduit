@@ -6,7 +6,7 @@ import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";
 import { FileTypeIcon, FolderTypeIcon } from "@/components/ui/file-marks";
-import { haptic, type Haptic } from "@/components/ui/haptics";
+import { haptic, HAPTIC_EFFECT, type Haptic } from "@/components/ui/haptics";
 import { MoveContext } from "@/components/ui/motion";
 import { palettePages } from "./palettes";
 import { row, token, type Page, type Part } from "./model";
@@ -571,13 +571,13 @@ const vocabulary: [keyof typeof Icons, string, number][] = [
   ["WriteFile", "A file-writing tool.", 2],
 ];
 
-const KINDS: { kind: Haptic; what: string; pieces: string; strength: string }[] = [
-  { kind: "select", what: "a side chosen", pieces: "Segmented (pill)", strength: "light" },
-  { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop", strength: "light" },
-  { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen", strength: "medium" },
-  { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure", strength: "light" },
-  { kind: "open", what: "the phone's drawer opening, just after a touch", pieces: "NavPane (drawer): its toggle, a swipe in", strength: "light" },
-  { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer", strength: "light" },
+const KINDS: { kind: Haptic; what: string; pieces: string }[] = [
+  { kind: "select", what: "a side chosen", pieces: "Segmented (pill)" },
+  { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop" },
+  { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen" },
+  { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure" },
+  { kind: "open", what: "the phone's drawer opening, just after a touch", pieces: "NavPane (drawer): its toggle, a swipe in" },
+  { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer" },
 ];
 
 export const typePage: Page = {
@@ -708,7 +708,7 @@ export const hapticsPage: Page = {
   title: "Haptics", rail: "Foundations",
   preview: () => <div class="g-row"><For each={KINDS}>{(k) => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>{k.kind}</Button>}</For></div>,
   summary: "What a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them.",
-  examples: KINDS.map((k) => row(k.kind, `${k.what}; fired by ${k.pieces}; impact: ${k.strength}`, () => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>Feel it</Button>, { code: `haptic("${k.kind}")`, phone: "only" })),
+  examples: KINDS.map((k) => row(k.kind, `${k.what}; fired by ${k.pieces}; effect: --haptic-${HAPTIC_EFFECT[k.kind]}`, () => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>Feel it</Button>, { code: `haptic("${k.kind}")`, phone: "only" })),
 };
 
 export const auraPage: Page = {

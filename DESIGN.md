@@ -167,6 +167,7 @@ Motion explains a change of place. A surface that does not change place does not
 - **Cards belong to the composer.** Queued messages and attachments rise out of it and drop back into it when it takes them; removed by hand, a card fades in place. Anything keyed for animation is keyed by identity, so an update never replays an entrance.
 - **A layout switch** happens in the frame the width crosses. Nothing crosses the pane: a section that changes place fades in where it now is; the composer alone eases to its new column. Both layouts share their gutters.
 - **Floating controls follow.** Anything anchored to a surface is re-measured when that surface is swapped or lands.
+- **Touch is felt, crisply.** A piece's haptic kind (`select`, `press`, `hold`, `fold`, `open`, `dismiss`) names an effect token (`--haptic-tick`, `click`, `thud`, `settle`): the platform's clear primitives at a scale, short and crisp or a thump, never a timed buzz. Only what a touch did is felt; the person's strength (Settings › Interface › Haptics) scales them all. A new meaning gets a kind; a new feel gets a token.
 - `prefers-reduced-motion` drops the move and keeps the end state (the meteor field excepted).
 
 # Layout

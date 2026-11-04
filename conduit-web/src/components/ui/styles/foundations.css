@@ -79,6 +79,14 @@
   /* Effects keep their own time: a level following a voice, a copy's wash fading, a spinner's turn (three
      times slower when motion is reduced), a recording's pulse, something live breathing. */
   --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
+  /* Haptics (haptics.ts): an effect is the platform's clear primitives, each `name scale [delay ms]`, comma
+     separated -- short and crisp, or a thump, never a buzz. Kinds (meanings) name these; the person's strength
+     scales them. tick: the lightest, a side chosen or a fold. click: a press that acts, a drawer opening. thud: weight,
+     a long press taking hold. settle: something put away, an overlay closing -- low and soft. */
+  --haptic-tick: tick .6;
+  --haptic-click: click .7;
+  --haptic-thud: thud .9;
+  --haptic-settle: low-tick .8;
 }
 /*
  * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:
