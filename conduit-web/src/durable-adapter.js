@@ -460,6 +460,8 @@ export class DurableAdapter extends EventEmitter {
     super();
     this.runtime = runtime;
     runtime.refreshLiveTools = (extension) => this.refreshLiveTools(extension);
+    // A prompt edited in Settings › Prompts reaches the threads running now, not only the next ones.
+    runtime.contextStore?.onChange?.(() => { void this.refreshInstructions(); });
     runtime.routineContextUsage = async (home, _context, compaction) => {
       const entries = await this.entries(home);
       const lastContext = [...entries].reverse().find((entry) => entry.kind === "pi.compaction" || (entry.kind === "pi.assistant" && entry.model?.[0]?.usage));
@@ -643,12 +645,20 @@ export class DurableAdapter extends EventEmitter {
       || (Array.isArray(stored?.extensions) && stored.extensions.includes("agent") ? "agent" : null);
     const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
     const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
-    const settings = await this.runtime.agentFor(templateId, { roaming, fixedVars: noticeState?.prompt });
     // jbot's prompt is assembled with the variables fixed at its thread's start (noticeState.prompt), so it changes only
-    // when its documents do (the template shipped, the person's Prompts): then the thread takes the new one on its next
-    // configure (a restart, a refresh), one cache miss for a real change. A thread from before fixed variables keeps the
-    // instructions it stored, since assembling them now would carry this moment's time and miss the cache every time.
-    if (templateId === "agent" && stored?.instructions !== undefined && !noticeState?.prompt) settings.instructions = stored.instructions;
+    // when its documents do (a template update shipped, the person's Prompts): the thread takes the new one whenever it
+    // is configured (a restart, a Prompts edit), one cache miss for a real change; never a copy frozen at its start. A
+    // thread from before fixed variables fixes them now, once (what the notices then compare against), and goes on so.
+    let fixedVars = noticeState?.prompt;
+    if (templateId === "agent" && !fixedVars && this.runtime.agentVars) {
+      const { now: _now, ...fixed } = await this.runtime.agentVars().catch(() => ({ now: null }));
+      if (fixed.assistant) {
+        fixedVars = fixed;
+        await conversation.commit(async (tx) => { const notes = await tx.doc(ConduitNotices, conversation.id); Object.assign(notes, { prompt: fixed, told: notes.told || fixed }); }, this.context);
+      }
+    }
+    const settings = await this.runtime.agentFor(templateId, { roaming, fixedVars });
+    if (templateId === "agent" && !fixedVars && stored?.instructions !== undefined) settings.instructions = stored.instructions;
     return settings;
   }
 
@@ -665,6 +675,18 @@ export class DurableAdapter extends EventEmitter {
     return pending.finally(() => {
       if (this.sessionConfigurations.get(conversation.id) === pending) this.sessionConfigurations.delete(conversation.id);
     });
+  }
+
+  /** Every live thread configured again: its prompt assembled from its documents as they are now (one cache miss each
+   *  where the text changed; none where it did not). */
+  async refreshInstructions() {
+    this.instructionRefresh = (this.instructionRefresh || Promise.resolve()).then(async () => {
+      for (const record of this.rawRecords()) {
+        try { await this.configureSession(record.conversation, record); }
+        catch (error) { console.warn("[context] live prompt refresh failed", record.conversationId, error); }
+      }
+    }).catch((error) => { console.warn("[context] prompt refresh failed", error); });
+    return this.instructionRefresh;
   }
 
   async refreshLiveTools(extension) {

@@ -85,7 +85,11 @@ export class ContextStore {
   constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills = null }) {
     // skills: the hub's SkillStore (Settings › Skills): installed skills' blocks, and which skills are off.
     Object.assign(this, { root: path.resolve(root), templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills });
+    this.listeners = new Set();
   }
+  /** Told after a block or document changes (Settings › Prompts), so live threads take the new prompt at once. */
+  onChange(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  changed() { for (const listener of this.listeners) { try { listener(); } catch (error) { console.warn("[context] change listener failed", error); } } }
 
   async json(name) {
     try { return JSON.parse(await fs.readFile(path.join(this.root, name), "utf8")); }
