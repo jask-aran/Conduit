@@ -63,19 +63,17 @@ final class FloatLiveBlur {
 
     /**
      * A window whose frost is its background: Samsung's blur takes the place of the window's background drawable, so
-     * the frost moves onto the content (drawn over the blur, its hairline and highlights intact) with its lift shadow.
+     * the frost moves onto the content (drawn over the blur, its hairline and highlights intact). No elevation: a
+     * shadow cast by glass shows through it (Android leaves it out only under the middle, so a clear square sits in a
+     * darkened rim), where CSS draws a box-shadow only outside the box; and the window, the panel's own size, has no
+     * room outside it.
      */
     static boolean frost(android.view.Window window, View content, android.graphics.drawable.Drawable frost) {
         if (!AVAILABLE) return false;
-        View decor = window.getDecorView();
         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
         content.setBackground(frost);
-        content.setElevation(decor.getElevation());
-        if (Build.VERSION.SDK_INT >= 28) {
-            content.setOutlineAmbientShadowColor(decor.getOutlineAmbientShadowColor());
-            content.setOutlineSpotShadowColor(decor.getOutlineSpotShadowColor());
-        }
-        decor.setElevation(0);
+        content.setElevation(0);
+        window.getDecorView().setElevation(0);
         return true;
     }
 
