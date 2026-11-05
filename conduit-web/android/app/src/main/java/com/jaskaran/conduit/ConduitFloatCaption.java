@@ -130,16 +130,18 @@ final class ConduitFloatCaption {
     /** The last LINES lines of the words, older ones dropped from the front behind an ellipsis. */
     private String tail(String words, int inner) {
         TextPaint paint = text.getPaint();
-        String shown = words;
+        StaticLayout layout = StaticLayout.Builder.obtain(words, 0, words.length(), paint, inner).build();
+        if (layout.getLineCount() <= LINES) return words;
+        int cut = layout.getLineStart(layout.getLineCount() - LINES);
+        String rest = words.substring(cut).trim();
+        // The ellipsis can wrap the short tail again; never lay out the full transcript again.
         while (true) {
-            StaticLayout layout = StaticLayout.Builder.obtain(shown, 0, shown.length(), paint, inner).build();
-            if (layout.getLineCount() <= LINES) return shown;
-            // Drop the first line's worth of words and try again.
-            int cut = layout.getLineEnd(0);
-            String rest = shown.substring(Math.min(shown.length(), cut)).trim();
             if (rest.startsWith("…")) rest = rest.substring(1).trim();
             if (rest.isEmpty()) return words.substring(Math.max(0, words.length() - 40));
-            shown = "… " + rest;
+            String shown = "… " + rest;
+            layout = StaticLayout.Builder.obtain(shown, 0, shown.length(), paint, inner).build();
+            if (layout.getLineCount() <= LINES) return shown;
+            rest = shown.substring(layout.getLineEnd(0)).trim();
         }
     }
 
@@ -148,6 +150,14 @@ final class ConduitFloatCaption {
         shown = false;
         View decor = window.getDecorView();
         decor.animate().alpha(0).setDuration(140).withEndAction(() -> { if (!shown) decor.setVisibility(View.GONE); }).start();
+    }
+
+    void hideNow() {
+        shown = false;
+        View decor = window.getDecorView();
+        decor.animate().cancel();
+        decor.setVisibility(View.GONE);
+        if (dialog.isShowing()) dialog.dismiss();
     }
 
     void destroy() {

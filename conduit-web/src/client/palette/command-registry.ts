@@ -19,6 +19,7 @@ import {
 } from "../commands/command-registry.ts";
 import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort.ts";
 import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
+import { installedClientKind } from "../platform/installed-client.ts";
 
 export interface PaletteContext {
   nativeApp: boolean;
@@ -165,6 +166,8 @@ export const SETTINGS_SECTIONS = [
   { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me", "time zone", "home", "connectors", "executor", "gmail", "integrations"] },
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
+  // Settings renders Phone only in the Android app, so the palette lists it only there.
+  ...(installedClientKind === "android" ? [{ id: "phone", label: "Phone", keywords: ["float", "side key", "assistant", "screen context", "hold to talk", "overlay", "slot names"] }] : []),
   { id: "models", label: "Models", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
   { id: "prompts", label: "Prompts", keywords: ["prompt", "system prompt", "context", "instructions"] },
   { id: "blocks", label: "Blocks", keywords: ["blocks", "context", "snippets"] },

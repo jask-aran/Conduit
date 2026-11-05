@@ -28,6 +28,8 @@ final class FloatShot {
     private static final long FLASH_MS = 180, FLY_DELAY = 60, FLY_MS = 420;
     private final Context context;
     private final PathInterpolator rise = new PathInterpolator(.2f, .8f, .2f, 1f);
+    private final java.util.List<ValueAnimator> motions = new java.util.ArrayList<>();
+    private final java.util.List<Dialog> dialogs = new java.util.ArrayList<>();
 
     FloatShot(Context context) { this.context = context; }
 
@@ -36,6 +38,7 @@ final class FloatShot {
     /** Plays over everything; bitmap may be null (the flash only). done runs once the copy has landed. */
     void play(Bitmap bitmap, boolean flash, Rect card, Runnable done) {
         Dialog dialog = new Dialog(context, R.style.ConduitFloatTheme);
+        dialogs.add(dialog);
         dialog.setCancelable(false);
         Window window = dialog.getWindow();
         window.setType(Build.VERSION.SDK_INT >= 26
@@ -99,15 +102,17 @@ final class FloatShot {
         view.setAlpha(0);
         long total = bitmap != null ? FLY_DELAY + FLY_MS : FLASH_MS;
         ValueAnimator motion = ValueAnimator.ofFloat(0, total);
+        motions.add(motion);
         motion.setDuration(total);
         motion.setInterpolator(new android.view.animation.LinearInterpolator());
         motion.addUpdateListener(a -> { t[0] = (float) a.getAnimatedValue(); view.invalidate(); });
         motion.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
+                motions.remove(motion);
                 view.performHapticFeedback(Build.VERSION.SDK_INT >= 30 ? HapticFeedbackConstants.CONFIRM : HapticFeedbackConstants.VIRTUAL_KEY);
                 done.run();
                 // One frame with the card underneath drawn before this goes, so there is no gap.
-                view.postOnAnimation(dialog::dismiss);
+                view.postOnAnimation(() -> { dialog.dismiss(); dialogs.remove(dialog); });
             }
         });
         // From the window's first drawn frame: started before it is up, the flash's peak would be spent unseen.
@@ -116,8 +121,24 @@ final class FloatShot {
             @Override public void onDraw() {
                 if (started) return;
                 started = true;
-                view.post(() -> { view.getViewTreeObserver().removeOnDrawListener(this); view.setAlpha(1); motion.start(); });
+                view.post(() -> {
+                    view.getViewTreeObserver().removeOnDrawListener(this);
+                    if (!motions.contains(motion)) return;
+                    view.setAlpha(1);
+                    motion.start();
+                });
             }
         });
+    }
+
+    /** Cancelling must not call done, including from an animation waiting for its first frame. */
+    void cancel() {
+        for (ValueAnimator motion : motions) {
+            motion.removeAllListeners();
+            motion.cancel();
+        }
+        motions.clear();
+        for (Dialog dialog : dialogs) dialog.dismiss();
+        dialogs.clear();
     }
 }

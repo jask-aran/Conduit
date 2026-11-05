@@ -62,6 +62,7 @@ public class ConduitFloatService extends Service {
     private final java.util.List<android.graphics.Bitmap> thumbs = new java.util.ArrayList<>();
     private boolean capturing;
     private long capturingSince;
+    private int gatheredGeneration;
     private FloatCaptures captures;
     private FloatShot shot;
     /** The pill's ✕ stopped a dictation: back to the radial with the captures still held. */
@@ -128,20 +129,24 @@ public class ConduitFloatService extends Service {
      * radial, or goes straight into dictation when Side key dictates is on.
      */
     private void sideKey(ConduitContext.Result result) {
+        if (destroyed) { if (result.image != null) result.image.delete(); return; }
         State state = machine.state();
         if (state != State.HANDLE) {
             if (result.image != null) result.image.delete();
             if (state == State.RECORDING && sideKeyRecording) stopRecording(false);
             return;
         }
+        // From rest it opens the radial or a dictation: a panel left open goes first.
+        closePanel();
         summoned = true;
         summoning = true;
         updateVisibility();
         boolean dictate = prefs().getBoolean("sideKeyDictates", false);
         Runnable next = () -> {
             summoning = false;
+            if (destroyed) return;
             updateVisibility();
-            if (machine.state() == State.HANDLE && !radialUp()) { if (dictate) sideKeyDictation(); else openRadial(); }
+            if (!appForeground && machine.state() == State.HANDLE && !radialUp()) { if (dictate) sideKeyDictation(); else openRadial(); }
         };
         if (prefs().getBoolean("sideKeyScreenshot", true) && result.error == null && result.image != null) captured(result, next);
         else { if (result.image != null) result.image.delete(); next.run(); }
@@ -200,7 +205,7 @@ public class ConduitFloatService extends Service {
                     discard();
                     show(State.HANDLE);
                     // The pill's ✕: back to the radial, the captures still held, to pick another target.
-                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { if (!destroyed && machine.state() == State.HANDLE) openRadial(); }, 160); }
+                    if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { if (!destroyed && !appForeground && machine.state() == State.HANDLE) openRadial(); }, 160); }
                 }
                 else if (saved) sendRecording();
                 else { discard(); show(State.ERROR); }
@@ -310,6 +315,7 @@ public class ConduitFloatService extends Service {
     /** The caption shows while listening and as it stops, once there are words. */
     private void updateCaption() {
         if (caption == null) return;
+        if (away) { caption.hideNow(); return; }
         if ((machine.state() == State.RECORDING || machine.state() == State.STOPPING) && !liveText.isEmpty())
             window.showCaption(caption, liveText, targetLine());
         else caption.hide();
@@ -323,7 +329,10 @@ public class ConduitFloatService extends Service {
     }
 
     private void show(State next) {
+        State previous = machine.state();
         if (destroyed || !machine.show(next)) return;
+        // Send to belongs to the recording, including when the recorder stops or fails on its own.
+        if (previous == State.RECORDING && next != State.RECORDING) closePanel();
         if (next == State.HANDLE) liveText = "";
         if (next != State.RECORDING) sideKeyRecording = false;
         // The dictation's Screenshot and Camera go with the recording.
@@ -358,7 +367,7 @@ public class ConduitFloatService extends Service {
     }
 
     private void closePanel() {
-        if (panel != null && panel.isOpen()) panel.close();
+        if (panel != null) panel.close();
         panel = null;
     }
 
@@ -483,12 +492,15 @@ public class ConduitFloatService extends Service {
     /** Everything of Float off the screen for a capture (a frame or two), or back as it was. */
     /** Off the screen for a capture: nothing may bring the handle back meanwhile. */
     private boolean away;
+    private final Runnable captureSafety = () -> {
+        if (!destroyed && away) { capturing = false; setAway(false); }
+    };
 
     private void setAway(boolean away) {
         this.away = away;
         if (radial != null) radial.setHidden(away);
         if (captures != null) captures.setHidden(away);
-        if (away) { if (caption != null) caption.hide(); window.setVisible(false); }
+        if (away) { if (caption != null) caption.hideNow(); window.setVisible(false); }
         else { updateVisibility(); updateCaption(); }
     }
 
@@ -508,7 +520,8 @@ public class ConduitFloatService extends Service {
         capturingSince = SystemClock.uptimeMillis();
         setAway(true);
         // Never left off the screen: back after 15s whatever happens to the capture.
-        main.postDelayed(() -> { if (away) { capturing = false; setAway(false); } }, 15000);
+        main.removeCallbacks(captureSafety);
+        main.postDelayed(captureSafety, 15000);
         ConduitContext.screenshot(this, result -> captured(result, null));
     }
 
@@ -516,11 +529,13 @@ public class ConduitFloatService extends Service {
         if (busyCapturing()) return;
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
+        main.removeCallbacks(captureSafety);
         ConduitContext.photo(this, result -> captured(result, null));
     }
 
     /** A capture arrived: Float comes back, the flash and the copy flying into the card, then it is held. */
     private void captured(ConduitContext.Result result, Runnable then) {
+        main.removeCallbacks(captureSafety);
         capturing = false;
         if (destroyed) { if (result.image != null) result.image.delete(); return; }
         setAway(false);
@@ -530,6 +545,7 @@ public class ConduitFloatService extends Service {
             if (then != null) then.run();
             return;
         }
+        int heldGeneration = gatheredGeneration;
         boolean flash = !"photo".equals(result.kind);
         THUMBS.execute(() -> {
             android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
@@ -539,10 +555,23 @@ public class ConduitFloatService extends Service {
             catch (RuntimeException | OutOfMemoryError e) { thumb = null; }
             final android.graphics.Bitmap mini = thumb;
             main.post(() -> {
-                if (destroyed) return;
+                if (destroyed || heldGeneration != gatheredGeneration) {
+                    result.image.delete();
+                    if (mini != null) mini.recycle();
+                    if (!destroyed && then != null) then.run();
+                    return;
+                }
                 if (shot == null) shot = new FloatShot(this);
                 android.graphics.Rect card = FloatCaptures.cardRect(this, window.handleCentre(), window.handleHeight());
                 Runnable land = () -> {
+                    // A discard during the flight must not put the capture back in the card.
+                    if (destroyed || heldGeneration != gatheredGeneration) {
+                        result.image.delete();
+                        if (mini != null) mini.recycle();
+                        // The side key's step still follows (its summoning flag waits on it).
+                        if (!destroyed && then != null) then.run();
+                        return;
+                    }
                     gathered.add(result);
                     thumbs.add(mini);
                     updateDiscard();
@@ -573,6 +602,7 @@ public class ConduitFloatService extends Service {
 
     /** The gathered captures are spent (sent) or let go (cancelled). */
     private void dropGathered() {
+        gatheredGeneration++;
         gathered.clear();
         for (android.graphics.Bitmap thumb : thumbs) if (thumb != null) thumb.recycle();
         thumbs.clear();
@@ -698,6 +728,7 @@ public class ConduitFloatService extends Service {
         if (caption != null) caption.destroy();
         if (active == this) active = null;
         if (radial != null) radial.destroy();
+        if (shot != null) shot.cancel();
         if (captures != null) captures.hide();
         closePanel();
         if (window != null) window.stopAnimations();
