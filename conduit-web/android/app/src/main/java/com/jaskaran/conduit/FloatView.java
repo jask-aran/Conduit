@@ -205,7 +205,15 @@ final class FloatView extends FrameLayout {
         stopButton.setAlpha(contentAlpha());
     }
 
-    private int gamma(double x) { return (int) Math.max(0, Math.min(255, 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.pow(Math.max(0, x), 1 / 2.4) - .055))); }
+    /** Linear light to an sRGB byte. A table of 4096 steps over 0..1: three pow() a pixel were most of the Aura's frame. */
+    private static final byte[] GAMMA = new byte[4097];
+    static {
+        for (int i = 0; i <= 4096; i++) {
+            double x = i / 4096.0;
+            GAMMA[i] = (byte) Math.max(0, Math.min(255, 255 * (x <= .0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - .055)));
+        }
+    }
+    private static int gamma(double x) { return x <= 0 ? 0 : x >= 1 ? 255 : GAMMA[(int) (x * 4096 + .5)] & 0xff; }
 
     /** Steps the Aura on (dt seconds) and draws it into its small bitmap; false when it has nothing to show. */
     private boolean stepAura(float w, float h) {
@@ -244,7 +252,7 @@ final class FloatView extends FrameLayout {
                 float k = (float) Math.exp(-(dx * dx + dy * dy) / br[i]);
                 sw += k; sl += k * bl[i]; sc += k * bc[i]; sa += k * ba[i]; sb += k * bb[i];
             }
-            double norm = Math.hypot(sa, sb), c = sc / sw, L = sl / sw, A = c * sa / (norm == 0 ? 1 : norm), B = c * sb / (norm == 0 ? 1 : norm);
+            double norm = Math.sqrt(sa * sa + sb * sb), c = sc / sw, L = sl / sw, A = c * sa / (norm == 0 ? 1 : norm), B = c * sb / (norm == 0 ? 1 : norm);
             double l_ = L + .3963377774 * A + .2158037573 * B, m_ = L - .1055613458 * A - .0638541728 * B, s_ = L - .0894841775 * A - 1.291485548 * B;
             double lc = l_ * l_ * l_, mc = m_ * m_ * m_, sc3 = s_ * s_ * s_;
             auraPixels[y * gw + x] = 0xff000000 | gamma(4.0767416621 * lc - 3.3077115913 * mc + .2309699292 * sc3) << 16

@@ -1004,9 +1004,13 @@ export function Settings(props: {
     const next = { ...voiceDraft(), ...patch };
     setVoiceDraft(next);
     voiceDraftAutosave.edit(next, "now");
-    if (installedClientKind === "android" && floatStatus()?.enabled
-      && (patch.otherAudio !== undefined || patch.otherAudioLevel !== undefined)) {
-      void conduitFloat.start(next).then(setFloatStatus).catch(floatFailure);
+    // A running Float takes other audio's handling with it; its status is read first when the Phone section has not
+    // been opened yet, or the change would never reach it.
+    if (installedClientKind === "android" && (patch.otherAudio !== undefined || patch.otherAudioLevel !== undefined)) {
+      const known = floatStatus();
+      void (known ? Promise.resolve(known) : conduitFloat.status())
+        .then((status) => { setFloatStatus(status); return status.enabled ? conduitFloat.start(next).then(setFloatStatus) : undefined; })
+        .catch(floatFailure);
     }
   };
   // The server's: a choice at once, typing after a pause. A custom endpoint

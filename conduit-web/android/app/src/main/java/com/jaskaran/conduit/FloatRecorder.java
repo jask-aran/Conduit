@@ -50,12 +50,34 @@ final class FloatRecorder {
     static final class Capture {
         final AudioRecord audio;
         final int generation;
-        ConduitFloatLive live;
+        volatile ConduitFloatLive live;
         volatile boolean stop, cancel;
         Capture(AudioRecord audio, int generation) { this.audio = audio; this.generation = generation; }
     }
 
+    /**
+     * Opens the microphone on the worker (its setup takes ~20ms, three frames at 120Hz, right as the dictation's
+     * row moves), then reports on the main thread and records. One start at a time; a start the service has torn down
+     * meanwhile (destroy) releases the microphone instead of reporting.
+     */
     void begin(int generation) {
+        if (starting) return;
+        starting = true;
+        worker.execute(() -> {
+            Capture next = open(generation);
+            main.post(() -> {
+                starting = false;
+                if (next == null) { listener.onFailure(); return; }
+                if (destroyed) { next.cancel = true; next.stop = true; try { next.audio.stop(); } catch (RuntimeException ignored) {} return; }
+                listener.onStarted(next);
+            });
+            if (next != null) record(next);
+        });
+    }
+
+    private volatile boolean starting, destroyed;
+
+    private Capture open(int generation) {
         AudioRecord audio = null;
         try {
             int bufferSize = AudioRecord.getMinBufferSize(16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
@@ -75,13 +97,11 @@ final class FloatRecorder {
             applyVolume();
             audio.startRecording();
             if (audio.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) throw new IllegalStateException("Microphone did not start");
-            Capture next = new Capture(audio, generation);
-            listener.onStarted(next);
-            worker.execute(() -> record(next));
+            return new Capture(audio, generation);
         } catch (Exception error) {
             if (audio != null) audio.release();
             restoreVolume();
-            listener.onFailure();
+            return null;
         }
     }
 
@@ -155,6 +175,7 @@ final class FloatRecorder {
     }
 
     void destroy(Capture capture) {
+        destroyed = true;
         if (capture == null) return;
         capture.cancel = true;
         capture.stop = true;
