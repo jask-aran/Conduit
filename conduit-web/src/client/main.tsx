@@ -24,7 +24,7 @@ import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window
 import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { startPush } from "./platform/push.ts";
 // Keeps Float told of the hub path in use (and its sign-in), from startup rather than only once Settings has loaded.
-import "./platform/float";
+import { onFloatOpensSettings } from "./platform/float";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";
@@ -2498,6 +2498,14 @@ function App() {
     setSettingsLoaded(true);
     setSettingsOpen(true);
   };
+  // Float's notification (screen context to set up) opens a section from outside the page's own controls, once the
+  // first route is up (opened earlier, it is lost under the connecting screen).
+  let floatSettingsWired = false;
+  createEffect(() => {
+    if (routeBootstrap() !== "ready" || floatSettingsWired) return;
+    floatSettingsWired = true;
+    onFloatOpensSettings((section) => openSettings(section));
+  });
   const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);

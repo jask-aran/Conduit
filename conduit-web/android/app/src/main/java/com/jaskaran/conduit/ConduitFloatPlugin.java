@@ -52,6 +52,7 @@ public class ConduitFloatPlugin extends Plugin {
     @Override public void load() {
         try { ConduitMediaVolume.recover(getContext()); }
         catch (RuntimeException error) { android.util.Log.w("ConduitAudio", "Could not restore media volume", error); }
+        openSettingsFrom(getActivity().getIntent());
     }
 
 
@@ -129,6 +130,8 @@ public class ConduitFloatPlugin extends Plugin {
                 permissionFlow = true;
                 if (!Settings.canDrawOverlays(getContext())) {
                     startActivityForResult(call, overlayIntent(), "overlayReturned");
+                    // Back as soon as it is allowed (no card: Float may not draw yet).
+                    guide().show(null, () -> Settings.canDrawOverlays(getContext()), this::returnToApp);
                 } else requireMicrophone(call);
             } catch (Exception error) {
                 permissionFlow = false;
@@ -174,6 +177,7 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     @ActivityCallback private void overlayReturned(PluginCall call, ActivityResult result) {
+        guide().hide();
         if (call == null) { permissionFlow = false; return; }
         if (!Settings.canDrawOverlays(getContext())) {
             permissionFlow = false;
@@ -208,22 +212,16 @@ public class ConduitFloatPlugin extends Plugin {
     private void assistantStep(PluginCall call) {
         permissionFlow = true;
         if (isAssistant()) { sideKeyStep(call); return; }
-        ask("Make Conduit your assistant",
-            "Optional: the side key can then open Float with the screen already taken, with its text. Choose Conduit "
-                + "as the digital assistant app, allow Use screenshot and Use text on screen, then come back.",
-            "Choose", () -> {
-                try { startActivityForResult(call, new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), "assistantReturned"); }
-                catch (RuntimeException noVoiceSettings) {
-                    try { startActivityForResult(call, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), "assistantReturned"); }
-                    catch (RuntimeException none) { nextAfterAssistant(call); }
-                }
-            }, call, () -> nextAfterAssistant(call));
+        step(call, "Choose " + appLabel() + ".",
+            new Intent[] { new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS) },
+            "assistantReturned", this::isAssistant, () -> nextAfterAssistant(call));
     }
 
-    /** Turning Float on: screen context, then the assistant. From a Settings row, only that row's steps. */
+    /** Turning Float on, or Settings' Set up: screen context, then the assistant. */
     private boolean thenAssistant;
 
     @ActivityCallback private void assistantReturned(PluginCall call, ActivityResult result) {
+        guide().hide();
         if (call == null) { permissionFlow = false; return; }
         if (isAssistant()) sideKeyStep(call); else nextAfterAssistant(call);
     }
@@ -235,13 +233,9 @@ public class ConduitFloatPlugin extends Plugin {
      */
     private void sideKeyStep(PluginCall call) {
         if (!sideKeyPending()) { nextAfterAssistant(call); return; }
-        ask("Side key opens Float",
-            "Hold the side key on any screen to open Float with that screen already captured. In Press and hold, "
-                + "choose Digital assistant, then come back.",
-            "Open side key", () -> {
-                try { startActivityForResult(call, new Intent("com.samsung.android.intent.action.SIDE_KEY_LONG_PRESS_SETTINGS"), "sideKeyReturned"); }
-                catch (RuntimeException notSamsung) { nextAfterAssistant(call); }
-            }, call, () -> nextAfterAssistant(call));
+        step(call, "Under Press and hold, choose Digital assistant.",
+            new Intent[] { new Intent("com.samsung.android.intent.action.SIDE_KEY_LONG_PRESS_SETTINGS") },
+            "sideKeyReturned", null, () -> nextAfterAssistant(call));
     }
 
     private boolean sideKeyPending() {
@@ -250,16 +244,9 @@ public class ConduitFloatPlugin extends Plugin {
 
     @ActivityCallback private void sideKeyReturned(PluginCall call, ActivityResult result) {
         preferences(getContext()).edit().putBoolean("sideKeyHandled", true).apply();
+        guide().hide();
         if (call == null) { permissionFlow = false; return; }
         nextAfterAssistant(call);
-    }
-
-    /** Settings' Side key row: Samsung's Press and hold page. */
-    @PluginMethod public void openSideKeySettings(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
-            try { startActivityForResult(call, new Intent("com.samsung.android.intent.action.SIDE_KEY_LONG_PRESS_SETTINGS"), "sideKeyReturned"); }
-            catch (RuntimeException notSamsung) { call.resolve(view()); }
-        });
     }
 
     private void nextAfterAssistant(PluginCall call) { permissionFlow = false; call.resolve(view()); }
@@ -271,11 +258,6 @@ public class ConduitFloatPlugin extends Plugin {
         call.resolve(view());
     }
 
-    /** Settings' Assistant row: make Conduit the assistant, then the side key. */
-    @PluginMethod public void setUpAssistant(PluginCall call) {
-        getActivity().runOnUiThread(() -> { thenAssistant = false; assistantStep(call); });
-    }
-
     /*
      * The rest of turning Float on, one step at a time, each introduced by a short dialog that says what to tap and
      * can be skipped: an app installed from an APK first needs App info > ⋮ > Allow restricted settings (Android 13+),
@@ -285,44 +267,56 @@ public class ConduitFloatPlugin extends Plugin {
         if (ConduitContext.screenReaderOn(getContext())) { afterScreenContext(call); return; }
         permissionFlow = true;
         if (restrictedSettingsBlocked()) {
-            ask("Allow restricted settings",
-                "Android holds back Accessibility for apps installed from a file. In App info, tap ⋮ at the top right, "
-                    + "then Allow restricted settings, then come back.",
-                "Open App info", () -> startActivityForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:" + getContext().getPackageName())), "restrictedReturned"), call,
-                () -> afterScreenContext(call));
+            step(call, "Tap ⋮ at the top right, then Allow restricted settings.",
+                new Intent[] { new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName())) },
+                "restrictedReturned", null, () -> afterScreenContext(call));
         } else accessibilityStep(call);
     }
 
     @ActivityCallback private void restrictedReturned(PluginCall call, ActivityResult result) {
         preferences(getContext()).edit().putBoolean("restrictedHandled", true).apply();
+        guide().hide();
         if (call == null) { permissionFlow = false; return; }
         accessibilityStep(call);
     }
 
     private void accessibilityStep(PluginCall call) {
-        ask("Turn on Float screen context",
-            "Screenshots without asking each time, the text on screen with them, and Float's frosted panels. "
-                + "In Installed apps, turn on Float screen context, then come back.",
-            "Open settings", () -> {
-                try { startActivityForResult(call, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "accessibilityReturned"); }
-                catch (RuntimeException unavailable) { afterScreenContext(call); }
-            }, call, () -> afterScreenContext(call));
+        step(call, "Tap Installed apps, then Float screen context, and turn it on.",
+            new Intent[] { new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS) },
+            "accessibilityReturned", () -> ConduitContext.screenReaderOn(getContext()), () -> afterScreenContext(call));
     }
 
     @ActivityCallback private void accessibilityReturned(PluginCall call, ActivityResult result) {
+        guide().hide();
         if (call == null) { permissionFlow = false; return; }
         afterScreenContext(call);
     }
 
-    /** A step's dialog: its button runs the step; Skip (or Back) goes on to what follows. */
-    private void ask(String title, String message, String go, Runnable step, PluginCall call, Runnable skip) {
-        new android.app.AlertDialog.Builder(getActivity()).setTitle(title).setMessage(message)
-            .setPositiveButton(go, (dialog, which) -> step.run())
-            .setNegativeButton("Skip", (dialog, which) -> skip.run())
-            .setOnCancelListener(dialog -> skip.run())
-            .show();
+    /*
+     * A step's Settings page, opened at once (its first fallback that exists) with a toast saying what to tap there,
+     * and Conduit back by itself once the step is done when Android can tell (done). Back from the page goes on to
+     * the next step, as Skip did. Settings lets no app open its Accessibility entry, point at a row or draw over these
+     * pages, so the toast is how the way there is shown.
+     */
+    private void step(PluginCall call, String line, Intent[] intents, String callback,
+                      java.util.function.BooleanSupplier done, Runnable skip) {
+        for (Intent intent : intents) {
+            try { startActivityForResult(call, intent, callback); }
+            catch (RuntimeException unavailable) { continue; }
+            guide().show(line, done, this::returnToApp);
+            return;
+        }
+        skip.run();
     }
+
+    private FloatSetupGuide guide;
+
+    private FloatSetupGuide guide() { if (guide == null) guide = new FloatSetupGuide(getContext()); return guide; }
+
+    private void returnToApp() { FloatSetupGuide.returnToApp(getContext()); }
+
+    private String appLabel() { return getContext().getApplicationInfo().loadLabel(getContext().getPackageManager()).toString(); }
+
 
     /**
      * Android 13+ restricts Accessibility for an app not installed from a store (a file, adb, Conduit's own updater:
@@ -335,9 +329,9 @@ public class ConduitFloatPlugin extends Plugin {
 
     private boolean restrictedSettingsBlocked() { return restrictedSettingsBlocked(getContext()); }
 
-    /** The screen-context steps alone, for Settings' row when Float is already on. */
-    @PluginMethod public void setUpScreenContext(PluginCall call) {
-        getActivity().runOnUiThread(() -> { thenAssistant = false; screenContextStep(call); });
+    /** Settings' Set up: every step Float is still missing, in order, each skippable (Float is already on). */
+    @PluginMethod public void setUp(PluginCall call) {
+        getActivity().runOnUiThread(() -> { thenAssistant = true; screenContextStep(call); });
     }
 
     private void startVisible(boolean record) {
@@ -355,32 +349,37 @@ public class ConduitFloatPlugin extends Plugin {
         call.resolve(view());
     }
 
-    /** Android's page for Float screen context (the Accessibility service behind instant screenshots and the frost). */
-    @PluginMethod public void openScreenContextSettings(PluginCall call) {
-        ConduitContext.openScreenReaderSettings(getContext());
-        call.resolve(view());
-    }
-
     @PluginMethod public void openOverlaySettings(PluginCall call) {
         getActivity().runOnUiThread(() -> startActivityForResult(call, overlayIntent(), "settingsReturned"));
-    }
-
-    @PluginMethod public void openAssistantSettings(PluginCall call) {
-        getActivity().runOnUiThread(() -> {
-            try {
-                startActivityForResult(call, new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), "settingsReturned");
-            } catch (android.content.ActivityNotFoundException noVoiceSettings) {
-                startActivityForResult(call, new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS), "settingsReturned");
-            }
-        });
     }
 
     @ActivityCallback private void settingsReturned(PluginCall call, ActivityResult result) {
         if (call != null) call.resolve(view());
     }
 
+    /** On the intent that opens the app: show Settings › Phone (Float's notification to set up screen context). */
+    static final String OPEN_SETTINGS = "conduit.float.settings";
+
     @Override protected void handleOnNewIntent(Intent intent) {
         pendingRecord |= intent != null && intent.getBooleanExtra("conduit.float.record", false);
+        openSettingsFrom(intent);
+    }
+
+
+    /** The section the app was opened for, until the page takes it (a cold start opens before it is listening). */
+    private static String settingsWanted;
+
+    private void openSettingsFrom(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(OPEN_SETTINGS, false)) return;
+        intent.removeExtra(OPEN_SETTINGS);
+        settingsWanted = "phone";
+        notifyListeners("openSettings", new com.getcapacitor.JSObject());
+    }
+
+    @PluginMethod public void takeOpenSettings(PluginCall call) {
+        String section = settingsWanted;
+        settingsWanted = null;
+        call.resolve(new com.getcapacitor.JSObject().put("section", section));
     }
 
     @Override protected void handleOnResume() {

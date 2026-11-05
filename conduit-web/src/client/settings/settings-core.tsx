@@ -469,6 +469,12 @@ export function Settings(props: {
   const [floatBusy, setFloatBusy] = createSignal(false);
   const [floatError, setFloatError] = createSignal("");
   const floatFailure = (error: unknown) => setFloatError(error instanceof Error ? error.message : "Could not update Float.");
+  /** Setup steps Float still lacks: screen context, Conduit as the assistant, then the side key (Samsung). */
+  const floatSetupLeft = () => {
+    const status = floatStatus();
+    if (!status) return 0;
+    return (status.screenContext ? 0 : 1) + (status.assistant ? (status.sideKey === "unset" ? 1 : 0) : 1);
+  };
   const refreshFloat = () => {
     if (installedClientKind !== "android") return;
     void conduitFloat.status().then(setFloatStatus).catch(floatFailure);
@@ -1554,24 +1560,26 @@ export function Settings(props: {
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
-                      <SettingLine label="Screen context" state={floatStatus()!.screenContext ? "on" : "off"}
-                        title="Float's Accessibility service: Float's Screenshot at once, the text on screen with it, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
-                        <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.screenContext ? conduitFloat.openScreenContextSettings() : conduitFloat.setUpScreenContext()).then(setFloatStatus).catch(floatFailure)}>
-                          {floatStatus()!.screenContext ? "Settings" : "Turn on"}
-                        </Button>
+                      {/* One way through what Float still lacks: each step opens its Settings page with a toast saying
+                          what to tap, and Conduit comes back by itself once Android reports it done. */}
+                      <Show when={floatSetupLeft() > 0}>
+                        <SettingLine plain label="Setup" state={`${floatSetupLeft()} ${floatSetupLeft() === 1 ? "step" : "steps"} left`}
+                          title="Goes through each step Float still lacks, any of which can be skipped.">
+                          <Button size="sm" disabled={floatBusy()} onClick={() => void conduitFloat.setUp().then(setFloatStatus).catch(floatFailure)}>Set up</Button>
+                        </SettingLine>
+                      </Show>
+                      <SettingLine plain label="Screen context"
+                        title="Float's Accessibility service: Float's Screenshot, the text on screen with it, and Float's frosted panels. It reads only when you take a screenshot or open a panel.">
+                        <SettingValue>{floatStatus()!.screenContext ? "On" : "Off"}</SettingValue>
                       </SettingLine>
-                      <SettingLine label="Assistant" state={floatStatus()!.assistant ? "Conduit" : "another app"}
-                        title="Optional: make Conduit the phone's digital assistant so a key (the side key, below) opens Float with the screen and its text already taken. Allow Use screenshot and Use text on screen there.">
-                        <Button variant="ghost" size="sm" onClick={() => void (floatStatus()!.assistant ? conduitFloat.openAssistantSettings() : conduitFloat.setUpAssistant()).then(setFloatStatus).catch(floatFailure)}>
-                          {floatStatus()!.assistant ? "Settings" : "Set up"}
-                        </Button>
+                      <SettingLine plain label="Assistant"
+                        title="Optional: make Conduit the phone's digital assistant so the side key opens Float with the screen and its text already taken.">
+                        <SettingValue>{floatStatus()!.assistant ? "Conduit" : "Another app"}</SettingValue>
                       </SettingLine>
                       <Show when={floatStatus()!.assistant && floatStatus()!.sideKey !== "none"}>
-                        <SettingLine label="Side key" state={floatStatus()!.sideKey === "set" ? "set up" : "optional"}
+                        <SettingLine plain label="Side key"
                           title="Hold the side key on any screen to open Float with that screen already captured: in Press and hold, choose Digital assistant.">
-                          <Button variant="ghost" size="sm" onClick={() => void conduitFloat.openSideKeySettings().then(setFloatStatus).catch(floatFailure)}>
-                            {floatStatus()!.sideKey === "set" ? "Settings" : "Set up"}
-                          </Button>
+                          <SettingValue>{floatStatus()!.sideKey === "set" ? "Opens Float" : "Not set"}</SettingValue>
                         </SettingLine>
                         <Show when={floatStatus()!.sideKey === "set"}>
                           <SettingLine label="Only on side key" title="Float stays out of sight until you hold the side key, and goes again once you are done.">

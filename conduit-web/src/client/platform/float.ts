@@ -41,11 +41,10 @@ const nativeFloat = registerPlugin<{
   setSlotNames(options: { slotNames: boolean }): Promise<FloatStatus>;
   setSideKey(options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
-  openScreenContextSettings(): Promise<FloatStatus>;
-  setUpScreenContext(): Promise<FloatStatus>;
-  openAssistantSettings(): Promise<FloatStatus>;
-  setUpAssistant(): Promise<FloatStatus>;
-  openSideKeySettings(): Promise<FloatStatus>;
+  /** Every setup step still missing (screen context, assistant, side key), in order, each skippable. */
+  setUp(): Promise<FloatStatus>;
+  takeOpenSettings(): Promise<{ section: string | null }>;
+  addListener(event: "openSettings", handler: () => void): Promise<{ remove(): Promise<void> }>;
 }>("ConduitFloat");
 
 // Keep native calls ordered: a pending settings update must finish before a later Turn off.
@@ -66,18 +65,22 @@ export const conduitFloat = {
   stop: () => enqueue(() => nativeFloat.stop()),
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
-  openScreenContextSettings: () => enqueue(() => nativeFloat.openScreenContextSettings()),
-  /** Walks through what screen context needs (Allow restricted settings, then Accessibility), each step skippable. */
-  setUpScreenContext: () => enqueue(() => nativeFloat.setUpScreenContext()),
-  openAssistantSettings: () => enqueue(() => nativeFloat.openAssistantSettings()),
-  /** Make Conduit the assistant, then (Samsung) the side key's press and hold, each step skippable. */
-  setUpAssistant: () => enqueue(() => nativeFloat.setUpAssistant()),
-  openSideKeySettings: () => enqueue(() => nativeFloat.openSideKeySettings()),
+  /** Every setup step still missing, in order: screen context (with restricted settings), the assistant, the side key. */
+  setUp: () => enqueue(() => nativeFloat.setUp()),
   setSlotNames: (slotNames: boolean) => enqueue(() => nativeFloat.setSlotNames({ slotNames })),
   setSideKey: (options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }) =>
     enqueue(() => nativeFloat.setSideKey(options)),
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
+
+// Float's notification to set up screen context opens Settings › Phone. The section waits natively until the app
+// asks for it: on a cold start the intent arrives before the page is listening.
+export function onFloatOpensSettings(open: (section: string) => void) {
+  if (installedClientKind !== "android") return;
+  const take = () => void nativeFloat.takeOpenSettings().then(({ section }) => { if (section) open(section); }).catch(() => {});
+  void nativeFloat.addListener("openSettings", take).catch(() => {});
+  take();
+}
 
 // This module lives for the page's lifetime, including when Settings is closed.
 if (installedClientKind === "android") createRoot(() => createEffect(() => {

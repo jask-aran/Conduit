@@ -516,6 +516,8 @@ public class ConduitFloatService extends Service {
      */
     private void screenshot() {
         if (busyCapturing()) return;
+        // Float's Screenshot is screen context's: without it, say so and offer the way to turn it on.
+        if (!ConduitContext.screenReaderOn(this)) { needScreenContext(); return; }
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
         setAway(true);
@@ -524,6 +526,25 @@ public class ConduitFloatService extends Service {
         main.postDelayed(captureSafety, 15000);
         ConduitContext.screenshot(this, result -> captured(result, null));
     }
+
+    /** Screenshot without screen context: a word now, and a notification that opens Settings › Phone to set it up. */
+    private void needScreenContext() {
+        android.widget.Toast.makeText(this, "Screenshot needs Float screen context", android.widget.Toast.LENGTH_SHORT).show();
+        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel channel = new NotificationChannel("conduit_float_setup", "Float setup", NotificationManager.IMPORTANCE_DEFAULT);
+            channel.setShowBadge(false);
+            manager.createNotificationChannel(channel);
+        }
+        PendingIntent open = PendingIntent.getActivity(this, 2, new Intent(this, MainActivity.class)
+                .putExtra(ConduitFloatPlugin.OPEN_SETTINGS, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        manager.notify(SETUP_NOTIFICATION, new NotificationCompat.Builder(this, "conduit_float_setup").setSmallIcon(R.drawable.ic_stat_conduit)
+            .setContentTitle("Turn on Float screen context").setContentText("Float's Screenshot needs it. Tap to set it up.")
+            .setContentIntent(open).setAutoCancel(true).build());
+    }
+
+    private static final int SETUP_NOTIFICATION = 4104;
 
     private void photo() {
         if (busyCapturing()) return;
