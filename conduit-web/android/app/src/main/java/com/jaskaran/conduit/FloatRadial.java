@@ -108,6 +108,7 @@ final class FloatRadial {
         // As bright as the handle, with its 1dp hairline.
         frost = new FloatFrost(-1, dp(1));
         frost.setLifted(true);
+        frost.setLive(LIVE);
         for (Slot slot : SLOTS) {
             icons[slot.ordinal()] = context.getDrawable(slot.icon).mutate();
             icons[slot.ordinal()].setTint(ICON);
@@ -254,7 +255,7 @@ final class FloatRadial {
         // The frost's ground: the screen as it is now, before anything of the radial is on it.
         int ticket = ++request;
         ConduitScreenReader reader = ConduitScreenReader.instance;
-        if (backdrop == null && reader != null && Build.VERSION.SDK_INT >= 30 && ConduitContext.screenReaderOn(context)) {
+        if (!LIVE && backdrop == null && reader != null && Build.VERSION.SDK_INT >= 30 && ConduitContext.screenReaderOn(context)) {
             final boolean[] done = { false };
             Runnable reveal = () -> { if (!done[0] && request == ticket) { done[0] = true; reveal(); } };
             main.postDelayed(reveal, 180);
@@ -528,6 +529,7 @@ final class FloatRadial {
         // Everything is placed in screen pixels; each window draws its own part of the screen.
         on.getLocationOnScreen(at);
         canvas.translate(-at[0], -at[1]);
+        drawingOn = on;
         if (on == surface) paintShot(canvas);
         int size = dp(SLOT);
         float dictateIn = arrive.getInterpolation(Math.min(1, dictated)), dictateOut = leave.getInterpolation(Math.min(1, dictated));
@@ -599,7 +601,8 @@ final class FloatRadial {
         // The popover's lift, 0 8 32 at 10%, as a soft disc under the frost.
         shadow.setColor(Color.argb(Math.round(a * .18f), 0, 0, 0));
         shadow.setMaskFilter(new android.graphics.BlurMaskFilter(dp(10), android.graphics.BlurMaskFilter.Blur.NORMAL));
-        canvas.drawCircle(x, y + dp(4), size / 2f, shadow);
+        if (!LIVE) canvas.drawCircle(x, y + dp(4), size / 2f, shadow);
+        if (LIVE && drawingOn instanceof Surface) ((Surface) drawingOn).glass(x - at[0], y - at[1], size, alpha);
         frost.setBounds(Math.round(x - size / 2), Math.round(y - size / 2), Math.round(x + size / 2), Math.round(y + size / 2));
         frost.setAlpha(a);
         frost.draw(canvas);
@@ -615,9 +618,54 @@ final class FloatRadial {
         icon.draw(canvas);
     }
 
-    private final class Surface extends View {
-        Surface(Context context) { super(context); setLayerType(LAYER_TYPE_HARDWARE, null); }
-        @Override protected void onDraw(Canvas canvas) { paint(canvas, this); }
+    /**
+     * A window's drawing: with Samsung's live blur, a pool of glass children (each one blurring what is behind its
+     * disc), placed under every round this frame draws; the slots are painted over them.
+     */
+    private final class Surface extends android.widget.FrameLayout {
+        private final java.util.List<View> glass = new java.util.ArrayList<>();
+        private int used;
+        Surface(Context context) {
+            super(context);
+            // A hardware layer would render the glass offscreen, out of reach of the window's blur.
+            if (!LIVE) setLayerType(LAYER_TYPE_HARDWARE, null);
+        }
+        private android.graphics.RenderNode content;
+        @Override protected void dispatchDraw(Canvas canvas) {
+            if (!LIVE || Build.VERSION.SDK_INT < 29) { paint(canvas, this); return; }
+            // Recorded first, which places the glass; then the glass, then the slots over it.
+            if (content == null) content = new android.graphics.RenderNode("radial");
+            content.setPosition(0, 0, getWidth(), getHeight());
+            used = 0;
+            paint(content.beginRecording(), this);
+            content.endRecording();
+            for (int k = used; k < glass.size(); k++) glass.get(k).setVisibility(INVISIBLE);
+            super.dispatchDraw(canvas);
+            canvas.drawRenderNode(content);
+        }
+        /** Puts the next glass disc at (x, y) in this window, size across, at alpha. */
+        void glass(float x, float y, float size, float alpha) {
+            int base = dp(SLOT);
+            if (used == glass.size()) {
+                View disc = new View(context);
+                disc.setLayoutParams(new android.widget.FrameLayout.LayoutParams(base, base));
+                addView(disc);
+                FloatLiveBlur.apply(disc, dp(24), LIVE_GROUND, base / 2f);
+                glass.add(disc);
+            }
+            View disc = glass.get(used++);
+            disc.setVisibility(VISIBLE);
+            disc.setTranslationX(x - base / 2f);
+            disc.setTranslationY(y - base / 2f);
+            disc.setScaleX(size / base);
+            disc.setScaleY(size / base);
+            disc.setAlpha(alpha);
+        }
         @Override public boolean onTouchEvent(MotionEvent event) { return touch(event); }
     }
+
+    /** Samsung's live blur behind each round, in place of the screenshot backdrop. */
+    private static final boolean LIVE = FloatLiveBlur.available();
+    private static final int LIVE_GROUND = FloatWindow.LIVE_GROUND;
+    private View drawingOn;
 }

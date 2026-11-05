@@ -67,6 +67,7 @@ final class FloatWindow {
     void create(State state, FloatView.Listener actions) {
         this.state = state;
         control = new FloatView(context, this, actions, state);
+        control.addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> view.post(this::handleCentre));
         // A Dialog supplies the public Window background-blur API to this service overlay.
         overlay = new Dialog(context, R.style.ConduitFloatTheme);
         overlay.setCancelable(false);
@@ -112,7 +113,9 @@ final class FloatWindow {
     }
 
     void setVisible(boolean visible) {
-        if (overlayWindow != null) overlayWindow.getDecorView().setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (overlayWindow == null) return;
+        if (!visible && control != null) handleCentre(); // reads the window's offset while it can
+        overlayWindow.getDecorView().setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     void updateLevel(float loud) { control.updateLevel(loud); }
@@ -193,16 +196,22 @@ final class FloatWindow {
             * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
     }
 
+    /** The handle's dark core over Samsung's live blur: enough that a white page behind does not wash it out. */
+    static final int LIVE_GROUND = 0xa63a3b3f;
+
     private void updateFrost() {
         if (destroyed) return;
         boolean right = prefs().getBoolean("right", true);
         float r = Math.min(frameWidth, frameHeight) / 2f;
         // Always fully round (a bubble at rest, a pill open): the window's blur follows a uniform outline.
+        boolean live = FloatLiveBlur.available()
+            && FloatLiveBlur.apply(overlayWindow.getDecorView(), dp(24), LIVE_GROUND, r);
         boolean blurred = blurEnabled;
         frost.setCornerRadii(null);
         frost.setCornerRadius(r);
-        // v2's white fill over its dark core ground; a denser core when blur is unavailable.
-        frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
+        // v2's white fill over its dark core ground; a denser core when blur is unavailable. Over Samsung's live
+        // blur the ground is the blur's own tint, so only the white fill is drawn here.
+        frost.setColor(live ? 0x2bffffff : androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
             blurred ? 0xe63a3b3f : 0xfa3a3b3f));
         frost.setStroke(dp(1), 0x4dffffff);
         if (Build.VERSION.SDK_INT >= 31) overlayWindow.setBackgroundBlurRadius(blurred ? Math.round(dp(24) * openness) : 0);
@@ -290,12 +299,23 @@ final class FloatWindow {
 
     /** The handle's centre on screen, in pixels: where the radial opens. */
     float[] handleCentre() {
-        int[] at = new int[2];
-        control.getLocationOnScreen(at);
         boolean right = prefs().getBoolean("right", true);
         float half = dp(HANDLE_W) / 2f;
-        return new float[] { at[0] + (right ? control.getWidth() - half : half), at[1] + control.getHeight() / 2f };
+        // From the window's own place, which holds while it is hidden (GONE, for a capture or Only on side key) and
+        // before it is laid out; the offset of that place from the screen's top is read whenever it is on screen.
+        if (control.isShown() && control.getWidth() > 0) {
+            int[] at = new int[2];
+            control.getLocationOnScreen(at);
+            offsetX = at[0] - windowLeft(right);
+            offsetY = at[1] - position.y;
+        }
+        float left = offsetX + windowLeft(right);
+        return new float[] { right ? left + frameWidth - half : left + half, offsetY + position.y + frameHeight / 2f };
     }
+
+    /** The handle's window's top on screen less its y (the status bar's room, when the window fits under it). */
+    private int offsetX, offsetY;
+    private int windowLeft(boolean right) { return right ? availableWidth - frameWidth - position.x : position.x; }
 
     /** The whole screen in pixels (the radial's window covers all of it). */
     int[] screenSize() {

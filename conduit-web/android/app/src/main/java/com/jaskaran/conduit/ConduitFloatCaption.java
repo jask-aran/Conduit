@@ -108,7 +108,9 @@ final class ConduitFloatCaption {
         position.x = x;
         position.y = above ? Math.max(0, pillY - dp(GAP) - position.height) : Math.min(screenHeight - position.height, pillY + pillHeight + dp(GAP));
         text.setText(tail);
-        frost.setColor(androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff, blurred ? 0xe63a3b3f : 0xfa3a3b3f));
+        boolean live = FloatLiveBlur.apply(window.getDecorView(), dp(24), FloatWindow.LIVE_GROUND, dp(16));
+        frost.setColor(live ? 0x2bffffff
+            : androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff, blurred ? 0xe63a3b3f : 0xfa3a3b3f));
         if (Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(blurred ? dp(24) : 0);
         window.setAttributes(position);
         View decor = window.getDecorView();

@@ -43,6 +43,9 @@ final class FloatFrost extends Drawable {
      * handle's ground (#3a3b3f) at 80% before the white fill, so a dark screen behind does not sink them.
      */
     private boolean lifted;
+    /** Over Samsung's live blur (FloatLiveBlur), which carries the ground as its tint: only the white fill is drawn. */
+    private boolean live;
+    void setLive(boolean live) { this.live = live; invalidateSelf(); }
     void setLifted(boolean lifted) { this.lifted = lifted; invalidateSelf(); }
     private static final int LIFT = 0x8c3a3b3f;
 
@@ -89,14 +92,14 @@ final class FloatFrost extends Drawable {
         return radius < 0 ? Math.min(getBounds().width(), getBounds().height()) / 2f : radius;
     }
 
-    private int fill() { return ColorUtils.compositeColors(FILL, lifted ? 0xfa3a3b3f : blurred ? GROUND_OVER_BLUR : GROUND); }
+    private int fill() { if (live) return FILL; return ColorUtils.compositeColors(FILL, lifted ? 0xfa3a3b3f : blurred ? GROUND_OVER_BLUR : GROUND); }
 
     private int faded(int colour) { return ColorUtils.setAlphaComponent(colour, Math.round((colour >>> 24) * alpha / 255f)); }
 
     @Override public void draw(Canvas canvas) {
         float r = corner();
         box.set(getBounds());
-        if (backdrop != null && !backdrop.isRecycled()) { drawOverBackdrop(canvas, r); return; }
+        if (!live && backdrop != null && !backdrop.isRecycled()) { drawOverBackdrop(canvas, r); return; }
         int fill = fill();
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(faded(fill));

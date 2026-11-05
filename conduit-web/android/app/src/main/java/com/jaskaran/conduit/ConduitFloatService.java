@@ -138,8 +138,8 @@ public class ConduitFloatService extends Service {
         boolean dictate = prefs().getBoolean("sideKeyDictates", false);
         Runnable next = () -> {
             summoning = false;
-            if (machine.state() == State.HANDLE && !radialUp()) { if (dictate) sideKeyDictation(); else openRadial(); }
             updateVisibility();
+            if (machine.state() == State.HANDLE && !radialUp()) { if (dictate) sideKeyDictation(); else openRadial(); }
         };
         if (prefs().getBoolean("sideKeyScreenshot", true) && result.error == null && result.image != null) captured(result, next);
         else { if (result.image != null) result.image.delete(); next.run(); }
