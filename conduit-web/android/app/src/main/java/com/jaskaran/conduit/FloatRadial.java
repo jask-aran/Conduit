@@ -127,6 +127,7 @@ final class FloatRadial {
     FloatRadial(Context context, Listener listener) {
         this.context = context;
         this.listener = listener;
+        shadow.setMaskFilter(new android.graphics.BlurMaskFilter(dp(10), android.graphics.BlurMaskFilter.Blur.NORMAL));
         // As bright as the handle, with its 1dp hairline.
         frost = new FloatFrost(-1, dp(1));
         frost.setLifted(true);
@@ -142,8 +143,8 @@ final class FloatRadial {
         names.setTextSize(dp(12.5f));
         names.setColor(ICON);
         names.setShadowLayer(dp(6), 0, dp(1), 0xcc000000);
-        surface = new Surface(context);
-        for (int k = 0; k < 3; k++) rowSurfaces[k] = new Surface(context);
+        surface = new Surface(context, -1);
+        for (int k = 0; k < 3; k++) rowSurfaces[k] = new Surface(context, k);
         dialog = overlay(surface);
         WindowManager.LayoutParams full = dialog.getWindow().getAttributes();
         full.x = full.y = 0;
@@ -572,7 +573,7 @@ final class FloatRadial {
         if (shrinkPending) { shrinkPending = false; shrinkToContext(); }
     }
 
-    private void paint(Canvas canvas, View on) {
+    private void paint(Canvas canvas, Surface on) {
         if (mode == Mode.CLOSED) return;
         canvas.save();
         // Everything is placed in screen pixels; each window draws its own part of the screen.
@@ -584,6 +585,8 @@ final class FloatRadial {
         float dictateIn = arrive.getInterpolation(Math.min(1, dictated)), dictateOut = leave.getInterpolation(Math.min(1, dictated));
         java.util.Arrays.fill(labelAlpha, 0);
         for (int i = 0; i < SLOTS.length; i++) {
+            // A row window contains only its own slot, including its glass disc.
+            if (on.row >= 0 && rowOf(i) != on.row) continue;
             float p = progress(i);
             float x = anchorX + (slotX[i] - anchorX) * p, y = anchorY + (slotY[i] - anchorY) * p;
             float alpha = Math.min(1, p * 1.6f), scale = .7f + .3f * p;
@@ -627,7 +630,7 @@ final class FloatRadial {
                 canvas.drawText(SLOTS[i].label, tx, ty, names);
             }
         }
-        if (held && mode == Mode.OPEN) {
+        if (on == surface && held && mode == Mode.OPEN) {
             float p = progress(0);
             float d = dp(DISCARD) * (.7f + .3f * p) * (pressedDiscard ? .92f : 1);
             drawRound(canvas, discardX, discardY, d, Math.min(1, p * 1.6f), pressedDiscard);
@@ -649,7 +652,6 @@ final class FloatRadial {
         int a = Math.round(255 * alpha);
         // The popover's lift, 0 8 32 at 10%, as a soft disc under the frost.
         shadow.setColor(Color.argb(Math.round(a * .18f), 0, 0, 0));
-        shadow.setMaskFilter(new android.graphics.BlurMaskFilter(dp(10), android.graphics.BlurMaskFilter.Blur.NORMAL));
         if (!LIVE) canvas.drawCircle(x, y + dp(4), size / 2f, shadow);
         if (LIVE && drawingOn instanceof Surface) ((Surface) drawingOn).glass(x - at[0], y - at[1], size, alpha);
         frost.setBounds(Math.round(x - size / 2), Math.round(y - size / 2), Math.round(x + size / 2), Math.round(y + size / 2));
@@ -673,9 +675,11 @@ final class FloatRadial {
      */
     private final class Surface extends android.widget.FrameLayout {
         private final java.util.List<View> glass = new java.util.ArrayList<>();
+        private final int row;
         private int used;
-        Surface(Context context) {
+        Surface(Context context, int row) {
             super(context);
+            this.row = row;
             // A hardware layer would render the glass offscreen, out of reach of the window's blur.
             if (!LIVE) setLayerType(LAYER_TYPE_HARDWARE, null);
         }

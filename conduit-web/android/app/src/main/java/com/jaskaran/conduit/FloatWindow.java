@@ -266,6 +266,14 @@ final class FloatWindow {
             openness = startOpen + (targetOpen - startOpen) * progress;
             updateFrame();
         });
+        morph.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (morph != animation) return;
+                morph = null;
+                // Use the latest touch and attention state, including changes during the morph.
+                overlayWindow.getDecorView().setAlpha(state != State.HANDLE || touched || attention ? 1 : REST_ALPHA);
+            }
+        });
         morph.start();
     }
 

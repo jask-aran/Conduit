@@ -16,6 +16,7 @@ final class FloatLiveBlur {
     private static Method radius, colour, corner, build, set;
     private static int windowMode;
     private static final boolean AVAILABLE = init();
+    private static final java.util.Map<View, long[]> applied = new java.util.WeakHashMap<>();
 
     private FloatLiveBlur() {}
 
@@ -80,12 +81,17 @@ final class FloatLiveBlur {
     /** Blurs what is behind view by radiusPx, tinted (an ARGB laid over the blur), in a rect of cornerPx corners. */
     static boolean apply(View view, int radiusPx, int tint, float cornerPx) {
         if (!AVAILABLE) return false;
+        long[] last = applied.get(view);
+        int cornerBits = Float.floatToIntBits(cornerPx);
+        if (last != null && last[0] == radiusPx && last[1] == tint && last[2] == cornerBits) return true;
         try {
             Object b = builder.newInstance(windowMode);
             if (radius != null) radius.invoke(b, radiusPx);
             if (colour != null) colour.invoke(b, tint);
             if (corner != null) corner.invoke(b, cornerPx);
             set.invoke(view, build.invoke(b));
+            // Record only a successful apply so a failed call can retry.
+            applied.put(view, new long[] { radiusPx, tint, cornerBits });
             return true;
         } catch (Throwable error) {
             Log.w(TAG, "SemBlurInfo failed", error);
@@ -94,6 +100,7 @@ final class FloatLiveBlur {
     }
 
     static void clear(View view) {
+        applied.remove(view);
         if (!AVAILABLE) return;
         try { set.invoke(view, (Object) null); } catch (Throwable ignored) {}
     }

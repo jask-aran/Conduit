@@ -530,6 +530,8 @@ public abstract class FloatPanel {
 
     /** The last answer for key, or null (another panel's list: Recent reads the places for their glyphs). */
     static Object last(String key) { return LAST.get(key); }
+    /** Another hub: its lists are not this one's, so none of them may show (or be chosen) while it loads. */
+    static void forget() { LAST.clear(); }
 
     /** Fetches a list ahead of its panel (as the radial opens), so even a first open has its rows. */
     static <T> void warm(String key, HubCall<T> call) {

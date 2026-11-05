@@ -148,13 +148,17 @@ public class ConduitFloatPlugin extends Plugin {
             throw new IllegalArgumentException("Choose a Conduit server first");
         }
         origin = uri.buildUpon().path("").build().toString();
+        String tokenOrigin = call.getString("tokenOrigin", origin);
+        // Another server (not another path to the same one, which keeps its token origin): its lists start empty.
+        if (!tokenOrigin.equals(preferences(getContext()).getString("tokenOrigin", tokenOrigin))) FloatPanel.forget();
         preferences(getContext()).edit().putString("origin", origin)
-            .putString("tokenOrigin", call.getString("tokenOrigin", origin)).apply();
+            .putString("tokenOrigin", tokenOrigin).apply();
     }
 
     // Follow hub/path changes without restarting a microphone service from a background WebView.
     @PluginMethod public void setOrigin(PluginCall call) {
         if ("".equals(call.getString("origin"))) {
+            FloatPanel.forget();
             preferences(getContext()).edit().remove("origin").remove("tokenOrigin").apply();
             call.resolve();
             return;
