@@ -22,11 +22,18 @@ final class FloatAssist {
 
     /** From the assistant session: to Float if it runs; else held, and Float is started when it is turned on. */
     static void deliver(Context context, ConduitContext.Result result) {
+        // The assistant's session is on screen, which lets Float hold the microphone: a Float restored at boot (or
+        // started by this press) has none until then, and its dictation would open the app instead.
+        if (receiver != null && !ConduitFloatService.microphoneReadyNow()) startVisible(context);
         if (receiver != null) { receiver.accept(result); return; }
         if (pending != null && pending.image != null) pending.image.delete();
         pending = result;
         if (!ConduitFloatPlugin.preferences(context).getBoolean("enabled", false)) return;
-        Intent start = new Intent(context, ConduitFloatService.class).setAction(ConduitFloatService.RESTORE);
+        startVisible(context);
+    }
+
+    private static void startVisible(Context context) {
+        Intent start = new Intent(context, ConduitFloatService.class).setAction(ConduitFloatService.VISIBLE);
         try {
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(start);
             else context.startService(start);

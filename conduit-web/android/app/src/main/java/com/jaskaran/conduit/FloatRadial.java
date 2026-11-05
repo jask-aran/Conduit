@@ -52,6 +52,13 @@ final class FloatRadial {
         void discard();
         /** The dictation's target bubble: choose where the words go instead. */
         void retarget();
+        /**
+         * The handle, under this window while it is open, held still (Hold to talk): a hold dictation begins. The
+         * radial stays the touch's window until it is let go.
+         */
+        void handleHeld();
+        /** That hold let go; cancelled when let go well away from where it began. */
+        void handleReleased(boolean cancelled);
     }
 
     private static final Slot[] SLOTS = Slot.values();
@@ -94,6 +101,21 @@ final class FloatRadial {
     private Slot chosen, pressed;
     private boolean pressedDiscard;
     private float downX, downY;
+    /**
+     * A touch that began on the handle (this window covers it while open): a tap closes, as a tap elsewhere does; held
+     * still for HOLD_MS with Hold to talk on, it is the handle's hold. Until it lifts, the row's hand-off to its small
+     * windows waits, since closing this window would lose the touch.
+     */
+    private boolean handleDown, handleHeld, shrinkPending;
+    private static final long HOLD_MS = 250;
+    private final Runnable holdStart = this::startHold;
+    private void startHold() {
+        if (!handleDown || handleHeld || mode != Mode.OPEN || closing) return;
+        handleHeld = true;
+        surface.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        listener.handleHeld();
+    }
+    private boolean onHandle(float x, float y) { return Math.hypot(x - anchorX, y - anchorY) < dp(26); }
     private ValueAnimator motion, dictation;
     private Bitmap backdrop;
     private int originX, originY;
@@ -345,6 +367,7 @@ final class FloatRadial {
         shown = 1;
         closing = false;
         mode = Mode.DICTATING;
+        shrinkPending = false;
         chosen = slot;
         targetIcon = null;
         dictation = ValueAnimator.ofFloat(0, 1);
@@ -354,7 +377,10 @@ final class FloatRadial {
         dictation.addListener(new android.animation.AnimatorListenerAdapter() {
             boolean cancelled;
             @Override public void onAnimationCancel(android.animation.Animator animation) { cancelled = true; }
-            @Override public void onAnimationEnd(android.animation.Animator animation) { if (!cancelled) shrinkToContext(); }
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (cancelled) return;
+                if (handleDown) shrinkPending = true; else shrinkToContext();
+            }
         });
         dictation.start();
     }
@@ -491,6 +517,13 @@ final class FloatRadial {
             case MotionEvent.ACTION_DOWN:
                 if (closing || mode == Mode.CLOSED) return true;
                 downX = x; downY = y;
+                main.removeCallbacks(holdStart);
+                handleHeld = false;
+                handleDown = mode == Mode.OPEN && slotAt(x, y) == null && onHandle(x, y);
+                if (handleDown) {
+                    if (ConduitFloatPlugin.preferences(context).getBoolean("holdToTalk", false)) main.postDelayed(holdStart, HOLD_MS);
+                    return true;
+                }
                 pressed = slotAt(x, y);
                 pressedDiscard = pressed == null && onDiscard(x, y);
                 if (pressed != null || pressedDiscard) surface.performHapticFeedback(Build.VERSION.SDK_INT >= 27
@@ -498,11 +531,14 @@ final class FloatRadial {
                 invalidateAll();
                 return true;
             case MotionEvent.ACTION_MOVE:
+                if (handleDown && !handleHeld && Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop())
+                    main.removeCallbacks(holdStart);
                 if (Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop() * 2) {
                     if (pressed != null || pressedDiscard) { pressed = null; pressedDiscard = false; invalidateAll(); }
                 }
                 return true;
             case MotionEvent.ACTION_UP: {
+                if (handleDown) { liftHandle(Math.hypot(x - downX, y - downY) > dp(80), Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop() * 2); return true; }
                 Slot tapped = pressed != null && pressed == slotAt(x, y) ? pressed : null;
                 boolean discard = pressedDiscard && onDiscard(x, y);
                 boolean moved = Math.hypot(x - downX, y - downY) > ViewConfiguration.get(context).getScaledTouchSlop() * 2;
@@ -518,9 +554,22 @@ final class FloatRadial {
                 else if (mode == Mode.OPEN && !moved) { close(); listener.dismissed(); }
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: pressed = null; pressedDiscard = false; invalidateAll(); return true;
+            case MotionEvent.ACTION_CANCEL:
+                if (handleDown) { liftHandle(true, true); return true; }
+                pressed = null; pressedDiscard = false; invalidateAll(); return true;
             default: return true;
         }
+    }
+
+    /** The handle's touch lifted: a hold ends (sent, or cancelled away from it), a tap closes. */
+    private void liftHandle(boolean away, boolean moved) {
+        main.removeCallbacks(holdStart);
+        boolean held = handleHeld;
+        handleDown = false;
+        handleHeld = false;
+        if (held) listener.handleReleased(away);
+        else if (!moved && mode == Mode.OPEN && !closing) { close(); listener.dismissed(); }
+        if (shrinkPending) { shrinkPending = false; shrinkToContext(); }
     }
 
     private void paint(Canvas canvas, View on) {

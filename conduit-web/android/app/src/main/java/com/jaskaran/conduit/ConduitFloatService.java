@@ -47,6 +47,8 @@ public class ConduitFloatService extends Service {
     private ConduitFloatCaption caption;
     private File recording;
     private boolean microphoneReady;
+    /** Whether the running Float may record (it was started from something visible); false when none runs. */
+    static boolean microphoneReadyNow() { return active != null && active.microphoneReady; }
     private volatile boolean destroyed;
     private volatile int generation;
     private long sentAt;
@@ -228,13 +230,17 @@ public class ConduitFloatService extends Service {
         try {
             // Only a plugin call from a visible activity establishes microphone access.
             // Boot and sticky recovery restore a specialUse idle handle on Android 14+.
+            // The side key's assistant session counts as visible too, but should the system refuse the microphone
+            // anyway, Float stays up without it (the next dictation opens the app) rather than turning itself off.
+            boolean wasReady = microphoneReady;
             microphoneReady |= visibleStart;
             Notification notification = notification();
-            if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION, notification,
-                microphoneReady ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-            else if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification,
-                microphoneReady ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
-            else startForeground(NOTIFICATION, notification);
+            try { foreground(notification); }
+            catch (SecurityException refused) {
+                if (microphoneReady == wasReady) throw refused;
+                microphoneReady = wasReady;
+                foreground(notification);
+            }
             if (window == null) {
                 window = new FloatWindow(this, main, new FloatWindow.Listener() {
                     @Override public void onShown() { caption = new ConduitFloatCaption(ConduitFloatService.this); }
@@ -267,6 +273,14 @@ public class ConduitFloatService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+    }
+
+    private void foreground(Notification notification) {
+        if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION, notification,
+            microphoneReady ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+        else if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification,
+            microphoneReady ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+        else startForeground(NOTIFICATION, notification);
     }
 
     private Notification notification() {
@@ -425,6 +439,9 @@ public class ConduitFloatService extends Service {
             // Clears what is held; the radial stays open to pick where the next message goes.
             @Override public void discard() { dropGathered(); updateDiscard(); }
             @Override public void retarget() { openSendTo(); }
+            // The handle held under the open radial (as when the side key summoned Float): the same hold as at rest.
+            @Override public void handleHeld() { holdStarted(); }
+            @Override public void handleReleased(boolean cancelled) { holdEnded(cancelled); }
         });
         return radial;
     }
