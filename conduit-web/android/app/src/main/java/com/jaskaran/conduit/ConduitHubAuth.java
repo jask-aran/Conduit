@@ -46,6 +46,7 @@ final class ConduitHubAuth {
      */
     static HttpURLConnection open(Context context, String origin, String tokenOrigin, String path, String method) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(origin + path).openConnection();
+        ConduitWebViewClient.restore(context);
         if (connection instanceof javax.net.ssl.HttpsURLConnection)
             ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
         connection.setInstanceFollowRedirects(false);

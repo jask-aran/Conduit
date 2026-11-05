@@ -650,7 +650,7 @@ final class FloatRadial {
                 View disc = new View(context);
                 disc.setLayoutParams(new android.widget.FrameLayout.LayoutParams(base, base));
                 addView(disc);
-                FloatLiveBlur.apply(disc, dp(24), LIVE_GROUND, base / 2f);
+                FloatLiveBlur.apply(disc, FloatLiveBlur.radius(context), FloatLiveBlur.LIFT, base / 2f);
                 glass.add(disc);
             }
             View disc = glass.get(used++);
@@ -666,6 +666,5 @@ final class FloatRadial {
 
     /** Samsung's live blur behind each round, in place of the screenshot backdrop. */
     private static final boolean LIVE = FloatLiveBlur.available();
-    private static final int LIVE_GROUND = FloatWindow.LIVE_GROUND;
     private View drawingOn;
 }

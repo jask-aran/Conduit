@@ -23,6 +23,8 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { startPush } from "./platform/push.ts";
+// Keeps Float told of the hub path in use (and its sign-in), from startup rather than only once Settings has loaded.
+import "./platform/float";
 // The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";

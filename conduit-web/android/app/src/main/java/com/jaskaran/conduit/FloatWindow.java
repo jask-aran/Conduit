@@ -48,6 +48,7 @@ final class FloatWindow {
             outline.setAlpha(1); // The translucent stroke must not suppress the lift shadow.
         }
     };
+    private FloatFrost glass;
     private java.util.function.Consumer<Boolean> blurListener;
     private boolean blurEnabled;
     private ValueAnimator morph;
@@ -85,6 +86,12 @@ final class FloatWindow {
             decor.setOutlineAmbientShadowColor(0x1a000000);
             decor.setOutlineSpotShadowColor(0x1a000000);
         }
+        // Over Samsung's live blur the handle is the radial's own slot: the same FloatFrost (raised ground as the
+        // blur's tint, white fill, hairline, inset highlights), so open it reads as one of them.
+        glass = new FloatFrost(-1, Math.max(1, dp(1)));
+        glass.setLifted(true);
+        glass.setLive(true);
+        live = FloatLiveBlur.frost(overlayWindow, control, glass);
         position = overlayWindow.getAttributes();
         position.format = PixelFormat.TRANSLUCENT;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -196,16 +203,15 @@ final class FloatWindow {
             * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
     }
 
-    /** The handle's dark core over Samsung's live blur: enough that a white page behind does not wash it out. */
-    static final int LIVE_GROUND = 0xa63a3b3f;
+    /** Samsung's live blur behind the handle (FloatLiveBlur), its raised ground as the blur's tint. */
+    private boolean live;
 
     private void updateFrost() {
         if (destroyed) return;
         boolean right = prefs().getBoolean("right", true);
         float r = Math.min(frameWidth, frameHeight) / 2f;
         // Always fully round (a bubble at rest, a pill open): the window's blur follows a uniform outline.
-        boolean live = FloatLiveBlur.available()
-            && FloatLiveBlur.apply(overlayWindow.getDecorView(), dp(24), LIVE_GROUND, r);
+        if (live) FloatLiveBlur.apply(overlayWindow.getDecorView(), FloatLiveBlur.radius(context), FloatLiveBlur.LIFT, r);
         boolean blurred = blurEnabled;
         frost.setCornerRadii(null);
         frost.setCornerRadius(r);
@@ -308,13 +314,23 @@ final class FloatWindow {
             control.getLocationOnScreen(at);
             offsetX = at[0] - windowLeft(right);
             offsetY = at[1] - position.y;
-        }
+            measured = true;
+        } else guessOffset();
         float left = offsetX + windowLeft(right);
         return new float[] { right ? left + frameWidth - half : left + half, offsetY + position.y + frameHeight / 2f };
     }
 
     /** The handle's window's top on screen less its y (the status bar's room, when the window fits under it). */
     private int offsetX, offsetY;
+    private boolean measured;
+    /** Before the handle has been on screen: its window fits inside the system bars and cutout, so it starts there. */
+    private void guessOffset() {
+        if (measured || Build.VERSION.SDK_INT < 30) return;
+        android.graphics.Insets bars = windows.getCurrentWindowMetrics().getWindowInsets()
+            .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+        offsetX = bars.left;
+        offsetY = bars.top;
+    }
     private int windowLeft(boolean right) { return right ? availableWidth - frameWidth - position.x : position.x; }
 
     /** The whole screen in pixels (the radial's window covers all of it). */

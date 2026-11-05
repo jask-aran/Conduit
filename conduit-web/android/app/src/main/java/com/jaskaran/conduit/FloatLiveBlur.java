@@ -52,6 +52,33 @@ final class FloatLiveBlur {
 
     static boolean available() { return AVAILABLE; }
 
+    /**
+     * The old screenshot frost's blur, matched on the phone over a test pattern: 80px at density 3.75 (1/8 of the
+     * screen, three box passes of round(24dp / 8 / 3)). A mean difference under 1/255 from it.
+     */
+    static int radius(android.content.Context context) { return Math.round(21.33f * context.getResources().getDisplayMetrics().density); }
+
+    /** Float's raised ground over the blur (FloatFrost's LIFT): its handle, slots and caption, as bright as each other. */
+    static final int LIFT = 0x8c3a3b3f;
+
+    /**
+     * A window whose frost is its background: Samsung's blur takes the place of the window's background drawable, so
+     * the frost moves onto the content (drawn over the blur, its hairline and highlights intact) with its lift shadow.
+     */
+    static boolean frost(android.view.Window window, View content, android.graphics.drawable.Drawable frost) {
+        if (!AVAILABLE) return false;
+        View decor = window.getDecorView();
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        content.setBackground(frost);
+        content.setElevation(decor.getElevation());
+        if (Build.VERSION.SDK_INT >= 28) {
+            content.setOutlineAmbientShadowColor(decor.getOutlineAmbientShadowColor());
+            content.setOutlineSpotShadowColor(decor.getOutlineSpotShadowColor());
+        }
+        decor.setElevation(0);
+        return true;
+    }
+
     /** Blurs what is behind view by radiusPx, tinted (an ARGB laid over the blur), in a rect of cornerPx corners. */
     static boolean apply(View view, int radiusPx, int tint, float cornerPx) {
         if (!AVAILABLE) return false;

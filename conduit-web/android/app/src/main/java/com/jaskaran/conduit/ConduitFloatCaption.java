@@ -32,6 +32,8 @@ final class ConduitFloatCaption {
     private final TextView text, header;
     private final android.widget.LinearLayout card;
     private final GradientDrawable frost = new GradientDrawable();
+    /** Samsung's live blur behind the card (FloatLiveBlur), with the frost on the card over it. */
+    private boolean live;
     private boolean shown;
 
     ConduitFloatCaption(Context context) {
@@ -69,6 +71,7 @@ final class ConduitFloatCaption {
         window.setBackgroundDrawable(frost);
         window.setContentView(card);
         window.getDecorView().setPadding(0, 0, 0, 0);
+        live = FloatLiveBlur.frost(window, card, frost);
         position = window.getAttributes();
         position.format = PixelFormat.TRANSLUCENT;
         if (Build.VERSION.SDK_INT >= 30) {
@@ -108,7 +111,7 @@ final class ConduitFloatCaption {
         position.x = x;
         position.y = above ? Math.max(0, pillY - dp(GAP) - position.height) : Math.min(screenHeight - position.height, pillY + pillHeight + dp(GAP));
         text.setText(tail);
-        boolean live = FloatLiveBlur.apply(window.getDecorView(), dp(24), FloatWindow.LIVE_GROUND, dp(16));
+        if (live) FloatLiveBlur.apply(window.getDecorView(), FloatLiveBlur.radius(context), FloatLiveBlur.LIFT, dp(16));
         frost.setColor(live ? 0x2bffffff
             : androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff, blurred ? 0xe63a3b3f : 0xfa3a3b3f));
         if (Build.VERSION.SDK_INT >= 31) window.setBackgroundBlurRadius(blurred ? dp(24) : 0);

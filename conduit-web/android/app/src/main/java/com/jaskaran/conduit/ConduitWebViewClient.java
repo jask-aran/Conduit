@@ -79,6 +79,32 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
         return changed;
     }
 
+    private static final String PREFS = "conduit-tls";
+
+    /**
+     * Keeps the paired identities (public keys only) for the app's native callers that run without the page: Float
+     * and push answers can start before the WebView has told this process who is paired.
+     */
+    static void remember(android.content.Context context, Map<String, String> next) {
+        org.json.JSONObject saved = new org.json.JSONObject();
+        try { for (Map.Entry<String, String> identity : next.entrySet()) saved.put(identity.getKey(), identity.getValue()); }
+        catch (org.json.JSONException ignored) { return; }
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString("identities", saved.toString()).apply();
+    }
+
+    /** The remembered identities, when the page has not set any in this process yet. */
+    static void restore(android.content.Context context) {
+        if (!identities.isEmpty()) return;
+        String saved = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString("identities", null);
+        if (saved == null) return;
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(saved);
+            Map<String, String> next = new HashMap<>();
+            for (java.util.Iterator<String> keys = json.keys(); keys.hasNext();) { String id = keys.next(); next.put(id, json.getString(id)); }
+            if (identities.isEmpty()) trust(next);
+        } catch (org.json.JSONException ignored) { /* An unreadable record is no trust: the page sets it again. */ }
+    }
+
     public ConduitWebViewClient(Bridge bridge) {
         super(bridge);
     }

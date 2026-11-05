@@ -212,6 +212,7 @@ public final class ConduitHubClient {
         } catch (Failure error) { throw error; }
         catch (org.json.JSONException error) { throw invalidResponse(); }
         catch (Exception error) {
+            android.util.Log.w("ConduitHub", "request to " + origin + " failed", error);
             throw new Failure(status, "connection_failed", "Cannot reach the hub. Check the connection and sign in to Conduit.");
         } finally {
             if (connection != null) connection.disconnect();

@@ -32,6 +32,7 @@ public class ConduitPushAnswerReceiver extends BroadcastReceiver {
                 if (origin == null || token == null || !token.matches("[A-Za-z0-9_-]{43}")
                     || !("allow".equals(choice) || "always".equals(choice) || "deny".equals(choice))) throw new IllegalStateException();
                 connection = (HttpURLConnection) new URL(origin + "/v0/push/answer/" + token).openConnection();
+                ConduitWebViewClient.restore(context);
                 if (connection instanceof javax.net.ssl.HttpsURLConnection)
                     ConduitWebViewClient.trustPaired((javax.net.ssl.HttpsURLConnection) connection);
                 connection.setInstanceFollowRedirects(false);

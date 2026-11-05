@@ -43,6 +43,7 @@ public class ConduitTlsPlugin extends Plugin {
             call.reject("identities must be a list of { id, publicKey }");
             return;
         }
+        ConduitWebViewClient.remember(getContext(), identities);
         if (ConduitWebViewClient.trust(identities)) {
             getActivity().runOnUiThread(() -> getBridge().getWebView().clearSslPreferences());
         }

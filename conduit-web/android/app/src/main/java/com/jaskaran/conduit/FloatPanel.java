@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 
 /**
  * One-use native overlay in v2's popover language (popover.css .ui-menu, read off the phone's WebView): 240dp wide,
- * radius 14, a 6dp frost inset, FloatFrost with the system's blur; 40dp rows of Geist 13.5 at weight 500 in the
+ * radius 14, a 6dp frost inset, FloatFrost over Samsung's live blur (or the screen behind it); 40dp rows of Geist 13.5 at weight 500 in the
  * foreground at 68%, washed white 7% at radius 8 while pressed; section labels in Paper Mono 10 uppercase. It rises
  * in 8dp over 250ms on --ease-arrive and drops back over 150ms on --ease-leave. Construct and show on the main thread.
  */
@@ -127,9 +127,14 @@ public abstract class FloatPanel {
         window.setContentView(root);
         View decor = window.getDecorView();
         decor.setPadding(0, 0, 0, 0);
-        // The popover's lift: 0 8px 32px black at 10%.
-        decor.setElevation(dp(8));
-        if (Build.VERSION.SDK_INT >= 28) { decor.setOutlineAmbientShadowColor(0x1a000000); decor.setOutlineSpotShadowColor(0x1a000000); }
+        // The menu's raised lift (--frost-lift-raised, read off the WebView's .ui-menu): 0 24px 70px black at 38%.
+        decor.setElevation(dp(24));
+        if (Build.VERSION.SDK_INT >= 28) { decor.setOutlineAmbientShadowColor(0); decor.setOutlineSpotShadowColor(0x61000000); }
+        // Samsung's live blur behind the card, clear, the frost drawn over it: no screenshot, no Screen context needed.
+        if (FloatLiveBlur.frost(window, root, frost)) {
+            frost.setLive(true);
+            FloatLiveBlur.apply(decor, FloatLiveBlur.radius(context), 0, dp(14));
+        }
         dialog.setOnDismissListener(ignored -> {
             closed = true;
             frost.setBackdrop(null);
@@ -169,7 +174,7 @@ public abstract class FloatPanel {
     public final void show(boolean right, int centerY) {
         if (closed || shown || waiting) return;
         ConduitScreenReader reader = ConduitScreenReader.instance;
-        boolean wantsBlur = !(Build.VERSION.SDK_INT >= 31 && manager.isCrossWindowBlurEnabled());
+        boolean wantsBlur = !(Build.VERSION.SDK_INT >= 31 && manager.isCrossWindowBlurEnabled()) && !FloatLiveBlur.available();
         if (wantsBlur && reader != null && Build.VERSION.SDK_INT >= 30 && ConduitContext.screenReaderOn(context)) {
             waiting = true;
             final boolean[] done = { false };
