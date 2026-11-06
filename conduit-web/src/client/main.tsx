@@ -6215,9 +6215,6 @@ function App() {
                 <Button variant="ghost" size="sm" onClick={() => cancel()()}>Cancel</Button>}</Show>
             </>;
           }}</Show>
-          <Show when={titleBarShows("update") && (updateState().kind === "current" || updateState().kind === "updated")}>
-            <Button variant="ghost" size="sm" disabled><Icons.Check />{updateState().kind === "updated" ? "Conduit updated" : "Up to date"}</Button>
-          </Show>
           <Show when={titleBarShows("history")}>
             <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
             <IconButton kind="pane" label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
