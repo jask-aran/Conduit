@@ -9,7 +9,7 @@ import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
 import { inboxFile, syncInboxFiles } from "./inbox-files.js";
 import { migrateSoul } from "./memory.js";
-import { migrateToRoutines, promptVars, runInstructions } from "./routines.js";
+import { migrateToRoutines, promptVars, retireEmailRoutine, runInstructions } from "./routines.js";
 import { startRoutine } from "./routine-task.js";
 import { readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
@@ -103,8 +103,36 @@ export class PersistentAgent {
     await this.readSettings();
     await this.seedFolder();
     await this.connectors.start();
+    void this.followInbox();
     return project;
   }
+
+  /**
+   * Keep the context inbox's files (inbox-files.js) in step with the agent's document, from load until `stopFollowing`:
+   * each change to the inbox rewrites what changed, in order.
+   */
+  async followInbox() {
+    if (this.inboxWatch || !this.folder) return;
+    try {
+      const harness = await this.runtime.open();
+      const watch = await harness.watchDoc(AgentDoc, this.context);
+      if (!watch) return;
+      this.inboxWatch = watch;
+      let last = null;
+      let pending = Promise.resolve();
+      const sync = (value) => {
+        const key = JSON.stringify(value?.inbox || {});
+        if (key === last) return;
+        last = key;
+        pending = pending.then(() => syncInboxFiles(this.folder, listInbox(value), { lastAnswer: (id) => this.runtime.lastAnswer(id) }))
+          .catch((error) => console.warn("The context inbox's files could not be written", error.message));
+      };
+      sync(watch.value);
+      watch.start(async (value) => { sync(value); });
+    } catch (error) { console.warn("The context inbox's files are not followed", error.message); }
+  }
+
+  async stopFollowing() { const watch = this.inboxWatch; this.inboxWatch = null; await watch?.stop(); }
 
   enabled() { return Boolean(this.project); }
 
@@ -124,6 +152,8 @@ export class PersistentAgent {
       });
     }
     await seedRoutines(this.folder, path.join(SEED, "routines"));
+    await retireEmailRoutine(this, fileURLToPath(new URL("../../../templates/agent/seed-history/", import.meta.url)))
+      .catch((error) => console.warn("The Email routine could not be retired", error.message));
   }
 
   /** agent.json as last read, over the defaults. */
@@ -286,6 +316,7 @@ export class PersistentAgent {
     await this.readSettings();
     await this.seedFolder();
     await this.connectors.start();
+    void this.followInbox();
     if (name && !this.cached.name) await this.saveSettings({ name });
     else if (!this.cached.name) await this.saveSettings({ name: this.project.name });
     await this.home();
@@ -431,10 +462,9 @@ export class PersistentAgent {
     if (!this.enabled()) return { enabled: false };
     const [current, settings] = await Promise.all([state || this.state(), this.shownSettings()]);
     state = current;
+    // Each entry's text is a file in its folder (inbox-files.js, kept in step by followInbox), which the page opens in
+    // the file viewer.
     const inbox = listInbox(state);
-    // Each entry's text as a file in its folder (inbox-files.js), which the page opens in the file viewer.
-    await syncInboxFiles(this.folder, inbox, { lastAnswer: (id) => this.runtime.lastAnswer(id) })
-      .catch((error) => console.warn("The context inbox's files could not be written", error.message));
     return {
       enabled: true,
       settings,

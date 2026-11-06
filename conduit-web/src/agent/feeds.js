@@ -1,10 +1,11 @@
-import { compile } from "html-to-text";
 import { defineTool } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { appendEntry } from "./inbox.js";
+import { cleanEmailHtml } from "./mail-pipeline.js";
+import { toMarkdown } from "../markdown/to-markdown.js";
 import { isReadAction, programPaths } from "./policy.js";
 import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 
@@ -48,67 +49,28 @@ export function sourceProblem(source) {
 }
 
 const TEXT_MAX = 2500;
+const LINKS_MAX = 8;
 const BODY_MAX = 30_000;
 /** Content kept as paragraphs: runs of blank lines and spaces folded, cut short. */
 const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim(); return kept.length > max ? `${kept.slice(0, max - 1)}…` : kept; };
-/** Links nobody opens a mail for. */
-const SKIP_LINK = /unsubscribe|preferences|privacy|terms|view (it )?(online|in (your )?browser)|view image|contact us|help cent|manage (your )?(email|subscription)|^https?:/i;
-const LINKS_MAX = 8;
-const altOf = (elem) => elem.attribs?.alt || (elem.children || []).map(altOf).find(Boolean) || "";
-/** An anchor as its words and a numbered reference, its address kept in the item's links (the text stays short). */
-function emailAnchor(elem, walk, builder) {
-  const href = String(elem.attribs?.href || "").trim();
-  let words = "";
-  builder.pushWordTransform((word) => { if (word) words += `${words ? " " : ""}${word}`; return word; });
-  walk(elem.children, builder);
-  builder.popWordTransform();
-  const label = (words || altOf(elem)).replace(/\s+/g, " ").trim();
-  if (!/^https?:\/\//i.test(href) || !label || SKIP_LINK.test(label)) return;
-  const links = builder.metadata.links;
-  let number = links.findIndex((link) => link.url === href) + 1;
-  if (!number && links.length < LINKS_MAX) number = links.push({ label: label.slice(0, 60), url: href.slice(0, 600) });
-  if (!number) return;
-  if (!words) builder.addInline(label);
-  builder.addInline(` [${number}]`, { noWordTransform: true });
-}
-const toText = compile({
-  wordwrap: false,
-  limits: { maxInputLength: 400_000 },
-  formatters: { emailAnchor },
-  selectors: [
-    { selector: "a", format: "emailAnchor" },
-    { selector: "img", format: "skip" },
-    // A mail's preheader: hidden text for the inbox preview, repeated or padded with invisible characters.
-    { selector: "[style*='display:none']", format: "skip" },
-    { selector: "[style*='display: none']", format: "skip" },
-    ...["h1", "h2", "h3", "h4", "h5", "h6"].map((selector) => ({ selector, options: { uppercase: false } })),
-    { selector: "table", options: { uppercaseHeaderCells: false } },
-  ],
-});
-
 /**
- * An encoded mail part as `{ text, links }`: decoded (base64url); HTML through html-to-text, its links numbered in the
- * text and kept in `links`; a plain part's addresses taken out the same way. Quoted replies and a signature are cut.
+ * An encoded mail part as `{ text, links }`: decoded (base64 or base64url); HTML, cleaned of what a reader never sees,
+ * through the Markdown engine (its links stay where they are, as Markdown links). Quoted replies and a signature are cut.
  */
-export function decodeContent(encoded) {
+export async function decodeContent(encoded) {
   if (!encoded || typeof encoded.data !== "string") return { text: "", links: [] };
   const raw = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
-  const links = [];
-  let body;
-  if (/html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|span)\b/i.test(raw)) body = toText(raw, { links });
-  else body = raw.replace(/<?(https?:\/\/[^\s<>]+)>?/g, (url, bare) => {
-    if (links.length >= LINKS_MAX) return "";
-    return ` [${links.push({ label: "Link", url: bare.slice(0, 600) })}]`;
-  });
-  const text = body.replace(/[\u034F\u00AD\u200B-\u200F\u2060\uFEFF]/g, "").replace(/\r/g, "")
-    .replace(/\n>.*$/gs, "").replace(/\n-- \n[\s\S]*$/, "").replace(/[ \t]+/g, " ").replace(/\n[ \t]+/g, "\n");
-  return { text, links };
+  const html = /html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|span)\b/i.test(raw);
+  const body = html ? await toMarkdown(cleanEmailHtml(raw), { type: "text/html" }).catch(() => raw) : raw;
+  const text = body.replace(/\r/g, "").replace(/\n>.*$/gs, "").replace(/\n-- \n[\s\S]*$/, "").replace(/[ \t]+\n/g, "\n");
+  return { text, links: [] };
 }
 
 const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 
-/** JSON items out of a program's or script's output: an array, `{ items }`, or Executor's `{ result }` around either. */
-export function itemsOf(output) {
+/** The list a program's or script's output carries, as it printed it: an array, `{ items }`, or Executor's `{ result }`
+ *  around either. */
+export function rawItemsOf(output) {
   let value = output;
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -126,24 +88,30 @@ export function itemsOf(output) {
       throw new Error(`The program did not complete: ${JSON.stringify(value.execution?.error ?? value).slice(0, 300)}`);
     }
     value = value.items ?? value.execution ?? value.result ?? value.value ?? value.output ?? null;
-    if (typeof value === "string") return itemsOf(value);
+    if (typeof value === "string") return rawItemsOf(value);
   }
   if (!Array.isArray(value)) throw new Error(`The feed's JSON has no list of items: ${JSON.stringify(parsed).slice(0, 400)}`);
-  return value.slice(0, MAX_ITEMS).map((item) => {
+  return value.slice(0, MAX_ITEMS);
+}
+
+/** JSON items out of a program's or script's output (`rawItemsOf`), each as a feed item. */
+export async function itemsOf(output) {
+  return Promise.all(rawItemsOf(output).map(async (item) => {
     const raw = item && typeof item === "object" ? item : { title: item };
     const title = text(raw.title ?? raw.subject ?? raw.name ?? raw.summary ?? "", 160);
     const detail = text(raw.detail ?? raw.from ?? raw.snippet ?? raw.description ?? "", 200);
     const id = text(raw.id ?? raw.key ?? raw.url ?? "", 200) || createHash("sha256").update(`${title}\n${detail}`).digest("hex").slice(0, 24);
-    const decoded = raw.encoded ? decodeContent(raw.encoded) : null;
+    const decoded = raw.encoded ? await decodeContent(raw.encoded) : null;
     const body = prose(decoded?.text || (raw.text ?? raw.body ?? raw.content ?? ""), TEXT_MAX);
     const links = decoded ? decoded.links : Array.isArray(raw.links) ? raw.links.filter((link) => link?.url).slice(0, LINKS_MAX).map((link) => ({ label: text(link.label || "Link", 60), url: text(link.url, 600) })) : [];
     return { id, title, ...(detail ? { detail } : {}), ...(body ? { text: body } : {}), ...(links.length ? { links } : {}), ...(raw.at ? { at: text(raw.at, 40) } : {}), ...(raw.url ? { url: text(raw.url, 300) } : {}),
       ...(LEVELS.includes(raw.level) ? { level: raw.level } : {}) };
-  });
+  }));
 }
 
 /** Run a feed's source once: `{ items }` or `{ items: [], error }`. Never throws. */
-export async function runSource(agent, source, { signal, seen = [] } = {}) {
+export async function runSource(agent, source, { signal, seen = [], raw = false } = {}) {
+  const read = raw ? rawItemsOf : itemsOf;
   try {
     if (source.kind === "executor") {
       // A check that fires as the hub starts found Executor still connecting, and failed until the next one.
@@ -154,7 +122,7 @@ export async function runSource(agent, source, { signal, seen = [] } = {}) {
       const result = await tool.execute({ code }, { signal: signal || AbortSignal.timeout(90_000) });
       const output = (result.output || []).filter((part) => part.type === "text").map((part) => part.text).join("");
       if (result.isError) return { items: [], error: text(output || "The program failed.", 300) };
-      return { items: itemsOf(output) };
+      return { items: await read(output) };
     }
     if (source.kind === "script") {
       const env = sandboxedEnv(new NodeExecutionEnv({ cwd: agent.folder, shellEnv: agent.runtime.shellEnv }), {
@@ -166,7 +134,7 @@ export async function runSource(agent, source, { signal, seen = [] } = {}) {
       } }, agent.context);
       if (!ran.ok) return { items: [], error: text(ran.error?.message || "The script could not run.", 300) };
       if (ran.value.exitCode !== 0) return { items: [], error: text(`Exit ${ran.value.exitCode}: ${stderr || stdout}`, 300) };
-      return { items: itemsOf(stdout) };
+      return { items: await read(stdout) };
     }
     return { items: [], error: "A run feed has no output to read." };
   } catch (error) { return { items: [], error: text(error?.message || "The feed failed.", 300) }; }

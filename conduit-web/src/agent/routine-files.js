@@ -14,7 +14,7 @@ const idPattern = /^[a-z][a-z0-9-]{0,30}$/;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
 /** Fields a task kind takes besides its id, kind and program. */
-const TASK_FIELDS = { inbox: ["all", "for", "kinds", "addressed"], calendar: ["account", "calendars", "days"] };
+const TASK_FIELDS = { inbox: ["all", "for", "kinds", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
 export const settingRule = (trigger, kind) => Array.isArray(trigger)
@@ -103,7 +103,7 @@ export function routineProblem(routine) {
     if (!object(task) || typeof task.id !== "string" || !idPattern.test(task.id)) return "Each task needs a valid id.";
     if (ids.has(task.id)) return "Task ids must be unique.";
     ids.add(task.id);
-    if (!["inbox", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
+    if (!["inbox", "email", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
     const field = task.kind === "executor" ? "code" : task.kind === "script" ? "command" : null;
     const extra = TASK_FIELDS[task.kind] || [];
     const unknown = Object.keys(task).find((key) => !["id", "kind", ...(field ? [field] : []), ...extra].includes(key));
@@ -121,6 +121,10 @@ export function routineProblem(routine) {
         return `Task ${task.id}: calendars is a list of calendar ids.`;
       }
       if (task.days !== undefined && (!Number.isInteger(task.days) || task.days < 1 || task.days > 14)) return `Task ${task.id}: days is 1 to 14.`;
+    }
+    if (task.kind === "email") {
+      if (task.query !== undefined && (typeof task.query !== "string" || !task.query.trim() || task.query.length > 300)) return `Task ${task.id}: query is a Gmail search.`;
+      if (task.max !== undefined && (!Number.isInteger(task.max) || task.max < 1 || task.max > 50)) return `Task ${task.id}: max is 1 to 50.`;
     }
     if (field && (typeof task[field] !== "string" || task[field].length > (field === "code" ? 8000 : 4000))) {
       return `Invalid task ${field}.`;

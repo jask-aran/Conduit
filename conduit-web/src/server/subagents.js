@@ -5,6 +5,7 @@ import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTa
 import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
+import { inboxFile, writeInboxFile } from "../agent/inbox-files.js";
 
 const SubagentRoster = defineDoc({
   checkpointWhen: () => false, kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -338,6 +339,22 @@ export function Subagents(runtime) {
               status: "unhandled" }, Date.parse(at));
           }, context);
         }
+        // A routine's report told to jbot is kept in the context inbox as well, handled as it is told: what the routine
+        // found, with the sources its tasks gathered (an email's message.md), for jbot or any run to open later. What
+        // jbot is told links to it.
+        let recorded = null;
+        if (task.input.gate && !task.input.origin?.test && task.input.origin?.routineTaskId && output === "jbot" && heard && !stopped && level !== "failed") {
+          const at = await api.memo("recordAt", new Date().toISOString(), context);
+          const entry = await api.commit(async (tx) => {
+            const doc = await tx.doc(AgentDoc);
+            const sources = doc.routineRuns?.[task.input.origin.routineTaskId]?.outcome?.sources || [];
+            const body = sources.length ? `${report.answer}\n\n## Sources\n\n${sources.map((source) => `- [${source.title}](../${source.path})`).join("\n")}` : report.answer;
+            return JSON.parse(JSON.stringify(appendEntry(doc, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
+              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: "Told jbot", body }, Date.parse(at))));
+          }, context);
+          if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry).catch(() => {});
+          recorded = inboxFile(entry);
+        }
         if (task.input.gate && !heard && !stopped) {
           const snapshot = kind === "heartbeat" && !task.input.origin?.test ? await api.snapshot(AgentDoc, context) : null;
           const counts = await api.memo("beat", {
@@ -378,7 +395,8 @@ export function Subagents(runtime) {
           // run that asked and ended often never mentioned it.
           const waiting = task.input.gate && runtime.agent ? await api.memo("waitingAsks", listAsks(await runtime.agent.state())
             .filter((ask) => ask.status === "pending" && ask.run === String(child)).map((ask) => `• ${ask.title} (ask ${ask.id})`), context) : [];
-          const answer = waiting.length ? `${report.answer}\n\nWaiting on the person's approval (they have been notified):\n${waiting.join("\n")}` : report.answer;
+          const told = recorded ? `${report.answer}\n\nThe whole report, with what it drew on: ${recorded}` : report.answer;
+          const answer = waiting.length ? `${told}\n\nWaiting on the person's approval (they have been notified):\n${waiting.join("\n")}` : told;
           const content = await notice(runtime.contextStore, task.input.gate ? (kind === "brief" || kind === "morning-brief" ? "report-brief" : "report-run") : "report-subagent", { report: answer, title });
           const at = content.indexOf(answer);
           const appended = task.input.gate && at >= 0 ? content.slice(at + answer.length) : null;

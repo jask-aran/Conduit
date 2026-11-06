@@ -55,7 +55,9 @@ test("every shipped historical routine upgrades, including serialized Settings c
   const commits = JSON.parse(await fs.readFile(new URL("index.json", history), "utf8"));
   for (const commit of commits) {
     const names = await fs.readdir(new URL(`${commit}/routines/`, history)).catch(() => []);
-    for (const file of names) for (const serialized of [false, true]) await t.test(`${commit}/${file} serialized=${serialized}`, async (t) => {
+    // A routine no longer shipped (email.md, now the heartbeat's email task) is retired, not upgraded: retireEmailRoutine.
+    const shipped = new Set(await fs.readdir(currentSeeds));
+    for (const file of names.filter((name) => shipped.has(name))) for (const serialized of [false, true]) await t.test(`${commit}/${file} serialized=${serialized}`, async (t) => {
       const { root } = await agentFixture(t);
       const name = file.slice(0, -3);
       const old = await oldSeed(commit, name, "utf8");
@@ -92,15 +94,15 @@ test("Settings flips keep their keys while a changed template updates the body a
 test("old Settings copies infer their historical body without a base or hash record", async (t) => {
   const { root } = await agentFixture(t);
   await fs.mkdir(path.join(root, "routines"));
-  for (const name of ["heartbeat", "morning-brief", "email"]) {
-    const old = await oldSeed(name === "email" ? "265b7705" : "b5db1bd6", name, "utf8");
+  for (const name of ["heartbeat", "morning-brief"]) {
+    const old = await oldSeed("b5db1bd6", name, "utf8");
     const parsed = parseRoutine(old, name);
     await writeRoutine(root, { ...parsed, enabled: !parsed.enabled });
   }
   await seedRoutines(root, fileURLToPath(currentSeeds));
-  for (const name of ["heartbeat", "morning-brief", "email"]) {
+  for (const name of ["heartbeat", "morning-brief"]) {
     const actual = await readRoutine(root, name);
-    const old = parseRoutine(await oldSeed(name === "email" ? "265b7705" : "b5db1bd6", name, "utf8"), name);
+    const old = parseRoutine(await oldSeed("b5db1bd6", name, "utf8"), name);
     const latest = parseRoutine(await fs.readFile(new URL(`${name}.md`, currentSeeds), "utf8"), name);
     assert.equal(actual.enabled, !old.enabled);
     assert.equal(actual.body, latest.body);
@@ -237,9 +239,10 @@ test("agent seeding tracks templates and preserves migrated settings and persona
   await agent.seedFolder();
   assert.equal((await readRoutine(root, "morning-brief")).enabled, false);
   assert.equal((await readRoutine(root, "morning-brief")).trigger.time, "09:00");
-  for (const name of ["heartbeat", "morning-brief", "reflect", "email"]) {
+  for (const name of ["heartbeat", "morning-brief", "reflect"]) {
     assert.equal(await baseText(root, `routines/${name}.md`), await fs.readFile(new URL(`${name}.md`, currentSeeds), "utf8"));
   }
+  assert.equal(await readRoutine(root, "email"), null, "email is the heartbeat's task now, not a routine of its own");
   for (const name of ["SOUL.md", "USER.md", "MEMORY.md"]) assert.equal(await fs.readFile(path.join(root, name), "utf8"), `Personal ${name}`);
 });
 

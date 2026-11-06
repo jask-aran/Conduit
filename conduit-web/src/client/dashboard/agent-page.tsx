@@ -9,7 +9,6 @@ import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRu
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
-import { GroupAction } from "@/components/ui/dashboard";
 
 /**
  * The agent's dashboard: what needs the person, its work and schedule, its inbox, threads and memory.
@@ -166,11 +165,10 @@ export function AgentPage(props: {
   /*
    * The context inbox, the person's to edit as much as jbot's (POST/PATCH/DELETE /v0/agent/inbox, the same verbs as
    * conduit_inbox): a row opens the entry's file (inbox/…md in its folder) in the file viewer; its menu marks it handled or reopens it, addresses it to a routine, dismisses
-   * it (handled, outcome dismissed: nothing lost) or deletes it (the person only). Add files a note of their own.
+   * it (handled, outcome dismissed: nothing lost) or deletes it (the person only). The person talks to jbot rather
+   * than filing notes here: the inbox is what routines report.
    */
   const [readingEntry, setReadingEntry] = createSignal<AgentInboxEntry | null>(null);
-  const [adding, setAdding] = createSignal(false);
-  const [note, setNote] = createSignal("");
   // A function, not a memo: `timed` is declared below, and a memo would read it now.
   const routines = () => timed().filter((rule) => rule.routine).map((rule) => ({ id: rule.routine!, title: rule.title }));
   const routineTitle = (id: string) => routines().find((routine) => routine.id === id)?.title || id;
@@ -178,19 +176,10 @@ export function AgentPage(props: {
     api(`/v0/agent/inbox/${encodeURIComponent(entry.id)}`, { method: "PATCH", body: JSON.stringify(body) }));
   const deleteEntry = (entry: AgentInboxEntry) => act(`inbox:${entry.id}`, () =>
     api(`/v0/agent/inbox/${encodeURIComponent(entry.id)}`, { method: "DELETE" }));
-  const addNote = () => {
-    const text = note().trim();
-    if (!text) return;
-    void act("inbox:add", async () => {
-      await api("/v0/agent/inbox", { method: "POST", body: JSON.stringify({ title: "Note", headline: (text.split(/\r?\n/)[0] ?? text).slice(0, 200), body: text, level: "fyi", kind: "note" }) });
-      setNote(""); setAdding(false);
-    });
-  };
   const entryContext = (entry: AgentInboxEntry) => entry.status === "handled"
     ? `${entry.title} · ${entry.outcome === "dismissed" ? "dismissed" : "handled"}`
     : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
-  const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null}
-    actions={<GroupAction onClick={() => setAdding(true)}>Add</GroupAction>}>
+  const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inbox()}>{(entry) =>
@@ -420,11 +409,6 @@ export function AgentPage(props: {
         <For each={(entry().body && entry().body !== entry().headline ? entry().body! : entry().headline).split(/\n{2,}/)}>{(paragraph) => <p>{paragraph}</p>}</For>
         <Note kind="card" tone="quiet">{entryContext(entry())} · {age(entry().at, now())}</Note>
       </>}</Show>
-    </Dialog>
-    <Dialog open={adding()} onOpenChange={setAdding} title="Add to the context inbox" close="Cancel" busy={busy() === "inbox:add"}
-      actions={<Button type="button" disabled={!note().trim() || busy() === "inbox:add"} onClick={addNote}>Add</Button>}>
-      <TextArea aria-label="Note" rows={4} autofocus value={note()} placeholder="Something jbot should know or act on…" onInput={(event) => setNote(event.currentTarget.value)}
-        onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) addNote(); }} />
     </Dialog>
     {/* A run now: a task it works on alone, reporting to the home thread. */}
     <Dialog open={asking()} onOpenChange={setAsking} title="Run a task" close="Cancel" busy={busy() === "wake"}

@@ -74,10 +74,19 @@ What the run should do with what was gathered, and what to tell jbot.
     ```
 
     In `reflect.md`, this reads only feedback addressed to `reflect`. Heartbeat
-    keeps its plain inbox task and receives unaddressed email. Morning brief
-    keeps `all: true` and receives unaddressed entries, handled or not.
+    keeps its plain inbox task and receives unaddressed reports. Morning brief
+    keeps `all: true` and receives unaddressed entries, handled or not (the
+    heartbeat's reports among them). A routine never reads its own reports.
     The `conduit_inbox` tool and agent page still show all recipients. Each
     addressed entry carries `for` and retains its `headline`.
+  - `email`: the person's new Gmail (every account connected in Executor),
+    `query?` (a Gmail search; default the inbox of the last two days without
+    promotions or social) and `max?` (1 to 50, default 25 a firing). Each email
+    is saved in your folder as `mail/<date>/<id>/message.md` (its text as
+    Markdown, headed by its parties, date, labels and Gmail link) beside the
+    original `message.eml` and its attachments (documents also as `.md`); the
+    run gets one line per email with that path. The first firing only learns
+    what is there. The heartbeat's first task is `- { id: email, kind: email }`.
   - `calendar` (`account`, `calendars?`, `days?` 1 to 14)
   - `chats`
   - `notes`: pending NOTES.md entries and recent declined proposals. Notes are
@@ -115,7 +124,10 @@ What the run should do with what was gathered, and what to tell jbot.
   the attention list. A gate that starts no run also starts no `after` steps.
   Routine dependencies in both lists must have no cycles. Saving and starting
   validate the graph; runtime chains stop at 16 routines.
-- **output**: `jbot`, `inbox` or `both`, delivered before `after` steps.
+- **output**: `jbot`, `inbox` or `both`, delivered before `after` steps. A
+  report told to jbot is also kept in the context inbox, handled, as
+  `inbox/<date>-<id>-<title>.md` with the files its tasks gathered listed
+  under it; what jbot is told ends with that path.
 - Optional: `model` (provider/model), `effort`, `level` (fyi, attention,
   urgent), `enabled`, `context` (soul, user, memory, diary: the files its run sees).
 

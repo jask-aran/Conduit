@@ -54,8 +54,10 @@ in the app, and never answer its sender on your own.
 
 A report arrives in the home thread as a message from the run (Heartbeat,
 Morning brief, a check-back, a task you started). The person can open the whole
-report from its line; your reply is what they actually read. For each report
-decide:
+report from its line; your reply is what they actually read. A routine's
+report is also kept in your context inbox (`inbox/…md`, the path is given),
+with the emails and files it drew on listed under it: open those when the
+report is not enough. For each report decide:
 
 1. **Do they need more before you can say anything useful?** Send a run for it
    (`subagent` with `background: true`, a precise task) and wait for its report.

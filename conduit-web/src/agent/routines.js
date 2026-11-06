@@ -4,6 +4,7 @@ import path from "node:path";
 import { entryText, listInbox } from "./inbox.js";
 import { inboxEntryText } from "./inbox-files.js";
 import { itemText, runSource, SEEN_KEPT } from "./feeds.js";
+import { mailTask } from "./mail-task.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { startRoutine } from "./routine-task.js";
@@ -137,7 +138,8 @@ async function runTask(agent, task, cursor, state, now, routineName) {
   const zone = agent.settings().timezone;
   if (task.kind === "inbox") {
     const filters = { for: task.for ?? routineName, kinds: task.kinds, addressed: task.addressed };
-    const entries = listInbox(state, { ...filters, unhandled: !task.all });
+    // Never its own reports (a routine's run is kept in the inbox as a record, handled or not).
+    const entries = listInbox(state, { ...filters, unhandled: !task.all }).filter((entry) => entry.kind !== routineName);
     const since = Date.parse(cursor.since || "") || 0;
     const eligibleAt = (entry) => Math.max(Date.parse(entry.at), Date.parse(entry.reopenedAt || "") || 0);
     const fresh = entries.filter((entry) => eligibleAt(entry) > since).sort((a, b) => eligibleAt(b) - eligibleAt(a));
@@ -158,6 +160,7 @@ async function runTask(agent, task, cursor, state, now, routineName) {
         fresh.length ? `${shown.join("\n")}${more ? `\n… and ${more} more (conduit_inbox list)` : ""}` : "Nothing new.") };
   }
   if (task.kind === "notes") return notesTask(agent, task, cursor, state);
+  if (task.kind === "email") return mailTask(agent, task, cursor, { block, now });
   if (task.kind === "chats") {
     const since = Date.parse(cursor.since || "") || now - 86400000;
     const chats = finishedChats(agent, since).slice(0, 30);
@@ -191,6 +194,7 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
   const items = [];
   const taskVars = {};
   const inboxIds = [];
+  const sources = [];
   for (const task of routine.tasks) {
     const done = await runTask(agent, task, cursors[task.id] || {}, state, now, routine.name).catch((error) => ({
       fresh: 0, cursor: cursors[task.id] || {}, items: [], error: error.message, block: block(task.id, { error: "yes" }, error.message) }));
@@ -198,6 +202,7 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
     tasks.push({ id: task.id, kind: task.kind, fresh: done.fresh, ...(done.error ? { error: done.error } : {}) });
     blocks.push(done.block);
     inboxIds.push(...(done.inboxIds || []));
+    sources.push(...(done.sources || []));
     taskVars[task.id] = done.block;
     if (task.kind === "notes") Object.assign(taskVars, { notesBlock: done.notes, declinedBlock: done.declined });
     fresh += done.fresh;
@@ -210,7 +215,7 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
     windowEnd: new Date(now).toISOString(), reportPath: `reports/${routine.name}/${agent.today(now)}.md` };
   const rendered = { ...routine, body: renderVars(routine.body, vars) };
   return {
-    run: true, cursors: next, tasks, items: [], fresh, inboxIds,
+    run: true, cursors: next, tasks, items: [], fresh, inboxIds, sources,
     instructions: renderVars(await runInstructions(agent, rendered, now), vars),
     reportPath: vars.reportPath,
     prompt: [rendered.body, await routineContext(agent, routine, now), ...blocks].filter(Boolean).join("\n\n"),
@@ -281,6 +286,34 @@ export async function migrateToRoutines(agent, seedDir) {
       await fs.writeFile(target, seed, { flag: "wx" });
     } else await writeRoutine(agent.folder, adjusted);
     if (name === "heartbeat") await fs.unlink(path.join(agent.folder, "HEARTBEAT.md")).catch(() => {});
+  }
+}
+
+/**
+ * The Email routine (a Gmail reader on its own clock, filing into the context inbox) became the heartbeat's email task
+ * (mail-task.js): once, its file goes when it is still the packaged one (its tasks as shipped), and what it had seen
+ * becomes the heartbeat's email task's, so the next heartbeat reports only what is new. A Gmail routine the person
+ * wrote or changed is theirs, and stays.
+ */
+export async function retireEmailRoutine(agent, historyDir) {
+  const current = await readRoutine(agent.folder, "email").catch(() => null);
+  if (!current) return;
+  const shipped = [];
+  for (const commit of JSON.parse(await readText(path.join(historyDir, "index.json")) || "[]")) {
+    const text = await readText(path.join(historyDir, commit, "routines", "email.md"));
+    if (text) shipped.push(JSON.stringify(parseRoutine(text, "email").tasks));
+  }
+  if (!shipped.includes(JSON.stringify(current.tasks))) return;
+  await agent.update((doc) => {
+    const seen = doc.cursors?.email?.items?.seen || [];
+    doc.cursors ||= {};
+    doc.cursors.heartbeat ||= {};
+    if (seen.length && !doc.cursors.heartbeat.email) doc.cursors.heartbeat.email = { primed: true, seen };
+    delete doc.cursors.email;
+  });
+  await removeRoutine(agent.folder, "email");
+  for (const file of [path.join(".seeds", "routines", "email.md"), path.join(".seeds", "routines", "email.md.state.json")]) {
+    await fs.rm(path.join(agent.folder, file), { force: true });
   }
 }
 

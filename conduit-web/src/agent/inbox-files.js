@@ -1,13 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import YAML from "yaml";
 import { readFolderFile, splitFrontMatter, writeFolderFile } from "./routine-files.js";
 
 /*
- * The context inbox as files: each entry's text is `inbox/<date>-<id>-<title>.md` in jbot's folder, so the person sees
- * it in jbot's files and opens it in the file viewer like any other. The entry itself (status, level, who it is for)
- * stays in the agent's document; its text is the file's once written, so an edit there is what jbot reads next. A file
- * is written once, when the entry is first seen without one, and removed when the entry goes (deleted, or pruned a
- * week after it was handled).
+ * The context inbox as files: each entry is `inbox/<date>-<id>-<title>.md` in jbot's folder, so the person sees it in
+ * jbot's files and opens it in the file viewer like any other. Its front matter says what the entry is and where it
+ * stands (kind, level, status, when and how it was handled, which routine it is for); its body is the entry's text.
+ *
+ * The body is the file's once written: an edit there is what jbot reads next. The front matter follows the entry's
+ * record in the agent's document, which stays the source of its status for now, since a run marks entries handled in
+ * the same commit that moves its cursors. A file goes when its entry does (deleted, or pruned a week after it was
+ * handled). The agent keeps them in step as its document changes (agent.js).
  */
 export const INBOX_DIR = "inbox";
 const FILE = /^\d{4}-\d{2}-\d{2}-i-?\d+-[^/]*\.md$/;
@@ -17,21 +21,30 @@ const slug = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "
 /** The entry's file, relative to jbot's folder: from what never changes on it (when it came, its id, its title). */
 export const inboxFile = (entry) => `${INBOX_DIR}/${entry.at.slice(0, 10)}-${entry.id}-${slug(entry.title === "Note" ? entry.headline : entry.title)}.md`;
 
-const render = (entry, text) => [
-  "---",
-  `title: ${JSON.stringify(entry.title || "")}`,
-  `kind: ${entry.kind}`,
-  `level: ${entry.level}`,
-  `at: ${entry.at}`,
-  "---",
-  "",
-  String(text || entry.headline || "").trim(),
-  "",
-].join("\n");
+const header = (entry) => Object.fromEntries(Object.entries({
+  title: entry.title || "", kind: entry.kind, level: entry.level, at: entry.at, status: entry.status,
+  handledAt: entry.handledAt, outcome: entry.outcome, for: entry.for?.length ? entry.for : undefined, headline: entry.headline,
+}).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+const render = (entry, body) => `---\n${YAML.stringify(header(entry), { lineWidth: 0 })}---\n\n${String(body || "").trim()}\n`;
 
 /**
- * Write the files entries lack and remove those whose entry is gone. `lastAnswer(conversationId)` gives a run's report,
- * for entries that point at their run instead of carrying text.
+ * Write the entry's file, or bring its front matter up to date and keep the body it has. `text` is its text when the
+ * entry carries none (a run's report, read from the run).
+ */
+export async function writeInboxFile(folder, entry, { text } = {}) {
+  const relative = inboxFile(entry);
+  await fs.mkdir(path.join(folder, INBOX_DIR), { recursive: true });
+  const current = await readFolderFile(folder, relative).catch(() => null);
+  if (current === null) return writeFolderFile(folder, relative, render(entry, entry.body || text || entry.headline));
+  let body;
+  try { body = splitFrontMatter(current).body; } catch { body = current; }
+  const next = render(entry, body);
+  if (next !== current) await writeFolderFile(folder, relative, next);
+}
+
+/**
+ * Bring the inbox folder in step with the entries: each one's file written or updated, and those of entries that are
+ * gone removed. `lastAnswer(conversationId)` gives a run's report, for entries that point at their run.
  */
 export async function syncInboxFiles(folder, entries, { lastAnswer } = {}) {
   if (!folder) return;
@@ -40,12 +53,10 @@ export async function syncInboxFiles(folder, entries, { lastAnswer } = {}) {
   const present = new Set(await fs.readdir(dir));
   const wanted = new Set();
   for (const entry of entries) {
-    const relative = inboxFile(entry);
-    const name = path.basename(relative);
+    const name = path.basename(inboxFile(entry));
     wanted.add(name);
-    if (present.has(name)) continue;
-    const answer = !entry.body && entry.conversationId && lastAnswer ? await lastAnswer(entry.conversationId).catch(() => null) : null;
-    await writeFolderFile(folder, relative, render(entry, entry.body || answer));
+    const text = !present.has(name) && !entry.body && entry.conversationId && lastAnswer ? await lastAnswer(entry.conversationId).catch(() => null) : null;
+    await writeInboxFile(folder, entry, { text });
   }
   for (const name of present) if (FILE.test(name) && !wanted.has(name)) await fs.rm(path.join(dir, name), { force: true });
 }

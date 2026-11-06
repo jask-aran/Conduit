@@ -151,16 +151,15 @@ test("email to a room with another sender or copied recipient is refused before 
   assert.equal(sent.mock.callCount(), 0);
 });
 
-// persistent-agent.md, Email Who wakes jbot: unknown senders wait as context, without a model turn.
-test("unknown email waits in context while the person's email starts a turn", async (t) => {
+// email.js, Who wakes jbot: unknown senders wait in the mail room, held, without a model turn and outside the context
+// inbox (which is what routines report, not mail to jbot).
+test("unknown email waits in the mail room while the person's email starts a turn", async (t) => {
   const { log, email, agent, prompts } = await mailbox(t);
   await email.receive(mail("unknown", { from: "other@example.test" }));
   assert.equal(prompts.length, 0);
   assert.equal(log.list()[0].delivery.state, "held");
-  const entries = Object.values((await agent.state()).inbox);
-  assert.equal(entries.length, 1);
-  assert.equal(entries[0].status, "unhandled");
-  assert.ok(entries[0].body.includes("Body of unknown"));
+  assert.ok(log.list()[0].body.includes("Body of unknown"));
+  assert.deepEqual(Object.values((await agent.state()).inbox || {}), []);
   await email.receive(mail("person"));
   assert.equal(prompts.length, 1);
   assert.ok(prompts[0][1].includes("Body of person"));
