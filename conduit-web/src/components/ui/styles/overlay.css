@@ -218,7 +218,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 
 /* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */
 .ui-scrim[data-dialog] { position: fixed; inset: 0; z-index: var(--layer-dialog); min-height: 0; outline: none; padding: calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-xl) calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-/* Above the keyboard: the visual viewport's height (--app-height, mobile-layout.ts), not the window's, which the
+/* Above the keyboard: the visual viewport's height (--app-height, viewport.ts), not the window's, which the
    keyboard overlays. A dialog taller than what is left scrolls within it, and a centred one never centres past the top. */
 .ui-scrim[data-dialog] { inset: var(--vv-offset-top, 0px) 0 auto 0; height: var(--app-height, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
 .ui-scrim[data-dialog][data-placement="center"] { align-items: safe center; }

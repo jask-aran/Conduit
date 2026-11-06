@@ -21,6 +21,33 @@ export function duration(token: `--duration-${string}`, element: Element = docum
   return cssTime(element, token, 0);
 }
 
+/*
+ * Every motion drawn at its normal length or slowed down, to look at one closely (the app's Animation speed). It
+ * multiplies the duration tokens (foundations.css --duration-*), which the stylesheet's transitions and the code's
+ * animations both read (duration()), so whatever waits for a motion to end waits as long as it now takes. A motion with
+ * a length of its own, not a token, keeps it.
+ */
+const SCALED_DURATIONS = ["quick", "gentle", "fold", "travel", "follow", "flash", "spin", "pulse", "breathe"].map((name) => `--duration-${name}`);
+
+const ms = (value: string) => {
+  const text = value.trim();
+  const number = parseFloat(text);
+  return Number.isFinite(number) ? (text.endsWith("ms") ? number : number * 1000) : null;
+};
+
+/** Set every duration token to its stylesheet length times scale, on <html> (1: the stylesheet's own). */
+export function scaleMotion(scale: number) {
+  const root = document.documentElement;
+  for (const token of SCALED_DURATIONS) root.style.removeProperty(token);
+  if (scale === 1) return;
+  // The stylesheet's own lengths, read with nothing set over them.
+  const styles = getComputedStyle(root);
+  for (const token of SCALED_DURATIONS) {
+    const base = ms(styles.getPropertyValue(token));
+    if (base !== null) root.style.setProperty(token, `${Math.round(base * scale)}ms`);
+  }
+}
+
 /** Read an easing token from the current styles. */
 export function easing(token: `--ease-${string}`, element: Element = document.documentElement): string {
   return getComputedStyle(element).getPropertyValue(token).trim() || "ease";
@@ -81,7 +108,7 @@ const collapses = new Set<() => void>();
 /*
  * Settle every collapse to what its state now says, at once and unanimated. The native composer's keyboard travel does
  * this after measuring where the (hidden) web composer starts and before measuring where it ends: the whole change --
- * the keyboard's and the rooms' -- then rides the travel's one compositor animation (client/navigation/keyboard-travel.ts)
+ * the keyboard's and the rooms' -- then rides the travel's one compositor animation (keyboard-travel.ts)
  * rather than a room gliding by layout on the main thread beside it.
  */
 export function settleRooms() {

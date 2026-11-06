@@ -1,7 +1,9 @@
 import { installedClientKind } from "../platform/installed-client.ts";
 import { logKeyboardEvent, noteKeyboardFrame, reportKeyboardProbe } from "./keyboard-probe.ts";
-import { travelEasing, travelsWithoutLayout, travelWithoutLayout } from "./keyboard-travel.ts";
+import { latestAway } from "../chat/latest-away";
+import { travelEasing, travelsWithoutLayout, travelWithoutLayout } from "@/components/ui/keyboard-travel";
 import { keyboardTravel } from "@/components/ui/motion";
+import { followViewport } from "@/components/ui/viewport";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
 /** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
@@ -23,13 +25,9 @@ export function setMobileOverlayKind(kind: MobileOverlayKind | null): void {
 /**
  * Pin the app shell to the visual viewport so the composer stays above the
  * software keyboard on phones (iOS pans via offsetTop; Android often resizes).
- * Returns an disposer for onCleanup.
- *
- * The shell is moved rather than scrolled: `--app-height` sizes `#root` and
- * `.chat-main`, so a shorter window shortens the transcript and carries the
- * composer up with it. Chasing the keyboard by scrolling instead would fight
- * whatever the transcript is doing on its own, which is the same surface
- * being moved by two things at once.
+ * Returns an disposer for onCleanup. The variables themselves are the
+ * library's (components/ui/viewport.ts, followViewport); what is here is
+ * telling it about the keyboard.
  *
  * `visualViewport` alone is not enough on a phone, in either client and for
  * two unrelated reasons. The page asks for
@@ -45,135 +43,8 @@ export function setMobileOverlayKind(kind: MobileOverlayKind | null): void {
  * the Android shell. Where neither exists -- iOS, which pans instead of
  * resizing -- `visualViewport` and `--vv-offset-top` are already the answer.
  */
-export const KEYBOARD_HIDDEN_EVENT = "conduit:keyboard-hidden";
-
 export function bindVisualViewportShell(): () => void {
-  let keyboardWasShown = false;
   const root = document.documentElement;
-  /*
-   * CSS pixels the keyboard covers, as the shell reports them, and the height
-   * of the window last seen without one.
-   *
-   * Both numbers are needed because the two accounts must not be added
-   * together. Where the WebView is resized, the viewport has already lost the
-   * keyboard's height and subtracting it again would leave the window short by
-   * a keyboard. Where it is not, the viewport is the full screen and the
-   * shell's number is the only one that knows better. Which case this is shows
-   * in whether the viewport moved at all, so the resting height is what tells
-   * them apart.
-   */
-  let shellKeyboard = 0;
-  /*
-   * How much room the navigation bar is owed with no keyboard in the way.
-   *
-   * The shell sends it under its own name and leaves it alone, so the amount
-   * still owed can be worked out here on the frame the keyboard is drawn --
-   * `rest - keyboard`, to nothing well before the keyboard is fully up. Read
-   * once a travel rather than once a frame: it only changes when the bars do,
-   * and reading a computed style inside the drawing costs a recalculation on
-   * every frame of it.
-   */
-  let restBottom = 0;
-  let restingHeight = 0;
-  let restingWidth = 0;
-  let source = "viewport";
-  /*
-   * The tallest this viewport has been at this width, not the last height seen
-   * without a keyboard.
-   *
-   * They are not the same, and the difference is a screen flash. The shell
-   * reports the keyboard *after* the window has begun to change, so a resting
-   * height sampled on the way down records a viewport that has already lost
-   * part of the keyboard -- and then loses all of it again by subtraction,
-   * leaving the composer somewhere near the top of the screen for a frame.
-   * A maximum cannot be poisoned that way. Width standing in for orientation,
-   * since a turned phone is a different screen and keeps none of this.
-   */
-  const noteResting = (viewport: number) => {
-    if (window.innerWidth !== restingWidth) {
-      restingWidth = window.innerWidth;
-      restingHeight = 0;
-    }
-    if (!shellKeyboard) restingHeight = Math.max(restingHeight, viewport);
-  };
-  const readRestBottom = () => {
-    const value = Number.parseFloat(getComputedStyle(root).getPropertyValue("--safe-area-inset-bottom-rest"));
-    if (Number.isFinite(value)) restBottom = value;
-  };
-  const sync = () => {
-    if (!isMobileLayout()) {
-      root.style.removeProperty("--safe-area-inset-bottom");
-      root.style.removeProperty("--app-height");
-      root.style.removeProperty("--vv-offset-top");
-      root.removeAttribute("data-vv-shell");
-      return;
-    }
-    const vv = window.visualViewport;
-    const viewport = vv?.height ?? window.innerHeight;
-    /*
-     * Which measurement is the truth, when the shell reports the keyboard
-     * frame by frame.
-     *
-     * Nothing resizes the window then -- the keyboard overlays it -- so
-     * `innerHeight` stays the whole screen and the keyboard's height is the
-     * only thing to take off it. The visual viewport is not usable at all
-     * here: Chromium shrinks it by the keyboard's full height on the first
-     * frame, so a shell sized from it lands at the end of the travel while
-     * the keyboard is still a quarter of the way up, and holds there. That is
-     * the composer running ahead with a band of empty screen beneath it, and
-     * on the way back it is the viewport springing to full height while the
-     * keyboard is still descending -- a move upward before the move down.
-     *
-     * So where the keyboard's position is known, it is the only input.
-     * Everywhere else the viewport is still all there is.
-     */
-    const owned = source === "insets";
-    const measured = owned ? window.innerHeight : viewport;
-    noteResting(measured);
-    // A shrink of a few pixels is a toolbar, not a keyboard.
-    const viewportShrank = !owned && viewport < restingHeight - 48;
-    // One of the two, never both: the viewport if something already took the
-    // keyboard out of it, otherwise the resting height less what the keyboard
-    // is covering.
-    const height = Math.max(0, shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : measured);
-    const offsetTop = vv?.offsetTop ?? 0;
-    /*
-     * Only the height. The transcript holds its own scroll against the
-     * scroller shrinking, from a `ResizeObserver` on the scroller itself --
-     * one correction, made by the thing being corrected, on the frame it
-     * happens. Doing it again from here was a second hand on the same
-     * surface, and it cost two forced layouts a frame to be wrong in
-     * parallel.
-     */
-    // The navigation bar's room, given up to the keyboard as the keyboard
-    // takes it rather than the moment it is announced. Only where the
-    // keyboard's own position is known; everywhere else the stylesheet's
-    // resting value stands.
-    if (owned) {
-      root.style.setProperty("--safe-area-inset-bottom", `${Math.max(0, restBottom - shellKeyboard).toFixed(1)}px`);
-    }
-    root.style.setProperty("--app-height", `${Math.round(height)}px`);
-    root.style.setProperty("--vv-offset-top", `${Math.round(offsetTop)}px`);
-    root.setAttribute("data-vv-shell", "true");
-    /* The keyboard went away with focus still in a field (Android's back
-       button does this): say so, since no blur will. */
-    const keyboardOpen = shellKeyboard > 120 || viewport < restingHeight - 120;
-    if (keyboardWasShown && !keyboardOpen) window.dispatchEvent(new CustomEvent(KEYBOARD_HIDDEN_EVENT));
-    keyboardWasShown = keyboardOpen;
-    reportKeyboardProbe({
-      source,
-      inner: window.innerHeight,
-      visual: Math.round(viewport),
-      base: Math.round(measured),
-      offset: Math.round(offsetTop),
-      resting: Math.round(restingHeight),
-      keyboard: Math.round(shellKeyboard),
-      applied: Math.round(height),
-      shrank: viewportShrank,
-      dpr: window.devicePixelRatio,
-    });
-  };
-  sync();
   const vv = window.visualViewport;
   /*
    * Watched only so the probe can say what arrived and in what order. The two
@@ -197,11 +68,8 @@ export function bindVisualViewportShell(): () => void {
   document.addEventListener("focusout", onFocusOut, true);
   document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
 
-  vv?.addEventListener("resize", sync);
-  vv?.addEventListener("scroll", sync);
-  window.addEventListener("resize", sync);
-  const media = typeof matchMedia === "function" ? matchMedia(MOBILE_LAYOUT_QUERY) : null;
-  media?.addEventListener("change", sync);
+  const shell = followViewport({ onReading: reportKeyboardProbe });
+  const { sync, readRestBottom } = shell;
 
   /*
    * Chromium's own answer, for every client that is not the Android shell.
@@ -228,11 +96,11 @@ export function bindVisualViewportShell(): () => void {
   }
   if (virtualKeyboard && installedClientKind !== "android") {
     virtualKeyboard.overlaysContent = true;
-    source = "virtualkeyboard";
+    shell.source = "virtualkeyboard";
     const onGeometry = () => {
       const next = virtualKeyboard.boundingRect.height;
       logKeyboardEvent("geometry", Math.round(next));
-      shellKeyboard = next;
+      shell.keyboard = next;
       sync();
     };
     virtualKeyboard.addEventListener("geometrychange", onGeometry);
@@ -360,15 +228,15 @@ export function bindVisualViewportShell(): () => void {
         travel?.cancel();
         travel = null;
         if (travelsWithoutLayout()) {
-          travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt, rest: restBottom },
-            (height) => { shellKeyboard = height; noteKeyboardFrame(true); sync(); });
+          travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt, rest: shell.restBottom },
+            (height) => { shell.keyboard = height; noteKeyboardFrame(true); sync(); }, { away: latestAway(), log: logKeyboardEvent });
           keyboardTravel(travelLeft, travelEasing(curve));
           return;
         }
         keyboardTravel(travelLeft, travelEasing(curve));
         const draw = () => {
           const t = (performance.now() - began) / durationMs;
-          shellKeyboard = info.from + (info.to - info.from) * along(curve, t);
+          shell.keyboard = info.from + (info.to - info.from) * along(curve, t);
           noteKeyboardFrame(t >= 1);
           sync();
           drawing = t >= 1 ? 0 : requestAnimationFrame(draw);
@@ -407,25 +275,25 @@ export function bindVisualViewportShell(): () => void {
         travelling = false;
         stopDrawing();
         if (!info.animating) readRestBottom();
-        shellKeyboard = info.height;
+        shell.keyboard = info.height;
         noteKeyboardFrame(!info.animating);
         if (!info.animating) logKeyboardEvent("ime-end", Math.round(info.height));
         sync();
       });
       const restObserver = new MutationObserver(() => {
-        const held = restBottom;
+        const held = shell.restBottom;
         readRestBottom();
-        if (restBottom !== held) sync();
+        if (shell.restBottom !== held) sync();
       });
       dropKeyboard = () => {
         void animation.remove();
         void geometry.remove();
         stopDrawing();
         restObserver.disconnect();
-        shellKeyboard = 0;
+        shell.keyboard = 0;
         // Back to measuring, or the shell goes on subtracting a keyboard
         // nothing is reporting any more from a height nothing is updating.
-        source = "viewport";
+        shell.source = "viewport";
         sync();
       };
       /*
@@ -444,7 +312,7 @@ export function bindVisualViewportShell(): () => void {
       // believing `innerHeight` was the window -- the full screen, keyboard
       // and all, with the composer behind it -- and never fell back to the
       // viewport the comment promised.
-      source = "insets";
+      shell.source = "insets";
       sync();
       if (disposed) dropKeyboard();
     }).catch(() => { /* no shell to ask; visualViewport is the whole answer */ });
@@ -459,14 +327,7 @@ export function bindVisualViewportShell(): () => void {
     document.removeEventListener("focusin", onFocusIn, true);
     document.removeEventListener("focusout", onFocusOut, true);
     document.removeEventListener("scroll", onAnyScroll, { capture: true } as EventListenerOptions);
-    vv?.removeEventListener("resize", sync);
-    vv?.removeEventListener("scroll", sync);
-    window.removeEventListener("resize", sync);
-    media?.removeEventListener("change", sync);
-    root.style.removeProperty("--safe-area-inset-bottom");
-    root.style.removeProperty("--app-height");
-    root.style.removeProperty("--vv-offset-top");
-    root.removeAttribute("data-vv-shell");
+    shell.stop();
   };
 }
 

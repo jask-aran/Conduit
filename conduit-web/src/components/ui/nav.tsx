@@ -18,7 +18,7 @@ import { Row, type RowProps } from "./row";
 /** The sidebar itself: a head, the list and a foot. collapsed: the narrow rail's width (its edge moves with
  *  --panel-motion; instant: at once); folded: drawn as the rail, the list's rows away and its RailButtons shown
  *  (set once the edge has moved); drawer: a phone's, under the page, open or shut. */
-/** The drawer's next open or shut was already felt as a finger carried it past where it lands (see the app's swipe):
+/** The drawer's next open or shut was already felt as a finger carried it past where it lands (drawer-swipe.ts):
  *  that change plays no haptic of its own. */
 let drawerFeltAhead = false;
 export function feelDrawerAhead() { drawerFeltAhead = true; }

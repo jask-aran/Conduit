@@ -1,12 +1,10 @@
-import { logKeyboardEvent } from "./keyboard-probe.ts";
-import { settleRooms } from "@/components/ui/motion";
-import { latestAway } from "../chat/latest-away";
+import { settleRooms } from "./motion";
 
 /** Said at a travel's start, before its end is measured: a hide takes the composer out of typing now (composer.tsx). */
 export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
 
 /**
- * The keyboard's travel with no layout in it, while the native composer is up (components/ui/native-phone-composer.ts).
+ * The keyboard's travel with no layout in it, while the native composer is up (native-phone-composer.ts).
  *
  * Drawn the old way, a travel sets --app-height on every frame, and every frame is then a whole-app style and layout
  * pass (5-13ms on a phone): the transcript falls to every other frame at 120Hz, and further behind on anything faster.
@@ -16,7 +14,7 @@ export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
  * moved by one transform animation each, on the system's own curve (CSS linear() from its samples), which the
  * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout.
  *
- * What a transcript does follows one rule, the same one that shows Scroll to latest (latestAway): at the bottom (no
+ * What a transcript does follows one rule, the same one that shows Scroll to latest (the caller's `away`): at the bottom (no
  * pill) it rides the keyboard, held against the composer; scrolled up (the pill showing) it does not move at all --
  * the keyboard and composer come up over it, and what is being read stays where it is. The transcript's own hold
  * (transcript.tsx, holdAgainstKeyboard) keeps the same rule, so neither the ride nor the layout at the ends moves it.
@@ -55,12 +53,13 @@ export function ridingCurve(travel: Travel): number[] {
   return travel.curve.map((progress) => Math.round(((at(progress) - start) / (end - start)) * 1000) / 1000);
 }
 
-/** One travel. `setKeyboard(height)` sets the shell's keyboard height and lays the app out for it. */
-export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number) => void) {
+/** One travel. `setKeyboard(height)` sets the shell's keyboard height and lays the app out for it. away: the latest is
+ *  out of view (Scroll to latest is showing); log: a readout of the travel for a diagnostic. */
+export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number) => void, options: { away: boolean; log?: (name: string, detail: string) => void }) {
   const low = Math.min(travel.from, travel.to);
   const riding = travelEasing(ridingCurve(travel));
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
-  const away = latestAway();
+  const away = options.away;
   const scrollers = away ? [] : [...document.querySelectorAll(SCROLLERS)].filter(shown);
   // Scrolled up: marked, so the transcript's hold leaves it be, and its scroll read so a clamp can be carried.
   // The element that scrolls: a thread's viewport inside its scroller, a room's scroller itself.
@@ -95,7 +94,7 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
     animation.currentTime = along;
     return animation;
   });
-  logKeyboardEvent("travel", `${Math.round(travel.from)}->${Math.round(travel.to)} moves ${Math.round(atTo - atFrom)} ${animations.length} parts, ${Math.round(along)}ms in`);
+  options.log?.("travel", `${Math.round(travel.from)}->${Math.round(travel.to)} moves ${Math.round(atTo - atFrom)} ${animations.length} parts, ${Math.round(along)}ms in`);
   let done = false;
   let landAt = travel.to;
   const land = () => {

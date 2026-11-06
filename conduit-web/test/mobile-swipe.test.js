@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { beginEdgeSwipe } from "../src/client/navigation/mobile-swipe.ts";
+import { beginEdgeSwipe } from "../src/components/ui/edge-swipe.ts";
 
 const run = (start, points, state = {}) => {
   const gesture = beginEdgeSwipe({ t: 0, width: 400, sidebarOpen: false, workspaceOpen: false, ...state, ...start });

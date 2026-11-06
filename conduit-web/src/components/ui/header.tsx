@@ -27,7 +27,7 @@ const TERM_FOLDS = ["shortcuts", "labels"] as const;
  *          after (beside the title: a HeaderNote), actions; frost: the strip itself is frost, for a tab row read over
  *          the transcript scrolling under it
  *   tool   a tool's in the dock or a pane: its name, the place it shows (the dock follows places), its modes (a
- *          Segmented), views and controls; the app measures it short (compact: "labels", "name"). Its drag handle.
+ *          Segmented), views and controls; fit: it measures itself short (compact: "labels", "name"). Its drag handle.
  *   file   a file's: what the file is, then its controls in a fixed order (save, actions, tools, the ⋯, close)
  *   term   a terminal's: leading controls, identity, shortcuts, overflow, then actions. It folds by measure: while its
  *          content overflows or the identity's title or context is cut, the next fold goes (TERM_FOLDS); each comes
@@ -43,6 +43,8 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   kind?: PaneHeaderKind; ref?: HTMLElement | ((element: never) => void);
   lead?: JSX.Element; pill?: JSX.Element; after?: JSX.Element; frost?: boolean; actions?: JSX.Element;
   name?: string; nameTitle?: string; place?: string; placeTitle?: string; modes?: JSX.Element; views?: JSX.Element;
+  /** tool: drop the modes' labels, then the name, as they stop fitting (data-compact). */
+  fit?: boolean;
 }) {
   const kind = untrack(() => props.kind ?? "pane");
   const letter = useContext(PaneLetterContext);
@@ -52,8 +54,25 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
     return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="file">{mark()}{local.children}</header>;
   }
   if (kind === "tool") {
-    const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost"]);
-    return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool">
+    const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost", "fit"]);
+    // The header holds the view's name and its modes. When they stop fitting,
+    // the modes drop their labels, then the name goes: measured, not a width.
+    const fitHeader = (element: HTMLElement) => {
+      if (!untrack(() => local.fit)) return;
+      const fit = () => {
+        element.removeAttribute("data-compact");
+        if (element.scrollWidth <= element.clientWidth) return;
+        element.setAttribute("data-compact", "labels");
+        if (element.scrollWidth > element.clientWidth) element.setAttribute("data-compact", "name");
+      };
+      // Its width changing, or what it holds: another view's name and modes.
+      const resized = new ResizeObserver(fit);
+      const changed = new MutationObserver(fit);
+      resized.observe(element);
+      changed.observe(element, { childList: true, subtree: true, characterData: true });
+      onCleanup(() => { resized.disconnect(); changed.disconnect(); });
+    };
+    return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool">
       {mark()}
       <strong title={local.nameTitle}>{local.name}</strong>
       <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>
