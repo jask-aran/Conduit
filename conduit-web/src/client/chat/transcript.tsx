@@ -74,7 +74,7 @@ import { elapsed } from "./tool-card";
  * almost every message anyone sends.
  */
 /** A message the user sent: the library's Message, given the fold preference, the edit state and its foot. */
-function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void }) {
+function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void; onCancelSend?: () => void }) {
   const preference = useUserMessageCollapse();
   const [open, setOpen] = createSignal(false);
   // Pessimistic: a line holds at least 24 characters. Under that budget a message cannot fill the fold at any
@@ -97,9 +97,13 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   const timestamp = () => props.message.timestamp || undefined;
   return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
     time={timestamp() && new Date(timestamp()!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
+    status={props.message.outbox ? "Waiting to send" : undefined}
     before={props.message.notes ? <ConduitAdded before text={props.message.notes} /> : undefined}
     under={props.under}
-    actions={<Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><Icons.Edit /></LibraryButton></Show>}>
+    actions={<>
+      <Show when={props.editable}><LibraryButton variant="ghost" size="icon-xs" aria-label={props.editing ? "Cancel editing" : "Edit from here"} onClick={props.onEdit}><Icons.Edit /></LibraryButton></Show>
+      <Show when={props.message.outbox && props.onCancelSend}><LibraryButton variant="ghost" size="icon-xs" aria-label="Don't send" title="Don't send: back into the composer" onClick={() => props.onCancelSend!()}><Icons.Close /></LibraryButton></Show>
+    </>}>
     {props.text || undefined}
   </LibraryMessage>;
 }
@@ -426,7 +430,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const awaitingTurn = createMemo(() => {
     const last = props.chat.messages().at(-1);
     // Sent from here: the server's copy replacing ours keeps it waiting.
-    if (!last || last.role !== "user" || !(last.local || arrivedAt.has(last.id))) return false;
+    // Waiting to send: there is no turn to start until it goes.
+    if (!last || last.role !== "user" || last.outbox || !(last.local || arrivedAt.has(last.id))) return false;
     return timeline.at(-1)?.type === "message";
   });
 
@@ -1401,8 +1406,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           const rowActions = (): TurnAction[] => {
             const actions: TurnAction[] = [];
             if (user()) {
-              if (!(message().content || "").startsWith(APPROVAL_NOTE) && !message().pending && props.supports("fork"))
+              if (!(message().content || "").startsWith(APPROVAL_NOTE) && !message().pending && !message().outbox && props.supports("fork"))
                 actions.push({ label: props.chat.editingEntryId() === message().id ? "Cancel editing" : "Edit from here", icon: <Icons.Edit />, run: () => { props.chat.edit(message()); focusComposerSoon(); } });
+              if (message().outbox && props.chat.cancelOutbox) actions.push({ label: "Don't send", icon: <Icons.Close />, run: () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } });
               return actions;
             }
             if (narrated() && !item.orb || !actionsShown()) return actions;
@@ -1439,7 +1445,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
                   bubble. Read as the text arrives: a row is built before its message has any. */}
               <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
-                editable={!message().pending && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
+                editable={!message().pending && !message().outbox && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
+                onCancelSend={props.chat.cancelOutbox ? () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } : undefined}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>

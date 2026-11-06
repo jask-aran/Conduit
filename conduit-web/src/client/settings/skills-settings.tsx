@@ -56,7 +56,7 @@ export function SkillsSettings() {
     const key = `${item.source}/${item.skillId}`;
     setBusy(key); setSearchError("");
     try {
-      const skill = await api<Skill>("/v0/skills/install", { method: "POST", body: JSON.stringify({ source: item.source, skillId: item.skillId }) });
+      const skill = await api<Skill>("/v0/skills/install", { method: "POST", body: JSON.stringify({ source: item.source, skillId: item.skillId }), timeout: false });
       await load(); markFound(item, true); setStatus(`${skill.name} installed`);
     } catch (failure) { setSearchError(failed(failure)); }
     finally { setBusy(""); }

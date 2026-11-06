@@ -71,7 +71,7 @@ export function EmailSettings(props: { name: string }) {
   };
   const check = async () => {
     setBusy("check"); setError("");
-    try { show(await api<EmailView>("/v0/agent/email/check", { method: "POST", body: "{}" })); }
+    try { show(await api<EmailView>("/v0/agent/email/check", { method: "POST", body: "{}", timeout: false })); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(""); }
   };

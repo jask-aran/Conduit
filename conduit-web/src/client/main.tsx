@@ -39,7 +39,7 @@ import { HeaderCrumb } from "@/components/ui/header";
 import { FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { api, apiWhenServed, asList, chatPath, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
+import { api, apiWhenServed, asList, chatPath, isUnreachableError, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -873,8 +873,13 @@ function App() {
   let diagnosticContext: () => ErrorDiagnosticContext = () => ({ route: location.pathname });
   let askRuntimeForError: (diagnostic: ErrorDiagnostic) => Promise<void> = async () => {};
   let suppressDiagnosticActions = false;
+  // Set once the runtime store exists (below); until then nothing is known to be away.
+  let hubAway = () => false;
   const showPlainError = (error: unknown) => toast.error(error instanceof Error ? error.message : String(error || "Request failed"));
   const showError = (error: unknown) => {
+    // A request the hub never answered, while the hub is known to be away: the composer already says it cannot be
+    // reached, once, and each read that failed behind that saying so again was noise.
+    if (isUnreachableError(error) && hubAway()) return;
     if (suppressDiagnosticActions) return showPlainError(error);
     const diagnostic = createErrorDiagnostic(error, diagnosticContext());
     toast.error(diagnostic.message, {
@@ -1067,6 +1072,7 @@ function App() {
   // The first open is shown before the stream's first frame, and saying
   // "Server unavailable" for that moment was a flash of something untrue.
   const serverReachable = () => !["reconnecting", "offline"].includes(runtime.connectivity());
+  hubAway = () => runtime.connectivity() !== "online";
   const drafts = createDrafts(showError);
 
 
@@ -2008,7 +2014,7 @@ function App() {
   };
   type OpenedThread = { chat: ChatSummary; project: Project; tracked: boolean };
   const openThreadChat = (harnessId: string, body: Record<string, unknown>) => api<OpenedThread>(
-    `/v0/harnesses/${encodeURIComponent(harnessId)}/threads/open`, { method: "POST", body: JSON.stringify(body) });
+    `/v0/harnesses/${encodeURIComponent(harnessId)}/threads/open`, { method: "POST", body: JSON.stringify(body), timeout: false });
   const openHarnessThread = async (target: HarnessThreadTarget, historyMode: "push" | "replace" | "none" = "push") => {
     const open = harnessThread();
     if (open?.harnessId === target.harnessId && (target.id ? open.id === target.id : open.chatId === target.chatId)) return;
@@ -2430,7 +2436,7 @@ function App() {
     const target = focusedChat();
     if (!id) return;
     try {
-      const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST" });
+      const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST", timeout: false });
       target.setTitle(saved.title);
       await refresh();
       toast.success(`Renamed chat to ${saved.title}`);

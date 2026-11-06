@@ -1200,7 +1200,7 @@ export function Settings(props: {
     setVoiceTestResult("");
     try {
       await voiceAutosave.flush();
-      await api("/v0/voice/test", { method: "POST", body: "{}" });
+      await api("/v0/voice/test", { method: "POST", body: "{}", timeout: false });
       setVoiceTestResult("Connection successful");
       await loadVoiceSettings({ quiet: true });
     } catch (error) { setVoiceError((error as Error).message); }

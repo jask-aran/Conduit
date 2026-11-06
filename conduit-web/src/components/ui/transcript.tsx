@@ -171,14 +171,15 @@ export const Turn = (props: { orb?: JSX.Element; bubble?: boolean; children: JSX
 /**
  * The user's message: what Conduit put before it (`before`: ConduitAdded), its Bubble (none when it is only
  * attachments), what came with it (`under`: attachments, references), and its foot at the right. fold, open, onToggle and editing are the Bubble's; time, dateTime and
- * title the foot's. since: how far into its entrance it already is (sinceOf).
+ * title the foot's, and status (Waiting to send: one kept on this device until the hub can take it). since: how far into
+ * its entrance it already is (sinceOf).
  */
-export const Message = (props: { time?: string; dateTime?: string; title?: string; actions?: JSX.Element; before?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
+export const Message = (props: { time?: string; dateTime?: string; title?: string; status?: string; actions?: JSX.Element; before?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
   <article class="ui-message" {...motionOf(props.motion)} style={sinceOf(props.since)}>
     {props.before}
     <Show when={props.children}><Bubble fold={props.fold} open={props.open} onToggle={props.onToggle} editing={props.editing}>{props.children}</Bubble></Show>
     {props.under}
-    <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} end>{props.actions}</MessageFoot>
+    <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} status={props.status} end>{props.actions}</MessageFoot>
   </article>;
 /** The reading column: the composer's width (or --transcript-width, when the pane declares one), one gap between
  *  messages. Drawn row by row for a long chat (the caller windows it), each row a TranscriptRow. */

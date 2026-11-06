@@ -1,6 +1,6 @@
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { deriveFineActivity } from "../../activity.js";
-import { api, asList, chatPath } from "../api/client";
+import { api, asList, chatPath, isUnreachableError } from "../api/client";
 import { createAgentSession } from "./agent-session";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
@@ -36,6 +36,7 @@ import { createClientActiveGenerationStore } from "./active-generation-store.js"
 import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
 import { toast } from "@/components/ui/notifications";
+import { addToOutbox, outboxOf, returnToOutbox, takeFromOutbox, type OutboxEntry } from "./outbox";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -357,6 +358,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     onEvent: (data, chatId) => {
       try {
         const event = normalizeLiveEvent(JSON.parse(data));
+        // A runtime state is what a stream sends first when it attaches: a socket proven live, so the outbox may go.
+        if (event.type === "runtime_state") queueMicrotask(() => void flushOutbox());
         if (!acceptInOrder(event)) return;
         const opening = liveOpening;
         if (opening?.chatId === chatId && opening.selection === selectionToken) {
@@ -439,6 +442,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const reset = (draftProfileId?: string) => {
     navigationToken += 1;
+    enteredOffline = null;
     logId = null;
     logSeq = 0;
     selectionToken += 1;
@@ -563,12 +567,30 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
+  /*
+   * The outbox (state/outbox.ts): what the person sent while the hub could not be reached. Its messages are this
+   * device's, so a load of the transcript -- which replaces what is held -- puts them back at the end, where they were
+   * sent, until they go.
+   */
+  const [outboxRevision, setOutboxRevision] = createSignal(0);
+  const outboxChanged = () => setOutboxRevision((revision) => revision + 1);
+  const outboxMessage = (entry: OutboxEntry): Message =>
+    ({ id: entry.messageId, role: "user", content: entry.message, timestamp: entry.timestamp, local: true, outbox: true });
+  const withOutbox = (chatId: string, list: Message[]) => {
+    const waiting = outboxOf(chatId).filter((entry) => !list.some((message) => message.id === entry.messageId));
+    return waiting.length ? [...list, ...waiting.map(outboxMessage)] : list;
+  };
+  /** The hub is known not to be there: the runtime stream lost it and has not got it back. */
+  const hubUnreachable = () => ["reconnecting", "offline"].includes(options.runtime.connectivity());
+  /** A chat opened from what this client held while the hub could not be reached, read again once it can. */
+  let enteredOffline: { chat: ChatSummary; project: Project } | null = null;
+
   const applyDetail = (detail: TranscriptDetail, reconcile = false) => {
     const incoming = asList<Message>(detail.messages);
     const nextTools = assignToolSeq(asList<ToolItem>(detail.tools)) as ToolItem[];
     batch(() => {
       setLoadedId(detail.id);
-      setMessages((current) => (reconcile ? replaceMessages(current, incoming) : incoming));
+      setMessages((current) => withOutbox(detail.id, reconcile ? replaceMessages(current, incoming) : incoming));
       setTools(nextTools);
       setPageBefore(detail.page?.before || null);
       setStatus(detail.status || "draft");
@@ -609,7 +631,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const chatId = selectedId();
     if (!chatId) return;
     const usage = await api<{ contextUsage?: ContextUsage; sessionStats?: SessionStats; cacheStats?: CacheStats | null }>(
-      `/v0/sessions/${encodeURIComponent(chatId)}/context/breakdown`, { method: "POST" });
+      `/v0/sessions/${encodeURIComponent(chatId)}/context/breakdown`, { method: "POST", timeout: false });
     if (selectedId() !== chatId || !usage?.contextUsage) return;
     setContextUsage(usage.contextUsage);
     if (usage.sessionStats) setSessionStats(usage.sessionStats);
@@ -896,7 +918,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   // its questions and what it waits for show here as they do where it began.
   createEffect(() => {
     const chatId = selectedId();
-    if (!chatId || !options.runtime.getProcess(chatId)?.active) return;
+    // Not while the hub cannot be reached: the process list is the last one heard, and joining is asked again when it is back.
+    if (!chatId || !options.runtime.getProcess(chatId)?.active || hubUnreachable()) return;
     untrack(() => {
       const project = projectId();
       if (!project || session.isOpen() || liveOpening) return;
@@ -921,6 +944,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     detail?: TranscriptDetail;
     history?: "push" | "replace" | "none";
     warm?: boolean;
+    /** Opened while the hub could not be reached: nothing is asked of a harness that cannot answer. */
+    offline?: boolean;
     onCommit?: () => void;
     onShown?: () => void;
   }) => {
@@ -967,10 +992,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
     // Every store that holds one chat's answers is told which chat, in one
     // place, so adding one cannot mean remembering it in two.
-    const scopeReload = reconcileChatScope(chat, project, detail, entry.warm);
+    const scopeReload = reconcileChatScope(chat, project, detail, entry.warm || entry.offline);
     if (detail) applyDetail(detail);
     else {
-      setMessages([]);
+      setMessages(withOutbox(chat.id, []));
       setTools([]);
       setPageBefore(null);
       setLoadedId(chat.id);
@@ -1046,6 +1071,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     const detailResult = transcriptResult.kind === "value" && attachResult.kind === "value" && !attachResult.value
       ? await settleRequest(fetchTranscript(chat)) : transcriptResult;
     if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
+    // The hub went while this opened: what this client already holds, shown and ready to type into, rather than a
+    // chat that could not be loaded. The address bar has already moved.
+    if (detailResult.kind === "error" && isUnreachableError(detailResult.error)) {
+      return enterOffline(chat, project, { history: "none", onShown: navigationOptions.onShown });
+    }
     if (detailResult.kind === "error") {
       batch(() => {
         setPresentation({ kind: "live_error", chatId: chat.id });
@@ -1070,15 +1100,58 @@ export function createActiveChat(options: ActiveChatOptions) {
     await scopeReload;
   };
 
+  /**
+   * Open a chat while the hub cannot be reached: the transcript this client last read of it (any, however old), or
+   * none, at once and ready to type into -- what is sent waits in the outbox. No agent is asked for. Once the hub is
+   * back the chat is read again, and a turn running in it is joined as any is.
+   */
+  const enterOffline = async (
+    chat: ChatSummary,
+    project: Project,
+    navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
+  ) => {
+    const known = transcriptCache.get(chat.id)?.detail;
+    const entering = enterChat(chat, project, {
+      detail: known,
+      history: navigationOptions.history || "replace",
+      warm: false,
+      offline: true,
+      onCommit: navigationOptions.onCommit,
+      onShown: navigationOptions.onShown,
+    });
+    // After enterChat's reset, which forgets any earlier one.
+    enteredOffline = { chat, project };
+    await entering;
+  };
+
+  createEffect(on(() => options.runtime.connectivity() === "online", (online) => {
+    const entered = enteredOffline;
+    if (!online || !entered || selectedId() !== entered.chat.id || loadedId() !== entered.chat.id) return;
+    enteredOffline = null;
+    const selection = selectionToken;
+    // What the open asked of the hub and could not have: the transcript, and the stores that read it from the harness.
+    // Asked again for the chat already open, as rehydrateDraft asks, not a second way into one.
+    void loadDetail(entered.chat.id, true, selection).catch(onError);
+    void models.reloadChat(entered.chat.id);
+    void permissions?.select(entered.chat.id);
+    void serviceLevels?.select(entered.chat.id);
+  }, { defer: true }));
+
   const performSelect = async (
     chat: ChatSummary,
     project: Project,
     navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
   ) => {
+    if (hubUnreachable()) return enterOffline(chat, project, navigationOptions);
     if (chatIsLive(chat)) return performLiveSelect(chat, project, navigationOptions);
     const navigation = ++navigationToken;
     const cached = cachedTranscript(chat);
-    const detail = cached || await loadTranscript(chat);
+    let detail: TranscriptDetail;
+    try { detail = cached || await loadTranscript(chat); }
+    catch (error) {
+      if (navigation !== navigationToken || !isUnreachableError(error)) throw error;
+      return enterOffline(chat, project, navigationOptions);
+    }
     if (chatIsLive(chat)) transcriptPrefetches.delete(chat.id);
     if (navigation !== navigationToken) return;
     await enterChat(chat, project, {
@@ -1166,15 +1239,112 @@ export function createActiveChat(options: ActiveChatOptions) {
     clearReviewComments(prepared.chatId);
   };
 
+  /**
+   * Keep a message for when the hub is back (the outbox): in the transcript at once, marked Waiting to send, the
+   * composer emptied, and on this device until it goes. `messageId` is a message already placed, now kept instead.
+   */
+  const keepForLater = (prepared: ReturnType<typeof prepareOutboundMessage>, chatId: string, messageId = newMessageId()) => {
+    const entry: OutboxEntry = { messageId, kind: streaming() ? "follow_up" : "prompt", message: prepared.message, timestamp: new Date().toISOString() };
+    addToOutbox(chatId, entry);
+    acceptOutboundMessage(prepared);
+    setDraft("");
+    setMessages((current) => current.some((message) => message.id === messageId)
+      ? current.map((message) => message.id === messageId ? { ...message, outbox: true } : message)
+      : [...current, outboxMessage(entry)]);
+    outboxChanged();
+  };
+
+  /**
+   * Send what the outbox holds for the open chat, oldest first, once the hub can take it: a prompt to an idle agent,
+   * a follow-up to a working one. Each leaves the outbox before it is handed to the socket -- the server does not
+   * ignore a repeated message id, so a message is sent at most once -- and goes back only when the socket refused it
+   * without sending anything.
+   */
+  let flushingOutbox = false;
+  const flushOutbox = async () => {
+    const chatId = loadedId();
+    if (flushingOutbox || !chatId || selectedId() !== chatId || !outboxOf(chatId).length) return;
+    if (options.runtime.connectivity() !== "online" || presentation().kind !== "ready") return;
+    if (generation() === "stopping" || generation() === "submitting") return;
+    const selection = selectionToken;
+    const current = () => selectionToken === selection && selectedId() === chatId;
+    flushingOutbox = true;
+    try {
+      if (!live() || live()!.chatId !== chatId || !session.isOpen()) {
+        try { await requireAgent("prompt"); }
+        catch (error) { if (current() && !isUnreachableError(error)) onError(error); return; }
+      }
+      for (;;) {
+        if (!current() || !session.isOpen() || generation() === "stopping") return;
+        const next = outboxOf(chatId)[0];
+        if (!next) return;
+        const busy = streaming();
+        const queueMode = !busy ? null : supports("followUpQueue") ? "follow_up" : supports("steer") ? "steer" : undefined;
+        // A working agent that takes nothing queued is waited out: its turn ending runs this again.
+        if (queueMode === undefined) return;
+        const entry = takeFromOutbox(chatId, next.messageId);
+        if (!entry) continue;
+        try {
+          session.send(queueMode
+            ? { type: queueMode, messageId: entry.messageId, message: entry.message, attachmentIds: [] }
+            : { type: "prompt", messageId: entry.messageId, message: entry.message, attachmentIds: [] });
+        } catch {
+          returnToOutbox(chatId, entry);
+          return;
+        }
+        outboxChanged();
+        if (queueMode) {
+          // Queued, it is the composer's queued bubble's (from the server's queue), not a sent turn.
+          setMessages((list) => list.filter((message) => message.id !== entry.messageId));
+        } else {
+          setMessages((list) => list.map((message) => message.id === entry.messageId ? { ...message, outbox: undefined } : message));
+          setStatus("active");
+          setGeneration(stopRequest ? "stopping" : "active");
+        }
+      }
+    } finally {
+      flushingOutbox = false;
+    }
+  };
+  // Asked again whenever the hub, the chat or its turn changes; a stream that has just attached asks too (onEvent).
+  createEffect(() => {
+    outboxRevision();
+    if (options.runtime.connectivity() !== "online" || presentation().kind !== "ready" || !loadedId()) return;
+    generation();
+    untrack(() => void flushOutbox());
+  });
+
+  /** Take back a message still waiting to send: out of the transcript, and into the composer. */
+  const cancelOutbox = (messageId: string) => {
+    const chatId = loadedId();
+    if (!chatId) return;
+    const entry = takeFromOutbox(chatId, messageId);
+    // Gone already: it is on its way.
+    if (!entry) return;
+    outboxChanged();
+    setMessages((current) => current.filter((message) => message.id !== messageId));
+    const review = parseReviewComments(entry.message);
+    setDraft((value) => value.trim() ? `${value}\n${review.text}` : review.text);
+    if (review.comments.length) restoreReviewComments(chatId, [...reviewComments(chatId), ...review.comments]);
+  };
+
   const send = async (mode?: "steer" | "follow_up") => {
     if (generation() === "stopping") return;
-    if (options.runtime.connectivity() !== "online") return onError("Server unavailable");
     const prepared = prepareOutboundMessage();
     const chatId = selectedId();
     const selection = selectionToken;
     const current = () => selectedId() === chatId && selectionToken === selection;
+    const online = options.runtime.connectivity() === "online";
     if (!prepared.hasContent) return;
-    if (/^\/compact\s+\S/.test(prepared.text) && supports("compaction")) {
+    const compactCommand = /^\/compact\s+\S/.test(prepared.text) && supports("compaction");
+    // What can wait for the hub: a plain message, as a prompt or a follow-up. A steer, an edit (a fork), a compaction
+    // and attachments still need it there.
+    const keepable = Boolean(chatId) && loadedId() === chatId && !compactCommand && mode !== "steer"
+      && !editingEntryId() && !prepared.attachmentIds.length;
+    if (!online && !keepable) return onError("Server unavailable");
+    // Behind anything already waiting, so they go in the order they were sent.
+    if (keepable && (!online || outboxOf(chatId!).length)) return keepForLater(prepared, chatId!);
+    if (compactCommand) {
       if (!streaming() && !compacting()) try { await requireAgent("compact"); if (selectedId() !== prepared.chatId) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { onError(error); } return; }
     const busy = streaming();
     const messageId = newMessageId();
@@ -1225,7 +1395,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const thinkingLevel = models.effort();
     const handOver = () => {
       if (editId || !chatId) return;
-      void api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", body: JSON.stringify({
+      void api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", timeout: false, body: JSON.stringify({
         messageId, message: prepared.message, attachmentIds: prepared.attachmentIds, projectId: ownerProjectId, model, thinkingLevel }) })
         .then(() => { acceptOutboundMessage(prepared); void catalogue.refresh().catch(() => {}); }).catch(onError);
     };
@@ -1233,6 +1403,12 @@ export function createActiveChat(options: ActiveChatOptions) {
       try { await requireAgent("prompt"); } catch (error) {
         if (!current()) return handOver();
         stopRequest = null;
+        // The hub went before the agent could be reached: nothing was sent, so the message waits rather than coming back.
+        if (!editId && chatId && !prepared.attachmentIds.length && isUnreachableError(error)) {
+          setGeneration("idle");
+          keepForLater(prepared, chatId, messageId);
+          return;
+        }
         setMessages(previous);
         setDraft(prepared.text);
         setGeneration("idle");
@@ -1504,7 +1680,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
-    agents, stopAgent,
+    agents, stopAgent, cancelOutbox,
   };
 }
 

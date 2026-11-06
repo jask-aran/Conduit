@@ -361,6 +361,8 @@ export interface Message {
   pending?: boolean;
   /** Added by this client and not yet stated by the server. */
   local?: boolean;
+  /** Sent while the hub could not be reached, and kept on this device until it can (state/outbox.ts): Waiting to send. */
+  outbox?: boolean;
   /** A line in the record the model was never given (a heartbeat's quiet line): drawn, and said to be unseen. */
   unseen?: boolean;
   /**

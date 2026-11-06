@@ -8,7 +8,8 @@ import { openNativeCamera } from "../platform/camera";
 import { composerKind, nativeComposer, nativeComposerAvailable, type ComposerAction, type ComposerInput } from "../platform/native-composer";
 import { mirror } from "@/components/ui/native-phone-composer";
 import type { PluginListenerHandle } from "@capacitor/core";
-import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
+import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, Line, Lines, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, RiderMark, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
+import { activeServer } from "../platform/servers";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
@@ -253,7 +254,8 @@ export function Composer(props: {
   const dictating = createMemo(() => ["starting", "listening"].includes(dictationState()) || finalisingTakes() > 0);
   const recording = createMemo(() => dictationState() === "listening");
   const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
-  const canSend = createMemo(() => hasPayload() && props.serverOnline && interactive() && props.chat.generation() !== "stopping"
+  // A chat's own send waits in its outbox while the hub cannot be reached; a composer that starts its chat needs the hub.
+  const canSend = createMemo(() => hasPayload() && (props.serverOnline || !props.onSendDraft) && interactive() && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
   const sentPrompts = createMemo(() => props.chat.messages()
     // What the person wrote: a report or a run's line (a prompt the harness made, `origin`) is not theirs to recall.
@@ -969,12 +971,20 @@ export function Composer(props: {
   });
 
   const field = () => <>
-    <TextArea ref={input} rows={1} onPointerDown={(event) => { if (startNativeTyping()) event.preventDefault(); }} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.serverOnline ? "Server unavailable" : !props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!props.serverOnline || !interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
+    <TextArea ref={input} rows={1} onPointerDown={(event) => { if (startNativeTyping()) event.preventDefault(); }} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
   // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the
   // keyboard and the home bar have the bottom edge.
   const agents = () => <Show when={props.chat.agents().length}><RunningAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
+  // The hub cannot be reached: a state rider (below a desktop composer, above a phone's, as the agents are), said once
+  // and taking nothing away from the field.
+  const unreachable = () => <Show when={!props.serverOnline}>
+    <Rider label="Hub unreachable" motion="entering">
+      <RiderMark icon={<Icons.Server />} label="Unreachable" />
+      <Lines><Line text={`Can't reach ${activeServer()?.name || "the hub"}${props.onSendDraft ? "" : " — messages will send when it's back"}`} /></Lines>
+    </Rider>
+  </Show>;
   const riders = () => <>
     <QueuedMessages messages={props.chat.pendingMessages()} busy={busy()} canInterrupt={supports("cancel")} onInterruptAndSend={() => void props.chat.interruptAndSend()} onEdit={props.chat.editQueued} onDiscard={props.chat.discardQueued} />
     <Show when={comments().length}><Rider label="File references"><ReviewCommentCards items={comments()} chatId={props.chat.loadedId() ?? ""} label="File references" onRemove={(comment) => removeReviewComment(comment.id)} onUpdate={(comment, note) => updateReviewComment(comment.id, note)} /></Rider></Show>
@@ -989,7 +999,7 @@ export function Composer(props: {
   // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
-  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening} under={agents()}
+  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening} under={<>{unreachable()}{agents()}</>}
     riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} level={Math.min(1, dictationWaveform.level() * 2.5)} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
     <Toolbar ref={toolbarRef}
@@ -1022,7 +1032,7 @@ export function Composer(props: {
       primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><Icons.Send /></LibraryButton>}>{stopButton()}</Show>} />
   </DesktopComposer>;
   const phone = () => <PhoneComposer opening={props.opening} mode={phoneMode() ?? "idle"} layout="bar" under={optionsOpen()} editing={editing()} level={Math.min(1, dictationWaveform.level() * 2.5)} onTrack={toggleDictation}
-    riders={<>{question()}{agents()}{riders()}</>}
+    riders={<>{question()}{unreachable()}{agents()}{riders()}</>}
     field={<PillField>{field()}</PillField>}
     track={<PillWave levels={dictationWaveform.history()} gain={2.5} />}
     captions={<Show when={captionLead() || dictatedText()}><Captions lead={captionLead()} words={dictatedText().split(/(?<=\s)/)} ref={announceCaptions} /></Show>}
@@ -1034,7 +1044,7 @@ export function Composer(props: {
       <Show when={viewfinder()}><Viewfinder onCapture={(file) => addPhotos([file])} onFull={() => cameraInput.click()} onClose={() => setViewfinder(false)} /></Show>
       <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ "data-haptic": "press", title: "Take a photo (hold to choose photos)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />
     </Show>
-    <PillButton haptic={keyboardWanted() ? "dismiss" : "open"} label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<Icons.Keyboard />} button={{ disabled: !props.serverOnline || !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
+    <PillButton haptic={keyboardWanted() ? "dismiss" : "open"} label={keyboardWanted() ? "Close the keyboard" : "Type a message"} icon={<Icons.Keyboard />} button={{ disabled: !interactive(), onPointerDown: (event) => event.preventDefault(), onClick: toggleKeyboard }} />
     <PillButton folded={!latestAway()} label="Scroll to latest" icon={<Icons.ArrowDown />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
     <PillButton stretch aura haptic="press" label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<Icons.Microphone />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
     <PillButton haptic="press" folded={phoneMode() === "listening" || !(stoppable() && newDraft())} label="Stop response" icon={<Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show>} button={{ onClick: props.chat.stop }} />

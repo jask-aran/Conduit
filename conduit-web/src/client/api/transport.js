@@ -7,6 +7,8 @@ import { authorizedFetch } from "./native-auth-client.ts";
 // while the list of servers and the rules for an address live together.
 export { normalizeServerOrigin };
 
+const SOCKET_TICKET_TIMEOUT_MS = 8_000;
+
 export function buildHttpUrl(path, origin) {
   return new URL(path, `${origin}/`).toString();
 }
@@ -33,9 +35,19 @@ export async function webSocketUrl(path) {
   if (!isInstalledClient()) return buildWebSocketUrl(path, location.origin);
   await trustSettled();
   const origin = nativeOrigin();
-  const response = await authorizedFetch(buildHttpUrl("/v0/auth/socket-ticket", origin), { method: "POST" });
-  if (!response.ok) throw new Error("Could not authorize the live connection.");
-  const { ticket } = await response.json();
+  // Bounded: a hub that does not answer (a phone back from the background on a route that went away) would otherwise
+  // hold the live connection's reconnect here for as long as the OS waits on the connect. It fails as a network error
+  // does, and the reconnect's backoff asks again.
+  let response;
+  let ticket;
+  try {
+    response = await authorizedFetch(buildHttpUrl("/v0/auth/socket-ticket", origin), { method: "POST", signal: AbortSignal.timeout(SOCKET_TICKET_TIMEOUT_MS) });
+    if (!response.ok) throw new Error("Could not authorize the live connection.");
+    ({ ticket } = await response.json());
+  } catch (error) {
+    if (error?.name === "TimeoutError") throw new TypeError("The server did not answer the live connection in time.");
+    throw error;
+  }
   const url = new URL(buildWebSocketUrl(path, origin));
   url.searchParams.set("ticket", ticket);
   return url.toString();

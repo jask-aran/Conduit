@@ -76,7 +76,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let directFrame: HTMLIFrameElement | undefined;
 
   const act = (action: string, value?: unknown) => api<Status>(`/v0/browsers/${encodeURIComponent(props.id)}/actions`,
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, value }) })
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, value }), timeout: false })
     .then((next) => { setStatus(next); name(next); return next; })
     .catch((error) => setState({ text: error instanceof Error ? error.message : String(error), tone: "error" }));
   // The tab's name: the page's title, else its host; a blank page is the Browser.

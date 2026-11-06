@@ -32,6 +32,8 @@ export interface TranscriptSource {
   /** The chat's subagents, and a stop for a background one (a Conduit chat's; a harness thread has none). */
   agents?: Accessor<AgentSummary[]>;
   stopAgent?: (id: string) => Promise<unknown> | void;
+  /** Take back a message still waiting to send (a Conduit chat's outbox), into the composer. */
+  cancelOutbox?: (messageId: string) => void;
   /** The chat's turn summaries, from a request its open already started when it has one. */
   turnArtifactTimeline?: (projectId: string, chatId: string) => Promise<TurnArtifactSummary[]>;
 }

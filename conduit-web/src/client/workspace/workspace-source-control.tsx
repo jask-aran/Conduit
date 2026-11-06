@@ -167,6 +167,7 @@ export function createSourceControl(options: { projectId: Accessor<string>; enab
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action, path, message: action === "commit" ? commitMessage().trim() : undefined }),
+        timeout: false,
       });
       if (action === "commit") setCommitMessage("");
       await loadDiff(mode() === "patch", mode() === "graph");

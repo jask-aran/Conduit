@@ -9,6 +9,8 @@ import { api } from "../api/client";
 import { RESUME_RECONNECT_AFTER_MS } from "./agent-session";
 import { buildLabel, clientBuild } from "../platform/build-info";
 
+/** How long the runtime stream's answer (its headers, not its frames) is waited for before the attempt counts as lost. */
+const STREAM_ANSWER_TIMEOUT_MS = 10_000;
 /** This client's runtime stream, as the server lists it in /v0/runtime/clients. */
 const [connectionId, setConnectionId] = createSignal("");
 export { connectionId };
@@ -220,10 +222,16 @@ export function createRuntimeStore() {
       const controller = new AbortController();
       const next = { close: () => controller.abort() };
       source = next;
+      // The stream itself is never timed out, but its answer is: a hub that does not answer at all (a phone back from
+      // the background on a route that went away) held this at "connecting" until the silence watchdog, and
+      // "connecting" reads as reachable. Given up, it fails as any lost stream does and the backoff takes over.
+      let unanswered = false;
+      const answerTimer = setTimeout(() => { unanswered = true; controller.abort(); }, STREAM_ANSWER_TIMEOUT_MS);
       void authorizedFetch(streamUrl(), {
         headers: { accept: "text/event-stream" },
         signal: controller.signal,
       }).then(async (response) => {
+        clearTimeout(answerTimer);
         if (!response.ok || !response.body) throw new Error("Runtime stream unavailable");
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -240,7 +248,7 @@ export function createRuntimeStore() {
             if (data) onMessage(data);
           }
         }
-      }).catch(() => { if (!controller.signal.aborted) onError(next); });
+      }).catch(() => { clearTimeout(answerTimer); if (!controller.signal.aborted || unanswered) onError(next); });
     } else {
       const next = new EventSource(streamUrl());
       source = next;

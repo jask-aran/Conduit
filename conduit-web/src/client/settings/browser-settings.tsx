@@ -35,7 +35,7 @@ export function BrowserSettings() {
   const put = (patch: Partial<BrowserSettings["settings"]>) => run(patch.direct !== undefined ? "direct" : patch.codec ? "codec" : patch.quality ? "quality" : "fps", () =>
     api<BrowserSettings>("/v0/browsers/hub/settings", { method: "PUT", body: JSON.stringify(patch) }));
   const act = (action: "restart" | "clear") => run(action, () =>
-    api("/v0/browsers/hub/actions", { method: "POST", body: JSON.stringify({ action }) }).then(() => api<BrowserSettings>("/v0/browsers/hub/settings")));
+    api("/v0/browsers/hub/actions", { method: "POST", body: JSON.stringify({ action }), timeout: false }).then(() => api<BrowserSettings>("/v0/browsers/hub/settings")));
   const clear = async () => {
     if (!(await confirm("Clear the hub browser's data? Every site it is signed in to signs out, and its history and storage go.", { destructive: true, confirmLabel: "Clear data" }))) return;
     await act("clear");

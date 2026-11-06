@@ -365,7 +365,12 @@ export function createAgentSession(deps: {
       reconnectAttempts = 0;
       const era = epoch;
       void connect(pendingRecord, chatId, era).catch((error) => {
-        if (era === epoch && deps.chatId() === chatId) deps.onError(error);
+        if (era !== epoch || deps.chatId() !== chatId) return;
+        // The connect cancelled any reconnect, and the socket it meant to replace is the one not trusted after time
+        // away: closed (or, with none, a reconnect asked for), so the backoff keeps trying until the hub answers.
+        if (socket) socket.close();
+        else scheduleReconnect(chatId, era);
+        deps.onError(error);
       });
     }
   };
