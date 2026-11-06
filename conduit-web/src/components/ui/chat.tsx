@@ -1,4 +1,4 @@
-import { splitProps, type JSX } from "solid-js";
+import { createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 
 /*
@@ -41,4 +41,31 @@ export const ChatEmpty = (props: { children?: JSX.Element }) => <div class="ui-c
 export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void }) {
   const [local, rest] = splitProps(props, ["class"]);
   return <div {...rest} class={cn("ui-composer-dock", local.class)} />;
+}
+
+/**
+ * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
+ * its reading width (measured from the tokens, never a tuned width); otherwise risen over the chat from its foot while
+ * open, a scrim over the rest that closes it. onWide: which of the two it is now, for the control that opens it.
+ */
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; onWide?: (wide: boolean) => void; children: JSX.Element }) {
+  let root!: HTMLDivElement;
+  let need!: HTMLSpanElement;
+  const [wide, setWide] = createSignal(false);
+  onMount(() => {
+    const measure = () => { const next = root.clientWidth >= need.offsetWidth; if (next !== wide()) { setWide(next); props.onWide?.(next); } };
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(root);
+    measure();
+    props.onWide?.(wide());
+    onCleanup(() => sizes.disconnect());
+  });
+  const over = () => !wide() && props.open;
+  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined}
+    onKeyDown={(event) => { if (event.key === "Escape" && over()) { event.stopPropagation(); props.onClose(); } }}>
+    <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
+    <div class="ui-chat-beside-main">{props.children}</div>
+    <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />
+    <aside class="ui-chat-beside-panel" aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>{props.panel}</aside>
+  </div>;
 }

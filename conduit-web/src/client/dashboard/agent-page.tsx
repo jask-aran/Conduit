@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { AgentAvatar, approvalLineText, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
+import { AgentAvatar, approvalLineText, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -51,11 +51,19 @@ const when = (schedule: AgentSchedule) => schedule.cadence ? schedule.cadence : 
   : schedule.kind === "every" ? `Every ${schedule.everyMinutes && schedule.everyMinutes % 60 === 0 ? `${schedule.everyMinutes / 60}h` : `${schedule.everyMinutes}m`}`
   : "Once";
 
+/** jbot's panel's tabs: its page's groups, by what they are about. */
+export type JbotTab = "now" | "routines" | "memory" | "threads";
+export const JBOT_TABS: Array<{ value: JbotTab; label: string }> = [
+  { value: "now", label: "Now" }, { value: "routines", label: "Routines" }, { value: "memory", label: "Memory" }, { value: "threads", label: "Threads" },
+];
+
 export function AgentPage(props: {
+  /** Drawn as one tab of jbot's panel (beside or over the jbot chat): that tab's groups in one column, no header. */
+  panel?: JbotTab;
   /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
   onNeed?: (width: number) => void;
   /** The page's header in its pane, titled with the agent's name. */
-  header: (title: string) => JSX.Element;
+  header?: (title: string) => JSX.Element;
   /** Opens its home thread: the page shows none of it. */
   onOpenThread?: () => void;
   /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
@@ -63,7 +71,7 @@ export function AgentPage(props: {
   /** Opens one of its memory files (a path in its folder) in the file viewer. */
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
-  onOpenMessages: () => void;
+  onOpenMessages?: () => void;
 }) {
   const [now, setNow] = createSignal(Date.now());
   // A run's chat, by its conversation: run ids (bg-1, bg-2…) are counted again and repeat; a conversation never does.
@@ -75,7 +83,7 @@ export function AgentPage(props: {
 
   // While the page is open it follows the agent closely; the sidebar's minute is too slow to watch a run finish.
   onMount(() => {
-    setAgentDashboardLaidOut(true);
+    if (!props.panel) setAgentDashboardLaidOut(true);
     void refreshAgent();
     const tick = window.setInterval(() => { setNow(Date.now()); if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
@@ -389,14 +397,24 @@ export function AgentPage(props: {
   };
   const running = () => working()?.runs.length ? `${working()!.runs.length} running` : null;
 
+  // jbot's panel: one tab's groups, a tab's own action first.
+  const tabGroups = (tab: JbotTab) => tab === "now" ? <>{needsGroup()}{workingGroup()}{inboxGroup()}{recentGroup()}</>
+    : tab === "routines" ? <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" onClick={() => setAsking(true)}><Icons.Play />Run a task</Button></div>{timedGroup()}{watchesGroup()}</>
+    : tab === "memory" ? <>{rememberedGroup()}{memoryGroup()}{decidedGroup()}{rulesGroup()}</>
+    : <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" disabled={busy() === "thread"} onClick={() => void newThread()}><Icons.NewChat />New thread</Button></div>{threadsGroup()}</>;
+
   return <>
-    {props.header(`${name()}'s page`)}
-    <Show when={view()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
+    {props.header?.(`${name()}'s page`)}
+    <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
+      <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
+        notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} band={tab() === "now" ? day() : undefined} list={tabGroups(tab())} />
+    </Show>}</Show>
+    <Show when={!props.panel && view()} fallback={<Show when={!props.panel}><SplitEmpty>Loading…</SplitEmpty></Show>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <SplitDashboard page="Agent" label={`${name()}'s page`} onNeed={props.onNeed}
           header={<SplitHeader title={name()} kind="Agent" glyph={<AgentAvatar />} context={[DIAL[view()?.settings?.dial || ""], spent(), running()]} />}
           quickActions={<SplitQuickActions items={[
-            { icon: <Icons.Chat />, label: "Messages", onClick: props.onOpenMessages },
+            ...(props.onOpenMessages ? [{ icon: <Icons.Chat />, label: "Messages", onClick: props.onOpenMessages }] : []),
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },

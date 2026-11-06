@@ -131,8 +131,6 @@ export function Sidebar(props: {
   navigatingId?: string | null;
   dashboard: boolean;
   agent: boolean;
-  /** jbot's page (its dashboard, /jbot/page), as `agent` is its messages (/jbot). */
-  agentPage: boolean;
   project: boolean;
   computer: boolean;
   terminal: boolean;
@@ -165,7 +163,6 @@ export function Sidebar(props: {
   onOpenPty: (terminal: Pty) => void;
   onOpenDashboard: () => void;
   onOpenAgent: () => void;
-  onOpenAgentPage: () => void;
   onOpenComputer: () => void;
   onOpenHarness: (id: string) => void;
   /** A client environment's page; `environment`: the one shown. */
@@ -1233,7 +1230,7 @@ export function Sidebar(props: {
         <Row density="nav" element="button" lead={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</Row>
         <Show when={agentView()?.enabled}>
           <Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:jbot" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row>
-          <Row density="nav" element="button" lead={<Icons.Agent />} draggable="true" data-doc-view="page:agent" current={props.agentPage} onClick={() => { closeMobile(); props.onOpenAgentPage(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}'s page</Row></Show>
+</Show>
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>
         <Show when={props.onNewPane}><Row density="nav" element="button" lead={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</Row></Show>
         <Show when={pinnedItems().length}>

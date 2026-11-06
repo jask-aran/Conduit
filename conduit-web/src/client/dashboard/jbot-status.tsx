@@ -1,15 +1,14 @@
-import { createEffect, createSignal, on, Show, type JSX } from "solid-js";
+import { createContext, createSignal, Show, useContext } from "solid-js";
 import { Button, Gauge, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } from "@/components/ui";
-import { Popover, PopoverContent } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
+import { AgentPage, JBOT_TABS, type JbotTab } from "./agent-page";
 
 /*
  * jbot's particulars, where a chat keeps its own: how much it speaks up, what it has spent today against its budget,
- * and what it is running. The room is a projection of its home thread, not the thread, so the thread's context is not
- * shown here (it is the thread's own, a tap away). A desktop opens it from the composer's chip (a ring of today's
- * spend, in the context gauge's place); a phone from
- * jbot's pill at the top, as a chat's pill opens its menu. Nothing of it takes the messages' room.
+ * and what it is running, then its page's groups by tab. The jbot chat is a projection of its home thread, not the
+ * thread, so the thread's context is not shown (it is the thread's own, a tap away). The composer's chip (a ring of
+ * today's spend, in the context gauge's place) and jbot's pill open it.
  */
 
 const DIALS = [
@@ -37,8 +36,8 @@ function useJbotStatus() {
   return { name: () => settings()?.name || "jbot", spent, budget, share, running, dial: shownDial, setDial };
 }
 
-/** The panel itself: today's spend, the dial, what runs, the thread's context, and the ways on. */
-export function JbotStatus(props: { onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
+/** The head of jbot's panel: today's spend, the dial, what runs, and the ways on. */
+export function JbotStatus(props: { onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
   const status = useJbotStatus();
   const tone = () => status.share() >= 100 ? "var(--destructive)" : status.share() >= 80 ? "var(--warning, var(--category-4))" : "var(--category-1)";
   const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
@@ -54,44 +53,44 @@ export function JbotStatus(props: { onOpenPage?: () => void; onOpenThread?: () =
     </Reading>
     <Rule />
     <div class="ui-dash-room-actions">
-      <Show when={props.onOpenPage}><Button variant="ghost" size="sm" onClick={go(props.onOpenPage)}><Icons.Agent />{status.name()}'s page</Button></Show>
       <Show when={props.onOpenThread}><Button variant="ghost" size="sm" onClick={go(props.onOpenThread)}><Icons.Chat />Thread</Button></Show>
       <Show when={props.onOpenSettings}><Button variant="ghost" size="sm" onClick={go(props.onOpenSettings)}><Icons.Settings />Settings</Button></Show>
     </div>
   </>;
 }
 
+/** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
+export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void } | null>(null);
+
 /**
- * The panel opened from a control the caller draws (`trigger` gets the ref and the toggle): the composer's chip on a
- * desktop, jbot's pill on a phone.
+ * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by
+ * tab (Now, Routines, Memory, Threads). Configuration stays in Settings › jbot.
  */
-export function JbotStatusPopover(props: {
-  trigger: (control: { ref: (element: HTMLElement) => void; open: boolean; toggle: () => void }) => JSX.Element;
-  placement?: "top-start" | "bottom-start";
-  onOpenPage?: () => void;
+export function JbotPanel(props: {
+  onOpenChat: (chatId: string, event?: MouseEvent) => void;
+  onOpenFile: (path: string) => void;
   onOpenThread?: () => void;
-  onOpenSettings?: () => void;
+  onOpenSettings: () => void;
+  onDone?: () => void;
 }) {
-  const [open, setOpen] = createSignal(false);
-  let anchor: HTMLElement | undefined;
-  createEffect(on(open, (now) => { if (now) void refreshAgent(); }, { defer: true }));
-  return <Popover open={open()} onOpenChange={(now) => { if (!now) setOpen(false); }} anchorRef={() => anchor} placement={props.placement ?? "top-start"}>
-    {props.trigger({ ref: (element) => { anchor = element; }, open: open(), toggle: () => setOpen(!open()) })}
-    <PopoverContent width="lg" unfolds aria-label="jbot"
-      onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
-      onPointerDownOutside={(event) => { if (anchor?.contains(event.target as Node)) event.preventDefault(); }}>
-      <JbotStatus onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={() => setOpen(false)} />
-    </PopoverContent>
-  </Popover>;
+  const key = "conduit.jbot.panel-tab";
+  const [tab, setTabShown] = createSignal<JbotTab>((() => { try { const saved = localStorage.getItem(key); return JBOT_TABS.some((item) => item.value === saved) ? saved as JbotTab : "now"; } catch { return "now"; } })());
+  const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(key, next); } catch { /* a per-viewer convenience */ } };
+  return <>
+    <JbotStatus onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={props.onDone} />
+    <Segmented label="jbot's panel" value={tab()} options={JBOT_TABS} onChange={setTab} />
+    <AgentPage panel={tab()} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
+  </>;
 }
 
-/** The composer's chip for jbot's room, in the context gauge's place: a ring of today's spend against the budget. */
-export function JbotChip(props: { onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void }) {
+/** The composer's chip in the jbot chat, in the context gauge's place: a ring of today's spend against the budget,
+ *  opening jbot's panel. */
+export function JbotChip() {
   const status = useJbotStatus();
+  const control = useContext(JbotPanelControl);
   const tone = () => !status.budget() ? "idle" : status.share() >= 100 ? "critical" : status.share() >= 80 ? "warning" : "normal";
-  return <JbotStatusPopover onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings}
-    trigger={(control) => <Button ref={control.ref as (element: HTMLButtonElement) => void} variant="ghost" size="icon-sm" aria-expanded={control.open}
-      aria-label={`${status.name()}: ${money(status.spent())} of ${money(status.budget())} today`} title={`${money(status.spent())} of ${money(status.budget())} today`} onClick={control.toggle}>
-      <Gauge value={status.share()} tone={tone()} />
-    </Button>} />;
+  return <Button variant="ghost" size="icon-sm" aria-expanded={control?.open()} onClick={() => control?.toggle()}
+    aria-label={`${status.name()}: ${money(status.spent())} of ${money(status.budget())} today`} title={`${money(status.spent())} of ${money(status.budget())} today`}>
+    <Gauge value={status.share()} tone={tone()} />
+  </Button>;
 }

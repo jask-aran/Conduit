@@ -50,3 +50,22 @@
   .ui-chat[data-empty] .ui-chat-empty { --welcome-room: 0; }
   .ui-chat[data-empty] .ui-composer-dock { position: relative; inset: auto; width: 100%; margin: 0; padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); transform: none; background: var(--background); }
 }
+
+/* ChatBeside: a chat with its own panel (jbot's). Beside the transcript when the pane holds both at reading width
+   (the measured need), else risen over the chat from its foot while open. */
+.ui-chat-beside { --chat-panel-width: var(--measure-lg); position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.ui-chat-beside-need { position: absolute; width: calc(var(--reading-width) + var(--chat-panel-width) + 2 * var(--space-4xl)); height: 0; visibility: hidden; pointer-events: none; }
+.ui-chat-beside-main { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
+.ui-chat-beside-panel { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: var(--space-lg); }
+.ui-chat-beside-panel .ui-dash { flex: none; overflow: visible; }
+.ui-chat-beside-panel .ui-dash-body { overflow: visible; padding: 0; }
+.ui-chat-beside-scrim { display: none; }
+.ui-chat-beside[data-wide]:not([data-open]) .ui-chat-beside-panel { display: none; }
+.ui-chat-beside[data-wide] .ui-chat-beside-panel { flex: 0 0 var(--chat-panel-width); padding-top: calc(var(--header-height, 0px) + var(--space-lg)); border-left: 1px solid var(--border); }
+.ui-chat-beside:not([data-wide]) .ui-chat-beside-panel { position: absolute; inset: auto 0 0; z-index: 3; max-height: 85%;
+  padding-bottom: calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  background: var(--popover); border-top: 1px solid var(--border); border-radius: var(--radius-surface) var(--radius-surface) 0 0;
+  transform: translateY(100%); visibility: hidden; transition: transform var(--duration-gentle) var(--ease-leave), visibility 0s linear var(--duration-gentle); }
+.ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
+.ui-chat-beside:not([data-wide]) .ui-chat-beside-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: var(--frame); opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-leave); }
+.ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: .5; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
