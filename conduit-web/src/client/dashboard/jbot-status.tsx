@@ -3,14 +3,12 @@ import { Button, Gauge, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } f
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
-import type { ActiveChatStore } from "../state/active-chat";
-import { ContextBreakdown } from "../chat/context-gauge";
-import { contextUsagePercent } from "../chat/context-metrics";
 
 /*
  * jbot's particulars, where a chat keeps its own: how much it speaks up, what it has spent today against its budget,
- * what it is running, and its home thread's context. The room it is read in is a projection of that thread, so the
- * thread's context is jbot's. A desktop opens it from the composer's chip (in the context gauge's place); a phone from
+ * and what it is running. The room is a projection of its home thread, not the thread, so the thread's context is not
+ * shown here (it is the thread's own, a tap away). A desktop opens it from the composer's chip (a ring of today's
+ * spend, in the context gauge's place); a phone from
  * jbot's pill at the top, as a chat's pill opens its menu. Nothing of it takes the messages' room.
  */
 
@@ -40,7 +38,7 @@ function useJbotStatus() {
 }
 
 /** The panel itself: today's spend, the dial, what runs, the thread's context, and the ways on. */
-export function JbotStatus(props: { chat?: ActiveChatStore; onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
+export function JbotStatus(props: { onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
   const status = useJbotStatus();
   const tone = () => status.share() >= 100 ? "var(--destructive)" : status.share() >= 80 ? "var(--warning, var(--category-4))" : "var(--category-1)";
   const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
@@ -54,7 +52,6 @@ export function JbotStatus(props: { chat?: ActiveChatStore; onOpenPage?: () => v
       <Segmented label="Speaks up" value={status.dial()} options={DIALS.map(({ value, label, title }) => ({ value, label, title }))} onChange={status.setDial} />
       <Show when={status.running()}>{(count) => <ReadingTotal label="Running" value={`${count()} ${count() === 1 ? "run" : "runs"}`} />}</Show>
     </Reading>
-    <Show when={props.chat}>{(chat) => <><Rule /><ContextBreakdown chat={chat()} canCompact={chat().capabilities()?.compaction !== false} /></>}</Show>
     <Rule />
     <div class="ui-dash-room-actions">
       <Show when={props.onOpenPage}><Button variant="ghost" size="sm" onClick={go(props.onOpenPage)}><Icons.Agent />{status.name()}'s page</Button></Show>
@@ -71,33 +68,30 @@ export function JbotStatus(props: { chat?: ActiveChatStore; onOpenPage?: () => v
 export function JbotStatusPopover(props: {
   trigger: (control: { ref: (element: HTMLElement) => void; open: boolean; toggle: () => void }) => JSX.Element;
   placement?: "top-start" | "bottom-start";
-  chat?: ActiveChatStore;
   onOpenPage?: () => void;
   onOpenThread?: () => void;
   onOpenSettings?: () => void;
 }) {
   const [open, setOpen] = createSignal(false);
   let anchor: HTMLElement | undefined;
-  createEffect(on(open, (now) => { if (now) { props.chat?.refreshContext(); void refreshAgent(); } }, { defer: true }));
+  createEffect(on(open, (now) => { if (now) void refreshAgent(); }, { defer: true }));
   return <Popover open={open()} onOpenChange={(now) => { if (!now) setOpen(false); }} anchorRef={() => anchor} placement={props.placement ?? "top-start"}>
     {props.trigger({ ref: (element) => { anchor = element; }, open: open(), toggle: () => setOpen(!open()) })}
     <PopoverContent width="lg" unfolds aria-label="jbot"
       onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => { if (anchor?.contains(event.target as Node)) event.preventDefault(); }}>
-      <JbotStatus chat={props.chat} onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={() => setOpen(false)} />
+      <JbotStatus onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={() => setOpen(false)} />
     </PopoverContent>
   </Popover>;
 }
 
-/** The composer's chip for jbot's room, in the context gauge's place: the thread's context ring and today's spend. */
-export function JbotChip(props: { chat: ActiveChatStore; onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void }) {
+/** The composer's chip for jbot's room, in the context gauge's place: a ring of today's spend against the budget. */
+export function JbotChip(props: { onOpenPage?: () => void; onOpenThread?: () => void; onOpenSettings?: () => void }) {
   const status = useJbotStatus();
-  const context = () => contextUsagePercent(props.chat.contextUsage());
-  const tone = () => context() == null ? "idle" : context()! >= 90 ? "critical" : context()! >= 70 ? "warning" : "normal";
-  return <JbotStatusPopover chat={props.chat} onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings}
-    trigger={(control) => <Button ref={control.ref as (element: HTMLButtonElement) => void} variant="ghost" size="sm" aria-expanded={control.open}
-      aria-label={`${status.name()}: ${money(status.spent())} today, context ${Math.round(context() ?? 0)}%`} onClick={control.toggle}>
-      <Gauge value={Math.max(0, Math.min(100, context() ?? 0))} tone={tone()} />
-      {money(status.spent())}<Show when={status.running()}>{(count) => <> · {count()} running</>}</Show>
+  const tone = () => !status.budget() ? "idle" : status.share() >= 100 ? "critical" : status.share() >= 80 ? "warning" : "normal";
+  return <JbotStatusPopover onOpenPage={props.onOpenPage} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings}
+    trigger={(control) => <Button ref={control.ref as (element: HTMLButtonElement) => void} variant="ghost" size="icon-sm" aria-expanded={control.open}
+      aria-label={`${status.name()}: ${money(status.spent())} of ${money(status.budget())} today`} title={`${money(status.spent())} of ${money(status.budget())} today`} onClick={control.toggle}>
+      <Gauge value={status.share()} tone={tone()} />
     </Button>} />;
 }

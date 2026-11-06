@@ -6022,11 +6022,10 @@ function App() {
     // The page shows none of the thread: it is a tap away (Open thread).
     const jbotPanel = { onOpenPage: () => { if (altActivation()) void openPageBeside("agent"); else void openAgentHere(); },
       onOpenThread: agentView()?.home?.chatId ? openAgentThread : undefined, onOpenSettings: () => openSettings("agent") };
-    const homeChat = () => current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId ? current.chat : undefined;
     // A phone opens jbot's panel from its pill, where a chat's pill opens the chat's menu.
-    const jbotPill = <JbotStatusPopover placement="bottom-start" chat={homeChat()} {...jbotPanel}
+    const jbotPill = <JbotStatusPopover placement="bottom-start" {...jbotPanel}
       trigger={(control) => <HeaderPill opens ref={control.ref as (element: HTMLButtonElement) => void} label={agentView()?.settings?.name || "jbot"}
-        icon={<HarnessMark id="conduit" />} aria-expanded={control.open} aria-label={`${agentView()?.settings?.name || "jbot"}: today, speaking up, context`} onClick={control.toggle} />} />;
+        icon={<HarnessMark id="conduit" />} aria-expanded={control.open} aria-label={`${agentView()?.settings?.name || "jbot"}: today and speaking up`} onClick={control.toggle} />} />;
     return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill)}
       onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined}
       onOpenPage={() => { if (altActivation()) void openPageBeside("agent"); else void openAgentHere(); }}
@@ -6034,7 +6033,7 @@ function App() {
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
-        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip chat={current.chat} {...jbotPanel} />} /></Show>} />;
+        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip {...jbotPanel} />} /></Show>} />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
     if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);
