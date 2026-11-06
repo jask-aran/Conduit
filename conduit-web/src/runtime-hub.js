@@ -11,6 +11,8 @@ export class RuntimeHub {
     // Paired environments and whether each is there: workspaces on one come and go with it.
     this.listDevices = listDevices || (() => []);
     this.clients = new Set();
+    /** What this hub offers its clients to update to (server.js): its interface build, its desktop installer. */
+    this.updates = null;
     /** The restart being prepared: who it waits for, and who is ready. */
     this.restart = null;
   }
@@ -20,6 +22,7 @@ export class RuntimeHub {
       type: "runtime_global_snapshot",
       processes: this.listViews(),
       devices: this.listDevices(),
+      ...(this.updates ? { updates: this.updates } : {}),
       ...(this.restart ? { restartPrepared: true, restartAttempt: this.restart.attempt, restartTarget: this.restart.target } : {}),
       at: new Date().toISOString(),
     };
@@ -37,6 +40,13 @@ export class RuntimeHub {
     this.clients.add(client);
     this.send(client, { ...this.snapshot(), connection: client.peer.id });
     return () => this.clients.delete(client);
+  }
+
+  /** A new offer, told to every client at once (and in each snapshot after): the push a client checks on. */
+  offerUpdates(updates) {
+    if (JSON.stringify(updates) === JSON.stringify(this.updates)) return;
+    this.updates = updates;
+    this.publish({ type: "updates_offered", updates, at: new Date().toISOString() });
   }
 
   publish(event) {

@@ -126,6 +126,7 @@ export function createRuntimeStore() {
       } else if (event.type === "runtime_global_snapshot") {
         replaceAll((event.processes || []) as RuntimeProcess[]);
         takeDevices(event.devices);
+        if (event.updates) window.dispatchEvent(new CustomEvent("conduit:updates-offered", { detail: event.updates }));
         if (typeof event.connection === "string") { setConnectionId(event.connection); locate(event.connection); }
         restartPrepared = event.restartPrepared === true;
         if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
@@ -141,6 +142,9 @@ export function createRuntimeStore() {
         remove(event.id as string | undefined, event.chatId as string | undefined);
       } else if (event.type === "chat_changed" && event.chat) {
         window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
+      } else if (event.type === "updates_offered" && event.updates) {
+        // The hub has something new to offer (live-update.ts, main.tsx): checked now, not at the next poll.
+        window.dispatchEvent(new CustomEvent("conduit:updates-offered", { detail: event.updates }));
       } else if (event.type === "devices_changed") {
         takeDevices(event.devices);
       } else if (event.type === "workspace_changed" && Array.isArray(event.projectIds)) {

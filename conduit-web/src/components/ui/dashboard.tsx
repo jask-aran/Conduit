@@ -42,7 +42,7 @@ export function Dashboard(props: {
   /** After the body: a phone's composer at the foot. */
   dock?: JSX.Element;
 }) {
-  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-headless={props.head || props.actions ? undefined : ""} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
       {/* None for a room whose particulars are elsewhere (jbot's: its pill and the composer's chip). */}
       <Show when={props.head || props.actions}><header class="ui-dash-head">{props.head}{props.actions}</header></Show>

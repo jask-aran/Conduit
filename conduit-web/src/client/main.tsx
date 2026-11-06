@@ -21,7 +21,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
-import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
 import { JbotChip, JbotStatusPopover } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
@@ -1009,7 +1009,12 @@ function App() {
       step = "looking for a newer app";
       if (!quiet) setUpdateState({ kind: "working", label: "Looking for a newer app…", onCancel: cancel });
       const result = await bounded(shell.prepareUpdate((progress) => {
-        if (quiet) return;
+        // A background check that found one says so while it downloads, quietly: no spinner over the page, no Cancel.
+        if (quiet) {
+          const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
+          setUpdateState({ kind: "working", label: `Update available · downloading ${share}%` });
+          return;
+        }
         step = `downloading ${progress.version}`;
         touch();
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
@@ -1019,6 +1024,7 @@ function App() {
       else if (!quiet) sayUpToDate();
     } catch (error) {
       if (!quiet) { setUpdateState({ kind: "idle" }); if (!cancelled) showError(error); }
+      else if (updateState().kind === "working") setUpdateState({ kind: "idle" });
     } finally {
       clearTimeout(timer);
       if (quiet) quietCheck = false;
@@ -5301,8 +5307,17 @@ function App() {
     // Stage a signed update while the window remains usable. The button and
     // tray command can still ask for an immediate check at any time.
     const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), 10_000);
+    // The hub pushes the installer it offers (runtime stream): a new one is downloaded as soon as it is there. The
+    // hourly check is only for a hub that does not push (a release's, whose updates come from GitHub).
     const laterChecks = window.setInterval(() => void prepareDesktopUpdate(true), 60 * 60_000);
-    onCleanup(() => { clearTimeout(firstCheck); clearInterval(laterChecks); });
+    let offered: string | null | undefined;
+    const onOffer = (event: Event) => {
+      const desktop = (event as CustomEvent<{ desktop?: string | null }>).detail?.desktop ?? null;
+      if (offered !== undefined && desktop && desktop !== offered) void prepareDesktopUpdate(true);
+      offered = desktop;
+    };
+    window.addEventListener("conduit:updates-offered", onOffer);
+    onCleanup(() => { clearTimeout(firstCheck); clearInterval(laterChecks); window.removeEventListener("conduit:updates-offered", onOffer); });
     if (!desktopShell) return;
     const stops: Array<() => void> = [];
     const remember = (unlisten: () => void) => stops.push(unlisten);
@@ -6210,8 +6225,10 @@ function App() {
           <Show when={titleBarShows("server")}><ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
             onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} /></Show>
           {/* Beside the server it is an update from: under way, a spinner and how far (Cancel while it can be); then Update. */}
-          <Show when={titleBarShows("update") && updateState().kind === "ready"}>
-            <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
+          {/* A new app (installed, with its own interface) or a new interface from the hub (a reload): either is Update. */}
+          <Show when={titleBarShows("update") && (updateState().kind === "ready" || (interfaceReady() && updateState().kind === "idle"))}>
+            <Button variant="secondary" size="sm" title={updateState().kind === "ready" ? "A new version of Conduit is ready: restart into it" : "A new interface is ready: reload into it"}
+              onClick={() => void (updateState().kind === "ready" ? takePwaUpdate(true) : applyStagedInterface())}><Icons.Download />Update</Button>
           </Show>
           <Show when={titleBarShows("update") && (updateState().kind === "current" || updateState().kind === "updated")}>
             <Button variant="ghost" size="sm" disabled><Icons.Check />{updateState().kind === "updated" ? "Conduit updated" : "Up to date"}</Button>

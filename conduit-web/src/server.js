@@ -552,6 +552,18 @@ app.get("/v0/downloads", async (_request, response) => {
 // of authentication like the compiled client it is made of, which is already
 // served without a session (auth-middleware.js): it carries nobody's data.
 const clientBundle = createClientBundle(dist);
+// What this hub offers its clients to update to, pushed on the runtime stream (RuntimeHub.offerUpdates) so a client
+// checks when there is something new rather than polling: the interface it serves and the desktop installer it
+// publishes. Read again every 20 s: a build lands in dist or the update folder without the hub restarting.
+const readOffer = async () => {
+  const offer = { interface: (await clientBundle.manifest().catch(() => null))?.build || null, desktop: null };
+  if (desktopUpdateDir) offer.desktop = JSON.parse(await fs.readFile(path.join(desktopUpdateDir, "latest.json"), "utf8").catch(() => "null"))?.version || null;
+  return offer;
+};
+const offerUpdates = () => void readOffer().then((offer) => runtimeHub.offerUpdates(offer)).catch(() => {});
+offerUpdates();
+const offerTimer = setInterval(offerUpdates, 20_000);
+offerTimer.unref?.();
 app.get("/client-bundle/manifest.json", async (_request, response, next) => {
   try {
     response.setHeader("Cache-Control", "no-store");

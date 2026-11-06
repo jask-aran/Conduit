@@ -25,6 +25,7 @@ async function serverIsNewer(server: string): Promise<boolean> {
     return Number.isFinite(theirs) && (!Number.isFinite(ours) || theirs > ours);
   } catch { return false; }
 }
+import { createSignal } from "solid-js";
 import { installedClientKind } from "./installed-client.ts";
 import { authorizedFetch } from "../api/native-auth-client.ts";
 import { clientBuild } from "./build-info.ts";
@@ -42,6 +43,13 @@ interface BundlePlugin {
 }
 
 let staged: string | null = null;
+/* A staged interface is said (the title bar's Update): taken by hand at once, or at the next time out of sight. */
+const [interfaceReady, setInterfaceReady] = createSignal(false);
+export { interfaceReady };
+let applyStaged: (() => Promise<unknown>) | null = null;
+/** Swap the staged interface in now (the page reloads into it). */
+export function applyStagedInterface() { return applyStaged?.(); }
+const stage = (build: string | null) => { staged = build; setInterfaceReady(Boolean(build)); };
 let checking = false;
 let now: ((onProgress?: (progress: BundleProgress) => void) => Promise<"current" | "applying" | "unreachable" | "cancelled">) | null = null;
 
@@ -68,9 +76,9 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
     if (!server || checking) return;
     checking = true;
     try {
-      if (!(await serverIsNewer(server))) { staged = null; return; }
+      if (!(await serverIsNewer(server))) { stage(null); return; }
       const result = await plugin.stageBundle({ origin: server });
-      staged = result.state === "staged" ? result.build : null;
+      stage(result.state === "staged" ? result.build : null);
     } catch {
       // Unreachable, or an older server without bundles: try again later.
     } finally {
@@ -93,6 +101,9 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
       void listener?.remove();
     }
   };
+  applyStaged = async () => { if (staged) { rememberView(); await plugin.applyBundle({ build: staged }); } };
+  // The hub pushes what it offers (runtime stream): a new interface is staged as soon as it is there.
+  window.addEventListener("conduit:updates-offered", () => void check());
   void check();
   await App.addListener("resume", () => void check());
   await App.addListener("pause", () => {
@@ -113,7 +124,7 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
   // This interface started; without this the shell goes back to its built-in one at the next launch.
   await invoke("interface_confirm").catch(() => {});
   /** Stage the server's interface; its build when one was staged, null when this one is what it serves. */
-  const stage = async (server: string, onProgress?: (progress: BundleProgress) => void): Promise<string | null> => {
+  const download = async (server: string, onProgress?: (progress: BundleProgress) => void): Promise<string | null> => {
     onProgress?.({ phase: "checking", downloaded: 0, total: 0 });
     const manifest = await authorizedFetch(`${server}/client-bundle/manifest.json`, { signal: AbortSignal.timeout(10_000) });
     const { build } = await manifest.json() as { build?: string };
@@ -147,8 +158,8 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     if (!server || checking) return;
     checking = true;
     try {
-      if (!(await serverIsNewer(server))) { staged = null; return; }
-      staged = await stage(server);
+      if (!(await serverIsNewer(server))) { stage(null); return; }
+      stage(await download(server));
     } catch {
       // Unreachable, or an older server without bundles: try again later.
     } finally {
@@ -159,7 +170,7 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     const server = origin();
     if (!server) return "unreachable";
     try {
-      const build = await stage(server, onProgress);
+      const build = await download(server, onProgress);
       if (!build) return "current";
       await apply(build);
       return "applying";
@@ -167,7 +178,12 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
       return (error as Error | null)?.name === "AbortError" ? "cancelled" : "unreachable";
     }
   };
+  applyStaged = async () => { if (staged) await apply(staged); };
   void check();
+  // The hub pushes what it offers (runtime stream): a new interface is staged as soon as it is there. Asking now and
+  // then as well is only for a hub that does not push.
+  window.addEventListener("conduit:updates-offered", () => { lastCheck = Date.now(); void check(); });
+  setInterval(() => { lastCheck = Date.now(); void check(); }, 60 * 60_000);
   let lastCheck = Date.now();
   const again = () => { if (Date.now() - lastCheck > 60_000) { lastCheck = Date.now(); void check(); } };
   window.addEventListener("focus", again);
