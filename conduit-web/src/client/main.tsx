@@ -967,6 +967,20 @@ function App() {
       } else sayUpToDate();
     }
   };
+  // The new interface, pressed for: said at once (the window reloads into it), and said if it does not.
+  const takeStagedInterface = async () => {
+    setUpdateState({ kind: "working", label: "Opening the new interface…" });
+    try {
+      await applyStagedInterface();
+      // The reload takes the page; still here after a while, it did not happen.
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      setUpdateState({ kind: "idle" });
+      toast.error("The new interface did not open. Try Check for updates again.");
+    } catch (error) {
+      setUpdateState({ kind: "idle" });
+      showError(error);
+    }
+  };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
   let quietCheck = false;
   const prepareDesktopUpdate = async (quiet: boolean) => {
@@ -4809,6 +4823,8 @@ function App() {
     if (inRow !== undefined) return focusPane(inRow);
     if (!workspacePanelScope()) return void openJbotHere();
     dockBeforeJbot = { open: panelOpen(), slot: dockSlot(), tool: dockTool() };
+    // Its tool has no Maximise: a dock maximised for another tool comes back to its width for it.
+    if (workspaceExpanded()) setWorkspaceExpanded(false);
     await openWorkspaceView("jbot");
     focusWorkspacePanel();
   };
@@ -6277,7 +6293,7 @@ function App() {
           {/* A new app (installed, with its own interface) or a new interface from the hub (a reload): either is Update. */}
           <Show when={titleBarShows("update") && (updateState().kind === "ready" || (interfaceReady() && updateState().kind === "idle"))}>
             <Button variant="secondary" size="sm" title={updateState().kind === "ready" ? "A new version of Conduit is ready: restart into it" : "A new interface is ready: reload into it"}
-              onClick={() => void (updateState().kind === "ready" ? takePwaUpdate(true) : applyStagedInterface())}><Icons.Download />Update</Button>
+              onClick={() => void (updateState().kind === "ready" ? takePwaUpdate(true) : takeStagedInterface())}><Icons.Download />Update</Button>
           </Show>
           <Show when={titleBarShows("update") && (updateState().kind === "current" || updateState().kind === "updated")}>
             <Button variant="ghost" size="sm" disabled><Icons.Check />{updateState().kind === "updated" ? "Conduit updated" : "Up to date"}</Button>
@@ -6434,7 +6450,7 @@ function App() {
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => { dockBeforeJbot = null; closePanel(); }} shortcuts={shortcutManager}
-      jbotView={() => renderJbot("tool")} onOpenJbotPane={() => { void putJbotAway().then(() => openPageBeside("jbot")); }}
+      jbotView={() => renderJbot("tool")}
       jbotModes={() => <HeaderButton label={`${agentView()?.settings?.name || "jbot"}'s panel`} icon={<Icons.Dashboard />} aria-pressed={Boolean(jbotToolControl()?.open())} onClick={() => jbotToolControl()?.toggle()} />} /></Show>
     </AppShell>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}

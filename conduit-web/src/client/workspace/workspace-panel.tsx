@@ -53,9 +53,9 @@ function panelTab(value: string): PanelTab | null {
 const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
 export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
-  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session), its header's modes, and
-   *  moving it to a pane. */
-  jbotView?: () => JSX.Element; jbotModes?: () => JSX.Element; onOpenJbotPane?: () => void }) {
+  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session), and its header's modes.
+   *  It stays in the dock: no Maximise, no moving to a pane. */
+  jbotView?: () => JSX.Element; jbotModes?: () => JSX.Element }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
@@ -596,9 +596,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
           <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
           <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
-          <Show when={tool() === "jbot" && props.onOpenJbotPane}><HeaderButton only="desktop" label="Move to a pane" aria-label="Move jbot to a pane" icon={<Icons.Split />} onClick={() => props.onOpenJbotPane?.()} /></Show>
           <Show when={props.onOpenBeside && tool() !== "jbot" && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
-          <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} />
+          <Show when={tool() !== "jbot"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
           <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
         </Show>} />
   );

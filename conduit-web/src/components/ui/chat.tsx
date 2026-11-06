@@ -1,4 +1,6 @@
-import { createEffect, createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { IconButton } from "./actions";
+import * as Icons from "./icons";
 import { cn } from "@/lib/utils";
 
 /*
@@ -50,7 +52,7 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
  * a menu is, a click outside or Esc putting it away. onWide: when that changes (it starts narrow), for the controls
  * that open it.
  */
-export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; drop?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; drop?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
   const [wide, setWide] = createSignal(false);
@@ -74,6 +76,11 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
     <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />
-    <aside class="ui-chat-beside-panel" aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>{props.panel}</aside>
+    {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane. */}
+    <aside class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
+      aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>
+      <Show when={!wide()}><div class="ui-chat-beside-head"><strong>{props.title}</strong><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></div></Show>
+      {props.panel}
+    </aside>
   </div>;
 }
