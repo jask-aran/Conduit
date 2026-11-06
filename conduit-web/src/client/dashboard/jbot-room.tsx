@@ -22,8 +22,11 @@ export function JbotRoom(props: {
   composer?: JSX.Element;
   working?: boolean;
   threadChanged?: unknown;
-  /** "phone": a phone's presentation on a desktop (the dock: tall and narrow), its pill and actions frost over it. */
-  presentation?: "phone";
+  /** On a desktop: "phone", a phone's header (its pill, its actions frost over the chat) and column; "narrow", the
+   *  column alone (jbot's dock tool, under the tool's header). */
+  presentation?: "phone" | "narrow";
+  /** The panel's control, for a header outside the room (the dock tool's). */
+  onControl?: (control: { open: () => boolean; toggle: () => void } | null) => void;
 }) {
   const log = useJbotMessages(() => props.threadChanged);
   const name = () => agentView()?.settings?.name || "Agent";
@@ -48,6 +51,7 @@ export function JbotRoom(props: {
     const handle = window.setTimeout(() => setBuilt(true), 1500);
     onCleanup(() => window.clearTimeout(handle));
   });
+  onMount(() => { props.onControl?.({ open, toggle }); onCleanup(() => props.onControl?.(null)); });
   const toggle = () => {
     if (!wide()) return void setOver(!over());
     const next = !beside();

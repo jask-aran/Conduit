@@ -120,3 +120,10 @@
   .ui-dock, .ui-dock-surface { transition-duration: 0.01ms !important; }
   .ui-dock[data-open] .ui-dock-surface { transform: none; }
 }
+
+/* ToolKept: drawn once, then skipped while another tool shows, its rendering state (scroll) kept. */
+.ui-tool-kept { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+.ui-tool-kept:not([data-shown]) { position: absolute; inset: 0; content-visibility: hidden; pointer-events: none; }
+/* A kept tool (jbot's chat) is held at the dock's open width while the dock eases, as a docked pane's document is. */
+.ui-dock:not([data-expanded]) .ui-tool-content > .ui-tool-kept[data-shown] { flex: none; width: var(--dock-document-width, 100%); max-width: none; margin-left: auto; }
+@media (--conduit-phone-layout) { .ui-dock .ui-tool-content > .ui-tool-kept[data-shown] { flex: 1; width: auto; margin-left: 0; } }

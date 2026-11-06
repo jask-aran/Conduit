@@ -13,7 +13,8 @@ export interface GitLineCounts { added: number; removed: number; }
 export interface GitChangedFile { status: string; path: string; stagedCounts?: GitLineCounts | null; workingCounts?: GitLineCounts | null; headCounts?: GitLineCounts | null; }
 export interface DiffPayload { repository: boolean; branch?: string; upstream?: string | null; ahead?: number; behind?: number; commits?: GitCommit[]; refs?: GitRef[]; files: GitChangedFile[]; diff: string; }
 export interface GitCommitDetail { hash: string; content: string; }
-export type PanelTab = "files" | "diff" | "chat" | "terminal";
+/** The dock's tools; jbot's works on no project (the jbot chat with its panel). */
+export type PanelTab = "files" | "diff" | "chat" | "terminal" | "jbot";
 /**
  * What the main pane's split holds: a tool moved out of the dock, the file
  * opened beside ("file", the path is Files' second slot), or one terminal
@@ -22,7 +23,7 @@ export type PanelTab = "files" | "diff" | "chat" | "terminal";
  * or nothing yet ("home": an empty pane, showing what can be opened in it).
  */
 export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}`;
-export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal";
+export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot";
 export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser):./.test(value));
 export type ChatMode = "history" | "changes";
 // `discarded`: the harness kept this step in its tree but builds every later

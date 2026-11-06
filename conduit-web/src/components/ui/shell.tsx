@@ -63,6 +63,9 @@ export function DockSurface(props: JSX.HTMLAttributes<HTMLDivElement> & { docume
 export const DockDocument = (props: { ref?: (element: HTMLDivElement) => void }) => <div ref={props.ref} class="ui-dock-document" />;
 
 /** A tool's body under its PaneHeader, in the dock or a split: it takes the room left and holds the keyboard. */
+/** A tool kept drawn while another shows (jbot's): skipped from layout and paint, its scroll and state kept. */
+export const ToolKept = (props: { shown: boolean; children: JSX.Element }) => <div class="ui-tool-kept" data-shown={props.shown ? "" : undefined} aria-hidden={props.shown ? undefined : "true"} inert={props.shown ? undefined : true}>{props.children}</div>;
+
 export const ToolContent = (props: JSX.HTMLAttributes<HTMLElement>) => {
   const [local, rest] = splitProps(props, ["class"]);
   return <main tabIndex={-1} {...rest} class={cn("ui-tool-content", local.class)} />;

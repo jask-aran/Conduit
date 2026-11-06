@@ -201,7 +201,7 @@ export type UpdateState =
   | { kind: "updated" }
   | { kind: "ready" }
   | { kind: "working"; label: string; onCancel?: () => void };
-type WorkspaceView = "files" | "diff" | "chat" | "terminal";
+type WorkspaceView = "files" | "diff" | "chat" | "terminal" | "jbot";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
 const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
@@ -1253,6 +1253,12 @@ function App() {
     };
   });
   const paneSlot = (slot: number) => paneSlots[slot]!;
+  // jbot's dock tool holds its own session (its home thread, for its composer), as a pane does.
+  const jbotSession = createSideChat({
+    runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
+    harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
+  });
+  const [jbotToolControl, setJbotToolControl] = createSignal<{ open: () => boolean; toggle: () => void } | null>(null);
   // Not awaited: a round trip in front of first paint is a poor price for a
   // race that asking again closes. A chat that opened before this landed is
   // told to look once more, and a composer with something in it is left alone.
@@ -4784,48 +4790,29 @@ function App() {
     showDocked(slot);
   };
   /*
-   * jbot opens in the dock first, beside the work: you send it something and read what it says, you do not work in it.
-   * Alt (or a drag) puts it in a pane instead; a jbot already in a pane is focused there. No dock here (a page without
-   * a place for one): pane A.
-   */
-  const jbotDocked = () => dockContents().find((slot) => slotView(slot) === "page:jbot");
-  const openJbotDocked = async (alt = false) => {
-    if (alt) return void openPageBeside("jbot");
-    const docked = jbotDocked();
-    if (docked !== undefined) return chooseDocked(docked, false);
-    const inRow = shownSlots().find((slot) => slotView(slot) === "page:jbot");
-    if (inRow !== undefined) return focusPane(inRow);
-    if (routeKind() === "jbot" && !paneAOverride()) return focusChatPane();
-    const free = freeSlot(true);
-    if (!dockAvailable() || free === null) return void openJbotHere();
-    freshlyDocked.add(free);
-    movingDocuments = true;
-    batch(() => { void setSlotView(free, "page:jbot"); setDockedSlots((current) => [...current, free]); });
-    movingDocuments = false;
-    persistSlots();
-    showDocked(free);
-  };
-  /*
    * Ctrl+J (and the rail's jbot): jbot from anywhere, in the dock, taking it over from whatever it showed; put away the
    * same way, the dock goes back to what it showed (a tool, a docked pane, or shut). jbot already in a pane: focused.
    */
-  let dockBeforeJbot: { open: boolean; slot: number | null } | null = null;
-  const jbotShownInDock = () => { const docked = jbotDocked(); return docked !== undefined && panelOpen() && dockSlot() === docked; };
+  let dockBeforeJbot: { open: boolean; slot: number | null; tool: WorkspaceView } | null = null;
+  const jbotShownInDock = () => panelOpen() && dockSlot() === null && dockTool() === "jbot";
   const putJbotAway = async () => {
     const before = dockBeforeJbot;
     dockBeforeJbot = null;
     if (before?.open && before.slot !== null && dockContents().includes(before.slot)) return showDocked(before.slot);
-    if (before?.open && before.slot === null) { setDockSlot(null); return void await openWorkspaceView(dockTool()); }
+    if (before?.open && before.slot === null && before.tool !== "jbot") return void await openWorkspaceView(before.tool);
     closePanel();
   };
-  const toggleJbot = async () => {
+  const showJbot = async () => {
     if (isMobileLayout()) return void openJbotHere();
-    if (jbotShownInDock()) return putJbotAway();
+    if (jbotShownInDock()) return focusWorkspacePanel();
     const inRow = shownSlots().find((slot) => slotView(slot) === "page:jbot");
     if (inRow !== undefined) return focusPane(inRow);
-    dockBeforeJbot = { open: panelOpen(), slot: dockSlot() };
-    await openJbotDocked();
+    if (!workspacePanelScope()) return void openJbotHere();
+    dockBeforeJbot = { open: panelOpen(), slot: dockSlot(), tool: dockTool() };
+    await openWorkspaceView("jbot");
+    focusWorkspacePanel();
   };
+  const toggleJbot = async () => jbotShownInDock() ? putJbotAway() : showJbot();
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <Actions kind="pane">
       <Show when={isDocked(pane)}><IconButton kind="pane" label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></IconButton></Show>
@@ -6057,9 +6044,11 @@ function App() {
     onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
     onOpenSettings={() => openSettings("agent")}
     onOpenChat={openAgentChatFromPage} />;
-  const renderJbot = (slot: number | "main") => {
-    const current = slot === "main" ? session : paneSlot(slot).session;
-    const owns = slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
+  const renderJbot = (slot: number | "main" | "tool") => {
+    const tool = slot === "tool";
+    const current = tool ? jbotSession : slot === "main" ? session : paneSlot(slot).session;
+    const owns = tool ? () => Boolean(document.activeElement?.closest("[data-region='workspace-panel']"))
+      : slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
     // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
     // Kept loaded while the page shows: opening the page again (its sidebar row) clears the session's chat, as any
     // route to a page does, and the composer went with it.
@@ -6080,13 +6069,15 @@ function App() {
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
     // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
-    const docked = () => !isMobileLayout() && inDock(slot);
+    const docked = () => !tool && !isMobileLayout() && inDock(slot as PaneKey);
     // Its actions are the pill's own buttons (a phone header's), not a pane's strip set in a pill.
     const dockActions = () => <>
       <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
       <HeaderButton label="Put jbot away" icon={<Icons.Close />} onClick={() => void putJbotAway()} />
     </>;
-    return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill(), docked() ? dockActions() : undefined)} presentation={!isMobileLayout() && inDock(slot) ? "phone" : undefined}
+    // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
+    return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
+      presentation={tool ? "narrow" : docked() ? "phone" : undefined} onControl={tool ? setJbotToolControl : undefined}
       panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
@@ -6260,7 +6251,7 @@ function App() {
       onOpenEnvironment={async (id) => { if (altActivation()) await openPageBeside(`environment:${encodeURIComponent(id)}`); else void openEnvironmentHere(id); }}
       environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneAOverride() ? undefined : computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenAgent={async () => { if (isMobileLayout()) void openJbotHere(); else await openJbotDocked(altActivation()); }}
+      onOpenAgent={async () => { if (isMobileLayout()) void openJbotHere(); else if (altActivation()) await openPageBeside("jbot"); else await showJbot(); }}
       onOpenDashboard={async () => { if (altActivation()) await openPageBeside("dashboard"); else void openDashboardHere(); }}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
@@ -6442,7 +6433,9 @@ function App() {
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
     <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} /></Show>
+    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => { dockBeforeJbot = null; closePanel(); }} shortcuts={shortcutManager}
+      jbotView={() => renderJbot("tool")} onOpenJbotPane={() => { void putJbotAway().then(() => openPageBeside("jbot")); }}
+      jbotModes={() => <HeaderButton label={`${agentView()?.settings?.name || "jbot"}'s panel`} icon={<Icons.Dashboard />} aria-pressed={Boolean(jbotToolControl()?.open())} onClick={() => jbotToolControl()?.toggle()} />} /></Show>
     </AppShell>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
@@ -6450,7 +6443,7 @@ function App() {
     <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
-      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: panelOpen() && dockSlot() !== null && dockSlot() === jbotDocked(), onOpen: (alt) => void (alt ? openJbotDocked(true) : toggleJbot()) } : undefined}
+      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: jbotShownInDock(), onOpen: (alt) => void (alt ? openPageBeside("jbot") : toggleJbot()) } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

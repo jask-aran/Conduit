@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
-import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, Loading, PaneHeader } from "@/components/ui";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, ToolKept, Loading, PaneHeader } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
-import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor } from "solid-js";
+import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 import { minMainPaneWidth } from "../layout-geometry";
 import { unitPx } from "@/components/ui/layout";
@@ -42,17 +42,20 @@ import type { FileEntry } from "./file-documents";
  * (docs/design/panes-and-rail.md).
  */
 
-const PANEL_TABS = ["files", "chat", "terminal", "diff"] satisfies PanelTab[];
+const PANEL_TABS = ["files", "chat", "terminal", "diff", "jbot"] satisfies PanelTab[];
 
 function panelTab(value: string): PanelTab | null {
   if (value === "artifacts") return "chat";
-  return value === "files" || value === "diff" || value === "chat" || value === "terminal" ? value : null;
+  return value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot" ? value : null;
 }
 
 // In the unit (layout-geometry): its least, its most and its first width; the gap is --space-md, the chat's margin.
 const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void }) {
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
+  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session), its header's modes, and
+   *  moving it to a pane. */
+  jbotView?: () => JSX.Element; jbotModes?: () => JSX.Element; onOpenJbotPane?: () => void }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
   let resizeHandle: HTMLDivElement | undefined;
@@ -200,6 +203,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       if (next === "terminal") setTerminalFocusRequest((request) => request + 1);
     });
   };
+  const [jbotKept, setJbotKept] = createSignal(false);
+  createEffect(() => { if (dockShows("jbot") && props.open()) setJbotKept(true); });
   const tabIcon = (candidate: PanelTab) => { const Icon = WORKSPACE_TOOL_ICONS[candidate]; return <Icon />; };
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
@@ -213,7 +218,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       observer.observe(element);
       onCleanup(() => observer.disconnect());
     }}>
-      <For each={PANEL_TABS}>{(item) => {
+      <For each={PANEL_TABS.filter((item) => item !== "jbot")}>{(item) => {
         const disabled = () => item === "diff" && !props.sourceControlEnabled();
         return <ToolView data-workspace-tab={item} disabled={disabled()} icon={tabIcon(item)} label={tabLabel(item)} aria-label={disabled() ? `${tabLabel(item)}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : tabLabel(item)} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item)} selected={tab() === item} onClick={() => changePaneTab(item)} />;
       }}</For>
@@ -576,21 +581,23 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
     // The dock follows places (6d-1): its header says which one it shows.
-    <PaneHeader kind="tool" fit draggable={!isMobileLayout()}
+    <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && tool() !== "jbot"}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
       onDragEnd={() => delete document.body.dataset.toolDrag}
       name={viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}
-      place={where === "dock" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
+      place={where === "dock" && tool() !== "jbot" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
       modes={<>
         <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
         <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
+        <Show when={tool() === "jbot"}>{props.jbotModes?.()}</Show>
       </>}
       views={where === "dock" ? tabStrip() : undefined}
       actions={<Show when={where === "dock"} fallback={<>
           <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
           <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
-          <Show when={props.onOpenBeside && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
+          <Show when={tool() === "jbot" && props.onOpenJbotPane}><HeaderButton only="desktop" label="Move to a pane" aria-label="Move jbot to a pane" icon={<Icons.Split />} onClick={() => props.onOpenJbotPane?.()} /></Show>
+          <Show when={props.onOpenBeside && tool() !== "jbot" && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
           <HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} />
           <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
         </Show>} />
@@ -603,6 +610,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       navigatorOnly={Boolean(props.onOpenFile)} openInPane={props.openFiles ? (path) => props.openFiles!().get(`${props.projectId()}:${path}`) : undefined} />
     : tool === "diff" ? <SourceControlView control={sourceControl} stale={poll.stale()} onRetryPoll={poll.retry} chatAvailable={Boolean(props.artifactChatId?.())}
       commentChatId={commentChatId()} reveal={reviewReveal()} onInspectFile={inspectFileDiff} onOpenWorkingFile={openWorkingFile} />
+    : tool === "jbot" ? props.jbotView?.()
     : tool === "chat" ? <ChatView control={chat} historyAvailable={Boolean(props.historyAvailable?.())} chatId={props.artifactChatId?.() ?? null}
       commentChatId={commentChatId()} reveal={reviewReveal()} onOpenWorkingFile={openWorkingFile} />
     : <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
@@ -629,7 +637,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
     <ToolContent>
-      <For each={PANEL_TABS}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
+      <For each={PANEL_TABS.filter((tool) => tool !== "jbot")}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
+      {/* jbot's stays drawn once opened, its chat where it was: put away and back (Ctrl+J) costs nothing. */}
+      <Show when={jbotKept()}><ToolKept shown={dockShows("jbot")}>{toolView("jbot", "dock")}</ToolKept></Show>
     </ToolContent>
     {/* A pane's document moved into the dock draws here, over the tools. */}
     <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />

@@ -5,8 +5,8 @@ import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
 import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 
-export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal" };
-export const WORKSPACE_TOOL_ICONS = { files: Icons.Folder, diff: Icons.GitCompareArrows, chat: Icons.Chat, terminal: Icons.Terminal } satisfies Record<PanelTab, unknown>;
+export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal", jbot: "jbot" };
+export const WORKSPACE_TOOL_ICONS = { files: Icons.Folder, diff: Icons.GitCompareArrows, chat: Icons.Chat, terminal: Icons.Terminal, jbot: Icons.Agent } satisfies Record<PanelTab, unknown>;
 
 /** A view dragged by its header, between the dock and the main pane's split. */
 export const TOOL_DRAG_TYPE = "application/x-conduit-tool";
