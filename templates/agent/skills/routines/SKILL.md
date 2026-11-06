@@ -61,6 +61,10 @@ What the run should do with what was gathered, and what to tell jbot.
   ```
 
   This means hourly outside quiet hours and every two hours inside them.
+  A rule can instead name an event, `{ on: held-mail }`: an email to your
+  address from someone who does not wake you. The event only starts the
+  routine; its tasks gather what came (a `held-mail` task), so add a clock rule
+  too (`{ every: 720 }`) for what arrives while a run is busy.
 - **tasks**, each `{ id, kind }`:
   - `inbox`: `for: <routine-name>` defaults to this routine's name. Entries
     with a nonempty `for` list are shown only when that list names the recipient.
@@ -87,6 +91,10 @@ What the run should do with what was gathered, and what to tell jbot.
     original `message.eml` and its attachments (documents also as `.md`); the
     run gets one line per email with that path. The first firing only learns
     what is there. The heartbeat's first task is `- { id: email, kind: email }`.
+  - `held-mail`: email to your address from people who do not wake you, held
+    in its mail room, since the last firing (the first looks back a day): one
+    line each, marked untrusted, with the path to its `message.md`. The packaged
+    Held mail routine uses it, off until the person turns it on.
   - `calendar` (`account`, `calendars?`, `days?` 1 to 14)
   - `chats`
   - `notes`: pending NOTES.md entries and recent declined proposals. Notes are

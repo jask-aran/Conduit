@@ -15,6 +15,8 @@ const object = (value) => value !== null && typeof value === "object" && !Array.
 const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
 /** Fields a task kind takes besides its id, kind and program. */
 const TASK_FIELDS = { inbox: ["all", "for", "kinds", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
+/** What an `on:` trigger can name: an email to jbot from someone who does not wake it (email.js). */
+export const EVENTS = ["held-mail"];
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
 export const settingRule = (trigger, kind) => Array.isArray(trigger)
@@ -68,6 +70,8 @@ export function routineProblem(routine) {
         || !date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== match[0].slice(0, 10)) {
         return "Once must be an ISO date-time with a timezone.";
       }
+    } else if (trigger.kind === "on") {
+      if (!keysOnly(trigger, ["kind", "event"]) || !EVENTS.includes(trigger.event)) return `On must name an event: ${EVENTS.join(", ")}.`;
     } else return "A valid trigger is required.";
     if (trigger.during !== undefined && (typeof trigger.during !== "string"
       || !(trigger.during === "quiet" || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(trigger.during))
@@ -103,7 +107,7 @@ export function routineProblem(routine) {
     if (!object(task) || typeof task.id !== "string" || !idPattern.test(task.id)) return "Each task needs a valid id.";
     if (ids.has(task.id)) return "Task ids must be unique.";
     ids.add(task.id);
-    if (!["inbox", "email", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
+    if (!["inbox", "email", "held-mail", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
     const field = task.kind === "executor" ? "code" : task.kind === "script" ? "command" : null;
     const extra = TASK_FIELDS[task.kind] || [];
     const unknown = Object.keys(task).find((key) => !["id", "kind", ...(field ? [field] : []), ...extra].includes(key));
@@ -164,6 +168,7 @@ export function parseRoutine(text, name) {
   const unknownKey = Object.keys(data).find((key) => !fields.includes(key));
   if (unknownKey) throw new Error(`Unknown field ${unknownKey} in the front matter.`);
   const parseTrigger = (input) => {
+    if (object(input) && Object.hasOwn(input, "on")) return keysOnly(input, ["on"]) ? { kind: "on", event: input.on } : null;
     if (!object(input) || !keysOnly(input, ["every", "at", "once", "during"])
       || ["every", "at", "once"].filter((key) => Object.hasOwn(input, key)).length !== 1) return null;
     const during = Object.hasOwn(input, "during") ? { during: input.during } : {};
@@ -188,7 +193,7 @@ export function serializeRoutine(routine) {
   const problem = routineProblem(routine);
   if (problem) throw new Error(problem);
   const { name, title, trigger, tasks, gate, output, model, effort, level, enabled, context, body } = routine;
-  const writeTrigger = (rule) => ({ ...(rule.kind === "every" ? { every: rule.minutes }
+  const writeTrigger = (rule) => rule.kind === "on" ? { on: rule.event } : ({ ...(rule.kind === "every" ? { every: rule.minutes }
     : rule.kind === "at" ? { at: rule.time } : { once: rule.at }), ...(rule.during !== undefined ? { during: rule.during } : {}) });
   const data = { ...(routine.mode === "fork" ? { mode: "fork" } : {}),
     ...(routine.before?.length ? { before: routine.before } : {}), ...(routine.after?.length ? { after: routine.after } : {}), ...(title !== name ? { title } : {}),

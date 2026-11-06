@@ -4,7 +4,7 @@ import path from "node:path";
 import { entryText, listInbox } from "./inbox.js";
 import { inboxEntryText } from "./inbox-files.js";
 import { itemText, runSource, SEEN_KEPT } from "./feeds.js";
-import { mailTask } from "./mail-task.js";
+import { heldMailTask, mailTask } from "./mail-task.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { startRoutine } from "./routine-task.js";
@@ -161,6 +161,7 @@ async function runTask(agent, task, cursor, state, now, routineName) {
   }
   if (task.kind === "notes") return notesTask(agent, task, cursor, state);
   if (task.kind === "email") return mailTask(agent, task, cursor, { block, now });
+  if (task.kind === "held-mail") return heldMailTask(agent, task, cursor, { block, now });
   if (task.kind === "chats") {
     const since = Date.parse(cursor.since || "") || now - 86400000;
     const chats = finishedChats(agent, since).slice(0, 30);
@@ -186,7 +187,7 @@ async function runTask(agent, task, cursor, state, now, routineName) {
  * Fire a routine: its tasks in order, its gate, and, when it runs, its run's prompt and first message. Returns plain
  * JSON (it is memoised by the clock), applied in a commit by `applyRoutine`. Never throws for a task's failure.
  */
-export async function executeRoutine(agent, routine, { cursors = {}, state, now = Date.now(), force = false } = {}) {
+export async function executeRoutine(agent, routine, { cursors = {}, state, now = Date.now(), force = false, event = null } = {}) {
   const next = {};
   const tasks = [];
   const blocks = [];
@@ -208,6 +209,8 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
     fresh += done.fresh;
     items.push(...done.items);
   }
+  // What started it, when an event did (`trigger: { on: … }`): a line of its own; what it brought, its tasks gather.
+  if (event) blocks.unshift(block("event", { name: event.name }, event.text));
   const run = force ? routine.gate !== "never" : routine.gate === "always" || (routine.gate === "when-new" && fresh > 0);
   if (!run) return { run: false, cursors: next, tasks, items, fresh };
   const vars = { ...await promptVars(agent, now), ...taskVars,
@@ -253,10 +256,11 @@ export async function routineClocks(agent) {
       everyMinutes: rule.kind === "every" ? rule.minutes : null,
       ...(rule.during !== undefined ? { during: rule.during === "quiet" ? (quiet?.enabled ? `${quiet.start}-${quiet.end}` : null) : rule.during } : {}) });
     // A one-off whose time has passed has fired (or was missed): its file stays as a record, its clock does not.
-    const rules = (Array.isArray(trigger) ? trigger : [trigger])
-      .filter((rule) => rule.kind !== "once" || Date.parse(rule.at) >= Date.now() - 60_000).map(clockRule);
+    // An event's trigger (`on:`) has no clock: the event starts the routine (agent.js fireEvent).
+    const timed = (Array.isArray(trigger) ? trigger : [trigger]).filter((rule) => rule.kind !== "on");
+    const rules = timed.filter((rule) => rule.kind !== "once" || Date.parse(rule.at) >= Date.now() - 60_000).map(clockRule);
     if (!rules.length) continue;
-    const windowed = Array.isArray(trigger) || trigger.during !== undefined;
+    const windowed = timed.length > 1 || timed[0].during !== undefined;
     clocks[`r-${routine.name}`] = { ...(windowed ? { kind: "rules", rules } : rules[0]),
       title: routine.title, task: null, routine: routine.name };
   }
@@ -321,6 +325,7 @@ const toolResult = (text, isError = false) => ({ output: [{ type: "text", text }
 export const triggerWords = (trigger, compact = false) => {
   if (Array.isArray(trigger)) return trigger.map((rule) => triggerWords(rule, true)).join("; ");
   const words = trigger.kind === "every" ? (compact && trigger.minutes === 60 ? "hourly" : compact && trigger.minutes % 60 === 0 ? `every ${trigger.minutes / 60} hours` : `every ${trigger.minutes} min`)
+    : trigger.kind === "on" ? `on ${trigger.event.replace(/-/g, " ")}`
     : trigger.kind === "at" ? (trigger.time === "quiet" ? "daily as quiet hours start" : `daily at ${trigger.time}`) : `once at ${trigger.at}`;
   return words + (trigger.during === "quiet" ? " in quiet hours" : trigger.during ? ` during ${trigger.during}` : "");
 };

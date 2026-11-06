@@ -51,7 +51,7 @@ export function shouldCompact(settings, usage) {
 }
 
 /** The same name cannot run twice at once. Request keys also survive completed firings. */
-export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outcome, force = false, chain = [], key = `r-${routine.name}:${slot}` } = {}) {
+export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outcome, force = false, chain = [], key = `r-${routine.name}:${slot}`, event = null } = {}) {
   if (chain.includes(routine.name) || chain.length >= ROUTINE_DEPTH) throw new Error(`Routine cycle or depth limit: ${[...chain, routine.name].join(" -> ")}.`);
   doc.routineRuns ||= {};
   doc.routineState ||= {};
@@ -66,7 +66,7 @@ export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outc
   const taskId = await tx.createTask(routineTask(agent.runtime), { homeId, name: routine.name }, {
     conversationId: homeId, ownership: { kind: "conversation" }, background: true,
   });
-  doc.routineRuns[taskId] = { taskId, routine, slot, key, force, chain: [...chain, routine.name],
+  doc.routineRuns[taskId] = { taskId, routine, slot, key, force, ...(event ? { event } : {}), chain: [...chain, routine.name],
     previousAt: previous.lastAt || null, startedAt: Date.now(), ...(outcome ? { outcome } : {}) };
   doc.routineState[routine.name] = { ...previous, key, taskId, lastAt: slot, lastError: null };
   return taskId;
@@ -194,7 +194,7 @@ export function routineTask(runtime) {
         const agent = runtime.agent;
         const state = await api.snapshot(AgentDoc, context);
         const outcome = record.outcome || await api.memo("gather", await executeRoutine(agent, record.routine, {
-          cursors: state.cursors?.[record.routine.name] || {}, state, now: api.now(), force: record.force,
+          cursors: state.cursors?.[record.routine.name] || {}, state, now: api.now(), force: record.force, event: record.event || null,
         }), context);
         if (outcome.run && await agent.overBudget()) throw new Error("Routine skipped: today's budget is spent.");
         await api.commit(async (tx) => {

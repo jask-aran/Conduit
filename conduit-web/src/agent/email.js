@@ -201,8 +201,13 @@ export class EmailChannel {
       title: bare(mail.subject) || "(no subject)", body: body || "(no text)", prompt, native, conversationId: home.conversationId,
       ...(wakes ? {} : { delivery: { state: "held", at } }) });
     // Not from someone who wakes jbot: it stays in the mail room, held, where the person sees it (Messages). It is mail to
-    // jbot, not context for the heartbeat, so it never reaches the context inbox.
-    if (!wakes) return;
+    // jbot, not context for the heartbeat, so it never reaches the context inbox; a routine on `trigger: { on:
+    // held-mail }` is woken, and its held-mail task reads it.
+    if (!wakes) {
+      await this.agent.fireEvent?.("held-mail", { key: messageId, text: `An email to ${this.config.address} was held: "${bare(mail.subject) || "(no subject)"}" from ${mail.from?.address || "unknown"}.` })
+        .catch((error) => console.warn("A held-mail routine could not start", error.message));
+      return;
+    }
     try { await this.agent.chatHost.say(home.chat.id, prompt); }
     catch (error) { this.log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } })); }
   }

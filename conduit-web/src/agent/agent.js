@@ -11,7 +11,7 @@ import { inboxFile, syncInboxFiles } from "./inbox-files.js";
 import { migrateSoul } from "./memory.js";
 import { migrateToRoutines, promptVars, retireEmailRoutine, runInstructions } from "./routines.js";
 import { startRoutine } from "./routine-task.js";
-import { readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
+import { listRoutines, readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
 const TEMPLATE_ID = "agent";
@@ -447,6 +447,29 @@ export class PersistentAgent {
       return id;
     }, this.context);
     return { ran: routine.gate !== "never", taskId };
+  }
+
+  /**
+   * An event (routine-files.js EVENTS) starts every routine on that is triggered by it (`trigger: { on: <event> }`):
+   * `text` is what its run is shown as an `<event>` block; `key` keeps one event to one run of each.
+   */
+  async fireEvent(name, { key, text }) {
+    if (!this.active() || await this.overBudget()) return [];
+    const routines = (await listRoutines(this.folder)).filter((routine) => !routine.error && routine.enabled !== false
+      && (Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger]).some((rule) => rule.kind === "on" && rule.event === name));
+    if (!routines.length) return [];
+    const { conversationId } = await this.home();
+    const harness = await this.runtime.open();
+    const conversation = await harness.conversation(conversationId, this.context);
+    const slot = new Date().toISOString();
+    return conversation.commit(async (tx) => {
+      const doc = await tx.doc(AgentDoc);
+      const ids = [];
+      for (const routine of routines) {
+        ids.push(await startRoutine(tx, doc, this, conversationId, routine, slot, { key: `event:${routine.name}:${key}`, event: { name, text } }));
+      }
+      return ids;
+    }, this.context);
   }
 
   /**
