@@ -29,7 +29,9 @@ const partyName = (party?: Party | string | null) => typeof party === "string" ?
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
-const clock = (at: string) => { const date = new Date(at); return Number.isFinite(date.getTime()) ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""; };
+// One formatter for every message: toLocaleTimeString builds a new one per call, the most of a long room's first draw.
+const TIME = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" });
+const clock = (at: string) => { const date = new Date(at); return Number.isFinite(date.getTime()) ? TIME.format(date) : ""; };
 const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
 
 /** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and

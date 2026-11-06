@@ -85,7 +85,8 @@ export function AgentPage(props: {
   onMount(() => {
     if (!props.panel) setAgentDashboardLaidOut(true);
     void refreshAgent();
-    const tick = window.setInterval(() => { setNow(Date.now()); if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
+    // In jbot's panel the jbot chat already follows the agent: only the ages tick here.
+    const tick = window.setInterval(() => { setNow(Date.now()); if (!props.panel && document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
   });
 

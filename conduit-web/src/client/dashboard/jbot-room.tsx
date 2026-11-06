@@ -42,6 +42,13 @@ export function JbotRoom(props: {
   const switched = () => desktop && !wide();
   const view = () => switched() && over() ? tab() : "chat";
   const setView = (next: "chat" | JbotTab) => { if (next === "chat") return void setOver(false); setTab(next); setOver(true); };
+  // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
+  // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
+  const [built, setBuilt] = createSignal(false);
+  onMount(() => {
+    const handle = window.setTimeout(() => setBuilt(true), 1500);
+    onCleanup(() => window.clearTimeout(handle));
+  });
   const toggle = () => {
     if (!wide()) return void setOver(!over());
     const next = !beside();
@@ -61,14 +68,14 @@ export function JbotRoom(props: {
     const toLatest = () => { if (pinned && viewport) viewport.scrollTop = viewport.scrollHeight; };
     const scrolled = () => { if (viewport) pinned = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48; };
     element.addEventListener("scroll", scrolled, { passive: true });
+    // The viewport and its reading column: every change to what it holds changes the column's size, so nothing watches
+    // the DOM itself (a mutation observer over the transcript re-observed every row on every change).
     const sizes = new ResizeObserver(toLatest);
-    const watch = () => { sizes.disconnect(); sizes.observe(element); for (const child of element.children) sizes.observe(child); toLatest(); };
-    const tree = new MutationObserver(watch);
-    tree.observe(element, { childList: true, subtree: true, characterData: true });
-    queueMicrotask(watch);
+    sizes.observe(element);
+    if (element.firstElementChild) sizes.observe(element.firstElementChild);
     let stopClearing: (() => void) | null = null;
     const frame = requestAnimationFrame(() => { if (root && dock) stopClearing = clearDock(root, dock, toLatest); });
-    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
+    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
   };
 
   return <JbotPanelControl.Provider value={{ open, toggle, view, setView, switched }}><SheetFill data-jbot-room="">
@@ -76,7 +83,7 @@ export function JbotRoom(props: {
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} open={open()} swap={desktop} onClose={() => setOver(false)} onWide={setWide}
-          panel={props.panel({ get tab() { return tab(); }, onTab: setTab, get tabs() { return !switched(); }, done: () => setOver(false) })}>
+          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, get tabs() { return !switched(); }, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />

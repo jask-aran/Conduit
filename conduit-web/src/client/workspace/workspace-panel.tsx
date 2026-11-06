@@ -81,6 +81,10 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const [width, setWidth] = createSignal(Math.max(unitPx(MIN_WORKSPACE_PANE_UNITS), Math.min(unitPx(MAX_WORKSPACE_PANE_UNITS), Number(readGeometrySetting("width")) || unitPx(DEFAULT_WORKSPACE_PANE_UNITS))));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? unitPx(DOCK_GAP_UNITS) : 0);
+  // A pane's document in the dock keeps the width it is open at while the dock slides open or shut (shell.css
+  // .ui-dock-document): the dock's width eases, and a transcript re-laid out at each frame's width dropped frames.
+  const [documentWidth, setDocumentWidth] = createSignal(shellWidth());
+  createEffect(() => { const next = shellWidth(); if (next > 0.5) setDocumentWidth(next); });
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
   // Review comments ride the composer, which a dashboard has before its chat
   // exists, so they follow the loaded chat rather than the panel's own scope.
@@ -620,7 +624,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <Show when={props.open()}>
       <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
-    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, "--dock-document-width": `${documentWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
     <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}

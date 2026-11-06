@@ -47,7 +47,8 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
  * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
  * chat from its foot, a scrim over the rest that closes it; with `swap` (a desktop: the dock, a narrow pane) in the
- * chat's place, the chat kept where it was underneath. onWide: which it is now, for the controls that open it.
+ * chat's place, the chat kept where it was underneath. onWide: when that changes (it starts narrow), for the
+ * controls that open it.
  */
 export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; swap?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
@@ -55,10 +56,10 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   const [wide, setWide] = createSignal(false);
   onMount(() => {
     const measure = () => { const next = root.clientWidth >= need.offsetWidth; if (next !== wide()) { setWide(next); props.onWide?.(next); } };
+    // Measured when the observer first reports, after layout and before paint: a read at mount forced a layout of
+    // the whole new chat in the middle of drawing it.
     const sizes = new ResizeObserver(measure);
     sizes.observe(root);
-    measure();
-    props.onWide?.(wide());
     onCleanup(() => sizes.disconnect());
   });
   const over = () => !wide() && props.open;

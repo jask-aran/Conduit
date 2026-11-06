@@ -912,6 +912,12 @@ function App() {
    * event you had to be watching for.
    */
   const [updateState, setUpdateState] = createSignal<UpdateState>({ kind: "idle" });
+  // Progress arrives per downloaded chunk, several a frame: the row redraws only when what it says changes.
+  const sayProgress = (label: string, onCancel?: () => void) => {
+    const current = updateState();
+    if (current.kind === "working" && current.label === label && current.onCancel === onCancel) return;
+    setUpdateState({ kind: "working", label, onCancel });
+  };
   const pwaUpdating = () => { const state = updateState().kind; return state === "checking" || state === "working"; };
   /*
    * "Nothing to install" is an answer, and it was only ever given in a toast.
@@ -992,7 +998,7 @@ function App() {
           if (progress.phase === "checking") return;
           step = "downloading the new interface";
           const share = progress.total ? ` ${Math.round((progress.downloaded / progress.total) * 100)}% of ${megabytes(progress.total)}` : ` ${megabytes(progress.downloaded)}`;
-          setUpdateState({ kind: "working", label: `Downloading the new interface…${share}`, onCancel: cancel });
+          sayProgress(`Downloading the new interface…${share}`, cancel);
         });
         if (live) {
           const outcome = await bounded(live);
@@ -1012,13 +1018,13 @@ function App() {
         // A background check that found one says so while it downloads, quietly: no spinner over the page, no Cancel.
         if (quiet) {
           const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-          setUpdateState({ kind: "working", label: `Update available · downloading ${share}%` });
+          sayProgress(`Update available · downloading ${share}%`);
           return;
         }
         step = `downloading ${progress.version}`;
         touch();
         const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
-        setUpdateState({ kind: "working", label: `Downloading ${progress.version}… ${share}%`, onCancel: cancel });
+        sayProgress(`Downloading ${progress.version}… ${share}%`, cancel);
       }, quiet));
       if (result.kind === "ready") setUpdateState({ kind: "ready" });
       else if (!quiet) sayUpToDate();
