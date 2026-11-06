@@ -360,7 +360,7 @@ export function bindVisualViewportShell(): () => void {
         travel?.cancel();
         travel = null;
         if (travelsWithoutLayout()) {
-          travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt },
+          travel = travelWithoutLayout({ from: info.from, to: info.to, durationMs, curve, startedAt: info.startedAt, rest: restBottom },
             (height) => { shellKeyboard = height; noteKeyboardFrame(true); sync(); });
           keyboardTravel(travelLeft, travelEasing(curve));
           return;

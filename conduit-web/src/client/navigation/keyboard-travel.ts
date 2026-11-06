@@ -37,12 +37,28 @@ export const travelsWithoutLayout = () => !!document.querySelector(".ui-phone-co
 export const travelEasing = (curve: number[]) => CSS.supports("animation-timing-function", "linear(0, 1)") && curve.length >= 2
   ? `linear(${curve.map((value) => Math.min(1.5, Math.max(-0.5, value))).join(", ")})` : "cubic-bezier(.2, 0, 0, 1)";
 
-export type Travel = { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number };
+/** rest: the navigation bar's room with no keyboard (the shell's --safe-area-inset-bottom-rest), which the keyboard
+ *  covers before the composer moves at all. */
+export type Travel = { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number; rest?: number };
+
+/**
+ * The curve of what rides the composer: the composer sits on the keyboard or on the navigation bar's room, whichever is
+ * higher, so it moves only while the keyboard is above that room -- landing (or setting off) while the keyboard is
+ * still in the bar's room. The keyboard's own curve spread the composer's move over the keyboard's whole travel: the
+ * transcript arrived after the composer, a band of page showing under it until it did.
+ */
+export function ridingCurve(travel: Travel): number[] {
+  const rest = travel.rest ?? 0;
+  const at = (progress: number) => Math.max(rest, travel.from + (travel.to - travel.from) * progress);
+  const start = at(0), end = at(1);
+  if (!rest || Math.abs(end - start) < 0.5) return travel.curve;
+  return travel.curve.map((progress) => Math.round(((at(progress) - start) / (end - start)) * 1000) / 1000);
+}
 
 /** One travel. `setKeyboard(height)` sets the shell's keyboard height and lays the app out for it. */
 export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number) => void) {
   const low = Math.min(travel.from, travel.to);
-  const easing = travelEasing(travel.curve);
+  const riding = travelEasing(ridingCurve(travel));
   const riders = [...document.querySelectorAll(RIDERS)].filter(shown);
   const away = latestAway();
   const scrollers = away ? [] : [...document.querySelectorAll(SCROLLERS)].filter(shown);
@@ -68,14 +84,14 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const duration = Math.max(1, travel.durationMs);
   const along = travel.startedAt ? Math.min(duration - 1, Math.max(0, Date.now() - travel.startedAt)) : 0;
   const clamped = clamps.map(({ scroller, shift }) => {
-    const animation = scroller.animate([{ transform: `translateY(${-shift}px)` }, { transform: "none" }], { duration, easing, fill: "forwards" });
+    const animation = scroller.animate([{ transform: `translateY(${-shift}px)` }, { transform: "none" }], { duration, easing: riding, fill: "forwards" });
     animation.currentTime = along;
     return animation;
   });
   const animations = [...riders, ...scrollers].map((element) => {
     const animation = element.animate(
       [{ transform: `translateY(${atFrom - atLow}px)` }, { transform: `translateY(${atTo - atLow}px)` }],
-      { duration, easing, fill: "forwards" });
+      { duration, easing: riding, fill: "forwards" });
     animation.currentTime = along;
     return animation;
   });
