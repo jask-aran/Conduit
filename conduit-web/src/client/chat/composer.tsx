@@ -922,6 +922,10 @@ export function Composer(props: {
             else if (name === "latest") scrollToLatest();
             else if (name === "undo" || name === "delete" || name === "left" || name === "right" || name === "select") editActions[name === "select" ? "end" : name]();
             else if (name === "keyboard" && nativeClosing) reopenNative = true;
+            // The rest are the web's to carry out once typing ends. Message options (+) closes the keyboard because its
+            // menu is the web's popover, and the native composer's pills are drawn in a window over the app
+            // (ComposerFrost): nothing the WebView draws can appear above them, so the web takes the composer back
+            // first and opens the menu from its own pill (finishNativeTyping). The camera and the mic go the same way.
             else { nativeAction = name; void nativeComposer.end(); }
           }),
         ]);
