@@ -20,7 +20,9 @@ export function createClientBundle(dist) {
     const index = await fs.readFile(path.join(dist, "index.html"));
     const build = crypto.createHash("sha256").update(index).digest("hex").slice(0, 16);
     if (cached?.build === build) return cached;
-    cached = { build, zip: null };
+    // When it was built: a client that switches between servers takes only an interface newer than its own.
+    const builtAt = (await fs.stat(path.join(dist, "index.html"))).mtime.toISOString();
+    cached = { build, builtAt, zip: null };
     return cached;
   };
 
@@ -31,8 +33,8 @@ export function createClientBundle(dist) {
 
   return {
     async manifest() {
-      const { build } = await current();
-      return { build };
+      const { build, builtAt } = await current();
+      return { build, builtAt };
     },
     async zip(build) {
       const entry = await current();

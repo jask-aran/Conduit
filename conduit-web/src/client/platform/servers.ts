@@ -1,3 +1,4 @@
+import { rememberView } from "./resume-view.ts";
 import { createEffect, createSignal, on } from "solid-js";
 import { installedClientKind, isInstalledClient } from "./installed-client.ts";
 import { publishTrustedIdentities, type TrustedIdentity } from "./certificate-pins.ts";
@@ -617,6 +618,9 @@ export function switchToServer(origin: string, installed: boolean) {
     if (origin !== location.origin) location.assign(origin);
     return;
   }
+  // The app is rebuilt around the other server: it opens on its sidebar, which names the server and lists its chats,
+  // rather than on a chat address of the server just left.
+  if (origin !== active()) rememberView({ path: "/", sidebar: true });
   setActiveServer(origin);
 }
 

@@ -22,6 +22,7 @@ import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { takeView, trackSidebar } from "./platform/resume-view.ts";
 import { startPush } from "./platform/push.ts";
 // Keeps Float told of the hub path in use (and its sign-in), from startup rather than only once Settings has loaded.
 import { onFloatOpensSettings } from "./platform/float";
@@ -726,7 +727,11 @@ function App() {
     return stored === "diff" || stored === "chat" || stored === "terminal" ? stored : stored === "artifacts" ? "chat" : "files";
   })());
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(false);
+  // Back where the person was after an interface update or a server switch (resume-view.ts): the path is restored
+  // before the route is read, and the sidebar as it was.
+  const resumed = takeView();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(resumed?.sidebar === true);
+  trackSidebar(mobileSidebarOpen);
   const initialRouteId = pathChatId();
   // Asked for before anything else on the way in: every route waits on it,
   // and behind the browser's six connections to a server it queued for a

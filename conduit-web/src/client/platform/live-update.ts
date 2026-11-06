@@ -10,8 +10,25 @@
  *
  * Development builds only (`.dev`): a release client must not take whatever
  * interface the server it points at happens to run.
+ *
+ * On its own it only moves forward: an interface built before the one running is not taken, so switching between
+ * servers on different builds does not swap the interface back and forth. Check for updates by hand takes whatever
+ * the connected server serves.
  */
+
+/** Whether the server's interface was built after this one (its manifest's `builtAt`); unknown is not newer. */
+async function serverIsNewer(server: string): Promise<boolean> {
+  try {
+    const response = await authorizedFetch(`${server}/client-bundle/manifest.json`, { signal: AbortSignal.timeout(5000) });
+    const { builtAt } = await response.json() as { builtAt?: string };
+    const theirs = Date.parse(builtAt || ""), ours = Date.parse(clientBuild.builtAt || "");
+    return Number.isFinite(theirs) && (!Number.isFinite(ours) || theirs > ours);
+  } catch { return false; }
+}
 import { installedClientKind } from "./installed-client.ts";
+import { authorizedFetch } from "../api/native-auth-client.ts";
+import { clientBuild } from "./build-info.ts";
+import { rememberView } from "./resume-view.ts";
 
 /** Where a fetch of the server's interface is: asking which build it serves, then downloading it. */
 export interface BundleProgress { phase: "checking" | "downloading"; downloaded: number; total: number }
@@ -50,6 +67,7 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
     if (!server || checking) return;
     checking = true;
     try {
+      if (!(await serverIsNewer(server))) { staged = null; return; }
       const result = await plugin.stageBundle({ origin: server });
       staged = result.state === "staged" ? result.build : null;
     } catch {
@@ -65,6 +83,7 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
     try {
       const result = await plugin.stageBundle({ origin: server });
       if (result.state !== "staged") return "current";
+      rememberView();
       await plugin.applyBundle({ build: result.build });
       return "applying";
     } catch (error) {
@@ -76,7 +95,7 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
   void check();
   await App.addListener("resume", () => void check());
   await App.addListener("pause", () => {
-    if (staged) void plugin.applyBundle({ build: staged }).catch(() => {});
+    if (staged) { rememberView(); void plugin.applyBundle({ build: staged }).catch(() => {}); }
   });
 }
 

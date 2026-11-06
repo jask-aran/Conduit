@@ -25,6 +25,29 @@ let edges: unknown, gapPx: number | undefined;
 if (typeof window !== "undefined") for (const change of ["resize", "conduit:ui-scale"]) addEventListener(change, () => { edges = gapPx = undefined; });
 /** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
  *  under (the safe area), so a menu never runs under a phone's navigation bar. */
+/*
+ * A touch that picks a row closes the menu on its pointerup, and the browser's click for that same touch then lands on
+ * whatever was under the menu (a dashboard row, a New button). The click a touch on a menu surface makes is spent
+ * there: once that surface has gone, the next click within the tap's time does nothing. A click on the surface while it
+ * is still open, and any mouse, are untouched.
+ */
+const SURFACES = "[data-slot='ui-menu-content'], [data-slot='ui-menu-sub-content'], [data-slot='ui-context-menu-content'], [data-slot='ui-popover-content']";
+let spent: { surface: Element; until: number } | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerup", (event) => {
+    const surface = event.pointerType === "mouse" ? null : (event.target as Element | null)?.closest?.(SURFACES);
+    if (surface) spent = { surface, until: performance.now() + 700 };
+  }, true);
+  document.addEventListener("click", (event) => {
+    const tap = spent;
+    if (!tap || performance.now() > tap.until) { spent = null; return; }
+    spent = null;
+    if (tap.surface.isConnected && tap.surface.contains(event.target as Node)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+}
+
 export function edgePadding() { return (edges ??= measureEdges()) as number; }
 function measureEdges() {
   const probe = document.createElement("div");
