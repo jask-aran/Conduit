@@ -188,6 +188,15 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   };
   const focusTabDefault = (next: PanelTab) => {
+    // jbot's: its composer, as a chat's pane is entered, never its first message.
+    if (next === "jbot") {
+      queueMicrotask(() => {
+        const field = panelRoot?.querySelector<HTMLElement>(".ui-tool-kept[data-shown] :is(textarea, [contenteditable='true'])");
+        if (field) field.focus({ preventScroll: true });
+        else panelRoot?.querySelector<HTMLElement>(".ui-tool-content")?.focus({ preventScroll: true });
+      });
+      return;
+    }
     if (next === "files") {
       if (!files.directories()[""]) void files.loadDirectory();
       // The filter lives in the file navigator, which a narrow panel folds
@@ -240,7 +249,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const focusWorkspaceSurface = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest(".ui-dock-document")) return;
+    // A document in the dock (a docked pane, jbot's chat) takes its clicks as a pane does: the focus lands where the
+    // click did, not on its first control (jbot's oldest message, scrolled to the top to show it).
+    if (target?.closest(".ui-dock-document, .ui-tool-kept")) return;
     // The terminal is its own pointer surface: preventDefault here suppresses
     // the compatibility mouse events, so xterm never sees the mousedown and
     // loses click-to-position, drag selection, and mouse reporting to the TUI.
