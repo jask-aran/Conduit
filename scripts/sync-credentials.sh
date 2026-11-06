@@ -13,12 +13,13 @@
 #   models    pi/settings.json (default and scoped models), pi/models.json (custom providers), pi/models-store.json,
 #             pi/web-search.json
 #   keys      the API keys in pi/auth.json, merged into the remote's own file, whose sign-ins stay as they are
-#   jbot      its profile (USER.md), memory (MEMORY.md), context overrides (prompt-overrides/) and settings (agent.json),
+#   jbot      its context overrides (prompt-overrides/) and settings (agent.json),
 #             merged so the remote keeps its own switches: whether jbot, its heartbeat, brief and email are on (this
 #             server's jbot can be quiet while the remote's runs); SOUL.md, RUN.md and its routines come from the template
 #   web       the ChatGPT web session (chatgpt-web/cookies.json)
 #
-# Never copied: chats, projects and workspaces, jbot's history (diary, mail, reports, threads), the login password and
+# Never copied: chats, projects and workspaces, what each jbot learns (USER.md, MEMORY.md) and its history (diary, mail,
+# reports, threads), the login password and
 # sessions, server identity, network and push keys, and OAuth sign-ins (pi/auth.json's oauth entries,
 # agent-connectors/): a refresh token used from two machines is rotated by one and dies on the other, so sign in to
 # those on each server. jbot's mailbox (agent/email.json) can be polled by one server only: `--move-email` hands it
@@ -36,7 +37,7 @@ AGENT=chat/files/conduit-agent
 
 FILES=(preferences.json keybindings.json runtime.json account voice.json
   pi/settings.json pi/models.json pi/models-store.json pi/web-search.json
-  "$AGENT/USER.md" "$AGENT/MEMORY.md" prompt-overrides
+  prompt-overrides
   chatgpt-web/cookies.json)
 (( move_email )) && FILES+=(agent/email.json)
 present=()
