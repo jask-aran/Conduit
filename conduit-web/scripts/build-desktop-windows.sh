@@ -130,7 +130,7 @@ fi
 
 if [ -n "$dev_client" ]; then
   # Conduit Durable updates from the durable head it is the client of.
-  default_base="https://localconduit.jask-aran.com/desktop-updates"
+  default_base="https://conduit-local.jask-aran.com/desktop-updates"
   [ "$variant" = durable ] && default_base="https://conduit-durable.jask-aran.com/desktop-updates"
   update_base=${CONDUIT_LOCAL_UPDATE_URL:-"$default_base"}
 else

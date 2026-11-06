@@ -307,6 +307,8 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
         import("@tauri-apps/plugin-updater"), import("@tauri-apps/api/app"),
       ]);
       let pending: InstanceType<typeof Update> | null = null;
+      // A server that answered "nothing newer" is the answer: the built-in endpoint is only for when none answered.
+      let answered = false;
       const unanswered: string[] = [];
       if (await getIdentifier() === "com.jaskaran.conduit.desktop.dev") {
         const [{ activePath, activeServer, pathsOf }, { invoke }] = await Promise.all([
@@ -323,6 +325,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
           try {
             const metadata = await invoke<ConstructorParameters<typeof Update>[0] | null>("check_dev_update", { endpoint });
             if (metadata) pending = new Update(metadata);
+            answered = true;
             break;
           } catch (error) {
             unanswered.push(`${endpoint} (${error instanceof Error ? error.message : String(error)})`);
@@ -333,7 +336,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       // endpoint built into this client is still a valid update source, but
       // when it fails too, its error alone names an address the person never
       // chose -- so say which of theirs were tried.
-      if (!pending) {
+      if (!pending && !answered) {
         try {
           pending = await check();
         } catch (error) {

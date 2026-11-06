@@ -377,7 +377,7 @@ land.
 | | Built by | Identifier | Signed with | Updates from |
 | --- | --- | --- | --- | --- |
 | Windows, released | CI, on a tag | `com.jaskaran.conduit.desktop` | the minisign release key | GitHub releases |
-| Windows, dev | `npm run desktop:build:win -- --dev` | `com.jaskaran.conduit.desktop.dev` | the same key | the active server's `/desktop-updates`, else `https://localconduit.jask-aran.com/desktop-updates` |
+| Windows, dev | `npm run desktop:build:win -- --dev` | `com.jaskaran.conduit.desktop.dev` | the same key | the active server's `/desktop-updates`, else `https://conduit-local.jask-aran.com/desktop-updates` |
 | Android, released | CI, on a tag | `com.jaskaran.conduit` | the release keystore | GitHub releases |
 | Android, dev | `npm run android:build` | `com.jaskaran.conduit.dev` | the local debug key | the connected server's interface bundle only |
 
