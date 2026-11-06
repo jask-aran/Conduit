@@ -1470,6 +1470,8 @@ function App() {
         window.clearTimeout(settleTimer);
         for (const part of [parts.pane, parts.shell, parts.backdrop]) { part.removeAttribute("data-drawer-settle"); part.setAttribute("data-drawer-drag", ""); }
         drag = { parts, progress, frame: 0, from: mobileSidebarOpen(), felt: mobileSidebarOpen() };
+        // Where it is taken from is drawn at once, in the same frame the settle stops: a frame later it has jumped.
+        for (const part of [parts.body, parts.shell, parts.backdrop]) part.style.setProperty("--drawer", String(progress));
       }
       drag.progress = progress;
       const landing = lands ? !drag.from : drag.from;
@@ -1480,6 +1482,15 @@ function App() {
         drag.frame = 0;
         for (const part of [drag.parts.body, drag.parts.shell, drag.parts.backdrop]) part.style.setProperty("--drawer", String(drag.progress));
       });
+    };
+    /** How open the sidebar is drawn now, when it is still on its way open or shut (0 to 1); null at rest. The page's
+     *  slide is read, not the state: the state already says where it is going. */
+    const drawerMoving = (): number | null => {
+      const parts = drawerParts();
+      const width = parts?.pane.offsetWidth;
+      if (!parts || !width) return null;
+      const at = new DOMMatrixReadOnly(getComputedStyle(parts.shell).transform).m41 / width;
+      return Math.abs(at - (mobileSidebarOpen() ? 1 : 0)) * width > 2 ? Math.max(0, Math.min(1, at)) : null;
     };
     /** Lets the carried sidebar go: it settles open or shut from where it is (open: whether it lands open). */
     const release = (open: boolean) => {
@@ -1492,7 +1503,8 @@ function App() {
       for (const part of [parts.body, parts.shell, parts.backdrop]) part.style.removeProperty("--drawer");
       for (const part of [parts.pane, parts.shell, parts.backdrop]) { part.removeAttribute("data-drawer-drag"); part.setAttribute("data-drawer-settle", ""); }
       setMobileSidebar(open);
-      settleTimer = window.setTimeout(() => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); }, 400);
+      // Kept for as long as the settle takes (the Animation speed setting slows it), not a fixed time it can outlast.
+      settleTimer = window.setTimeout(() => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); }, duration("--duration-gentle") * 2 + 150);
     };
     // A swipe hears its touch first, on the window as it is captured: an open popover stops a touch outside it from
     // going on (dismissing itself), which left a carried sidebar never let go. Its moves and end also go to where it
@@ -1522,11 +1534,16 @@ function App() {
       if (swipeBlocked(event.target) || String(window.getSelection() || "")) return;
       const touch = event.touches[0]!;
       const opening = !mobileSidebarOpen() && !panelOpen();
-      if (opening && browserOwnsEdges) return;
-      const sidebar = mobileSidebarOpen() || (!panelOpen() && touch.clientX <= EDGE_PX);
+      // A sidebar still on its way open or shut is caught where it is drawn, and held there: a finger that then carries
+      // it carries it on from that place, and one that does not lets it settle from there.
+      const caught = panelOpen() ? null : drawerMoving();
+      if (caught !== null) carry(caught, false);
+      if (opening && browserOwnsEdges && caught === null) return;
+      const sidebar = mobileSidebarOpen() || caught !== null || (!panelOpen() && touch.clientX <= EDGE_PX);
       const travel = sidebar ? document.querySelector<HTMLElement>(".ui-nav-pane[data-drawer]")?.offsetWidth : undefined;
-      const gesture = beginEdgeSwipe({ x: touch.clientX, y: touch.clientY, t: event.timeStamp, width: window.innerWidth, sidebarOpen: mobileSidebarOpen(), workspaceOpen: panelOpen(), travel });
+      const gesture = beginEdgeSwipe({ x: touch.clientX, y: touch.clientY, t: event.timeStamp, width: window.innerWidth, sidebarOpen: mobileSidebarOpen(), workspaceOpen: panelOpen(), travel, ...(caught !== null ? { from: caught } : {}) });
       if (gesture) { swipe = { id: touch.identifier, gesture }; hear(event.target); }
+      else if (caught !== null) release(mobileSidebarOpen());
     };
     const move = (event: TouchEvent) => {
       if (!swipe || !once(event)) return;
@@ -1535,7 +1552,7 @@ function App() {
       if (!touch) return;
       const point = { x: touch.clientX, y: touch.clientY, t: event.timeStamp };
       const state = swipe.gesture.move(point);
-      if (state === "abandoned") swipe = null;
+      if (state === "abandoned") { swipe = null; release(mobileSidebarOpen()); }
       else if (state === "swiping" && swipe.gesture.action.endsWith("sidebar")) carry(swipe.gesture.progress(point), swipe.gesture.lands(point));
     };
     const end = (event: TouchEvent) => {

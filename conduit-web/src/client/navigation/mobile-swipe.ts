@@ -9,7 +9,7 @@ export type MobileSwipeAction = "open-sidebar" | "close-sidebar" | "open-workspa
  * Nothing is decided until the finger has moved LOCK_PX. Then the touch is a
  * swipe (mostly sideways, the right way) or a scroll, and that is final: a
  * scroll that drifts sideways later never becomes a swipe. A swipe carries its
- * panel with the finger (progress, 0 shut to 1 open, over the panel's travel)
+ * panel with the finger from where it was decided (progress, 0 shut to 1 open, over the panel's travel)
  * and lands open or shut on letting go: past COMMIT of the way, or flicked
  * there; a flick back the other way returns it, however far it had come.
  */
@@ -28,7 +28,10 @@ const VELOCITY_MS = 80;
 
 /** travel: how far the panel moves between shut and open, in px, when it follows the finger (it lands past COMMIT of
  *  it). Without one the panel only opens or shuts on letting go, after the width's 30% (at most 120px). */
-export interface SwipeStart { x: number; y: number; t: number; width: number; sidebarOpen: boolean; workspaceOpen: boolean; travel?: number }
+export interface SwipeStart { x: number; y: number; t: number; width: number; sidebarOpen: boolean; workspaceOpen: boolean; travel?: number;
+  /** How open the sidebar is where a touch caught it still moving (0 to 1): the swipe carries it on from there, and may
+   *  start anywhere, since the page it slides is wherever the motion had got to. */
+  from?: number }
 export interface SwipePoint { x: number; y: number; t: number }
 
 export interface EdgeSwipe {
@@ -48,6 +51,7 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
   // Which action this touch could become, and which way it must go.
   const intent: { action: MobileSwipeAction; sign: 1 | -1 } | null =
     start.sidebarOpen ? { action: "close-sidebar", sign: -1 }
+      : start.from !== undefined ? { action: "open-sidebar", sign: 1 }
       : start.workspaceOpen ? { action: "close-workspace", sign: 1 }
         : start.x <= EDGE_PX ? { action: "open-sidebar", sign: 1 }
           : start.x >= start.width - EDGE_PX ? { action: "open-workspace", sign: -1 }
@@ -58,6 +62,14 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
   const span = start.travel ?? Math.min(120, start.width * 0.3);
   const opening = intent.action.startsWith("open");
   const travel = (point: SwipePoint) => (point.x - start.x) * intent.sign;
+  const base = start.from ?? (opening ? 0 : 1);
+  // The panel moves from where the touch became a swipe, not from where it went down: carried from the touch, it would
+  // jump the lock's distance (more on a quick start) the frame the swipe is decided. It trails the finger by that much.
+  let slop = 0;
+  const at = (moved: number) => Math.max(0, Math.min(1, base + (opening ? 1 : -1) * moved / span));
+  const progress = (point: SwipePoint) => at(Math.max(0, travel(point) - slop));
+  // Where it lands is the finger's whole way, so the lag it is drawn with changes nothing about that.
+  const lands = (point: SwipePoint) => opening ? at(travel(point)) >= COMMIT : at(travel(point)) <= 1 - COMMIT;
   const velocity = () => {
     const last = recent[recent.length - 1]!;
     const first = recent.find((point) => last.t - point.t <= VELOCITY_MS) ?? last;
@@ -75,22 +87,20 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
       return state;
     }
     state = travel(point) > 0 && Math.abs(dx) >= Math.abs(dy) * SIDEWAYS_RATIO ? "swiping" : "abandoned";
+    if (state === "swiping") slop = travel(point);
     return state;
   };
   return {
     move,
     action: intent.action,
-    progress(point) {
-      const moved = Math.max(0, Math.min(1, travel(point) / span));
-      return opening ? moved : 1 - moved;
-    },
-    lands(point) { return travel(point) >= span * COMMIT; },
+    progress,
+    lands,
     end(point) {
       if (move(point) !== "swiping") return null;
       const distance = travel(point);
       const speed = velocity();
       if (speed <= -FLICK_PX_PER_MS) return null;
-      return distance >= (start.travel ? span * COMMIT : span) || (distance >= FLICK_MIN_PX && speed >= FLICK_PX_PER_MS) ? intent.action : null;
+      return (start.travel ? lands(point) : distance >= span) || (distance >= FLICK_MIN_PX && speed >= FLICK_PX_PER_MS) ? intent.action : null;
     },
   };
 }

@@ -31,11 +31,17 @@ test("a panel that follows the finger lands the way it was let go", () => {
   // Far out but flicked back: back. Barely out but flicked on: open.
   assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 50 }, { x: 300, y: 104, t: 400 }, { x: 260, y: 104, t: 440 }, { x: 200, y: 104, t: 470 }]), null);
   assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 20 }, { x: 70, y: 102, t: 50 }]), "open-sidebar");
-  // Closing from open counts down from 1.
+  // Closing from open counts down from 1, from where the touch became a swipe (20px in): no jump as it is decided.
   const gesture = beginEdgeSwipe({ x: 300, y: 100, t: 0, width: 400, sidebarOpen: true, workspaceOpen: false, ...travel });
   gesture.move({ x: 280, y: 101, t: 30 });
   assert.equal(gesture.action, "close-sidebar");
-  assert.equal(gesture.progress({ x: 130, y: 101, t: 60 }), 0.5);
+  assert.equal(gesture.progress({ x: 280, y: 101, t: 30 }), 1);
+  assert.equal(gesture.progress({ x: 110, y: 101, t: 60 }), 0.5);
+  // One caught still moving goes on from where it was caught.
+  const caught = beginEdgeSwipe({ x: 300, y: 100, t: 0, width: 400, sidebarOpen: false, workspaceOpen: false, from: 0.7, ...travel });
+  caught.move({ x: 320, y: 101, t: 30 });
+  assert.equal(caught.action, "open-sidebar");
+  assert.equal(caught.progress({ x: 320, y: 101, t: 30 }), 0.7);
 });
 
 test("the sidebar opens from 64px in", () => {
