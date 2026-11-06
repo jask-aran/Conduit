@@ -125,15 +125,23 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
     const form = client.kind === "android" || /^(Android|iOS)$/.test(client.platform || "") ? "phone" : client.kind === "desktop" ? "desktop" : "browser";
     const name = client.kind === "browser" ? client.agent || "Browser" : /-dev/.test(client.build) ? "Conduit Dev" : "Conduit";
     const said = mine ? (form === "browser" ? "this browser" : "this app") : client.platform || "";
-    const here = (mine && own ? [own] : []).concat(client.nodes || []).map((node) => byNode.get(node)).find(Boolean);
+    const machine = client.machine === "hub" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.hub)
+      : client.machine ? list.find((device) => device.name.toLowerCase() === client.machine!.toLowerCase()) : undefined;
+    // An app whose companion has no pairing now (taken off the network, or not set up again) still is the environment
+    // of its OS on its machine: the one environment of that name there, away and not claimed by another app.
+    const unpaired = () => {
+      if (form !== "desktop" || !machine || !client.platform) return undefined;
+      const candidates = machine.clients.filter((item) => item.node && !item.node.online && !item.part.headed
+        && item.node.name.toLowerCase() === client.platform!.toLowerCase());
+      return candidates.length === 1 ? candidates[0] : undefined;
+    };
+    const here = (mine && own ? [own] : []).concat(client.nodes || []).map((node) => byNode.get(node)).find(Boolean) ?? unpaired();
     if (here) {
       here.mine ||= mine;
       Object.assign(here.part, { headed: form, online: true, meta: [name, mine ? said : "", here.node?.online ? here.part.meta : "not sharing"].filter(Boolean).join(" · ") });
       continue;
     }
     const shown: Shown = { mine, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
-    const machine = client.machine === "hub" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.hub)
-      : client.machine ? list.find((device) => device.name.toLowerCase() === client.machine!.toLowerCase()) : undefined;
     if (machine) machine.clients.push(shown);
     else if (client.machine && client.machine !== "hub") list.push({ id: `machine:${client.machine}`, name: client.machine, paired: false, clients: [shown] });
     else if (form === "browser" && !mine) browsers.clients.push(shown);
