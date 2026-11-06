@@ -9,7 +9,7 @@ import { ClientCard, ClientCards, ClientPlaces, NetworkMap } from "@/components/
 import { LiveNote, SettingLine, SettingTitle, SettingValue } from "@/components/ui/overlay";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
-import { pairingWith, pairThisComputer } from "../platform/this-computer.ts";
+import { pairingWith, pairThisComputer, keepThisComputerConnected } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
 import { MachineReadout } from "./machine-readout.tsx";
 import { createNetwork, DeviceHarnesses, mountedOn, together, type Device, type Node, type Shown, type ShownDevice } from "./network-state.tsx";
@@ -114,11 +114,10 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
             <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
           </SettingLine>}</For>
           <Show when={companion && paired()}>
-            <SettingLine label={`Share with ${server()}`} title="Mounts the folders you choose on this computer in the network. It keeps running in the tray with the window closed.">
-              <Switch id="device-serve" label={`Share with ${server()}`} disabled={companion!.busy() || !companion!.settings()} checked={Boolean(companion!.settings()?.serveAsDevice)} onChange={(on) => void companion!.serve(on)} />
-            </SettingLine>
-            <SettingLine label={`Let ${server()} browse`} title={`${server()} can list this computer's folders and mount one picked in New workspace, with the grants below. Set here only.`}>
-              <Switch id="device-browse" label={`Let ${server()} browse this computer`} disabled={companion!.busy()} checked={Boolean(paired()?.browse)} onChange={(on) => void companion!.browse(on)} />
+            {/* Paired is connected: the workspaces mounted from here work whenever this app runs (in the tray too).
+                Sharing is the other thing: letting the hub go through this computer's folders and mount any of them. */}
+            <SettingLine label={`Share folders with ${server()}`} title={`${server()} can go through this computer's folders and mount any of them as a workspace (New workspace), with the grants below. Workspaces already mounted from here work either way, while this app runs. Set here only.`}>
+              <Switch id="device-browse" label={`Share this computer's folders with ${server()}`} disabled={companion!.busy()} checked={Boolean(paired()?.browse)} onChange={(on) => void companion!.browse(on)} />
             </SettingLine>
             <SettingLine label="New folders can be edited" title="Folders mounted from here, or by browsing this computer.">
               <Switch id="device-share-write" label="New folders can be edited" disabled={companion!.busy()} checked={grants().write} onChange={(on) => void companion!.grant({ ...grants(), write: on })} />
@@ -254,10 +253,6 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
     try { await work(); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(false); refresh(); }
   };
-  const serve = (on: boolean) => act(async () => {
-    const current = settings();
-    if (current) setSettings(await shell.saveSettings({ ...current, serveAsDevice: on }));
-  });
   const pair = () => act(async () => { await pairThisComputer(status()); setSettings(await shell.settings()); });
   const grants = () => pairing()?.newFolders ?? { write: true, shell: false };
   const share = (mainUrl: string) => act(() => shell.companion.share(mainUrl, grants().write, grants().shell));
@@ -266,8 +261,11 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
   const unpair = (mainUrl: string, nodeId: string | null) => act(async () => {
     await shell.companion.unpair(mainUrl);
     if (nodeId) await api(`/v0/nodes/${nodeId}`, { method: "DELETE" });
+    // Paired with nothing now, the companion stops; still paired elsewhere, it keeps running.
+    await keepThisComputerConnected();
+    setSettings(await shell.settings());
   });
-  return { read, settings, pairing, busy, error, serve, pair, share, grant, browse, unpair };
+  return { read, settings, pairing, busy, error, pair, share, grant, browse, unpair };
 }
 
 /**

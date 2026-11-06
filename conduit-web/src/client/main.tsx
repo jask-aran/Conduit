@@ -23,6 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { cancelUpdateDownload, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
+import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
 // Keeps Float told of the hub path in use (and its sign-in), from startup rather than only once Settings has loaded.
 import { onFloatOpensSettings } from "./platform/float";
@@ -6405,6 +6406,7 @@ window.addEventListener("vite:preloadError", (event) => {
 // the background (platform/live-update.ts).
 void startLiveUpdate(() => { const path = activePath(); return path ? dialOrigin(path) : null; }).catch(() => {});
 void startPush().catch(() => {});
+void keepThisComputerConnected().catch(() => {});
 
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
   {nativeApp ? <NativeRoot /> : <App />}

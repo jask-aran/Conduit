@@ -1220,7 +1220,7 @@ export function Sidebar(props: {
             <Show when={!terminals().length}><Note kind="nav">No live terminals</Note></Show>
           </Group>
         </>}>
-          <For each={byMachine()}>{(group) => <Group kind="nav" title={group.machine.label} away={awayNote(group.machine)}>
+          <For each={byMachine()}>{(group) => <Group kind="nav" title={group.machine.id === ownNode() ? `${group.machine.label} · this app` : group.machine.label} away={awayNote(group.machine)}>
             {/* The hub's machine is a client like any other, and the hub besides: its page (its harnesses, its files) first. */}
             <Show when={group.machine.hub} fallback={environmentRow(group.machine)}>{hubRow()}</Show>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>

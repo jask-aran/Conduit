@@ -7,7 +7,7 @@ import { api } from "../api/client.ts";
 import { httpUrl } from "../api/transport.js";
 import { desktopShell, type CompanionStatus } from "./installed-client.ts";
 
-type Listed = { devices: Array<{ nodes: Array<{ id: string; online: boolean; browse?: boolean; roots: Array<{ label: string }> }> }> };
+type Listed = { devices: Array<{ id: string; hub?: string | boolean; nodes: Array<{ id: string; online: boolean; browse?: boolean; roots: Array<{ label: string }> }> }> };
 type ListedNode = Listed["devices"][number]["nodes"][number];
 
 const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((device) => device.nodes);
@@ -23,6 +23,19 @@ async function paired() {
     if (!settings.serveAsDevice) await app.saveSettings({ ...settings, serveAsDevice: true });
   }
   return target;
+}
+
+/**
+ * A paired computer is connected: its companion runs whenever the app does, so the workspaces mounted from it are
+ * there while it is online. Paired with no companion running (a pairing made before this, or the old Serve switch
+ * left off) is put right at start; unpaired from everything, it stops.
+ */
+export async function keepThisComputerConnected() {
+  const shell = desktopShell;
+  if (!shell) return;
+  const [status, settings] = await Promise.all([shell.companion.status(), shell.settings()]);
+  const paired = Boolean(status?.node?.pairings.length);
+  if (paired !== settings.serveAsDevice) await shell.saveSettings({ ...settings, serveAsDevice: paired });
 }
 
 /** The node restarts to take a change; its hello says when it has. Asked until `ready` says so, for a while. */
@@ -61,9 +74,14 @@ export function pairingWith(status: CompanionStatus | null, nodeIds: Iterable<st
 export async function pairThisComputer(status: CompanionStatus | null) {
   const shell = desktopShell!;
   const deviceName = status?.node?.name || status?.node?.host || "This computer";
+  const mainUrl = dialableServer();
+  // On the hub's own machine (it dials the hub on loopback) this computer is the hub's device, another side of it
+  // (decision 29: Windows beside the WSL that is the hub), not a device of its own named for the machine.
+  const onHub = Boolean(mainUrl && /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|$)/.test(mainUrl));
+  const deviceId = onHub ? (await api<Listed>("/v0/nodes")).devices.find((device) => device.hub)?.id : undefined;
   const paired = await api<{ node: { id: string }; key: string; mainUrl: string; routes?: string[] }>("/v0/nodes", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl: dialableServer() }),
+    body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl, ...(deviceId ? { deviceId } : {}) }),
   });
   await shell.companion.pair(paired.mainUrl, paired.key, paired.node.id, deviceName, (paired.routes || []).slice(1));
   // Pairing is asking to share: the node starts with it.

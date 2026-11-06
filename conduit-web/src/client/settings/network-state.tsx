@@ -128,7 +128,8 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
     const machine = client.machine === "hub" ? list.find((device) => devices.find((paired) => paired.id === device.id)?.hub)
       : client.machine ? list.find((device) => device.name.toLowerCase() === client.machine!.toLowerCase()) : undefined;
     // An app whose companion has no pairing now (taken off the network, or not set up again) still is the environment
-    // of its OS on its machine: the one environment of that name there, away and not claimed by another app.
+    // of its OS on its machine: the one environment of that name there, away and not claimed by another app. It is
+    // not connected (its workspaces are away) until it is paired again.
     const unpaired = () => {
       if (form !== "desktop" || !machine || !client.platform) return undefined;
       const candidates = machine.clients.filter((item) => item.node && !item.node.online && !item.part.headed
@@ -138,7 +139,7 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
     const here = (mine && own ? [own] : []).concat(client.nodes || []).map((node) => byNode.get(node)).find(Boolean) ?? unpaired();
     if (here) {
       here.mine ||= mine;
-      Object.assign(here.part, { headed: form, online: true, meta: [name, mine ? said : "", here.node?.online ? here.part.meta : "not sharing"].filter(Boolean).join(" · ") });
+      Object.assign(here.part, { headed: form, online: true, meta: [name, mine ? said : "", here.node?.online ? here.part.meta : "not connected"].filter(Boolean).join(" · ") });
       continue;
     }
     const shown: Shown = { mine, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
