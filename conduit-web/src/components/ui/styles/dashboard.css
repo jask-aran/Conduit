@@ -218,6 +218,9 @@
 /* A room with no head (jbot's): the messages start right under the tab row, fading there as a chat's do, not a head's
    height lower. */
 .ui-dash[data-headless] .ui-dash-body { padding-top: 0; }
+/* And no fade at its top: a chat-like page reads as a chat does, its messages running up under the tabs (desktop) or
+   the frost pills (phone), not dimming into a gradient. */
+.ui-dash[data-headless] .ui-dash-conversation-scroll { mask-image: none; }
 .ui-dash[data-room] .ui-dash-conversation { flex: 1 1 0; max-block-size: none; }
 /* A phone's room scrolls as a thread does: the messages run under the composer's dock (its own gradient at the foot),
    the last one clearing its measured height (DashConversation, dock-inset.ts), as a thread clears it. */
