@@ -6195,9 +6195,25 @@ function App() {
         lead={<>
           <Show when={titleBarShows("server")}><ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
             onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} /></Show>
-          {/* Beside the server it is an update from. */}
+          {/* Beside the server it is an update from: under way, a spinner and how far (Cancel while it can be); then Update. */}
           <Show when={titleBarShows("update") && updateState().kind === "ready"}>
             <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
+          </Show>
+          <Show when={titleBarShows("update") && (() => { const state = updateState(); return state.kind === "checking" || state.kind === "working" ? state : null; })()}>{(state) => {
+            const words = () => {
+              const current = state();
+              if (current.kind !== "working") return "Checking for updates…";
+              const share = current.label.match(/(\d+)\s*%/);
+              return current.label.startsWith("Downloading") ? `Downloading…${share ? ` ${share[1]}%` : ""}` : current.label;
+            };
+            return <>
+              <Button variant="ghost" size="sm" disabled title={state().kind === "working" ? (state() as { label: string }).label : "Checking for updates"}><Spinner />{words()}</Button>
+              <Show when={(() => { const current = state(); return current.kind === "working" ? current.onCancel : undefined; })()}>{(cancel) =>
+                <Button variant="ghost" size="sm" onClick={() => cancel()()}>Cancel</Button>}</Show>
+            </>;
+          }}</Show>
+          <Show when={titleBarShows("update") && (updateState().kind === "current" || updateState().kind === "updated")}>
+            <Button variant="ghost" size="sm" disabled><Icons.Check />{updateState().kind === "updated" ? "Conduit updated" : "Up to date"}</Button>
           </Show>
           <Show when={titleBarShows("history")}>
             <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
