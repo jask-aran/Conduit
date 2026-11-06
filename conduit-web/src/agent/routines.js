@@ -147,7 +147,7 @@ async function runTask(agent, task, cursor, state, now, routineName) {
     const inboxIds = [];
     let size = 0;
     for (const entry of fresh.slice(0, ENTRIES)) {
-      const body = await inboxEntryText(agent.folder, entry);
+      const body = await inboxEntryText(agent, entry);
       const text = entryText({ ...entry, body: body ? body.slice(0, ENTRY_BODY) : "" }, zone);
       if (size + text.length > BLOCK_MAX) break;
       shown.push(text);

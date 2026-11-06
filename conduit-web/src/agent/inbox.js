@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { defineDoc, defineTool, section } from "@earendil-works/pi-durable";
+import { defineDoc, defineDocFamily, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { inboxEntryText } from "./inbox-files.js";
@@ -39,7 +39,34 @@ export async function renderWaitingInbox(agent, state = null) {
       ...(items.length > 12 ? [`… and ${items.length - 12} more (conduit_inbox list).`] : [])].join("\n");
 }
 
-/** Append a run's entry in the caller's commit; idempotent by `key`. Prunes what has been handled a week. */
+/*
+ * An entry's text is a document of its own, one per entry id (pi-durable's keyed family), written once when it is
+ * filed: the agent's document keeps only the index (what the inbox lists, filters and marks handled in the same commit
+ * as a routine's cursors), so it no longer grows with every report and email it records. The text becomes the entry's
+ * file (inbox-files.js), which is what is read after that.
+ */
+export const InboxText = defineDocFamily({ family: true, checkpointWhen: () => false, kind: "conduit.agent.inbox-text", version: 1,
+  scope: "session", initial: (seed) => ({ text: String(seed ?? "") }) });
+
+/** File an entry in the caller's commit: its index in the agent's document, its text (`body`) beside it. */
+export async function fileEntry(tx, entry, now = Date.now()) {
+  const { body, ...index } = entry;
+  const doc = await tx.doc(AgentDoc);
+  const before = new Set(Object.keys(doc.inbox || {}));
+  const existing = Object.values(doc.inbox || {}).find((item) => item.key === entry.key);
+  const item = appendEntry(doc, index, now);
+  if (!existing && typeof body === "string" && body) await tx.doc(InboxText, item.id, body);
+  for (const id of before) if (!Object.hasOwn(doc.inbox, id)) await tx.retireDoc(InboxText, id);
+  return item;
+}
+
+/** An entry's text as filed, or "" (an entry from before texts were their own documents carries `body`). */
+export async function filedText(reader, entry, context) {
+  if (typeof entry.body === "string") return entry.body;
+  return (await reader.snapshot(InboxText, entry.id, context))?.text || "";
+}
+
+/** Append an entry's index to the agent's document; idempotent by `key`. Prunes what has been handled a week. */
 export function appendEntry(doc, entry, now = Date.now()) {
   doc.inbox ||= {};
   const existing = Object.values(doc.inbox).find((item) => item.key === entry.key);
@@ -77,7 +104,7 @@ const recipients = (value) => {
 };
 
 /** Shared mutation functions. Caller identity comes from the route or tool, never the input. */
-export function addInboxEntry(doc, input, { author, by, key = `note:${crypto.randomUUID()}` }) {
+export async function addInboxEntry(tx, input, { author, by, key = `note:${crypto.randomUUID()}` }) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw badInbox("An entry is required.");
   const title = inboxText(input.title, "title");
   const headline = inboxText(input.headline, "headline");
@@ -85,7 +112,7 @@ export function addInboxEntry(doc, input, { author, by, key = `note:${crypto.ran
   if (input.body !== undefined && typeof input.body !== "string") throw badInbox("body must be text.");
   const kind = input.kind === undefined ? "note" : inboxText(input.kind, "kind");
   const addressed = input.for === undefined ? {} : { for: recipients(input.for) };
-  return entryCopy(appendEntry(doc, { key, title, headline, kind, level: input.level, status: "unhandled", author, by,
+  return entryCopy(await fileEntry(tx, { key, title, headline, kind, level: input.level, status: "unhandled", author, by,
     ...(input.body === undefined ? {} : { body: input.body }), ...addressed }));
 }
 
@@ -117,10 +144,12 @@ export function editInboxEntries(doc, input, { by, conversationId } = {}) {
   return entries.map(entryCopy);
 }
 
-export function deleteInboxEntry(doc, id) {
+export async function deleteInboxEntry(tx, id) {
+  const doc = await tx.doc(AgentDoc);
   const item = Object.hasOwn(doc.inbox || {}, id) ? doc.inbox[id] : undefined;
   if (!item) throw missingInbox();
   delete doc.inbox[id];
+  await tx.retireDoc(InboxText, id);
 }
 
 const LEVEL_LABEL = { fyi: "FYI", attention: "ATTENTION", urgent: "URGENT", failed: "FAILED" };
@@ -219,13 +248,13 @@ export function ConduitInboxTool(runtime) {
           const item = Object.hasOwn(state.inbox || {}, args.id) ? state.inbox[args.id] : undefined;
           if (!item) throw missingInbox();
           const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
-          return result(`${line(item, agent.settings().timezone)}\n\n${await inboxEntryText(agent.folder, item) || answer || item.headline || "(The run left no text.)"}`);
+          return result(`${line(item, agent.settings().timezone)}\n\n${await inboxEntryText(agent, item) || answer || item.headline || "(The run left no text.)"}`);
         }
-        const change = (doc) => {
-          if (args.action === "add") return addInboxEntry(doc, args, { author: api.conversationId ?? "mcp", by: api.conversationId ?? "mcp", key: api.callId ? `inbox:${api.callId}` : undefined });
-          return editInboxEntries(doc, args, { by: api.conversationId ?? "mcp", conversationId: api.conversationId });
+        const change = async (tx) => {
+          if (args.action === "add") return addInboxEntry(tx, args, { author: api.conversationId ?? "mcp", by: api.conversationId ?? "mcp", key: api.callId ? `inbox:${api.callId}` : undefined });
+          return editInboxEntries(await tx.doc(AgentDoc), args, { by: api.conversationId ?? "mcp", conversationId: api.conversationId });
         };
-        const done = api.commit ? await api.commit(async (tx) => change(await tx.doc(AgentDoc)), context) : await agent.update(change);
+        const done = api.commit ? await api.commit(change, context) : await agent.update((doc, tx) => change(tx));
         return result(JSON.stringify(done));
       } catch (error) {
         if (error.status === 400 || error.status === 404) return result(error.message, true);

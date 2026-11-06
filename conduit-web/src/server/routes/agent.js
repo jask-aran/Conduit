@@ -13,7 +13,7 @@ import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../
 import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
 import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
-import { addInboxEntry, appendEntry, deleteInboxEntry, editInboxEntries } from "../../agent/inbox.js";
+import { addInboxEntry, deleteInboxEntry, editInboxEntries, fileEntry } from "../../agent/inbox.js";
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { emailView, setupEmail, patchEmail, removeEmail } from "../../agent/email-setup.js";
 import { backgroundSubagents } from "../subagents.js";
@@ -177,7 +177,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   app.post("/v0/agent/inbox", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
-      const entry = await agent.update((doc) => addInboxEntry(doc, request.body, { author: "person", by: "person" }));
+      const entry = await agent.update((doc, tx) => addInboxEntry(tx, request.body, { author: "person", by: "person" }));
       response.status(201).json(entry);
     } catch (error) {
       if ([400, 404].includes(error.status)) return response.status(error.status).json({ error: error.message });
@@ -199,7 +199,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   app.delete("/v0/agent/inbox/:id", async (request, response, next) => {
     try {
       if (!enabled(response)) return;
-      await agent.update((doc) => deleteInboxEntry(doc, request.params.id));
+      await agent.update((doc, tx) => deleteInboxEntry(tx, request.params.id));
       response.status(204).end();
     } catch (error) {
       if ([400, 404].includes(error.status)) return response.status(error.status).json({ error: error.message });
@@ -221,11 +221,11 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const original = String(message.body || "").trim();
       const quote = original.length > 600 ? `${original.slice(0, 599)}…` : original;
       const key = `feedback:${crypto.randomUUID()}`;
-      const id = await agent.update((doc) => appendEntry(doc, {
+      const id = await agent.update(async (doc, tx) => (await fileEntry(tx, {
         key, kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled",
         title: "Feedback", headline: text.split(/\r?\n/)[0], author: "person", via: "feedback", text, messageId,
         body: `${text}\n\nAbout jbot message ${message.id} at ${message.at}:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}`,
-      }).id);
+      })).id);
       response.status(201).json({ id });
     } catch (error) { next(error); }
   });
@@ -473,10 +473,10 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const key = `now:${schedule.id}:${crypto.randomUUID()}`;
       if (schedule.feed && schedule.feed.source.kind !== "run") {
         const outcome = await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] });
-        const fresh = await agent.update((doc) => {
+        const fresh = await agent.update(async (doc, tx) => {
           const current = doc.schedules[schedule.id];
           if (!current?.feed) return 0;
-          applyOutcome(doc, current, outcome, new Date().toISOString());
+          await applyOutcome(tx, current, outcome, new Date().toISOString());
           return outcome.error ? 0 : current.feed.lastCount;
         });
         return response.json({ checked: outcome.items.length, new: fresh, error: outcome.error || null });

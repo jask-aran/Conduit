@@ -227,7 +227,7 @@ function makeClock(runtime) {
           if (agent.active() && Date.parse(slot) > (agent.resumedAt || 0)) {
             if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
             else if (fired && !taken) await applyRoutine(tx, doc, agent, api.conversationId, routine, null, slot);
-            else if (direct) { if (outcome) applyOutcome(doc, current, outcome, slot); }
+            else if (direct) { if (outcome) await applyOutcome(tx, current, outcome, slot); }
             else if (!schedule.routine && !missed && !overBudget && !taken) {
               await agent.spawnRun(tx, api.conversationId, {
                 key: `${current.id}:${slot}`, kind: current.feed ? "feed" : "checkback", title: current.title,

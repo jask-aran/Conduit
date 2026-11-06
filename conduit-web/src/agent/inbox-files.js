@@ -35,7 +35,7 @@ export async function writeInboxFile(folder, entry, { text } = {}) {
   const relative = inboxFile(entry);
   await fs.mkdir(path.join(folder, INBOX_DIR), { recursive: true });
   const current = await readFolderFile(folder, relative).catch(() => null);
-  if (current === null) return writeFolderFile(folder, relative, render(entry, entry.body || text || entry.headline));
+  if (current === null) return writeFolderFile(folder, relative, render(entry, text || entry.body || entry.headline));
   let body;
   try { body = splitFrontMatter(current).body; } catch { body = current; }
   const next = render(entry, body);
@@ -44,9 +44,10 @@ export async function writeInboxFile(folder, entry, { text } = {}) {
 
 /**
  * Bring the inbox folder in step with the entries: each one's file written or updated, and those of entries that are
- * gone removed. `lastAnswer(conversationId)` gives a run's report, for entries that point at their run.
+ * gone removed. `textOf(entry)` gives an entry's text as filed; `lastAnswer(conversationId)` a run's report, for
+ * entries that point at their run.
  */
-export async function syncInboxFiles(folder, entries, { lastAnswer } = {}) {
+export async function syncInboxFiles(folder, entries, { textOf, lastAnswer } = {}) {
   if (!folder) return;
   const dir = path.join(folder, INBOX_DIR);
   await fs.mkdir(dir, { recursive: true });
@@ -55,15 +56,19 @@ export async function syncInboxFiles(folder, entries, { lastAnswer } = {}) {
   for (const entry of entries) {
     const name = path.basename(inboxFile(entry));
     wanted.add(name);
-    const text = !present.has(name) && !entry.body && entry.conversationId && lastAnswer ? await lastAnswer(entry.conversationId).catch(() => null) : null;
+    let text = null;
+    if (!present.has(name)) {
+      text = textOf ? await textOf(entry).catch(() => "") : entry.body || "";
+      if (!text && entry.conversationId && lastAnswer) text = await lastAnswer(entry.conversationId).catch(() => null);
+    }
     await writeInboxFile(folder, entry, { text });
   }
   for (const name of present) if (FILE.test(name) && !wanted.has(name)) await fs.rm(path.join(dir, name), { force: true });
 }
 
-/** The entry's text: its file's body when there is one (the person may have edited it), else what the entry carries. */
-export async function inboxEntryText(folder, entry) {
-  const text = folder ? await readFolderFile(folder, inboxFile(entry)).catch(() => null) : null;
-  if (text === null) return entry.body || "";
+/** The entry's text: its file's body when there is one (the person may have edited it), else its text as filed. */
+export async function inboxEntryText(agent, entry) {
+  const text = agent.folder ? await readFolderFile(agent.folder, inboxFile(entry)).catch(() => null) : null;
+  if (text === null) return agent.entryText ? agent.entryText(entry) : entry.body || "";
   try { return splitFrontMatter(text).body.trim(); } catch { return text.trim(); }
 }

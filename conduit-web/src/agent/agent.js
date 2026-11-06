@@ -6,7 +6,7 @@ import { templateBackend } from "../chat-backend.js";
 import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
-import { listInbox } from "./inbox.js";
+import { filedText, InboxText, listInbox } from "./inbox.js";
 import { inboxFile, syncInboxFiles } from "./inbox-files.js";
 import { migrateSoul } from "./memory.js";
 import { migrateToRoutines, promptVars, retireEmailRoutine, runInstructions } from "./routines.js";
@@ -114,6 +114,7 @@ export class PersistentAgent {
   async followInbox() {
     if (this.inboxWatch || !this.folder) return;
     try {
+      await this.moveInboxTexts();
       const harness = await this.runtime.open();
       const watch = await harness.watchDoc(AgentDoc, this.context);
       if (!watch) return;
@@ -124,12 +125,32 @@ export class PersistentAgent {
         const key = JSON.stringify(value?.inbox || {});
         if (key === last) return;
         last = key;
-        pending = pending.then(() => syncInboxFiles(this.folder, listInbox(value), { lastAnswer: (id) => this.runtime.lastAnswer(id) }))
+        pending = pending.then(() => syncInboxFiles(this.folder, listInbox(value), { textOf: (entry) => this.entryText(entry),
+          lastAnswer: (id) => this.runtime.lastAnswer(id) }))
           .catch((error) => console.warn("The context inbox's files could not be written", error.message));
       };
       sync(watch.value);
       watch.start(async (value) => { sync(value); });
     } catch (error) { console.warn("The context inbox's files are not followed", error.message); }
+  }
+
+  /** An entry's text as filed (inbox.js), before or without its file. */
+  async entryText(entry) {
+    const harness = await this.runtime.open();
+    return filedText(harness, entry, this.context);
+  }
+
+  /** Once: the texts entries carried in the agent's document become documents of their own (inbox.js, InboxText). */
+  async moveInboxTexts() {
+    const carrying = Object.values((await this.state()).inbox || {}).filter((entry) => typeof entry.body === "string");
+    if (!carrying.length) return;
+    await this.update(async (doc, tx) => {
+      for (const entry of Object.values(doc.inbox || {})) {
+        if (typeof entry.body !== "string") continue;
+        if (entry.body) await tx.doc(InboxText, entry.id, entry.body);
+        delete entry.body;
+      }
+    });
   }
 
   async stopFollowing() { const watch = this.inboxWatch; this.inboxWatch = null; await watch?.stop(); }

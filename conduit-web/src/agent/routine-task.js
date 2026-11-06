@@ -3,7 +3,7 @@ import { AgentDoc as PiAgentDoc, CompactionTask, defineTask, hook, LiveDoc, Tool
 import { ConduitIds } from "../server/durable-runtime.js";
 import { notice } from "../context/notices.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
-import { appendEntry, headlineOf } from "./inbox.js";
+import { fileEntry, headlineOf } from "./inbox.js";
 import { fileItems } from "./feeds.js";
 import { finalText } from "./messages.js";
 import { completeRoutine, executeRoutine } from "./routines.js";
@@ -205,7 +205,7 @@ export function routineTask(runtime) {
           current.startedAt = api.now();
           if (!outcome.run) {
             completeRoutine(doc, record.routine, outcome, new Date(api.now()).toISOString());
-            if (record.routine.output !== "jbot" && outcome.items.length) fileItems(doc,
+            if (record.routine.output !== "jbot" && outcome.items.length) await fileItems(tx,
               { key: record.key, title: record.routine.title, feedId: `r-${record.routine.name}`, level: record.routine.level }, outcome.items, record.slot);
           }
           return next(outcome.run ? "wait" : "done");
@@ -285,7 +285,7 @@ export function routineTask(runtime) {
         const record = await get(task, api, context);
         if (record.routine.mode === "fork") {
           if (record.routine.output !== "jbot") await api.commit(async (tx) => {
-            appendEntry(await tx.doc(AgentDoc), { key: record.key, kind: record.routine.name, title: record.routine.title,
+            await fileEntry(tx, { key: record.key, kind: record.routine.name, title: record.routine.title,
               level: record.routine.level, status: "unhandled", headline: headlineOf(record.summary), body: record.summary }, Date.parse(record.slot));
           }, context);
           if (record.routine.output !== "inbox") await messageJbot(runtime, task, record, record.summary, `${record.key}:output`, context);

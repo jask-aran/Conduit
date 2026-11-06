@@ -4,7 +4,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, LiveDoc, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
 import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
-import { appendEntry, headlineOf, RunEnd } from "../agent/inbox.js";
+import { fileEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 import { inboxFile, writeInboxFile } from "../agent/inbox-files.js";
 
 const SubagentRoster = defineDoc({
@@ -334,7 +334,7 @@ export function Subagents(runtime) {
         if (task.input.gate && !task.input.origin?.test && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
-            appendEntry(await tx.doc(AgentDoc), { key: `${child}:${number}`, kind, title, subagentId: label, conversationId: child, level,
+            await fileEntry(tx, { key: `${child}:${number}`, kind, title, subagentId: label, conversationId: child, level,
               headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
               status: "unhandled" }, Date.parse(at));
           }, context);
@@ -349,10 +349,11 @@ export function Subagents(runtime) {
             const doc = await tx.doc(AgentDoc);
             const sources = doc.routineRuns?.[task.input.origin.routineTaskId]?.outcome?.sources || [];
             const body = sources.length ? `${report.answer}\n\n## Sources\n\n${sources.map((source) => `- [${source.title}](../${source.path})`).join("\n")}` : report.answer;
-            return JSON.parse(JSON.stringify(appendEntry(doc, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
-              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: "Told jbot", body }, Date.parse(at))));
+            const filed = await fileEntry(tx, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
+              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: "Told jbot", body }, Date.parse(at));
+            return { ...JSON.parse(JSON.stringify(filed)), body };
           }, context);
-          if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry).catch(() => {});
+          if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry, { text: entry.body }).catch(() => {});
           recorded = inboxFile(entry);
         }
         if (task.input.gate && !heard && !stopped) {

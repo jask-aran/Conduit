@@ -91,10 +91,12 @@ test("feedback keeps the person's words separate from the quoted jbot message", 
     messageId: "jbot-message", headline: "FYI: Keep the detail", text,
   });
   assert.ok(Number.isFinite(Date.parse(item.at)));
-  assert.equal(item.body, `${text}\n\nAbout jbot message jbot-message at ${at}:\n${`${original.slice(0, 599)}…`.split("\n").map((line) => `> ${line}`).join("\n")}`);
+  // The text is a document of its own (inbox.js InboxText); the agent's document keeps the index.
+  assert.equal(item.body, undefined);
+  assert.equal(await agent.entryText(item), `${text}\n\nAbout jbot message jbot-message at ${at}:\n${`${original.slice(0, 599)}…`.split("\n").map((line) => `> ${line}`).join("\n")}`);
   assert.match(entryText(item, "UTC"), /author: person, via: feedback/);
   const read = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
-  assert.ok((await read.execute({ action: "read", id: item.id }, api)).output[0].text.includes(item.body));
+  assert.ok((await read.execute({ action: "read", id: item.id }, api)).output[0].text.includes(await agent.entryText(item)));
   // Feedback is for Reflection only: never the person's intent for the approval judge.
   assert.ok(!(await personWords(agent, api.conversationId)).messages.some((message) => message.via === "feedback"));
   assert.equal(prompts.length, 0, "feedback waits for Reflection without a home turn");

@@ -3,7 +3,7 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Type } from "@earendil-works/pi-ai";
 import { createHash } from "node:crypto";
 import { AgentDoc, nextId } from "./agent-doc.js";
-import { appendEntry } from "./inbox.js";
+import { fileEntry } from "./inbox.js";
 import { cleanEmailHtml } from "./mail-pipeline.js";
 import { toMarkdown } from "../markdown/to-markdown.js";
 import { isReadAction, programPaths } from "./policy.js";
@@ -144,7 +144,7 @@ export async function runSource(agent, source, { signal, seen = [], raw = false 
  * Take one tick's outcome into the feed, in the clock's commit: remember what it saw, and put what is new into the
  * inbox as one entry. The first good tick only learns what is there.
  */
-export function applyOutcome(doc, schedule, outcome, slot) {
+export async function applyOutcome(tx, schedule, outcome, slot) {
   const feed = schedule.feed;
   const seen = new Set(feed.seen || []);
   const fresh = outcome.items.filter((item) => !seen.has(item.id));
@@ -153,7 +153,7 @@ export function applyOutcome(doc, schedule, outcome, slot) {
   if (outcome.error) return;
   feed.seen = [...new Set([...outcome.items.map((item) => item.id), ...(feed.seen || [])])].slice(0, SEEN_KEPT);
   feed.lastCount = feed.primed ? fresh.length : 0;
-  if (feed.primed && fresh.length) fileItems(doc, { key: `${schedule.id}:${slot}`, title: schedule.title, feedId: schedule.id, level: feed.level }, fresh, slot);
+  if (feed.primed && fresh.length) await fileItems(tx, { key: `${schedule.id}:${slot}`, title: schedule.title, feedId: schedule.id, level: feed.level }, fresh, slot);
   feed.primed = true;
 }
 
@@ -163,10 +163,10 @@ export const itemText = (item) => `- ${item.title || "(untitled)"}${item.detail 
   + `${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`;
 
 /** New items into the inbox as one entry (a feed's tick, a routine whose output is the inbox). */
-export function fileItems(doc, { key, title, feedId = null, level = "fyi" }, fresh, slot) {
+export async function fileItems(tx, { key, title, feedId = null, level = "fyi" }, fresh, slot) {
   const top = fresh.reduce((best, item) => LEVELS.indexOf(item.level) > LEVELS.indexOf(best) ? item.level : best, LEVELS.includes(level) ? level : "fyi");
   const line = (item) => `${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}`;
-  appendEntry(doc, { key, kind: "feed", title, feedId, subagentId: null, conversationId: null, level: top, status: "unhandled", count: fresh.length,
+  await fileEntry(tx, { key, kind: "feed", title, feedId, subagentId: null, conversationId: null, level: top, status: "unhandled", count: fresh.length,
     headline: text(fresh.length === 1 ? line(fresh[0]) : `${fresh.length} new: ${fresh.map((item) => item.title || "(untitled)").join("; ")}`, 160),
     body: fresh.map(itemText).join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
 }
