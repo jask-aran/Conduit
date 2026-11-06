@@ -1,5 +1,5 @@
 /* The gallery's own chrome. Kept plain and out of the app's names (g-*). */
-html, body { background: var(--frame, #08090a); color: var(--foreground); }
+html, body { background: var(--frame, #050607); color: var(--foreground); }
 #root { height: auto; }
 /* The app locks body scrolling; the gallery's left side scrolls instead. */
 .g-canvas { display: grid; flex: 1; min-width: 0; grid-template-columns: auto 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
