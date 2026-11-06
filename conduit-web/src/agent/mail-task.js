@@ -16,37 +16,36 @@ import { INVISIBLE, readMail } from "./mail-pipeline.js";
 export const DEFAULT_QUERY = "in:inbox newer_than:2d -category:promotions -category:social";
 const MAX = 25;
 /*
- * What one firing may pull through Executor, whose program has about 30 seconds: an email up to RAW_ONE comes whole
- * (attachments and all); a bigger one comes as its text and HTML parts only, its attachments named; whole emails stop
- * at RAW_BUDGET a firing, and the rest wait, unseen, for the next. A batch too big to finish would otherwise fail the
- * same way every heartbeat, its cursor never moving.
+ * What one firing may pull through Executor, whose program has about 30 seconds, in two rounds of calls: the lists
+ * (Gmail's search splits them by size), then every message at once. An email under 2 MB comes whole (attachments and
+ * all), at most RAW_COUNT a firing, the rest waiting, unseen, for the next; a bigger one comes as its text and HTML
+ * parts only, its attachments named. A batch too big to finish would otherwise fail the same way every heartbeat, its
+ * cursor never moving. The Gmail accounts are found once and kept in the cursor, and found again if a list fails.
  */
-const RAW_ONE = 2 * 1024 * 1024;
-const RAW_BUDGET = 6 * 1024 * 1024;
+const RAW_COUNT = 12;
 
-/** The program: every Gmail account connected in Executor; `seen` (the ids already gathered) is handed in by the hub. */
-export const gmailProgram = ({ query = DEFAULT_QUERY, max = MAX } = {}) => `
-const found = await tools.search({ query: "gmail users messages list", limit: 10 });
-const lister = (found.items ?? []).find((item) => item.path === "tools.gmail.api.users.gmailUsersMessagesList");
-const accounts = [...new Set(String(lister?.input ?? "").split('"').filter((part) => part.startsWith("acc_")))];
-if (!accounts.length) throw new Error("No Gmail account is connected in Executor: connect one there, then this runs.");
-const one = accounts.length === 1;
-const listed = await Promise.all(accounts.map(async (accountId) => {
+/** The program: `seen` (the ids already gathered) is handed in by the hub; its last item is `{ accounts }`. */
+export const gmailProgram = ({ query = DEFAULT_QUERY, max = MAX, accounts = [] } = {}) => `
+const discover = async () => {
+  const found = await tools.search({ query: "gmail users messages list", limit: 10 });
+  const lister = (found.items ?? []).find((item) => item.path === "tools.gmail.api.users.gmailUsersMessagesList");
+  const ids = [...new Set(String(lister?.input ?? "").split('"').filter((part) => part.startsWith("acc_")))];
+  if (!ids.length) throw new Error("No Gmail account is connected in Executor: connect one there, then this runs.");
+  return ids;
+};
+const listAll = (ids) => Promise.all(ids.flatMap((accountId) => [["raw", "smaller:2M"], ["full", "larger:2M"]].map(async ([format, size]) => {
   const list = await tools.gmail.api.users.gmailUsersMessagesList({ accountId, input: { path: { userId: "me" },
-    query: { q: ${JSON.stringify(query)}, maxResults: 50 } } });
-  return (list.messages ?? []).map((message) => ({ accountId, id: one ? message.id : accountId + ":" + message.id, gmailId: message.id }));
-}));
-const fresh = listed.flat().filter((message) => !seen.has(message.id)).slice(0, ${Number(max) || MAX});
-const get = (message, format) => tools.gmail.api.users.gmailUsersMessagesGet({ accountId: message.accountId,
-  input: { path: { userId: "me", id: message.gmailId }, query: { format } } });
-const sized = await Promise.all(fresh.map((message) => get(message, "minimal").then((small) => ({ message, small }))));
-let budget = ${RAW_BUDGET};
-const plan = [];
-for (const entry of sized) {
-  const size = entry.small.sizeEstimate ?? 0;
-  if (size > ${RAW_ONE}) plan.push({ ...entry, format: "full" });
-  else if (size <= budget) { budget -= size; plan.push({ ...entry, format: "raw" }); }
-}
+    query: { q: ${JSON.stringify(query)} + " " + size, maxResults: 50 } } });
+  return (list.messages ?? []).map((message) => ({ accountId, gmailId: message.id, format,
+    id: ids.length === 1 ? message.id : accountId + ":" + message.id }));
+})));
+let accounts = ${JSON.stringify(accounts)};
+let listed;
+if (accounts.length) { try { listed = await listAll(accounts); } catch { accounts = []; } }
+if (!accounts.length) { accounts = await discover(); listed = await listAll(accounts); }
+const fresh = listed.flat().filter((message) => !seen.has(message.id));
+const plan = [...fresh.filter((message) => message.format === "raw").slice(0, ${RAW_COUNT}), ...fresh.filter((message) => message.format === "full")]
+  .slice(0, ${Number(max) || MAX});
 const parts = (part, out = { html: null, text: null, attachments: [] }) => {
   if (!part) return out;
   if (part.filename) out.attachments.push({ name: part.filename, size: part.body?.size ?? 0 });
@@ -55,14 +54,16 @@ const parts = (part, out = { html: null, text: null, attachments: [] }) => {
   for (const child of part.parts ?? []) parts(child, out);
   return out;
 };
-return Promise.all(plan.map(async ({ message, small, format }) => {
-  const item = { id: message.id, gmailId: message.gmailId, account: one ? null : message.accountId, thread: small.threadId,
-    labels: small.labelIds ?? [], at: new Date(Number(small.internalDate)).toISOString(), snippet: small.snippet ?? "", size: small.sizeEstimate };
-  const got = await get(message, format);
-  if (format === "raw") return { ...item, raw: got.raw };
+const items = await Promise.all(plan.map(async (message) => {
+  const got = await tools.gmail.api.users.gmailUsersMessagesGet({ accountId: message.accountId,
+    input: { path: { userId: "me", id: message.gmailId }, query: { format: message.format } } });
+  const item = { id: message.id, gmailId: message.gmailId, account: accounts.length === 1 ? null : message.accountId, thread: got.threadId,
+    labels: got.labelIds ?? [], at: new Date(Number(got.internalDate)).toISOString(), snippet: got.snippet ?? "", size: got.sizeEstimate };
+  if (message.format === "raw") return { ...item, raw: got.raw };
   const headers = (got.payload?.headers ?? []).filter((entry) => /^(from|to|cc|date|subject|message-id|in-reply-to|references)$/i.test(entry.name));
   return { ...item, headers, ...parts(got.payload) };
-}));`;
+}));
+return [...items, { accounts }];`;
 
 /**
  * An email too big to fetch whole, put back together from its headers and body parts as a message the pipeline reads
@@ -92,10 +93,12 @@ const when = (at, zone) => new Intl.DateTimeFormat("en-AU", { timeZone: zone, we
  */
 export async function mailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
   const zone = agent.settings().timezone;
-  const outcome = await runSource(agent, { kind: "executor", code: gmailProgram(task) }, { seen: cursor.seen || [], raw: true });
+  const outcome = await runSource(agent, { kind: "executor", code: gmailProgram({ ...task, accounts: cursor.accounts || [] }) },
+    { seen: cursor.seen || [], raw: true });
   if (outcome.error) return { fresh: 0, cursor, items: [], error: outcome.error, block: block(task.id, { error: "yes" }, outcome.error) };
   const got = outcome.items.filter((item) => item && typeof item.id === "string");
-  const next = { primed: true, seen: [...new Set([...got.map((item) => item.id), ...(cursor.seen || [])])].slice(0, SEEN_KEPT) };
+  const accounts = outcome.items.find((item) => Array.isArray(item?.accounts))?.accounts || cursor.accounts || [];
+  const next = { primed: true, accounts, seen: [...new Set([...got.map((item) => item.id), ...(cursor.seen || [])])].slice(0, SEEN_KEPT) };
   // The first firing learns what is there; the inbox the person already has is not news.
   if (!cursor.primed) return { fresh: 0, cursor: next, items: [], sources: [], block: block(task.id, { new: 0 }, "Nothing new (first look: what is there now is known).") };
   const lines = [];
