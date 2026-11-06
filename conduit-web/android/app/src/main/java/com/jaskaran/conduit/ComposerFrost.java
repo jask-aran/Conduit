@@ -1,6 +1,5 @@
 package com.jaskaran.conduit;
 
-import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.BlurMaskFilter;
@@ -24,20 +23,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The native composer's live frost, while the keyboard stands still. A live blur of the transcript can only be drawn by
- * the compositor in a layer above the app's (the app paints the transcript and the composer into one picture), so this
- * is a window over the app that can take neither focus nor touches: each pill and the field drawn there as the web's
- * .ui-frost (styles/frost.css) over Samsung's live blur, with a copy of what the real part shows (its icon; the field's
- * text, caret and selection), redrawn whenever the app's window draws. The real composer stays where it is, keeping the
- * keyboard and every touch, drawn at opacity 0 while this shows.
+ * The native composer's live frost, from its first frame to its hand back. A live blur of the transcript can only be
+ * drawn by the compositor in a layer above the app's (the app paints the transcript and the composer into one picture),
+ * so this is a window over the app that can take neither focus nor touches: each pill and the field drawn there as the
+ * web's .ui-frost (styles/frost.css) over Samsung's live blur, with a copy of what the real part shows (its icon; the
+ * field's text, caret and selection), redrawn whenever the app's window draws. The real composer stays where it is,
+ * keeping the keyboard and every touch, drawn at opacity 0 while this shows, so it rides the keyboard's travel with the
+ * composer. Where the blur is not available it never shows, and the composer keeps its flat frost.
  *
- * Never during the keyboard's travel: only the window running that animation keeps step with the keyboard, so this
- * comes in once the travel ends and goes before the next one starts. Where the blur is not available it never shows,
- * and the composer keeps its flat frost.
- *
- * One composer is always whole on screen. Arriving, the glass's edges and contents are drawn at once, over the real
- * composer, and only its fill fades in as the real composer fades out under it (the blur of an opaque pill is that
- * pill); leaving, the real composer is drawn again first and this window goes once that frame is out.
+ * One composer is always whole on screen: the real one goes only once this window's first frame is out, and at rest
+ * this goes in the very frame the web's pills come back (handOver).
  */
 final class ComposerFrost {
     /* The web's frost (foundations.css): --frost-blur, --frost-fill, --frost-stroke, --frost-highlight, --frost-lift-rest. */
@@ -52,36 +47,23 @@ final class ComposerFrost {
     private final Map<String, ConduitMoves.Part> parts;
     private final float scale;
     private final Corner corner;
-    private final long fadeMs;
     private PopupWindow window;
     private Layer layer;
     private ViewTreeObserver observer;
-    private ValueAnimator fade;
-    /** The glass's fill, 0 to 1; the real composer is drawn at 1 - shown. */
+    /** The glass's fill, 0 or 1; the real composer is drawn at 1 - shown. */
     private float shown;
-    private boolean leaving;
+    private boolean handing;
     private final ViewTreeObserver.OnDrawListener onDraw = this::sync;
 
-    ComposerFrost(Activity activity, FrameLayout content, FrameLayout root, Map<String, ConduitMoves.Part> parts, float scale, Corner corner, long fadeMs) {
-        this.activity = activity; this.content = content; this.root = root; this.parts = parts; this.scale = scale; this.corner = corner; this.fadeMs = fadeMs;
+    ComposerFrost(Activity activity, FrameLayout content, FrameLayout root, Map<String, ConduitMoves.Part> parts, float scale, Corner corner) {
+        this.activity = activity; this.content = content; this.root = root; this.parts = parts; this.scale = scale; this.corner = corner;
     }
 
     static boolean available() { return FloatLiveBlur.available(); }
 
-    /** An experiment, set over adb (`setprop debug.conduit.frost_travel 1`): the frost kept up through the keyboard's travel. */
-    static boolean throughTravel() {
-        try {
-            Object value = Class.forName("android.os.SystemProperties").getMethod("get", String.class).invoke(null, "debug.conduit.frost_travel");
-            return "1".equals(value);
-        } catch (Throwable unavailable) { return false; }
-    }
-
-    boolean showing() { return window != null && !leaving; }
-
-    /** The frost window over the composer, ending at keyboardBottom (never over the keyboard); fadeMs 0 arrives at once. */
-    void show(int keyboardBottom, long fadeMs) {
-        if (leaving) close();
-        int height = content.getHeight() - Math.max(0, keyboardBottom);
+    /** The frost window over the app, as the native composer first shows. */
+    void show() {
+        int height = content.getHeight();
         if (window != null || !available() || content.getWidth() == 0 || height <= 0) return;
         layer = new Layer(activity);
         window = new PopupWindow(layer, content.getWidth(), height, false);
@@ -102,25 +84,7 @@ final class ComposerFrost {
         // The fill comes in, and the real composer goes, only once this window's first frame is out: until then the real
         // composer is all there is to see.
         Layer showing = layer;
-        afterFrame(layer, () -> {
-            if (layer != showing || leaving) return;
-            fade = ValueAnimator.ofFloat(0, 1);
-            fade.setDuration(fadeMs);
-            fade.addUpdateListener(value -> { shown = (float) value.getAnimatedValue(); sync(); });
-            fade.start();
-        });
-    }
-    void show(int keyboardBottom) { show(keyboardBottom, fadeMs); }
-
-    /** Before the keyboard moves again: the real composer drawn again, and this window gone once that frame is out. */
-    void hide() {
-        if (window == null || leaving) return;
-        if (fade != null) { fade.cancel(); fade = null; }
-        leaving = true;
-        root.setAlpha(1);
-        PopupWindow going = window;
-        content.invalidate();
-        afterFrame(content, () -> { if (window == going) close(); });
+        afterFrame(layer, () -> { if (layer == showing && !handing) { shown = 1; sync(); } });
     }
 
     /** Once view's window has handed its next frame to the compositor (a frame later where that cannot be told). */
@@ -129,20 +93,46 @@ final class ComposerFrost {
         else view.postOnAnimation(() -> view.postOnAnimation(then));
     }
 
+    /**
+     * The web's pills are drawn again under this (the composer at rest). Removing the window outright took three
+     * frames, each a brighter double fill: the frost goes in the app's next frame, both windows synced; without that
+     * sync the glass keeps its blur, edges and contents but drops its fill, and the window goes two frames later.
+     */
+    void handOver(View web) {
+        if (layer == null) { close(); return; }
+        handing = true;
+        Layer going = layer;
+        Runnable later = () -> going.postOnAnimation(() -> going.postOnAnimation(() -> { if (layer == going) close(); }));
+        // Both windows' next frames presented as one: the frost (its glass and its blur) gone in the frame the web's
+        // pills are already in.
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            try {
+                android.window.SurfaceSyncGroup together = new android.window.SurfaceSyncGroup("conduit-composer-frost");
+                boolean app = together.add(content.getRootSurfaceControl(), null);
+                boolean own = together.add(going.getRootSurfaceControl(), null);
+                going.setVisibility(View.INVISIBLE);
+                web.invalidate(); content.invalidate();
+                together.markSyncReady();
+                if (app && own) { later.run(); return; }
+            } catch (Throwable unsynced) { going.setVisibility(View.VISIBLE); }
+        }
+        for (Glass glass : layer.glasses.values()) { glass.fill = 0; glass.invalidate(); }
+        afterFrame(going, later);
+    }
+
     /** At once: the composer is going. */
     void close() {
-        if (fade != null) { fade.cancel(); fade = null; }
         if (observer != null && observer.isAlive()) observer.removeOnDrawListener(onDraw);
         observer = null;
         root.setAlpha(1);
         if (window != null) { try { window.dismiss(); } catch (RuntimeException ignored) {} }
-        window = null; layer = null; shown = 0; leaving = false;
+        window = null; layer = null; shown = 0; handing = false;
     }
 
     /** Each frame the app's window draws: the glass follows its part, and the real composer fades as the fill arrives. */
     private void sync() {
-        if (layer == null) return;
-        if (!leaving) root.setAlpha(1 - shown);
+        if (layer == null || handing) return;
+        root.setAlpha(1 - shown);
         float lift = root.getTranslationY();
         Map<View, Glass> seen = new HashMap<>();
         StringBuilder shape = new StringBuilder();
