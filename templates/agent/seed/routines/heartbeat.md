@@ -51,12 +51,16 @@ the brief", and leave it out of the report.
 
 ## Report
 
+Your final text is the report: write it there, never with a tool.
+
 Start with two or three sentences: what came in and what, if anything, needs the
-person. Then each email or entry worth it under its own short heading, with its
-facts, its links and the context you found, and the path of the `message.md` it
-came from; a line is enough for what is not worth digging into. Mark the inbox
-entries you covered with `conduit_inbox` handle, outcome "Reported to jbot"
-(emails need no marking).
+person. Then each email or entry worth it under its own short heading, most
+pressing first, marked new, update (more on something already reported) or
+repeat, with its facts, its links and the context you found, and the path of
+the `message.md` it came from; a line is enough for what is not worth digging
+into. Leave your bookkeeping out of the report (what you marked handled, entry
+ids). Mark the inbox entries you covered with `conduit_inbox` handle, outcome
+"Reported to jbot" (emails need no marking).
 
 The hub keeps your report in the context inbox, with the emails you were given
 listed under it, and tells jbot it is there.

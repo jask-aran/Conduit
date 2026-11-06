@@ -275,11 +275,15 @@ export function Subagents(runtime) {
         const conversation = await runtime.harness.conversation(child, context);
         const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
-        const answer = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("")
-          || (settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`);
+        const said = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
+        // A run of jbot's whose final text is empty has not reported, whatever it did on the way: it failed, so its
+        // routine's window is not counted as done and is gathered again next time.
+        const empty = !said.trim() && Boolean(task.input.gate);
+        const answer = said.trim() ? said : empty && settled.status === "done" ? "The run ended without a report (its final text was empty)."
+          : settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`;
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
         const report = await api.memo("report", { answer: capOutput(answer, limits().outputChars),
-          status: settled.status === "done" && !limited
+          status: settled.status === "done" && !limited && !empty
             && (!task.input.origin?.routineTaskId || answerEntry?.model?.[0]?.stopReason === "stop") ? "finished" : "failed" }, context);
         const endedAt = task.input.gate ? await api.memo("endedAt", new Date().toISOString(), context) : null;
         let stopped = false;

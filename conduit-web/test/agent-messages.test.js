@@ -147,7 +147,7 @@ test("email to a room with another sender or copied recipient is refused before 
     assert.equal(email.personOnly(message.room), false);
     const outcome = await tool.execute({ text: "Reply", room: message.room }, api);
     assert.equal(outcome.isError, true);
-    assert.match(outcome.content[0].text, /not sent/i);
+    assert.match(outcome.output[0].text, /not sent/i);
   }
   assert.deepEqual(log.list().map((item) => item.id), before);
   assert.equal(sent.mock.callCount(), 0);

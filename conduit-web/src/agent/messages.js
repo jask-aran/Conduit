@@ -155,7 +155,7 @@ export async function mirrorHomeThread(agent, log) {
   });
 }
 
-const result = (text, isError = false) => ({ content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
+const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 
 /** The `message` tool: jbot speaking to the person beyond its final text. */
 export function MessageTools(runtime) {

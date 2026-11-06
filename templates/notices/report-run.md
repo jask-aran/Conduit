@@ -1,4 +1,4 @@
 {{report}}
 
 ---
-That was your {{title}} run's report. Decide as in "When a run reports": if the person should hear it, write them a report, sent with `message` and `notify: push` if it should reach their phone now; if not, say in one short line what came in. Never just acknowledge it.
+That was your {{title}} run's report. As in "When a run reports": tell the person what came in, keeping each item's facts and links (one short line only when nothing is worth a mention), and send it with `message` and `notify: push` only if it should reach their phone now. Never just acknowledge it.
