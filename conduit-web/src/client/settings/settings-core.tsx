@@ -31,6 +31,7 @@ import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type Trans
 import { defaultNarration, NARRATION_OPTIONS, saveDefaultNarration } from "../preferences/transcript-mode";
 import type { Narration } from "../turn-rows";
 import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
+import { MOTION_SCALE_OPTIONS, motionScale, saveMotionScale, type MotionScale } from "../preferences/motion-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
 import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
@@ -328,6 +329,7 @@ export function Settings(props: {
   const [hapticChoice, setHapticChoice] = createSignal<HapticStrength>(hapticStrength());
   const [composerChoice, setComposerChoice] = createSignal(composerKind());
   const [transcriptScaleChoice, setTranscriptScaleChoice] = createSignal(transcriptScale());
+  const [motionScaleChoice, setMotionScaleChoice] = createSignal(motionScale());
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
@@ -1431,6 +1433,11 @@ export function Settings(props: {
                   </Show>
                   <SettingLine label="Meteor field">
                     <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
+                  </SettingLine>
+                  <SettingLine label="Animation speed" title="Slows every animation on this device, to look at one closely.">
+                    <Select id="motion-scale" aria-label="Animation speed" value={String(motionScaleChoice())} onChange={(event) => setMotionScaleChoice(saveMotionScale(Number(event.currentTarget.value) as MotionScale))}>
+                      <For each={MOTION_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "Normal" : `${scale}× slower`}</option>}</For>
+                    </Select>
                   </SettingLine>
               </Group>
               <DesktopSettingsTile />
