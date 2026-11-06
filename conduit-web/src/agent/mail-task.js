@@ -15,8 +15,14 @@ import { INVISIBLE, readMail } from "./mail-pipeline.js";
  */
 export const DEFAULT_QUERY = "in:inbox newer_than:2d -category:promotions -category:social";
 const MAX = 25;
-/** A message bigger than this is not fetched whole: its headers and snippet, and a link to open it in Gmail. */
-const RAW_MAX = 8 * 1024 * 1024;
+/*
+ * What one firing may pull through Executor, whose program has about 30 seconds: an email up to RAW_ONE comes whole
+ * (attachments and all); a bigger one comes as its text and HTML parts only, its attachments named; whole emails stop
+ * at RAW_BUDGET a firing, and the rest wait, unseen, for the next. A batch too big to finish would otherwise fail the
+ * same way every heartbeat, its cursor never moving.
+ */
+const RAW_ONE = 2 * 1024 * 1024;
+const RAW_BUDGET = 6 * 1024 * 1024;
 
 /** The program: every Gmail account connected in Executor; `seen` (the ids already gathered) is handed in by the hub. */
 export const gmailProgram = ({ query = DEFAULT_QUERY, max = MAX } = {}) => `
@@ -34,17 +40,41 @@ const fresh = listed.flat().filter((message) => !seen.has(message.id)).slice(0, 
 const get = (message, format) => tools.gmail.api.users.gmailUsersMessagesGet({ accountId: message.accountId,
   input: { path: { userId: "me", id: message.gmailId }, query: { format } } });
 const sized = await Promise.all(fresh.map((message) => get(message, "minimal").then((small) => ({ message, small }))));
-return Promise.all(sized.map(async ({ message, small }) => {
+let budget = ${RAW_BUDGET};
+const plan = [];
+for (const entry of sized) {
+  const size = entry.small.sizeEstimate ?? 0;
+  if (size > ${RAW_ONE}) plan.push({ ...entry, format: "full" });
+  else if (size <= budget) { budget -= size; plan.push({ ...entry, format: "raw" }); }
+}
+const parts = (part, out = { html: null, text: null, attachments: [] }) => {
+  if (!part) return out;
+  if (part.filename) out.attachments.push({ name: part.filename, size: part.body?.size ?? 0 });
+  else if (part.mimeType === "text/html" && part.body?.data && !out.html) out.html = part.body.data;
+  else if (part.mimeType === "text/plain" && part.body?.data && !out.text) out.text = part.body.data;
+  for (const child of part.parts ?? []) parts(child, out);
+  return out;
+};
+return Promise.all(plan.map(async ({ message, small, format }) => {
   const item = { id: message.id, gmailId: message.gmailId, account: one ? null : message.accountId, thread: small.threadId,
-    labels: small.labelIds ?? [], at: new Date(Number(small.internalDate)).toISOString(), snippet: small.snippet ?? "" };
-  if ((small.sizeEstimate ?? 0) > ${RAW_MAX}) {
-    const head = await get(message, "metadata");
-    const header = (name) => head.payload?.headers?.find((entry) => entry.name === name)?.value ?? "";
-    return { ...item, large: true, subject: header("Subject"), from: header("From"), size: small.sizeEstimate };
-  }
-  const whole = await get(message, "raw");
-  return { ...item, raw: whole.raw };
+    labels: small.labelIds ?? [], at: new Date(Number(small.internalDate)).toISOString(), snippet: small.snippet ?? "", size: small.sizeEstimate };
+  const got = await get(message, format);
+  if (format === "raw") return { ...item, raw: got.raw };
+  const headers = (got.payload?.headers ?? []).filter((entry) => /^(from|to|cc|date|subject|message-id|in-reply-to|references)$/i.test(entry.name));
+  return { ...item, headers, ...parts(got.payload) };
 }));`;
+
+/**
+ * An email too big to fetch whole, put back together from its headers and body parts as a message the pipeline reads
+ * like any other; its attachments stay in Gmail (named under not-fetched in message.md).
+ */
+function partialMessage(item) {
+  const boundary = `conduit-${item.gmailId}`;
+  const part = (type, data) => data ? `--${boundary}\r\nContent-Type: ${type}; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n`
+    + `${Buffer.from(data, "base64url").toString("base64")}\r\n` : "";
+  return Buffer.from(`${(item.headers || []).map((entry) => `${entry.name}: ${entry.value}`).join("\r\n")}\r\nMIME-Version: 1.0\r\n`
+    + `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n${part("text/plain", item.text)}${part("text/html", item.html)}--${boundary}--\r\n`);
+}
 
 /** Gmail's labels a reader cares about, as words: its categories, important, starred, unread. */
 const labelWords = (ids) => ids.filter((label) => /^CATEGORY_|^IMPORTANT$|^STARRED$|^UNREAD$/.test(label))
@@ -73,13 +103,10 @@ export async function mailTask(agent, task, cursor, { block, now = Date.now() } 
   for (const item of got.sort((a, b) => String(b.at).localeCompare(String(a.at)))) {
     const labels = labelWords(item.labels || []);
     const meta = { labels, link: linkOf(item), thread: item.thread, ...(item.account ? { account: item.account } : {}) };
-    if (item.large || typeof item.raw !== "string") {
-      lines.push(`- ${sender(item.from)} — ${item.subject || "(no subject)"}${labels.length ? ` · ${labels.join(", ")}` : ""} · ${when(item.at, zone)}`
-        + `\n  ${unescape(item.snippet)}\n  Too large to fetch whole (${Math.round((item.size || 0) / 1048576)} MB): ${meta.link}`);
-      continue;
-    }
     try {
-      const mail = await readMail(Buffer.from(item.raw, "base64url"), { folder: agent.folder, meta });
+      const mail = typeof item.raw === "string" ? await readMail(Buffer.from(item.raw, "base64url"), { folder: agent.folder, meta })
+        : await readMail(partialMessage(item), { folder: agent.folder, original: false,
+          meta: { ...meta, "not-fetched": item.attachments?.map((file) => `${file.name} (${Math.round(file.size / 1024)} KB)`) } });
       const file = path.join(mail.dir, "message.md");
       const files = mail.attachments.length ? ` · ${mail.attachments.length} attachment${mail.attachments.length === 1 ? "" : "s"}` : "";
       lines.push(`- ${sender(mail.header.from)} — ${mail.header.subject}${labels.length ? ` · ${labels.join(", ")}` : ""} · ${when(mail.at, zone)}`

@@ -91,9 +91,10 @@ function gistOf(text) {
 /**
  * An email (its raw RFC 822 bytes) read and kept: `meta` is what its source knows beyond the message (labels, link,
  * thread, account). Returns what callers tell jbot: its parties, its Markdown, its own words apart from what it quotes,
- * a one-line gist, its files. Writes nothing when `folder` is null.
+ * a one-line gist, its files. Writes nothing when `folder` is null; no message.eml when `original` is false (a message
+ * put back together from parts is not the original).
  */
-export async function readMail(raw, { folder = null, meta = {} } = {}) {
+export async function readMail(raw, { folder = null, meta = {}, original = true } = {}) {
   const mail = await PostalMime.parse(raw);
   const messageId = mail.messageId || `<${sha(raw).slice(0, 32)}@conduit>`;
   const at = mail.date && !Number.isNaN(Date.parse(mail.date)) ? new Date(mail.date).toISOString() : new Date().toISOString();
@@ -136,7 +137,7 @@ export async function readMail(raw, { folder = null, meta = {} } = {}) {
     ...(attachments.length ? { attachments: attachments.map((item) => item.filename) } : {}),
   };
   if (where) {
-    await fs.writeFile(path.join(where, "message.eml"), raw);
+    if (original) await fs.writeFile(path.join(where, "message.eml"), raw);
     if (mail.html) await fs.writeFile(path.join(where, "message.html"), mail.html);
     await fs.writeFile(path.join(where, "message.md"), `---\n${YAML.stringify(header, { lineWidth: 0 })}---\n\n${markdown}\n`);
   }
