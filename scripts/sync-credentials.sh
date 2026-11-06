@@ -10,10 +10,11 @@
 #
 # Copied (when present here): model provider keys and logins (pi/auth.json), custom providers (pi/models.json), web
 # search keys (pi/web-search.json), voice credentials (voice.json), connector sign-ins (agent-connectors/), the
-# ChatGPT web session (chatgpt-web/cookies.json), and jbot's context as edited here (prompt-overrides/: what this
-# person's agent knows of their life; changes meant for every jbot go in templates/agent, which the clone already has).
+# ChatGPT web session (chatgpt-web/cookies.json), and jbot's context as it is here: who you are (USER.md), what it keeps
+# (MEMORY.md), its settings (agent.json) and context overrides (prompt-overrides/). Changes meant for every jbot go in
+# templates/agent, which the clone already has, so its SOUL.md, RUN.md and routines come from there.
 # Not copied: the login password and sessions, push keys, server
-# identity, chats and jbot's history, and jbot's mailbox (agent/email.json), which only one server may poll: `--move-email` hands it over, and
+# identity, chats and jbot's history (diary, mail, reports, threads), and jbot's mailbox (agent/email.json), which only one server may poll: `--move-email` hands it over, and
 # this server stops reading jbot's mail.
 set -euo pipefail
 
@@ -25,7 +26,8 @@ REMOTE_STATE="${args[1]:-/root/.conduit-dev}"
 REMOTE_CLI="${args[2]:-conduit-server-dev}"
 DATA="${CONDUIT_DATA_ROOT:-$HOME/.conduit/data}"
 
-FILES=(pi/auth.json pi/models.json pi/web-search.json voice.json agent-connectors chatgpt-web/cookies.json prompt-overrides)
+FILES=(pi/auth.json pi/models.json pi/web-search.json voice.json agent-connectors chatgpt-web/cookies.json prompt-overrides
+  chat/files/conduit-agent/USER.md chat/files/conduit-agent/MEMORY.md chat/files/conduit-agent/agent.json)
 (( move_email )) && FILES+=(agent/email.json)
 present=()
 for file in "${FILES[@]}"; do [[ -e "$DATA/$file" ]] && present+=("$file"); done
