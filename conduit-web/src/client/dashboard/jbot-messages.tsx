@@ -48,7 +48,7 @@ export function useJbotMessages(changed: () => unknown) {
   return { messages, refresh };
 }
 
-export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean }) {
+export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean; /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
   // rooms interleave.
@@ -118,9 +118,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
-  return <>
-    <DashConversation label={`Messages with ${props.name}`}>
-      <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
+  const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         <Transcript data-times="shown">
           <For each={rows()}>{(row, index) => row.kind === "room"
             ? <TranscriptRow flow={flowAt(index())} tabIndex={-1} data-dash-row="">
@@ -146,8 +144,9 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
           {/* While a turn runs: the thread is at work; what it says arrives as messages. */}
           <Show when={props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}><Turn><Trail><Step state="running" verb={`${props.name} is working`} /></Trail></Turn></TranscriptRow></Show>
         </Transcript>
-      </Show>
-    </DashConversation>
+      </Show>;
+  return <>
+    {props.bare ? transcript() : <DashConversation label={`Messages with ${props.name}`}>{transcript()}</DashConversation>}
     <Dialog open={reading() !== null} onOpenChange={(open) => { if (!open) setReading(null); }} title={reading()?.title || ""} size="large" close="Close">
       <Show when={reading()}>{(message) => markdown(message().body)}</Show>
     </Dialog>
