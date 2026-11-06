@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, SheetFill } from "@/components/ui";
+import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, SheetFill } from "@/components/ui";
+import { unitPx } from "@/components/ui/layout";
 import { clearDock } from "@/components/ui/dock-inset";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
@@ -65,11 +66,21 @@ export function JbotRoom(props: {
   });
   // As a thread's transcript: held at the latest while the person is there, left where they scrolled to otherwise,
   // and clear of the composer by its measured height (dock-inset.ts).
+  // Scrolled back from the latest: the transcript's own Scroll to latest, riding just above the composer.
+  const [away, setAway] = createSignal(false);
+  let latest: HTMLButtonElement | undefined;
+  const anchorLatest = () => {
+    const composer = dock?.firstElementChild?.getBoundingClientRect();
+    const shell = root?.getBoundingClientRect();
+    if (!latest || !composer || !shell || composer.height <= 0) return;
+    latest.style.setProperty("--ride-bottom", `${Math.max(unitPx(0.5), shell.bottom - composer.top + unitPx(0.625))}px`);
+  };
+  const jumpToLatest = () => { if (viewport) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" }); };
   const follow = (element: HTMLDivElement) => {
     viewport = element;
     let pinned = true;
     const toLatest = () => { if (pinned && viewport) viewport.scrollTop = viewport.scrollHeight; };
-    const scrolled = () => { if (viewport) pinned = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48; };
+    const scrolled = () => { if (!viewport) return; pinned = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48; setAway(!pinned); };
     element.addEventListener("scroll", scrolled, { passive: true });
     // The viewport and its reading column: every change to what it holds changes the column's size, so nothing watches
     // the DOM itself (a mutation observer over the transcript re-observed every row on every change).
@@ -77,7 +88,7 @@ export function JbotRoom(props: {
     sizes.observe(element);
     if (element.firstElementChild) sizes.observe(element.firstElementChild);
     let stopClearing: (() => void) | null = null;
-    const frame = requestAnimationFrame(() => { if (root && dock) stopClearing = clearDock(root, dock, toLatest); });
+    const frame = requestAnimationFrame(() => { if (root && dock) stopClearing = clearDock(root, dock, () => { toLatest(); anchorLatest(); }); anchorLatest(); });
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
   };
 
@@ -88,7 +99,9 @@ export function JbotRoom(props: {
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} drop={desktop} onClose={() => setOver(false)} onWide={setWide}
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
-          <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}>
+          <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
+            over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
+              hidden={!away()} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={(element) => { dock = element; }}>{props.composer}</ComposerDock></Show>
