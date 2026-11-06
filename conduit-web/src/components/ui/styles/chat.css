@@ -58,7 +58,7 @@
 .ui-chat-beside-main { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
 .ui-chat-beside-panel { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: var(--space-lg); }
 .ui-chat-beside-panel .ui-dash { flex: none; overflow: visible; }
-.ui-chat-beside-panel .ui-dash-body { overflow: visible; padding: 0; }
+.ui-chat-beside-panel .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
 .ui-chat-beside-scrim { display: none; }
 /* Over the chat: the panel's name by its close, the row a dialog's head is. */
 .ui-chat-beside-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
@@ -72,7 +72,6 @@
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
 .ui-chat-beside:not([data-wide]) .ui-chat-beside-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: var(--frame); opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: .5; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
-[data-presentation] .ui-chat-column { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--transcript-composer-inset, 160px); }
 /* drop: a pointer's panel, dropped from under the header as a menu is, put away by a click outside, Esc or its
    control; the sheet risen from the foot is a phone's, for a thumb. */
 .ui-chat-beside[data-drop]:not([data-wide]) .ui-chat-beside-panel { inset: var(--space-xs) var(--space-md) auto; max-height: calc(100% - var(--space-lg));

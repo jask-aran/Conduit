@@ -74,6 +74,8 @@ export function Composer(props: {
   chat: ActiveChatStore;
   /** In the context gauge's place: what this composer's page reads its particulars from (jbot's chip, in its room). */
   contextControl?: JSX.Element;
+  /** What takes the composer's place, as a question does (jbot's panel); a question comes first. */
+  takeover?: JSX.Element;
   attachments: ComposerAttachments;
   models: ComposerModels;
   modelsLoading?: boolean;
@@ -1006,7 +1008,7 @@ export function Composer(props: {
   // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
-  const desktop = () => <DesktopComposer takeover={question()} opening={props.opening} under={<>{unreachable()}{agents()}</>}
+  const desktop = () => <DesktopComposer takeover={props.chat.hostUiRequests().length ? question() : props.takeover} opening={props.opening} under={<>{unreachable()}{agents()}</>}
     riders={<>{riders()}<Show when={voice.value()}><VoiceRider levels={dictationWaveform.history()} gain={2.5} level={Math.min(1, dictationWaveform.level() * 2.5)} motion={riderMotion(voice.leaving())} /></Show></>}>
     <ComposerField>{field()}</ComposerField>
     <Toolbar ref={toolbarRef}

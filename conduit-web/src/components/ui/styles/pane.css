@@ -96,8 +96,8 @@
 /* A tool's header: the name strong, the place muted; then its modes; its controls at the right. When the app
    measures it short, the modes drop their words, then the name goes. */
 .ui-pane-header:where([data-header="tool"]) { display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); overflow: hidden; padding: var(--space-md) var(--space-lg); font-size: var(--text-row); line-height: var(--leading-row); }
-/* frost: a tool whose content scrolls under its header (jbot's chat), as a chat's pane header. */
-.ui-pane-header:where([data-header="tool"])[data-frost] { position: relative; z-index: 2; background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
+/* frost: a tool whose content scrolls under its header (jbot's chat): the pane header's own fade over it. */
+.ui-pane-header:where([data-header="tool"])[data-frost] { position: relative; z-index: 2; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .ui-pane-header:where([data-header="tool"]) > strong { flex: none; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-tool-place { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-pane-header:where([data-header="tool"]) > .ui-seg { flex: none; }

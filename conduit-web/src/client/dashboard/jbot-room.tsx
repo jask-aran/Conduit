@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, SheetFill } from "@/components/ui";
 import { unitPx } from "@/components/ui/layout";
 import { clearDock } from "@/components/ui/dock-inset";
@@ -17,7 +17,8 @@ import { SplitEmpty } from "./primitives/split";
  */
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
-  /** jbot's panel (JbotPanel): beside the chat, risen over it (a phone) or dropped from its pill (a desktop). */
+  /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
+   *  desktop the composer's takeover (JbotTakeover, as the question card is). */
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; tabs: boolean; done: () => void }) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
@@ -26,8 +27,6 @@ export function JbotRoom(props: {
   /** On a desktop: "phone", a phone's header (its pill, its actions frost over the chat) and column; "narrow", the
    *  column alone (jbot's dock tool, under the tool's header). */
   presentation?: "phone" | "narrow";
-  /** The panel's control, for a header outside the room (the dock tool's). */
-  onControl?: (control: { open: () => boolean; toggle: () => void } | null) => void;
 }) {
   const log = useJbotMessages(() => props.threadChanged);
   const name = () => agentView()?.settings?.name || "Agent";
@@ -43,8 +42,16 @@ export function JbotRoom(props: {
   const tabKey = "conduit.jbot.panel-tab";
   const [tab, setTabShown] = createSignal<JbotTab>((() => { try { const saved = localStorage.getItem(tabKey); return JBOT_TABS.some((item) => item.value === saved) ? saved as JbotTab : "now"; } catch { return "now"; } })());
   const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(tabKey, next); } catch { /* a per-viewer convenience */ } };
-  // A desktop never raises a sheet (a thumb's): without room beside, the panel drops from jbot's pill, as a menu.
+  // A desktop never raises a sheet (a thumb's): without room beside, the panel takes the composer's place.
   const desktop = !isMobileLayout();
+  const takeover = () => desktop && !wide() && over();
+  const panelState = { get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) };
+  createEffect(() => {
+    if (!takeover()) return;
+    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); setOver(false); } };
+    window.addEventListener("keydown", away, true);
+    onCleanup(() => window.removeEventListener("keydown", away, true));
+  });
   // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
   // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
   const [built, setBuilt] = createSignal(false);
@@ -52,7 +59,6 @@ export function JbotRoom(props: {
     const handle = window.setTimeout(() => setBuilt(true), 1500);
     onCleanup(() => window.clearTimeout(handle));
   });
-  onMount(() => { props.onControl?.({ open, toggle }); onCleanup(() => props.onControl?.(null)); });
   const toggle = () => {
     if (!wide()) return void setOver(!over());
     const next = !beside();
@@ -92,12 +98,12 @@ export function JbotRoom(props: {
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
   };
 
-  return <JbotPanelControl.Provider value={{ open, toggle }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
+  return <JbotPanelControl.Provider value={{ open, toggle, takeover, close: () => setOver(false), name, panel: () => props.panel(panelState) }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} drop={desktop} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide}
-          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
+        <ChatBeside label={`${name()}'s panel`} title={name()} open={desktop && !wide() ? false : open()} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide}
+          panel={<Show when={(!desktop || wide()) && (built() || open())}>{props.panel(panelState)}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"

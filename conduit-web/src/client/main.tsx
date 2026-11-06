@@ -23,7 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
-import { JbotChip, JbotPanel, JbotPanelControl } from "./dashboard/jbot-status";
+import { JbotChip, JbotPanel, JbotPanelControl, JbotTakeover } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
@@ -1272,7 +1272,6 @@ function App() {
     runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
     harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
   });
-  const [jbotToolControl, setJbotToolControl] = createSignal<{ open: () => boolean; toggle: () => void } | null>(null);
   // Not awaited: a round trip in front of first paint is a poor price for a
   // race that asking again closes. A chat that opened before this landed is
   // told to look once more, and a composer with something in it is left alone.
@@ -5155,7 +5154,6 @@ function App() {
   const dockDragging = (event: DragEvent) => document.body.dataset.toolDrag === "dock" && Boolean(event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) && !isMobileLayout();
   // Only the Terminal is maximised in the dock (its header alone offers it): showing anything else there restores it.
   createEffect(() => { if (workspaceExpanded() && !(dockSlot() === null && dockTool() === "terminal")) setWorkspaceExpanded(false); });
-  const jbotModes = () => <HeaderButton label={`${agentView()?.settings?.name || "jbot"}'s panel`} icon={<Icons.Dashboard />} aria-pressed={Boolean(jbotToolControl()?.open())} onClick={() => jbotToolControl()?.toggle()} />;
   const toggleWorkspaceExpanded = () => {
     const next = !workspaceExpanded();
     setWorkspaceExpanded(next);
@@ -6017,9 +6015,9 @@ function App() {
    * (docs/design/panes-and-rail.md, stage 5d).
    */
   // onSendDraft: a page whose composer starts a chat; without it the session's loaded chat is sent to (jbot's page).
-  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void>; contextControl?: JSX.Element }) => {
+  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void>; contextControl?: JSX.Element; takeover?: JSX.Element }) => {
     const current = props.session;
-    return <Composer shortcuts={shortcutManager} contextControl={props.contextControl}
+    return <Composer shortcuts={shortcutManager} contextControl={props.contextControl} takeover={props.takeover}
       chat={current.chat}
       place={props.place}
       workspace={props.workspace}
@@ -6099,14 +6097,14 @@ function App() {
     </>;
     // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
-      presentation={tool ? "narrow" : docked() ? "phone" : undefined} onControl={tool ? setJbotToolControl : undefined}
+      presentation={tool ? "narrow" : docked() ? "phone" : undefined}
       panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
-        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip />} /></Show>} />;
+        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip />} takeover={<JbotTakeover />} /></Show>} />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
     if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);
@@ -6454,10 +6452,10 @@ function App() {
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} jbotModes={jbotModes} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
     <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => { dockBeforeJbot = null; closePanel(); }} shortcuts={shortcutManager}
       jbotView={() => renderJbot("tool")}
-      jbotModes={jbotModes} /></Show>
+ /></Show>
     </AppShell>
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
