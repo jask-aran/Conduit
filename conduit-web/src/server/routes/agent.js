@@ -468,7 +468,10 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (!enabled(response)) return;
       if (!agent.active()) return response.status(409).json({ error: "agent_off" });
       const state = await agent.state();
-      const schedule = state.schedules[request.params.id];
+      // A routine without a clock (switched off, or started only by an event) runs by hand all the same.
+      const routineId = /^r-([a-z0-9][a-z0-9-]*)$/.exec(request.params.id)?.[1];
+      const schedule = state.schedules[request.params.id]
+        || (routineId && await readRoutine(agent.folder, routineId).catch(() => null) ? { id: request.params.id, routine: routineId } : null);
       if (!schedule) return response.status(404).json({ error: "schedule_not_found" });
       const key = `now:${schedule.id}:${crypto.randomUUID()}`;
       if (schedule.feed && schedule.feed.source.kind !== "run") {

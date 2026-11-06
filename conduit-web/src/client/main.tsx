@@ -580,7 +580,8 @@ function App() {
   const logout = async () => {
     clearCachedCatalogue();
     if (nativeApp) {
-      try { await authorizedFetch(logoutUrl(), { method: "POST" }); } catch {}
+      // The server is told when it can be reached; signing out never waits on one that cannot.
+      try { await authorizedFetch(logoutUrl(), { method: "POST", signal: AbortSignal.timeout(4000) }); } catch {}
       await clearNativeBearerToken();
       window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
       return;

@@ -261,12 +261,14 @@ export function AgentPage(props: {
     const quiet = () => clockKind(schedule) === "heartbeat" && quietUntil() ? `Quiet until ${quietUntil()}` : undefined;
     const status = () => !feed ? undefined : feed.lastError ? "Last check failed" : !feed.primed ? "First check soon"
       : `${feed.lastCount ? `${feed.lastCount} new` : "Nothing new"} ${age(feed.lastRunAt, now())}`.trim();
-    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} next="Off" off />;
+    const runNow = <IconButton kind="dash" aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
+      onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></IconButton>;
+    // Off: no clock, but it still runs by hand.
+    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} next="Off" off actions={schedule.routine ? runNow : undefined} />;
     return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
       actions={<>
-        <IconButton kind="dash" aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
-          onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></IconButton>
+        {runNow}
         {feed ? <IconButton kind="dash" aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}
         onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></IconButton> : undefined}
       </>} />;

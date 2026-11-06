@@ -157,8 +157,11 @@ test("email to a room with another sender or copied recipient is refused before 
 // inbox (which is what routines report, not mail to jbot).
 test("unknown email waits in the mail room while the person's email starts a turn", async (t) => {
   const { log, email, agent, prompts } = await mailbox(t);
+  const events = [];
+  agent.fireEvent = async (name, event) => { events.push([name, event.key]); return []; };
   await email.receive(mail("unknown", { from: "other@example.test" }));
   assert.equal(prompts.length, 0);
+  assert.deepEqual(events.map(([name]) => name), ["held-mail"], "held mail wakes routines on held-mail");
   assert.equal(log.list()[0].delivery.state, "held");
   assert.ok(log.list()[0].body.includes("Body of unknown"));
   assert.deepEqual(Object.values((await agent.state()).inbox || {}), []);

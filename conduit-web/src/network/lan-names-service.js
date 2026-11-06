@@ -67,17 +67,23 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
   async function status() {
     return {
       configured: Boolean(config),
-      ...(config ? { domain: config.domain, via: config.via, tokenSet: Boolean(config.token), hubName: config.hubName } : {}),
+      ...(config ? { domain: config.domain, via: config.via, tokenSet: Boolean(config.token), hubName: config.hubName, ...(config.hubLabel ? { hubHost: hubHost() } : {}) } : {}),
       state, ...(step ? { step } : {}), ...(error ? { error } : {}),
       certificates: await certificates(), hubAddress: await hubAddress(), cf: await cliStatus(),
     };
   }
+  /*
+   * The hub's own LAN name: the domain itself, or `<hubLabel>.<domain>` when the domain's bare name is taken by
+   * something else (the hub's internet route through a tunnel: conduit-local.jask-aran.com outside, and
+   * lan.conduit-local.jask-aran.com on the LAN).
+   */
+  const hubHost = () => config.hubLabel ? `${config.hubLabel}.${config.domain}` : config.domain;
   async function pointHub() {
     if (!config?.hubName) return;
     const address = await hubAddress();
     if (!address) return;
-    const record = { type: "A", name: config.domain, content: address, ttl: 60, proxied: false };
-    const rows = await currentProvider.records(config.zone, { type: "A", name: config.domain });
+    const record = { type: "A", name: hubHost(), content: address, ttl: 60, proxied: false };
+    const rows = await currentProvider.records(config.zone, { type: "A", name: hubHost() });
     if (rows.some((row) => row.content === address)) return;
     if (rows[0]?.id) await currentProvider.update(config.zone, rows[0].id, record);
     else await currentProvider.create(config.zone, record);
@@ -95,7 +101,7 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
   }
   async function run(force) {
     try {
-      const targets = [["nodes", `*.${config.domain}`], ...(config.hubName ? [["lan", config.domain]] : [])];
+      const targets = [["nodes", `*.${config.domain}`], ...(config.hubName ? [["lan", hubHost()]] : [])];
       let due = targets;
       if (!force) {
         const needed = await Promise.all(targets.map((target) => needsCertificate(...target)));
@@ -168,7 +174,9 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
         if (!["token", "cf"].includes(input.via)) throw fail("cloudflare_token_invalid", "Choose a Cloudflare token or the Cloudflare CLI");
         const token = input.via === "token" ? (typeof input.token === "string" && input.token.trim() || (config?.via === input.via && config.domain === domain ? config.token : "")) : undefined;
         if (input.via === "token" && !token) throw fail("cloudflare_token_invalid", "Enter a Cloudflare API token");
-        const next = { domain, via: input.via, ...(token ? { token } : {}), hubName: input.hubName === true, accountKey: config?.accountKey || null, files: config?.files || [] };
+        const hubLabel = typeof input.hubLabel === "string" && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(input.hubLabel) && !input.hubLabel.startsWith("n-")
+          ? input.hubLabel : input.hubLabel === undefined && config?.domain === domain ? config.hubLabel : undefined;
+        const next = { domain, via: input.via, ...(token ? { token } : {}), hubName: input.hubName === true, ...(hubLabel ? { hubLabel } : {}), accountKey: config?.accountKey || null, files: config?.files || [] };
         const provider = makeProvider(next);
         let zone;
         try {

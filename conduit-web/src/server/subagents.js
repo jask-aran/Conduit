@@ -345,13 +345,15 @@ export function Subagents(runtime) {
         let recorded = null;
         if (task.input.gate && !task.input.origin?.test && task.input.origin?.routineTaskId && output === "jbot" && heard && !stopped && level !== "failed") {
           const at = await api.memo("recordAt", new Date().toISOString(), context);
-          const entry = await api.commit(async (tx) => {
+          // What a task's commit returns is its next state: the entry is kept aside, never returned.
+          let entry = null;
+          await api.commit(async (tx) => {
             const doc = await tx.doc(AgentDoc);
             const sources = doc.routineRuns?.[task.input.origin.routineTaskId]?.outcome?.sources || [];
             const body = sources.length ? `${report.answer}\n\n## Sources\n\n${sources.map((source) => `- [${source.title}](../${source.path})`).join("\n")}` : report.answer;
             const filed = await fileEntry(tx, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
               level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: "Told jbot", body }, Date.parse(at));
-            return { ...JSON.parse(JSON.stringify(filed)), body };
+            entry = { ...JSON.parse(JSON.stringify(filed)), body };
           }, context);
           if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry, { text: entry.body }).catch(() => {});
           recorded = inboxFile(entry);

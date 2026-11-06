@@ -112,6 +112,10 @@ export class ServerIdentity {
     this.id = "";
     /** origin -> last seen, for addresses this server has actually answered on. */
     this.observed = new Map();
+    /** Addresses its owner says it answers on (an internet name through a tunnel): offered before anyone arrives. */
+    this.published = [];
+    /** False on a hub nobody shares a network with (a VPS): its private addresses and LAN names are not routes. */
+    this.lan = true;
     this.writing = null;
   }
 
@@ -128,6 +132,10 @@ export class ServerIdentity {
     // saved here, is what every client and the LAN see.
     this.name = String(saved?.name || this.configuredName || os.hostname() || "Conduit").trim().slice(0, 63) || "Conduit";
     this.id = typeof saved?.id === "string" && /^[0-9a-f]{32}$/.test(saved.id) ? saved.id : crypto.randomBytes(16).toString("hex");
+    this.lan = saved?.lan !== false;
+    this.published = (Array.isArray(saved?.published) ? saved.published : []).filter((origin) => {
+      try { return /^https?:$/.test(new URL(origin).protocol); } catch { return false; }
+    });
     for (const entry of Array.isArray(saved?.observed) ? saved.observed : []) {
       if (typeof entry?.origin === "string" && Number.isFinite(entry.seenAt)) this.observed.set(entry.origin, entry.seenAt);
     }
@@ -218,6 +226,7 @@ export class ServerIdentity {
   async prune() {
     let changed = false;
     for (const [origin, seenAt] of [...this.observed]) {
+      if (this.published.includes(origin)) { this.observed.delete(origin); changed = true; continue; }
       let gone = this.now() - seenAt > OBSERVED_KEPT_MS;
       if (!gone) {
         const { hostname } = new URL(origin);
@@ -237,15 +246,19 @@ export class ServerIdentity {
     return () => clearInterval(timer);
   }
 
-  /** Every address this server believes it answers on, with what each costs. */
+  /*
+   * Every address this server believes it answers on, with what each costs. Set by hand in identity.json:
+   * `published` (origins it always offers: an internet name through a tunnel, a tailnet name) and `lan: false` (a hub
+   * nobody shares a network with offers no private address or LAN name).
+   */
   paths() {
     const seen = new Set();
     const rows = [];
-    const local = localPaths(this.port).filter((origin) => this.network || scopeForHost(new URL(origin).hostname) !== PATH_SCOPES.private);
+    const local = localPaths(this.port).filter((origin) => (this.network && this.lan) || scopeForHost(new URL(origin).hostname) !== PATH_SCOPES.private);
     // Its LAN names (lan-names-service.js) follow the machine to a new address, where every address above is only
     // what it holds today: a client that saved one still has a way back after the router hands out another.
-    const named = this.network ? (this.names?.() || []).map((name) => `https://${name}:${this.port}`) : [];
-    for (const origin of [...local, ...named, ...this.observed.keys()]) {
+    const named = this.network && this.lan ? (this.names?.() || []).map((name) => `https://${name}:${this.port}`) : [];
+    for (const origin of [...local, ...named, ...this.published, ...this.observed.keys()]) {
       if (seen.has(origin)) continue;
       seen.add(origin);
       rows.push({ origin, scope: scopeForHost(new URL(origin).hostname) });
@@ -279,6 +292,8 @@ export class ServerIdentity {
       id: this.id,
       name: this.name,
       privateKey: this.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
+      ...(this.published.length ? { published: this.published } : {}),
+      ...(this.lan ? {} : { lan: false }),
       observed: [...this.observed].map(([origin, seenAt]) => ({ origin, seenAt })),
     }, null, 2);
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });

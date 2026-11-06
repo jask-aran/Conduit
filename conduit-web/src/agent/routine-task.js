@@ -174,7 +174,8 @@ export function routineTask(runtime) {
     phases: {
       before: async (task, api, context) => {
         const record = await get(task, api, context);
-        if (!record || !runtime.agent.enabled() || !record.routine.enabled) throw new Error("Routine is disabled or unavailable.");
+        // Switched off stops its clock, not the person: a routine run by hand (force) runs whether it is on or not.
+        if (!record || !runtime.agent.enabled() || (!record.routine.enabled && !record.force)) throw new Error("Routine is disabled or unavailable.");
         await validateRoutineGraph(runtime.agent.folder, record.routine);
         const index = task.state.checkpoint.index || 0;
         const step = record.routine.before?.[index];
