@@ -70,6 +70,18 @@ It still shares the machine: auth commands need an explicit `CONDUIT_DATA_ROOT`
 to avoid touching the real password, and Tailscale setup changes the real tailnet.
 See [testing](TESTING.md) before testing an installer or update.
 
+### A server that follows main
+
+A clone's server can take every push to `main` by itself, as the VPS's dev
+server does (a second daemon beside the release one: `CONDUIT_PROFILE=dev`,
+its own port, state and data). [`follow-main.sh`](../scripts/follow-main.sh)
+fast-forwards the clone, builds and restarts through the server CLI, which
+waits for answers in flight; a failed build or a server that does not come
+back is rolled back, and that commit is skipped. Run it every minute from a
+systemd user timer whose service sets `CONDUIT_PROFILE`, `CONDUIT_STATE_DIR`,
+`CONDUIT_DATA_ROOT` and a `PATH` with the clone's Node; its log is
+`<state dir>/follow-main.log`.
+
 ### Build installed clients
 
 Installed clients bundle the interface. A server update alone cannot update
