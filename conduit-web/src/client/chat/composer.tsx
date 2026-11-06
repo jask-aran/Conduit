@@ -10,6 +10,7 @@ import { mirror } from "@/components/ui/native-phone-composer";
 import type { PluginListenerHandle } from "@capacitor/core";
 import { Button as LibraryButton, Viewfinder, Captions, Completion, ComposerField, DesktopComposer, Line, Lines, PhoneComposer, Picker, PillButton, PillField, PillWave, Rider, RiderMark, Spinner, StopGlyph, TextArea, Toolbar, VoiceRider } from "@/components/ui";
 import { activeServer } from "../platform/servers";
+import { changesWaiting, heldWrites } from "../api/client";
 import { latestAway, scrollToLatest } from "./latest-away";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 
@@ -982,7 +983,10 @@ export function Composer(props: {
   const unreachable = () => <Show when={!props.serverOnline}>
     <Rider label="Hub unreachable" motion="entering">
       <RiderMark icon={<Icons.Server />} label="Unreachable" />
-      <Lines><Line text={`Can't reach ${activeServer()?.name || "the hub"}${props.onSendDraft ? "" : " — messages will send when it's back"}`} /></Lines>
+      <Lines>
+        <Line text={`Can't reach ${activeServer()?.name || "the hub"}${props.onSendDraft ? "" : " — messages will send when it's back"}`} />
+        <Show when={heldWrites()}><Line text={changesWaiting(heldWrites())} /></Show>
+      </Lines>
     </Rider>
   </Show>;
   const riders = () => <>

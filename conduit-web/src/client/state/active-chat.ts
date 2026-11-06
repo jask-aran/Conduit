@@ -36,7 +36,8 @@ import { createClientActiveGenerationStore } from "./active-generation-store.js"
 import { markChatRead } from "./read-receipts";
 import { clearReviewComments, parseReviewComments, projectReviewComments, restoreReviewComments, reviewComments } from "../chat/review-comments";
 import { toast } from "@/components/ui/notifications";
-import { addToOutbox, outboxOf, returnToOutbox, takeFromOutbox, type OutboxEntry } from "./outbox";
+import { addToOutbox, holdOutboxOpen, outboxOf, returnToOutbox, takeFromOutbox, type OutboxEntry } from "./outbox";
+import { readDeviceTranscript, saveDeviceTranscript } from "./device-transcripts";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -1110,7 +1111,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     project: Project,
     navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
   ) => {
-    const known = transcriptCache.get(chat.id)?.detail;
+    // What this page read of it, else the copy kept on the device (a cold start has nothing in memory).
+    const navigation = ++navigationToken;
+    const known = transcriptCache.get(chat.id)?.detail ?? await readDeviceTranscript(chat.id) ?? undefined;
+    if (navigation !== navigationToken) return;
     const entering = enterChat(chat, project, {
       detail: known,
       history: navigationOptions.history || "replace",
@@ -1136,6 +1140,38 @@ export function createActiveChat(options: ActiveChatOptions) {
     void permissions?.select(entered.chat.id);
     void serviceLevels?.select(entered.chat.id);
   }, { defer: true }));
+
+  /*
+   * The device's copy of the open chat (state/device-transcripts.ts), kept as it loads and as it changes: what is on
+   * screen, written a couple of seconds after it last changed, and at once when another chat takes its place.
+   */
+  let deviceCopy: { chatId: string; detail: TranscriptDetail } | null = null;
+  let deviceCopyTimer: ReturnType<typeof setTimeout> | undefined;
+  const writeDeviceCopy = () => {
+    clearTimeout(deviceCopyTimer);
+    deviceCopyTimer = undefined;
+    const copy = deviceCopy;
+    deviceCopy = null;
+    if (copy) void saveDeviceTranscript(copy.chatId, copy.detail);
+  };
+  createEffect(() => {
+    const chatId = loadedId();
+    const list = messages();
+    const toolList = tools();
+    if (!chatId || presentation().kind !== "ready" || !list.length) return;
+    untrack(() => {
+      if (deviceCopy && deviceCopy.chatId !== chatId) writeDeviceCopy();
+      const base = transcriptCache.get(chatId)?.detail;
+      deviceCopy = { chatId, detail: { ...base, id: chatId, projectId: projectId(), title: title(), status: status(),
+        messages: list, tools: toolList } as TranscriptDetail };
+      deviceCopyTimer ??= setTimeout(writeDeviceCopy, 2_000);
+    });
+  });
+  // The open chat's waiting messages are its own to send; the app's background sending leaves them alone.
+  createEffect(() => {
+    const chatId = loadedId();
+    if (chatId) onCleanup(holdOutboxOpen(chatId));
+  });
 
   const performSelect = async (
     chat: ChatSummary,
@@ -1668,6 +1704,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   });
 
   onCleanup(() => {
+    writeDeviceCopy();
     transcriptPrefetches.clear();
     transcriptCache.clear();
     session.dispose();
@@ -1681,6 +1718,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     initialize, select, prefetch, turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
     agents, stopAgent, cancelOutbox,
+    /** Open a chat from what this device holds, the hub being out of reach (a cold start's address): read again once it is back. */
+    openOffline: (chat: ChatSummary, project: Project) => enterOffline(chat, project, { history: "none" }),
   };
 }
 

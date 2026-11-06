@@ -756,7 +756,7 @@ export function Settings(props: {
     onCleanup(() => window.clearInterval(timer));
   });
   const stopProcess = async (id: string) => {
-    try { await api(`/v0/live-sessions/${encodeURIComponent(id)}/process`, { method: "DELETE" }); }
+    try { await api(`/v0/live-sessions/${encodeURIComponent(id)}/process`, { method: "DELETE", replay: false }); }
     catch (error) { setRuntimeError((error as Error).message); }
     await Promise.all([loadProcesses(), loadRuntime()]);
   };
@@ -800,7 +800,7 @@ export function Settings(props: {
   const saveChatGptCookie = async (cookie: string) => {
     setChatGptBusy(true);
     try {
-      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie }) }));
+      setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/credential", { method: "PUT", body: JSON.stringify({ cookie }), replay: false }));
       setChatGptError("");
     } catch (error) { setChatGptError((error as Error).message); throw error; }
     finally { setChatGptBusy(false); }
@@ -852,7 +852,7 @@ export function Settings(props: {
   const saveApiKey = async (providerId: string, key: string, env: Record<string, string>) => {
     setAuthError("");
     try {
-      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key, env }) });
+      await api("/v0/pi-auth/api-key", { method: "PUT", body: JSON.stringify({ providerId, key, env }), replay: false });
       await loadPiAuth();
       if (section() === "search") void loadSearchSettings();
     } catch (error) { setAuthError((error as Error).message); throw error; }
@@ -937,7 +937,7 @@ export function Settings(props: {
   const saveSearchKey = async (id: string, key: string) => {
     setSearchSaving(true);
     setSearchError("");
-    try { setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }) })); }
+    try { setSearchSettings(await api<SearchSettings>(`/v0/search/providers/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ key }), replay: false })); }
     catch (error) { setSearchError((error as Error).message); throw error; }
     finally { setSearchSaving(false); }
   };
@@ -1146,8 +1146,10 @@ export function Settings(props: {
     voiceSettingsGeneration += 1;
     voiceSaveInFlight += 1;
     try {
+      // Not kept to send again: it carries the provider's secret.
       const saved = await api<VoiceServerSettings>("/v0/voice/settings", {
         method: "PUT",
+        replay: false,
         body: JSON.stringify({
           mode: settings.mode,
           localModelId: settings.localModelId,

@@ -150,8 +150,11 @@ export function createDrafts(onError: (error: unknown) => void) {
   const flush = async (chatId: string, entry: DraftEntry | null) => {
     setInFlight((value) => value + 1);
     try {
+      // Not kept to send again: the local copy is already the draft's net (unflushed, reconciled on load), and a held
+      // PUT would keep `settled()` false -- and a page replacement waiting -- for as long as the hub is away.
       await api(`/v0/chats/${encodeURIComponent(chatId)}/draft`, {
         method: "PUT",
+        replay: false,
         body: JSON.stringify({ text: entry?.text ?? "", attachmentIds: entry?.attachmentIds ?? [] }),
       });
       if (entry) markFlushed(chatId, entry);

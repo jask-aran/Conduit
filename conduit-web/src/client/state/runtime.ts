@@ -5,7 +5,7 @@ import { onPathChange } from "../platform/servers";
 import { eventSourceUrl } from "../api/transport";
 import { authorizedFetch } from "../api/native-auth-client";
 import { browserRegistrationId, finishPwaRestart, preparePwaRestart } from "../pwa-update";
-import { api } from "../api/client";
+import { api, replayHeldWrites } from "../api/client";
 import { RESUME_RECONNECT_AFTER_MS } from "./agent-session";
 import { buildLabel, clientBuild } from "../platform/build-info";
 
@@ -121,7 +121,7 @@ export function createRuntimeStore() {
     try {
       const event = JSON.parse(data) as Record<string, unknown>;
       if (event.type === "ping") {
-        if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); }
+        if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); replayHeldWrites(); }
         setStale(false);
       } else if (event.type === "runtime_global_snapshot") {
         replaceAll((event.processes || []) as RuntimeProcess[]);
@@ -131,6 +131,8 @@ export function createRuntimeStore() {
         if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
         restartAnnounced = { attempt: event.restartAttempt, target: event.restartTarget };
         attempts = 0;
+        // Back (or first heard from): the writes waiting for it go now rather than at their next retry.
+        if (connectivity() !== "online") replayHeldWrites();
         setConnectivity("online");
         setStale(false);
       } else if (event.type === "runtime_process" && event.process) {

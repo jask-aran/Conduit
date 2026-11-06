@@ -7,6 +7,7 @@ import { Avatar, ServerControl } from "@/components/ui/connection";
 import { accountName, accountPicture, loadAccount } from "../state/account";
 import { isMobileLayout } from "./mobile-layout";
 import { buildHttpUrl } from "../api/transport";
+import { changesWaiting, heldWrites } from "../api/client";
 import { proveServer } from "../platform/server-proof";
 import { installerDownloads, type PublishedRelease } from "../platform/github-release";
 
@@ -119,7 +120,9 @@ export function ServerSwitcher(props: {
     const value = origin ? latency()[origin] : undefined;
     return typeof value === "number" ? ` · ${value} ms` : "";
   };
-  const triggerDetail = () => `${connectionLabel()}${activeLatency()}`;
+  // Writes kept on this device until the hub takes them (api/client.ts's held writes).
+  const waitingLabel = () => heldWrites() ? ` · ${changesWaiting(heldWrites())}` : "";
+  const triggerDetail = () => `${connectionLabel()}${waitingLabel()}${activeLatency()}`;
 
   const latencyLabel = (origin: string) => {
     if (!canProbe(origin)) return "";

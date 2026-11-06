@@ -7,7 +7,7 @@ import { authorizedFetch } from "./native-auth-client.ts";
 // while the list of servers and the rules for an address live together.
 export { normalizeServerOrigin };
 
-const SOCKET_TICKET_TIMEOUT_MS = 8_000;
+const SOCKET_TICKET_TIMEOUT_MS = 30_000;
 
 export function buildHttpUrl(path, origin) {
   return new URL(path, `${origin}/`).toString();

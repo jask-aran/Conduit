@@ -68,3 +68,31 @@ export function takeFromOutbox(chatId: string, messageId: string): OutboxEntry |
 export function returnToOutbox(chatId: string, entry: OutboxEntry) {
   write(chatId, [entry, ...outboxOf(chatId).filter((held) => held.messageId !== entry.messageId)]);
 }
+
+/* Which chats are open in some pane: their waiting messages are that chat's to send (over its stream), so the app's
+   background sending for chats nobody has open leaves them alone. */
+const openChats = new Map<string, number>();
+export function holdOutboxOpen(chatId: string) {
+  openChats.set(chatId, (openChats.get(chatId) ?? 0) + 1);
+  return () => {
+    const count = (openChats.get(chatId) ?? 1) - 1;
+    if (count > 0) openChats.set(chatId, count);
+    else openChats.delete(chatId);
+  };
+}
+export const outboxIsOpen = (chatId: string) => openChats.has(chatId);
+
+/** The chats of the active server with messages waiting. */
+export function outboxChats(): string[] {
+  const store = storage();
+  if (!store) return [];
+  const prefix = `${PREFIX}${activeOrigin() || ""}:`;
+  const chats: string[] = [];
+  try {
+    for (let index = 0; index < store.length; index += 1) {
+      const key = store.key(index);
+      if (key?.startsWith(prefix)) chats.push(key.slice(prefix.length));
+    }
+  } catch { return []; }
+  return chats.filter((chatId) => outboxOf(chatId).length);
+}

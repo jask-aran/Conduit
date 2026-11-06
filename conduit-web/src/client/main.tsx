@@ -39,7 +39,7 @@ import { HeaderCrumb } from "@/components/ui/header";
 import { FileEmptySide } from "@/components/ui/viewer";
 import { DragPill, DropWash, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
-import { api, apiWhenServed, asList, chatPath, isUnreachableError, JBOT_THREAD_PATH, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
+import { api, apiWhenServed, asList, chatPath, isUnreachableError, JBOT_THREAD_PATH, type ApiRequestMetadata, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
 import { startPathSelection } from "./platform/path-selector";
 import { canDiscoverServers, discoverServers, type FoundServer } from "./platform/discovery";
@@ -94,6 +94,8 @@ import { applyPwaUpdate, checkForPwaUpdate, arrivedByNewBuild, claimPwaUpdateArr
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
+import { outboxChats, outboxIsOpen, outboxOf, takeFromOutbox } from "./state/outbox";
+import { parseReviewComments } from "./chat/review-comments";
 import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from "./state/catalogue-cache";
 import { createCatalogueStore } from "./state/catalogue";
 import { markChatRead } from "./state/read-receipts";
@@ -1076,6 +1078,54 @@ function App() {
   const serverReachable = () => !["reconnecting", "offline"].includes(runtime.connectivity());
   hubAway = () => runtime.connectivity() !== "online";
   const drafts = createDrafts(showError);
+  /*
+   * The waiting messages (state/outbox.ts) of chats nobody has open, sent once the hub is back -- an open chat sends
+   * its own over its stream. By HTTP (POST /v0/chats/:id/prompt, which starts the chat's agent if it has none), one at
+   * a time per chat, and only to an agent that is not working: the next waits until the turn the last one started has
+   * been seen to run and end. Each leaves the outbox before it goes. One the hub refused goes back only if the chat is
+   * gone (then it is dropped); one whose fate is unknown (the request failed on the way) is never sent twice and goes
+   * into the chat's draft instead, for the person to send or not.
+   */
+  const sentElsewhere = new Map<string, { at: number; seen: boolean }>();
+  let sendingElsewhere = false;
+  const sendWaitingElsewhere = async () => {
+    if (sendingElsewhere || runtime.connectivity() !== "online") return;
+    sendingElsewhere = true;
+    try {
+      for (const chatId of outboxChats()) {
+        if (outboxIsOpen(chatId)) continue;
+        const active = Boolean(runtime.getProcess(chatId)?.active);
+        const last = sentElsewhere.get(chatId);
+        if (last) {
+          if (active) { last.seen = true; continue; }
+          if (!last.seen && Date.now() - last.at < 60_000) continue;
+          sentElsewhere.delete(chatId);
+        }
+        if (active) continue;
+        const next = outboxOf(chatId)[0];
+        const entry = next ? takeFromOutbox(chatId, next.messageId) : null;
+        if (!entry) continue;
+        const projectId = catalogue.projects().find((project) => project.sessions.some((session) => session.id === chatId))?.id || "";
+        try {
+          await api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", timeout: false,
+            body: JSON.stringify({ messageId: entry.messageId, message: entry.message, attachmentIds: [], projectId }) });
+          sentElsewhere.set(chatId, { at: Date.now(), seen: false });
+        } catch (error) {
+          if ((error as { apiRequest?: ApiRequestMetadata }).apiRequest?.status === 404) continue;
+          const text = parseReviewComments(entry.message).text;
+          const held = drafts.draftFor(chatId)?.text || "";
+          drafts.save(chatId, held ? `${held}\n${text}` : text, []);
+        }
+      }
+    } finally {
+      sendingElsewhere = false;
+    }
+  };
+  createEffect(() => {
+    if (runtime.connectivity() !== "online") return;
+    runtime.processes();
+    untrack(() => void sendWaitingElsewhere());
+  });
 
 
   const saveWorkspaceDefault = async (workspaceId: string, templateId: string | null) => {
@@ -2569,7 +2619,7 @@ function App() {
   };
   const destroyWorkspace = async (target: Project, confirmation: string) => {
     try {
-      await api(`/v0/projects/${encodeURIComponent(target.id)}`, { method: "DELETE", body: JSON.stringify({ mode: "destroy_workspace", confirmation }) });
+      await api(`/v0/projects/${encodeURIComponent(target.id)}`, { method: "DELETE", body: JSON.stringify({ mode: "destroy_workspace", confirmation }), replay: false });
       dropProjectPanelState(target);
       if (catalogue.projectId() === target.id) await createChat(catalogue.projects().find((item) => item.slug === "chat"));
       await refresh();
@@ -2577,7 +2627,7 @@ function App() {
     } catch (error) { showError(error); return false; }
   };
   const cancelClone = async (operationId: string) => {
-    await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE" });
+    await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE", replay: false });
   };
 
   /*
@@ -5173,7 +5223,7 @@ function App() {
     const process = runtime.getProcess(chatId);
     if (!chatId || !process?.id) return;
     try {
-      await api(`/v0/live-sessions/${encodeURIComponent(process.id)}/process`, { method: "DELETE" });
+      await api(`/v0/live-sessions/${encodeURIComponent(process.id)}/process`, { method: "DELETE", replay: false });
       runtime.forget(chatId);
       toast.success("Process stopped");
     } catch (error) { showError(error); }
@@ -5871,10 +5921,18 @@ function App() {
     // route; what loaded then fills the catalogue but does not take the page back.
     const bootPath = location.pathname;
     const navigated = () => location.pathname !== bootPath;
+    // A chat's address opened while the hub cannot be reached (the runtime stream says so within seconds): with the
+    // catalogue this device saw last, the chat opens from its device copy rather than waiting on the hub, which its
+    // requests go on doing; the open chat is read again once the hub is back.
+    let hubAwayOnBoot: (away: "away") => void = () => {};
+    const awayOnBoot = new Promise<"away">((resolve) => { hubAwayOnBoot = resolve; });
+    if (initialRouteId && cachedCatalogue) createEffect(() => {
+      if (["reconnecting", "offline"].includes(runtime.connectivity())) hubAwayOnBoot("away");
+    });
     void (async () => {
       const [cataloguePayload, selectedChat] = await Promise.all([
         catalogueRequest,
-        selectedChatRequest || Promise.resolve(null),
+        selectedChatRequest && cachedCatalogue ? Promise.race([selectedChatRequest, awayOnBoot]) : selectedChatRequest || Promise.resolve(null),
       ]);
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
       migrateWorkspacePanelStorage(workspacePanelScopes(projects));
@@ -5887,8 +5945,20 @@ function App() {
         catalogue.setProjects(asList<Project>(fresh.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) })));
       }).catch(() => {});
       if (navigated()) return;
-      if (selectedChat) {
-        const [target, detail] = selectedChat;
+      const offlineTarget = selectedChat === "away"
+        ? projects.flatMap((project) => project.sessions.map((session) => ({ project, session }))).find((item) => item.session.id === initialRouteId)
+        : undefined;
+      if (offlineTarget) {
+        await chat.openOffline(offlineTarget.session, offlineTarget.project);
+        if (navigated()) return;
+        setRouteKind("chat");
+        setRouteBootstrap("ready");
+        return;
+      }
+      // Not in the catalogue this device saw: only the hub can say which chat it is.
+      const reached = selectedChat === "away" ? await selectedChatRequest : selectedChat;
+      if (reached) {
+        const [target, detail] = reached;
         let project = projects.find((item) => item.id === target.projectId);
         if (!project && cachedCatalogue) {
           const fresh = asList<Project>((await catalogueFresh).projects).map((item) => ({ ...item, sessions: asList<ChatSummary>(item.sessions) }));
