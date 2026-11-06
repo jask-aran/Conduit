@@ -17,8 +17,8 @@ const MOST_PINGS = 48;
 const FEWEST_GAPS = 5;
 
 /**
- * The model's cache lifetime for a retention tier: declared by its catalogue entry; otherwise the longest past gap the
- * cache survived on this thread ("observed"), or what is assumed for its provider, whichever is longer.
+ * The model's cache lifetime for a retention tier: declared by its catalogue entry; otherwise how long it reliably
+ * lived ("observed", reliableLifetime), or what is assumed for its provider, whichever is longer.
  */
 export function cacheLifetime(model, retention = "long", observedMs = 0) {
   const declared = model?.promptCache?.[retention] ?? model?.promptCache?.short;
@@ -34,8 +34,9 @@ export function cacheLifetime(model, retention = "long", observedMs = 0) {
  * cache lives until pings * interval + ttl; each past gap is priced under every choice, and the cheapest wins.
  */
 export function keepWarmPolicy({ model, retention = "long", gaps: past, survivedMs = 0 }) {
-  // A gap the cache survived proves it lives at least that long (a ping in it would have kept it alive: none counted).
-  const ttl = cacheLifetime(model, retention, Math.max(survivedMs, ...past.filter((gap) => gap.hit && !gap.pinged).map((gap) => gap.ms)));
+  // How long the cache reliably lives, from every thread's pauses (survivedMs), else this thread's own; gaps with a ping
+  // in them are not the provider's.
+  const ttl = cacheLifetime(model, retention, survivedMs || reliableLifetime(past.filter((gap) => !gap.pinged)));
   const gaps = past.map((gap) => gap.ms);
   const hit = Number(model?.cost?.cacheRead) || 0;
   // A provider that declares its cache lifetimes charges writes (Anthropic); OpenAI's catalogue lists a write price it
@@ -80,10 +81,31 @@ export function requestGaps(file, conversationId, days = 14, pinged = []) {
   } catch { return []; } finally { db?.close(); }
 }
 
+/** How often a pause up to the lifetime must have kept the cache for that lifetime to count as one. */
+const RELIABLE = 0.75;
+const FEWEST_PAUSES = 5;
+
 /**
- * The longest pause (ms) any conversation's cache on this provider and model survived over the last `days`: the
- * provider's cache lifetime as seen, from every thread, not only the one kept warm. Gaps with a ping in them
- * (`pinged`: times, on `pingedConversation`) are left out.
+ * How long a cache reliably lives, from pauses `{ ms, hit }`: the longest one it survived such that, of all the pauses
+ * up to it, at least RELIABLE kept it. A provider's cache does not end at a fixed time -- on OpenAI three in four
+ * pauses under 80 minutes kept it and one in three past that -- so the longest pause survived is luck, and pings timed
+ * from it all arrived after the cache had gone. Pauses under ten minutes say nothing about the lifetime and are left
+ * out; with too few, the longest survived is all there is.
+ */
+export function reliableLifetime(pauses) {
+  const long = pauses.filter((pause) => pause.ms >= 600_000).sort((a, b) => a.ms - b.ms);
+  if (long.length < FEWEST_PAUSES) return Math.max(0, ...long.filter((pause) => pause.hit).map((pause) => pause.ms));
+  let hits = 0, lifetime = 0;
+  long.forEach((pause, index) => {
+    if (pause.hit) hits++;
+    if (pause.hit && hits / (index + 1) >= RELIABLE) lifetime = pause.ms;
+  });
+  return lifetime;
+}
+
+/**
+ * How long (ms) a cache on this provider and model reliably lived over the last `days` (reliableLifetime), from every
+ * thread, not only the one kept warm. Gaps with a ping in them (`pinged`: times, on `pingedConversation`) are left out.
  */
 export function survivedLifetime(file, model, days = 14, pingedConversation = null, pinged = []) {
   let db;
@@ -91,7 +113,7 @@ export function survivedLifetime(file, model, days = 14, pingedConversation = nu
     db = new DatabaseSync(file, { readOnly: true });
     const since = Date.now() - days * 86_400_000;
     const prior = new Map();
-    let longest = 0;
+    const pauses = [];
     for (const row of db.prepare(`SELECT conversation_id, record FROM entries WHERE json_extract(record, '$.kind') = 'pi.assistant' ORDER BY rowid`).iterate()) {
       const record = JSON.parse(row.record);
       const message = (Array.isArray(record.model) ? record.model[0] : record.message) || {};
@@ -104,8 +126,8 @@ export function survivedLifetime(file, model, days = 14, pingedConversation = nu
       prior.set(cid, { at, total });
       if (!before || at < since || message.provider !== model?.provider || message.model !== model?.id || before.total <= 2048) continue;
       if (cid === String(pingedConversation) && pinged.some((ping) => ping > before.at && ping < at)) continue;
-      if ((Number(usage.cacheRead) || 0) >= 0.5 * before.total) longest = Math.max(longest, at - before.at);
+      pauses.push({ ms: at - before.at, hit: (Number(usage.cacheRead) || 0) >= 0.5 * before.total });
     }
-    return longest;
+    return reliableLifetime(pauses);
   } catch { return 0; } finally { db?.close(); }
 }
