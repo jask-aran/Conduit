@@ -6199,6 +6199,9 @@ function App() {
           <Show when={titleBarShows("update") && updateState().kind === "ready"}>
             <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
           </Show>
+          <Show when={titleBarShows("update") && (updateState().kind === "current" || updateState().kind === "updated")}>
+            <Button variant="ghost" size="sm" disabled><Icons.Check />{updateState().kind === "updated" ? "Conduit updated" : "Up to date"}</Button>
+          </Show>
           <Show when={titleBarShows("update") && (() => { const state = updateState(); return state.kind === "checking" || state.kind === "working" ? state : null; })()}>{(state) => {
             const words = () => {
               const current = state();
