@@ -48,7 +48,7 @@ async function fixture(t) {
   t.after(async () => { await harness.close(context); await fs.rm(root, { recursive: true, force: true }); });
   const settings = await runtime.agentFor("agent", { roaming: true, fixedVars: { name: "fixed" } });
   const home = await harness.createConversation({ ownership: { kind: "ownerless" }, agent: {
-    ...settings, instructions: "stored instructions", model: { provider: "conduit-test", modelId: "steady" }, thinkingLevel: "max",
+    ...settings, model: { provider: "conduit-test", modelId: "steady" }, thinkingLevel: "max",
   } }, context);
   await home.commit(async (tx) => {
     (await tx.doc(ConduitWorkspace, home.id)).roaming = true;
@@ -77,7 +77,7 @@ test("late connectors reach live sessions, existing children and later runs with
   await runtime.refreshConnectors();
   const current = await home.agent(context);
   assert.deepEqual(current.callable.map((item) => item.name), [...before.callable.map((item) => item.name), connector.name]);
-  assert.equal(current.instructions, "stored instructions");
+  assert.equal(current.instructions, "template fixed");
   assert.equal(current.tools.some((item) => item.name === connector.name), false);
   for (const child of [first, await spawn()]) {
     const agent = await (await harness.conversation(child.child, context)).agent(context);
@@ -105,7 +105,7 @@ test("late browser tools refresh live sessions and preserve fixed prompt slots",
   runtime.browserHost = { available: true, tools: async () => [tool("agent_browser_snapshot")] };
   await runtime.loadBrowserTools();
   assert.ok((await home.agent(context)).callable.some((item) => item.name === "agent_browser_snapshot"));
-  assert.equal((await adapter.sessionSettings(home, { templateId: "agent" })).instructions, "stored instructions");
+  assert.equal((await adapter.sessionSettings(home, { templateId: "agent" })).instructions, "template fixed");
 });
 
 test("Executor readiness is bounded, and routine gathering records a missing connector error", async (t) => {
@@ -181,5 +181,5 @@ test("reattached agent sessions keep their profile when launch options are absen
   await runtime.refreshConnectors();
   const agent = await home.agent(context);
   assert.ok(agent.callable.some((item) => item.name === "mcp__executor__execute"));
-  assert.equal(agent.instructions, "stored instructions");
+  assert.equal(agent.instructions, "template fixed");
 });
