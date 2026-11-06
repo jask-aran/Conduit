@@ -16,7 +16,10 @@ cd "$(dirname "$0")/.."
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
-target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target"}
+# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: in the user folder every .exe it holds
+# showed up in the Start menu as an app.
+build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')\\conduit-build
+target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$build_home\\desktop-target"}
 
 if [ ! -x "$cargo_tauri" ]; then
   echo "No cargo-tauri.exe under $windows_home\\.cargo." >&2

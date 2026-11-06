@@ -96,7 +96,8 @@ that interface; build a new client. Run these commands from `conduit-web/`:
 | Android development APK, offered to dev apps as an update | `bash conduit-web/scripts/build-android-dev.sh` |
 
 Windows builds require the Windows toolchain, invoked from WSL. Installers go
-to `C:\Users\<user>\conduit-desktop-target[-dev]\release\bundle\nsis\`.
+to `%LOCALAPPDATA%\conduit-build\desktop-target[-dev]\release\bundle\nsis\`,
+which Windows Search does not index (built `.exe`s elsewhere show up in the Start menu).
 Keep Cargo output on Windows storage to avoid slow writes across the WSL share.
 An interrupted build can leave a Windows Cargo process holding the build lock.
 

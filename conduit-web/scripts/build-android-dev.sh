@@ -17,8 +17,8 @@ code=$(( $(date +%s) / 60 ))
 (cd android && CONDUIT_VERSION_NAME="$version" CONDUIT_VERSION_CODE="$code" ./gradlew -q assembleDebug)
 dir="${CONDUIT_DESKTOP_UPDATE_DIR:-}"
 if [ -z "$dir" ] && command -v wslpath >/dev/null 2>&1; then
-  home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
-  dir="$(wslpath -u "$home\\conduit-desktop-target-dev")/release/bundle/nsis"
+  home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+  dir="$(wslpath -u "$home\\conduit-build\\desktop-target-dev")/release/bundle/nsis"
 fi
 mkdir -p "$dir"
 cp android/app/build/outputs/apk/debug/app-debug.apk "$dir/Conduit Dev_${version}.apk"

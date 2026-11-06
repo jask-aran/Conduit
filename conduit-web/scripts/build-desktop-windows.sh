@@ -49,6 +49,9 @@ while [ $# -gt 0 ]; do
 done
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
+# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: in the user folder every .exe it holds
+# showed up in the Start menu as an app.
+build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')\\conduit-build
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
 # A development build compiles into a directory of its own.
 #
@@ -61,7 +64,7 @@ cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
 # Separate directories cost one more full compile the first time and a second
 # copy of the build output on disk. Both are cheaper than a build that can only
 # run when nothing is open.
-target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$windows_home\\conduit-desktop-target${dev_client:+-$variant}"}
+target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$build_home\\desktop-target${dev_client:+-$variant}"}
 
 if [ ! -x "$cargo_tauri" ]; then
   echo "No cargo-tauri.exe under $windows_home\\.cargo: install Rust and the" >&2

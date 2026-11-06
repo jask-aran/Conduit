@@ -40,16 +40,16 @@ export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/tem
 # rather than configured: remembering an environment variable before every
 # restart is the difference between testing an update and not bothering.
 if [ -z "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ] && command -v wslpath >/dev/null 2>&1; then
-  windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
-  if [ -n "$windows_home" ]; then
+  build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+  if [ -n "$build_home" ]; then
     # The development build compiles into a directory of its own, so that it
     # does not fight a running dev session for the same files. It is the one
     # this server has any business serving -- the other holds release builds,
     # which come from a tag and reach a client through GitHub. Preferred, with
     # the shared directory kept as a fallback for a tree built before the
-    # split.
+    # split. Both live under %LOCALAPPDATA%\conduit-build (scripts/build-desktop-windows.sh).
     for suffix in "-dev" ""; do
-      candidate="$(wslpath -u "${CONDUIT_DESKTOP_TARGET_DIR:-$windows_home\\conduit-desktop-target$suffix}" 2>/dev/null)/release/bundle/nsis"
+      candidate="$(wslpath -u "${CONDUIT_DESKTOP_TARGET_DIR:-$build_home\\conduit-build\\desktop-target$suffix}" 2>/dev/null)/release/bundle/nsis"
       if [ -d "$candidate" ]; then CONDUIT_DESKTOP_UPDATE_DIR="$candidate"; break; fi
     done
   fi
