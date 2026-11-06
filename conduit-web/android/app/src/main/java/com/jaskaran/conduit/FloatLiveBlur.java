@@ -99,6 +99,28 @@ final class FloatLiveBlur {
         }
     }
 
+    private static Method clipPath;
+    /**
+     * One blur behind several shapes: a view's blur clipped to path (its own coordinates). A window may ask the
+     * compositor for only a few blur regions (One UI ignores every one past its limit), so one region holds them all.
+     */
+    static boolean applyPath(View view, int radiusPx, android.graphics.Path path) {
+        if (!AVAILABLE) return false;
+        try {
+            if (clipPath == null) clipPath = method(Class.forName("android.view.SemBlurInfo$Builder"), "setBackgroundClipPath", android.graphics.Path.class);
+            Object b = builder.newInstance(windowMode);
+            if (radius != null) radius.invoke(b, radiusPx);
+            if (colour != null) colour.invoke(b, android.graphics.Color.TRANSPARENT);
+            if (clipPath != null) clipPath.invoke(b, path);
+            set.invoke(view, build.invoke(b));
+            applied.remove(view);
+            return clipPath != null;
+        } catch (Throwable error) {
+            Log.w(TAG, "SemBlurInfo path failed", error);
+            return false;
+        }
+    }
+
     static void clear(View view) {
         applied.remove(view);
         if (!AVAILABLE) return;

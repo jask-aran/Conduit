@@ -57,6 +57,10 @@ public class ConduitComposerPlugin extends Plugin {
     private ConduitMoves moves;
     private final Map<String, ConduitMoves.Part> parts = new LinkedHashMap<>();
     private boolean webFocusable, webTouchFocusable, closingSent;
+    /** The live frost over the composer while the keyboard stands still (ComposerFrost). */
+    private ComposerFrost frost;
+    /** The frost kept up through the keyboard's travel (an experiment: ComposerFrost.throughTravel). */
+    private boolean frostTravel;
 
     @PluginMethod public void begin(PluginCall call) {
         getActivity().runOnUiThread(() -> {
@@ -159,13 +163,17 @@ public class ConduitComposerPlugin extends Plugin {
                     public void afterTextChanged(Editable text) {}
                 });
                 setParts(call.getArray("parts", new JSArray()), row);
+                frost = new ComposerFrost(getActivity(), content, root, parts, scale, part -> part.getBackground() instanceof Frost ? ((Frost) part.getBackground()).radius : 0, moves.quick());
+                frostTravel = ComposerFrost.throughTravel();
+                if (frostTravel) root.post(() -> { if (frost != null) frost.show(0, 0); });
                 ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-                    if (!animating) { if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
+                    if (!animating) { if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); else settled(insets); }
                     return insets;
                 });
                 ViewCompat.setWindowInsetsAnimationCallback(root, new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
                     @Override public void onPrepare(WindowInsetsAnimationCompat animation) {
-                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) animating = true;
+                        // The frost goes before the keyboard moves: only this window keeps step with its travel.
+                        if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) { animating = true; if (frost != null && !frostTravel) frost.hide(); }
                     }
                     @Override public WindowInsetsAnimationCompat.BoundsCompat onStart(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
                         if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0 && root != null) {
@@ -190,6 +198,7 @@ public class ConduitComposerPlugin extends Plugin {
                             move(insets);
                             // As at onStart: the end of a hide that ran before this composer's keyboard came up is not its close.
                             if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
+                            else settled(insets);
                         }
                     }
                 });
@@ -224,7 +233,12 @@ public class ConduitComposerPlugin extends Plugin {
         root.setTranslationY(-Math.max(0, imeBottom - navBottom));
         if (seenIme && !animating && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
     }
+    /** The keyboard up and still: the live frost comes in. */
+    private void settled(WindowInsetsCompat insets) {
+        if (frost != null && seenIme && !closing && !returning && insets.isVisible(WindowInsetsCompat.Type.ime())) frost.show(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+    }
     private void announceClosing() {
+        if (frost != null && !frostTravel) frost.hide();
         if (root == null || closingSent) return;
         closing = closingSent = true;
         // Start the described close target in this UI frame, before the WebView receives closing.
@@ -446,10 +460,12 @@ public class ConduitComposerPlugin extends Plugin {
     private void atRest() {
         if (root == null || returning) return;
         announceClosing();
+        if (frost != null) frost.hide();
         returning = true; root.setTranslationY(0); input.clearFocus();
         notifyListeners("ended", value());
     }
     private void remove() {
+        if (frost != null) { frost.close(); frost = null; }
         if (root != null) {
             ViewCompat.setWindowInsetsAnimationCallback(root, null); ViewCompat.setOnApplyWindowInsetsListener(root, null);
             ((ViewGroup) root.getParent()).removeView(root);

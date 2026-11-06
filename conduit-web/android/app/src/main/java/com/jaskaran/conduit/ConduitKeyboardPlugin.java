@@ -175,7 +175,10 @@ public class ConduitKeyboardPlugin extends Plugin {
         JSObject payload = new JSObject();
         payload.put("from", to == low ? high : low);
         payload.put("to", to);
-        payload.put("durationMs", animation.getDurationMillis());
+        // The animation's own duration is before the system's animator scale (developer options), which slows the
+        // keyboard itself: the web's travel takes the scaled time too, so a slowed keyboard is followed, not outrun.
+        float durationScale = android.os.Build.VERSION.SDK_INT >= 33 ? android.animation.ValueAnimator.getDurationScale() : 1;
+        payload.put("durationMs", Math.round(animation.getDurationMillis() * durationScale));
         JSArray curve = new JSArray();
         android.view.animation.Interpolator in = animation.getInterpolator();
         try {
