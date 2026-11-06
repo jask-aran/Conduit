@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-credentials.sh — copy this server's sign-ins to another Conduit server over ssh, then restart it there.
+# sync-credentials.sh — copy this server's sign-ins and jbot's context to another Conduit server over ssh, then restart it there.
 #
 # For a second server that should use the same accounts without being set up by hand: the VPS's dev server, which
 # takes only what a user would sign in to, never this machine's chats, context or customisation. New integrations are
@@ -10,8 +10,10 @@
 #
 # Copied (when present here): model provider keys and logins (pi/auth.json), custom providers (pi/models.json), web
 # search keys (pi/web-search.json), voice credentials (voice.json), connector sign-ins (agent-connectors/), the
-# ChatGPT web session (chatgpt-web/cookies.json). Not copied: the login password and sessions, push keys, server
-# identity, and jbot's mailbox (agent/email.json), which only one server may poll: `--move-email` hands it over, and
+# ChatGPT web session (chatgpt-web/cookies.json), and jbot's context as edited here (prompt-overrides/: what this
+# person's agent knows of their life; changes meant for every jbot go in templates/agent, which the clone already has).
+# Not copied: the login password and sessions, push keys, server
+# identity, chats and jbot's history, and jbot's mailbox (agent/email.json), which only one server may poll: `--move-email` hands it over, and
 # this server stops reading jbot's mail.
 set -euo pipefail
 
@@ -23,7 +25,7 @@ REMOTE_STATE="${args[1]:-/root/.conduit-dev}"
 REMOTE_CLI="${args[2]:-conduit-server-dev}"
 DATA="${CONDUIT_DATA_ROOT:-$HOME/.conduit/data}"
 
-FILES=(pi/auth.json pi/models.json pi/web-search.json voice.json agent-connectors chatgpt-web/cookies.json)
+FILES=(pi/auth.json pi/models.json pi/web-search.json voice.json agent-connectors chatgpt-web/cookies.json prompt-overrides)
 (( move_email )) && FILES+=(agent/email.json)
 present=()
 for file in "${FILES[@]}"; do [[ -e "$DATA/$file" ]] && present+=("$file"); done
