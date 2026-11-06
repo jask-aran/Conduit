@@ -2,6 +2,7 @@ import { notice } from "../context/notices.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { entryText, listInbox } from "./inbox.js";
+import { inboxEntryText } from "./inbox-files.js";
 import { itemText, runSource, SEEN_KEPT } from "./feeds.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
@@ -144,7 +145,8 @@ async function runTask(agent, task, cursor, state, now, routineName) {
     const inboxIds = [];
     let size = 0;
     for (const entry of fresh.slice(0, ENTRIES)) {
-      const text = entryText({ ...entry, body: entry.body ? String(entry.body).slice(0, ENTRY_BODY) : "" }, zone);
+      const body = await inboxEntryText(agent.folder, entry);
+      const text = entryText({ ...entry, body: body ? body.slice(0, ENTRY_BODY) : "" }, zone);
       if (size + text.length > BLOCK_MAX) break;
       shown.push(text);
       inboxIds.push(entry.id);

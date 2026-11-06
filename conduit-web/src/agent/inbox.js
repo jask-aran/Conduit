@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { defineDoc, defineTool, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
+import { inboxEntryText } from "./inbox-files.js";
 
 /*
  * Block II's inbox (docs/plans/persistent-agent.md, Vision): where context waits. Every run that ends with something
@@ -218,7 +219,7 @@ export function ConduitInboxTool(runtime) {
           const item = Object.hasOwn(state.inbox || {}, args.id) ? state.inbox[args.id] : undefined;
           if (!item) throw missingInbox();
           const answer = item.conversationId ? await runtime.lastAnswer(item.conversationId).catch(() => null) : null;
-          return result(`${line(item, agent.settings().timezone)}\n\n${answer || item.body || item.headline || "(The run left no text.)"}`);
+          return result(`${line(item, agent.settings().timezone)}\n\n${await inboxEntryText(agent.folder, item) || answer || item.headline || "(The run left no text.)"}`);
         }
         const change = (doc) => {
           if (args.action === "add") return addInboxEntry(doc, args, { author: api.conversationId ?? "mcp", by: api.conversationId ?? "mcp", key: api.callId ? `inbox:${api.callId}` : undefined });

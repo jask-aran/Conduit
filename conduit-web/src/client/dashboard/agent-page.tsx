@@ -165,7 +165,7 @@ export function AgentPage(props: {
   };
   /*
    * The context inbox, the person's to edit as much as jbot's (POST/PATCH/DELETE /v0/agent/inbox, the same verbs as
-   * conduit_inbox): a row opens the entry; its menu marks it handled or reopens it, addresses it to a routine, dismisses
+   * conduit_inbox): a row opens the entry's file (inbox/…md in its folder) in the file viewer; its menu marks it handled or reopens it, addresses it to a routine, dismisses
    * it (handled, outcome dismissed: nothing lost) or deletes it (the person only). Add files a note of their own.
    */
   const [readingEntry, setReadingEntry] = createSignal<AgentInboxEntry | null>(null);
@@ -194,7 +194,7 @@ export function AgentPage(props: {
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inbox()}>{(entry) =>
-        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => setReadingEntry(entry)}
+        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => entry.file ? props.onOpenFile(entry.file) : setReadingEntry(entry)}
             lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.kind === "note" || entry.kind === "feedback" ? entry.headline : tally([entry])}
             context={entryContext(entry)} meta={age(entry.at, now())} />
           <ContextMenuContent>

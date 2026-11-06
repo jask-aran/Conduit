@@ -7,6 +7,7 @@ import { Connectors } from "./connectors.js";
 import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
 import { listInbox } from "./inbox.js";
+import { inboxFile, syncInboxFiles } from "./inbox-files.js";
 import { migrateSoul } from "./memory.js";
 import { migrateToRoutines, promptVars, runInstructions } from "./routines.js";
 import { startRoutine } from "./routine-task.js";
@@ -430,6 +431,10 @@ export class PersistentAgent {
     if (!this.enabled()) return { enabled: false };
     const [current, settings] = await Promise.all([state || this.state(), this.shownSettings()]);
     state = current;
+    const inbox = listInbox(state);
+    // Each entry's text as a file in its folder (inbox-files.js), which the page opens in the file viewer.
+    await syncInboxFiles(this.folder, inbox, { lastAnswer: (id) => this.runtime.lastAnswer(id) })
+      .catch((error) => console.warn("The context inbox's files could not be written", error.message));
     return {
       enabled: true,
       settings,
@@ -441,7 +446,7 @@ export class PersistentAgent {
         .map((chat) => ({ chatId: chat.id, title: chat.title || "", updatedAt: chat.updatedAt })),
       spentToday: state.spend[this.today()] || 0,
       asks: listAsks(state),
-      inbox: listInbox(state),
+      inbox: inbox.map((entry) => ({ ...entry, file: inboxFile(entry) })),
       rules: Object.values(state.rules || {}).reverse().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     };
   }

@@ -154,7 +154,10 @@ test("person inbox routes share edits, return current entries and reject invalid
     const response = await request("patch", body, id);
     assert.equal(response.status, 200);
     assert.equal(response.body.id, id);
-    assert.deepEqual((await agent.view()).inbox.find((entry) => entry.id === id), response.body);
+    // The view adds where the entry's text is kept as a file (inbox-files.js).
+    const { file, ...shown } = (await agent.view()).inbox.find((entry) => entry.id === id);
+    assert.match(file, /^inbox\/\d{4}-\d{2}-\d{2}-i-1-person-note\.md$/);
+    assert.deepEqual(shown, response.body);
   }
   assert.equal((await agent.state()).inbox[id].outcome, "dismissed");
   assert.equal((await request("delete", undefined, id)).status, 204);
