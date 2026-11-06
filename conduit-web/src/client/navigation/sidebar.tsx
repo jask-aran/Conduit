@@ -1174,7 +1174,8 @@ export function Sidebar(props: {
         </Show>
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
-          <Show when={agentView()?.enabled}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><AgentAvatar /></RailAction></Show>
+          {/* jbot lives on the workspace rail on a desktop (Ctrl+J); the sidebar keeps it on a phone, for now. */}
+          <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><AgentAvatar /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={props.onNewPane}><RailAction label="New pane" onClick={() => props.onNewPane?.()}><Icons.Split /></RailAction></Show>
           <Show when={railFolders().length}>
@@ -1228,7 +1229,7 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "conduit"}>
         <Row density="nav" element="button" lead={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</Row>
-        <Show when={agentView()?.enabled}>
+        <Show when={agentView()?.enabled && phoneLayout()}>
           <Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:jbot" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row>
 </Show>
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>

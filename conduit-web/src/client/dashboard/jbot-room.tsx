@@ -96,7 +96,7 @@ export function JbotRoom(props: {
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} drop={desktop} onClose={() => setOver(false)} onWide={setWide}
+        <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} drop={desktop} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide}
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}

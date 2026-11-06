@@ -52,11 +52,14 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
  * a menu is, a click outside or Esc putting it away. onWide: when that changes (it starts narrow), for the controls
  * that open it.
  */
-export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; drop?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; drop?: boolean;
+  /** false: never beside the chat, whatever the width (a tool in the dock: its panel only drops). */
+  beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
   const [wide, setWide] = createSignal(false);
   onMount(() => {
+    if (props.beside === false) return;
     const measure = () => { const next = root.clientWidth >= need.offsetWidth; if (next !== wide()) { setWide(next); props.onWide?.(next); } };
     // Measured when the observer first reports, after layout and before paint: a read at mount forced a layout of
     // the whole new chat in the middle of drawing it.
