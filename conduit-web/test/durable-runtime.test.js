@@ -95,8 +95,10 @@ test("foreground agents finish before the parent answer and have distinct fg lab
 // Source: subagents.js, background ownership and reporter comments.
 test("a background agent returns immediately and its later report wakes the parent", async (t) => {
   const c = await chat(t);
-  await turn(c, "background 1t");
-  const placed = await c.stream.next((event) => event.type === "transcript_op" && event.op === "message.open" && event.message.origin === "harness" && event.message.agent, 4000);
+  // slow: the child takes three 2-second steps, so the parent's answer comes first by seconds, not by a race of
+  // milliseconds between two scripted replies at the same pace.
+  await turn(c, "background slow 1t");
+  const placed = await c.stream.next((event) => event.type === "transcript_op" && event.op === "message.open" && event.message.origin === "harness" && event.message.agent, 12000);
   await c.stream.next((event) => event.type === "transcript_op" && event.op === "turn.settle" && event.promptId === placed.message.id && event.outcome === "complete", 4000);
   const stored = await json(`/v0/sessions/${c.id}`);
   const agents = (await json(`/v0/chats/${c.id}/agents`)).agents;
@@ -151,11 +153,13 @@ test("finished turn messages and tool results survive a server restart", async (
 // Source: subagents.js, "A Stop leaves a chat's background agents working".
 test("stop ends the turn but keeps a background report without waking the parent", async (t) => {
   const c = await chat(t);
-  c.send({ type: "prompt", message: "background ask" });
+  // slow: the child reports seconds after the question, never before it (a report that came first would wake a
+  // second turn, and stop would end that one instead).
+  c.send({ type: "prompt", message: "background slow ask" });
   const question = await c.stream.next((event) => event.type === "permission_request" && event.kind === "question", 4000);
   c.send({ type: "stop_generation", generationId: question.generationId });
   await c.stream.next((event) => event.type === "status" && event.phase === "stopped", 4000);
-  await c.stream.next((event) => event.type === "transcript_op" && event.op === "message.open" && event.message.origin === "harness" && event.message.agent, 2000);
+  await c.stream.next((event) => event.type === "transcript_op" && event.op === "message.open" && event.message.origin === "harness" && event.message.agent, 12000);
   const stored = await json(`/v0/sessions/${c.id}`);
   assert.equal(stored.messages.find((message) => message.role === "user" && !message.origin).outcome, "interrupted");
   const report = stored.messages.find((message) => message.origin === "harness" && message.agent);
