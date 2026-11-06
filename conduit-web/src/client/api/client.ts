@@ -13,7 +13,8 @@ type Read = { status: number; ok: boolean; text: string };
 
 /**
  * What `api()` takes: a fetch's options, and how long to wait for the answer. A request with no signal of its own is
- * given up after `timeout` ms (reads 15 s, writes 20 s by default) and rejects as a network failure would -- a
+ * given up when the hub has not started answering after `timeout` ms (reads 15 s, writes 20 s by default; a slow
+ * answer that has started is waited for) and rejects as a network failure would -- a
  * TypeError -- so the retry and offline paths that already handle a hub that is not there take over, rather than the
  * page waiting on an address nothing answers at. `timeout: false` is for a write that legitimately takes longer than
  * that (a git push, a harness asked to start); an upload (a body that is not a string) and a request with its own
@@ -36,14 +37,19 @@ const readOf = async (url: string, { timeout, ...init }: ApiOptions): Promise<Re
   for (let attempt = 0; ; attempt++) {
     const moved = new AbortController();
     const stop = whenPathMoves(() => moved.abort(new DOMException("The route to the server changed.", "AbortError")));
-    // Each attempt has the whole of the limit: a read asked again on a new route is a new request.
-    const expiry = limit ? AbortSignal.timeout(limit) : null;
-    const signals = [init.signal, moved.signal, expiry].filter((signal): signal is AbortSignal => Boolean(signal));
+    // The limit is on the hub starting to answer, not on the answer arriving: a slow link still brings a big
+    // transcript in, where a route with nothing behind it is given up and the read asked again. Each attempt has the
+    // whole of it: a read asked again on a new route is a new request.
+    const expiry = limit ? new AbortController() : null;
+    const timer = expiry ? setTimeout(() => expiry.abort(), limit) : undefined;
+    const signals = [init.signal, moved.signal, expiry?.signal].filter((signal): signal is AbortSignal => Boolean(signal));
     try {
       const response = await authorizedFetch(httpUrl(url), { ...init, signal: signals.length > 1 ? AbortSignal.any(signals) : signals[0] });
+      clearTimeout(timer);
       return { status: response.status, ok: response.ok, text: await response.text() };
     } catch (error) {
-      if (expiry?.aborted && !moved.signal.aborted) throw new TypeError(`The server did not answer within ${Math.round(limit / 1000)} s.`);
+      clearTimeout(timer);
+      if (expiry?.signal.aborted && !moved.signal.aborted) throw new TypeError(`The server did not answer within ${Math.round(limit / 1000)} s.`);
       // A start or a wake can move the route more than once (the last route, then the race's winner): a read follows each
       // move, up to a few, rather than failing on the second.
       if (!moved.signal.aborted || init.signal?.aborted || !read || attempt >= 3) throw error;
