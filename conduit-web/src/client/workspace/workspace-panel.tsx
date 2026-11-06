@@ -597,7 +597,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
           <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
           <Show when={props.onOpenBeside && tool() !== "jbot" && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
-          <Show when={tool() !== "jbot"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
+          <Show when={tool() === "terminal"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
           <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
         </Show>} />
   );

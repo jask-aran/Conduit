@@ -4823,8 +4823,6 @@ function App() {
     if (inRow !== undefined) return focusPane(inRow);
     if (!workspacePanelScope()) return void openJbotHere();
     dockBeforeJbot = { open: panelOpen(), slot: dockSlot(), tool: dockTool() };
-    // Its tool has no Maximise: a dock maximised for another tool comes back to its width for it.
-    if (workspaceExpanded()) setWorkspaceExpanded(false);
     await openWorkspaceView("jbot");
     focusWorkspacePanel();
   };
@@ -5150,6 +5148,8 @@ function App() {
   };
   // A view dragged from the dock onto the main pane lands in its split.
   const dockDragging = (event: DragEvent) => document.body.dataset.toolDrag === "dock" && Boolean(event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) && !isMobileLayout();
+  // Only the Terminal is maximised in the dock (its header alone offers it): showing anything else there restores it.
+  createEffect(() => { if (workspaceExpanded() && !(dockSlot() === null && dockTool() === "terminal")) setWorkspaceExpanded(false); });
   const toggleWorkspaceExpanded = () => {
     const next = !workspaceExpanded();
     setWorkspaceExpanded(next);
