@@ -4505,10 +4505,15 @@ function App() {
   // A new chat is started warm, before anything is said in it: not a chat the person has going until it has a message.
   const liveChats = createMemo(() => {
     const chats = new Map(catalogue.projects().flatMap((project) => project.sessions.map((chat) => [chat.id, chat] as const)));
+    // jbot's threads are not in the catalogue; any other process whose chat is not there is one left from a chat that
+    // is gone (a discarded draft): nothing to open, so not a live chat.
+    const agent = agentView();
+    const jbots = new Set([agent?.home?.chatId, ...(agent?.sides || []).map((side) => side.chatId)].filter(Boolean));
     return [...runtime.processes().values()].filter((process) => {
       if (!visibleRuntimeActivity(process)) return false;
+      if (jbots.has(process.chatId)) return true;
       const chat = chats.get(process.chatId);
-      return !chat || Boolean(chat.lastMessageAt || chat.lastUserMessageAt) || generating(process);
+      return Boolean(chat) && (Boolean(chat!.lastMessageAt || chat!.lastUserMessageAt) || generating(process));
     });
   });
   function generating(process: RuntimeProcess) { const activity = visibleRuntimeActivity(process); return activity !== "idle" && activity !== "failed"; }
@@ -6190,6 +6195,10 @@ function App() {
         lead={<>
           <Show when={titleBarShows("server")}><ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
             onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} /></Show>
+          {/* Beside the server it is an update from. */}
+          <Show when={titleBarShows("update") && updateState().kind === "ready"}>
+            <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
+          </Show>
           <Show when={titleBarShows("history")}>
             <IconButton kind="pane" label="Back" onClick={() => history.back()}><Icons.Back /></IconButton>
             <IconButton kind="pane" label="Forward" onClick={() => history.forward()}><Icons.Forward /></IconButton>
@@ -6214,9 +6223,6 @@ function App() {
           </Show>
           <Show when={titleBarShows("agent") && agentView()?.enabled && agentNeeds()}>{(needs) =>
             <Button variant="ghost" size="sm" title={`${agentView()?.settings?.name || "Agent"} wants you`} onClick={() => void openAgentHere()}>{agentView()?.settings?.name || "Agent"} · {needs()}</Button>}</Show>
-          <Show when={titleBarShows("update") && updateState().kind === "ready"}>
-            <Button variant="secondary" size="sm" onClick={() => void takePwaUpdate(true)}><Icons.Download />Update</Button>
-          </Show>
           <Show when={titleBarShows("panels")}>
             <IconButton kind="pane" label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
             <IconButton kind="pane" label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
