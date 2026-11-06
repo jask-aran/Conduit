@@ -117,6 +117,7 @@ export const COMMAND_IDS = {
   biggerInterface: "interface.bigger",
   smallerInterface: "interface.smaller",
   resetInterfaceSize: "interface.reset",
+  toggleJbot: "jbot.toggle",
 } as const;
 
 const command = (
@@ -197,6 +198,17 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["zoom", "reset", "actual", "size", "scale"],
     contexts: ["application"],
     defaultBindings: [binding(stroke("Digit0", "0", ["primary"]))],
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.toggleJbot,
+    label: "jbot",
+    description: "jbot from anywhere, in the dock (taking it over); again, put away, the dock as it was",
+    group: "commands",
+    icon: "chat",
+    keywords: ["agent", "assistant", "dock", "show", "hide"],
+    contexts: ["application"],
+    defaultBindings: [binding(stroke("KeyJ", "J", ["primary"]))],
     palette: true,
   }),
   command({

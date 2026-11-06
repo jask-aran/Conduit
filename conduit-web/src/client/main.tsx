@@ -801,7 +801,7 @@ function App() {
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
     : (routeKind() === "agent" || routeKind() === "jbot") ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
     : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
-      // No project in view: the dock still opens (jbot needs none), on jbot's own folder; the project tools stay away.
+      // No project in view: the dock still opens, on jbot's own folder.
       : ["chat", "project", "dashboard"].includes(routeKind()) && agentView()?.projectId ? `project:${agentView()!.projectId}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
@@ -1312,11 +1312,10 @@ function App() {
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
   // The project the dock opens: the agent's own workspace on its page (its SOUL.md, its memory), else the selected one.
-  // The project the dock's tools work on (Files, Source Control, Chat review, Terminal), and where the dock opens: with
-  // no project in view it still opens, on jbot's folder, for what needs none (jbot), its project tools not offered.
+  // The project the dock's tools work on (Files, Source Control, Chat review, Terminal): with no project in view, jbot's
+  // own folder, so the dock and its tools are there everywhere.
   const agentProject = () => catalogue.projects().find((project) => project.id === agentView()?.projectId);
-  const toolHome = createMemo(() => (routeKind() === "agent" || routeKind() === "jbot") ? agentProject() : selectedProject());
-  const dockHome = createMemo(() => toolHome() ?? agentProject());
+  const dockHome = createMemo(() => ((routeKind() === "agent" || routeKind() === "jbot") ? undefined : selectedProject()) ?? agentProject());
   const chatManifest = session.manifest;
   const chatCapability = session.capability;
   const chatHistory = session.history;
@@ -4806,6 +4805,27 @@ function App() {
     persistSlots();
     showDocked(free);
   };
+  /*
+   * Ctrl+J (and the rail's jbot): jbot from anywhere, in the dock, taking it over from whatever it showed; put away the
+   * same way, the dock goes back to what it showed (a tool, a docked pane, or shut). jbot already in a pane: focused.
+   */
+  let dockBeforeJbot: { open: boolean; slot: number | null } | null = null;
+  const jbotShownInDock = () => { const docked = jbotDocked(); return docked !== undefined && panelOpen() && dockSlot() === docked; };
+  const putJbotAway = async () => {
+    const before = dockBeforeJbot;
+    dockBeforeJbot = null;
+    if (before?.open && before.slot !== null && dockContents().includes(before.slot)) return showDocked(before.slot);
+    if (before?.open && before.slot === null) { setDockSlot(null); return void await openWorkspaceView(dockTool()); }
+    closePanel();
+  };
+  const toggleJbot = async () => {
+    if (isMobileLayout()) return void openJbotHere();
+    if (jbotShownInDock()) return putJbotAway();
+    const inRow = shownSlots().find((slot) => slotView(slot) === "page:jbot");
+    if (inRow !== undefined) return focusPane(inRow);
+    dockBeforeJbot = { open: panelOpen(), slot: dockSlot() };
+    await openJbotDocked();
+  };
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <Actions kind="pane">
       <Show when={isDocked(pane)}><IconButton kind="pane" label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></IconButton></Show>
@@ -4897,7 +4917,8 @@ function App() {
     return ["main", ...shownSlots(), ...docked];
   });
   // A pane's letter for its header: only while there are several (one pane needs no name).
-  const paneLetter = (pane: PaneKey) => { const order = paneOrder(); const at = order.indexOf(pane); return order.length > 1 && at >= 0 ? String.fromCharCode(65 + at) : undefined; };
+  // jbot in the dock is a tool there, as Files is: no letter, and the panes are lettered without it.
+  const paneLetter = (pane: PaneKey) => { const order = paneOrder().filter((slot) => slot === "main" || !(inDock(slot) && slotView(slot) === "page:jbot")); const at = order.indexOf(pane); return order.length > 1 && at >= 0 ? String.fromCharCode(65 + at) : undefined; };
   const chatPlaces = createMemo(() => {
     const places = new Map<string, { pane: string; shown: boolean }>();
     paneOrder().forEach((pane, index) => {
@@ -5582,6 +5603,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings()),
       shortcutManager.registerHandler(COMMAND_IDS.biggerInterface, "application", () => void stepUiScale(1)),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleJbot, "application", () => void toggleJbot(), { when: () => Boolean(agentView()?.enabled) }),
       shortcutManager.registerHandler(COMMAND_IDS.smallerInterface, "application", () => void stepUiScale(-1)),
       shortcutManager.registerHandler(COMMAND_IDS.resetInterfaceSize, "application", () => void stepUiScale(0)),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
@@ -6013,7 +6035,7 @@ function App() {
       onSendDraft={props.onSendDraft}
     />;
   };
-  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element, actions?: JSX.Element) => <ChatHeader title={title} pill={pill} actions={actions} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
+  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element, actions?: JSX.Element) => <ChatHeader title={title} pill={pill} actions={actions} tabActions={actions ? undefined : paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
   const openAgentThread = () => {
     const id = agentView()?.home?.chatId;
     if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
@@ -6058,7 +6080,13 @@ function App() {
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
     // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
-    return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill())} presentation={!isMobileLayout() && inDock(slot) ? "phone" : undefined}
+    const docked = () => !isMobileLayout() && inDock(slot);
+    // Its actions are the pill's own buttons (a phone header's), not a pane's strip set in a pill.
+    const dockActions = () => <>
+      <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
+      <HeaderButton label="Put jbot away" icon={<Icons.Close />} onClick={() => void putJbotAway()} />
+    </>;
+    return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill(), docked() ? dockActions() : undefined)} presentation={!isMobileLayout() && inDock(slot) ? "phone" : undefined}
       panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
@@ -6419,10 +6447,10 @@ function App() {
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && toolHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
-      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: panelOpen() && dockSlot() !== null && dockSlot() === jbotDocked(), onOpen: (alt) => void openJbotDocked(alt) } : undefined}
+      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: panelOpen() && dockSlot() !== null && dockSlot() === jbotDocked(), onOpen: (alt) => void (alt ? openJbotDocked(true) : toggleJbot()) } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

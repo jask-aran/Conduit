@@ -84,7 +84,7 @@
 .ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
 /* Held at the width it is open at while the dock eases open or shut, against the dock's right edge, the surface
    clipping the rest: nothing in it re-lays out per frame. A resize drag moves the width itself, so it follows. */
-.ui-dock:not([data-expanded]) .ui-dock-surface[data-documented] > .ui-dock-document { width: var(--dock-document-width, 100%); max-width: none; flex: 1 0 auto; align-self: flex-end; }
+.ui-dock:not([data-expanded]) .ui-dock-surface[data-documented] > .ui-dock-document { width: var(--dock-document-width, 100%); max-width: none; align-self: flex-end; }
 @media (--conduit-phone-layout) { .ui-dock .ui-dock-surface[data-documented] > .ui-dock-document { width: auto; align-self: stretch; } }
 
 /* A tool's body under its header. */
