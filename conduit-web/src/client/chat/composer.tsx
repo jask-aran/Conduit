@@ -72,6 +72,8 @@ const EDIT_ACTIONS = [
 
 export function Composer(props: {
   chat: ActiveChatStore;
+  /** In the context gauge's place: what this composer's page reads its particulars from (jbot's chip, in its room). */
+  contextControl?: JSX.Element;
   attachments: ComposerAttachments;
   models: ComposerModels;
   modelsLoading?: boolean;
@@ -1014,7 +1016,7 @@ export function Composer(props: {
           onChooseProfile={props.onChooseProfile} onOpenModelSelector={props.onOpenModelSelector} modelSelectorShortcut={props.modelSelectorShortcut}
           onAttach={props.attachmentsSupported !== false ? attach : undefined} />
         <Show when={props.folder}>{(folder) => <FolderPicker {...folder()} />}</Show>
-        <Show when={shows("context")}><div data-composer-fold="context"><ContextGauge chat={props.chat} compact canCompact={supports("compaction")} /></div></Show>
+        <Show when={shows("context")}><div data-composer-fold="context">{props.contextControl ?? <ContextGauge chat={props.chat} compact canCompact={supports("compaction")} />}</div></Show>
         <Show when={props.profiles.length && shows("profile")}><div data-composer-fold="profile"><DropdownMenu>
           <DropdownMenu.Trigger as={Picker} icon={<HarnessMark id={props.activeProfile?.implementation || "conduit"} />} title={props.activeProfile?.label || "Profile"} aria-label={`Profile ${props.activeProfile?.label || "General"}`} disabled={!props.serverOnline || !interactive()} />
           <MenuContent><ProfileChoices profiles={props.profiles} active={props.activeProfile} locked={props.chat.status() !== "draft"} onChoose={props.onChooseProfile} /></MenuContent>

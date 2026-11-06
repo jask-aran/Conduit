@@ -27,7 +27,7 @@ export function Dashboard(props: {
   room?: boolean;
   ref?: (element: HTMLElement) => void;
   /** A DashHeader. */
-  head: JSX.Element;
+  head?: JSX.Element;
   /** QuickActions, at the title's right. */
   actions?: JSX.Element;
   notice?: JSX.Element;
@@ -44,7 +44,8 @@ export function Dashboard(props: {
 }) {
   return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
-      <header class="ui-dash-head">{props.head}{props.actions}</header>
+      {/* None for a room whose particulars are elsewhere (jbot's: its pill and the composer's chip). */}
+      <Show when={props.head || props.actions}><header class="ui-dash-head">{props.head}{props.actions}</header></Show>
       <Show when={props.notice}><div class="ui-dash-notice">{props.notice}</div></Show>
       <Show when={props.band}><div class="ui-dash-band">{props.band}</div></Show>
       <div class="ui-dash-main">

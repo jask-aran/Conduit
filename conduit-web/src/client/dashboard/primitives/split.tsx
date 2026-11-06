@@ -94,7 +94,7 @@ export function SplitDashboard(props: {
   /** What the page is, for the leader. */
   page: SplitPage;
   class?: string;
-  header: JSX.Element;
+  header?: JSX.Element;
   quickActions?: JSX.Element;
   notice?: JSX.Element;
   band?: JSX.Element;

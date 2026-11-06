@@ -1,11 +1,9 @@
 import { onCleanup, onMount, Show, type JSX } from "solid-js";
-import { AgentAvatar, IconButton, Icons, SheetFill } from "@/components/ui";
+import { SheetFill } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
-import { SplitDashboard, SplitEmpty, SplitHeader } from "./primitives/split";
-
-const DIAL: Record<string, string> = { quiet: "Quiet", normal: "Normal", chatty: "Chatty" };
+import { SplitDashboard, SplitEmpty } from "./primitives/split";
 
 /** The message log and home-thread composer, without the dashboard's groups. */
 export function JbotRoom(props: {
@@ -19,14 +17,6 @@ export function JbotRoom(props: {
 }) {
   const log = useJbotMessages(() => props.threadChanged);
   const name = () => agentView()?.settings?.name || "Agent";
-  const spent = () => {
-    const settings = agentView()?.settings;
-    return settings ? `$${(agentView()?.spentToday || 0).toFixed(2)} of $${settings.budgetUsdPerDay.toFixed(2)} today` : null;
-  };
-  const running = () => {
-    const count = agentView()?.attention?.working?.runs.length;
-    return count ? `${count} running` : null;
-  };
   onMount(() => {
     void refreshAgent();
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
@@ -37,13 +27,9 @@ export function JbotRoom(props: {
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
+        {/* No head: jbot's particulars and its page and thread are in its panel, from the composer's chip (desktop) or
+            its pill (phone, jbot-status.tsx), so the messages start at the top. */}
         <SplitDashboard page="Agent" room label={`Messages with ${name()}`}
-          header={<SplitHeader title={name()} glyph={<AgentAvatar />} context={[DIAL[agentView()?.settings?.dial || ""], spent(), running()]} />}
-          // Two small buttons beside the name: tiles took a row of the phone's screen from the messages.
-          quickActions={<div class="ui-dash-room-actions">
-            <IconButton label={`${name()}'s page`} onClick={props.onOpenPage}><Icons.Agent /></IconButton>
-            <Show when={props.onOpenThread}><IconButton label="Open thread" onClick={() => props.onOpenThread?.()}><Icons.Chat /></IconButton></Show>
-          </div>}
           conversation={<JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />}
           composer={props.composer} />
       </Show>

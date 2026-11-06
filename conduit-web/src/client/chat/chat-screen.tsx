@@ -59,6 +59,8 @@ export function ChatHeader(props: {
   /** A pane's chat tabs, when it has two or more (6c): they stand in for the
    *  breadcrumb, and the active tab's place moves to the right. */
   tabs?: JSX.Element;
+  /** The phone's pill, when the page's particulars open from it its own way (jbot's room: jbot's panel). */
+  pill?: JSX.Element;
 }) {
   // What a project or workspace page calls itself in its own menu.
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
@@ -89,7 +91,7 @@ export function ChatHeader(props: {
       <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} onClick={props.onNewChat} />
     </>}
     // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
-    pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
+    pill={props.pill ?? <Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
       {/* Opening, the context is read afresh, so Context shows its reading before it is unfolded. */}
       <DropdownMenu modal={false} placement="bottom" onOpenChange={(open) => { if (open) props.chat?.refreshContext(); else setDetailsOpen(false); }}>
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
