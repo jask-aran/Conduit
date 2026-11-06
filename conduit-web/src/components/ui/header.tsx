@@ -72,7 +72,7 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
       changed.observe(element, { childList: true, subtree: true, characterData: true });
       onCleanup(() => { resized.disconnect(); changed.disconnect(); });
     };
-    return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool">
+    return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool" data-frost={local.frost ? "" : undefined}>
       {mark()}
       <strong title={local.nameTitle}>{local.name}</strong>
       <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>

@@ -60,26 +60,45 @@ export function JbotStatus(props: { onOpenThread?: () => void; onOpenSettings?: 
 }
 
 /** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
-export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void } | null>(null);
+export const JbotPanelControl = createContext<{
+  open: () => boolean;
+  toggle: () => void;
+  /** What a desktop's jbot shows in its place (the dock, a narrow pane): the chat, or one of the panel's tabs. */
+  view: () => "chat" | JbotTab;
+  setView: (view: "chat" | JbotTab) => void;
+  /** The view switch is the header's (a desktop's jbot without room for the panel beside). */
+  switched: () => boolean;
+} | null>(null);
+
+export const JBOT_VIEWS: Array<{ value: "chat" | JbotTab; label: string }> = [{ value: "chat", label: "Chat" }, ...JBOT_TABS];
+
+/** The header's switch between the jbot chat and its panel's tabs. */
+export function JbotViews() {
+  const control = useContext(JbotPanelControl);
+  return <Show when={control?.switched()}>
+    <Segmented label="jbot" value={control!.view()} options={JBOT_VIEWS} onChange={control!.setView} />
+  </Show>;
+}
 
 /**
  * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by
  * tab (Now, Routines, Memory, Threads). Configuration stays in Settings › jbot.
  */
 export function JbotPanel(props: {
+  tab: JbotTab;
+  onTab: (tab: JbotTab) => void;
+  /** Its own tab switch (beside the chat, or a phone's sheet); none where the header switches (JbotViews). */
+  tabs: boolean;
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   onOpenFile: (path: string) => void;
   onOpenThread?: () => void;
   onOpenSettings: () => void;
   onDone?: () => void;
 }) {
-  const key = "conduit.jbot.panel-tab";
-  const [tab, setTabShown] = createSignal<JbotTab>((() => { try { const saved = localStorage.getItem(key); return JBOT_TABS.some((item) => item.value === saved) ? saved as JbotTab : "now"; } catch { return "now"; } })());
-  const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(key, next); } catch { /* a per-viewer convenience */ } };
   return <>
     <JbotStatus onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={props.onDone} />
-    <Segmented label="jbot's panel" value={tab()} options={JBOT_TABS} onChange={setTab} />
-    <AgentPage panel={tab()} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
+    <Show when={props.tabs}><Segmented label="jbot's panel" value={props.tab} options={JBOT_TABS} onChange={props.onTab} /></Show>
+    <AgentPage panel={props.tab} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
   </>;
 }
 

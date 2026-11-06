@@ -68,7 +68,7 @@ export function WorkspaceRail(props: {
   /** The dock drawn over the panes rather than beside them. */
   dockOverlay: boolean;
   onToggleDockOverlay: () => void;
-  /** jbot, opened in the dock (alt: in a pane); current while the dock shows it. Its docked pane has no icon besides. */
+  /** jbot, a tool among the others: opened in the dock (alt or a drag: in a pane), current while the dock shows it. */
   jbot?: { name: string; current: boolean; needs: number; onOpen: (alt: boolean) => void };
 }) {
   const foot = () => <>
@@ -102,10 +102,10 @@ export function WorkspaceRail(props: {
         aria-label={WORKSPACE_TOOL_LABELS[tool]} title={label()} current={props.current === tool}
         data-open={props.inSplit === tool ? "" : undefined}
         onClick={() => props.onChoose(tool)}><Icon /></IconButton>;
-    }}</For>
-    <RailRule /></Show>
+    }}</For></Show>
     <Show when={props.jbot}>{(jbot) => <IconButton kind="rail" tabIndex={-1} draggable={true} data-doc-view="page:jbot" aria-label={jbot().needs ? `${jbot().name}, ${jbot().needs} waiting on you` : jbot().name} title={jbot().name}
       current={jbot().current} onClick={(event) => jbot().onOpen(event.altKey)}><Icons.Agent /></IconButton>}</Show>
+    <Show when={props.tools || props.jbot}><RailRule /></Show>
     <Show when={props.docked.some((doc) => doc.view !== "page:jbot")}>
       <For each={props.docked.filter((doc) => doc.view !== "page:jbot")}>{(doc) => {
         const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : doc.view.startsWith("browser:") ? Icons.Browser : Icons.FileText;

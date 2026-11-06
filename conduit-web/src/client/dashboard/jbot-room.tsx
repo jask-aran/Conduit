@@ -5,6 +5,8 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotPanelControl } from "./jbot-status";
+import { JBOT_TABS, type JbotTab } from "./agent-page";
+import { isMobileLayout } from "../navigation/mobile-layout";
 import { SplitEmpty } from "./primitives/split";
 
 /**
@@ -14,8 +16,8 @@ import { SplitEmpty } from "./primitives/split";
  */
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
-  /** jbot's panel (JbotPanel), beside the chat or over it. */
-  panel: (done: () => void) => JSX.Element;
+  /** jbot's panel (JbotPanel), beside the chat, over it (a phone) or in its place (a desktop). */
+  panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; tabs: boolean; done: () => void }) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
   working?: boolean;
@@ -32,6 +34,14 @@ export function JbotRoom(props: {
   const [beside, setBeside] = createSignal((() => { try { return localStorage.getItem(besideKey) !== "0"; } catch { return true; } })());
   const [over, setOver] = createSignal(false);
   const open = () => wide() ? beside() : over();
+  const tabKey = "conduit.jbot.panel-tab";
+  const [tab, setTabShown] = createSignal<JbotTab>((() => { try { const saved = localStorage.getItem(tabKey); return JBOT_TABS.some((item) => item.value === saved) ? saved as JbotTab : "now"; } catch { return "now"; } })());
+  const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(tabKey, next); } catch { /* a per-viewer convenience */ } };
+  // A desktop never raises a sheet: without room beside, the panel takes the chat's place, switched from the header.
+  const desktop = !isMobileLayout();
+  const switched = () => desktop && !wide();
+  const view = () => switched() && over() ? tab() : "chat";
+  const setView = (next: "chat" | JbotTab) => { if (next === "chat") return void setOver(false); setTab(next); setOver(true); };
   const toggle = () => {
     if (!wide()) return void setOver(!over());
     const next = !beside();
@@ -61,11 +71,12 @@ export function JbotRoom(props: {
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
   };
 
-  return <JbotPanelControl.Provider value={{ open, toggle }}><SheetFill data-jbot-room="">
+  return <JbotPanelControl.Provider value={{ open, toggle, view, setView, switched }}><SheetFill data-jbot-room="">
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <ChatBeside label={`${name()}'s panel`} open={open()} onClose={() => setOver(false)} onWide={setWide} panel={props.panel(() => setOver(false))}>
+        <ChatBeside label={`${name()}'s panel`} open={open()} swap={desktop} onClose={() => setOver(false)} onWide={setWide}
+          panel={props.panel({ get tab() { return tab(); }, onTab: setTab, get tabs() { return !switched(); }, done: () => setOver(false) })}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />

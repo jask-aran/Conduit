@@ -45,10 +45,11 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 
 /**
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
- * its reading width (measured from the tokens, never a tuned width); otherwise risen over the chat from its foot while
- * open, a scrim over the rest that closes it. onWide: which of the two it is now, for the control that opens it.
+ * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
+ * chat from its foot, a scrim over the rest that closes it; with `swap` (a desktop: the dock, a narrow pane) in the
+ * chat's place, the chat kept where it was underneath. onWide: which it is now, for the controls that open it.
  */
-export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; onWide?: (wide: boolean) => void; children: JSX.Element }) {
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; swap?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
   const [wide, setWide] = createSignal(false);
@@ -61,7 +62,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     onCleanup(() => sizes.disconnect());
   });
   const over = () => !wide() && props.open;
-  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined}
+  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-swap={props.swap ? "" : undefined}
     onKeyDown={(event) => { if (event.key === "Escape" && over()) { event.stopPropagation(); props.onClose(); } }}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>

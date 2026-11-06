@@ -4,7 +4,7 @@ import { HarnessMark, HeaderNote, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader } from "@/components/ui";
+import { AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -23,7 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
-import { JbotChip, JbotPanel, JbotPanelControl } from "./dashboard/jbot-status";
+import { JbotChip, JbotPanel, JbotPanelControl, JbotViews } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
@@ -6001,7 +6001,7 @@ function App() {
       onSendDraft={props.onSendDraft}
     />;
   };
-  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element) => <ChatHeader title={title} pill={pill} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
+  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element, actions?: JSX.Element) => <ChatHeader title={title} pill={pill} actions={actions} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
   const openAgentThread = () => {
     const id = agentView()?.home?.chatId;
     if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
@@ -6045,8 +6045,14 @@ function App() {
     // A phone's pill and the composer's chip open jbot's panel (JbotPanelControl, from the room).
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
-    return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill())}
-      panel={(done) => <JbotPanel onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={done}
+    // In the dock jbot is a tool: a tool's header, its views (the chat, the panel's tabs) switched there.
+    const jbotTool = (title: string) => <PaneHeader kind="tool" fit frost name={title} modes={<JbotViews />}
+      actions={<>
+        <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
+        <HeaderButton label={`Close ${title}`} icon={<Icons.Close />} onClick={() => void closeSlot(slot as number)} />
+      </>} />;
+    return <JbotRoom header={(title) => !isMobileLayout() && inDock(slot) ? jbotTool(title) : agentHeader(slot)(title, jbotPill(), isMobileLayout() ? undefined : <JbotViews />)}
+      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
