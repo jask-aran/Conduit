@@ -1,5 +1,6 @@
 import path from "node:path";
-import { runSource, SEEN_KEPT } from "./feeds.js";
+import { runSource } from "./feeds.js";
+import { gatherMail, mailSince } from "./mailbox.js";
 import { INVISIBLE, readMail } from "./mail-pipeline.js";
 
 /*
@@ -87,42 +88,60 @@ const unescape = (text) => String(text || "").replace(/&(amp|lt|gt|quot|#39|#(\d
   code ? String.fromCodePoint(Number(code)) : { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[name]).replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 const when = (at, zone) => new Intl.DateTimeFormat("en-AU", { timeZone: zone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(at));
 
-/**
- * One firing: `{ fresh, cursor, items, sources, block }` as routines.js's tasks give it; `sources` the message.md
- * files the run's report should point back to.
- */
-export async function mailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
-  const zone = agent.settings().timezone;
-  const outcome = await runSource(agent, { kind: "executor", code: gmailProgram({ ...task, accounts: cursor.accounts || [] }) },
-    { seen: cursor.seen || [], raw: true });
-  if (outcome.error) return { fresh: 0, cursor, items: [], error: outcome.error, block: block(task.id, { error: "yes" }, outcome.error) };
+/** The new Gmail, read into the mail pipeline: what gatherMail wants of a source (mailbox.js). */
+async function fetchGmail(agent, task, state) {
+  const outcome = await runSource(agent, { kind: "executor", code: gmailProgram({ ...task, accounts: state.accounts }) },
+    { seen: state.known, raw: true });
+  if (outcome.error) return { error: outcome.error };
   const got = outcome.items.filter((item) => item && typeof item.id === "string");
-  const accounts = outcome.items.find((item) => Array.isArray(item?.accounts))?.accounts || cursor.accounts || [];
-  const next = { primed: true, accounts, seen: [...new Set([...got.map((item) => item.id), ...(cursor.seen || [])])].slice(0, SEEN_KEPT) };
-  // The first firing learns what is there; the inbox the person already has is not news.
-  if (!cursor.primed) return { fresh: 0, cursor: next, items: [], sources: [], block: block(task.id, { new: 0 }, "Nothing new (first look: what is there now is known).") };
+  const accounts = outcome.items.find((item) => Array.isArray(item?.accounts))?.accounts || state.accounts;
+  // The first gathering learns what is there; the inbox the person already has is not news, so nothing is read.
+  if (!state.primed) return { accounts, known: got.map((item) => item.id), lines: [] };
+  const gathered = new Date().toISOString();
   const lines = [];
-  const sources = [];
-  for (const item of got.sort((a, b) => String(b.at).localeCompare(String(a.at)))) {
+  for (const item of got.sort((a, b) => String(a.at).localeCompare(String(b.at)))) {
     const labels = labelWords(item.labels || []);
     const meta = { labels, link: linkOf(item), thread: item.thread, ...(item.account ? { account: item.account } : {}) };
     try {
       const mail = typeof item.raw === "string" ? await readMail(Buffer.from(item.raw, "base64url"), { folder: agent.folder, meta })
         : await readMail(partialMessage(item), { folder: agent.folder, original: false,
           meta: { ...meta, "not-fetched": item.attachments?.map((file) => `${file.name} (${Math.round(file.size / 1024)} KB)`) } });
-      const file = path.join(mail.dir, "message.md");
-      const files = mail.attachments.length ? ` · ${mail.attachments.length} attachment${mail.attachments.length === 1 ? "" : "s"}` : "";
-      lines.push(`- ${sender(mail.header.from)} — ${mail.header.subject}${labels.length ? ` · ${labels.join(", ")}` : ""} · ${when(mail.at, zone)}`
-        // Gmail's snippet first: the line the sender wrote to be seen first (a marketing email's preheader), from the
-        // text it shows; the pipeline's gist when there is none.
-        + `${unescape(item.snippet) || mail.gist ? `\n  ${unescape(item.snippet) || mail.gist}` : ""}\n  ${file}${files}`);
-      sources.push({ path: file, title: `${sender(mail.header.from)}: ${mail.header.subject}` });
+      // Gmail's snippet first: the line the sender wrote to be seen first (a marketing email's preheader), from the text
+      // it shows; the pipeline's gist when there is none.
+      lines.push({ id: item.id, gathered, at: mail.at, from: sender(mail.header.from), subject: mail.header.subject, labels,
+        summary: unescape(item.snippet) || mail.gist, path: path.join(mail.dir, "message.md"), attachments: mail.attachments.length,
+        ...(typeof item.raw === "string" ? {} : { partial: true }), link: meta.link });
     } catch (error) {
-      lines.push(`- (an email that could not be read: ${error.message}) ${meta.link}`);
+      lines.push({ id: item.id, gathered, at: item.at, from: "", subject: `(could not be read: ${error.message})`, labels, summary: "", path: null, link: meta.link });
     }
   }
-  return { fresh: lines.length, cursor: next, items: [], sources,
-    block: block(task.id, { new: lines.length, at: when(now, zone) }, lines.join("\n") || "Nothing new.") };
+  return { accounts, known: got.map((item) => item.id), lines };
+}
+
+const SHOWN = 60;
+
+/**
+ * One firing: gather the new mail into the mailbox, then show this routine what the mailbox gathered since its last
+ * firing (its first: the last day). `{ fresh, cursor, items, sources, block }` as routines.js's tasks give it;
+ * `sources` the message.md files its report should point back to.
+ */
+export async function mailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
+  const zone = agent.settings().timezone;
+  const gathered = await gatherMail(agent, (state) => fetchGmail(agent, task, state), { legacy: cursor.seen ? cursor : null })
+    .catch((error) => ({ error: error.message }));
+  const since = cursor.since || new Date(now - 86400_000).toISOString();
+  const lines = await mailSince(agent, since);
+  const shown = lines.slice(-SHOWN).reverse();
+  const text = shown.map((line) => `- ${line.from} — ${line.subject}${line.labels?.length ? ` · ${line.labels.join(", ")}` : ""} · ${when(line.at, zone)}`
+    + `${line.summary ? `\n  ${line.summary}` : ""}\n  ${line.path || line.link}${line.attachments ? ` · ${line.attachments} attachment${line.attachments === 1 ? "" : "s"}` : ""}`
+    + `${line.partial ? " (too large: attachments left in Gmail)" : ""}`);
+  if (lines.length > shown.length) text.push(`… and ${lines.length - shown.length} earlier (mail/index.jsonl)`);
+  const notes = [gathered.error ? `Gmail could not be checked this time (${gathered.error}); this is what the mailbox already had.` : null,
+    gathered.first ? "First look at Gmail: what is there now is known, and only what arrives from here on is gathered." : null].filter(Boolean);
+  return { fresh: lines.length, ...(gathered.error ? { error: gathered.error } : {}),
+    cursor: { since: lines.length ? lines.at(-1).gathered : cursor.since || since }, items: [],
+    sources: shown.filter((line) => line.path).map((line) => ({ path: line.path, title: `${line.from}: ${line.subject}` })),
+    block: block(task.id, { new: lines.length, at: when(now, zone) }, [...notes, text.join("\n") || "Nothing new."].join("\n\n")) };
 }
 
 /**

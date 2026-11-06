@@ -107,8 +107,9 @@ test("old Settings copies infer their historical body without a base or hash rec
     assert.equal(actual.enabled, !old.enabled);
     assert.equal(actual.body, latest.body);
     assert.deepEqual(actual.tasks, latest.tasks);
-    // The brief's body is unchanged across versions. The required newest match treats its missing before key as an edit.
-    assert.deepEqual(actual.before, old.body.trim() === latest.body.trim() ? old.before : latest.before);
+    // The brief's body was the same in every version this copy could have come from, so its base is the newest of them,
+    // which has a before key; the copy's missing one reads as the person's edit and stays missing.
+    assert.deepEqual(actual.before, old.before);
   }
 });
 

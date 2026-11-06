@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import dns from "node:dns/promises";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -93,6 +94,10 @@ export function originOfRequest(request) {
 }
 
 const MAX_OBSERVED = 10;
+/** An observed address nobody has arrived on for this long is no longer offered. */
+const OBSERVED_KEPT_MS = 14 * 86400_000;
+/** How often the observed names are checked against DNS. */
+const OBSERVED_CHECK_MS = 3600_000;
 
 export class ServerIdentity {
   constructor(filePath, { port = 4310, network = true, now = Date.now, name = process.env.CONDUIT_SERVER_NAME } = {}) {
@@ -202,6 +207,34 @@ export class ServerIdentity {
       if (oldest) this.observed.delete(oldest[0]);
     }
     this.schedule();
+  }
+
+  /*
+   * Forget observed addresses that are gone: a name that no longer resolves (its record was deleted, as when the hub
+   * was renamed or a tunnel retired) or one nobody has arrived on for two weeks. Without this a client is offered every
+   * address the hub ever answered on, and keeps probing dead ones. Checked at start and hourly; a DNS failure that is
+   * not "no such name" (offline, a timeout) forgets nothing.
+   */
+  async prune() {
+    let changed = false;
+    for (const [origin, seenAt] of [...this.observed]) {
+      let gone = this.now() - seenAt > OBSERVED_KEPT_MS;
+      if (!gone) {
+        const { hostname } = new URL(origin);
+        gone = await dns.lookup(hostname, { all: true }).then(() => false, (error) => ["ENOTFOUND", "ENODATA"].includes(error.code));
+      }
+      if (gone) { this.observed.delete(origin); changed = true; }
+    }
+    if (changed) await this.save();
+    return changed;
+  }
+
+  /** Prune now and then hourly; returns the stop. */
+  followObserved() {
+    void this.prune().catch(() => {});
+    const timer = setInterval(() => void this.prune().catch(() => {}), OBSERVED_CHECK_MS);
+    timer.unref?.();
+    return () => clearInterval(timer);
   }
 
   /** Every address this server believes it answers on, with what each costs. */

@@ -69,7 +69,8 @@ What the run should do with what was gathered, and what to tell jbot.
   - `inbox`: `for: <routine-name>` defaults to this routine's name. Entries
     with a nonempty `for` list are shown only when that list names the recipient.
     Entries without an address (including `for: []`) stay visible unless the task
-    sets `addressed: only`. Optional `kinds: [feedback, ...]` selects entry kinds.
+    sets `addressed: only`. Optional `kinds: [feedback, ...]` selects entry kinds;
+    `except: [heartbeat, ...]` leaves kinds out.
     `all: true` includes handled entries; it keeps the same address, kind and
     since-last-firing filters. For example:
 
@@ -83,14 +84,18 @@ What the run should do with what was gathered, and what to tell jbot.
     heartbeat's reports among them). A routine never reads its own reports.
     The `conduit_inbox` tool and agent page still show all recipients. Each
     addressed entry carries `for` and retains its `headline`.
-  - `email`: the person's new Gmail (every account connected in Executor),
-    `query?` (a Gmail search; default the inbox of the last two days without
-    promotions or social) and `max?` (1 to 50, default 25 a firing). Each email
-    is saved in your folder as `mail/<date>/<id>/message.md` (its text as
-    Markdown, headed by its parties, date, labels and Gmail link) beside the
-    original `message.eml` and its attachments (documents also as `.md`); the
-    run gets one line per email with that path. The first firing only learns
-    what is there. The heartbeat's first task is `- { id: email, kind: email }`.
+  - `email`: the person's Gmail (every account connected in Executor), in two
+    halves. It gathers what is new into your mailbox: each email saved as
+    `mail/<date>/<id>/message.md` (its text as Markdown, headed by its parties,
+    date, labels and Gmail link) beside the original `message.eml` and its
+    attachments (documents also as `.md`), and a line in `mail/index.jsonl`.
+    Then it shows this routine what the mailbox gathered since its last firing
+    (its first: the last day), one line each with that path. Any routine can
+    have one: the heartbeat sees its hour, the morning brief its day, each
+    reading the mail itself. Optional `query` (a Gmail search; default the inbox
+    of the last two days without promotions or social) and `max` (1 to 50,
+    default 25 fetched a firing). The very first gathering only learns what is
+    there.
   - `held-mail`: email to your address from people who do not wake you, held
     in its mail room, since the last firing (the first looks back a day): one
     line each, marked untrusted, with the path to its `message.md`. The packaged

@@ -14,8 +14,8 @@
 #             pi/web-search.json
 #   keys      the API keys in pi/auth.json, merged into the remote's own file, whose sign-ins stay as they are
 #   jbot      its context overrides (prompt-overrides/) and settings (agent.json),
-#             merged so the remote keeps its own switches: whether jbot, its heartbeat, brief and email are on (this
-#             server's jbot can be quiet while the remote's runs); SOUL.md, RUN.md and its routines come from the template
+#             merged so the remote keeps its own switches: whether jbot, its heartbeat and brief are on (this server's
+#             jbot can be quiet while the remote's runs); SOUL.md, RUN.md and its routines come from the template
 #   web       the ChatGPT web session (chatgpt-web/cookies.json)
 #
 # Never copied: chats, projects and workspaces, what each jbot learns (USER.md, MEMORY.md) and its history (diary, mail,
@@ -66,7 +66,7 @@ local = json.load(open(sys.argv[1]))
 try: remote = json.load(open(sys.argv[2]))
 except FileNotFoundError: remote = {}
 # The switches stay the remote's; within them, the schedule (times, intervals) follows this server.
-for key in ("heartbeat", "brief", "email"):
+for key in ("heartbeat", "brief"):
     if key in local and isinstance(remote.get(key), dict) and "enabled" in remote[key]:
         local[key] = {**local[key], "enabled": remote[key]["enabled"]}
 if "on" in remote: local["on"] = remote["on"]

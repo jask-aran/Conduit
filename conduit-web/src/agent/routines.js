@@ -138,8 +138,10 @@ async function runTask(agent, task, cursor, state, now, routineName) {
   const zone = agent.settings().timezone;
   if (task.kind === "inbox") {
     const filters = { for: task.for ?? routineName, kinds: task.kinds, addressed: task.addressed };
-    // Never its own reports (a routine's run is kept in the inbox as a record, handled or not).
-    const entries = listInbox(state, { ...filters, unhandled: !task.all }).filter((entry) => entry.kind !== routineName);
+    // Never its own reports (a routine's run is kept in the inbox as a record, handled or not), nor the kinds it leaves
+    // out (`except`: the morning brief reads the mail itself, not the heartbeat's take on it).
+    const entries = listInbox(state, { ...filters, unhandled: !task.all })
+      .filter((entry) => entry.kind !== routineName && !task.except?.includes(entry.kind));
     const since = Date.parse(cursor.since || "") || 0;
     const eligibleAt = (entry) => Math.max(Date.parse(entry.at), Date.parse(entry.reopenedAt || "") || 0);
     const fresh = entries.filter((entry) => eligibleAt(entry) > since).sort((a, b) => eligibleAt(b) - eligibleAt(a));

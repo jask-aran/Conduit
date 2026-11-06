@@ -14,7 +14,7 @@ const idPattern = /^[a-z][a-z0-9-]{0,30}$/;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
 /** Fields a task kind takes besides its id, kind and program. */
-const TASK_FIELDS = { inbox: ["all", "for", "kinds", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
+const TASK_FIELDS = { inbox: ["all", "for", "kinds", "except", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
 /** What an `on:` trigger can name: an email to jbot from someone who does not wake it (email.js). */
 export const EVENTS = ["held-mail"];
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
@@ -118,6 +118,8 @@ export function routineProblem(routine) {
       if (task.addressed !== undefined && task.addressed !== "only") return `Task ${task.id}: addressed must be only.`;
       if (task.kinds !== undefined && (!Array.isArray(task.kinds) || !task.kinds.length
         || task.kinds.some((kind) => typeof kind !== "string" || !namePattern.test(kind)))) return `Task ${task.id}: kinds must be a nonempty list of entry kinds.`;
+      if (task.except !== undefined && (!Array.isArray(task.except) || !task.except.length
+        || task.except.some((kind) => typeof kind !== "string" || !namePattern.test(kind)))) return `Task ${task.id}: except must be a nonempty list of entry kinds.`;
     }
     if (task.kind === "calendar") {
       if (typeof task.account !== "string" || !task.account) return `Task ${task.id}: the calendar's Executor account is required.`;

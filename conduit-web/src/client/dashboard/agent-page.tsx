@@ -46,7 +46,8 @@ function age(value: string | null | undefined, now: number) {
   return at > now && span !== "now" ? `in ${span}` : span;
 }
 
-const when = (schedule: AgentSchedule) => schedule.kind === "rules" ? schedule.cadence || "Scheduled" : schedule.kind === "daily" ? `Daily ${schedule.at || ""}`.trim()
+// Its cadence in words when the hub gives one (rules, or an event alongside a clock: "on held mail; every 12 hours").
+const when = (schedule: AgentSchedule) => schedule.cadence ? schedule.cadence : schedule.kind === "rules" ? "Scheduled" : schedule.kind === "daily" ? `Daily ${schedule.at || ""}`.trim()
   : schedule.kind === "every" ? `Every ${schedule.everyMinutes && schedule.everyMinutes % 60 === 0 ? `${schedule.everyMinutes / 60}h` : `${schedule.everyMinutes}m`}`
   : "Once";
 

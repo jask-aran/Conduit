@@ -3,16 +3,20 @@ title: Morning brief
 before: [{ routine: reflect, ifMissedSince: last }]
 trigger: { at: "08:00" }
 tasks:
-  - { id: inbox, kind: inbox, all: true }
+  - { id: email, kind: email }
+  - { id: inbox, kind: inbox, all: true, except: [heartbeat] }
   - { id: chats, kind: chats }
 gate: always
 output: jbot
 ---
 Gather what jbot needs to give the person a full look at their day. Your first
-message carries everything that came into the inbox since the last brief
-(handled or not: the brief covers the whole day before) and the chats that
-finished since. Then look wider: their calendar for today and the next few
-days, mail and messages that need them, devices, and jbot's schedules.
+message carries the person's email since the last brief (`<email>`: one line
+each, with the path to its `message.md`, the whole email as Markdown), what
+came into the inbox since (handled or not: the brief covers the whole day
+before) and the chats that finished since. The heartbeat's hourly reports are
+left out on purpose: read the mail yourself and make your own call. Then look
+wider: their calendar for today and the next few days, messages that need
+them, devices, and jbot's schedules.
 
 Report in full, with the specifics (times, people, order and tracking numbers,
 amounts, deadlines), the links that do the next thing, and the context you

@@ -506,6 +506,12 @@ export async function listSchedules(agent) {
   // A routine switched off has no clock; it is listed as off (the page dims it), so turning it off never hides it.
   const off = routines.filter((routine) => routine.enabled === false && !state.schedules[`r-${routine.name}`])
     .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null, lastAt: null, routine: routine.name, cadence: wording.get(routine.name), off: true }));
+  // A routine an event starts (`trigger: { on: … }`) says so; one with no clock at all is listed all the same.
+  const evented = new Set(routines.filter((routine) => (Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger]).some((rule) => rule.kind === "on"))
+    .map((routine) => routine.name));
+  const waiting = routines.filter((routine) => routine.enabled !== false && evented.has(routine.name) && !state.schedules[`r-${routine.name}`])
+    .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null,
+      lastAt: state.routineState?.[routine.name]?.lastAt || null, routine: routine.name, cadence: wording.get(routine.name) }));
   return [...Object.values(state.schedules).map((item) => {
     const { id, title, kind, at, everyMinutes, lastAt, system, routine } = item;
     const next = item.nextAt ? Date.parse(item.nextAt) : item.kind === "rules" && item.nextAt === null ? null : nextTime(item, zone, now);
@@ -514,10 +520,10 @@ export async function listSchedules(agent) {
     const feed = item.feed ? { source: item.feed.source.kind, lastRunAt: item.feed.lastRunAt, lastCount: item.feed.lastCount, lastError: item.feed.lastError, primed: item.feed.primed }
       : gathers.has(routine) ? { source: gathers.get(routine) === "script" ? "script" : "executor", lastRunAt: last?.lastAt || null, lastCount: last?.fresh || 0,
         lastError: last?.lastError || null, primed: true } : null;
-    return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" ? { cadence: wording.get(routine) } : {}) } : {}),
+    return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" || evented.has(routine) ? { cadence: wording.get(routine) } : {}) } : {}),
       // Its rules as they apply now (a quiet window resolved to the hours), for the page's day strip.
       ...(kind === "rules" ? { rules: item.rules.map((rule) => ({ kind: rule.kind, ...(rule.everyMinutes ? { everyMinutes: rule.everyMinutes } : {}), ...(rule.at ? { at: rule.at } : {}), during: rule.during ?? null })) } : {}),
       ...(feed ? { feed } : {}) };
-  }), ...off]
+  }), ...waiting, ...off]
     .sort((a, b) => Number(!!a.off) - Number(!!b.off) || (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }
