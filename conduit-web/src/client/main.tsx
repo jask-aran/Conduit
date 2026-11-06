@@ -23,7 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
-import { JbotChip, JbotPanel, JbotPanelControl, JbotTakeover } from "./dashboard/jbot-status";
+import { JbotChip, JbotPanel, JbotPanelControl } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
@@ -6015,9 +6015,9 @@ function App() {
    * (docs/design/panes-and-rail.md, stage 5d).
    */
   // onSendDraft: a page whose composer starts a chat; without it the session's loaded chat is sent to (jbot's page).
-  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void>; contextControl?: JSX.Element; takeover?: JSX.Element }) => {
+  const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void>; contextControl?: JSX.Element }) => {
     const current = props.session;
-    return <Composer shortcuts={shortcutManager} contextControl={props.contextControl} takeover={props.takeover}
+    return <Composer shortcuts={shortcutManager} contextControl={props.contextControl}
       chat={current.chat}
       place={props.place}
       workspace={props.workspace}
@@ -6104,7 +6104,7 @@ function App() {
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
-        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip />} takeover={<JbotTakeover />} /></Show>} />;
+        <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip />} /></Show>} />;
   };
   const openTerminalFromPage = async (terminal: { id: string; projectId: string; cwd?: string | null }, maximized: boolean) => {
     if (terminal.projectId.startsWith("device:")) return openTerminalRoute("push", terminal.id);

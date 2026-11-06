@@ -16,8 +16,6 @@ export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: stri
   // `ui-rider-going` as it leaves: what holds it (the composer's under row) closes its room by it, a class for :has().
   return <Frost role="group" {...rest} class={cn("ui-rider", (local.motion === "leaving" || local.motion === "removing") && "ui-rider-going", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
 }
-/** A card rider's body that scrolls when it holds more than the pane can show (jbot's panel). */
-export const RiderScroll = (props: { children: JSX.Element }) => <div class="ui-rider-scroll">{props.children}</div>;
 /** A card rider's title (RiderTop); title: what it means, on hover. */
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
 /** A row rider's mark: what it holds as an icon, its word on hover and to a reader, so the row keeps its width for

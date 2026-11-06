@@ -72,18 +72,18 @@
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
 .ui-chat-beside:not([data-wide]) .ui-chat-beside-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: var(--frame); opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: .5; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
-/* drop: a pointer's panel, dropped from under the header as a menu is, put away by a click outside, Esc or its
-   control; the sheet risen from the foot is a phone's, for a thumb. */
-.ui-chat-beside[data-drop]:not([data-wide]) .ui-chat-beside-panel { inset: var(--space-xs) var(--space-md) auto; max-height: calc(100% - var(--space-lg));
-  padding-bottom: var(--space-lg); border-radius: var(--radius-surface);
-  transform: translateY(calc(-1 * var(--space-md))); opacity: 0; transform-origin: top center;
-  /* Shut, it stays drawn on its own layer, see-through and out of reach (inert): dropping it composites what is
+/* above: a pointer's panel, faded in over the transcript just above the composer (the composer and the transcript
+   stay where they are), the composer's width; put away by its close, Esc or its control. The sheet risen from the
+   foot is a phone's, for a thumb. */
+.ui-chat-beside[data-above]:not([data-wide]) .ui-chat-beside-panel { inset: auto 0 var(--chat-beside-above, var(--space-md));
+  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); margin-inline: auto; max-height: calc(100% - var(--chat-beside-above, var(--space-md)) - var(--space-lg));
+  transform: none; border-radius: var(--radius-surface); opacity: 0;
+  /* Shut, it stays drawn on its own layer, see-through and out of reach (inert): fading it in composites what is
      already rastered and blurred, rather than painting the whole frost panel on its first frame. */
-  visibility: visible; pointer-events: none; will-change: transform, opacity;
-  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-leave), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-leave); }
-.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; opacity: 1; pointer-events: auto;
-  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-arrive), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-arrive); }
-.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: 0; }
-/* Shut and settled (its leave played), it is skipped from layout and paint: a resize of the dock lays out the chat
+  visibility: visible; pointer-events: none; will-change: opacity;
+  transition: opacity var(--duration-quick) var(--ease-leave); }
+.ui-chat-beside[data-above]:not([data-wide])[data-open] .ui-chat-beside-panel { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-chat-beside[data-above]:not([data-wide]) .ui-chat-beside-scrim { display: none; }
+/* Shut and settled (its fade played), it is skipped from layout and paint: a resize of the dock lays out the chat
    alone, not the hidden panel as well. */
-.ui-chat-beside[data-drop]:not([data-wide]):not([data-open]) .ui-chat-beside-panel { content-visibility: hidden; transition-property: transform, opacity, content-visibility; transition-behavior: allow-discrete; }
+.ui-chat-beside[data-above]:not([data-wide]):not([data-open]) .ui-chat-beside-panel { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }

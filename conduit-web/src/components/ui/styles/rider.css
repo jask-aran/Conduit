@@ -164,7 +164,3 @@
 .ui-rider-button[data-ride="beside"] { translate: calc(-100% - var(--control-lg) / 2 - var(--space-sm)) 0; }
 .ui-rider-button[data-hidden] { opacity: 0; pointer-events: none; transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }
 
-/* RiderScroll: a card rider's body taller than the pane can hold scrolls within it, the card's top and foot kept. */
-.ui-rider-scroll { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; max-height: min(70dvh, var(--measure-3xl)); overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--space-sm) var(--space-sm); }
-.ui-rider-scroll .ui-dash { flex: none; overflow: visible; }
-.ui-rider-scroll .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }

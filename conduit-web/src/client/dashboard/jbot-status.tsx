@@ -1,5 +1,5 @@
-import { createContext, createSignal, Show, useContext, type JSX } from "solid-js";
-import { Button, Gauge, Icons, Meter, Reading, ReadingTotal, Rider, RiderScroll, RiderTitle, RiderTop, Rule, Segmented } from "@/components/ui";
+import { createContext, createSignal, Show, useContext } from "solid-js";
+import { Button, Gauge, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } from "@/components/ui";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
 import { AgentPage, JBOT_TABS, type JbotTab } from "./agent-page";
@@ -60,30 +60,7 @@ export function JbotStatus(props: { onOpenThread?: () => void; onOpenSettings?: 
 }
 
 /** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
-export const JbotPanelControl = createContext<{
-  open: () => boolean;
-  toggle: () => void;
-  /** A desktop's panel takes the composer's place (JbotTakeover) while this holds. */
-  takeover: () => boolean;
-  close: () => void;
-  name: () => string;
-  /** The panel, drawn fresh where it shows. */
-  panel: () => JSX.Element;
-} | null>(null);
-
-/**
- * jbot's panel on a desktop: the composer's takeover, as the question card is (a card rider in the composer's slot:
- * the composer drops and fades, the card rises in). Its close, Esc or the composer's ring put it away.
- */
-export function JbotTakeover() {
-  const control = useContext(JbotPanelControl);
-  return <Show when={control?.takeover()}>
-    <Rider layout="card" motion="entering" label={`${control!.name()}'s panel`}>
-      <RiderTop><RiderTitle>{control!.name()}</RiderTitle><Button variant="ghost" size="icon-sm" aria-label="Close" title="Close" onClick={() => control!.close()}><Icons.Close /></Button></RiderTop>
-      <RiderScroll>{control!.panel()}</RiderScroll>
-    </Rider>
-  </Show>;
-}
+export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void } | null>(null);
 
 /**
  * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by

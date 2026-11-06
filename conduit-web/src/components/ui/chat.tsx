@@ -48,12 +48,12 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 /**
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
  * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
- * chat from its foot, a scrim over the rest that closes it; with `drop` (a pointer's) dropped from under the header as
- * a menu is, a click outside or Esc putting it away. onWide: when that changes (it starts narrow), for the controls
+ * chat from its foot, a scrim over the rest that closes it; with `above` (a pointer's) faded in over the transcript
+ * just above the composer (`above` px over the chat's foot), the transcript left where it is, Esc putting it away. onWide: when that changes (it starts narrow), for the controls
  * that open it.
  */
-export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; drop?: boolean;
-  /** false: never beside the chat, whatever the width (a tool in the dock: its panel only drops). */
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; above?: number;
+  /** false: never beside the chat, whatever the width (a tool in the dock: its panel only rides above the composer). */
   beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
@@ -75,7 +75,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     window.addEventListener("keydown", away, true);
     onCleanup(() => window.removeEventListener("keydown", away, true));
   });
-  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-drop={props.drop ? "" : undefined}>
+  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-above={props.above !== undefined ? "" : undefined} style={props.above !== undefined ? { "--chat-beside-above": `${props.above}px` } : undefined}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
     <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />
