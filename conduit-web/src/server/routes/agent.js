@@ -38,6 +38,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a routine's tasks gather and its run fires
  *                                    whatever its gate (not a gate of never), even in quiet hours; a feed checks; the rest wake a run
  * GET  /v0/agent/routines            its routine files (routines/*.md) with their cursors and last firing
+ * POST /v0/agent/tasks/:id/retry       run a task the runtime parked (restart limit) again from its checkpoint
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
@@ -517,6 +518,17 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const state = await agent.state();
       const outcome = await executeRoutine(agent, routine, { cursors: state.cursors?.[routine.name] || {}, state, force: true });
       response.json({ tasks: outcome.tasks, fresh: outcome.fresh, run: outcome.run, instructions: outcome.instructions || null, message: outcome.message || null });
+    } catch (error) { next(error); }
+  });
+  // A task the runtime parked after too many restarts (pi-durable's restart limit) runs again from its checkpoint.
+  app.post("/v0/agent/tasks/:id/retry", async (request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const id = Number(request.params.id);
+      if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "invalid_task" });
+      const harness = await agent.runtime.open();
+      await harness.retryTask(id, agent.context);
+      response.json({ retried: id });
     } catch (error) { next(error); }
   });
   app.post("/v0/agent/routines/:name/forget", async (request, response, next) => {
