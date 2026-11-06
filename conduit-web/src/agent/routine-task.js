@@ -32,7 +32,7 @@ export function routineToolGuard(runtime) {
   return hook(ToolTask, { beforeTool: async (call, api, context) => {
     const record = forkRecord(await api.snapshot(AgentDoc, context), api.conversationId);
     if (record && !forkAllows(runtime.agent, record, call.name, call.arguments)) {
-      return { block: "Routine forks cannot send, post, notify, request approval, or start other work. Use memory, the report file, and conduit_inbox handle for gathered entries only." };
+      return { block: "A routine run cannot send, post, notify, request approval, or start other work. Put what the person should hear in your final text: that is your report, and jbot tells them. Memory and conduit_inbox handle (for gathered entries) are yours to use." };
     }
   } });
 }
