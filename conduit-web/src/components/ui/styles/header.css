@@ -39,10 +39,11 @@ button.ui-header-place { cursor: pointer; }
 .ui-header-note > button:disabled { color: var(--muted-foreground); cursor: default; }
 
 @media (--conduit-phone-layout) {
-  /* The pills sit at the overlay inset inside the safe area; the strip's fade gives way so the transcript runs under them. */
+  /* The pills sit at the overlay inset inside the safe area, frost over the transcript: the strip has no ground of its
+     own, so the transcript runs under them and the status bar alike. */
   :root { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
   .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs);
-    background: linear-gradient(to bottom, var(--background) 0 60%, transparent 100%); }
+    background: none; }
   .ui-header-title { display: none; }
   /* The name pill sits between the groups, centred in the room they leave: its place's mark, then its title, which
      wraps to a second line before it is cut short. */
