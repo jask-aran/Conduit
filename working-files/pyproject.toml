@@ -10,7 +10,7 @@ dependencies = [
   "paper-pptx==0.2.1",
   "paper-xlsx==0.2.2",
   "pyarrow",
-  "pymupdf",
+  "pymupdf<2",  # 2.x pulls in pymupdf-layout and ONNX Runtime (hundreds of MB) for every install
   "pypdf",
   "pyxlsb",
   "xlrd",
