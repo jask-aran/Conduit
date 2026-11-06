@@ -37,14 +37,13 @@
 .ui-chat[data-sending] .ui-chat-empty { visibility: hidden; }
 .ui-chat[data-opening] .ui-chat-scroller { visibility: hidden; }
 
-/* A phone: the column full-width, the dock on its own gradient clear of the safe area; empty, the composer at the
-   foot (not mid-screen) and no rubber-band scroll. */
+/* A phone: the column full-width, the dock clear of the safe area with no ground of its own (the pills are frost over
+   the transcript; a dictation's captions bring theirs); empty, the composer at the foot (not mid-screen) and no
+   rubber-band scroll. */
 @media (--conduit-phone-layout) {
   .ui-chat-column { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--transcript-composer-inset, 160px); }
   .ui-composer-dock {
     padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-    background: linear-gradient(to top, var(--background) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))),
-      transparent calc(var(--space-4xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))));
   }
   .ui-chat[data-empty] .ui-chat-scroller { position: relative; inset: auto; flex: 1 1 auto; min-height: 0; }
   .ui-chat[data-empty] :is(.ui-chat-column, .ui-chat-empty) { height: 100%; }
