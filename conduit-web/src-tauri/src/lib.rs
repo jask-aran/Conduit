@@ -9,6 +9,7 @@ mod desktop_settings;
 mod dev_update;
 mod discovery;
 mod global_shortcuts;
+mod interface_bundle;
 mod node_companion;
 mod secrets;
 mod tray;
@@ -25,6 +26,9 @@ const HIDDEN_LAUNCH_ARG: &str = "--hidden";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    // The development client may serve an interface taken from its server in place of its own (interface_bundle.rs).
+    let interface = interface_bundle::wrap(&mut context);
     tauri::Builder::default()
         // A second launch is a request to see the window that already exists,
         // never a second process holding a second copy of the same session.
@@ -42,7 +46,10 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![HIDDEN_LAUNCH_ARG]),
         ))
-        .setup(|app| {
+        .setup(move |app| {
+            if let Some(interface) = interface {
+                app.manage(interface);
+            }
             let handle = app.handle();
             let settings = desktop_settings::load(handle);
             app.manage(desktop_settings::Store(Mutex::new(settings)));
@@ -88,6 +95,10 @@ pub fn run() {
             desktop_settings::desktop_settings,
             desktop_settings::set_desktop_settings,
             dev_update::check_dev_update,
+            interface_bundle::interface_build,
+            interface_bundle::interface_stage,
+            interface_bundle::interface_apply,
+            interface_bundle::interface_confirm,
             global_shortcuts::set_global_shortcuts,
             discovery::discover_servers,
             discovery::resolve_host,
@@ -101,7 +112,7 @@ pub fn run() {
             node_companion::device_companion_new_folders,
             node_companion::device_companion_unpair
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("Conduit desktop failed to start")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::ExitRequested { .. }) {

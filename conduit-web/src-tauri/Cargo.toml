@@ -27,6 +27,8 @@ serde_json = "1"
 base64 = "0.22"
 ed25519-dalek = "2"
 sha2 = "0.10"
+# Unpacking an interface taken from the server (interface_bundle.rs); already in the build through the updater.
+flate2 = "1"
 
 # The token is held by the OS credential store for the signed-in user: on
 # Windows that is Credential Manager, which encrypts it under the user's own

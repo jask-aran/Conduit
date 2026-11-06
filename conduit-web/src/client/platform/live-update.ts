@@ -55,6 +55,7 @@ export function liveUpdateNow(onProgress?: (progress: BundleProgress) => void) {
 }
 
 export async function startLiveUpdate(origin: () => string | null): Promise<void> {
+  if (installedClientKind === "desktop") return startDesktopLiveUpdate(origin);
   if (installedClientKind !== "android") return;
   const [{ registerPlugin }, { App }] = await Promise.all([import("@capacitor/core"), import("@capacitor/app")]);
   if (!(await App.getInfo()).id.endsWith(".dev")) return;
@@ -99,8 +100,86 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
   });
 }
 
+/*
+ * The desktop development client does the same through its shell (src-tauri interface_bundle.rs): the page downloads
+ * the server's interface -- it already knows the route and the trust -- and hands the zip over to be unpacked; it is
+ * swapped in when the window is out of sight (minimised or in the tray), or at once by Check for updates.
+ */
+let desktopDownload: AbortController | null = null;
+
+async function startDesktopLiveUpdate(origin: () => string | null): Promise<void> {
+  const [{ invoke }, { getIdentifier }] = await Promise.all([import("@tauri-apps/api/core"), import("@tauri-apps/api/app")]);
+  if (!(await getIdentifier()).endsWith(".dev")) return;
+  // This interface started; without this the shell goes back to its built-in one at the next launch.
+  await invoke("interface_confirm").catch(() => {});
+  /** Stage the server's interface; its build when one was staged, null when this one is what it serves. */
+  const stage = async (server: string, onProgress?: (progress: BundleProgress) => void): Promise<string | null> => {
+    onProgress?.({ phase: "checking", downloaded: 0, total: 0 });
+    const manifest = await authorizedFetch(`${server}/client-bundle/manifest.json`, { signal: AbortSignal.timeout(10_000) });
+    const { build } = await manifest.json() as { build?: string };
+    if (!build || build === await invoke<string>("interface_build")) return null;
+    desktopDownload = new AbortController();
+    try {
+      const response = await authorizedFetch(`${server}/client-bundle/${build}.zip`, { signal: desktopDownload.signal });
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      const total = Number(response.headers.get("content-length")) || 0;
+      const reader = response.body.getReader();
+      const parts: Uint8Array[] = [];
+      let downloaded = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value);
+        downloaded += value.length;
+        onProgress?.({ phase: "downloading", downloaded, total });
+      }
+      const zip = new Uint8Array(downloaded);
+      let at = 0;
+      for (const part of parts) { zip.set(part, at); at += part.length; }
+      return await invoke<string>("interface_stage", zip, { headers: { "x-build": build } });
+    } finally {
+      desktopDownload = null;
+    }
+  };
+  const apply = (build: string) => { rememberView(); return invoke("interface_apply", { build }); };
+  const check = async () => {
+    const server = origin();
+    if (!server || checking) return;
+    checking = true;
+    try {
+      if (!(await serverIsNewer(server))) { staged = null; return; }
+      staged = await stage(server);
+    } catch {
+      // Unreachable, or an older server without bundles: try again later.
+    } finally {
+      checking = false;
+    }
+  };
+  now = async (onProgress) => {
+    const server = origin();
+    if (!server) return "unreachable";
+    try {
+      const build = await stage(server, onProgress);
+      if (!build) return "current";
+      await apply(build);
+      return "applying";
+    } catch (error) {
+      return (error as Error | null)?.name === "AbortError" ? "cancelled" : "unreachable";
+    }
+  };
+  void check();
+  let lastCheck = Date.now();
+  const again = () => { if (Date.now() - lastCheck > 60_000) { lastCheck = Date.now(); void check(); } };
+  window.addEventListener("focus", again);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") again();
+    else if (staged) void apply(staged).catch(() => {});
+  });
+}
+
 /** Stop a download under way, of an interface or an APK (they share the native worker). */
 export async function cancelUpdateDownload(): Promise<void> {
+  desktopDownload?.abort();
   if (installedClientKind !== "android") return;
   const { registerPlugin } = await import("@capacitor/core");
   await registerPlugin<BundlePlugin>("ConduitUpdater").cancel().catch(() => {});
