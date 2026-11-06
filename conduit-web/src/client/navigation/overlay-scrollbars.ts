@@ -17,19 +17,13 @@ export function bindOverlayScrollbars() {
   if (!("showPopover" in HTMLElement.prototype)) return () => {};
   const media = matchMedia("(hover: hover) and (pointer: fine) and (forced-colors: none)");
   /*
-   * Touch gets the same overlay, shown while a finger is moving the list.
-   *
-   * A native scrollbar on a phone is a classic one: it takes a column of the
-   * scrollport, so a list that grows past the viewport -- opening a folder is
-   * enough -- shifts every row sideways, and closing it shifts them back. The
-   * overlay is drawn on top of the content instead, which costs the list
-   * nothing and appears only while it is actually moving.
+   * Touch has no scrollbar at all: the list under the finger shows where it is.
+   * Its native one is still hidden, since on a phone that is a classic one: it
+   * takes a column of the scrollport, so a list that grows past the viewport --
+   * opening a folder is enough -- would shift every row sideways.
    */
   const touch = matchMedia("(pointer: coarse)");
   const phoneLayout = matchMedia(MOBILE_LAYOUT_QUERY);
-  const TOUCH_LINGER = 900;
-  let touching = false;
-  let lingerTimer = 0;
   const bar = document.createElement("div");
   bar.className = "overlay-scrollbar";
   bar.popover = "manual";
@@ -47,11 +41,7 @@ export function bindOverlayScrollbars() {
 
   function hide() {
     clearTimeout(timer);
-    clearTimeout(lingerTimer);
-    lingerTimer = 0;
     timer = 0;
-    touching = false;
-    delete bar.dataset.touch;
     cancelAnimationFrame(frame);
     frame = 0;
     drag = null;
@@ -89,9 +79,6 @@ export function bindOverlayScrollbars() {
   }
 
   function near(candidate: Target) {
-    // A finger is nowhere near the edge it is scrolling; the gesture is the
-    // proof that this is the list being moved.
-    if (touching) return true;
     const r = bounds(candidate.element);
     return pointer.x >= r.left && pointer.x <= r.right && pointer.y >= r.top && pointer.y <= r.bottom
       && (candidate.axis === "y" ? r.right - pointer.x <= EDGE : r.bottom - pointer.y <= EDGE);
@@ -211,25 +198,6 @@ export function bindOverlayScrollbars() {
   function outsideDown(event: PointerEvent) {
     if (!(event.target instanceof Node) || !bar.contains(event.target)) hide();
   }
-  function scrolled(event: Event) {
-    if (media.matches || !touch.matches) return;
-    const element = event.target instanceof HTMLElement ? event.target : null;
-    if (!element || element.matches(HIDDEN)) return;
-    const axis = element.scrollHeight - element.clientHeight > 1 ? "y"
-      : element.scrollWidth - element.clientWidth > 1 ? "x" : null;
-    if (!axis) return;
-    clearTimeout(lingerTimer);
-    lingerTimer = window.setTimeout(hide, TOUCH_LINGER);
-    if (shown && target?.element === element && target.axis === axis) return;
-    if (shown) hide();
-    touching = true;
-    bar.dataset.touch = "true";
-    target = { element, axis };
-    clearTimeout(lingerTimer);
-    lingerTimer = window.setTimeout(hide, TOUCH_LINGER);
-    reveal();
-  }
-
   function syncMedia() {
     hide();
     // Either overlay hides the native scrollbar, and with it the column of the
@@ -246,7 +214,6 @@ export function bindOverlayScrollbars() {
   document.addEventListener("pointerdown", outsideDown, true);
   document.addEventListener("keydown", hide, true);
   window.addEventListener("blur", hide);
-  document.addEventListener("scroll", scrolled, { capture: true, passive: true });
   media.addEventListener("change", syncMedia);
   touch.addEventListener("change", syncMedia);
   syncMedia();
@@ -258,7 +225,6 @@ export function bindOverlayScrollbars() {
     document.removeEventListener("pointerdown", outsideDown, true);
     document.removeEventListener("keydown", hide, true);
     window.removeEventListener("blur", hide);
-    document.removeEventListener("scroll", scrolled, { capture: true });
     media.removeEventListener("change", syncMedia);
     touch.removeEventListener("change", syncMedia);
   };

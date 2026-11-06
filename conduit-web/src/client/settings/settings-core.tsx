@@ -883,7 +883,7 @@ export function Settings(props: {
         onSave={(key, env) => saveApiKey(provider.id, key, env)} onRemove={provider.auth.removable ? () => void removePiAuth(provider.id) : undefined}
         actions={<>
           <Show when={provider.oauth && (!configured() || signedIn())}><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>{signedIn() ? "Sign in again" : "Sign in"}</Button></Show>
-          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="sm" haptic="destructive" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
           <Show when={options.pending}><Button variant="ghost" size="sm" onClick={() => setAddingAccount("")}>Cancel</Button></Show>
         </>} />
       <Show when={attempt()}>{(current) => <>

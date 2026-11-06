@@ -54,3 +54,9 @@ export const ANSWER_MARKDOWN = { flow: "ui-answer-flow", table: "ui-answer-table
 
 /** What a caller drawing its own lines into a CodeBlock marks: each line (line), which the block numbers. */
 export const CODE_BLOCK = { line: "ui-code-line" } as const;
+
+/** Calls a Solid event handler as given: a function, or a bound [handler, data] pair. */
+export function callHandler<E extends Event>(handler: unknown, event: E) {
+  if (typeof handler === "function") handler(event);
+  else if (Array.isArray(handler) && typeof handler[0] === "function") handler[0](handler[1], event);
+}

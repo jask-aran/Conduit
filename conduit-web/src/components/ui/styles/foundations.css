@@ -53,6 +53,8 @@
   --layer-dock: 40;
   /* A phone's drawers over the page: the sidebar's, then the workspace panel's over it; each one's Backdrop just under it. */
   --layer-drawer: 55;
+  /* How far a phone's page slides off the sidebar under it: the sidebar's width, the page's edge left showing beside it. */
+  --drawer-width: 85vw;
   /* A dragged tab's drop wash over the panes it can land on. */
   --layer-drop: 60;
   --layer-panel: 70;
@@ -82,11 +84,15 @@
   /* Haptics (haptics.ts): an effect is the platform's clear primitives, each `name scale [delay ms]`, comma
      separated -- short and crisp, or a thump, never a buzz. Kinds (meanings) name these; the person's strength
      scales them. tick: the lightest, a side chosen or a fold. click: a press that acts, a drawer opening. thud: weight,
-     a long press taking hold. settle: something put away, an overlay closing -- low and soft. */
+     a long press taking hold. settle: something put away, an overlay closing -- low and soft. rise: a change
+     committed (Save, Set up) -- swelling into its click. knock: a change that cannot be taken back (Remove, Delete,
+     Sign out) -- two blows, the second lighter. */
   --haptic-tick: tick .6;
   --haptic-click: click .7;
   --haptic-thud: thud .9;
   --haptic-settle: low-tick .8;
+  --haptic-rise: quick-rise .5, click .8 50;
+  --haptic-knock: thud .8, thud .55 90;
 }
 /*
  * Every piece's moves keep these invariants; a new state or piece is added within them, never as an exception:

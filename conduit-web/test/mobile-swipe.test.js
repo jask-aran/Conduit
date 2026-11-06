@@ -22,3 +22,23 @@ test("a scroll stays a scroll, and a flick is enough", () => {
   assert.equal(run({ x: 10, y: 100 }, [{ x: 30, y: 101, t: 20 }, { x: 60, y: 102, t: 50 }]), "open-sidebar");
   assert.equal(run({ x: 10, y: 100 }, [{ x: 30, y: 101, t: 100 }, { x: 60, y: 102, t: 1000 }]), null);
 });
+
+test("a panel that follows the finger lands the way it was let go", () => {
+  const travel = { travel: 340 };
+  // Past 40% of its travel, slowly: open. Short of it, slowly: back.
+  assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 50 }, { x: 160, y: 104, t: 600 }, { x: 160, y: 104, t: 900 }]), "open-sidebar");
+  assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 50 }, { x: 120, y: 104, t: 600 }, { x: 120, y: 104, t: 900 }]), null);
+  // Far out but flicked back: back. Barely out but flicked on: open.
+  assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 50 }, { x: 300, y: 104, t: 400 }, { x: 260, y: 104, t: 440 }, { x: 200, y: 104, t: 470 }]), null);
+  assert.equal(run({ x: 10, y: 100, ...travel }, [{ x: 30, y: 101, t: 20 }, { x: 70, y: 102, t: 50 }]), "open-sidebar");
+  // Closing from open counts down from 1.
+  const gesture = beginEdgeSwipe({ x: 300, y: 100, t: 0, width: 400, sidebarOpen: true, workspaceOpen: false, ...travel });
+  gesture.move({ x: 280, y: 101, t: 30 });
+  assert.equal(gesture.action, "close-sidebar");
+  assert.equal(gesture.progress({ x: 130, y: 101, t: 60 }), 0.5);
+});
+
+test("the sidebar opens from 64px in", () => {
+  assert.equal(run({ x: 60, y: 100 }, [{ x: 80, y: 101, t: 50 }, { x: 200, y: 105, t: 200 }]), "open-sidebar");
+  assert.equal(run({ x: 70, y: 100 }, [{ x: 90, y: 101, t: 50 }, { x: 210, y: 105, t: 200 }]), null);
+});

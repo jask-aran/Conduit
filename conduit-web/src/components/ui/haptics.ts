@@ -10,13 +10,21 @@ import { touchOnly } from "./layout";
  * delay (ms) -- `click .7` or `tick .5, click .7 40`. Never a timed buzz: a key click is 10-20ms of drive, and a long
  * one-shot rings on in the actuator (Android's haptics principles).
  *
- * Kinds are meanings, each a piece's own (callers do not fire them), and each names its effect:
- * - select (tick): a side chosen in a Segmented (a pill one too);
- * - press (click): a PillButton that acts at once (the mic, Send, Stop: its haptic prop);
+ * Kinds are meanings, each a piece's own (callers do not fire them), and each names its effect. Every control has a
+ * default kind, so what is built from the library is felt without asking; its `haptic` prop overrides it (a kind), or
+ * silences it (false):
+ * - select (tick): a side chosen in a Segmented (a pill one too), a Switch turned, each stop a Slider passes, an entry
+ *   tapped in a list (a Row that is a button or a link);
+ * - press (click): a PillButton that acts at once (the mic, Send, Stop: its haptic prop), a Button (secondary or
+ *   ghost: Retry, Cancel, Replace);
+ * - confirm (rise): a change committed, a primary Button (Save, Add, Set up);
+ * - destructive (knock): a change that cannot be taken back, a destructive Button (Disconnect, Delete chats), or one
+ *   that says so in its haptic prop (a ghost Remove, Sign out);
  * - hold (thud): a long press opening a context menu;
  * - fold (tick): what an Expand or Disclosure holds opening or shutting;
- * - open (click): an overlay opening (a menu, submenu, popover, dialog, the phone's drawer: a tap or a swipe in);
- * - dismiss (settle): an overlay closing (a menu, submenu, popover, dialog, the phone's drawer).
+ * - open (click): an overlay opening (a menu, submenu, popover, dialog, the phone's drawer: a tap or a swipe in, or
+ *   carried past where it lands), or a phone's OverlayPage arriving from its list (a Settings section);
+ * - dismiss (settle): an overlay closing (a menu, submenu, popover, dialog, the phone's drawer), or that page going back.
  * fold, open and dismiss are felt only just after a touch, so what opens or closes on its own (rows a search filters in,
  * a drawer shut by navigation from the keyboard) is not. Only a touch screen with nothing that hovers feels them.
  *
@@ -24,9 +32,11 @@ import { touchOnly } from "./layout";
  * the native player (ConduitHapticsPlugin) composes the primitives, falling back to the nearest predefined click;
  * in a browser, a vibration of a few milliseconds.
  */
-export type Haptic = "select" | "press" | "hold" | "fold" | "open" | "dismiss";
-export type HapticEffect = "tick" | "click" | "thud" | "settle";
-export const HAPTIC_EFFECT: Record<Haptic, HapticEffect> = { select: "tick", press: "click", hold: "thud", fold: "tick", open: "click", dismiss: "settle" };
+export type Haptic = "select" | "press" | "confirm" | "destructive" | "hold" | "fold" | "open" | "dismiss";
+/** A control's haptic prop: a kind in place of its default, or false for none. */
+export type HapticProp = Haptic | false;
+export type HapticEffect = "tick" | "click" | "thud" | "settle" | "rise" | "knock";
+export const HAPTIC_EFFECT: Record<Haptic, HapticEffect> = { select: "tick", press: "click", confirm: "rise", destructive: "knock", hold: "thud", fold: "tick", open: "click", dismiss: "settle" };
 
 export type HapticStrength = "off" | "light" | "medium" | "strong";
 export const HAPTIC_STRENGTHS: { value: HapticStrength; label: string; gain: number }[] = [
@@ -85,7 +95,8 @@ export function playEffect(effect: HapticEffect) {
 
 let touchedAt = -Infinity;
 // One feel per touch: a piece told both by its own change and by its owner's (an overlay's open prop and its
-// onOpenChange) is felt once.
+// onOpenChange), or two pieces the one tap reached (a Row that folds an Expand), is felt once. A different effect
+// straight after replaces it (the platform plays the latest): a Row's tick, then the page it opens.
 let last = { kind: "", at: -Infinity };
 // Down as well as up: a tap outside a menu closes it on the way down.
 const touched = (event: PointerEvent) => { if (event.pointerType === "touch") touchedAt = performance.now(); };
@@ -94,10 +105,13 @@ export function haptic(kind: Haptic) {
   if (!touchOnly()) return;
   const now = performance.now();
   if ((kind === "fold" || kind === "open" || kind === "dismiss") && now - touchedAt > 600) return;
-  if (last.kind === kind && now - last.at < 120) return;
-  last = { kind, at: now };
+  if (last.kind === HAPTIC_EFFECT[kind] && now - last.at < 120) return;
+  last = { kind: HAPTIC_EFFECT[kind], at: now };
   playEffect(HAPTIC_EFFECT[kind]);
 }
+
+/** A control's feel: its haptic prop, else its default. */
+export function feel(prop: HapticProp | undefined, fallback: Haptic) { if (prop !== false) haptic(prop ?? fallback); }
 
 /** An overlay's own haptics, whoever opens or shuts it: felt opening and shutting (just after a touch). */
 export function overlayHaptics(open: () => boolean | undefined) {

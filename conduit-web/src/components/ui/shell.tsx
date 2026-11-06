@@ -11,10 +11,11 @@ import { PaneLetter } from "./header";
  */
 
 /** The row beside the sidebar that the panes and the dock share. settling: the panes' shares are easing (a split
- *  opening or closing), so each sheet's room and margins move with them. */
-export function AppShell(props: JSX.HTMLAttributes<HTMLDivElement> & { settling?: boolean }) {
-  const [local, rest] = splitProps(props, ["class", "settling"]);
-  return <div {...rest} class={cn("ui-shell", local.class)} data-settling={local.settling ? "" : undefined} />;
+ *  opening or closing), so each sheet's room and margins move with them. drawer: the sidebar's on a phone, which the
+ *  row slides off to show (nav.css --drawer). */
+export function AppShell(props: JSX.HTMLAttributes<HTMLDivElement> & { settling?: boolean; drawer?: "open" | "shut" }) {
+  const [local, rest] = splitProps(props, ["class", "settling", "drawer"]);
+  return <div {...rest} class={cn("ui-shell", local.class)} data-settling={local.settling ? "" : undefined} data-drawer={local.drawer} />;
 }
 
 /** A pane: the charcoal ground inset on the frame. lead: the main pane, first beside the sidebar (it clips what it

@@ -572,12 +572,14 @@ const vocabulary: [keyof typeof Icons, string, number][] = [
 ];
 
 const KINDS: { kind: Haptic; what: string; pieces: string }[] = [
-  { kind: "select", what: "a side chosen", pieces: "Segmented (pill)" },
-  { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop" },
+  { kind: "select", what: "a side chosen, an entry tapped", pieces: "Segmented (pill), Switch, each stop of a Slider, a Row that is a button or link (each a default; haptic overrides, false silences)" },
+  { kind: "press", what: "a press that acts at once", pieces: "PillButton with haptic=\"press\": the mic, Send, Stop; a secondary or ghost Button (Retry, Cancel)" },
+  { kind: "confirm", what: "a change committed", pieces: "a primary Button (Save, Add, Set up)" },
+  { kind: "destructive", what: "a change that cannot be taken back", pieces: "a destructive Button (Disconnect, Delete chats); a ghost one with haptic=\"destructive\" (Remove, Sign out)" },
   { kind: "hold", what: "a long press opening a context menu", pieces: "ContextMenu on a touch screen" },
   { kind: "fold", what: "what a row holds opening or shutting, just after a touch", pieces: "Expand, Disclosure" },
-  { kind: "open", what: "an overlay opening, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer" },
-  { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer" },
+  { kind: "open", what: "an overlay opening, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer, a phone's OverlayPage from its list" },
+  { kind: "dismiss", what: "an overlay closing, just after a touch", pieces: "Menu, submenu, Popover, Dialog, the phone's drawer, a phone's OverlayPage going back" },
 ];
 
 export const typePage: Page = {
@@ -704,9 +706,9 @@ export const motionPage: Page = {
 
 export const hapticsPage: Page = {
   title: "Haptics", rail: "Foundations",
-  preview: () => <div class="g-row"><For each={KINDS}>{(k) => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>{k.kind}</Button>}</For></div>,
-  summary: "What a touch that changes something feels like on a phone: five kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them.",
-  examples: KINDS.map((k) => row(k.kind, `${k.what}; fired by ${k.pieces}; effect: --haptic-${HAPTIC_EFFECT[k.kind]}`, () => <Button variant="secondary" size="sm" onClick={() => haptic(k.kind)}>Feel it</Button>, { code: `haptic("${k.kind}")`, phone: "only" })),
+  preview: () => <div class="g-row"><For each={KINDS}>{(k) => <Button variant="secondary" size="sm" haptic={false} onClick={() => haptic(k.kind)}>{k.kind}</Button>}</For></div>,
+  summary: "What a touch that changes something feels like on a phone: eight kinds, each a piece's own, so callers never fire them (components/ui/haptics.ts). Only a touch screen with nothing that hovers feels them.",
+  examples: KINDS.map((k) => row(k.kind, `${k.what}; fired by ${k.pieces}; effect: --haptic-${HAPTIC_EFFECT[k.kind]}`, () => <Button variant="secondary" size="sm" haptic={false} onClick={() => haptic(k.kind)}>Feel it</Button>, { code: `haptic("${k.kind}")`, phone: "only" })),
 };
 
 export const auraPage: Page = {

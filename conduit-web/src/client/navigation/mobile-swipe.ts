@@ -8,25 +8,39 @@ export type MobileSwipeAction = "open-sidebar" | "close-sidebar" | "open-workspa
  *
  * Nothing is decided until the finger has moved LOCK_PX. Then the touch is a
  * swipe (mostly sideways, the right way) or a scroll, and that is final: a
- * scroll that drifts sideways later never becomes a swipe. A swipe completes
- * on enough travel or a quick enough flick.
+ * scroll that drifts sideways later never becomes a swipe. A swipe carries its
+ * panel with the finger (progress, 0 shut to 1 open, over the panel's travel)
+ * and lands open or shut on letting go: past COMMIT of the way, or flicked
+ * there; a flick back the other way returns it, however far it had come.
  */
 
 /** From the edge inward. On Android's gesture navigation the outermost strip
  *  is the system's Back and never reaches the page, so this reaches past it. */
-export const EDGE_PX = 48;
+export const EDGE_PX = 64;
 const LOCK_PX = 10;
 const LOCK_WITHIN_MS = 500;
 const SIDEWAYS_RATIO = 1.5;
 const FLICK_PX_PER_MS = 0.5;
 const FLICK_MIN_PX = 24;
+const COMMIT = 0.4;
+/** The finger's speed is read over its last few moves, not the last one alone, which a touch screen makes noisy. */
+const VELOCITY_MS = 80;
 
-export interface SwipeStart { x: number; y: number; t: number; width: number; sidebarOpen: boolean; workspaceOpen: boolean }
+/** travel: how far the panel moves between shut and open, in px, when it follows the finger (it lands past COMMIT of
+ *  it). Without one the panel only opens or shuts on letting go, after the width's 30% (at most 120px). */
+export interface SwipeStart { x: number; y: number; t: number; width: number; sidebarOpen: boolean; workspaceOpen: boolean; travel?: number }
 export interface SwipePoint { x: number; y: number; t: number }
 
 export interface EdgeSwipe {
   /** False once the touch is a scroll (or never could be a swipe): stop tracking it. */
   move(point: SwipePoint): "pending" | "swiping" | "abandoned";
+  /** What the touch would do, once it is a swipe: which panel, and which way. */
+  readonly action: MobileSwipeAction;
+  /** How open its panel is at this point, 0 shut to 1 open. */
+  progress(point: SwipePoint): number;
+  /** Whether, let go slowly here, it would land (past COMMIT of the way); a flick may still change that. */
+  lands(point: SwipePoint): boolean;
+  /** On letting go: the action if it lands that way, null if the panel goes back (or the touch was never a swipe). */
   end(point: SwipePoint): MobileSwipeAction | null;
 }
 
@@ -40,14 +54,19 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
             : null;
   if (!intent) return null;
   let state: "pending" | "swiping" | "abandoned" = "pending";
-  let last = { x: start.x, t: start.t };
-  let velocity = 0;
+  const recent: SwipePoint[] = [{ x: start.x, y: start.y, t: start.t }];
+  const span = start.travel ?? Math.min(120, start.width * 0.3);
+  const opening = intent.action.startsWith("open");
   const travel = (point: SwipePoint) => (point.x - start.x) * intent.sign;
+  const velocity = () => {
+    const last = recent[recent.length - 1]!;
+    const first = recent.find((point) => last.t - point.t <= VELOCITY_MS) ?? last;
+    return last.t > first.t ? ((last.x - first.x) * intent.sign) / (last.t - first.t) : 0;
+  };
   const move = (point: SwipePoint) => {
     if (state === "abandoned") return state;
-    const dt = point.t - last.t;
-    if (dt > 0) velocity = ((point.x - last.x) * intent.sign) / dt;
-    last = { x: point.x, t: point.t };
+    if (point.t >= recent[recent.length - 1]!.t) recent.push(point);
+    while (recent.length > 2 && point.t - recent[0]!.t > VELOCITY_MS * 2) recent.shift();
     if (state === "swiping") return state;
     const dx = point.x - start.x;
     const dy = point.y - start.y;
@@ -60,11 +79,18 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
   };
   return {
     move,
+    action: intent.action,
+    progress(point) {
+      const moved = Math.max(0, Math.min(1, travel(point) / span));
+      return opening ? moved : 1 - moved;
+    },
+    lands(point) { return travel(point) >= span * COMMIT; },
     end(point) {
       if (move(point) !== "swiping") return null;
       const distance = travel(point);
-      const enough = Math.min(120, start.width * 0.3);
-      return distance >= enough || (distance >= FLICK_MIN_PX && velocity >= FLICK_PX_PER_MS) ? intent.action : null;
+      const speed = velocity();
+      if (speed <= -FLICK_PX_PER_MS) return null;
+      return distance >= (start.travel ? span * COMMIT : span) || (distance >= FLICK_MIN_PX && speed >= FLICK_PX_PER_MS) ? intent.action : null;
     },
   };
 }

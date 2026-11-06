@@ -41,7 +41,7 @@ export function SignInsGroup() {
   return <Group title="Signed in">
     <For each={people()}>{(session) => <SettingLine plain label={clientName(session)} state={session.current ? "this device" : ago(session.lastSeenAt)}
       title={session.userAgent || undefined}>
-      <Show when={!session.current}><Button size="sm" variant="ghost" onClick={() => void end(session)}>Sign out</Button></Show>
+      <Show when={!session.current}><Button size="sm" variant="ghost" haptic="destructive" onClick={() => void end(session)}>Sign out</Button></Show>
     </SettingLine>}</For>
     <Show when={scripts()}><SettingLine plain label="Scripts" state={`${scripts()} short sessions`} title="Sessions scripts and probes made for themselves; each ends an hour after its last use." /></Show>
     <Show when={error()}><Note tone="error">{error()}</Note></Show>

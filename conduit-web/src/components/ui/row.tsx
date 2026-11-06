@@ -1,6 +1,8 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { cn } from "@/lib/utils";
+import { callHandler } from "./shared";
+import { feel, type HapticProp } from "./haptics";
 
 /**
  * Row: one line in a list -- a mark, the title (a detail under it), muted context after it, data at its end and a
@@ -10,6 +12,7 @@ import { cn } from "@/lib/utils";
  *
  * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own.
  * bare: the children are the row's whole inside (a composition with parts of its own: a menu item, a folder's row).
+ * A row that is a button or a link is felt as select when tapped on a phone; haptic overrides it (false: none).
  */
 export type RowDensity = "nav" | "list" | "menu";
 
@@ -41,6 +44,7 @@ export type RowProps = {
   /** Smaller and quieter: a row that leads elsewhere ("View all"). */
   quiet?: boolean;
   bare?: boolean;
+  haptic?: HapticProp;
   class?: string;
   children?: JSX.Element;
   /** Any element's ref: a row is whichever element it is drawn as. */
@@ -50,7 +54,7 @@ export type RowProps = {
   & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel">>
   & Partial<Pick<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "disabled">>;
 
-const PARTS = ["density", "element", "lead", "label", "detail", "context", "meta", "end", "indent", "current", "within", "open", "selected", "quiet", "bare", "class", "children"] as const;
+const PARTS = ["density", "element", "lead", "label", "detail", "context", "meta", "end", "indent", "current", "within", "open", "selected", "quiet", "bare", "haptic", "class", "children"] as const;
 
 export function Row(props: RowProps) {
   const [local, rest] = splitProps(props, PARTS);
@@ -59,8 +63,9 @@ export function Row(props: RowProps) {
   // A list row always draws its mark's room and its context's, so a column of them lines up and its data sits at the end.
   const keepsRoom = () => density() === "list";
   // The row is a button, a link or a div: its attributes are passed through as the element it is.
+  const click = (event: MouseEvent) => { if (element() !== "div") feel(local.haptic, "select"); callHandler(rest.onClick, event); };
   return <Dynamic component={element()} type={element() === "button" ? "button" : undefined} {...(rest as Record<string, unknown>)}
-    class={cn("ui-row", local.class)} data-density={density()}
+    onClick={click} class={cn("ui-row", local.class)} data-density={density()}
     data-indent={local.indent === 2 ? "2" : local.indent ? "" : undefined}
     aria-current={local.current && density() !== "list" ? "page" : undefined}
     data-current={local.current && density() === "list" ? "" : undefined}

@@ -15,6 +15,10 @@ import { cssTime } from "./shared";
  * In a scroller as tall as its content (a menu, data-fits), the scroller's own edge runs with the rows: its height
  * moves between the two it has, open and shut, on the same timing -- laid out per frame, but only that small box,
  * out of the page's flow. Without it the menu's edge jumped at the move's start and the rows slid in after it.
+ * Shutting in a scroller scrolled near its end, the list will be too short to stay where it is when the rows go: its
+ * scroll comes back by that much at the end. So everything in it slides down that far with the move (the rows above
+ * as well as what follows), and the end, scroll clamped and slides let go, looks as the last frame did -- without it
+ * the whole list jumped down as the slide ended.
  */
 export function Expand(props: { open: boolean; class?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(props.open);
@@ -54,9 +58,25 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       const clip = (shows: number) => `inset(0 0 ${(1 - shows) * 100}% 0)`;
       const shift = (shows: number) => `translateY(${-(1 - shows) * height}px)`;
       target = to;
-      motions = [node.animate([{ clipPath: clip(showing) }, { clipPath: clip(to) }], timing),
-        ...following(node).map((next) => next.animate([{ transform: shift(showing) }, { transform: shift(to) }], timing))];
       const edge = scrollerOf(node);
+      // Shutting: how far the scroll will come back when the rows go, and so how far everything drops on the way there.
+      const back = to === 0 && edge && edge.dataset.fits === undefined && showing > 0
+        ? Math.max(0, edge.scrollTop - Math.max(0, edge.scrollHeight - height - edge.clientHeight)) : 0;
+      const drop = (shows: number) => back * (showing - shows) / showing;
+      // The scroller's own child holding the rows (or the rows themselves): it and what is before it drop; what follows
+      // drops too, inside it by being in it, beside it by its own slide.
+      let top: HTMLElement = node;
+      while (top.parentElement && top.parentElement !== edge) top = top.parentElement;
+      const beside = (next: HTMLElement) => back > 0 && next.parentElement === edge;
+      motions = [node.animate([{ clipPath: clip(showing) }, { clipPath: clip(to) }], timing),
+        ...following(node).map((next) => next.animate(beside(next)
+          ? [{ transform: `translateY(${drop(showing) - (1 - showing) * height}px)` }, { transform: `translateY(${drop(to) - (1 - to) * height}px)` }]
+          : [{ transform: shift(showing) }, { transform: shift(to) }], timing))];
+      if (back > 0 && edge) {
+        for (let before: Element | null = top; before; before = before.previousElementSibling) {
+          if (before instanceof HTMLElement) motions.push(before.animate([{ transform: "translateY(0px)" }, { transform: `translateY(${back}px)` }], timing));
+        }
+      }
       if (edge?.dataset.fits !== undefined) {
         // The rows are in, whole: open, it is as tall as it is now; shut, it loses what of them it shows, inside its caps.
         const open = edge.getBoundingClientRect().height;

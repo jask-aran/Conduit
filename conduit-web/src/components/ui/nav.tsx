@@ -17,11 +17,17 @@ import { Row, type RowProps } from "./row";
 
 /** The sidebar itself: a head, the list and a foot. collapsed: the narrow rail's width (its edge moves with
  *  --panel-motion; instant: at once); folded: drawn as the rail, the list's rows away and its RailButtons shown
- *  (set once the edge has moved); drawer: a phone's, over the page, open or shut. */
+ *  (set once the edge has moved); drawer: a phone's, under the page, open or shut. */
+/** The drawer's next open or shut was already felt as a finger carried it past where it lands (see the app's swipe):
+ *  that change plays no haptic of its own. */
+let drawerFeltAhead = false;
+export function feelDrawerAhead() { drawerFeltAhead = true; }
+
 export function NavPane(props: JSX.HTMLAttributes<HTMLElement> & { collapsed?: boolean; folded?: boolean; instant?: boolean; drawer?: "open" | "shut"; head: JSX.Element; foot?: JSX.Element; listRef?: (element: HTMLDivElement) => void; ref?: (element: HTMLElement) => void }) {
   const [local, rest] = splitProps(props, ["collapsed", "folded", "instant", "drawer", "head", "foot", "listRef", "children", "class"]);
   // The drawer opening and shutting are felt after a touch (its toggle or a swipe; a swipe, a tap outside it or on a row).
   createEffect(on(() => local.drawer, (drawer, was) => {
+    if (drawerFeltAhead) { drawerFeltAhead = false; return; }
     if (was === "open" && drawer === "shut") haptic("dismiss");
     else if (was === "shut" && drawer === "open") haptic("open");
   }, { defer: true }));

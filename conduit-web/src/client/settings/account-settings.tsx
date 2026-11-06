@@ -37,7 +37,7 @@ export function AccountSettings(props: { onOpenTools?: (connector: string) => vo
   return <><Group title="Account">
     <SettingLine plain label="Picture" state={accountPicture() ? undefined : "your name's initials"} title="Shown in the server switcher's menu, on every device signed in to this hub.">
       <input ref={chooser} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void choose(file); }} />
-      <Show when={accountPicture()}><Button size="sm" variant="ghost" disabled={busy()} onClick={() => void act(removeAccountPicture)}>Remove</Button></Show>
+      <Show when={accountPicture()}><Button size="sm" variant="ghost" haptic="destructive" disabled={busy()} onClick={() => void act(removeAccountPicture)}>Remove</Button></Show>
       <Button size="sm" variant="secondary" disabled={busy()} onClick={() => chooser.click()}>{accountPicture() ? "Change" : "Choose…"}</Button>
       <Avatar name={accountName()} src={accountPicture()} size="lg" label={`${accountName() || "No name"}'s picture`} />
     </SettingLine>

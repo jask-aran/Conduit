@@ -10,7 +10,7 @@ import { Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
-import { batch, createEffect, createMemo, createSignal, For, lazy, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 
 
 import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
@@ -465,11 +465,17 @@ export function Sidebar(props: {
     const retained = [...selectedChatIds()].filter((id) => available.has(id));
     if (retained.length !== selectedChatIds().size) setSelectedChatIds(new Set(retained));
   });
-  createEffect(() => {
+  // The open chat's folder opens when that chat is opened (or first found in one), not again: re-run on the drawer
+  // shutting or a list refresh, it undid the person's own closing of that folder.
+  const selectedOwner = createMemo(() => {
     const selectedId = props.selectedId;
-    if (!selectedId) return;
-    const owner = props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId));
-    if (!owner) return;
+    const owner = selectedId ? props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId)) : undefined;
+    return owner && selectedId ? `${owner.id}\n${selectedId}` : "";
+  });
+  createEffect(on(selectedOwner, (key) => untrack(() => {
+    if (!key) return;
+    const [ownerId, selectedId] = key.split("\n") as [string, string];
+    const owner = { id: ownerId };
     setCollapsedProjectIds((current) => {
       if (!current.has(owner.id)) return current;
       const next = new Set(current);
@@ -484,7 +490,7 @@ export function Sidebar(props: {
       const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
       row?.scrollIntoView({ block: "nearest" });
     });
-  });
+  })));
   createEffect(() => {
     const open = props.mobileOpen;
     if (open !== mobileWasOpen) {
@@ -495,6 +501,11 @@ export function Sidebar(props: {
     if (open && !mobileWasOpen) {
       mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (!phoneLayout()) queueMicrotask(() => focusFirst(sidebarRoot));
+      // A chat opened while it was shut is shown as it opens (its folder was opened then).
+      else if (props.selectedId) {
+        const id = props.selectedId;
+        queueMicrotask(() => document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" }));
+      }
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
@@ -1115,7 +1126,8 @@ export function Sidebar(props: {
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
       aria-hidden={phoneLayout() && !drawerSettled() ? true : undefined} inert={phoneLayout() && !drawerSettled() ? true : undefined}
       onTransitionEnd={(event) => {
-        if (event.target === sidebarRoot && event.propertyName === "transform") settleDrawer();
+        // The drawer has landed when its body has (the pane itself only steps off screen once shut).
+        if (event.target === sidebarRoot?.firstElementChild && event.propertyName === "transform") settleDrawer();
         if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.();
       }}
       onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}

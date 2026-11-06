@@ -5,6 +5,15 @@
    the shell scrolls sideways instead (#root, the app's). The row holds the main pane and its margins; its own
    intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
 .ui-shell { position: relative; display: flex; min-width: 0; flex: 1; overflow: hidden; container-type: inline-size; }
+/* A phone's page slides off the sidebar under it (nav.css --drawer), opaque so nothing shows through; at rest shut it has
+   no transform, which would make it a stacking context and the box its fixed pieces (the workspace panel) sit in. */
+@media (--conduit-phone-layout) {
+  .ui-shell[data-drawer] { background: var(--background); transition: transform var(--duration-quick) var(--ease-leave); }
+  .ui-shell:is([data-drawer="open"], [data-drawer-drag]) { transform: translateX(calc(var(--drawer) * var(--drawer-width))); }
+  .ui-shell[data-drawer="open"] { --drawer: 1; transition: transform var(--duration-gentle) var(--ease-arrive); }
+  .ui-shell[data-drawer-drag] { transition: none; }
+  .ui-shell[data-drawer-settle] { transition: transform var(--duration-gentle) var(--ease-arrive); }
+}
 @media (--conduit-wide-layout) {
   .ui-shell { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
 }

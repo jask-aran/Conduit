@@ -3,8 +3,9 @@ import { IconButton } from "./actions";
 import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 
-import { haptic } from "./haptics";
+import { feel, haptic, type Haptic, type HapticProp } from "./haptics";
 import { cn } from "@/lib/utils";
+import { callHandler } from "./shared";
 
 /** A key or a chord. onClick: it can be pressed (to record another); onRemove: a × beside it clears it (Settings · Shortcuts). */
 export function Keycap(props: { children: JSX.Element; label?: string; class?: string; onClick?: () => void; onRemove?: () => void }) {
@@ -20,16 +21,21 @@ export const Progress = (props: { value: number; max: number; label: string }) =
 /* What sits on a surface: the look follows [data-surface] above it (styles/foundations.css). */
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
-/** outline: the variant as a line in its colour with nothing inside (primary, ghost, destructive; secondary is already a line round a well). */
-export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; outline?: boolean; size?: "default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-xs" }) {
-  const [local, rest] = splitProps(props, ["class", "variant", "outline", "size"]);
-  return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-outline={local.outline ? "" : undefined} data-size={local.size ?? "default"} />;
+/** outline: the variant as a line in its colour with nothing inside (primary, ghost, destructive; secondary is already a line round a well).
+ *  Felt when pressed on a phone by its variant: primary confirm, destructive destructive, the others press;
+ *  haptic overrides it (false: none; see haptics.ts). */
+const BUTTON_HAPTIC: Record<ButtonVariant, Haptic> = { primary: "confirm", destructive: "destructive", secondary: "press", ghost: "press" };
+export function Button(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; outline?: boolean; size?: "default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-xs"; haptic?: HapticProp }) {
+  const [local, rest] = splitProps(props, ["class", "variant", "outline", "size", "haptic", "onClick"]);
+  return <button type="button" data-slot="button" {...rest} class={cn("ui-button", local.class)} data-variant={local.variant ?? "primary"} data-outline={local.outline ? "" : undefined} data-size={local.size ?? "default"}
+    onClick={(event) => { feel(local.haptic, BUTTON_HAPTIC[local.variant ?? "primary"]); callHandler(local.onClick, event); }} />;
 }
 
-/** On or off, for a setting that is one or the other: an --icon thumb travelling its own width. */
-export function Switch(props: { label: string; checked: boolean; onChange?: (checked: boolean) => void; disabled?: boolean; id?: string }) {
+
+/** On or off, for a setting that is one or the other: an --icon thumb travelling its own width. Felt as select. */
+export function Switch(props: { label: string; checked: boolean; onChange?: (checked: boolean) => void; disabled?: boolean; id?: string; haptic?: HapticProp }) {
   return <button id={props.id} type="button" role="switch" class="ui-switch" aria-label={props.label} aria-checked={props.checked}
-    disabled={props.disabled} onClick={() => props.onChange?.(!props.checked)}><span aria-hidden="true" /></button>;
+    disabled={props.disabled} onClick={() => { feel(props.haptic, "select"); props.onChange?.(!props.checked); }}><span aria-hidden="true" /></button>;
 }
 
 /** Waiting: a ring turning, the icon's size. */
@@ -94,9 +100,9 @@ export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonEle
   </button>;
 }
 
-/** A few choices side by side, one current. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
+/** A few choices side by side, one current; choosing one is felt as select. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
  *  without it what holds the group steers its keys (the sidebar's cursor). */
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; id?: string }) {
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; id?: string; haptic?: HapticProp }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
   const move = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
@@ -110,7 +116,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
-      onClick={() => { if (option.value === props.value) return; haptic("select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
+      onClick={() => { if (option.value === props.value) return; feel(props.haptic, "select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
   </Frost>;
 }
 
@@ -159,10 +165,10 @@ export function Series(props: { label: string; points: { label: string; value: n
 
 /**
  * One choice from an ordered list, set by sliding along it. The value follows
- * the thumb and is chosen on release; with onOpen the value is a SliderValue
+ * the thumb and is chosen on release, each stop it passes felt as select; with onOpen the value is a SliderValue
  * that opens the levels, and control puts the caller's own there (a submenu).
  */
-export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void; control?: (shown: () => string) => JSX.Element }) {
+export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void; control?: (shown: () => string) => JSX.Element; haptic?: HapticProp }) {
   const id = createUniqueId();
   const indexOf = (value: string) => Math.max(0, props.options.findIndex((option) => option.value === value));
   const [preview, setPreview] = createSignal(indexOf(props.value));
@@ -179,7 +185,7 @@ export function Slider(props: { label: string; options: { value: string; label: 
     </div>
     <input id={id} class="ui-slider-input" type="range" min={0} max={Math.max(0, props.options.length - 1)} step={1} value={preview()} disabled={props.disabled} aria-valuetext={shown()}
       style={{ "--fill": `${props.options.length > 1 ? (preview() / (props.options.length - 1)) * 100 : 0}%` }}
-      onInput={(event) => setPreview(Number(event.currentTarget.value))} onChange={(event) => commit(Number(event.currentTarget.value))} />
+      onInput={(event) => { const next = Number(event.currentTarget.value); if (next !== preview()) feel(props.haptic, "select"); setPreview(next); }} onChange={(event) => commit(Number(event.currentTarget.value))} />
     <div class="ui-slider-ticks" aria-hidden="true"><For each={props.options}>{(_, index) => <i data-reached={index() <= preview() ? "" : undefined} />}</For></div>
   </div>;
 }

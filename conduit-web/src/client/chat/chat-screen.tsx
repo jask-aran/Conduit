@@ -83,10 +83,11 @@ export function ChatHeader(props: {
     : !props.project || props.project.slug === "chat" ? <HarnessMark id="conduit" />
     : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <Icons.Folder />;
   return <PaneHeader frost={!!props.tabs && tabFrostOn()}
-    lead={<Show when={!props.mobileSidebarOpen}>
-      <HeaderButton label="Toggle Sidebar" icon={<Icons.Sidebar />} aria-expanded={false} tabIndex={0} onClick={props.onToggleMobileSidebar} />
+    // Kept while the sidebar is open: the page slides off it whole, beside it, and comes back unchanged.
+    lead={<>
+      <HeaderButton label="Toggle Sidebar" icon={<Icons.Sidebar />} aria-expanded={props.mobileSidebarOpen} tabIndex={0} onClick={props.onToggleMobileSidebar} />
       <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} onClick={props.onNewChat} />
-    </Show>}
+    </>}
     // A phone's name for the page, and the way into its menu (a desktop's title and rail hold what it holds).
     pill={<Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
       {/* Opening, the context is read afresh, so Context shows its reading before it is unfolded. */}

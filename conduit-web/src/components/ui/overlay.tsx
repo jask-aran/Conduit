@@ -1,6 +1,7 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { createEffect, createSignal, For, on, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { haptic } from "./haptics";
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
@@ -143,6 +144,8 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
   /* A save is often quicker than the spinner's turn, which then cut out and jumped to Saved. Saving is held until its
      spinner has made one whole turn (--duration-spin); a failure is said at once. */
   const [held, setHeld] = createSignal<string | null>(null);
+  // A screen of its own (a phone's section, with its way back): felt arriving from the list, and going back to it.
+  onMount(() => { if (props.onBack) haptic("open"); });
   let since = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   createEffect(() => {
@@ -158,7 +161,7 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
   const busy = () => Boolean(props.busy) || held() !== null;
   const status = () => held() ?? props.status;
   return <main class="ui-overlay-page">
-    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
+    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" haptic="dismiss" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
       <Show when={status()}><span class="ui-overlay-status" role="status" data-failed={props.failed && held() === null ? "" : undefined} title={props.why}><Show when={busy()}><Spinner /></Show>{status()}
         <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>
       <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><Icons.Close /></Button></Show></div>
@@ -265,7 +268,7 @@ export function SettingCredential(props: {
       <Show when={open()} fallback={<>
         {props.actions}
         <Show when={props.editable !== false}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.stored ? "Replace" : props.add || "Add key"}</Button></Show>
-        <Show when={props.stored && props.onRemove}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => props.onRemove?.()}>Remove</Button></Show>
+        <Show when={props.stored && props.onRemove}><Button variant="ghost" size="sm" haptic="destructive" disabled={props.busy} onClick={() => props.onRemove?.()}>Remove</Button></Show>
       </>}>
         <Input data-credential="" aria-label={props.label} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
           ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} placeholder={props.placeholder || "API key"}
