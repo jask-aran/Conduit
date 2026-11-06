@@ -97,16 +97,6 @@ export class VoiceRuntime {
     return release;
   }
 
-  async observeVoiceActivity(pcm) {
-    if (typeof this.modelManager?.observeVoiceActivity !== "function") return null;
-    return this.modelManager.observeVoiceActivity(pcm);
-  }
-
-  beginVoiceActivity() {
-    if (typeof this.modelManager?.beginVoiceActivity !== "function") return null;
-    return this.modelManager.beginVoiceActivity();
-  }
-
   async resolve() {
     const config = await this.settings.effective();
     if (config.mode === "off") throw runtimeError("dictation_not_configured", "Voice dictation is disabled", 409);
@@ -123,22 +113,12 @@ export class VoiceRuntime {
         profile,
         catalog: this.catalog,
         modelManager: this.modelManager,
-        runtime: { ...local, adapterKind: runtimeDefinition.adapterKind },
-        fetchImpl: this.fetchImpl,
         openStream: profile.execution === "live" && typeof this.modelManager.stream === "function"
           ? (options) => this.modelManager.stream(artifact.legacyModelId, options)
           : null,
       });
       const actualStreaming = profile.execution === "live" && Boolean(adapters.stream);
-      const adapter = profile.execution === "live"
-        ? "transcribe_cpp_stream_v1"
-        : runtimeDefinition.adapterKind === "transformers_js"
-          ? "managed_transformers_v1"
-          : runtimeDefinition.adapterKind === "parakeet_loopback"
-            ? "managed_parakeet_loopback_v1"
-            : runtimeDefinition.adapterKind === "transcribe_rs"
-              ? "transcribe_rs_batch_v1"
-            : "transcribe_cpp_batch_v1";
+      const adapter = profile.execution === "live" ? local.adapter : local.batchAdapter || "transcribe_cpp_batch_v1";
       const transcribe = async (pcm, options = {}) => {
         const result = await adapters.batch.transcribe({
           pcm16: Buffer.from(pcm || []),
@@ -167,10 +147,10 @@ export class VoiceRuntime {
         segmentation: profile.segmentation,
         fallback: profile.fallback ? { ...profile.fallback } : null,
         precision: artifact.precision || modelPrecision(artifact.legacyModelId),
-        backend: local.backend || (runtimeDefinition.adapterKind === "transformers_js" ? "embedded_transformers" : runtimeDefinition.adapterKind === "parakeet_loopback" ? "loopback_parakeet" : runtimeDefinition.adapterKind === "transcribe_rs" ? "transcribe_rs" : "transcribe_cpp"),
-        computeBackend: local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" || runtimeDefinition.adapterKind === "transcribe_rs" ? "cpu" : null),
-        requestedComputeBackend: local.requestedComputeBackend || (profile.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition.compiledComputeBackends[0] || null),
-        actualComputeBackend: local.actualComputeBackend || local.computeBackend || (runtimeDefinition.adapterKind === "transformers_js" ? "wasm-cpu" : runtimeDefinition.adapterKind === "parakeet_loopback" || runtimeDefinition.adapterKind === "transcribe_rs" ? "cpu" : null),
+        backend: local.backend || runtimeDefinition.id,
+        computeBackend: local.computeBackend || null,
+        requestedComputeBackend: local.requestedComputeBackend || runtimeDefinition.requestedComputeBackend || null,
+        actualComputeBackend: local.actualComputeBackend || local.computeBackend || null,
         loadedRuntimeVersion: local.runtimeVersion || local.native?.version || runtimeDefinition.version,
         capabilities: local.capabilities || { inferenceMode: profile.execution === "live" ? "streaming" : "batch", partials: profile.execution === "live" },
         streaming: actualStreaming ? local.capabilities?.streaming || null : null,

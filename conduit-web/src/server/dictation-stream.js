@@ -2,8 +2,7 @@ import { performance } from "node:perf_hooks";
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL } from "../voice-settings.js";
-import { createSegmentationProvider, segmentationObservationMetadata } from "./voice-segmentation.js";
-import { selectSileroVadRanges } from "./voice-vad.js";
+import { createSegmentationProvider, segmentationObservationMetadata, selectSegmentationRanges } from "./voice-segmentation.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { within } from "./effect-concurrency.js";
 
@@ -20,35 +19,13 @@ const DEFAULT_LIMITS = Object.freeze({
   maxSegments: 16,
 });
 
-// The binding exposes the Parakeet buffered decoder's 160 ms chunk setting,
-// but it does not define a required JavaScript feed size. Keep the transport
-// packet size independent and coalesce eight 20 ms packets before native feed.
-// The queue limit is deliberately fixed for this package; tests can use the
-// createDictationStream limits seam to force the overflow path.
+// Coalesce eight 20 ms transport packets before each native feed. Keep the
+// feed size separate from model decode options and bound the queued audio.
 export const TRANSCRIBE_CPP_FEED_QUANTUM_MS = 160;
 export const TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS = 5_000;
 const VOICE_SAMPLE_RATE = 16_000;
 
-// Local full-precision models need much more CPU time than a remote streaming
-// adapter. Keep these policies here so a deployment can tune the defaults
-// through createDictationStream({ limits }) without changing the protocol.
-export const FINALIZATION_MODEL_MULTIPLIERS = Object.freeze({
-  "parakeet-tdt-0.6b-v2-fp32": 18,
-  "parakeet-tdt-0.6b-v2-int8": 10,
-  "parakeet-tdt-0.6b-v3-fp32": 18,
-  "parakeet-tdt-0.6b-v3-int8": 10,
-  "whisper-large-v3-turbo-q8": 14,
-  "whisper-small-fp32": 14,
-  "whisper-small-q8": 10,
-  "whisper-base-fp32": 12,
-  "whisper-base-q8": 8,
-  "whisper-tiny-en-fp32": 10,
-  "whisper-tiny-en-q8": 6,
-});
-
-function finalizationMultiplier({ adapter, model }, limits) {
-  const exact = FINALIZATION_MODEL_MULTIPLIERS[String(model || "")];
-  if (Number.isFinite(exact)) return exact;
+function finalizationMultiplier(limits) {
   return Number.isFinite(Number(limits.finalizationDefaultMultiplier))
     ? Number(limits.finalizationDefaultMultiplier)
     : DEFAULT_LIMITS.finalizationDefaultMultiplier;
@@ -60,7 +37,7 @@ export function calculateFinalizationTimeoutMs({ audioBytes = 0, adapter = null,
   const baseMs = Math.max(1_000, Number(limits.finalizationBaseMs) || DEFAULT_LIMITS.finalizationBaseMs);
   const maxMs = Math.max(baseMs, Number(limits.finalizationMaxMs) || DEFAULT_LIMITS.finalizationMaxMs);
   const audioDurationMs = Math.max(0, Number(audioBytes) || 0) / 32;
-  const estimate = Math.max(baseMs, audioDurationMs * finalizationMultiplier({ adapter, model }, limits));
+  const estimate = Math.max(baseMs, audioDurationMs * finalizationMultiplier(limits));
   return Math.min(maxMs, Math.ceil(estimate));
 }
 
@@ -289,7 +266,7 @@ function appendProgressiveSegment(left, right, overlapSamples = 0) {
 
 // Merge an incoming finalized transcript into the accumulated text. Endpoints
 // stream token deltas that differ from their final text only by whitespace
-// (the local Parakeet runtime emits word-boundary tokens with a leading space
+// (local runtimes can emit word-boundary tokens with a leading space
 // and then a trimmed, collapsed `transcript.text.done`), so a plain append
 // would print the transcript twice. When the two texts are whitespace-equal or
 // one is a normalized prefix of the other, take the authoritative candidate
@@ -305,8 +282,7 @@ function mergeTranscript(left, right) {
   return joinTranscript(left, right);
 }
 
-// Batch ASR models hallucinate over long mid-utterance silence: the local
-// Parakeet TDT fills a 2s+ pause with invented text and drops the speech that
+// Batch ASR models can invent text over a 2s+ pause and drop the speech that
 // follows. Split the buffered PCM at long silent runs before transcription so
 // each segment is a self-contained utterance, then join the segment texts.
 const SEGMENT_WINDOW_SAMPLES = 160; // 10ms at 16 kHz
@@ -675,7 +651,7 @@ function gapsForSegments(segments, sampleCount) {
   return gaps;
 }
 
-function authoritativeAnalysis(selection, sampleCount, source = "silero_authoritative") {
+function authoritativeAnalysis(selection, sampleCount, source = "heuristic") {
   const segments = Array.isArray(selection?.segments) ? selection.segments : [];
   const silentRuns = selection?.available ? gapsForSegments(segments, sampleCount) : [];
   return {
@@ -738,9 +714,9 @@ function markInferenceComplete(diagnostics) {
 }
 
 function speechDecision(diagnostics) {
-  if (["silero_authoritative", "heuristic"].includes(diagnostics.analysis?.source)) {
+  if (diagnostics.analysis?.source === "heuristic") {
     return {
-      detector: diagnostics.analysis.source === "heuristic" ? "heuristic" : "silero_vad",
+      detector: "heuristic",
       detected: diagnostics.analysis.segments.length > 0,
       available: diagnostics.analysis.available,
       status: diagnostics.analysis.status,
@@ -782,7 +758,7 @@ function serializeServerDiagnostics(diagnostics) {
     endMs: Math.round(endSample / 16),
     durationMs: Math.round((endSample - startSample) / 16),
   }));
-  const speechSamples = ["silero_authoritative", "heuristic"].includes(analysis?.source)
+  const speechSamples = analysis?.source === "heuristic"
     ? analysis.speechSamples
     : analysis ? Math.max(0, analysis.sampleCount - analysis.silentSamples) : 0;
   const submittedSegmentSamples = segments.reduce((total, [start, end]) => total + end - start, 0);
@@ -850,15 +826,7 @@ function serializeServerDiagnostics(diagnostics) {
       sileroObservation: diagnostics.vadObservation,
       segmentGuard: analysis?.segmentGuard || null,
       progressiveBatch: diagnostics.progressive,
-      vadPolicy: analysis?.source === "silero_authoritative"
-        ? {
-          type: "silero_authoritative",
-          ...(analysis.policy || {}),
-          maxSegments: analysis.maxSegments,
-          sourceRegionCount: analysis.sourceRegionCount,
-          normalizedRegionCount: analysis.normalizedRegionCount,
-        }
-        : analysis?.source === "heuristic"
+      vadPolicy: analysis?.source === "heuristic"
           ? {
             type: "heuristic",
             ...(analysis.policy || {}),
@@ -982,18 +950,6 @@ async function readSse(response, emit, limits) {
 }
 
 function resolveInferenceAnalysis(pcm, byteLength, segmentation, limits, diagnostics) {
-  if (segmentation?.mode === "silero_authoritative") {
-    const analysis = segmentation.analysis || authoritativeAnalysis(
-      {
-        available: true,
-        status: "speech",
-        segments: segmentation.segments,
-      },
-      Math.floor(byteLength / 2),
-    );
-    if (diagnostics) diagnostics.analysis = analysis;
-    return analysis;
-  }
   if (segmentation?.mode === "heuristic") {
     const analysis = segmentation.analysis || authoritativeAnalysis(
       {
@@ -1177,21 +1133,6 @@ function createSnapshotAdapter(emit, limits, transcribe, diagnostics = null, {
     },
     ...(progressive ? { transcribeRange } : {}),
     close() { closed = true; byteLength = 0; chunks.length = 0; },
-  };
-}
-
-function streamOptions(streaming = {}) {
-  const family = String(streaming.family || "parakeet_buffered");
-  const familyOptions = { kind: family };
-  for (const [key, value] of [["leftMs", streaming.leftMs], ["chunkMs", streaming.chunkMs], ["rightMs", streaming.rightMs]]) {
-    if (Number.isFinite(Number(value))) familyOptions[key] = Number(value);
-  }
-  return {
-    family: familyOptions,
-    commitPolicy: streaming.commitPolicy || "stable_prefix",
-    ...(Number.isFinite(Number(streaming.stablePrefixAgreementN))
-      ? { stablePrefixAgreementN: Number(streaming.stablePrefixAgreementN) }
-      : {}),
   };
 }
 
@@ -1461,7 +1402,7 @@ export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, 
   let stopDrainStartedAt = null;
   const queue = [];
   let queuedSamples = 0;
-  const options = streamOptions(streaming);
+  const options = { streaming };
   const feedQuantumMs = TRANSCRIBE_CPP_FEED_QUANTUM_MS;
   const feedQuantumSamples = Math.round(feedQuantumMs * VOICE_SAMPLE_RATE / 1_000);
   const queueLimitMs = Number.isFinite(Number(limits.liveQueueLimitMs)) && Number(limits.liveQueueLimitMs) > 0
@@ -1469,13 +1410,13 @@ export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, 
     : TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS;
   const queueLimitSamples = Math.round(queueLimitMs * VOICE_SAMPLE_RATE / 1_000);
   const configuration = {
-    family: options.family.kind,
-    leftMs: options.family.leftMs ?? null,
-    chunkMs: options.family.chunkMs ?? null,
-    rightMs: options.family.rightMs ?? null,
+    family: streaming.family || null,
+    leftMs: streaming.leftMs ?? null,
+    chunkMs: streaming.chunkMs ?? null,
+    rightMs: streaming.rightMs ?? null,
     latencyMs: Number.isFinite(Number(streaming.latencyMs)) ? Number(streaming.latencyMs) : null,
-    commitPolicy: options.commitPolicy,
-    stablePrefixAgreementN: options.stablePrefixAgreementN ?? null,
+    commitPolicy: streaming.commitPolicy || null,
+    stablePrefixAgreementN: streaming.stablePrefixAgreementN ?? null,
     feedQuantumMs,
     feedQuantumSamples,
     queueLimitMs,
@@ -1889,12 +1830,12 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     });
     const setAuthoritativeVadAnalysis = (observation) => {
       const sampleCount = Math.floor(audioBytes / 2);
-      const selection = selectSileroVadRanges(observation, sampleCount, { maxSegments: limits.maxSegments });
-      const source = observation?.type === "heuristic_segmentation_observation" ? "heuristic" : "silero_authoritative";
+      const selection = selectSegmentationRanges(observation, sampleCount, { maxSegments: limits.maxSegments });
+      const source = "heuristic";
       const metadata = segmentationObservationMetadata(observation);
       diagnostics.analysis = authoritativeAnalysis(selection, sampleCount, source);
       diagnostics.segmentation = {
-        provider: source === "heuristic" ? "heuristic" : "silero",
+        provider: "heuristic",
         calibrationVersion: observation?.policy?.calibrationVersion || null,
         state: observation?.available === true ? "ready" : observation?.status || "unavailable",
         status: metadata.status,
@@ -2073,14 +2014,8 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     const activateProgressiveBatch = (config, next) => {
       if (config?.mode !== "local" || config?.execution === "stop" || config?.inferenceMode !== "batch" || typeof next?.transcribeRange !== "function") return;
       let provider = segmentationProvider;
-      if ((!provider || provider.mode === "none") && typeof voiceRuntime.beginVoiceActivity === "function") {
-        provider = createSegmentationProvider({
-          mode: "silero",
-          silero: {
-            observe: (pcm) => voiceRuntime.observeVoiceActivity(pcm),
-            createStream: () => voiceRuntime.beginVoiceActivity(),
-          },
-        });
+      if (!provider || provider.mode === "none") {
+        provider = createSegmentationProvider({ mode: "heuristic" });
         segmentationProvider = provider;
       }
       if (!provider?.createStream) return;
@@ -2214,7 +2149,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           diagnostics.vadStartedAt = startedAt;
           diagnostics.vadCompletedAt = performance.now();
           diagnostics.vadObservation = observation || {
-            type: "silero_vad_observation",
+            type: "heuristic_segmentation_observation",
             available: false,
             status: progressiveVadError ? "error" : "not_configured",
             regions: [],
@@ -2230,7 +2165,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         }
         if (typeof segmentationProvider.observe !== "function") {
           diagnostics.vadObservation = {
-            type: "silero_vad_observation",
+            type: "heuristic_segmentation_observation",
             available: false,
             status: "not_configured",
             regions: [],
@@ -2245,7 +2180,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         diagnostics.vadStartedAt = queue?.startedAt ?? performance.now();
         diagnostics.vadCompletedAt = queue?.completedAt ?? performance.now();
         diagnostics.vadObservation = observation || {
-          type: "silero_vad_observation",
+          type: "heuristic_segmentation_observation",
           available: false,
           status: "not_configured",
           regions: [],
@@ -2257,11 +2192,11 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         diagnostics.vadStartedAt ||= performance.now();
         diagnostics.vadCompletedAt = performance.now();
         diagnostics.vadObservation = {
-          type: "silero_vad_observation",
+          type: "heuristic_segmentation_observation",
           available: false,
           status: "error",
           errorCode: error.code || "voice_vad_unavailable",
-          error: error.message || "Silero VAD observation failed",
+          error: error.message || "Silence observation failed",
           regions: [],
           frames: [],
         };
@@ -2412,9 +2347,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           const segmentation = {
             mode: diagnostics.analysis?.source === "heuristic"
               ? "heuristic"
-              : diagnostics.analysis?.source === "silero_authoritative"
-                ? "silero_authoritative"
-                : "external_policy",
+              : "external_policy",
             segments: diagnostics.analysis?.segments || [],
             analysis: diagnostics.analysis,
             policy: diagnostics.analysis?.policy || null,
@@ -2569,17 +2502,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         progressiveBatch: false,
         streamFallback: null,
       };
-      const segmentationMode = config.segmentation === "heuristic"
-        ? "heuristic"
-        : config.segmentation === "none"
-          ? "none"
-          : "silero";
+      const segmentationMode = config.segmentation === "none" ? "none" : "heuristic";
       segmentationProvider = createSegmentationProvider({
         mode: segmentationMode,
-        silero: {
-          ...(typeof voiceRuntime.observeVoiceActivity === "function" ? { observe: (pcm) => voiceRuntime.observeVoiceActivity(pcm) } : {}),
-          ...(typeof voiceRuntime.beginVoiceActivity === "function" ? { createStream: () => voiceRuntime.beginVoiceActivity() } : {}),
-        },
         heuristicPolicy: config.heuristicPolicy || config.segmentationPolicy || {},
       });
       diagnostics.segmentation = {
@@ -2685,27 +2610,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
       } else if (config.adapter === "transcribe_cpp_batch_v1") {
         next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
-      } else if (config.adapter === "managed_transformers_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, {
-          progressive: config.execution !== "stop",
-          useSegmentation: config.execution !== "stop",
-          signal: sessionController.signal,
-          sessionId,
-          nextOperationId,
-          watermarks: watermarkHooks,
-        });
-      } else if (config.adapter === "managed_parakeet_loopback_v1") {
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
-      } else if (config.adapter === "transcribe_rs_batch_v1") {
-        const progressive = config.execution !== "stop";
-        next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, {
-          progressive,
-          useSegmentation: progressive,
-          signal: sessionController.signal,
-          sessionId,
-          nextOperationId,
-          watermarks: watermarkHooks,
-        });
       } else {
         next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, watermarks: watermarkHooks });
       }

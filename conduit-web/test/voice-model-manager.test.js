@@ -1,24 +1,19 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { DEFAULT_TRANSCRIBE_CPP_STREAM, extractRuntime, LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
-import { getVoiceModelManifest, TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
+import { LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
+import backend, { DEFAULT_TRANSCRIBE_CPP_STREAM } from "../src/server/voice-backends/transcribe-cpp.js";
+const getVoiceModelManifest = (model) => backend.manifest(model);
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
-const runCommand = (command, args) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { stdio: "ignore" });
-  child.once("error", reject);
-  child.once("exit", (code, signal) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code ?? signal}`)));
-});
-
 test("managed voice packages use reviewed immutable revisions, sizes, and SHA-256 pins", () => {
   for (const model of LOCAL_VOICE_MODELS) {
-    for (const architecture of [{ release: "amd64", runtime: "x64" }, { release: "arm64", runtime: "aarch64" }]) {
-      const manifest = getVoiceModelManifest(model, architecture);
+    {
+      const manifest = getVoiceModelManifest(model);
       assert.equal(manifest.modelRevision, model.revision);
       assert.ok(manifest.artifacts.length > 0);
       for (const artifact of manifest.artifacts) {
@@ -28,46 +23,25 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
       }
     }
   }
-  const parakeet = getVoiceModelManifest(LOCAL_VOICE_MODELS.at(-1), { release: "amd64", runtime: "x64" });
-  assert.equal(parakeet.artifacts.find((artifact) => artifact.name === "parakeet-linux-amd64").sha256, "4eaa7123e49756dea7714db20b4ea36aa96f3ba50d7e1ccec7df2ccededcdf9b");
-  const v2 = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-tdt-0.6b-v2-int8"), { release: "amd64", runtime: "x64" });
-  assert.equal(v2.modelRevision, "0bbb45a3365852604aef28b538a8f066f4ccaa85");
-  assert.ok(v2.artifacts.some((artifact) => artifact.url.includes("istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/0bbb45a3365852604aef28b538a8f066f4ccaa85/encoder-model.int8.onnx")));
-  assert.equal(v2.artifacts.find((artifact) => artifact.name === "encoder-model.int8.onnx").sha256, "3e0581fda6ab843888b51e56d7ee78b6d5bc3237ec113af1f732d1d5286aa155");
-  assert.notEqual(v2.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256, parakeet.artifacts.find((artifact) => artifact.name === "vocab.txt").sha256);
-  const whisper = getVoiceModelManifest(LOCAL_VOICE_MODELS[0], { release: "amd64", runtime: "x64" });
-  assert.equal(whisper.artifacts.find((artifact) => artifact.name === "silero_vad.onnx").sha256, "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3");
-  const unified = getVoiceModelManifest(LOCAL_VOICE_MODELS.find((model) => model.id === "parakeet-unified-en-0.6b-q8"), { release: "amd64", runtime: "x64" });
-  assert.equal(unified.artifacts[0].name, "parakeet-unified-en-0.6b-Q8_0.gguf");
-  assert.equal(unified.artifacts[0].size, 731357568);
-  assert.equal(unified.artifacts[0].sha256, "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795");
-  assert.equal(unified.sourceRevision, "d4ac9928f3bf238223ff0779c06b8149bf8ac4e1");
-  assert.deepEqual(unified.runtime, TRANSCRIBE_CPP_RUNTIME);
+  assert.equal(LOCAL_VOICE_MODELS.length, 1);
+  const manifest = getVoiceModelManifest(LOCAL_VOICE_MODELS[0]);
+  assert.equal(manifest.artifacts[0].name, "moonshine-streaming-tiny-Q8_0.gguf");
+  assert.equal(manifest.artifacts[0].size, 50462816);
+  assert.equal(manifest.artifacts[0].sha256, "930e4622ad3a24158b91406c30c977fa6a26b34cb32d6ac3e57cfb23383a869e");
+  assert.equal(manifest.runtime, TRANSCRIBE_CPP_RUNTIME);
 });
 
 test("managed voice model requires license acceptance, verifies artifacts, reports progress, and uninstalls", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-model-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v3-int8";
-  const contents = new Map([
-    ["https://packages.invalid/parakeet", Buffer.from("fake executable")],
-    ["https://packages.invalid/runtime", Buffer.from("fake runtime archive")],
-    ["https://packages.invalid/model", Buffer.from("fake checked model weights")],
-  ]);
-  const artifacts = [
-    { name: "parakeet", relative: "bin/parakeet", url: "https://packages.invalid/parakeet" },
-    { name: "runtime", relative: "runtime.tgz", url: "https://packages.invalid/runtime" },
-    { name: "weights", relative: "models/encoder-model.int8.onnx", url: "https://packages.invalid/model" },
-  ].map((artifact) => ({ ...artifact, size: contents.get(artifact.url).length, sha256: sha256(contents.get(artifact.url)) }));
+  const modelId = "moonshine-streaming-tiny-q8";
+  const content = Buffer.from("fake gguf weights");
   const manager = new VoiceModelManager({
     root,
-    manifestResolver: async () => ({ version: "test-v1", modelRevision: "pinned-revision", extractRuntime: true, artifacts }),
-    fetchImpl: async (url) => new Response(contents.get(url)),
-    runtimeExtractor: async (_archive, staging) => {
-      const directory = path.join(staging, "onnxruntime-linux-x64-1.25.1", "lib");
-      await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(path.join(directory, "libonnxruntime.so"), "fake library");
-    },
+    manifestResolver: async () => ({ version: "test-v1", modelRevision: "pinned-revision", artifacts: [{
+      name: "weights", relative: "model.gguf", url: "https://packages.invalid/model", size: content.length, sha256: sha256(content),
+    }] }),
+    fetchImpl: async () => new Response(content),
   });
   try {
     assert.throws(() => manager.startInstall({ modelId }), { code: "voice_model_license" });
@@ -85,44 +59,20 @@ test("managed voice model requires license acceptance, verifies artifacts, repor
   } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
-test("uninstalling ASR does not reset the shared Silero instance", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-lifecycle-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
-  let vadStops = 0;
-  const manager = new VoiceModelManager({
-    root,
-    vad: { stop: async () => { vadStops += 1; } },
-  });
-  try {
-    await fs.mkdir(path.join(root, modelId), { recursive: true });
-    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
-    manager.activeModelId = modelId;
-    manager.transcriber = { dispose() {} };
-    assert.equal(await manager.uninstall(modelId), true);
-    assert.equal(vadStops, 0);
-  } finally {
-    await manager.stop();
-    assert.equal(vadStops, 1);
-    await fs.rm(temporary, { recursive: true, force: true });
-  }
-});
-
 test("managed voice model rejects a mismatched artifact without activating it", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-model-bad-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const modelId = "moonshine-streaming-tiny-q8";
   const manager = new VoiceModelManager({
     root,
     manifestResolver: async () => ({ version: "test-v1", modelRevision: "pinned", artifacts: [{
       name: "weights",
-      relative: "models/encoder-model.int8.onnx",
+      relative: "models/model.gguf",
       url: "https://packages.invalid/model",
       sha256: "0".repeat(64),
       size: 10,
     }] }),
     fetchImpl: async () => new Response("unexpected"),
-    runtimeExtractor: async () => {},
     downloadRetries: 0,
   });
   try {
@@ -131,103 +81,10 @@ test("managed voice model rejects a mismatched artifact without activating it", 
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
 
-test("managed voice model resumes a staged install after the process stops during runtime extraction", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-recover-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v3-int8";
-  const binary = Buffer.from("fake parakeet executable");
-  const runtime = Buffer.from("fake runtime archive");
-  const artifacts = [
-    { name: "parakeet", relative: "bin/parakeet", url: "https://packages.invalid/parakeet", size: binary.length, sha256: sha256(binary) },
-    { name: "runtime", relative: "runtime.tgz", url: "https://packages.invalid/runtime", size: runtime.length, sha256: sha256(runtime) },
-  ];
-  let extractionAttempts = 0;
-  const createManager = () => new VoiceModelManager({
-    root,
-    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", extractRuntime: true, artifacts }),
-    fetchImpl: async (url) => new Response(url.endsWith("/parakeet") ? binary : runtime),
-    runtimeExtractor: async (_archive, staging) => {
-      extractionAttempts += 1;
-      const directory = path.join(staging, "onnxruntime-linux-x64-1.25.1", "lib");
-      await fs.mkdir(directory, { recursive: true });
-      await fs.writeFile(path.join(directory, "libonnxruntime.so"), "fake library");
-      if (extractionAttempts === 1) throw new Error("simulated process stop");
-    },
-    downloadRetries: 0,
-  });
-  const first = createManager();
-  try {
-    await assert.rejects(first.startInstall({ modelId, licenseAccepted: true }), { message: "simulated process stop" });
-    assert.equal((await first.publicView()).models.find((model) => model.id === modelId).state, "error");
-    assert.equal((await first.publicView()).models.find((model) => model.id === modelId).staged, true);
-
-    const second = createManager();
-    try {
-      await second.startInstall({ modelId, licenseAccepted: true });
-      const recovered = (await second.publicView()).models.find((model) => model.id === modelId);
-      assert.equal(recovered.state, "ready");
-      assert.equal(recovered.installed, true);
-      assert.equal(recovered.staged, false);
-      assert.equal(extractionAttempts, 2);
-      assert.equal(await fs.access(path.join(root, modelId, "runtime", "lib", "libonnxruntime.so")).then(() => true), true);
-    } finally { await second.stop(); }
-  } finally {
-    await first.stop();
-    await fs.rm(temporary, { recursive: true, force: true });
-  }
-});
-
-test("runtime extraction ignores archive ownership metadata", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-runtime-"));
-  const source = path.join(temporary, "source", "onnxruntime-linux-x64-1.25.1", "lib");
-  const archive = path.join(temporary, "runtime.tgz");
-  const destination = path.join(temporary, "destination");
-  try {
-    await fs.mkdir(source, { recursive: true });
-    await fs.writeFile(path.join(source, "libonnxruntime.so"), "fake library");
-    await runCommand("tar", ["--owner=0", "--group=0", "-czf", archive, "-C", path.join(temporary, "source"), "onnxruntime-linux-x64-1.25.1"]);
-    await fs.mkdir(destination, { recursive: true });
-    await extractRuntime(archive, destination);
-    assert.equal(await fs.readFile(path.join(destination, "onnxruntime-linux-x64-1.25.1", "lib", "libonnxruntime.so"), "utf8"), "fake library");
-  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
-});
-
-test("managed Whisper tiers install independently and transcribe through the embedded engine", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
-  const content = Buffer.from('{"model_type":"whisper"}');
-  let loadedPath = "";
-  const transcriber = async (audio) => {
-    assert.equal(audio instanceof Float32Array, true);
-    return { text: "local transcript" };
-  };
-  transcriber.dispose = async () => {};
-  const manager = new VoiceModelManager({
-    root,
-    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
-      name: "config.json", relative: "config.json", url: "https://packages.invalid/config", size: content.length,
-      sha256: sha256(content), gitBlob: "0".repeat(40),
-    }] }),
-    fetchImpl: async () => new Response(content),
-    transformersLoader: async (modelPath) => { loadedPath = modelPath; return transcriber; },
-  });
-  try {
-    await manager.startInstall({ modelId, licenseAccepted: true });
-    assert.equal((await manager.publicView()).models.find((model) => model.id === modelId).installed, true);
-    const pcm = Buffer.alloc(4);
-    pcm.writeInt16LE(16_384, 0);
-    pcm.writeInt16LE(-16_384, 2);
-    assert.equal(await manager.transcribe(modelId, pcm), "local transcript");
-    assert.equal(loadedPath, path.join(root, modelId));
-    assert.equal((await manager.publicView()).activeModelId, modelId);
-  } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
-});
-
-test("Unified English Q8 uses one reusable transcribe.cpp session and exposes streaming", async () => {
+test("Moonshine Streaming Tiny Q8 uses one reusable transcribe.cpp session and exposes streaming", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-unified-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-unified-en-0.6b-q8";
+  const modelId = "moonshine-streaming-tiny-q8";
   const content = Buffer.from("fake gguf model");
   let loadedPath = "";
   let loadedDefinition = null;
@@ -236,7 +93,7 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
   let disposals = 0;
   let requestedStreamOptions = null;
   const runtime = {
-    backend: "cpu",
+    backend: "transcribe_cpp",
     computeBackend: "cpu",
     adapter: "transcribe_cpp_stream_v1",
     capabilities: {
@@ -245,8 +102,8 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
       partials: true,
       externalVad: false,
       precision: "q8",
-      memory: { modelBytes: 731357568 },
-      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+      memory: { modelBytes: 50462816 },
+      streaming: { family: "moonshine", commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
     },
     native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
     async transcribe(audio) {
@@ -255,7 +112,7 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
       maximumInferences = Math.max(maximumInferences, activeInferences);
       await new Promise((resolve) => setTimeout(resolve, 10));
       activeInferences -= 1;
-      return { text: "unified transcript" };
+      return { text: "moonshine transcript" };
     },
     async stream(options) {
       requestedStreamOptions = options;
@@ -266,11 +123,11 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
   const manager = new VoiceModelManager({
     root,
     manifestResolver: async () => ({ version: "transcribe-cpp-0.1.3", modelRevision: "pinned", sourceRevision: "source-pinned", runtime: TRANSCRIBE_CPP_RUNTIME, artifacts: [{
-      name: "parakeet-unified-en-0.6b-Q8_0.gguf", relative: "parakeet-unified-en-0.6b-Q8_0.gguf", url: "https://packages.invalid/unified", size: content.length,
+      name: "moonshine-streaming-tiny-Q8_0.gguf", relative: "moonshine-streaming-tiny-Q8_0.gguf", url: "https://packages.invalid/unified", size: content.length,
       sha256: sha256(content),
     }] }),
     fetchImpl: async () => new Response(content),
-    transcribeCppLoader: async (modelPath, definition) => {
+    runtimeLoader: async (modelPath, definition) => {
       loadedPath = modelPath;
       loadedDefinition = definition;
       return runtime;
@@ -279,12 +136,12 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
   try {
     await manager.startInstall({ modelId, licenseAccepted: true });
     const [first, second] = await Promise.all([manager.transcribe(modelId, Buffer.alloc(4)), manager.transcribe(modelId, Buffer.alloc(4))]);
-    assert.deepEqual([first, second], ["unified transcript", "unified transcript"]);
+    assert.deepEqual([first, second], ["moonshine transcript", "moonshine transcript"]);
     assert.equal(maximumInferences, 1);
-    assert.equal(loadedPath, path.join(root, modelId, "parakeet-unified-en-0.6b-Q8_0.gguf"));
+    assert.equal(loadedPath, path.join(root, modelId, "moonshine-streaming-tiny-Q8_0.gguf"));
     assert.equal(loadedDefinition.id, modelId);
-    assert.deepEqual(await manager.stream(modelId, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } }), { state: "active" });
-    assert.deepEqual(requestedStreamOptions, { family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 } });
+    assert.deepEqual(await manager.stream(modelId, { family: { kind: "moonshine" } }), { state: "active" });
+    assert.deepEqual(requestedStreamOptions, { family: { kind: "moonshine" } });
     assert.deepEqual(await manager.ensureRunning(modelId), {
       kind: "transcriber",
       adapter: "transcribe_cpp_stream_v1",
@@ -300,115 +157,24 @@ test("Unified English Q8 uses one reusable transcribe.cpp session and exposes st
   }
 });
 
-test("Unified English Live selects the measured sustained CPU profile", () => {
+test("Moonshine Streaming Tiny uses the stream-slot family", () => {
   assert.deepEqual(DEFAULT_TRANSCRIBE_CPP_STREAM, {
-    family: "parakeet_buffered",
-    leftMs: 5_600,
-    chunkMs: 560,
-    rightMs: 560,
-    latencyMs: 1_120,
+    family: "moonshine",
     commitPolicy: "stable_prefix",
     stablePrefixAgreementN: 3,
   });
 });
 
-test("transcribe-rs runs one private batch worker and reports provider truth", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-transcribe-rs-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v2-int8";
-  const calls = [];
-  class FakeWorker {
-    constructor(options) { this.options = options; this.sessionId = null; }
-    async start() { calls.push({ type: "start", command: this.options.command }); return this; }
-    async hello() { calls.push({ type: "hello" }); return { workerVersion: "0.1.0", crateVersion: "0.3.8", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
-    async load(options) { calls.push({ type: "load", options }); this.sessionId = "session-test"; return { requestedProvider: "cpu", actualProvider: "cpu", compiledOrtProviders: ["cpu"], ports: { batch: true, stream: false } }; }
-    async transcribeRange(options) { calls.push({ type: "transcribe", options }); return { text: "transcribe-rs transcript", fromSample: options.fromSample, throughSample: options.throughSample, timestamps: [] }; }
-    async health() { return { ready: true, loaded: true }; }
-    async close() { calls.push({ type: "close" }); }
-  }
-  const manager = new VoiceModelManager({
-    root,
-    transcribeRsWorkerCommand: "fake-transcribe-rs-worker",
-    transcribeRsWorkerFactory: (options) => new FakeWorker(options),
-  });
-  try {
-    await fs.mkdir(path.join(root, modelId), { recursive: true });
-    await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
-    const runtime = await manager.ensureRunning(modelId, { runtimeId: "transcribe-rs" });
-    assert.equal(runtime.kind, "transcribe-rs");
-    assert.equal(runtime.backend, "transcribe_rs");
-    assert.equal(runtime.computeBackend, "cpu");
-    const result = await manager.transcribe(modelId, Buffer.alloc(8), {
-      runtimeId: "transcribe-rs",
-      sequence: 3,
-      startSample: 400,
-      endSample: 404,
-      operationId: "range-3",
-    });
-    assert.deepEqual(result, { text: "transcribe-rs transcript", fromSample: 400, throughSample: 404, timestamps: [] });
-    assert.equal(calls.find((call) => call.type === "load").options.modelDir, path.join(root, modelId, "models"));
-    assert.equal(calls.find((call) => call.type === "load").options.quantization, "int8");
-    assert.equal(calls.find((call) => call.type === "transcribe").options.operationId, "range-3");
-    assert.equal(calls.find((call) => call.type === "transcribe").options.fromSample, 400);
-    const status = (await manager.publicView()).backendPaths.find((pathStatus) => pathStatus.backendPathId === `${modelId}.transcribe-rs.${"transcribe-rs"}`);
-    assert.equal(status.operational, true);
-    assert.equal(await manager.test(modelId, { runtimeId: "transcribe-rs" }).then((value) => value.ok), true);
-  } finally {
-    await manager.stop();
-    assert.equal(calls.at(-1).type, "close");
-    await fs.rm(temporary, { recursive: true, force: true });
-  }
-});
-
-test("concurrent managed Whisper requests share startup and serialize inference", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-concurrent-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
-  await fs.mkdir(path.join(root, modelId), { recursive: true });
-  await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
-  let loads = 0;
-  let disposals = 0;
-  let activeInferences = 0;
-  let maximumInferences = 0;
-  const manager = new VoiceModelManager({
-    root,
-    transformersLoader: async () => {
-      loads += 1;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      const transcriber = async () => {
-        activeInferences += 1;
-        maximumInferences = Math.max(maximumInferences, activeInferences);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        activeInferences -= 1;
-        return { text: "shared transcript" };
-      };
-      transcriber.dispose = async () => { disposals += 1; };
-      return transcriber;
-    },
-  });
-  try {
-    const runtimes = await Promise.all([manager.ensureRunning(modelId), manager.ensureRunning(modelId)]);
-    assert.deepEqual(runtimes, [{ kind: "transcriber" }, { kind: "transcriber" }]);
-    assert.equal(loads, 1);
-    assert.deepEqual(await Promise.all([manager.transcribe(modelId, Buffer.alloc(4)), manager.transcribe(modelId, Buffer.alloc(4))]), ["shared transcript", "shared transcript"]);
-    assert.equal(maximumInferences, 1);
-  } finally {
-    await manager.stop();
-    assert.equal(disposals, 1);
-    await fs.rm(temporary, { recursive: true, force: true });
-  }
-});
-
 test("install resumes an interrupted download from the partially written file", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-resume-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const modelId = "moonshine-streaming-tiny-q8";
   const content = Buffer.from("0123456789abcdef");
   const requests = [];
   const manager = new VoiceModelManager({
     root,
     manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
-      name: "weights", relative: "models/encoder-model.int8.onnx", url: "https://packages.invalid/model",
+      name: "weights", relative: "models/model.gguf", url: "https://packages.invalid/model",
       size: content.length, sha256: sha256(content),
     }] }),
     fetchImpl: async (url, options = {}) => {
@@ -416,15 +182,14 @@ test("install resumes an interrupted download from the partially written file", 
       assert.equal(options.headers.Range, "bytes=8-");
       return new Response(content.subarray(8), { status: 206, headers: { "Content-Range": "bytes 8-15/16" } });
     },
-    runtimeExtractor: async () => {},
     downloadRetries: 0,
   });
   try {
     const staging = path.join(root, `.installing-${modelId}`, "models");
     await fs.mkdir(staging, { recursive: true });
-    await fs.writeFile(path.join(staging, "encoder-model.int8.onnx.part"), content.subarray(0, 8));
+    await fs.writeFile(path.join(staging, "model.gguf.part"), content.subarray(0, 8));
     await manager.startInstall({ modelId, licenseAccepted: true });
-    const installed = await fs.readFile(path.join(root, modelId, "models", "encoder-model.int8.onnx"));
+    const installed = await fs.readFile(path.join(root, modelId, "models", "model.gguf"));
     assert.deepEqual(installed, content);
     assert.equal(requests.length, 1);
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
@@ -433,13 +198,13 @@ test("install resumes an interrupted download from the partially written file", 
 test("install retries transient download failures with backoff before failing", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-retry-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "parakeet-tdt-0.6b-v3-int8";
+  const modelId = "moonshine-streaming-tiny-q8";
   const content = Buffer.from("retryable payload");
   let attempts = 0;
   const manager = new VoiceModelManager({
     root,
     manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
-      name: "weights", relative: "models/encoder-model.int8.onnx", url: "https://packages.invalid/model",
+      name: "weights", relative: "models/model.gguf", url: "https://packages.invalid/model",
       size: content.length, sha256: sha256(content),
     }] }),
     fetchImpl: async () => {
@@ -447,14 +212,13 @@ test("install retries transient download failures with backoff before failing", 
       if (attempts < 3) throw new TypeError("fetch failed");
       return new Response(content);
     },
-    runtimeExtractor: async () => {},
     downloadRetries: 3,
     downloadRetryBaseMs: 5,
   });
   try {
     await manager.startInstall({ modelId, licenseAccepted: true });
     assert.equal(attempts, 3);
-    const installed = await fs.readFile(path.join(root, modelId, "models", "encoder-model.int8.onnx"));
+    const installed = await fs.readFile(path.join(root, modelId, "models", "model.gguf"));
     assert.deepEqual(installed, content);
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 });
@@ -462,7 +226,7 @@ test("install retries transient download failures with backoff before failing", 
 test("install downloads artifacts concurrently up to a bounded limit", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-parallel-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
+  const modelId = "moonshine-streaming-tiny-q8";
   const contents = new Map(["a", "b", "c", "d"].map((name) => [`https://packages.invalid/${name}`, Buffer.from(`payload ${name}`)]));
   let active = 0;
   let maximumActive = 0;
@@ -494,7 +258,7 @@ test("install downloads artifacts concurrently up to a bounded limit", async () 
 test("managed models stay warm briefly then unload after the idle TTL", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-idle-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
+  const modelId = "moonshine-streaming-tiny-q8";
   await fs.mkdir(path.join(root, modelId), { recursive: true });
   await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
   let loads = 0;
@@ -502,11 +266,11 @@ test("managed models stay warm briefly then unload after the idle TTL", async ()
   const manager = new VoiceModelManager({
     root,
     idleTtlMs: 40,
-    transformersLoader: async () => {
+    runtimeLoader: async () => {
       loads += 1;
       const transcriber = async () => ({ text: "idle transcript" });
       transcriber.dispose = async () => { disposals += 1; };
-      return transcriber;
+      return { transcribe: transcriber, dispose: transcriber.dispose };
     },
   });
   try {
@@ -527,17 +291,17 @@ test("managed models stay warm briefly then unload after the idle TTL", async ()
 test("pinned managed models do not unload while a dictation session is open", async () => {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-pin-"));
   const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-tiny-en-q8";
+  const modelId = "moonshine-streaming-tiny-q8";
   await fs.mkdir(path.join(root, modelId), { recursive: true });
   await fs.writeFile(path.join(root, modelId, "manifest.json"), JSON.stringify({ modelId }));
   let disposals = 0;
   const manager = new VoiceModelManager({
     root,
     idleTtlMs: 30,
-    transformersLoader: async () => {
+    runtimeLoader: async () => {
       const transcriber = async () => ({ text: "pinned transcript" });
       transcriber.dispose = async () => { disposals += 1; };
-      return transcriber;
+      return { transcribe: transcriber, dispose: transcriber.dispose };
     },
   });
   try {
@@ -556,37 +320,12 @@ test("pinned managed models do not unload while a dictation session is open", as
   }
 });
 
-test("full-precision Whisper models load with the fp32 precision", async () => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-whisper-fp32-"));
-  const root = path.join(temporary, "voice", "models");
-  const modelId = "whisper-small-fp32";
-  const content = Buffer.from('{"model_type":"whisper"}');
-  const loaded = [];
-  const transcriber = async () => ({ text: "full precision transcript" });
-  transcriber.dispose = async () => {};
-  const manager = new VoiceModelManager({
-    root,
-    manifestResolver: async () => ({ version: "test", modelRevision: "pinned", artifacts: [{
-      name: "config.json", relative: "config.json", url: "https://packages.invalid/config", size: content.length,
-      sha256: sha256(content), gitBlob: "0".repeat(40),
-    }] }),
-    fetchImpl: async () => new Response(content),
-    transformersLoader: async (modelPath, precision) => { loaded.push({ modelPath, precision }); return transcriber; },
-  });
-  try {
-    await manager.startInstall({ modelId, licenseAccepted: true });
-    assert.deepEqual(await manager.ensureRunning(modelId), { kind: "transcriber" });
-    assert.deepEqual(loaded, [{ modelPath: path.join(root, modelId), precision: "fp32" }]);
-    assert.equal(await manager.transcribe(modelId, Buffer.alloc(4)), "full precision transcript");
-  } finally { await manager.stop(); await fs.rm(temporary, { recursive: true, force: true }); }
-});
-
 test("CONDUIT_HF_ENDPOINT re-points managed model downloads at a mirror", () => {
   const previous = process.env.CONDUIT_HF_ENDPOINT;
   try {
     process.env.CONDUIT_HF_ENDPOINT = "https://hf-mirror.invalid//";
     for (const model of LOCAL_VOICE_MODELS) {
-      const manifest = getVoiceModelManifest(model, { release: "amd64", runtime: "x64" });
+      const manifest = getVoiceModelManifest(model);
       const huggingFaceArtifacts = manifest.artifacts.filter((artifact) => artifact.url.includes("/resolve/"));
       assert.ok(huggingFaceArtifacts.length > 0, `${model.id} should fetch models from a mirror`);
       assert.ok(huggingFaceArtifacts.every((artifact) => artifact.url.startsWith("https://hf-mirror.invalid/")), model.id);

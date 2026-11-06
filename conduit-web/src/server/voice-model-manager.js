@@ -1,16 +1,10 @@
+import { localVoiceBackend } from "./voice-backends/index.js";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
-import net from "node:net";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
-import { getVoiceModelManifest, ONNXRUNTIME_VERSION } from "./voice-model-manifests.js";
 import { LEGACY_LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
-import { SileroVad, VoiceVadObservationQueue } from "./voice-vad.js";
-import { defaultTranscribeRsWorkerCommand, TranscribeRsWorkerClient } from "./transcribe-rs-worker.js";
-import { ensureVoicePackages, importVoicePackage } from "./voice-packages.js";
-import { terminate } from "./effect-process.js";
 
 const MIB = 1024 * 1024;
 export const LOCAL_VOICE_MODELS = LEGACY_LOCAL_VOICE_MODELS;
@@ -27,39 +21,7 @@ function requiredModel(modelId) {
   return model;
 }
 
-async function availablePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
-      server.close((error) => error ? reject(error) : resolve(port));
-    });
-  });
-}
-
-async function spawnAndWait(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { ...options, stdio: ["ignore", "ignore", "pipe"] });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8_192); });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => code === 0 ? resolve() : reject(new Error(`${command} exited with ${code ?? signal}: ${stderr.trim()}`)));
-  });
-}
-
-export async function extractRuntime(archive, destination) {
-  await spawnAndWait("tar", ["--no-same-owner", "--no-same-permissions", "-xzf", archive, "-C", destination]);
-}
-
-function architecture() {
-  if (process.platform !== "linux") throw modelError("voice_model_platform", "Managed local voice models currently support Linux servers only", 409);
-  if (process.arch === "x64") return { release: "amd64", runtime: "x64", node: "x64" };
-  if (process.arch === "arm64") return { release: "arm64", runtime: "aarch64", node: "arm64" };
-  throw modelError("voice_model_platform", `Managed local voice models do not support ${process.arch}`, 409);
-}
-
-function packageManifest(model) { return getVoiceModelManifest(model, architecture()); }
+function packageManifest(model) { return localVoiceBackend(model.runtimeId).manifest(model); }
 
 async function digestFile(filePath, algorithm = "sha256", size = 0) {
   const hash = crypto.createHash(algorithm);
@@ -166,77 +128,6 @@ async function download(fetchImpl, artifact, destination, signal, onBytes, { ret
   }
 }
 
-async function defaultTransformersLoader(modelPath, precision = "q8") {
-  const { pipeline } = await importVoicePackage("@huggingface/transformers");
-  return pipeline("automatic-speech-recognition", modelPath, { dtype: precision === "fp32" ? "fp32" : "q8", local_files_only: true });
-}
-
-export const DEFAULT_TRANSCRIBE_CPP_STREAM = Object.freeze({
-  family: "parakeet_buffered",
-  leftMs: 5_600,
-  chunkMs: 560,
-  rightMs: 560,
-  latencyMs: 1_120,
-  commitPolicy: "stable_prefix",
-  stablePrefixAgreementN: 3,
-});
-
-async function defaultTranscribeCppLoader(modelPath, modelDefinition) {
-  const native = await importVoicePackage("transcribe-cpp");
-  const version = native.version();
-  const availableBackends = native.getAvailableBackends();
-  const model = await native.TranscribeModel.load(modelPath, { backend: "auto" });
-  const session = model.createSession();
-  const device = model.device || {};
-  const supportsStreaming = model.capabilities?.supportsStreaming === true
-    && model.accepts({ kind: "parakeet_buffered" });
-  return {
-    adapter: supportsStreaming ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1",
-    backend: String(model.backend || device.kind || "unknown"),
-    computeBackend: String(device.kind || model.backend || "unknown"),
-    capabilities: {
-      language: "en",
-      inferenceMode: supportsStreaming ? "streaming" : "batch",
-      partials: supportsStreaming,
-      externalVad: false,
-      precision: modelDefinition?.precision || "q8",
-      memory: {
-        modelBytes: modelDefinition?.approximateBytes || null,
-        totalBytes: Number.isFinite(Number(device.memoryTotal)) ? Number(device.memoryTotal) : null,
-        freeBytes: Number.isFinite(Number(device.memoryFree)) ? Number(device.memoryFree) : null,
-      },
-      streaming: supportsStreaming ? {
-        family: DEFAULT_TRANSCRIBE_CPP_STREAM.family,
-        leftMs: DEFAULT_TRANSCRIBE_CPP_STREAM.leftMs,
-        chunkMs: DEFAULT_TRANSCRIBE_CPP_STREAM.chunkMs,
-        rightMs: DEFAULT_TRANSCRIBE_CPP_STREAM.rightMs,
-        latencyMs: DEFAULT_TRANSCRIBE_CPP_STREAM.latencyMs,
-        commitPolicy: DEFAULT_TRANSCRIBE_CPP_STREAM.commitPolicy,
-        stablePrefixAgreementN: DEFAULT_TRANSCRIBE_CPP_STREAM.stablePrefixAgreementN,
-        supportedProfiles: [
-          { latencyMs: 160, chunkMs: 80, rightMs: 80 },
-          { latencyMs: 480, chunkMs: 160, rightMs: 320 },
-          { latencyMs: 1_120, chunkMs: 560, rightMs: 560 },
-          { latencyMs: 2_080, chunkMs: 1_040, rightMs: 1_040 },
-        ],
-      } : null,
-    },
-    native: {
-      package: "transcribe-cpp",
-      version: version.version,
-      commit: version.commit,
-      headerHash: version.headerHash,
-      availableBackends: availableBackends.map((backend) => ({ kind: backend.kind, name: backend.name, deviceType: backend.deviceType })),
-    },
-    transcribe: (pcm) => session.run(pcm),
-    stream: supportsStreaming ? (options = {}) => session.stream(options) : null,
-    dispose() {
-      session.dispose();
-      model.dispose();
-    },
-  };
-}
-
 function pcmFloat32(buffer) {
   const samples = new Float32Array(Math.floor(buffer.length / 2));
   for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
@@ -246,18 +137,13 @@ function pcmFloat32(buffer) {
 export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeExtractor = extractRuntime, transformersLoader = defaultTransformersLoader, transcribeCppLoader = defaultTranscribeCppLoader, transcribeRsWorkerCommand = defaultTranscribeRsWorkerCommand(), transcribeRsWorkerArgs = [], transcribeRsWorkerFactory = (options) => new TranscribeRsWorkerClient(options), downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS, vad = null, vadModelPath = null, vadSessionFactory = undefined } = {}) {
+  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeLoader = null, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.catalog = catalog;
     this.fetchImpl = fetchImpl;
     this.manifestResolver = manifestResolver;
-    this.runtimeExtractor = runtimeExtractor;
-    this.transformersLoader = transformersLoader;
-    this.transcribeCppLoader = transcribeCppLoader;
-    this.transcribeRsWorkerCommand = transcribeRsWorkerCommand;
-    this.transcribeRsWorkerArgs = [...transcribeRsWorkerArgs];
-    this.transcribeRsWorkerFactory = transcribeRsWorkerFactory;
+    this.runtimeLoader = runtimeLoader;
     this.downloadRetries = downloadRetries;
     this.downloadRetryBaseMs = downloadRetryBaseMs;
     this.downloadConcurrency = downloadConcurrency;
@@ -267,10 +153,6 @@ export class VoiceModelManager {
     this.installController = null;
     this.installPromise = null;
     this.installingModelId = null;
-    this.child = null;
-    this.port = null;
-    this.transcribeRsWorker = null;
-    this.transcribeRsDescriptor = null;
     this.transcriber = null;
     this.activeModelId = null;
     this.activeRuntimeId = null;
@@ -278,19 +160,10 @@ export class VoiceModelManager {
     this.startingModelId = null;
     this.startingRuntimeId = null;
     this.transcriptionTail = Promise.resolve();
-    this.vadStreamTail = Promise.resolve();
-    this.vadStreams = new Set();
     this.lastErrors = new Map();
     this.lastErrorCodes = new Map();
     this.progress = { phase: "idle", current: "", completedBytes: 0, totalBytes: 0 };
-    this.vad = vad || new SileroVad({ root: this.root, modelPath: vadModelPath, sessionFactory: vadSessionFactory });
-    this.vadQueue = new VoiceVadObservationQueue({ observer: (pcm, options) => this.scheduleVad(() => this.vad.observe(pcm, options)) });
-  }
 
-  scheduleVad(operation) {
-    const task = this.vadStreamTail.then(operation, operation);
-    this.vadStreamTail = task.then(() => undefined, () => undefined);
-    return task;
   }
 
   clearIdleTimer() {
@@ -301,7 +174,6 @@ export class VoiceModelManager {
   armIdleTimer() {
     this.clearIdleTimer();
     if (this.idleTtlMs <= 0 || this.pinCount > 0 || this.startPromise) return;
-    if (!this.activeModelId && !this.child && !this.transcriber && !this.transcribeRsWorker) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       if (this.pinCount > 0 || this.startPromise) return;
@@ -401,13 +273,10 @@ export class VoiceModelManager {
   }
 
   async install(model, signal) {
-    architecture();
     await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
     const stats = await fs.statfs(this.root);
     if (Number(stats.bavail) * Number(stats.bsize) < model.minimumFreeBytes) throw modelError("voice_model_disk_space", `At least ${Math.ceil(model.minimumFreeBytes / MIB)} MiB of free space is required for ${model.label}`, 409);
-    // A release ships without the native voice packages; the first model
-    // brings them (voice-packages.js).
-    await ensureVoicePackages({ onPhase: (phase) => { this.progress.phase = phase; } });
+    await localVoiceBackend(model.runtimeId).prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
     this.progress.phase = "manifest";
     const manifest = await this.manifestResolver(model, this.fetchImpl, signal);
     this.progress.totalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
@@ -430,17 +299,6 @@ export class VoiceModelManager {
       }
     });
     await Promise.all(workers);
-    if (manifest.extractRuntime) {
-      this.progress.phase = "extracting";
-      const archive = path.join(staging, "runtime.tgz");
-      const runtimeDirectory = path.join(staging, `onnxruntime-linux-${architecture().runtime}-${ONNXRUNTIME_VERSION}`);
-      await fs.rm(runtimeDirectory, { recursive: true, force: true });
-      await this.runtimeExtractor(archive, staging);
-      await fs.rm(path.join(staging, "runtime"), { recursive: true, force: true });
-      await fs.rename(runtimeDirectory, path.join(staging, "runtime"));
-      await fs.rm(archive, { force: true });
-      await fs.chmod(path.join(staging, "bin/parakeet"), 0o700);
-    }
     const finalManifest = {
       schemaVersion: 2,
       modelId: model.id,
@@ -449,7 +307,6 @@ export class VoiceModelManager {
       modelRevision: manifest.modelRevision,
       sourceRevision: manifest.sourceRevision || null,
       runtime: manifest.runtime || null,
-      transcribeRs: manifest.transcribeRs || null,
       installedAt: new Date().toISOString(),
       artifacts: verified,
     };
@@ -467,19 +324,11 @@ export class VoiceModelManager {
     this.lastErrors.delete(model.id);
   }
 
-  defaultRuntimeId(model) {
-    if (model.engine === "transformers-whisper") return "transformers-js";
-    if (model.engine === "transcribe-cpp") return "transcribe-cpp";
-    return this.catalog.artifacts.find((artifact) => artifact.legacyModelId === model.id && artifact.runtimeId === "parakeet-loopback")?.runtimeId || "parakeet-loopback";
-  }
+  defaultRuntimeId(model) { return model.runtimeId; }
 
   activeRuntime(model, runtimeId = this.activeRuntimeId || this.defaultRuntimeId(model)) {
-    if (!model || this.activeModelId !== model.id || this.activeRuntimeId !== runtimeId) return null;
-    if (model.engine === "parakeet" && runtimeId === "parakeet-loopback" && this.child && this.port) return { kind: "http", origin: `http://127.0.0.1:${this.port}` };
-    if (model.engine === "parakeet" && runtimeId === "transcribe-rs" && this.transcribeRsWorker?.isAlive !== false && this.transcribeRsDescriptor) return this.transcribeRsDescriptor;
-    if (model.engine === "transformers-whisper" && this.transcriber) return { kind: "transcriber" };
-    if (model.engine === "transcribe-cpp" && this.transcriber) return this.transcribeCppDescriptor(this.transcriber, model);
-    return null;
+    if (!model || this.activeModelId !== model.id || this.activeRuntimeId !== runtimeId || !this.transcriber) return null;
+    return this.runtimeDescriptor(this.transcriber, model);
   }
 
   async ensureRunning(modelId, { runtimeId = null } = {}) {
@@ -520,161 +369,48 @@ export class VoiceModelManager {
   }
 
   async startRuntime(model, runtimeId = this.defaultRuntimeId(model)) {
+    if (runtimeId !== model.runtimeId) throw modelError("voice_model_engine", "The model does not support this runtime", 409);
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
-    if (model.engine === "transformers-whisper") {
-      this.transcriber = await this.transformersLoader(this.modelRoot(model.id), model.precision || "q8");
-      this.activeModelId = model.id;
-      this.activeRuntimeId = runtimeId;
-      return { kind: "transcriber" };
-    }
-    if (model.engine === "transcribe-cpp") {
-      const runtime = await this.transcribeCppLoader(path.join(this.modelRoot(model.id), model.modelFile), model);
-      this.transcriber = runtime;
-      this.activeModelId = model.id;
-      this.activeRuntimeId = runtimeId;
-      return this.transcribeCppDescriptor(runtime, model);
-    }
-    if (runtimeId === "transcribe-rs") return this.startTranscribeRs(model);
-    const port = await availablePort();
-    const modelRoot = this.modelRoot(model.id);
-    const binary = path.join(modelRoot, "bin/parakeet");
-    const runtimeLibrary = path.join(modelRoot, "runtime/lib/libonnxruntime.so");
-    const child = spawn(binary, ["-long-audio", "-port", String(port), "-models", path.join(modelRoot, "models"), "-workers", "1", "-ffmpeg=false"], {
-      stdio: ["ignore", "ignore", "pipe"],
-      env: { ...process.env, ONNXRUNTIME_LIB: runtimeLibrary, LD_LIBRARY_PATH: path.dirname(runtimeLibrary) },
-    });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => { stderr = `${stderr}${chunk}`.slice(-8_192); });
-    child.once("exit", () => { if (this.child === child) { this.child = null; this.port = null; this.activeModelId = null; this.activeRuntimeId = null; } });
-    this.child = child; this.port = port; this.activeModelId = model.id; this.activeRuntimeId = runtimeId;
-    const deadline = Date.now() + 30_000;
-    while (Date.now() < deadline) {
-      if (child.exitCode != null) { this.child = null; this.port = null; this.activeModelId = null; throw modelError("voice_model_start_failed", `Managed Parakeet exited during startup: ${stderr.trim()}`, 502); }
-      try {
-        const response = await this.fetchImpl(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1_000) });
-        if (response.ok) return { kind: "http", origin: `http://127.0.0.1:${port}` };
-      } catch {}
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-    await this.stopActive();
-    throw modelError("voice_model_start_timeout", "Managed Parakeet did not become healthy in time", 504);
-  }
-
-  async startTranscribeRs(model) {
-    const modelRoot = this.modelRoot(model.id);
-    const worker = this.transcribeRsWorkerFactory({
-      command: this.transcribeRsWorkerCommand,
-      args: this.transcribeRsWorkerArgs,
-      env: { ...process.env },
-    });
-    this.transcribeRsWorker = worker;
-    try {
-      const hello = await worker.start().then(() => worker.hello());
-      const loaded = await worker.load({
-        modelDir: path.join(modelRoot, "models"),
-        quantization: model.precision === "fp32" ? "fp32" : "int8",
-        requestedProvider: "cpu",
-      });
-      this.transcribeRsDescriptor = {
-        kind: "transcribe-rs",
-        adapter: "transcribe_rs_batch_v1",
-        backend: "transcribe_rs",
-        computeBackend: loaded.actualProvider || "cpu",
-        requestedComputeBackend: loaded.requestedProvider || "cpu",
-        actualComputeBackend: loaded.actualProvider || "cpu",
-        runtimeVersion: `transcribe-rs-${hello.crateVersion || "0.3.8"}`,
-        capabilities: {
-          language: "en",
-          inferenceMode: "batch",
-          partials: false,
-          externalVad: false,
-          precision: model.precision || "int8",
-          memory: { modelBytes: model.approximateBytes || null },
-        },
-        native: {
-          ...hello,
-          load: loaded,
-        },
-      };
-      this.activeModelId = model.id;
-      this.activeRuntimeId = "transcribe-rs";
-      return this.transcribeRsDescriptor;
-    } catch (error) {
-      await Promise.resolve(worker.close?.()).catch(() => {});
-      this.transcribeRsWorker = null;
-      this.transcribeRsDescriptor = null;
-      throw modelError("voice_model_start_failed", `Managed transcribe-rs could not start: ${error.message}`, 502);
-    }
+    const backend = localVoiceBackend(runtimeId);
+    const modelPath = path.join(this.modelRoot(model.id), model.modelFile);
+    const runtime = this.runtimeLoader
+      ? await this.runtimeLoader(modelPath, model)
+      : await backend.createSession(model, { modelPath });
+    this.transcriber = runtime;
+    this.activeModelId = model.id;
+    this.activeRuntimeId = runtimeId;
+    return this.runtimeDescriptor(runtime, model);
   }
 
   async transcribe(modelId, pcm, options = {}) {
     const model = requiredModel(modelId);
-    const runtimeId = options.runtimeId || this.defaultRuntimeId(model);
-    if (model.engine !== "transformers-whisper" && model.engine !== "transcribe-cpp" && runtimeId !== "transcribe-rs") throw modelError("voice_model_engine", `${model.label} does not use the embedded transcription engine`, 409);
-    await this.ensureRunning(model.id, { runtimeId });
+    await this.ensureRunning(model.id, { runtimeId: options.runtimeId || model.runtimeId });
     const transcriber = this.transcriber;
-    const task = this.transcriptionTail.then(() => runtimeId === "transcribe-rs"
-      ? this.transcribeRsWorker.transcribeRange({
-        pcm16: Buffer.from(pcm || []),
-        fromSample: Number.isSafeInteger(options.startSample) ? options.startSample : 0,
-        throughSample: Number.isSafeInteger(options.endSample) ? options.endSample : Math.floor(Buffer.byteLength(pcm || []) / 2),
-        sequence: Number.isSafeInteger(options.sequence) ? options.sequence : 0,
-        operationId: options.operationId || null,
-        signal: options.signal,
-      })
-      : model.engine === "transcribe-cpp"
-        ? transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal })
-        : transcriber(pcmFloat32(Buffer.from(pcm)), { chunk_length_s: 30, stride_length_s: 2, ...(options.signal ? { signal: options.signal } : {}) }));
+    const task = this.transcriptionTail.then(() => transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
-    if (runtimeId === "transcribe-rs") return output;
     return String(output?.text || "").trim();
   }
 
   async stream(modelId, options = {}) {
     const model = requiredModel(modelId);
-    if (model.engine !== "transcribe-cpp") throw modelError("voice_model_engine", `${model.label} does not use the embedded streaming engine`, 409);
-    await this.ensureRunning(model.id, { runtimeId: "transcribe-cpp" });
+    await this.ensureRunning(model.id, { runtimeId: model.runtimeId });
     if (typeof this.transcriber?.stream !== "function") throw modelError("voice_model_streaming", `${model.label} does not support stateful streaming`, 409);
     return this.transcriber.stream(options);
   }
 
-  async observeVoiceActivity(pcm) {
-    return this.vadQueue.enqueue(pcm);
-  }
-
-  beginVoiceActivity() {
-    if (typeof this.vad?.createStream !== "function") return null;
-    const stream = this.vad.createStream();
-    const wrapper = {
-      push: (pcm) => this.scheduleVad(() => stream.push(pcm)),
-      finish: () => this.scheduleVad(() => stream.finish()).finally(() => this.vadStreams.delete(wrapper)),
-      cancel: () => this.scheduleVad(() => stream.cancel?.()).finally(() => this.vadStreams.delete(wrapper)),
-    };
-    this.vadStreams.add(wrapper);
-    return wrapper;
-  }
-
   async test(modelId, { runtimeId = null } = {}) {
     const model = requiredModel(modelId);
-    const resolved = await this.ensureRunning(model.id, { runtimeId: runtimeId || this.defaultRuntimeId(model) });
-    if (resolved.kind === "http") {
-      const response = await this.fetchImpl(`${resolved.origin}/health`, { signal: AbortSignal.timeout(3_000) });
-      if (!response.ok) throw modelError("voice_model_unhealthy", `Managed ${model.label} health check failed (${response.status})`, 502);
-    }
-    if (resolved.kind === "transcribe-rs") {
-      const health = await this.transcribeRsWorker.health();
-      if (health.ready !== true || health.loaded !== true) throw modelError("voice_model_unhealthy", `Managed ${model.label} worker health check failed`, 502);
-    }
+    await this.ensureRunning(model.id, { runtimeId: runtimeId || model.runtimeId });
     return { ok: true, mode: "local", modelId: model.id };
   }
 
-  transcribeCppDescriptor(runtime, model) {
+  runtimeDescriptor(runtime, model) {
     return {
       kind: "transcriber",
-      adapter: runtime.adapter || (typeof runtime.stream === "function" ? "transcribe_cpp_stream_v1" : "transcribe_cpp_batch_v1"),
-      backend: "transcribe_cpp",
+      adapter: runtime.adapter,
+      backend: runtime.backend,
       computeBackend: runtime.computeBackend || runtime.backend || null,
       capabilities: runtime.capabilities || {
         language: model.languages === "English" ? "en" : null,
@@ -697,27 +433,16 @@ export class VoiceModelManager {
     const startup = this.startPromise;
     if (startup) await startup.catch(() => {});
     await this.stopActive();
-    for (const stream of this.vadStreams) await stream.cancel?.().catch(() => {});
-    this.vadStreams.clear();
-    await this.vadStreamTail.catch(() => {});
-    this.vadStreamTail = Promise.resolve();
-    this.vadQueue.stop();
-    await this.vad?.stop?.();
   }
 
   async stopActive() {
     this.clearIdleTimer();
-    const child = this.child;
     const transcriber = this.transcriber;
-    const transcribeRsWorker = this.transcribeRsWorker;
-    this.child = null; this.port = null; this.transcriber = null; this.transcribeRsWorker = null; this.transcribeRsDescriptor = null;
+    this.transcriber = null;
     this.activeModelId = null; this.activeRuntimeId = null;
     await this.transcriptionTail.catch(() => {});
     this.transcriptionTail = Promise.resolve();
     if (typeof transcriber?.dispose === "function") await Promise.resolve().then(() => transcriber.dispose()).catch(() => {});
-    if (transcribeRsWorker) await Promise.resolve().then(() => transcribeRsWorker.close?.()).catch(() => {});
-    if (!child || child.exitCode != null) return;
-    await terminate(child, { graceMs: 5_000 });
   }
 
   async uninstall(modelId) {
@@ -752,7 +477,7 @@ export class VoiceModelManager {
           : active
             ? "warm"
             : "cold";
-      const requestedComputeBackend = backendPath.runtimeId === "transcribe-cpp" ? "auto" : runtimeDefinition?.compiledComputeBackends?.[0] || null;
+      const requestedComputeBackend = runtimeDefinition?.requestedComputeBackend || null;
       return {
         backendPathId: backendPath.id,
         installable: Boolean(artifact),

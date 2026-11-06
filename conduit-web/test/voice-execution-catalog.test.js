@@ -12,7 +12,7 @@ import {
   resolveVoiceExecutionProfile,
   validateVoiceExecutionCatalog,
 } from "../src/server/voice-execution-catalog.js";
-import { VoiceSettingsStore } from "../src/voice-settings.js";
+import { DEFAULT_LOCAL_VOICE_MODEL, VoiceSettingsStore } from "../src/voice-settings.js";
 
 const copy = () => structuredClone(VOICE_EXECUTION_CATALOG);
 
@@ -32,8 +32,8 @@ test("WP8 catalogue resolves every legacy local model to one profile", () => {
     assert.equal(resolveVoiceExecutionProfile(profileSelection(profile)).id, profile.id);
   }
   assert.equal(resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }).id, catalog.defaultProfileId);
-  assert.equal(catalog.defaultProfileId, migrateLocalSelection("whisper-tiny-en-q8").profileId);
-  assert.equal(resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }).execution, "eager");
+  assert.equal(catalog.defaultProfileId, migrateLocalSelection("moonshine-streaming-tiny-q8").profileId);
+  assert.equal(resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }).execution, "live");
   assert.equal(new Set(catalog.migrations.map((entry) => entry.legacyLocalModelId)).size, catalog.migrations.length);
   assert.deepEqual(new Set(catalog.migrations.map((entry) => entry.legacyLocalModelId)), new Set(LOCAL_VOICE_MODELS.map((model) => model.id)));
   for (const legacy of LOCAL_VOICE_MODELS) {
@@ -45,30 +45,19 @@ test("WP8 catalogue resolves every legacy local model to one profile", () => {
   for (const migration of catalog.migrations) {
     assert.deepEqual(migration.selection, profileSelection(resolveVoiceExecutionProfile({ profileId: migration.profileId })));
   }
-  const migration = migrateLocalSelection("parakeet-unified-en-0.6b-q8");
+  const migration = migrateLocalSelection("moonshine-streaming-tiny-q8");
   assert.deepEqual(migration.selection, {
-    modelId: "parakeet-unified-en-0.6b",
-    artifactId: "parakeet-unified-en-0.6b-q8-gguf",
+    modelId: "moonshine-streaming-tiny",
+    artifactId: "moonshine-streaming-tiny-q8-gguf",
     runtimeId: "transcribe-cpp",
     execution: "live",
     segmentation: "none",
   });
   const profile = resolveVoiceExecutionProfile(migration.selection);
   assert.equal(profile.id, migration.profileId);
-  assert.equal(artifactForProfile(profile).legacyModelId, "parakeet-unified-en-0.6b-q8");
+  assert.equal(artifactForProfile(profile).legacyModelId, "moonshine-streaming-tiny-q8");
 });
-test("WP10 registers transcribe-rs batch paths with stop and eager profiles", () => {
-  const paths = VOICE_EXECUTION_CATALOG.backendPaths.filter((candidate) => candidate.runtimeId === "transcribe-rs");
-  assert.ok(paths.length > 0);
-  assert.equal(paths.every((candidate) => candidate.ports.batch && !candidate.ports.stream), true);
-  const profiles = VOICE_EXECUTION_CATALOG.profiles.filter((candidate) => candidate.runtimeId === "transcribe-rs");
-  for (const backendPath of paths) {
-    const executions = profiles.filter((profile) => profile.backendPathId === backendPath.id).map((profile) => profile.execution);
-    assert.deepEqual(new Set(executions), new Set(["stop", "eager"]));
-    assert.equal(executions.length, new Set(executions).size);
-  }
-  assert.equal(VOICE_EXECUTION_CATALOG.runtimes.find((runtime) => runtime.id === "transcribe-rs").compiledComputeBackends[0], "cpu");
-});
+
 test("WP9 catalogue advertises stable sample-addressed output and checkpoint fallback", () => {
   const live = VOICE_EXECUTION_CATALOG.profiles.find((profile) => profile.execution === "live");
   assert.equal(live.output.stableSegments, true);
@@ -80,8 +69,8 @@ test("WP8 catalogue validation rejects each structural contract violation", () =
   const cases = [
     ["voice_catalog_duplicate_id", (catalog) => { catalog.profiles[1].id = catalog.profiles[0].id; }],
     ["voice_catalog_missing_reference", (catalog) => { catalog.profiles[0].artifactId = "missing-artifact"; }],
-    ["voice_catalog_model_artifact_mismatch", (catalog) => { catalog.profiles[0].modelId = "parakeet-unified-en-0.6b"; }],
-    ["voice_catalog_artifact_runtime_mismatch", (catalog) => { catalog.backendPaths[0].runtimeId = "transcribe-cpp"; }],
+    ["voice_catalog_model_artifact_mismatch", (catalog) => { catalog.models.push({ id: "other-model" }); catalog.profiles[0].modelId = "other-model"; }],
+    ["voice_catalog_artifact_runtime_mismatch", (catalog) => { catalog.runtimes.push({ id: "other-runtime" }); catalog.backendPaths[0].runtimeId = "other-runtime"; }],
     ["voice_catalog_fallback_cycle", (catalog) => {
       catalog.profiles[0].fallback = { profileId: catalog.profiles[1].id, allowed: "before_output", replay: "from_zero" };
       catalog.profiles[1].fallback = { profileId: catalog.profiles[0].id, allowed: "before_output", replay: "from_zero" };
@@ -91,8 +80,8 @@ test("WP8 catalogue validation rejects each structural contract violation", () =
       const pathId = catalog.profiles.find((profile) => profile.execution === "live").backendPathId;
       catalog.backendPaths.find((backendPath) => backendPath.id === pathId).ports.stream = false;
     }],
-    ["voice_catalog_eager_segmentation_required", (catalog) => { catalog.profiles.find((profile) => profile.execution === "eager").segmentation = "none"; }],
-    ["voice_catalog_segmentation_forbidden", (catalog) => { catalog.profiles.find((profile) => profile.execution === "stop").segmentation = "silero"; }],
+    ["voice_catalog_eager_segmentation_required", (catalog) => { catalog.profiles[0].execution = "eager"; catalog.profiles[0].segmentation = "none"; }],
+    ["voice_catalog_segmentation_forbidden", (catalog) => { catalog.profiles.find((profile) => profile.execution === "stop").segmentation = "heuristic"; }],
     ["voice_catalog_live_queue_required", (catalog) => { catalog.profiles.find((profile) => profile.execution === "live").resourcePolicy.maximumQueuedAudioMs = 0; }],
   ];
   for (const [code, change] of cases) {
@@ -108,7 +97,7 @@ test("WP8 settings migration writes a v2 tuple atomically and preserves remote c
   try {
     await fs.writeFile(filePath, JSON.stringify({
       mode: "local",
-      localModelId: "parakeet-unified-en-0.6b-q8",
+      localModelId: "moonshine-streaming-tiny-q8",
       provider: "openai",
       model: "gpt-transcribe",
       endpoint: "https://api.openai.com/v1/audio/transcriptions",
@@ -120,8 +109,8 @@ test("WP8 settings migration writes a v2 tuple atomically and preserves remote c
     assert.equal(saved.voiceConfigVersion, 2);
     assert.equal(saved.localSelectionOrigin, "migrated_explicit");
     assert.deepEqual(saved.localSelection, {
-      modelId: "parakeet-unified-en-0.6b",
-      artifactId: "parakeet-unified-en-0.6b-q8-gguf",
+      modelId: "moonshine-streaming-tiny",
+      artifactId: "moonshine-streaming-tiny-q8-gguf",
       runtimeId: "transcribe-cpp",
       execution: "live",
       segmentation: "none",
@@ -131,6 +120,24 @@ test("WP8 settings migration writes a v2 tuple atomically and preserves remote c
     assert.equal(view.voiceConfigVersion, 2);
     assert.equal(view.resolvedProfileId, saved.resolvedProfileId);
     assert.equal(JSON.stringify(view).includes("kept-secret"), false);
+    for (const mode of ["remote", "local", "off"]) {
+      for (const localFields of [
+        { localModelId: "whisper-tiny-en-q8", resolvedProfileId: "whisper-tiny-en-q8.eager" },
+        { voiceConfigVersion: 2, localModelId: "parakeet-unified-en-0.6b-q8", localSelectionOrigin: "explicit",
+          localSelection: { modelId: "parakeet-unified-en-0.6b", artifactId: "parakeet-unified-en-0.6b-q8-gguf", runtimeId: "transcribe-cpp", execution: "live", segmentation: "none" } },
+      ]) {
+        const previous = { mode, provider: "custom", auth: { type: "bearer", secret: "kept-secret" }, ...localFields };
+        await fs.writeFile(filePath, JSON.stringify(previous));
+        await store.initialize();
+        const migrated = JSON.parse(await fs.readFile(filePath, "utf8"));
+        assert.equal(migrated.mode, mode);
+        assert.equal(migrated.provider, previous.provider);
+        assert.deepEqual(migrated.auth, previous.auth);
+        assert.equal(migrated.localModelId, DEFAULT_LOCAL_VOICE_MODEL);
+        assert.equal(migrated.resolvedProfileId, VOICE_EXECUTION_CATALOG.defaultProfileId);
+        assert.equal((await store.effective()).mode, mode);
+      }
+    }
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 

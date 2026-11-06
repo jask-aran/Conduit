@@ -14,7 +14,7 @@ test("managed Python project includes the advertised working-file libraries", as
     "paper-pptx==0.2.1",
     "paper-xlsx==0.2.2",
     "pyarrow",
-    "pymupdf",
+    "pymupdf<2",
     "pypdf",
     "pyxlsb",
     "xlrd",

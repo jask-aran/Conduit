@@ -42,7 +42,7 @@ test("voice recording store writes a matching WAV and JSON sidecar", async () =>
       audioChunks: [pcm.subarray(0, 12_345), pcm.subarray(12_345)],
       audioBytes: pcm.length,
       transcript: "This is a diagnostic recording.",
-      metadata: { provider: "local", model: "parakeet-tdt-0.6b-v3-int8" },
+      metadata: { provider: "local", model: "moonshine-streaming-tiny-q8" },
     });
     assert.equal(record.audioBytes, pcm.length);
     assert.equal(record.audioDurationMs, 1_000);
@@ -60,7 +60,7 @@ test("voice recording store writes a matching WAV and JSON sidecar", async () =>
     assert.equal(sidecar.schemaVersion, 2);
     assert.equal(sidecar.transcript, record.transcript);
     assert.equal(sidecar.provider, "local");
-    assert.equal(sidecar.model, "parakeet-tdt-0.6b-v3-int8");
+    assert.equal(sidecar.model, "moonshine-streaming-tiny-q8");
     assert.equal((await fs.stat(root)).mode & 0o777, 0o700);
     assert.equal((await fs.stat(path.join(root, record.audioFile))).mode & 0o777, 0o600);
     assert.equal((await fs.stat(path.join(root, `${record.id}.json`))).mode & 0o777, 0o600);

@@ -57,7 +57,7 @@ export const meterPage: Page = {
     row("Gauge · normal", "Context usage is 42%; tone is normal.", () => <Gauge value={42} tone="normal" />),
     row("Gauge · warning", "Context usage is 85%; tone is warning.", () => <Gauge value={85} tone="warning" />),
     row("Gauge · critical", "Context usage is 98%; tone is critical.", () => <Gauge value={98} tone="critical" />),
-    row("Progress · model download", "Byte maximum in the settings download container.", () => <SettingWide><Reading><ReadingTotal label="whisper-large-v3-turbo · downloading model files" value="384 MB / 768 MB" /><Progress label="whisper-large-v3-turbo model files in /work/models/transcription" value={384000000} max={768000000} /></Reading></SettingWide>, { code: "<SettingWide><Progress label value={384000000} max={768000000} /></SettingWide>" }),
+    row("Progress · model download", "Byte maximum in the settings download container.", () => <SettingWide><Reading><ReadingTotal label="moonshine-streaming-tiny-q8 · downloading model files" value="25 MB / 50 MB" /><Progress label="moonshine-streaming-tiny-q8 model files in /work/models/transcription" value={25000000} max={50462816} /></Reading></SettingWide>, { code: "<SettingWide><Progress label value={25000000} max={50462816} /></SettingWide>" }),
     row("Progress · waiting", "No model files have downloaded.", () => <Progress label="Model files: waiting" value={0} max={100} />),
     row("Progress · downloading", "48 of 100 model file units have downloaded.", () => <Progress label="Model files: downloading" value={48} max={100} />),
     row("Progress · complete", "All model files have downloaded.", () => <Progress label="Model files: complete" value={100} max={100} />),

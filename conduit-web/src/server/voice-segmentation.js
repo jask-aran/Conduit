@@ -287,19 +287,8 @@ export function createHeuristicSegmentationProvider(overrides = {}) {
   };
 }
 
-export function createSegmentationProvider({ mode = "none", silero = null, heuristicPolicy = {} } = {}) {
+export function createSegmentationProvider({ mode = "none", heuristicPolicy = {} } = {}) {
   if (mode === "heuristic") return createHeuristicSegmentationProvider(heuristicPolicy);
-  if (mode === "silero" && silero && (typeof silero.observe === "function" || typeof silero.createStream === "function")) {
-    return {
-      mode: "silero",
-      observe: typeof silero.observe === "function"
-        ? (pcm) => silero.observe(pcm)
-        : undefined,
-      createStream: typeof silero.createStream === "function"
-        ? () => silero.createStream()
-        : undefined,
-    };
-  }
   return {
     mode: "none",
     observe: async (pcm) => unavailable(Math.floor(Buffer.byteLength(pcm || []) / 2), null, "not_configured"),
@@ -309,12 +298,99 @@ export function createSegmentationProvider({ mode = "none", silero = null, heuri
 
 export function segmentationObservationMetadata(observation) {
   return {
-    source: observation?.type === "heuristic_segmentation_observation" ? "heuristic" : "silero",
+    source: "heuristic",
     available: observation?.available === true,
     status: observation?.status || "unavailable",
     frameCount: Number(observation?.frameCount) || 0,
     regionCount: Array.isArray(observation?.regions) ? observation.regions.length : 0,
     calibrationVersion: observation?.policy?.calibrationVersion || null,
     capturedAtMs: Math.round(performance.now()),
+  };
+}
+
+function sampleValue(value, sampleCount, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(sampleCount, Math.max(0, Math.round(number)));
+}
+
+function mergeSelectedRanges(ranges) {
+  const merged = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (!previous || range.startSample > previous.endSample) {
+      merged.push({ ...range, regionIndices: [range.regionIndex] });
+      continue;
+    }
+    previous.endSample = Math.max(previous.endSample, range.endSample);
+    previous.regionIndices.push(range.regionIndex);
+    previous.speechSamples += range.speechSamples;
+  }
+  return merged;
+}
+
+export function selectSegmentationRanges(observation, sampleCount, { maxSegments = 16 } = {}) {
+  const safeSampleCount = Math.max(0, Math.floor(Number(sampleCount) || 0));
+  const safeMaxSegments = Math.max(1, Math.trunc(Number(maxSegments) || 16));
+  const sourceRegions = Array.isArray(observation?.regions) ? observation.regions : [];
+  const ranges = sourceRegions.map((region, regionIndex) => {
+    const startSample = sampleValue(
+      region?.submittedStartSample ?? region?.paddedStartSample ?? region?.startSample,
+      safeSampleCount,
+      0,
+    );
+    const endSample = sampleValue(
+      region?.submittedEndSample ?? region?.paddedEndSample ?? region?.endSample,
+      safeSampleCount,
+      0,
+    );
+    const speechStartSample = sampleValue(region?.speechStartSample, safeSampleCount, startSample);
+    const speechEndSample = sampleValue(region?.speechEndSample, safeSampleCount, endSample);
+    return {
+      startSample,
+      endSample,
+      regionIndex,
+      speechSamples: Math.max(0, speechEndSample - speechStartSample),
+    };
+  }).filter((range) => range.endSample > range.startSample)
+    .sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample);
+  const merged = mergeSelectedRanges(ranges);
+  const normalizedRegionCount = merged.length;
+  const available = observation?.available === true;
+  let selected = available ? merged : [];
+  let guardAction = "none";
+  if (available && selected.length > safeMaxSegments) {
+    const head = selected.slice(0, safeMaxSegments - 1);
+    const tail = selected.slice(safeMaxSegments - 1);
+    selected = [
+      ...head,
+      {
+        startSample: tail[0].startSample,
+        endSample: tail.at(-1).endSample,
+        regionIndices: tail.flatMap((range) => range.regionIndices),
+        speechSamples: tail.reduce((sum, range) => sum + range.speechSamples, 0),
+      },
+    ];
+    guardAction = "merged_tail";
+  }
+  const status = available ? (selected.length ? "speech" : "silence") : observation?.status || "unavailable";
+  return {
+    source: "heuristic",
+    available,
+    status,
+    segments: selected.map((range) => [range.startSample, range.endSample]),
+    regionIndices: selected.map((range) => range.regionIndices),
+    speechSamples: selected.reduce((sum, range) => sum + range.speechSamples, 0),
+    sourceRegionCount: sourceRegions.length,
+    normalizedRegionCount,
+    segmentGuard: {
+      maxSegments: safeMaxSegments,
+      sourceRegionCount: sourceRegions.length,
+      normalizedRegionCount,
+      submittedSegmentCount: selected.length,
+      overflowed: normalizedRegionCount > safeMaxSegments,
+      action: guardAction,
+    },
+    policy: observation?.policy || null,
   };
 }

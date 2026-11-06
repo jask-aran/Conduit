@@ -1,3 +1,4 @@
+import { localVoiceBackend } from "./voice-backends/index.js";
 import {
   artifactForProfile,
   backendPathForProfile,
@@ -45,44 +46,7 @@ function pcm16FromFloat32(value) {
   return buffer;
 }
 
-function streamOptions(profile, options = {}) {
-  const streaming = options.streaming || profile.streaming || {};
-  const family = {
-    kind: streaming.family || "parakeet_buffered",
-    ...(Number.isFinite(Number(streaming.leftMs)) ? { leftMs: Number(streaming.leftMs) } : {}),
-    ...(Number.isFinite(Number(streaming.chunkMs)) ? { chunkMs: Number(streaming.chunkMs) } : {}),
-    ...(Number.isFinite(Number(streaming.rightMs)) ? { rightMs: Number(streaming.rightMs) } : {}),
-  };
-  return {
-    family,
-    commitPolicy: streaming.commitPolicy || "stable_prefix",
-    ...(Number.isFinite(Number(streaming.stablePrefixAgreementN))
-      ? { stablePrefixAgreementN: Number(streaming.stablePrefixAgreementN) }
-      : {}),
-  };
-}
-
-function resultText(value) {
-  return String(value?.text || value?.transcript || value?.result?.text || "").trim();
-}
-
-async function readLoopbackText(response) {
-  if (!response.ok) throw runtimeAdapterError("voice_model_unhealthy", `Managed local voice endpoint returned ${response.status}`, 502);
-  const raw = await response.text();
-  try { return resultText(JSON.parse(raw)); }
-  catch {}
-  let text = "";
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue;
-    const value = line.slice(5).trim();
-    if (!value || value === "[DONE]") continue;
-    try { text = resultText(JSON.parse(value)) || text; }
-    catch {}
-  }
-  return text || raw.trim();
-}
-
-function createBatchPort({ profile, artifact, runtime, modelManager, fetchImpl }) {
+function createBatchPort({ profile, artifact, modelManager }) {
   const callManager = async ({ pcm16, signal, operationId, sequence, startSample, endSample }) => {
     if (typeof modelManager?.transcribe !== "function") throw runtimeAdapterError("voice_batch_port_unavailable", "The selected local runtime has no BatchPort");
     const task = modelManager.transcribe(artifact.legacyModelId, Buffer.from(pcm16 || []), {
@@ -98,40 +62,9 @@ function createBatchPort({ profile, artifact, runtime, modelManager, fetchImpl }
     if (value && typeof value === "object") return { ...value, text: String(value.text || "").trim() };
     return { text: String(value || "").trim() };
   };
-  const callLoopback = async ({ pcm16, signal, operationId }) => {
-    if (!runtime?.origin || typeof fetchImpl !== "function") throw runtimeAdapterError("voice_batch_port_unavailable", "The selected loopback runtime has no BatchPort");
-    throwIfAborted(signal);
-    const form = new FormData();
-    const bytes = Buffer.from(pcm16 || []);
-    const wav = Buffer.alloc(44 + bytes.length);
-    wav.write("RIFF", 0, "ascii");
-    wav.writeUInt32LE(36 + bytes.length, 4);
-    wav.write("WAVE", 8, "ascii");
-    wav.write("fmt ", 12, "ascii");
-    wav.writeUInt32LE(16, 16);
-    wav.writeUInt16LE(1, 20);
-    wav.writeUInt16LE(1, 22);
-    wav.writeUInt32LE(16_000, 24);
-    wav.writeUInt32LE(32_000, 28);
-    wav.writeUInt16LE(2, 32);
-    wav.writeUInt16LE(16, 34);
-    wav.write("data", 36, "ascii");
-    wav.writeUInt32LE(bytes.length, 40);
-    bytes.copy(wav, 44);
-    form.append("file", new Blob([wav], { type: "audio/wav" }), "dictation.wav");
-    form.append("response_format", "json");
-    const response = await fetchImpl(`${runtime.origin}/v1/audio/transcriptions`, {
-      method: "POST",
-      headers: { "User-Agent": "ConduitVoice/1.0" },
-      body: form,
-      signal,
-      redirect: "error",
-    });
-    return { text: await readLoopbackText(response), operationId };
-  };
   return {
     async transcribe(input) {
-      const result = runtime.adapterKind === "parakeet_loopback" ? await callLoopback(input) : await callManager(input);
+      const result = await callManager(input);
       return {
         ...result,
         operationId: input.operationId,
@@ -149,7 +82,7 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
   const open = async (input = {}) => {
     if (opened && stream) throw runtimeAdapterError("voice_stream_busy", "The selected StreamPort already has an active session");
     if (typeof openNative !== "function" && typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
-    const options = streamOptions(profile, input);
+    const options = localVoiceBackend(profile.runtimeId).streamOptions(profile, input);
     stream = await (openNative ? openNative(options) : modelManager.stream(artifact.legacyModelId, options));
     if (!stream || typeof stream.feed !== "function" || typeof stream.finalize !== "function") {
       stream = null;
@@ -195,9 +128,9 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
     openNative: async (options = {}) => {
       if (typeof openNative !== "function") {
         if (typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
-        return modelManager.stream(artifact.legacyModelId, streamOptions(profile, options));
+        return modelManager.stream(artifact.legacyModelId, localVoiceBackend(profile.runtimeId).streamOptions(profile, options));
       }
-      return openNative(streamOptions(profile, options));
+      return openNative(localVoiceBackend(profile.runtimeId).streamOptions(profile, options));
     },
   };
   api.openSession = async (options = {}) => {
@@ -226,13 +159,13 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
   return api;
 }
 
-export function createVoiceRuntimeAdapters({ profile, catalog, modelManager, runtime, fetchImpl = fetch, openStream } = {}) {
+export function createVoiceRuntimeAdapters({ profile, catalog, modelManager, openStream } = {}) {
   const resolvedProfile = resolveVoiceExecutionProfile(profile, catalog);
   const artifact = artifactForProfile(resolvedProfile, catalog);
   const backendPath = backendPathForProfile(resolvedProfile, catalog);
   const runtimeDefinition = runtimeForProfile(resolvedProfile, catalog);
   if (backendPath.ports.batch !== true) throw runtimeAdapterError("voice_batch_port_unavailable", `Backend path ${backendPath.id} has no BatchPort`);
-  const batch = createBatchPort({ profile: resolvedProfile, artifact, runtime: { ...runtime, ...runtimeDefinition }, modelManager, fetchImpl });
+  const batch = createBatchPort({ profile: resolvedProfile, artifact, modelManager });
   const stream = backendPath.ports.stream
     ? createStreamPort({ profile: resolvedProfile, modelManager, artifact, openNative: openStream })
     : null;

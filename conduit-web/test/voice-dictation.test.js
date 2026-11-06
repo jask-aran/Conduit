@@ -105,11 +105,9 @@ test("audio transfer diagnostics detect bytes lost before the server", () => {
 
 test("finalization timeout scales with audio duration and model cost", () => {
   const limits = { finalizationBaseMs: 30_000, finalizationMaxMs: 600_000, finalizationDefaultMultiplier: 12 };
-  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 36_000);
-  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v3-int8", limits }), 30_000);
-  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "parakeet-tdt-0.6b-v2-int8", limits }), 30_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "moonshine-streaming-tiny-q8", limits }), 30_000);
   assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 64_000, model: "unknown-model", limits }), 30_000);
-  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 32 * 60_000, model: "parakeet-tdt-0.6b-v3-fp32", limits }), 600_000);
+  assert.equal(calculateFinalizationTimeoutMs({ audioBytes: 32 * 60_000, model: "moonshine-streaming-tiny-q8", limits }), 600_000);
 });
 
 const WORKLET_SOURCE = await readFile(new URL("../public/voice-capture-worklet.js", import.meta.url), "utf8");

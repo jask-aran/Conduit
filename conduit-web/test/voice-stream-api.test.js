@@ -80,42 +80,20 @@ async function startUpstream(frames) {
   return server;
 }
 
-async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, observeVoiceActivity = null, beginVoiceActivity = null, runtimeConfig = null, limits = {} }) {
+async function startDictationBridge({ upstreamPort, recordingStore = null, resolveDelayMs = 0, pins = null, runtimeConfig = null, segmentation = "none", limits = {} }) {
   const wss = new WebSocketServer({ noServer: true });
   let resolveCount = 0;
-  const observe = typeof observeVoiceActivity === "function"
-    ? observeVoiceActivity
-    : async (pcm) => {
-      const sampleCount = Math.floor(pcm.length / 2);
-      return {
-        type: "silero_vad_observation",
-        available: true,
-        status: "observed",
-        policy: { sampleRate: 16_000, frameSamples: 512, preRollMs: 0, hangoverMs: 0, trailingPaddingMs: 0 },
-        regions: [{
-          startSample: 0,
-          endSample: sampleCount,
-          submittedStartSample: 0,
-          submittedEndSample: sampleCount,
-          speechStartSample: 0,
-          speechEndSample: sampleCount,
-        }],
-        frames: [],
-        summary: { regionCount: 1, speechFrameCount: 1, maxProbability: 1, meanProbability: 1 },
-      };
-    };
   const stream = createDictationStream({
     wss,
     voiceRuntime: {
       pin: () => { if (pins) pins.count += 1; },
       unpin: () => { if (pins) pins.count = Math.max(0, pins.count - 1); },
-      observeVoiceActivity: observe,
-      beginVoiceActivity: typeof beginVoiceActivity === "function" ? beginVoiceActivity : undefined,
       resolve: async () => {
         resolveCount += 1;
         if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
         return runtimeConfig || {
           mode: "remote",
+          segmentation,
           provider: "custom",
           adapter: "openai_audio_sse_v1",
           model: "",
@@ -133,66 +111,6 @@ async function startDictationBridge({ upstreamPort, recordingStore = null, resol
   bridge.listen(0, "127.0.0.1");
   await listen(bridge);
   return { bridge, origin: `ws://127.0.0.1:${bridge.address().port}`, resolveCount: () => resolveCount, stream };
-}
-
-async function startProgressiveBridge({ transcribe, regionsAtFinish, limits = {}, resolveDelayMs = 0 }) {
-  const wss = new WebSocketServer({ noServer: true });
-  let sampleCount = 0;
-  let firstRegionCommitted = false;
-  const voiceRuntime = {
-    pin() {},
-    unpin() {},
-    beginVoiceActivity() {
-      return {
-        push(pcm) {
-          sampleCount += Math.floor(pcm.length / 2);
-          if (!firstRegionCommitted && sampleCount >= 1_024) {
-            firstRegionCommitted = true;
-            return Promise.resolve([{
-              regionIndex: 0,
-              submittedStartSample: 0,
-              submittedEndSample: 1_024,
-              startSample: 0,
-              endSample: 1_024,
-              closureReason: "silence",
-            }]);
-          }
-          return Promise.resolve([]);
-        },
-        finish() {
-          return Promise.resolve({
-            type: "silero_vad_observation",
-            available: true,
-            status: "observed",
-            policy: { sampleRate: 16_000, frameSamples: 512, preRollMs: 0, hangoverMs: 0, trailingPaddingMs: 0 },
-            regions: regionsAtFinish(sampleCount),
-            frames: [],
-            summary: { regionCount: 2, speechFrameCount: 2, maxProbability: 1, meanProbability: 1 },
-          });
-        },
-        cancel() {},
-      };
-    },
-    resolve: async () => {
-      if (resolveDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, resolveDelayMs));
-      return {
-        mode: "local",
-        inferenceMode: "batch",
-        adapter: "managed_transformers_v1",
-        provider: "local",
-        model: "test-progressive-model",
-        precision: "q8",
-        backend: "test",
-        transcribe,
-      };
-    },
-  };
-  const stream = createDictationStream({ wss, voiceRuntime, limits });
-  const bridge = createServer();
-  bridge.on("upgrade", (request, socket, head) => stream.handleUpgrade(request, socket, head));
-  bridge.listen(0, "127.0.0.1");
-  await listen(bridge);
-  return { bridge, origin: `ws://127.0.0.1:${bridge.address().port}` };
 }
 
 test("HTTP snapshot adapters retain pause-separated final transcript segments", async () => {
@@ -324,7 +242,7 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
   }
 });
 
-test("Unified English batch adapter transcribes the complete PCM once and does not use progressive fallback", async () => {
+test("Moonshine Streaming Tiny batch adapter transcribes the complete PCM once and does not use progressive fallback", async () => {
   const upstream = await startUpstream([]);
   const calls = [];
   const { bridge, origin } = await startDictationBridge({
@@ -334,13 +252,13 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
       inferenceMode: "batch",
       adapter: "transcribe_cpp_batch_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 } },
+      capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "q8", memory: { modelBytes: 50462816 } },
       native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
-      transcribe: async (pcm, options) => { calls.push({ pcm: Buffer.from(pcm), options }); return "complete unified batch"; },
+      transcribe: async (pcm, options) => { calls.push({ pcm: Buffer.from(pcm), options }); return "complete moonshine batch"; },
     },
   });
   const client = new WebSocket(`${origin}/dictation`);
@@ -353,7 +271,7 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
     client.send(Buffer.alloc(2_048, 2), { binary: true });
     client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
     const completed = await next((event) => event.type === "completed");
-    assert.equal(completed.text, "complete unified batch");
+    assert.equal(completed.text, "complete moonshine batch");
     assert.equal(completed.adapter, "transcribe_cpp_batch_v1");
     assert.equal(completed.backend, "transcribe_cpp");
     assert.equal(completed.computeBackend, "cpu");
@@ -372,58 +290,9 @@ test("Unified English batch adapter transcribes the complete PCM once and does n
   }
 });
 
-test("transcribe-rs batch adapter uses the local BatchPort without an HTTP endpoint", async () => {
-  const upstream = await startUpstream([]);
-  const calls = [];
-  const { bridge, origin } = await startDictationBridge({
-    upstreamPort: upstream.address().port,
-    runtimeConfig: {
-      mode: "local",
-      inferenceMode: "batch",
-      adapter: "transcribe_rs_batch_v1",
-      provider: "local",
-      model: "parakeet-tdt-0.6b-v2-int8",
-      precision: "int8",
-      backend: "transcribe_rs",
-      computeBackend: "cpu",
-      modelId: "parakeet-tdt-0.6b-v2",
-      artifactId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs",
-      runtimeId: "transcribe-rs",
-      backendPathId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs.transcribe-rs",
-      resolvedProfileId: "parakeet-tdt-0.6b-v2-int8.transcribe-rs.stop",
-      execution: "stop",
-      segmentation: "none",
-      capabilities: { language: "en", inferenceMode: "batch", partials: false, externalVad: false, precision: "int8" },
-      transcribe: async (pcm, options) => { calls.push({ pcm: Buffer.from(pcm), options }); return "complete transcribe-rs batch"; },
-    },
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    await next((event) => event.type === "runtime_ready");
-    client.send(Buffer.alloc(2_048, 3), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 2_048 }));
-    const completed = await next((event) => event.type === "completed");
-    assert.equal(completed.text, "complete transcribe-rs batch");
-    assert.equal(completed.adapter, "transcribe_rs_batch_v1");
-    assert.equal(completed.backend, "transcribe_rs");
-    assert.equal(completed.computeBackend, "cpu");
-    assert.equal(completed.progressiveBatch, false);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].pcm.length, 2_048);
-    assert.equal(calls[0].options.startSample, 0);
-    assert.equal(calls[0].options.endSample, 1_024);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-  }
-});
 
-test("Unified English stream adapter coalesces PCM, exposes revisions, and stays open across silence", async () => {
+
+test("Moonshine Streaming Tiny stream adapter coalesces PCM, exposes revisions, and stays open across silence", async () => {
   const upstream = await startUpstream([]);
   const feedSizes = [];
   let snapshot = { full: "", committed: "", tentative: "" };
@@ -453,15 +322,15 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
       inferenceMode: "streaming",
       adapter: "transcribe_cpp_stream_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      modelId: "parakeet-unified-en-0.6b",
-      artifactId: "parakeet-unified-en-0.6b-q8-gguf",
+      modelId: "moonshine-streaming-tiny",
+      artifactId: "moonshine-streaming-tiny-q8-gguf",
       runtimeId: "transcribe-cpp",
-      backendPathId: "parakeet-unified-en-0.6b-q8-gguf.transcribe-cpp",
-      resolvedProfileId: "parakeet-unified-en-0.6b-q8-gguf.live",
+      backendPathId: "moonshine-streaming-tiny-q8-gguf.transcribe-cpp",
+      resolvedProfileId: "moonshine-streaming-tiny-q8-gguf.live",
       execution: "live",
       segmentation: "none",
       requestedComputeBackend: "auto",
@@ -473,16 +342,14 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
         partials: true,
         externalVad: false,
         precision: "q8",
-        memory: { modelBytes: 731357568 },
-        streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+        memory: { modelBytes: 50462816 },
+        streaming: { family: "moonshine", commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
       },
-      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480, commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
+      streaming: { family: "moonshine", commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
       native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
       stream: async (options) => {
         assert.deepEqual(options, {
-          family: { kind: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320 },
-          commitPolicy: "stable_prefix",
-          stablePrefixAgreementN: 3,
+          streaming: { family: "moonshine", commitPolicy: "stable_prefix", stablePrefixAgreementN: 3 },
         });
         return nativeStream;
       },
@@ -514,11 +381,11 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
     assert.equal(completed.text, "First phrase follows");
     assert.equal(completed.adapter, "transcribe_cpp_stream_v1");
     assert.equal(completed.inferenceMode, "streaming");
-    assert.equal(completed.modelId, "parakeet-unified-en-0.6b");
-    assert.equal(completed.artifactId, "parakeet-unified-en-0.6b-q8-gguf");
+    assert.equal(completed.modelId, "moonshine-streaming-tiny");
+    assert.equal(completed.artifactId, "moonshine-streaming-tiny-q8-gguf");
     assert.equal(completed.runtimeId, "transcribe-cpp");
-    assert.equal(completed.backendPathId, "parakeet-unified-en-0.6b-q8-gguf.transcribe-cpp");
-    assert.equal(completed.resolvedProfileId, "parakeet-unified-en-0.6b-q8-gguf.live");
+    assert.equal(completed.backendPathId, "moonshine-streaming-tiny-q8-gguf.transcribe-cpp");
+    assert.equal(completed.resolvedProfileId, "moonshine-streaming-tiny-q8-gguf.live");
     assert.equal(completed.execution, "live");
     assert.equal(completed.segmentation, "none");
     assert.equal(completed.requestedComputeBackend, "auto");
@@ -527,7 +394,7 @@ test("Unified English stream adapter coalesces PCM, exposes revisions, and stays
     assert.equal(completed.progressiveBatch, false);
     assert.equal(completed.capabilities.partials, true);
     assert.equal(completed.diagnostics.server.inference.streaming.feedCount, 3);
-    assert.equal(completed.diagnostics.server.inference.streaming.profile.latencyMs, 480);
+    assert.equal(completed.diagnostics.server.inference.streaming.profile.latencyMs, null);
     assert.equal(completed.diagnostics.server.inference.streaming.profile.feedQuantumMs, 160);
     assert.equal(completed.diagnostics.server.inference.streaming.acceptedThroughSample, 7_680);
     assert.equal(completed.diagnostics.server.inference.streaming.submittedThroughSample, 7_680);
@@ -569,7 +436,7 @@ test("transcribe.cpp feed worker does not make write await native inference and 
     {},
     async () => nativeStream,
     null,
-    { family: "parakeet_buffered", chunkMs: 160 },
+    { family: "moonshine" },
   );
   await adapter.opened;
   for (let index = 0; index < 16; index += 1) adapter.write(Buffer.alloc(640, index));
@@ -601,7 +468,7 @@ test("transcribe.cpp Stop drains a queued backlog in native quanta", async () =>
     {},
     async () => nativeStream,
     null,
-    { family: "parakeet_buffered", chunkMs: 160 },
+    { family: "moonshine" },
   );
   await adapter.opened;
   for (let index = 0; index < 32; index += 1) adapter.write(Buffer.alloc(640, index));
@@ -613,7 +480,7 @@ test("transcribe.cpp Stop drains a queued backlog in native quanta", async () =>
   assert.deepEqual(feedSizes, [2_560, 2_560, 2_560, 2_560]);
 });
 
-test("OpenAI live StreamPort feeds session PCM and finalizes like Unified English", async () => {
+test("OpenAI live StreamPort feeds session PCM and finalizes like Moonshine Streaming Tiny", async () => {
   const appended = [];
   const upstream = await startUpstream([]);
   const { bridge, origin } = await startDictationBridge({
@@ -665,45 +532,23 @@ test("OpenAI live StreamPort feeds session PCM and finalizes like Unified Englis
   }
 });
 
-test("Unified English stream startup failure falls back before consuming session PCM", async () => {
+test("Moonshine Streaming Tiny stream startup failure falls back before consuming session PCM", async () => {
   const upstream = await startUpstream([]);
   let streamAttempts = 0;
-  let progressiveStarts = 0;
-  let progressivePcmBytes = 0;
   const transcribed = [];
   const { bridge, origin } = await startDictationBridge({
     upstreamPort: upstream.address().port,
-    beginVoiceActivity: () => {
-      progressiveStarts += 1;
-      return {
-        push(pcm) {
-          progressivePcmBytes += pcm.length;
-          return Promise.resolve([]);
-        },
-        finish() {
-          return Promise.resolve({
-            type: "silero_vad_observation",
-            available: true,
-            status: "observed",
-            regions: [{ regionIndex: 0, startSample: 0, endSample: progressivePcmBytes / 2, submittedStartSample: 0, submittedEndSample: progressivePcmBytes / 2 }],
-            frames: [],
-            summary: { regionCount: 1, speechFrameCount: 1, maxProbability: 1, meanProbability: 1 },
-          });
-        },
-        cancel() {},
-      };
-    },
     runtimeConfig: {
       mode: "local",
       inferenceMode: "streaming",
       adapter: "transcribe_cpp_stream_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480 } },
-      streaming: { family: "parakeet_buffered", leftMs: 5_600, chunkMs: 160, rightMs: 320, latencyMs: 480 },
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "moonshine" } },
+      streaming: { family: "moonshine" },
       stream: async () => {
         streamAttempts += 1;
         throw Object.assign(new Error("stream unavailable"), { code: "test_stream_unavailable" });
@@ -739,7 +584,7 @@ test("Unified English stream startup failure falls back before consuming session
       sourceProfile: {
         profileId: null,
         adapter: "transcribe_cpp_stream_v1",
-        model: "parakeet-unified-en-0.6b-q8",
+        model: "moonshine-streaming-tiny-q8",
         runtimeId: null,
         backendPathId: null,
       },
@@ -747,8 +592,7 @@ test("Unified English stream startup failure falls back before consuming session
       completingProfile: null,
     });
     assert.equal(streamAttempts, 1);
-    assert.equal(progressiveStarts, 1);
-    assert.equal(progressivePcmBytes, 4_096);
+    assert.equal(completed.diagnostics.server.inference.segmentation.provider, "heuristic");
     assert.equal(transcribed.length, 1);
     assert.equal(transcribed[0].length, 4_096);
   } finally {
@@ -759,7 +603,7 @@ test("Unified English stream startup failure falls back before consuming session
   }
 });
 
-test("Unified English live queue overflow falls back from sample zero without a second native path", async () => {
+test("Moonshine Streaming Tiny live queue overflow falls back from sample zero without a second native path", async () => {
   const upstream = await startUpstream([]);
   const transcribed = [];
   let feedStarted = 0;
@@ -786,12 +630,12 @@ test("Unified English live queue overflow falls back from sample zero without a 
       inferenceMode: "streaming",
       adapter: "transcribe_cpp_stream_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
-      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "moonshine" } },
+      streaming: { family: "moonshine" },
       stream: async () => nativeStream,
       transcribe: async (pcm) => {
         transcribed.push(Buffer.from(pcm));
@@ -827,7 +671,7 @@ test("Unified English live queue overflow falls back from sample zero without a 
       sourceProfile: {
         profileId: null,
         adapter: "transcribe_cpp_stream_v1",
-        model: "parakeet-unified-en-0.6b-q8",
+        model: "moonshine-streaming-tiny-q8",
         runtimeId: null,
         backendPathId: null,
       },
@@ -849,7 +693,7 @@ test("Unified English live queue overflow falls back from sample zero without a 
   }
 });
 
-test("Unified English live failure after tentative output discards revisions and replays from zero", async () => {
+test("Moonshine Streaming Tiny live failure after tentative output discards revisions and replays from zero", async () => {
   const upstream = await startUpstream([]);
   const transcribed = [];
   let feedCount = 0;
@@ -875,12 +719,12 @@ test("Unified English live failure after tentative output discards revisions and
       segmentation: "none",
       adapter: "transcribe_cpp_stream_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
-      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "moonshine" } },
+      streaming: { family: "moonshine" },
       stream: async () => nativeStream,
       transcribe: async (pcm) => {
         transcribed.push(Buffer.from(pcm));
@@ -918,7 +762,7 @@ test("Unified English live failure after tentative output discards revisions and
   }
 });
 
-test("Unified English live failure after a stable checkpoint replays an overlapped suffix", async () => {
+test("Moonshine Streaming Tiny live failure after a stable checkpoint replays an overlapped suffix", async () => {
   const upstream = await startUpstream([]);
   const transcribed = [];
   let feedCount = 0;
@@ -948,16 +792,16 @@ test("Unified English live failure after a stable checkpoint replays an overlapp
       segmentation: "none",
       adapter: "transcribe_cpp_stream_v1",
       provider: "local",
-      model: "parakeet-unified-en-0.6b-q8",
+      model: "moonshine-streaming-tiny-q8",
       precision: "q8",
       backend: "transcribe_cpp",
       computeBackend: "cpu",
-      resolvedProfileId: "parakeet-unified-en-0.6b-q8-live",
+      resolvedProfileId: "moonshine-streaming-tiny-q8-live",
       runtimeId: "transcribe-cpp",
       backendPathId: "transcribe-cpp-native",
-      fallback: { profileId: "parakeet-unified-en-0.6b-q8-stop" },
-      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 } },
-      streaming: { family: "parakeet_buffered", chunkMs: 160, latencyMs: 480 },
+      fallback: { profileId: "moonshine-streaming-tiny-q8-stop" },
+      capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "moonshine" } },
+      streaming: { family: "moonshine" },
       stream: async () => nativeStream,
       transcribe: async (pcm) => {
         transcribed.push(Buffer.from(pcm));
@@ -981,7 +825,7 @@ test("Unified English live failure after a stable checkpoint replays an overlapp
     assert.equal(fallback.stableCheckpoint, 2_560);
     assert.equal(fallback.overlapSamples, 1_600);
     assert.equal(fallback.duplicateBoundaryHandling, "stable_prefix_preserved");
-    assert.equal(fallback.fallbackProfile, "parakeet-unified-en-0.6b-q8-stop");
+    assert.equal(fallback.fallbackProfile, "moonshine-streaming-tiny-q8-stop");
     client.send(JSON.stringify({ type: "stop", audioBytesSent: 10_240 }));
     const completed = await next((event) => event.type === "completed", 5_000);
     assert.equal(completed.text, "stable words fallback tail");
@@ -998,100 +842,11 @@ test("Unified English live failure after a stable checkpoint replays an overlapp
   }
 });
 
-test("progressive local batch publishes an ordered segment before Stop and appends the tail once", async () => {
-  const { bridge, origin } = await startProgressiveBridge({
-    transcribe: async (pcm) => pcm[0] === 1 ? "first phrase" : "second phrase",
-    regionsAtFinish: (sampleCount) => [
-      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
-      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
-    ],
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    await next((event) => event.type === "runtime_ready");
-    client.send(Buffer.alloc(2_048, 1), { binary: true });
-    const first = await next((event) => event.type === "final", 5_000);
-    assert.equal(first.text, "first phrase");
-    assert.equal(first.segment.sequence, 0);
-    assert.equal(first.segment.startSample, 0);
-    assert.equal(first.segment.endSample, 1_024);
-    assert.match(first.segment.segmentId, /^[0-9a-f-]+:segment:0$/);
-    client.send(Buffer.alloc(2_048, 2), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
-    const completed = await next((event) => event.type === "completed", 5_000);
-    assert.equal(completed.text, "first phrase second phrase");
-    assert.equal(completed.diagnostics.server.inference.progressiveBatch.committedSegments, 2);
-    assert.equal(completed.diagnostics.server.inference.progressiveBatch.failedSequences.length, 0);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-  }
-});
 
-test("progressive local batch keeps PCM sent during model startup", async () => {
-  const { bridge, origin } = await startProgressiveBridge({
-    resolveDelayMs: 75,
-    transcribe: async (pcm) => pcm[0] === 1 ? "cold first phrase" : "second phrase",
-    regionsAtFinish: (sampleCount) => [
-      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
-      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
-    ],
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    client.send(Buffer.alloc(2_048, 1), { binary: true });
-    const first = await next((event) => event.type === "final", 5_000);
-    assert.equal(first.text, "cold first phrase");
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 2_048 }));
-    const completed = await next((event) => event.type === "completed", 5_000);
-    assert.equal(completed.text, "cold first phrase");
-    assert.equal(completed.audioBytes, 2_048);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-  }
-});
 
-test("progressive batch retains successful segments when a later range fails", async () => {
-  const { bridge, origin } = await startProgressiveBridge({
-    transcribe: async (pcm) => {
-      if (pcm[0] === 2) throw Object.assign(new Error("second range failed"), { code: "test_range_failed" });
-      return "first phrase";
-    },
-    regionsAtFinish: (sampleCount) => [
-      { regionIndex: 0, submittedStartSample: 0, submittedEndSample: 1_024 },
-      { regionIndex: 1, submittedStartSample: 1_024, submittedEndSample: sampleCount },
-    ],
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    await next((event) => event.type === "runtime_ready");
-    client.send(Buffer.alloc(2_048, 1), { binary: true });
-    await next((event) => event.type === "final", 5_000);
-    client.send(Buffer.alloc(2_048, 2), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 4_096 }));
-    const failure = await next((event) => event.type === "segment_error", 5_000);
-    assert.equal(failure.sequence, 1);
-    const completed = await next((event) => event.type === "completed", 5_000);
-    assert.equal(completed.text, "first phrase");
-    assert.deepEqual(completed.diagnostics.server.inference.progressiveBatch.failedSequences, [1]);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-  }
-});
+
+
+
 
 test("slow archive settlement does not delay completed transcript delivery", async () => {
   const upstream = await startUpstream([
@@ -1255,20 +1010,20 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
       mode: "remote",
       provider: "custom",
       adapter: "openai_audio_sse_v1",
-      model: "whisper-tiny-en-q8",
+      model: "moonshine-streaming-tiny-q8",
       endpoint: `http://127.0.0.1:${upstream.address().port}/v1/audio/transcriptions`,
       headers: {},
       allowPrivate: true,
-      modelId: "whisper-tiny-en",
-      artifactId: "whisper-tiny-en-q8",
-      runtimeId: "transformers-js",
-      backendPathId: "whisper-tiny-en-q8.transformers-js",
-      resolvedProfileId: "whisper-tiny-en-q8.eager",
-      execution: "eager",
-      segmentation: "silero",
-      requestedComputeBackend: "wasm-cpu",
-      actualComputeBackend: "wasm-cpu",
-      loadedRuntimeVersion: "transformers.js-3.8.1",
+      modelId: "moonshine-streaming-tiny",
+      artifactId: "moonshine-streaming-tiny-q8",
+      runtimeId: "transcribe-cpp",
+      backendPathId: "moonshine-streaming-tiny-q8.transcribe-cpp",
+      resolvedProfileId: "moonshine-streaming-tiny-q8.live",
+      execution: "live",
+      segmentation: "none",
+      requestedComputeBackend: "cpu",
+      actualComputeBackend: "cpu",
+      loadedRuntimeVersion: "0.1.3",
     },
   });
   const client = new WebSocket(`${origin}/dictation`);
@@ -1336,16 +1091,16 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
     assert.equal(metadata.diagnostics.client.durations.stopToFinalMs, 8);
     assert.equal(metadata.provider, "custom");
     assert.equal(metadata.adapter, "openai_audio_sse_v1");
-    assert.equal(metadata.modelId, "whisper-tiny-en");
-    assert.equal(metadata.artifactId, "whisper-tiny-en-q8");
-    assert.equal(metadata.runtimeId, "transformers-js");
-    assert.equal(metadata.backendPathId, "whisper-tiny-en-q8.transformers-js");
-    assert.equal(metadata.resolvedProfileId, "whisper-tiny-en-q8.eager");
-    assert.equal(metadata.execution, "eager");
-    assert.equal(metadata.segmentation, "silero");
-    assert.equal(metadata.requestedComputeBackend, "wasm-cpu");
-    assert.equal(metadata.actualComputeBackend, "wasm-cpu");
-    assert.equal(metadata.loadedRuntimeVersion, "transformers.js-3.8.1");
+    assert.equal(metadata.modelId, "moonshine-streaming-tiny");
+    assert.equal(metadata.artifactId, "moonshine-streaming-tiny-q8");
+    assert.equal(metadata.runtimeId, "transcribe-cpp");
+    assert.equal(metadata.backendPathId, "moonshine-streaming-tiny-q8.transcribe-cpp");
+    assert.equal(metadata.resolvedProfileId, "moonshine-streaming-tiny-q8.live");
+    assert.equal(metadata.execution, "live");
+    assert.equal(metadata.segmentation, "none");
+    assert.equal(metadata.requestedComputeBackend, "cpu");
+    assert.equal(metadata.actualComputeBackend, "cpu");
+    assert.equal(metadata.loadedRuntimeVersion, "0.1.3");
     assert.equal(metadata.diagnostics.client.capture.requestedConstraints.audio.deviceId.exact, "[redacted]");
     assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.deviceId, "[redacted]");
     assert.equal(metadata.diagnostics.client.capture.effectiveTrackSettings.groupId, "[redacted]");
@@ -1409,50 +1164,7 @@ test("dictation stores server PCM when transcription returns no text", async () 
   }
 });
 
-test("authoritative Silero keeps silence-only PCM out of ASR", async () => {
-  let upstreamRequests = 0;
-  const upstream = createServer((request, response) => {
-    upstreamRequests += 1;
-    request.resume();
-    request.on("end", () => {
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      response.end();
-    });
-  });
-  upstream.listen(0, "127.0.0.1");
-  await listen(upstream);
-  const { bridge, origin } = await startDictationBridge({
-    upstreamPort: upstream.address().port,
-    observeVoiceActivity: async (pcm) => ({
-      type: "silero_vad_observation",
-      available: true,
-      status: "observed",
-      sampleCount: pcm.length / 2,
-      regions: [],
-      frames: [],
-      summary: { regionCount: 0, speechFrameCount: 0, maxProbability: 0.01, meanProbability: 0.001 },
-    }),
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    client.send(Buffer.alloc(32_000), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 32_000 }));
-    const completed = await next((event) => event.type === "completed");
-    assert.equal(completed.text, "");
-    assert.equal(completed.speech.detector, "silero_vad");
-    assert.equal(completed.speech.detected, false);
-    assert.equal(completed.diagnostics.server.inference.segmentCount, 0);
-    assert.equal(upstreamRequests, 0);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-  }
-});
+
 
 function pcmWith(parts) {
   return Buffer.concat(parts.map(({ samples, level }) => {
@@ -1462,127 +1174,9 @@ function pcmWith(parts) {
   }));
 }
 
-test("authoritative Silero observation submits its padded ranges", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-vad-shadow-"));
-  const recordingsRoot = path.join(root, "recordings");
-  const observation = {
-    type: "silero_vad_observation",
-    available: true,
-    status: "observed",
-    model: { name: "silero_vad.onnx", revision: "test", sha256: "a".repeat(64), license: "MIT" },
-    deployment: { executionProvider: "cpu", unprivileged: true },
-    policy: { sampleRate: 16_000, frameSamples: 512, threshold: 0.5, preRollMs: 240, hangoverMs: 320, trailingPaddingMs: 240 },
-    sampleCount: 72_000,
-    frameCount: 141,
-    frames: [],
-    regions: [
-      { startSample: 0, endSample: 19_840, speechStartSample: 3_840, speechEndSample: 16_000 },
-      { startSample: 52_160, endSample: 72_000, speechStartSample: 56_000, speechEndSample: 68_160 },
-    ],
-    summary: { regionCount: 2, speechFrameCount: 50, maxProbability: 0.99, meanProbability: 0.32 },
-  };
-  const audio = pcmWith([
-    { samples: 16_000, level: 0.1 },
-    { samples: 40_000, level: 0 },
-    { samples: 16_000, level: 0.1 },
-  ]);
-  let upstreamRequests = 0;
-  const upstream = createServer((request, response) => {
-    request.resume();
-    request.on("end", () => {
-      upstreamRequests += 1;
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      response.end(`event: transcript.text.done\ndata: ${JSON.stringify({ type: "transcript.text.done", text: "before after" })}\n\n`);
-    });
-  });
-  upstream.listen(0, "127.0.0.1");
-  await listen(upstream);
-  const recordingStore = new VoiceRecordingStore({ root: recordingsRoot });
-  const { bridge, origin } = await startDictationBridge({
-    upstreamPort: upstream.address().port,
-    recordingStore,
-    observeVoiceActivity: async (pcm) => {
-      assert.equal(pcm.length, audio.length);
-      return observation;
-    },
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    for (let offset = 0; offset < audio.length; offset += 5_120) client.send(audio.subarray(offset, offset + 5_120), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: audio.length }));
-    const completed = await next((event) => event.type === "completed");
-    assert.equal(completed.text, "before after");
-    assert.equal(upstreamRequests, 1);
-    assert.deepEqual(completed.diagnostics.server.inference.boundaries, [
-      { index: 0, startSample: 0, endSample: 19_840, startMs: 0, endMs: 1_240, durationMs: 1_240, vadRegionIndices: [0] },
-      { index: 1, startSample: 52_160, endSample: 72_000, startMs: 3_260, endMs: 4_500, durationMs: 1_240, vadRegionIndices: [1] },
-    ]);
-    assert.deepEqual(completed.diagnostics.server.inference.sileroObservation.regions, observation.regions);
-    const files = await waitForRecordings(recordingsRoot);
-    const metadataFile = files.find((file) => file.endsWith(".json"));
-    const metadata = JSON.parse(await fs.readFile(path.join(recordingsRoot, metadataFile), "utf8"));
-    assert.deepEqual(metadata.diagnostics.server.inference.sileroObservation.regions, observation.regions);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
 
-test("authoritative Silero submits a valid speech range shorter than 500 ms", async () => {
-  const bodies = [];
-  const upstream = createServer((request, response) => {
-    const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
-    request.on("end", () => {
-      bodies.push(Buffer.concat(chunks));
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      response.end("event: transcript.text.done\ndata: {\"type\":\"transcript.text.done\",\"text\":\"short word\"}\n\n");
-    });
-  });
-  upstream.listen(0, "127.0.0.1");
-  await listen(upstream);
-  const audio = pcmWith([{ samples: 8_000, level: 0 }, { samples: 8_000, level: 0.1 }]);
-  const { bridge, origin } = await startDictationBridge({
-    upstreamPort: upstream.address().port,
-    observeVoiceActivity: async () => ({
-      type: "silero_vad_observation",
-      available: true,
-      status: "observed",
-      regions: [{
-        submittedStartSample: 15_000,
-        submittedEndSample: 16_200,
-        speechStartSample: 15_200,
-        speechEndSample: 16_000,
-      }],
-      frames: [],
-      summary: { regionCount: 1, speechFrameCount: 2, maxProbability: 0.99, meanProbability: 0.8 },
-    }),
-  });
-  const client = new WebSocket(`${origin}/dictation`);
-  const next = messageQueue(client);
-  try {
-    await new Promise((resolve, reject) => { client.once("open", resolve); client.once("error", reject); });
-    await next((event) => event.type === "ready");
-    for (let offset = 0; offset < audio.length; offset += 5_120) client.send(audio.subarray(offset, offset + 5_120), { binary: true });
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: audio.length }));
-    const completed = await next((event) => event.type === "completed");
-    assert.equal(completed.text, "short word");
-    assert.equal(bodies.length, 1);
-    assert.equal(bodies[0].readUInt32LE(bodies[0].indexOf("RIFF") + 40), 2_000);
-    assert.equal(completed.diagnostics.server.inference.boundaries[0].durationMs, 63);
-  } finally {
-    client.terminate();
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    await new Promise((resolve) => bridge.close(resolve));
-    await new Promise((resolve) => upstream.close(resolve));
-  }
-});
+
+
 
 test("splitSilence keeps recordings without a long pause as one segment", () => {
   const pcm = pcmWith([{ samples: 8_000, level: 0.1 }, { samples: 4_000, level: 0 }]);
@@ -1685,17 +1279,7 @@ test("dictation bridge joins multi-segment transcripts into one completed text",
   await listen(upstream);
   const { bridge, origin } = await startDictationBridge({
     upstreamPort: upstream.address().port,
-    observeVoiceActivity: async () => ({
-      type: "silero_vad_observation",
-      available: true,
-      status: "observed",
-      regions: [
-        { submittedStartSample: 0, submittedEndSample: 16_000, speechStartSample: 0, speechEndSample: 16_000 },
-        { submittedStartSample: 56_000, submittedEndSample: 72_000, speechStartSample: 56_000, speechEndSample: 72_000 },
-      ],
-      frames: [],
-      summary: { regionCount: 2, speechFrameCount: 2, maxProbability: 1, meanProbability: 1 },
-    }),
+    segmentation: "heuristic",
   });
   const client = new WebSocket(`${origin}/dictation`);
   const next = messageQueue(client);
@@ -1714,6 +1298,7 @@ test("dictation bridge joins multi-segment transcripts into one completed text",
         assert.equal(event.text, "first sentence. second sentence.");
         assert.equal(event.audioBytes, 72_000 * 2);
         assert.equal(requestCount.value, 1);
+        assert.equal(event.diagnostics.server.inference.segmentation.provider, "heuristic");
         break;
       }
       finals.push(event.text);

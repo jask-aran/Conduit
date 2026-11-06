@@ -13,7 +13,7 @@ const MAX_SECRET_LENGTH = 16 * 1024;
 const MAX_ENDPOINT_LENGTH = 2 * 1024;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-export const DEFAULT_LOCAL_VOICE_MODEL = "whisper-tiny-en-q8";
+export const DEFAULT_LOCAL_VOICE_MODEL = artifactForProfile(resolveVoiceExecutionProfile({ profileId: VOICE_EXECUTION_CATALOG.defaultProfileId })).legacyModelId;
 export const VOICE_CONFIG_VERSION = 2;
 
 export const OPENAI_LIVE_MODEL = "gpt-live-transcribe";
@@ -187,7 +187,15 @@ function untouchedDefaultConfig(config) {
 function normalizedLocalConfig(config, catalog) {
   let profile;
   let origin = config.localSelectionOrigin;
-  if (Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION && config.localSelection) {
+  const removedModel = config.localModelId && !catalog.migrations.some((entry) => entry.legacyLocalModelId === config.localModelId);
+  const removedSelection = config.localSelection && !catalog.profiles.some((candidate) => {
+    try { return candidate.id === resolveVoiceExecutionProfile(config.localSelection, catalog).id; }
+    catch { return false; }
+  });
+  if (removedModel || removedSelection) {
+    profile = resolveVoiceExecutionProfile({ profileId: catalog.defaultProfileId }, catalog);
+    origin = "migrated_explicit";
+  } else if (Number(config.voiceConfigVersion) === VOICE_CONFIG_VERSION && config.localSelection) {
     if (!origin || !["default", "explicit", "migrated_explicit"].includes(origin)) throw voiceError("voice_profile_recovery_required", "The saved local voice profile has no valid selection origin", 409);
     profile = resolveVoiceExecutionProfile(config.localSelection, catalog);
   } else {

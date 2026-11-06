@@ -39,16 +39,7 @@ const executionDescription = (execution: VoiceExecutionProfile["execution"]) => 
   : execution === "eager"
     ? "Each pause commits a phrase."
     : "Nothing appears until you stop.";
-const segmentationLabel = (segmentation: VoiceExecutionProfile["segmentation"]) => segmentation === "silero" ? "Silero" : segmentation === "heuristic" ? "Silence detection" : "None";
-const runtimeLabel = (runtimeId: string) => runtimeId === "transcribe-rs"
-  ? "transcribe-rs ONNX worker"
-  : runtimeId === "parakeet-loopback"
-    ? "Parakeet loopback"
-    : runtimeId === "transformers-js"
-      ? "Transformers.js"
-      : runtimeId === "transcribe-cpp"
-        ? "transcribe.cpp"
-        : runtimeId;
+const segmentationLabel = (segmentation: VoiceExecutionProfile["segmentation"]) => segmentation === "heuristic" ? "Silence detection" : "None";
 const precisionLabel = (precision: string) => precision === "fp32" ? "FP32" : precision.toUpperCase();
 const artifactStateLabel = (state: VoiceBackendPathStatus["artifactState"] | null | undefined) => state === "installed" ? "installed" : state === "installing" ? "installing" : state === "failed" ? "failed" : state === "absent" ? "not installed" : "state not reported";
 const artifactsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => catalogue.artifacts.filter((artifact) => artifact.modelId === modelId);
@@ -57,7 +48,7 @@ const backendPathsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: s
   return catalogue.backendPaths.filter((backendPath) => artifactIds.has(backendPath.artifactId));
 };
 const artifactForBackendPath = (catalogue: VoiceExecutionCatalogueView, backendPath: CatalogueBackendPath) => catalogue.artifacts.find((artifact) => artifact.id === backendPath.artifactId);
-const formatLabel = (format: string) => format === "onnx-package" ? "ONNX" : format === "transformers.js" ? "ONNX package" : format.toUpperCase();
+const formatLabel = (format: string) => format.toUpperCase();
 const profileLabel = (profile: VoiceExecutionProfile) => profile.execution === "eager"
   ? `${executionLabel(profile.execution)} · ${segmentationLabel(profile.segmentation)}`
   : executionLabel(profile.execution);
@@ -66,6 +57,7 @@ const profileDescription = (profile: VoiceExecutionProfile) => profile.execution
   : executionDescription(profile.execution);
 
 export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
+  const runtimeLabel = (runtimeId: string) => props.catalogue.runtimes.find((runtime) => runtime.id === runtimeId)?.label || runtimeId;
   const disabled = () => props.busy || Boolean(props.installingModelId);
   const familyBackendPaths = () => props.selectedModel ? backendPathsForModel(props.catalogue, props.selectedModel.id) : [];
   const runtimeChoices = () => {
@@ -107,7 +99,7 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
   // Rows in the Transcription tile, like the cloud ones: the choices, then
   // the model files with the one action they need. The long runtime and
   // variant facts are each option's title, not its label.
-  const runtimeShortLabel = (runtimeId: string) => runtimeLabel(runtimeId).replace(/ ONNX worker$/, "");
+  const runtimeShortLabel = (runtimeId: string) => runtimeLabel(runtimeId);
   const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
   const filesState = () => props.installingModelId
     ? props.installProgress?.phase === "runtime" ? "Downloading the voice runtime…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"

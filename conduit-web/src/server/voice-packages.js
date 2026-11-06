@@ -5,25 +5,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/*
- * Local voice models run on native packages -- transcribe-cpp, onnxruntime
- * and transformers (which brings sharp) -- that are most of a release's
- * weight and that most installs never use. A release leaves them out
- * (scripts/package-server.sh); the first model install fetches them with npm
- * into the data root, once per set of versions, and links them into this
- * release's node_modules so a plain `import()` finds them. A checkout keeps
- * them in node_modules as before, and nothing here runs.
- */
+// Releases install the optional transcribe-cpp binding on the first model
+// download. Checkouts use the pinned package in node_modules.
 const WEB_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const MODULES = path.join(WEB_ROOT, "node_modules");
-const LINKED = ["transcribe-cpp", "@huggingface/transformers", "onnxruntime-node"];
+const LINKED = ["transcribe-cpp"];
 
 function wanted() {
   // devDependencies: a production `npm ci --omit=dev` leaves them out.
   const { dependencies = {}, devDependencies = {} } = JSON.parse(readFileSync(path.join(WEB_ROOT, "package.json"), "utf8"));
   Object.assign(dependencies, devDependencies);
-  // onnxruntime-node arrives with transformers, at the version it pins.
-  return Object.fromEntries(["transcribe-cpp", "@huggingface/transformers"].filter((name) => dependencies[name]).map((name) => [name, dependencies[name]]));
+  return Object.fromEntries(["transcribe-cpp"].filter((name) => dependencies[name]).map((name) => [name, dependencies[name]]));
 }
 
 function runtimeDir() {
@@ -51,24 +43,6 @@ function npmCommand() {
   return existsSync(cli) ? [process.execPath, [cli]] : [process.platform === "win32" ? "npm.cmd" : "npm", []];
 }
 
-// onnxruntime-node ships every OS and its GPU providers: ~600 MB this machine
-// will never load.
-async function prune(modules) {
-  const bin = path.join(modules, "onnxruntime-node", "bin");
-  for (const napi of await fs.readdir(bin).catch(() => [])) {
-    for (const platform of await fs.readdir(path.join(bin, napi)).catch(() => [])) {
-      const at = path.join(bin, napi, platform);
-      if (platform !== process.platform) { await fs.rm(at, { recursive: true, force: true }); continue; }
-      for (const arch of await fs.readdir(at).catch(() => [])) {
-        if (arch !== process.arch) { await fs.rm(path.join(at, arch), { recursive: true, force: true }); continue; }
-        for (const file of await fs.readdir(path.join(at, arch)).catch(() => [])) {
-          if (/providers_(cuda|tensorrt)/.test(file)) await fs.rm(path.join(at, arch, file), { force: true });
-        }
-      }
-    }
-  }
-}
-
 let installing = null;
 
 /** Make the voice packages importable, downloading them the first time. */
@@ -88,7 +62,6 @@ export async function ensureVoicePackages({ onPhase } = {}) {
         child.on("error", reject);
         child.on("close", (code) => code === 0 ? resolve() : reject(Object.assign(new Error(`Could not install the voice runtime: ${stderr.trim() || `npm exited ${code}`}`), { code: "voice_runtime_install", status: 502 })));
       });
-      await prune(path.join(dir, "node_modules"));
     })().finally(() => { installing = null; });
     await installing;
   }

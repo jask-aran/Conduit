@@ -224,7 +224,7 @@ session. Stop sends one immutable whole-session buffer to BatchPort. During
 pauses sends each closed range to BatchPort with absolute sample positions and
 flushes the open tail. Live sends every accepted sample once, in order, to the
 persistent StreamPort. Live does not run Eager segmentation. Conduit uses one
-shared `SegmentationProvider` contract for pinned Silero and the calibrated
+shared `SegmentationProvider` contract for the calibrated energy-based
 heuristic provider; analysis always uses a copy of the accepted PCM. Short
 valid ranges are retained, and bounded range exhaustion merges the remaining
 tail. The complete WAV remains the archive source, and sidecars retain frame
@@ -253,14 +253,14 @@ Local settings show one semantic model family at a time, then the compatible
 runtime, precision or variant, and valid batching profiles. Variant choices
 show truthful install state; the selected path reports requested and actual
 compute state. During pauses is labelled with its catalogue detector, such as
-Silero or Silence detection, rather than hiding pause selection in Advanced.
+Silence detection, rather than hiding pause selection in Advanced.
 Capture profile, shortcut, activation, auto-send, and warm microphone stay
 inside one closed Advanced section. Cloud settings show the selected transport
 and its fixed timing;
 OpenAI model selection updates between the HTTPS upload and WebSocket live
 adapters before Save.
 Settings → Voice can use managed
-Whisper Tiny English, Whisper Base, Whisper Small, Parakeet Unified English Q8, Parakeet TDT 0.6B v2, or Parakeet TDT 0.6B v3,
+Moonshine Streaming Tiny Q8_0 (English, 50,462,816 bytes),
 and has first-class provider/model profiles for OpenAI, Deepgram, and Groq.
 Remote None, Bearer, and custom API-key-header credentials are stored server-side in `data/voice.json`
 (mode `0600`) and are never returned to the browser. Environment configuration
@@ -270,36 +270,29 @@ non-empty dictation, final text remains an editable draft, and
 optional auto-send accepts only a server-confirmed final event settled within
 one second of stop.
 
-Managed local setup is an explicit user action. Conduit downloads pinned q8
-Whisper ONNX artifacts, the pinned Parakeet/ONNX Runtime package, or the
-Unified English Q8 GGUF into `data/voice/models`. A reviewed source manifest
-pins every model artifact to an immutable revision or release URL, exact byte
-size, and SHA-256 digest. The installer verifies these digests, displays
-progress, supports cancellation and retry, and keeps only one selected model
-resident. Whisper runs in the server through Transformers.js; legacy Parakeet
-runs as one unprivileged loopback worker; supported Parakeet ONNX artifacts
-also have a managed `transcribe-rs` BatchPort worker. Unified English Q8 uses the pinned
-`transcribe-cpp@0.1.3` Node binding and its locked Linux CPU/Vulkan native
-package. The binding verifies its ABI contract and reports the actual compute
-backend. The `transcribe-rs` worker is a long-lived unprivileged child process
-over private pipes. It pins `transcribe-rs` 0.3.8, `ort` 2.0.0-rc.12, bundled
-ONNX Runtime 1.24.2, Rust 1.88, and the x86_64 Linux CPU target. Its versioned
-frames use bounded length-prefixed JSON and PCM16 payloads; the worker reports
-compiled, requested, and actual providers separately. The worker exposes
-After Stop and During pauses only. It does not advertise Live because this
-pinned Parakeet implementation has no persistent StreamPort. Unified English
-Q8 uses one `parakeet_buffered` stateful session per
-dictation, with the current 1.12 s profile (5.6 s left context, 560 ms chunk,
-and 560 ms right context) and stable-prefix commits. It emits stable and tentative text
-while capture continues. If stream startup fails before useful text, Conduit
-records the failure and uses the bounded WP5 progressive batch fallback. If a
-stable segment has an exact sample checkpoint, a later stream failure replays
-only that checkpoint's bounded-overlap suffix through BatchPort and preserves
-the stable prefix. It does not run both paths in parallel. File-upload providers buffer one bounded
-utterance in memory and transcribe it after Stop. Other installed local batch
-models can use the bounded progressive range path during capture; this is not
-stateful streaming and does not run for remote providers. The native worker
-protocol and build records are in `native/transcribe-rs-worker/README.md`.
+Managed local setup is an explicit user action. Conduit downloads the pinned
+Moonshine Streaming Tiny Q8_0 GGUF into `data/voice/models`. The backend pins
+its repository, immutable revision, exact byte size, and SHA-256 digest. The
+installer verifies the digest, displays progress, supports cancellation and
+retry, and keeps one selected model resident. The pinned `transcribe-cpp@0.1.3`
+Node binding uses its Linux CPU/Vulkan native package and reports the actual
+compute backend.
+
+Moonshine uses one stateful `moonshine` stream per dictation, with stable-prefix
+commits and live tentative text. Stop-time transcription and batch fallback
+also feed and finalise a stream because Moonshine has no run slot. If stream
+startup fails before useful text, Conduit records the failure and uses the
+bounded progressive batch fallback. If a stable segment has an exact sample
+checkpoint, a later stream failure replays that checkpoint's bounded-overlap
+suffix through BatchPort and preserves the stable prefix. The paths do not run
+in parallel. File-upload providers buffer one bounded utterance in memory and
+transcribe it after Stop.
+
+Local backends register in `src/server/voice-backends/index.js`. Each backend
+owns its models, pinned manifest, package preparation, load operation, stream
+options, and the existing transcribe/stream/dispose runtime contract. Add a backend as one new
+file and one registration line; the catalogue, model manager, runtime, and
+settings read the registry.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
@@ -309,20 +302,18 @@ Local selection is stored as `voiceConfigVersion: 2` with a canonical tuple:
 The tuple resolves to one immutable execution profile and backend path. The
 runtime version is reported separately, so a routine runtime update does not
 invalidate the selection. Legacy `localModelId` values migrate through an
-explicit map and remain available to the older client for compatibility. A
+explicit map and remain available to the older client for compatibility. Removed
+local models reset to the default Moonshine profile without changing mode,
+provider, or remote credentials. A
 valid selection can be saved before its artifact is installed; capture then
 returns the specific missing-artifact error and the selection remains intact.
 The settings response includes the static profile catalogue and a separate
 backend-path status list with artifact state, runtime state, requested and
 actual compute backend, loaded runtime version, and the last error code.
 
-The current Unified English selection resolves to
-`parakeet-unified-en-0.6b` / `parakeet-unified-en-0.6b-q8-gguf` /
-`transcribe-cpp` and can use the persistent `live` StreamPort. The current
-Transformers.js paths use `eager` BatchPort execution with Silero
-segmentation. Legacy Parakeet paths use `stop` BatchPort execution. The
-`transcribe-rs` paths use `stop` and Silero-segmented `eager` BatchPort
-profiles. Each
+The current local selection resolves to `moonshine-streaming-tiny` /
+`moonshine-streaming-tiny-q8-gguf` / `transcribe-cpp` and supports persistent
+`live` StreamPort and `stop` BatchPort profiles. Each
 dictation freezes this resolved tuple at open; a settings change affects the
 next dictation only. One runtime lease covers the session and releases once on
 completion, failure, cancellation, socket close, or shutdown.
@@ -753,7 +744,7 @@ matching JSON sidecar. File-upload adapters (`openai_audio_sse_v1`,
 `gpt-live-transcribe` uses `openai_realtime_stream_v1`: each accepted 16 kHz
 PCM packet is upsampled to 24 kHz and appended to a Realtime transcription
 session; `partial` / `final` events include `stableText`, `tentativeText`,
-and `revision`. Unified English Q8 uses `transcribe_cpp_stream_v1` the same
+and `revision`. Moonshine Streaming Tiny Q8_0 uses `transcribe_cpp_stream_v1` the same
 way with native float32 packets, plus `audioCommittedMs` and `bufferedMs`.
 Conduit copies incoming packets into one bounded accepted timeline, coalesces
 eight 20 ms packets into one 160 ms native feed, and allows only one native
@@ -770,12 +761,8 @@ records discarded tentative revisions and duplicate-boundary handling. Without
 an exact checkpoint, Conduit emits `error` and preserves the accepted PCM for
 the archive. A stream-start failure is reported in `streamFallback` and can
 also select `transcribe_cpp_batch_fallback_v1` with the WP5 progressive path.
-The current CPU Live profile uses 5.6 s left context, a 560 ms chunk, and
-560 ms right context for 1.12 s lookahead. The other supported Unified English
-profiles remain available to later profile selection work.
-Other managed local models can submit closed ranges during capture through the
-bounded progressive path; the managed legacy Parakeet runtime still serves
-the OpenAI-compatible upload endpoint on loopback. Conduit emits
+Moonshine uses the binding's default decode interval and stable-prefix
+commits. Conduit emits
 `ready`, `partial`, `final`, `stream_fallback`, `finalizing`, `segment_error`,
 `settlement_deadline`, `session_final`, `completed`, and `error`. `final` events
 contain cumulative text and optional stable segment IDs, sequence, revision,
@@ -803,12 +790,14 @@ microphone stream was reused. The diagnostics also include first/last server
 PCM, runtime preparation, inference queue/start/finish, partial/final,
 completion-send, archive, and bounded VAD queue/execution timing.
 The client event record includes digital-silence device-stall notifications.
-The server record includes Silero frame probabilities, selected padded sample
+The server record includes energy segmentation frames, selected padded sample
 ranges, source-region mapping, segmentation provider and calibration version,
 accepted/submitted/processed/committed/archive-owned watermarks, fallback
 source and completing profiles, and any segment-guard action. Direct adapter
 calls without a session selection retain the legacy RMS split for compatibility;
-the authenticated dictation path always supplies its server-side VAD decision.
+the default stop-time detector uses the calibrated energy-based provider.
+Profiles with `segmentation: "none"` submit accepted PCM without external
+segmentation.
 Completed session metadata also records the frozen profile ID, model and
 artifact IDs, stable runtime and backend-path IDs, execution and segmentation,
 requested and actual compute backend, and loaded runtime version.
@@ -819,7 +808,7 @@ that fact.
 
 Finalisation uses `max(base, recordedAudioSeconds × modelMultiplier)` and a
 ten-minute cap. The relaxed defaults are a 30-second base and a 12× fallback
-multiplier; the full-precision local Parakeet policy uses 18×. Deployments can
+multiplier. Deployments can
 adjust the base, cap, and fallback with
 `CONDUIT_VOICE_FINALIZATION_BASE_MS`, `CONDUIT_VOICE_FINALIZATION_MAX_MS`, and
 `CONDUIT_VOICE_FINALIZATION_DEFAULT_MULTIPLIER`.

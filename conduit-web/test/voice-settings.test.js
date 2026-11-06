@@ -70,10 +70,10 @@ test("first-class cloud providers pin endpoints, models, and credential scope", 
     await assert.rejects(fixture.store.update({
       mode: "remote", provider: "deepgram", model: "nova-3", auth: { type: "bearer" },
     }), { code: "voice_secret_invalid" });
-    await fixture.store.selectLocalModel("whisper-base-q8");
+    await fixture.store.selectLocalModel("moonshine-streaming-tiny-q8");
     const local = await fixture.store.effective();
     assert.equal(local.mode, "local");
-    assert.equal(local.localModelId, "whisper-base-q8");
+    assert.equal(local.localModelId, "moonshine-streaming-tiny-q8");
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -84,12 +84,12 @@ test("local and off modes round-trip without deleting the saved cloud provider",
       mode: "remote", provider: "openai", model: "gpt-transcribe",
       auth: { type: "bearer", headerName: "Authorization", secret: "openai-secret" },
     });
-    await fixture.store.update({ mode: "local", localModelId: "whisper-tiny-en-q8" });
+    await fixture.store.update({ mode: "local", localModelId: "moonshine-streaming-tiny-q8" });
     let view = await fixture.store.publicView();
     assert.equal(view.mode, "local");
-    assert.equal(view.localModelId, "whisper-tiny-en-q8");
+    assert.equal(view.localModelId, "moonshine-streaming-tiny-q8");
     assert.equal(view.auth.configured, true);
-    await fixture.store.update({ mode: "off", localModelId: "whisper-tiny-en-q8" });
+    await fixture.store.update({ mode: "off", localModelId: "moonshine-streaming-tiny-q8" });
     view = await fixture.store.publicView();
     assert.equal(view.mode, "off");
     assert.equal(view.auth.configured, true);
@@ -195,26 +195,26 @@ test("VoiceRuntime requires provider credential checks to succeed and keeps the 
 
   let testedModel = "";
   const localRuntime = new VoiceRuntime({
-    settings: { effective: async () => ({ mode: "local", localModelId: "parakeet-tdt-0.6b-v3-int8" }) },
+    settings: { effective: async () => ({ mode: "local", localModelId: "moonshine-streaming-tiny-q8" }) },
     modelManager: {
       ensureRunning: async () => ({ kind: "http", origin: "http://127.0.0.1:9000" }),
       test: async (modelId) => { testedModel = modelId; return { ok: true }; },
     },
   });
   await localRuntime.test();
-  assert.equal(testedModel, "parakeet-tdt-0.6b-v3-int8");
+  assert.equal(testedModel, "moonshine-streaming-tiny-q8");
 });
 
 test("VoiceRuntime exposes the transcribe.cpp streaming capability and actual compute backend", async () => {
   const runtime = new VoiceRuntime({
-    settings: { effective: async () => ({ mode: "local", localModelId: "parakeet-unified-en-0.6b-q8" }) },
+    settings: { effective: async () => ({ mode: "local", localModelId: "moonshine-streaming-tiny-q8" }) },
     modelManager: {
       ensureRunning: async () => ({
         kind: "transcriber",
         adapter: "transcribe_cpp_stream_v1",
         backend: "transcribe_cpp",
         computeBackend: "cpu",
-        capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", memory: { modelBytes: 731357568 }, streaming: { family: "parakeet_buffered", latencyMs: 480 } },
+        capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", memory: { modelBytes: 50462816 }, streaming: { family: "moonshine" } },
         native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
       }),
       transcribe: async () => "unused",
@@ -228,7 +228,7 @@ test("VoiceRuntime exposes the transcribe.cpp streaming capability and actual co
   assert.equal(resolved.computeBackend, "cpu");
   assert.equal(resolved.capabilities.partials, true);
   assert.equal(resolved.capabilities.externalVad, false);
-  assert.equal(resolved.streaming.latencyMs, 480);
+  assert.equal(resolved.streaming.family, "moonshine");
   assert.equal(typeof resolved.stream, "function");
   assert.equal(resolved.native.headerHash, "86b16dd97ad1cb58");
 });

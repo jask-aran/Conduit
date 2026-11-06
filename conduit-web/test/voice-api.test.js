@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import express from "express";
+import { VOICE_EXECUTION_CATALOG } from "../src/server/voice-execution-catalog.js";
 import { registerVoiceRoutes } from "../src/server/routes/voice.js";
 import { registerAgentRoutes } from "../src/server/routes/agent.js";
 import { startConduitHarness } from "./helpers/conduit-harness.js";
@@ -122,8 +123,8 @@ test("voice settings API stores endpoint authentication without returning the se
     assert.equal(initial.mode, "off");
     assert.equal(initial.voiceConfigVersion, 2);
     assert.equal(initial.localSelectionOrigin, "default");
-    assert.equal(initial.local.catalogue.profiles.length, 28);
-    assert.equal(initial.local.backendPaths.length, 16);
+    assert.equal(initial.local.catalogue.profiles.length, VOICE_EXECUTION_CATALOG.profiles.length);
+    assert.equal(initial.local.backendPaths.length, VOICE_EXECUTION_CATALOG.backendPaths.length);
     assert.equal(initial.local.models.every((model) => !model.installed), true);
     assert.deepEqual(initial.providers.slice(0, 3).map((provider) => provider.id), ["openai", "deepgram", "groq"]);
 

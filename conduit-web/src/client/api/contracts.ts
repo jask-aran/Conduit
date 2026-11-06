@@ -720,7 +720,7 @@ export interface LiveRecord {
 }
 
 export type VoiceExecution = "stop" | "eager" | "live";
-export type VoiceSegmentation = "none" | "silero" | "heuristic";
+export type VoiceSegmentation = "none" | "heuristic";
 
 export interface VoiceLocalSelection {
   modelId: string;
@@ -784,7 +784,7 @@ export interface VoiceExecutionCatalogueView {
   schemaVersion: 1;
   models: { id: string; label: string; languages: string; description: string; artifactIds: string[] }[];
   artifacts: { id: string; modelId: string; legacyModelId: string; runtimeId: string; format: string; precision: string; approximateBytes: number; minimumFreeBytes: number; modelFile: string | null; runtimeVersion: string | null; license: { id: string; attribution: string } }[];
-  runtimes: { id: string; adapterKind: string; version: string; compiledComputeBackends: string[] }[];
+  runtimes: { id: string; label?: string; adapterKind: string; version: string; compiledComputeBackends: string[] }[];
   backendPaths: { id: string; artifactId: string; runtimeId: string; ports: { batch: boolean; stream: boolean } }[];
   profiles: VoiceExecutionProfile[];
   defaultProfileId: string;
