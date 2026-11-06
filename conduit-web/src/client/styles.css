@@ -209,3 +209,12 @@ svg.lucide { stroke-width: 2.4; }
 /* The file viewer takes focus for its keys: never a ring (DESIGN.md, Interaction). */
 
 .file-viewer-surface:focus { outline: none; }
+
+/* The jbot chat (dashboard/jbot-room.tsx): its messages are all drawn (no transcript-visibility windowing), so the
+   rows the viewport does not reach are skipped from layout and paint, their last size kept; a resize of the dock or a
+   pane beside it then lays out what is on screen, not every message ever said. */
+[data-jbot-room] .ui-transcript > .ui-transcript-row { content-visibility: auto; contain-intrinsic-size: auto 6rem; }
+/* The dock writes its widths (--workspace-shell-width, --workspace-panel-width, --dock-document-width) on its root at
+   every frame of a resize; they are read only by the dock and its own parts. Restated here as constants, the change
+   stops at the room's edge instead of restyling every element in it, every frame. */
+.ui-dock [data-jbot-room] { --workspace-shell-width: 0px; --workspace-panel-width: 0px; --dock-document-width: 0px; }

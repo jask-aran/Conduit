@@ -79,7 +79,13 @@
 .ui-chat-beside[data-drop]:not([data-wide]) .ui-chat-beside-panel { inset: var(--space-xs) var(--space-md) auto; max-height: calc(100% - var(--space-lg));
   padding-bottom: var(--space-lg); border-radius: var(--radius-surface);
   transform: translateY(calc(-1 * var(--space-md))); opacity: 0; transform-origin: top center;
-  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-leave), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-leave), visibility 0s linear var(--duration-quick, var(--duration-gentle)); }
-.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; opacity: 1; visibility: visible;
+  /* Shut, it stays drawn on its own layer, see-through and out of reach (inert): dropping it composites what is
+     already rastered and blurred, rather than painting the whole frost panel on its first frame. */
+  visibility: visible; pointer-events: none; will-change: transform, opacity;
+  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-leave), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-leave); }
+.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; opacity: 1; pointer-events: auto;
   transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-arrive), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-arrive); }
 .ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: 0; }
+/* Shut and settled (its leave played), it is skipped from layout and paint: a resize of the dock lays out the chat
+   alone, not the hidden panel as well. */
+.ui-chat-beside[data-drop]:not([data-wide]):not([data-open]) .ui-chat-beside-panel { content-visibility: hidden; transition-property: transform, opacity, content-visibility; transition-behavior: allow-discrete; }
