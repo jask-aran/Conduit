@@ -118,7 +118,7 @@ import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-t
 import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
-import { applyUiScale, selectedUiScale } from "./preferences/ui-scale";
+import { applyUiScale, followZoomGestures, selectedUiScale, stepUiScale } from "./preferences/ui-scale";
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { applyMotionScale } from "./preferences/motion-scale";
 import { harnessLabelFor } from "./harness-brand";
@@ -170,6 +170,7 @@ if (desktopShell) {
 
 const nativeApp = isInstalledClient();
 applyUiScale(selectedUiScale(), true);
+followZoomGestures();
 applyTranscriptScale();
 applyMotionScale();
 // Stamp the reading-surface presets before first paint so the transcript is
@@ -5529,6 +5530,9 @@ function App() {
       }),
       shortcutManager.registerHandler(COMMAND_IDS.searchChats, "application", toggleSearchPalette),
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings()),
+      shortcutManager.registerHandler(COMMAND_IDS.biggerInterface, "application", () => void stepUiScale(1)),
+      shortcutManager.registerHandler(COMMAND_IDS.smallerInterface, "application", () => void stepUiScale(-1)),
+      shortcutManager.registerHandler(COMMAND_IDS.resetInterfaceSize, "application", () => void stepUiScale(0)),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
       shortcutManager.registerHandler(COMMAND_IDS.newChat, "application", () => {
         setMobileSidebarOpen(false);

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import { Settings as SettingsCore } from "./settings-core";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { saveUiScale, selectedUiScale, type UiScale } from "../preferences/ui-scale";
@@ -54,6 +54,10 @@ export function Settings(props: SettingsProps) {
   const [userMessageCollapse, setUserMessageCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());
 
   const updateInterfaceScale = (scale: UiScale) => setInterfaceScale(saveUiScale(scale));
+  // Ctrl+wheel and the zoom keys change it from anywhere: the selector follows.
+  const followScale = () => setInterfaceScale(selectedUiScale());
+  addEventListener("conduit:ui-scale", followScale);
+  onCleanup(() => removeEventListener("conduit:ui-scale", followScale));
   // Each save writes localStorage and publishes the change; main.tsx mirrors it
   // to the server and stamps the document root, so the open transcript reflows
   // immediately without the dialog reaching into it.

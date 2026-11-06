@@ -100,3 +100,44 @@ export function saveUiScale(scale: UiScale): UiScale {
   localStorage.setItem(UI_SCALE_STORAGE_KEY, String(scale));
   return applyUiScale(scale);
 }
+
+/** The Interface size a step bigger (1) or smaller (-1), or back to 100% (0), saved. */
+export function stepUiScale(step: 1 | -1 | 0): UiScale {
+  const current = selectedUiScale();
+  const at = UI_SCALE_OPTIONS.indexOf(current);
+  const next = step === 0 ? 1 : UI_SCALE_OPTIONS[Math.max(0, Math.min(UI_SCALE_OPTIONS.length - 1, at + step))]!;
+  return next === current ? current : saveUiScale(next);
+}
+
+/** How far a wheel (or a trackpad's pinch, which arrives as Ctrl+wheel) turns for one step of the Interface size. */
+const WHEEL_STEP = 100;
+
+/**
+ * Zooming is the Interface size: Ctrl+wheel (and a trackpad pinch) steps it instead of the browser's or the webview's
+ * zoom, which scaled the page as a picture and left the setting saying otherwise. The keys' zoom (Ctrl+= and Ctrl+-)
+ * is the command registry's (Bigger / Smaller interface). A desktop shell zoomed before this folds that zoom into the
+ * Interface size once, and its webview goes back to 100%.
+ */
+export function followZoomGestures() {
+  if (installedClientKind === "desktop") {
+    const zoom = savedDesktopZoom();
+    if (zoom && Math.abs(zoom - 1) > 0.01) {
+      saveUiScale(nearest(selectedUiScale() * zoom));
+      localStorage.setItem(DESKTOP_ZOOM_STORAGE_KEY, "1");
+      void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) => getCurrentWebview().setZoom(1)).catch(() => {});
+    }
+  }
+  let turned = 0;
+  let last = 0;
+  window.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    // A pause starts a new gesture: what was left of the last one does not carry into it.
+    if (event.timeStamp - last > 400) turned = 0;
+    last = event.timeStamp;
+    turned += event.deltaMode === 1 ? event.deltaY * 33 : event.deltaY;
+    if (Math.abs(turned) < WHEEL_STEP) return;
+    stepUiScale(turned < 0 ? 1 : -1);
+    turned = 0;
+  }, { passive: false, capture: true });
+}
