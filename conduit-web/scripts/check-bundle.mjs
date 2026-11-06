@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { brotliCompressSync, gzipSync } from "node:zlib";
+import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 
 const dist = path.resolve("dist");
+// The quality the server's copies are made at (scripts/precompress.mjs); the default, 11, takes seconds more.
+const BROTLI = { params: { [constants.BROTLI_PARAM_QUALITY]: 9 } };
 const html = fs.readFileSync(path.join(dist, "index.html"), "utf8");
 const initial = new Set([...html.matchAll(/(?:src|href)="\/?([^"]+\.(?:js|css))"/g)].map((match) => match[1]));
 const assets = fs.readdirSync(path.join(dist, "assets"))
@@ -10,7 +12,7 @@ const assets = fs.readdirSync(path.join(dist, "assets"))
   .map((name) => {
     const relative = `assets/${name}`;
     const bytes = fs.readFileSync(path.join(dist, relative));
-    return { file: relative, type: path.extname(name).slice(1), initial: initial.has(relative), raw: bytes.length, gzip: gzipSync(bytes).length, brotli: brotliCompressSync(bytes).length };
+    return { file: relative, type: path.extname(name).slice(1), initial: initial.has(relative), raw: bytes.length, gzip: gzipSync(bytes).length, brotli: brotliCompressSync(bytes, BROTLI).length };
   });
 const totals = (type) => assets.filter((asset) => asset.initial && asset.type === type).reduce((sum, asset) => sum + asset.gzip, 0);
 const initialJs = totals("js");

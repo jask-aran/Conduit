@@ -181,6 +181,8 @@ export default defineConfig(({ mode }) => {
       ssrEmitAssets: access,
       outDir: gallery ? "dist-gallery" : "dist",
       emptyOutDir: !access,
+      // Gzipping every chunk for the size table costs seconds per build; scripts/check-bundle.mjs measures them.
+      reportCompressedSize: false,
       rollupOptions: {
         input: gallery ? { gallery: path.resolve(import.meta.dirname, "gallery.html") } : undefined,
         output: {

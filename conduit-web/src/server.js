@@ -980,7 +980,12 @@ lifetime.own("listener", null, async () => {
   server.closeAllConnections?.();
   secureServer?.close();
   secureServer?.closeAllConnections?.();
+  // The sockets' own goodbyes (a browser socket's "restarting") went out before this; end what is left, and cut what
+  // does not end within a second.
+  for (const socket of frontSockets) socket.end();
+  const cut = setTimeout(() => { for (const socket of frontSockets) socket.destroy(); }, 1_000);
   await closed;
+  clearTimeout(cut);
 });
 // A streamed answer is a frame per few characters, each carrying the same
 // keys and ids (~224 bytes for a 4-byte delta): compressed with the context
@@ -1146,7 +1151,12 @@ const TLS_HANDSHAKE = 0x16;
 // A connection that never says anything is held only this long before the
 // byte that decides where it goes.
 const FIRST_BYTE_TIMEOUT_MS = 30_000;
+// Every connection the listener holds, for shutdown: upgraded sockets and ones still waiting on their first byte are
+// in neither server's own list, and would hold the listener open until they time out.
+const frontSockets = new Set();
 const front = net.createServer((socket) => {
+  frontSockets.add(socket);
+  socket.once("close", () => frontSockets.delete(socket));
   socket.setTimeout(FIRST_BYTE_TIMEOUT_MS, () => socket.destroy());
   socket.once("readable", () => {
     const first = socket.read(1);
@@ -1180,6 +1190,9 @@ async function shutdown(signal) {
   shuttingDown = true;
   console.log(`Conduit received ${signal}; stopping`);
   await lifetime.close();
+  // Everything the server owns is released (each bounded by its own timeout); a handle nobody owns, such as a child's
+  // pipe, must not keep the process up until the service manager kills it.
+  process.exit();
 }
 
 for (const signal of ["SIGTERM", "SIGINT"]) {

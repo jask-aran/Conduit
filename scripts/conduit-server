@@ -121,7 +121,7 @@ Description=Conduit server${PROFILE:+ ($PROFILE)}
 After=network-online.target
 
 [Service]
-Environment=PATH=$PATH
+Environment="PATH=${PATH//%/%%}"
 Environment=CONDUIT_DATA_ROOT=$CONDUIT_DATA_ROOT
 Environment=CONDUIT_HOST=$CONDUIT_HOST
 Environment=CONDUIT_PORT=$CONDUIT_PORT
