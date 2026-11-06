@@ -439,7 +439,7 @@ export function registerProjectRoutes(app, {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("Cache-Control", "private, no-cache");
         response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-        if (resolved.path) return response.sendFile(resolved.path);
+        if (resolved.path) return response.sendFile(path.basename(resolved.path), { root: path.dirname(resolved.path), dotfiles: "allow" });
         // A device's file comes through the device, whole.
         if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
         return response.end(await resolved.host.read(resolved.relativePath));

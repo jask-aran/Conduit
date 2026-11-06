@@ -416,7 +416,7 @@ export function registerChatRoutes(app, {
   });
 
   // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
-  app.get("/v0/chats/:chatId/subagents/:conversationId?", async (request, response, next) => {
+  app.get("/v0/chats/:chatId/subagents{/:conversationId}", async (request, response, next) => {
     try {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });

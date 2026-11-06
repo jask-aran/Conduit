@@ -337,7 +337,6 @@ html, body { background: var(--frame, #08090a); color: var(--foreground); }
 .g-row-cell > :is(.g-form-surface, .g-form-density) { display: grid; place-items: center; overflow-x: auto; }
   .g-rows > .g-scale-head > span:first-child { display: none; }
   .g-rows > .g-scale-row > .g-scale-name { grid-column: 1 / -1; }
-}
 .g-canvas[data-app="hidden"] > .g-right { display: none; }
 .g-depth-chip { display: grid; width: 140px; height: 90px; place-items: center; color: var(--muted-foreground); font-size: 12px; }
 .g-anatomy-title { margin: var(--space-lg) 0 var(--space-sm); color: var(--muted-foreground); font-size: 12px; font-weight: 500; }

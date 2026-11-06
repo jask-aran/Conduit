@@ -870,7 +870,8 @@ app.get(/^\/assets\/[\w.-]+$/, (request, response, next) => {
   const copy = `${file}.${encoding === "br" ? "br" : "gz"}`;
   response.setHeader("Vary", "Accept-Encoding");
   response.type(path.extname(file));
-  response.sendFile(copy, {
+  response.sendFile(path.basename(copy), {
+    root: path.dirname(copy),
     dotfiles: "deny",
     headers: { "Content-Encoding": encoding, "Cache-Control": "public, max-age=31536000, immutable" },
   }, (error) => {
@@ -888,10 +889,10 @@ app.use(express.static(dist, {
     else response.setHeader("Cache-Control", "no-cache");
   },
 }));
-app.get("*", (request, response, next) => {
+app.get("/{*splat}", (request, response, next) => {
   if (request.path.startsWith("/v0/") || request.path === "/healthz") return next();
   response.setHeader("Cache-Control", "no-cache");
-  response.sendFile(path.join(dist, "index.html"));
+  response.sendFile("index.html", { root: dist });
 });
 app.use((error, _request, response, _next) => {
   let status = error.status || 500;
