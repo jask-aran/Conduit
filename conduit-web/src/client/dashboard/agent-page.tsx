@@ -145,7 +145,10 @@ export function AgentPage(props: {
       </For>
       <For each={needs()?.notices}>{(notice) =>
         <Row density="list" lead={<Icons.Warning />} label={notice.text} title={notice.text} context={age(notice.at, now())}
-          meta={<IconButton kind="dash" aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton>} />}
+          meta={notice.taskId
+            // Parked by the runtime after too many restarts: it runs again from where it stopped.
+            ? <IconButton kind="dash" aria-label="Retry" title="Retry" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/tasks/${notice.taskId}/retry`, { method: "POST" }))}><Icons.Refresh /></IconButton>
+            : <IconButton kind="dash" aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton>} />}
       </For>
     </Show>
   </SplitGroup>;

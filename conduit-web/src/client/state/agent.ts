@@ -27,7 +27,7 @@ export interface AgentProposal { id: string; file: string; op: "add" | "remove" 
 export interface AgentInboxEntry { id: string; at: string; kind: AgentRunKind; title: string; subagentId: string; conversationId: number; level: "fyi" | "attention" | "urgent" | "failed"; headline: string; body?: string; feedId?: string; count?: number; status: "unhandled" | "handled"; for?: string[]; handledAt?: string; outcome?: string;
   /** Its text as a file in the agent's folder (inbox/…md), which a row opens in the file viewer. */
   file?: string }
-export interface AgentNotice { id: string; kind: string; text: string; at: string }
+export interface AgentNotice { id: string; kind: string; text: string; at: string | null; taskId?: number }
 export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
 export interface AgentView {
   enabled: boolean;

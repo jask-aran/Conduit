@@ -96,6 +96,19 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
    * and its clocks. Needs you: a question or approval waiting in one of its
    * threads, memory its runs proposed, and notices (a budget reached).
    */
+  /*
+   * Work the runtime parked after too many restarts (pi-durable's restart limit): nothing runs it again until someone
+   * asks, so it is said here, with Retry (POST /v0/agent/tasks/:id/retry).
+   */
+  const TASK_WORDS = { "conduit.subagent-reporter": "A run's report", "conduit.agent-routine": "A routine", "pi.generation": "A model turn", "pi.tool": "A tool call" };
+  const parkedTasks = async () => {
+    const harness = await agent.runtime.open();
+    const { tasks } = await harness.inspect(agent.context).catch(() => ({ tasks: [] }));
+    return tasks.filter((task) => task.state.kind === "blocked" && task.state.reason === "restart_limit").map((task) => ({
+      id: `task-${task.record.id}`, kind: "parked", taskId: task.record.id, at: task.record.startedAt ? new Date(task.record.startedAt).toISOString() : null,
+      text: `${TASK_WORDS[task.record.kind] || "A task"} stopped after restarting ${task.record.restarts ?? "too many"} times`,
+    }));
+  };
   const attention = async (view, state) => {
     const harness = await agent.runtime.open();
     const runs = view.home?.conversationId ? await backgroundSubagents(harness, view.home.conversationId, agent.context) : [];
@@ -121,7 +134,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
         proposals: await listProposals(agent),
         notices: [...state.notices, ...(agent.connectors.entry("executor").status === "on" ? [] : [{
           id: "connector-executor", kind: "connector", text: "Executor isn't connected", at: null,
-        }])],
+        }]), ...await parkedTasks()],
       },
     };
   };
