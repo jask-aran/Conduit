@@ -111,8 +111,24 @@ export class PersistentAgent {
    * Keep the context inbox's files (inbox-files.js) in step with the agent's document, from load until `stopFollowing`:
    * each change to the inbox rewrites what changed, in order.
    */
+  /*
+   * A subagent's anchor only holds its run open, so one the runtime parked after too many unclean exits (pi-durable's
+   * restart limit) is safe to start again, and while it is parked its run's reports cannot be delivered. On load, every
+   * parked anchor runs again; other parked work waits for the person (the agent page's Needs you).
+   */
+  async recoverAnchors() {
+    const harness = await this.runtime.open();
+    const { tasks } = await harness.inspect(this.context);
+    for (const task of tasks) {
+      if (task.record.kind === "conduit.subagent-anchor" && task.state.kind === "blocked" && task.state.reason === "restart_limit") {
+        await harness.retryTask(task.record.id, this.context).catch(() => {});
+      }
+    }
+  }
+
   async followInbox() {
     if (this.inboxWatch || !this.folder) return;
+    void this.recoverAnchors().catch((error) => console.warn("Parked anchors could not be started again", error.message));
     try {
       await this.moveInboxTexts();
       const harness = await this.runtime.open();
