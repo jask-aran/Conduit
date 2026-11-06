@@ -60,25 +60,7 @@ export function JbotStatus(props: { onOpenThread?: () => void; onOpenSettings?: 
 }
 
 /** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
-export const JbotPanelControl = createContext<{
-  open: () => boolean;
-  toggle: () => void;
-  /** What a desktop's jbot shows in its place (the dock, a narrow pane): the chat, or one of the panel's tabs. */
-  view: () => "chat" | JbotTab;
-  setView: (view: "chat" | JbotTab) => void;
-  /** The view switch is the header's (a desktop's jbot without room for the panel beside). */
-  switched: () => boolean;
-} | null>(null);
-
-export const JBOT_VIEWS: Array<{ value: "chat" | JbotTab; label: string }> = [{ value: "chat", label: "Chat" }, ...JBOT_TABS];
-
-/** The header's switch between the jbot chat and its panel's tabs. */
-export function JbotViews() {
-  const control = useContext(JbotPanelControl);
-  return <Show when={control?.switched()}>
-    <Segmented label="jbot" value={control!.view()} options={JBOT_VIEWS} onChange={control!.setView} />
-  </Show>;
-}
+export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void } | null>(null);
 
 /**
  * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by
@@ -87,7 +69,7 @@ export function JbotViews() {
 export function JbotPanel(props: {
   tab: JbotTab;
   onTab: (tab: JbotTab) => void;
-  /** Its own tab switch (beside the chat, or a phone's sheet); none where the header switches (JbotViews). */
+  /** Its own tab switch. */
   tabs: boolean;
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   onOpenFile: (path: string) => void;

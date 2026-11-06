@@ -16,12 +16,14 @@ import { SplitEmpty } from "./primitives/split";
  */
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
-  /** jbot's panel (JbotPanel), beside the chat, over it (a phone) or in its place (a desktop). */
+  /** jbot's panel (JbotPanel): beside the chat, risen over it (a phone) or dropped from its pill (a desktop). */
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; tabs: boolean; done: () => void }) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
   working?: boolean;
   threadChanged?: unknown;
+  /** "phone": a phone's presentation on a desktop (the dock: tall and narrow), its pill and actions frost over it. */
+  presentation?: "phone";
 }) {
   const log = useJbotMessages(() => props.threadChanged);
   const name = () => agentView()?.settings?.name || "Agent";
@@ -37,11 +39,8 @@ export function JbotRoom(props: {
   const tabKey = "conduit.jbot.panel-tab";
   const [tab, setTabShown] = createSignal<JbotTab>((() => { try { const saved = localStorage.getItem(tabKey); return JBOT_TABS.some((item) => item.value === saved) ? saved as JbotTab : "now"; } catch { return "now"; } })());
   const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(tabKey, next); } catch { /* a per-viewer convenience */ } };
-  // A desktop never raises a sheet: without room beside, the panel takes the chat's place, switched from the header.
+  // A desktop never raises a sheet (a thumb's): without room beside, the panel drops from jbot's pill, as a menu.
   const desktop = !isMobileLayout();
-  const switched = () => desktop && !wide();
-  const view = () => switched() && over() ? tab() : "chat";
-  const setView = (next: "chat" | JbotTab) => { if (next === "chat") return void setOver(false); setTab(next); setOver(true); };
   // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
   // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
   const [built, setBuilt] = createSignal(false);
@@ -78,12 +77,12 @@ export function JbotRoom(props: {
     onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
   };
 
-  return <JbotPanelControl.Provider value={{ open, toggle, view, setView, switched }}><SheetFill data-jbot-room="">
+  return <JbotPanelControl.Provider value={{ open, toggle }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <ChatBeside label={`${name()}'s panel`} open={open()} swap={desktop} onClose={() => setOver(false)} onWide={setWide}
-          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, get tabs() { return !switched(); }, done: () => setOver(false) })}</Show>}>
+        <ChatBeside label={`${name()}'s panel`} open={open()} drop={desktop} onClose={() => setOver(false)} onWide={setWide}
+          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />

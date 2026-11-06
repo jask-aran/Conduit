@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, splitProps, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 
 /*
@@ -46,11 +46,11 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 /**
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
  * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
- * chat from its foot, a scrim over the rest that closes it; with `swap` (a desktop: the dock, a narrow pane) in the
- * chat's place, the chat kept where it was underneath. onWide: when that changes (it starts narrow), for the
- * controls that open it.
+ * chat from its foot, a scrim over the rest that closes it; with `drop` (a pointer's) dropped from under the header as
+ * a menu is, a click outside or Esc putting it away. onWide: when that changes (it starts narrow), for the controls
+ * that open it.
  */
-export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; swap?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
+export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; drop?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
   const [wide, setWide] = createSignal(false);
@@ -63,8 +63,14 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     onCleanup(() => sizes.disconnect());
   });
   const over = () => !wide() && props.open;
-  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-swap={props.swap ? "" : undefined}
-    onKeyDown={(event) => { if (event.key === "Escape" && over()) { event.stopPropagation(); props.onClose(); } }}>
+  // Esc puts it away wherever the keyboard is (its control is outside it: a pill, the composer's ring).
+  createEffect(() => {
+    if (!over()) return;
+    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
+    window.addEventListener("keydown", away, true);
+    onCleanup(() => window.removeEventListener("keydown", away, true));
+  });
+  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-drop={props.drop ? "" : undefined}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
     <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />

@@ -68,3 +68,22 @@ button.ui-header-place { cursor: pointer; }
   .ui-header-note { height: var(--control-sm); padding-left: var(--space-lg); font-size: var(--text-caption); }
   .ui-header-note > button { height: calc(var(--control-sm) - 2 * var(--space-2xs)); }
 }
+
+/* The phone presentation in a region that asks for it on a desktop ([data-presentation="phone"]: jbot in the dock, tall
+   and narrow): its name a frost pill, its actions frost pills, the transcript running under both. The phone's lead
+   group (sidebar, new chat) is the phone's own and stays away. Desktop pointer sizes; no safe areas. */
+[data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); }
+[data-presentation="phone"] .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: var(--space-md) var(--space-md) var(--space-xs); background: none; }
+[data-presentation="phone"] .ui-header-title { display: none; }
+[data-presentation="phone"] .ui-header-pill { display: inline-flex; min-width: 0; height: var(--pill-size); flex: 0 1 auto; align-items: center; gap: var(--space-sm);
+  margin-inline: auto; padding: 0 var(--space-xl) 0 var(--space-lg); color: var(--foreground); font: inherit; text-align: start; }
+[data-presentation="phone"] .ui-header-pill ~ .ui-header-group[data-actions] { margin-left: 0; }
+[data-presentation="phone"] .ui-header-pill-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
+[data-presentation="phone"] .ui-header-pill-icon > * { width: 100%; height: 100%; }
+[data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
+[data-presentation="phone"] button.ui-header-pill:is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
+[data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
+[data-presentation="phone"] :is(.ui-header-group:not([data-lead]), .ui-header-pill) { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
+  background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
+[data-presentation="phone"] .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
+[data-presentation="phone"] .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }

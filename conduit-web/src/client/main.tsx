@@ -23,7 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
-import { JbotChip, JbotPanel, JbotPanelControl, JbotViews } from "./dashboard/jbot-status";
+import { JbotChip, JbotPanel, JbotPanelControl } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
@@ -801,6 +801,8 @@ function App() {
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
     : (routeKind() === "agent" || routeKind() === "jbot") ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
     : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
+      // No project in view: the dock still opens (jbot needs none), on jbot's own folder; the project tools stay away.
+      : ["chat", "project", "dashboard"].includes(routeKind()) && agentView()?.projectId ? `project:${agentView()!.projectId}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
@@ -1310,7 +1312,11 @@ function App() {
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
   // The project the dock opens: the agent's own workspace on its page (its SOUL.md, its memory), else the selected one.
-  const dockHome = createMemo(() => (routeKind() === "agent" || routeKind() === "jbot") ? catalogue.projects().find((project) => project.id === agentView()?.projectId) : selectedProject());
+  // The project the dock's tools work on (Files, Source Control, Chat review, Terminal), and where the dock opens: with
+  // no project in view it still opens, on jbot's folder, for what needs none (jbot), its project tools not offered.
+  const agentProject = () => catalogue.projects().find((project) => project.id === agentView()?.projectId);
+  const toolHome = createMemo(() => (routeKind() === "agent" || routeKind() === "jbot") ? agentProject() : selectedProject());
+  const dockHome = createMemo(() => toolHome() ?? agentProject());
   const chatManifest = session.manifest;
   const chatCapability = session.capability;
   const chatHistory = session.history;
@@ -6051,13 +6057,8 @@ function App() {
     // A phone's pill and the composer's chip open jbot's panel (JbotPanelControl, from the room).
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
-    // In the dock jbot is a tool: a tool's header, its views (the chat, the panel's tabs) switched there.
-    const jbotTool = (title: string) => <PaneHeader kind="tool" fit frost name={title} modes={<JbotViews />}
-      actions={<>
-        <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
-        <HeaderButton label={`Close ${title}`} icon={<Icons.Close />} onClick={() => void closeSlot(slot as number)} />
-      </>} />;
-    return <JbotRoom header={(title) => !isMobileLayout() && inDock(slot) ? jbotTool(title) : agentHeader(slot)(title, jbotPill(), isMobileLayout() ? undefined : <JbotViews />)}
+    // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
+    return <JbotRoom header={(title) => agentHeader(slot)(title, jbotPill())} presentation={!isMobileLayout() && inDock(slot) ? "phone" : undefined}
       panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
@@ -6418,7 +6419,7 @@ function App() {
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && toolHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: panelOpen() && dockSlot() !== null && dockSlot() === jbotDocked(), onOpen: (alt) => void openJbotDocked(alt) } : undefined}

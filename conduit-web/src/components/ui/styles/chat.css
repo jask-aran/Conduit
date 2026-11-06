@@ -69,6 +69,14 @@
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
 .ui-chat-beside:not([data-wide]) .ui-chat-beside-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: var(--frame); opacity: 0; pointer-events: none; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-chat-beside:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: .5; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
-.ui-chat-beside[data-swap]:not([data-wide]) .ui-chat-beside-scrim { display: none; }
-.ui-chat-beside[data-swap]:not([data-wide]) .ui-chat-beside-panel { inset: 0; max-height: none; background: var(--background);
-  border: 0; border-radius: 0; transform: none; transition: none; }
+[data-presentation="phone"] .ui-chat-column { width: 100%; padding: calc(var(--header-height) + var(--space-4xl)) var(--space-xl) var(--transcript-composer-inset, 160px); }
+[data-presentation="phone"] .ui-composer-dock { padding: var(--space-md) var(--space-lg) var(--space-lg); }
+/* drop: a pointer's panel, dropped from under the header as a menu is, put away by a click outside, Esc or its
+   control; the sheet risen from the foot is a phone's, for a thumb. */
+.ui-chat-beside[data-drop]:not([data-wide]) .ui-chat-beside-panel { inset: var(--space-xs) var(--space-md) auto; max-height: calc(100% - var(--space-lg));
+  padding-bottom: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); box-shadow: var(--lift-raised);
+  transform: translateY(calc(-1 * var(--space-md))); opacity: 0; transform-origin: top center;
+  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-leave), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-leave), visibility 0s linear var(--duration-quick, var(--duration-gentle)); }
+.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-panel { transform: none; opacity: 1; visibility: visible;
+  transition: transform var(--duration-quick, var(--duration-gentle)) var(--ease-arrive), opacity var(--duration-quick, var(--duration-gentle)) var(--ease-arrive); }
+.ui-chat-beside[data-drop]:not([data-wide])[data-open] .ui-chat-beside-scrim { opacity: 0; }
