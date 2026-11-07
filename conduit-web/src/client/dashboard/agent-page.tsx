@@ -192,10 +192,20 @@ export function AgentPage(props: {
   const entryContext = (entry: AgentInboxEntry) => entry.status === "handled"
     ? `${entry.title} · ${entry.outcome === "dismissed" ? "dismissed" : "handled"}`
     : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
-  const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null}>
+  // A long group shows its latest few, the rest a press away (SplitGroupMore), never an endless list.
+  const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set());
+  const capped = <T,>(id: string, list: () => readonly T[] | undefined, shown = 5) => ({
+    rows: () => { const all = list() || []; return opened().has(id) ? all : all.slice(0, shown); },
+    more: () => {
+      const rest = (list()?.length || 0) - shown;
+      return rest > 0 && !opened().has(id) ? <SplitGroupMore count={rest} onClick={() => setOpened(new Set([...opened(), id]))}>Show all</SplitGroupMore> : undefined;
+    },
+  });
+  const inboxShown = capped("inbox", inbox);
+  const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null} more={inboxShown.more()}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
-      <For each={inbox()}>{(entry) =>
+      <For each={inboxShown.rows()}>{(entry) =>
         <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => entry.file ? props.onOpenFile(entry.file) : setReadingEntry(entry)}
             lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.kind === "note" || entry.kind === "feedback" ? entry.headline : tally([entry])}
             context={entryContext(entry)} meta={age(entry.at, now())} />
@@ -316,9 +326,10 @@ export function AgentPage(props: {
   const readDecided = () => void api<{ records: Decided[] }>("/v0/agent/approvals?limit=20").then((result) => setDecided(result.records.filter((record) => record.verdict.outcome !== "escalate"))).catch(() => {});
   readDecided();
   createEffect(on(now, readDecided, { defer: true }));
+  const decidedShown = capped("decided", decided);
   const decidedGroup = () => <Show when={decided().length}>
-    <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decided().length}>
-      <For each={decided().slice(0, 8)}>{(record) =>
+    <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decided().length} more={decidedShown.more()}>
+      <For each={decidedShown.rows()}>{(record) =>
         <Row density="list" lead={record.verdict.outcome === "allow" ? <Icons.Check /> : <Icons.Close />} label={record.held.action}
           context={`${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`}
           title={record.verdict.reason} meta={age(record.at, now())} />}
@@ -374,19 +385,21 @@ export function AgentPage(props: {
     </For>
   </SplitGroup>;
 
-  const recentGroup = () => <SplitGroup id="agent-recent" order="rest" label="Recent" count={working()?.recent.length || null}>
+  const recentShown = capped("recent", () => working()?.recent);
+  const recentGroup = () => <SplitGroup id="agent-recent" order="rest" label="Recent" count={working()?.recent.length || null} more={recentShown.more()}>
     <Show when={working()?.recent.length} fallback={<SplitEmpty>Nothing here yet.</SplitEmpty>}>
-      <For each={working()?.recent}>{(run) => runRow(run, false)}</For>
+      <For each={recentShown.rows()}>{(run) => runRow(run, false)}</For>
     </Show>
   </SplitGroup>;
 
   // Its threads: home, where it talks to the person, then the side threads it or they started.
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
-  const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)}>
+  const threadsShown = capped("threads", threads);
+  const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)} more={threadsShown.more()}>
     <Show when={view()?.home}>{(home) =>
       <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} label="Home" context="Where it talks to you" />}
     </Show>
-    <For each={threads()}>{(side) =>
+    <For each={threadsShown.rows()}>{(side) =>
       <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(side.chatId, event)} lead={<Icons.Chat />} label={side.title || "Untitled thread"} meta={age(side.updatedAt, now())} />}
     </For>
   </SplitGroup>;
