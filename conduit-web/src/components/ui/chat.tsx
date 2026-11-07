@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Ledge, PanelBody, PanelHead, Tray } from "./tray";
+import { ChatDrawingProvider, createChatDrawing } from "./chat-drawing";
 import { cn } from "@/lib/utils";
 
 /*
@@ -12,9 +13,13 @@ import { cn } from "@/lib/utils";
  *  (on a phone, at the foot); sending: the first send waiting on its agent, docked, with no welcome; opening: a chat
  *  still arriving (reattaching), its transcript withheld. */
 export function ChatView(props: JSX.HTMLAttributes<HTMLElement> & { empty?: boolean; sending?: boolean; opening?: boolean }) {
-  const [local, rest] = splitProps(props, ["class", "empty", "sending", "opening"]);
+  const [local, rest] = splitProps(props, ["class", "empty", "sending", "opening", "children"]);
+  // Held unseen (opening) while a TranscriptList in it is still drawing what is on screen too, then faded in.
+  const { drawing, pending } = createChatDrawing();
   return <section aria-label="Conversation" {...rest} class={cn("ui-chat", local.class)} data-empty={local.empty ? "" : undefined}
-    data-sending={local.sending ? "" : undefined} data-opening={local.opening ? "" : undefined} />;
+    data-sending={local.sending ? "" : undefined} data-opening={local.opening || pending() ? "" : undefined}>
+    <ChatDrawingProvider value={drawing}>{local.children}</ChatDrawingProvider>
+  </section>;
 }
 
 /** The transcript's scroller: it takes the header's height back, so text scrolls to the pane's top edge under the

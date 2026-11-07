@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { createTailWindow, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { clockTime, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -29,9 +29,7 @@ const partyName = (party?: Party | string | null) => typeof party === "string" ?
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
-// One formatter for every message: toLocaleTimeString builds a new one per call, the most of a long room's first draw.
-const TIME = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" });
-const clock = (at: string) => { const date = new Date(at); return Number.isFinite(date.getTime()) ? TIME.format(date) : ""; };
+const clock = (at: string) => clockTime(at) ?? "";
 const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
 
 /** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and
@@ -60,7 +58,7 @@ export function useJbotMessages(changed: () => unknown) {
   return { messages, loaded, refresh };
 }
 
-export function JbotMessages(props: { onDrawn?: (drawn: boolean) => void; messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean; /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
+export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean; /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
   // rooms interleave.
@@ -99,8 +97,8 @@ export function JbotMessages(props: { onDrawn?: (drawn: boolean) => void; messag
     return row.message.direction === "in" ? "turn" : above.message.direction === "in" ? "exchange" : "step";
   };
   const one = (message: LogMessage) => message.direction === "in"
-    ? <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
-    : <><Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
+    ? <Message at={message.at}>{message.body}</Message>
+    : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
   // An email in its room: from and to as its headers say; its own words, what it quotes folded.
   const email = (message: LogMessage) => {
     const { own, quoted } = splitQuoted(message.body);
@@ -130,37 +128,31 @@ export function JbotMessages(props: { onDrawn?: (drawn: boolean) => void; messag
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
-  // Its newest rows first, as a chat's transcript (createTailWindow): what is on screen drawn in the frame it opens.
-  let list: HTMLElement | undefined;
-  const tailWindow = createTailWindow({ items: rows, key: () => "jbot", scroller: () => list?.closest<HTMLElement>(".ui-chat-viewport"),
-    fills: () => { const viewport = list?.closest<HTMLElement>(".ui-chat-viewport"); return Boolean(list && viewport && list.offsetHeight >= viewport.clientHeight); } });
-  createEffect(() => props.onDrawn?.(tailWindow.drawn()));
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
-        <Transcript ref={(element: HTMLElement) => { list = element; }} data-times="shown" data-drawn={tailWindow.drawn() ? "" : undefined}>
-          <For each={tailWindow.shown()}>{(row, index) => row.kind === "room"
-            ? <TranscriptRow flow={flowAt(index() + tailWindow.offset())} tabIndex={-1} data-dash-row="">
+        {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
+        <TranscriptList data-times="shown" each={rows()} of="jbot"
+          after={<Show when={props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}><Turn><Trail><Step state="running" verb={`${props.name} is working`} /></Trail></Turn></TranscriptRow></Show>}>
+          {(row, index) => row.kind === "room"
+            ? <TranscriptRow flow={flowAt(index())} tabIndex={-1} data-dash-row="">
               <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
                 room={roomName(row.room)} count={row.messages.length} last={firstLine(splitQuoted(row.messages.at(-1)!.body).own || row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
                 <For each={row.messages}>{(message) => row.channel === "email" ? email(message) : one(message)}</For>
               </RoomRow>
             </TranscriptRow>
-            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index() + tailWindow.offset())} data-message-id={message.id} tabIndex={-1} data-dash-row="">
+            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1} data-dash-row="">
               <Switch>
                 <Match when={message.direction === "in"}>
-                  <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>
+                  <Message at={message.at}>{message.body}</Message>
                 </Match>
                 <Match when={message.title}>
                   <ReportCard title={message.title!} line={firstLine(message.body)} time={clock(message.at)} notified={message.notify !== "none"} onOpen={() => setReading(message)} />
                 </Match>
                 <Match when={true}>
-                  <Turn bubble>{markdown(message.body)}<MessageFoot time={clock(message.at)} dateTime={message.at} notified={sentTo(message)}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}
+                  <Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} notified={sentTo(message)}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}
                 </Match>
               </Switch>
             </TranscriptRow>; })()}
-          </For>
-          {/* While a turn runs: the thread is at work; what it says arrives as messages. */}
-          <Show when={props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}><Turn><Trail><Step state="running" verb={`${props.name} is working`} /></Trail></Turn></TranscriptRow></Show>
-        </Transcript>
+        </TranscriptList>
       </Show>;
   return <>
     {props.bare ? transcript() : <DashConversation label={`Messages with ${props.name}`}>{transcript()}</DashConversation>}

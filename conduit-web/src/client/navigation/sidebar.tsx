@@ -6,8 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardForm, CardBody, CardRead } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { haptic } from "@/components/ui/haptics";
-import { Backdrop, Button, NavBrand, NavHeadAction, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
+import { pressAhead, PillButton, Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -683,18 +682,9 @@ export function Sidebar(props: {
   };
   const closeMobile = () => props.onMobileOpenChange(false);
   // A row opening a page: the drawer stays aside until that page is drawn, then slides back over it (main.tsx).
-  let pressTimer = 0;
-  // A touch held on a row on a phone draws what it opens ahead of the tap (onPreviewChat, onPreviewJbot): a moment
-  // after it goes down, as a scroll usually shows itself (the browser takes the touch) before then.
-  const pressToPreview = (preview: () => void, current: () => boolean | undefined = () => false) => ({
-    onPointerDown: (event: PointerEvent) => {
-      if (event.pointerType !== "touch" || !phoneLayout() || current()) return;
-      clearTimeout(pressTimer);
-      pressTimer = window.setTimeout(preview, 40);
-    },
-    onPointerUp: () => { clearTimeout(pressTimer); props.onPreviewRelease?.(false); },
-    onPointerCancel: () => { clearTimeout(pressTimer); props.onPreviewRelease?.(true); },
-  });
+  // A touch held on a row on a phone draws what it opens ahead of the tap (the library's pressAhead).
+  const pressToPreview = (preview: () => void, current: () => boolean | undefined = () => false) =>
+    pressAhead({ press: preview, release: (cancelled) => props.onPreviewRelease?.(cancelled), when: () => phoneLayout() && !current() });
   const openOnto = (opening: Promise<unknown>) => {
     if (props.onMobileShutOnto) props.onMobileShutOnto(opening); else closeMobile();
     void opening.then(enterPane);
@@ -1195,8 +1185,9 @@ export function Sidebar(props: {
         <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
         {/* A phone's way to jbot, in the head by the section switch: a press draws its chat ahead of the tap, as a row's does. */}
         <Show when={agentView()?.enabled && phoneLayout()}>
-          <NavHeadAction label={agentView()?.settings?.name || "Agent"} current={props.agent} {...pressToPreview(() => props.onPreviewJbot?.(), () => props.agent)}
-            onClick={() => { haptic("select"); setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); }}><AgentAvatar /><Show when={agentNeeds()}>{(needs) => <small>{needs()}</small>}</Show></NavHeadAction>
+          <PillButton label={agentView()?.settings?.name || "Agent"} icon={<Icons.Agent />} haptic="select"
+            button={{ ...pressToPreview(() => props.onPreviewJbot?.(), () => props.agent), "aria-current": props.agent ? "page" : undefined,
+              onClick: () => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); } }} />
         </Show>
         <Show when={phoneLayout()} fallback={<Segmented icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />}>
           <Segmented pill icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />

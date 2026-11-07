@@ -32,7 +32,6 @@ export function JbotRoom(props: {
   presentation?: "phone" | "narrow";
 }) {
   const log = useJbotMessages(() => props.threadChanged);
-  const [drawn, setDrawn] = createSignal(false);
   const name = () => agentView()?.settings?.name || "Agent";
   let root: HTMLDivElement | undefined;
   let viewport: HTMLDivElement | undefined;
@@ -108,11 +107,11 @@ export function JbotRoom(props: {
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false) })}</Show>}>
         {/* Hidden until what is on screen is drawn, then faded in, as every chat opens (ChatView opening). */}
         {/* And with its composer: a page drawn without it moved up as it came (the composer is its home thread's). */}
-        <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || !drawn() || props.composerReady === false}>
+        <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages bare onDrawn={setDrawn} messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />
+            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={(element) => { dock = element; }}>{props.composer}</ComposerDock></Show>
         </ChatView>

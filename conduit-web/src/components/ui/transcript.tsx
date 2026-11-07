@@ -5,6 +5,10 @@ import { children, createEffect, createRenderEffect, createSignal, For, onCleanu
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
+import { Later } from "./later";
+import { clockTime, fullTime } from "./time";
+import { createTailWindow } from "./tail-window";
+import { useChatDrawing } from "./chat-drawing";
 export { ANSWER_MARKDOWN } from "./shared";
 
 /**
@@ -154,8 +158,13 @@ export function foldBody(props: { opens?: boolean; open?: boolean; children?: JS
  *  the answer ended when it did not finish (Interrupted, Stopping…), after the time. */
 /** The message's action row; `notified`: where it was pushed besides ("Sent to Phone"), a bell and those words before
  *  the time, always shown. */
-export const MessageFoot = (props: { time?: string; dateTime?: string; title?: string; status?: string; notified?: string; end?: boolean; motion?: Motion; children?: JSX.Element }) =>
-  <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.notified}><span class="ui-message-bell"><Icons.Notification aria-hidden="true" />{props.notified}</span></Show><Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show>{props.children}</div>;
+/** at: when it was said (an ISO time): its time, datetime and full title from that, each formatted once (time.ts),
+ *  in time/dateTime/title's place. Its actions (children) are built in idle time after the rows are drawn (Later):
+ *  unseen until the row is revealed, but the latest exchange's -- eager: drawn with it (that one, shown). */
+export const MessageFoot = (props: { at?: string | null; time?: string; dateTime?: string; title?: string; status?: string; notified?: string; end?: boolean; eager?: boolean; motion?: Motion; children?: JSX.Element }) => {
+  const time = () => props.time ?? clockTime(props.at);
+  return <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.notified}><span class="ui-message-bell"><Icons.Notification aria-hidden="true" />{props.notified}</span></Show><Show when={time()}><time dateTime={props.dateTime ?? props.at ?? undefined} title={props.title ?? (props.at ? fullTime(props.at) : undefined)}>{time()}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show><Later now={props.eager}>{props.children}</Later></div>;
+};
 /** In an answer's place, one stopped before writing any: the stop mark, Interrupted, and when. */
 export const StopLine = (props: { detail: string }) =>
   <div class="ui-stop-line" role="status"><Icons.Stop aria-hidden="true" /><b>Interrupted</b>{`\u00a0· ${props.detail}`}</div>;
@@ -174,18 +183,49 @@ export const Turn = (props: { orb?: JSX.Element; bubble?: boolean; children: JSX
  * title the foot's, and status (Waiting to send: one kept on this device until the hub can take it). since: how far into
  * its entrance it already is (sinceOf).
  */
-export const Message = (props: { time?: string; dateTime?: string; title?: string; status?: string; actions?: JSX.Element; before?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
+export const Message = (props: { at?: string | null; eager?: boolean; time?: string; dateTime?: string; title?: string; status?: string; actions?: JSX.Element; before?: JSX.Element; under?: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean; motion?: Motion; since?: number; children?: JSX.Element }) =>
   <article class="ui-message" {...motionOf(props.motion)} style={sinceOf(props.since)}>
     {props.before}
     <Show when={props.children}><Bubble fold={props.fold} open={props.open} onToggle={props.onToggle} editing={props.editing}>{props.children}</Bubble></Show>
     {props.under}
-    <MessageFoot time={props.time} dateTime={props.dateTime} title={props.title} status={props.status} end>{props.actions}</MessageFoot>
+    <MessageFoot at={props.at} eager={props.eager} time={props.time} dateTime={props.dateTime} title={props.title} status={props.status} end>{props.actions}</MessageFoot>
   </article>;
 /** The reading column: the composer's width (or --transcript-width, when the pane declares one), one gap between
  *  messages. Drawn row by row for a long chat (the caller windows it), each row a TranscriptRow. */
 export function Transcript(props: JSX.HTMLAttributes<HTMLDivElement>) {
   const [local, rest] = splitProps(props, ["class", "children"]);
   return <div {...rest} class={cn("ui-transcript", local.class)}>{local.children}</div>;
+}
+/**
+ * A Transcript of a list, drawn the fast way by default (createTailWindow): opening on as many of its newest items as
+ * fill the viewport it is in (estimate: a guess at an item's height at a column width; measured once, before the
+ * paint), the older ones added above in idle time. `of`: what it is a list of (a new one opens at its tail again);
+ * whole: open it whole instead (a place to come back to above its foot). Drawn -- everything on screen is --
+ * it says so (data-drawn), and the ChatView it is in shows only then (ChatDrawing). holdsFoot (on): as older items go
+ * in above, its scroller keeps its distance from the foot; off for a host that holds its own (a chat's transcript).
+ * before/after: rows around the list's (a loading spinner, a working row). children: a row, by its item and index.
+ */
+export function TranscriptList<T>(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "children" | "ref"> & {
+  each: readonly T[]; of: unknown; estimate?: (item: T, width: number) => number; whole?: () => boolean; holdsFoot?: boolean;
+  before?: JSX.Element; after?: JSX.Element; ref?: (element: HTMLDivElement) => void;
+  children: (item: T, index: () => number) => JSX.Element;
+}) {
+  const [local, rest] = splitProps(props, ["each", "of", "estimate", "whole", "holdsFoot", "before", "after", "ref", "children"]);
+  let list: HTMLDivElement | undefined;
+  const viewport = () => list?.closest<HTMLElement>(".ui-chat-viewport") ?? list?.parentElement ?? undefined;
+  const tail = createTailWindow({
+    items: () => local.each, key: () => local.of, whole: () => local.whole?.() ?? false,
+    room: () => viewport()?.clientHeight ?? 0,
+    estimate: local.estimate && ((item: T) => local.estimate!(item, list?.clientWidth || viewport()?.clientWidth || 0)),
+    fills: () => { const host = viewport(); return Boolean(list && host && list.offsetHeight >= host.clientHeight); },
+    scroller: () => local.holdsFoot === false ? undefined : viewport(),
+  });
+  useChatDrawing(tail.drawn);
+  return <div {...rest} ref={(element) => { list = element; local.ref?.(element); }} class={cn("ui-transcript", rest.class)} data-drawn={tail.drawn() ? "" : undefined}>
+    {local.before}
+    <For each={tail.shown()}>{(item, index) => local.children(item, () => index() + tail.offset())}</For>
+    {local.after}
+  </div>;
 }
 /** At a Transcript's top while earlier messages load: a spinner, centred. */
 export const LoadingEarlier = () => <div class="ui-loading-earlier" role="status" aria-label="Loading earlier messages"><Spinner /></div>;

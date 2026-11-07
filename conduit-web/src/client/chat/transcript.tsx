@@ -1,4 +1,4 @@
-import { AgentRows, createTailWindow, Icons, Later, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
+import { AgentRows, clockTime, Icons, onScrollRest, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
 import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
@@ -49,7 +49,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, Transcript as LibraryTranscript, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
+import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, TranscriptList, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow } from "@/components/ui/menus";
 import { FindBar } from "@/components/ui/find";
@@ -73,7 +73,7 @@ import { elapsed } from "./tool-card";
  * almost every message anyone sends.
  */
 /** A message the user sent: the library's Message, given the fold preference, the edit state and its foot. */
-function UserMessage(props: { message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void; onCancelSend?: () => void }) {
+function UserMessage(props: { latest?: boolean; message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void; onCancelSend?: () => void }) {
   const preference = useUserMessageCollapse();
   const [open, setOpen] = createSignal(false);
   // Pessimistic: a line holds at least 24 characters. Under that budget a message cannot fill the fold at any
@@ -95,7 +95,7 @@ function UserMessage(props: { message: Message; text: string; editing: boolean; 
   };
   const timestamp = () => props.message.timestamp || undefined;
   return <LibraryMessage motion={props.since != null ? "entering" : undefined} since={props.since} editing={props.editing} fold={fold()} open={open()} onToggle={toggle}
-    time={clock(timestamp())} dateTime={timestamp()} title={timestamp() && fullDateTime(timestamp()!)}
+    at={timestamp()} eager={props.latest}
     status={props.message.outbox ? "Waiting to send" : undefined}
     before={props.message.notes ? <ConduitAdded before text={props.message.notes} /> : undefined}
     under={props.under}
@@ -125,9 +125,8 @@ function estimateRowHeight(row: TurnRow, columnChars: number) {
 }
 
 /* A message's time leads its foot, muted -- not a line of its own above it. */
-// One formatter for every time drawn: toLocaleTimeString builds one per call (~0.2ms a row).
-const CLOCK = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit" });
-const clock = (timestamp?: string | null) => timestamp ? CLOCK.format(new Date(timestamp)) : undefined;
+// The library's, made once (time.ts).
+const clock = clockTime;
 
 /** An answer's foot: its time, how it ended if it did not finish, then Copy, Regenerate and its changes. */
 function AnswerFoot(props: { latest?: boolean; message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
@@ -142,13 +141,10 @@ function AnswerFoot(props: { latest?: boolean; message: Message; precedingUserId
   /* Nothing to copy from an answer that was never written, or one the agent
      was not given back. */
   const copyable = () => !props.message.discarded && Boolean(props.message.content || props.message.errorMessage);
-  return <MessageFoot motion={props.reveal ? "entering" : undefined} time={clock(props.message.timestamp)} dateTime={props.message.timestamp || undefined} title={props.message.timestamp ? fullDateTime(props.message.timestamp) : undefined} status={status()}>
-    {/* Unseen until the row is revealed (but the latest exchange's): built after the rows are drawn. */}
-    <Later now={props.latest}>
+  return <MessageFoot motion={props.reveal ? "entering" : undefined} at={props.message.timestamp} eager={props.latest} status={status()}>
       <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
       <Show when={props.supports("regenerate") && props.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(props.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
       <Show when={props.artifact}>{(entry) => <TurnChanges artifact={entry()} chatId={props.chat.loadedId()!} />}</Show>
-    </Later>
   </MessageFoot>;
 }
 
@@ -356,17 +352,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     props.chat.activeGenerationChange,
     () => props.narration || "fold",
   );
-  // Its newest rows first (createTailWindow): the turns on screen are drawn in the frame the chat opens, the older
-  // ones above them in the frames after, as the transcript holds its foot.
-  // The column's width and the viewport's height, as last laid out (read as the chat changes, before anything of the
-  // next is drawn, so the layout is the one already done).
-  let columnChars = 40;
-  const tailWindow = createTailWindow({ items: () => timeline, key: () => props.chat.loadedId(),
-    room: () => { if (!viewport) return 0; columnChars = Math.max(20, (thread?.clientWidth || viewport.clientWidth) / 8.5); return viewport.clientHeight; },
-    estimate: (row) => estimateRowHeight(row, columnChars),
-    // Back to where it was read, above its foot: drawn whole, so that place is there to scroll to.
-    whole: () => { const id = props.chat.loadedId(); const saved = id ? scrollPositions.get(id) : undefined; return Boolean(saved && !saved.following); },
-    fills: () => Boolean(thread && viewport && thread.offsetHeight >= viewport.clientHeight) });
+  // Back to where it was read, above its foot: drawn whole (TranscriptList whole), so that place is there to scroll to.
+  const reopensAbove = () => { const id = props.chat.loadedId(); const saved = id ? scrollPositions.get(id) : undefined; return Boolean(saved && !saved.following); };
   // Declared before the memo below, which runs as it is made.
   // Rhythm (DESIGN Transcript › Rhythm): how a row relates to the row above it. A message -- the person's, or one the
   // harness sent on its own -- starts an exchange; the first row of the reply to it is the exchange's; anything after
@@ -1211,10 +1198,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     viewport.addEventListener("scroll", onScroll, { passive: true });
     // Where the reader is, kept as they stop scrolling: leaving a chat then reads nothing (once the next is drawn,
     // its rows are the ones on screen).
-    let restTimer = 0;
-    const rememberAtRest = () => { clearTimeout(restTimer); restTimer = window.setTimeout(() => { const id = props.chat.loadedId(); if (id) rememberScrollPosition(id); }, 200); };
-    viewport.addEventListener("scroll", rememberAtRest, { passive: true });
-    onCleanup(() => { clearTimeout(restTimer); viewport.removeEventListener("scroll", rememberAtRest); });
+    onScrollRest(viewport, () => { const id = props.chat.loadedId(); if (id) rememberScrollPosition(id); });
     viewport.addEventListener("wheel", onWheel, { passive: true });
     viewport.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -1322,10 +1306,14 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </>}>
         <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
-        <LibraryTranscript ref={thread} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"} data-drawn={tailWindow.drawn() ? "" : undefined}>
-        <Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item" data-cursor-skip><LoadingEarlier /></TranscriptRow></Show>
-        <For each={tailWindow.shown()}>{(item, index) => {
-          const flow = () => flowAt(index() + tailWindow.offset());
+        {/* Its newest rows first, the older ones above in idle time (TranscriptList); it holds its own foot. */}
+        <TranscriptList ref={(element) => { thread = element; }} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}
+          each={timeline} of={props.chat.loadedId()} whole={reopensAbove} holdsFoot={false}
+          estimate={(row, width) => estimateRowHeight(row, Math.max(20, (width || 400) / 8.5))}
+          before={<Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item" data-cursor-skip><LoadingEarlier /></TranscriptRow></Show>}
+          after={<Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item" flow="step"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>}>
+        {(item, index) => {
+          const flow = () => flowAt(index());
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
@@ -1345,7 +1333,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
-                <MessageFoot time={clock(item.timestamp)} dateTime={item.timestamp} title={item.timestamp ? fullDateTime(item.timestamp) : undefined}>
+                <MessageFoot at={item.timestamp} eager={index() >= timeline.length - 1}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
                 </MessageFoot>
@@ -1482,7 +1470,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             </Turn>}>
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
                   bubble. Read as the text arrives: a row is built before its message has any. */}
-              <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
+              <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage latest={latestExchange().has(message().id)} message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && !message().outbox && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 onCancelSend={props.chat.cancelOutbox ? () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } : undefined}
                 under={<>
@@ -1496,12 +1484,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               </Show>
             </Show>
           </TranscriptRow>;
-        }}</For>
-        <Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item" flow="step"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>
-        {/* Sent, and the server has not started the turn yet: its starting
-            header shows with the message, fading in beside it, so the turn's
-            own header later takes the same spot instead of pushing in. */}
-        <Show when={awaitingTurn()}>{(_) => { const arrive = untrack(() => arrival(props.chat.messages().at(-1)!)); return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip flow="exchange"><TraceStarting narrated={narrated()} since={arrive} startedAt={props.chat.messages().at(-1)?.timestamp} label="Starting" /></TranscriptRow>; }}</Show>
-        </LibraryTranscript>
+        }}
+        </TranscriptList>
   </ChatScroller>;
 }

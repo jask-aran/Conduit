@@ -4,7 +4,7 @@ import { HarnessMark, HeaderNote, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
-import { AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
+import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -3717,25 +3717,12 @@ function App() {
     if (home) void agentChat(home).then((target) => chat.prefetch(target.chat)).catch(() => {});
   };
   createEffect(on(mobileSidebarOpen, (open) => { if (open && isMobileLayout() && agentView()?.enabled) warmJbot(); }, { defer: true }));
-  const pageDrawn = () => routeKind() === "jbot" ? Boolean(document.querySelector(".chat-main [data-jbot-room] .ui-chat:not([data-opening]) .ui-transcript[data-drawn]"))
-    : routeKind() !== "chat" || Boolean(document.querySelector(".chat-main .ui-transcript[data-drawn], .chat-main .ui-chat-empty"));
+  // The main pane drawn (paneDrawn: no chat in it still opening, its lists drawing what is on screen).
+  const pageDrawn = () => paneDrawn(document.querySelector(".chat-main"));
   const shutDrawerOnto = (opening: Promise<unknown>, shown: () => boolean = () => true) => {
     void opening.catch(() => {});
     if (!isMobileLayout() || !mobileSidebarOpen()) { setMobileSidebarOpen(false); return; }
-    // Not on the open's promise: that also waits on revalidating the chat with the server, long after it is drawn.
-    // The page it was on is drawn already: wait for the page to change (or the open to settle, on the same page).
-    let settled = false, failed = false;
-    // Settled on a page already drawn (a press drew it, chat.preview): shut at once, in the tap's own task.
-    void opening.then(() => { settled = true; if (mobileSidebarOpen() && shown() && pageDrawn()) setMobileSidebarOpen(false); }, () => { failed = true; });
-    const from = `${routeKind()}:${mainChatId()}`;
-    const started = performance.now();
-    const step = () => {
-      if (!mobileSidebarOpen()) return;
-      const moved = settled || `${routeKind()}:${mainChatId()}` !== from;
-      if (failed || (moved && shown() && pageDrawn()) || performance.now() - started > 500) setMobileSidebarOpen(false);
-      else requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+    handDrawerOnto({ opening, open: mobileSidebarOpen, shut: () => setMobileSidebarOpen(false), drawn: () => shown() && pageDrawn(), at: () => `${routeKind()}:${mainChatId()}` });
   };
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);

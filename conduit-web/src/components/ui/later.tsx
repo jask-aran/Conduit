@@ -13,3 +13,13 @@ export function Later(props: { now?: boolean; children: JSX.Element }) {
   if (!ready()) { const handle = idle(() => setReady(true)); onCleanup(() => cancelIdle(handle)); }
   return <Show when={ready() || props.now}>{props.children}</Show>;
 }
+
+/** Run once `element` stops scrolling (no scroll for `ms`): where a reader is, kept as they stop, so leaving it reads
+ *  nothing (a scroll position remembered at the moment a page changes reads the next page's layout). Undone with the
+ *  owner. */
+export function onScrollRest(element: HTMLElement, run: () => void, ms = 200) {
+  let timer = 0;
+  const scrolled = () => { clearTimeout(timer); timer = window.setTimeout(run, ms); };
+  element.addEventListener("scroll", scrolled, { passive: true });
+  onCleanup(() => { clearTimeout(timer); element.removeEventListener("scroll", scrolled); });
+}
