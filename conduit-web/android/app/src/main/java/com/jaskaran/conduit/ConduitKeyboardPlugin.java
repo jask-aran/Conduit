@@ -71,6 +71,17 @@ public class ConduitKeyboardPlugin extends Plugin {
         hostView = host;
 
 
+        /*
+         * Again on every page load: the variables live in the page, so insets dispatched before it committed (a cold
+         * start, a reload into another interface) were lost until the next change, and the composer sat under the
+         * gesture bar.
+         */
+        getBridge().addWebViewListener(new com.getcapacitor.WebViewListener() {
+            @Override public void onPageLoaded(android.webkit.WebView view) {
+                WindowInsetsCompat now = ViewCompat.getRootWindowInsets(host);
+                if (now != null) injectSafeArea(now);
+            }
+        });
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
             injectSafeArea(insets);
             // The end of the story, and the whole of it where the platform
