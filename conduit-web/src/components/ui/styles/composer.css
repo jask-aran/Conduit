@@ -92,4 +92,5 @@
 /* MessageFeedback (composer.tsx): the composer at a bubble's width, under the message it is about. */
 .ui-frost.ui-desktop-composer.ui-message-feedback { width: min(65%, var(--measure-2xl)); margin-top: var(--space-sm); }
 .ui-message-feedback-note { padding-inline: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-
+/* A composer control that opens something (jbot's ring, its panel) reads pressed while what it opens is shown. */
+.ui-desktop-composer .ui-button[data-variant="ghost"][aria-expanded="true"] { background: var(--tint); }

@@ -49,7 +49,7 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
  * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
  * chat from its foot, a scrim over the rest that closes it; with `above` (a pointer's) faded in over the transcript
- * just above the composer (`above` px over the chat's foot), the transcript left where it is, Esc putting it away. onWide: when that changes (it starts narrow), for the controls
+ * just above the composer (`above` px over the chat's foot), the transcript left where it is, Esc or a press outside it putting it away. onWide: when that changes (it starts narrow), for the controls
  * that open it.
  */
 export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; above?: number;
@@ -57,6 +57,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
+  let panel!: HTMLElement;
   const [wide, setWide] = createSignal(false);
   onMount(() => {
     if (props.beside === false) return;
@@ -74,13 +75,23 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
     window.addEventListener("keydown", away, true);
     onCleanup(() => window.removeEventListener("keydown", away, true));
+    // Above the composer, a press anywhere but the panel and the composer (which holds its control, and stays usable
+    // under it) puts it away, as a menu's does.
+    if (props.above === undefined) return;
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target?.closest || target.closest(".ui-chat-beside-panel") === panel || root.querySelector(".ui-composer-dock")?.contains(target)) return;
+      props.onClose();
+    };
+    window.addEventListener("pointerdown", outside, true);
+    onCleanup(() => window.removeEventListener("pointerdown", outside, true));
   });
   return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-above={props.above !== undefined ? "" : undefined} style={props.above !== undefined ? { "--chat-beside-above": `${props.above}px` } : undefined}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
     <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />
     {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane. */}
-    <aside class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
+    <aside ref={panel} class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
       aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>
       <Show when={!wide()}><div class="ui-chat-beside-head"><strong>{props.title}</strong><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></div></Show>
       {props.panel}
