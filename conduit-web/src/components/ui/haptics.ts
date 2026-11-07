@@ -58,8 +58,14 @@ export function saveHapticStrength(strength: HapticStrength): HapticStrength {
 
 type Step = { primitive: string; scale: number; delay: number };
 /** An effect token's steps: `primitive scale [delay]`, comma separated. */
+// The effect tokens are read once each (a computed-style read on a tap forced the page's style, ~4ms of it).
+const read = new Map<HapticEffect, Step[]>();
 function steps(effect: HapticEffect): Step[] {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(`--haptic-${effect}`).trim();
+  let known = read.get(effect);
+  if (!known) read.set(effect, known = parseSteps(getComputedStyle(document.documentElement).getPropertyValue(`--haptic-${effect}`).trim()));
+  return known;
+}
+function parseSteps(value: string): Step[] {
   return value.split(",").map((part) => part.trim().split(/\s+/)).filter((words) => words[0])
     .map(([primitive, scale, delay]) => ({ primitive: primitive!, scale: Number(scale ?? 1) || 0, delay: Number(delay ?? 0) || 0 }));
 }
@@ -93,6 +99,8 @@ export function playEffect(effect: HapticEffect) {
   navigator.vibrate(Math.max(1, Math.round((BROWSER_MS[top.primitive] ?? 8) * Math.min(1, .5 + top.scale / 2))));
 }
 
+// Read ahead of the first touch, while the page is idle.
+if (typeof requestIdleCallback === "function") requestIdleCallback(() => { for (const effect of new Set(Object.values(HAPTIC_EFFECT))) steps(effect); });
 let touchedAt = -Infinity;
 // One feel per touch: a piece told both by its own change and by its owner's (an overlay's open prop and its
 // onOpenChange), or two pieces the one tap reached (a Row that folds an Expand), is felt once. A different effect

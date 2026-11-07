@@ -35,7 +35,9 @@
 .ui-chat[data-empty] .ui-chat-empty { --welcome-room: calc(var(--measure-2xs) + var(--header-height)); }
 .ui-chat[data-empty] .ui-composer-dock { inset: 50% 0 auto; width: min(var(--reading-width), calc(100% - var(--page-gutter))); margin-inline: auto; padding: 0; transform: translateY(var(--header-height)); pointer-events: auto; }
 .ui-chat[data-sending] .ui-chat-empty { visibility: hidden; }
-.ui-chat[data-opening] .ui-chat-scroller { visibility: hidden; }
+/* Opening, it is drawn unseen; once what is on screen is laid out it fades in (opacity alone: the compositor's). */
+.ui-chat-scroller { transition: opacity var(--duration-quick) var(--ease-arrive); }
+.ui-chat[data-opening] .ui-chat-scroller { visibility: hidden; opacity: 0; transition: none; }
 
 /* A phone: the column full-width, the dock clear of the safe area with no ground of its own (the pills are frost over
    the transcript; a dictation's captions bring theirs); empty, the composer at the foot (not mid-screen) and no

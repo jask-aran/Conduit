@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { createTailWindow, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, Transcript, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -37,9 +37,19 @@ const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.repla
 /** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and
  *  slowly besides, for what arrives without it (another device's message). */
 
+// The last read, kept for the next time the jbot chat is drawn: it opens on what it last showed at once (a phone's
+// drawer warms it, prefetchJbotMessages), then reads afresh.
+let lastRead: LogMessage[] | null = null;
+let reading: Promise<LogMessage[]> | null = null;
+const readMessages = () => reading ??= api<{ messages: LogMessage[] }>("/v0/agent/messages?limit=100")
+  .then((result) => (lastRead = result.messages)).finally(() => { reading = null; });
+/** Read jbot's messages ahead (and its renderer), so its chat draws at once when it opens. */
+export const prefetchJbotMessages = () => { void readMessages().catch(() => {}); void ChatMarkdown.preload(); };
+
 export function useJbotMessages(changed: () => unknown) {
-  const [messages, setMessages] = createSignal<LogMessage[]>([]);
-  const refresh = () => api<{ messages: LogMessage[] }>("/v0/agent/messages?limit=100").then((result) => setMessages(result.messages)).catch(() => {});
+  const [messages, setMessages] = createSignal<LogMessage[]>(lastRead ?? []);
+  const [loaded, setLoaded] = createSignal(lastRead !== null);
+  const refresh = () => readMessages().then((read) => { setMessages(read); setLoaded(true); }).catch(() => { setLoaded(true); });
   // Read and drawable together: the first read, with the renderer's chunk, before the page is shown.
   void Promise.all([refresh(), ChatMarkdown.preload()]).finally(() => setAgentPageLaidOut(true));
   onMount(() => {
@@ -47,10 +57,10 @@ export function useJbotMessages(changed: () => unknown) {
     onCleanup(() => window.clearInterval(tick));
   });
   createEffect(on(changed, () => void refresh(), { defer: true }));
-  return { messages, refresh };
+  return { messages, loaded, refresh };
 }
 
-export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean; /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
+export function JbotMessages(props: { onDrawn?: (drawn: boolean) => void; messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean; /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
   // rooms interleave.
@@ -120,16 +130,21 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
+  // Its newest rows first, as a chat's transcript (createTailWindow): what is on screen drawn in the frame it opens.
+  let list: HTMLElement | undefined;
+  const tailWindow = createTailWindow({ items: rows, key: () => "jbot",
+    fills: () => { const viewport = list?.closest<HTMLElement>(".ui-chat-viewport"); return Boolean(list && viewport && list.offsetHeight >= viewport.clientHeight); } });
+  createEffect(() => props.onDrawn?.(tailWindow.drawn()));
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
-        <Transcript data-times="shown">
-          <For each={rows()}>{(row, index) => row.kind === "room"
-            ? <TranscriptRow flow={flowAt(index())} tabIndex={-1} data-dash-row="">
+        <Transcript ref={(element: HTMLElement) => { list = element; }} data-times="shown" data-drawn={tailWindow.drawn() ? "" : undefined}>
+          <For each={tailWindow.shown()}>{(row, index) => row.kind === "room"
+            ? <TranscriptRow flow={flowAt(index() + tailWindow.offset())} tabIndex={-1} data-dash-row="">
               <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
                 room={roomName(row.room)} count={row.messages.length} last={firstLine(splitQuoted(row.messages.at(-1)!.body).own || row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
                 <For each={row.messages}>{(message) => row.channel === "email" ? email(message) : one(message)}</For>
               </RoomRow>
             </TranscriptRow>
-            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1} data-dash-row="">
+            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index() + tailWindow.offset())} data-message-id={message.id} tabIndex={-1} data-dash-row="">
               <Switch>
                 <Match when={message.direction === "in"}>
                   <Message time={clock(message.at)} dateTime={message.at}>{message.body}</Message>

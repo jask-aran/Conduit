@@ -141,6 +141,11 @@ export function Sidebar(props: {
   onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
   onPrefetchChat: (chat: ChatSummary) => void;
+  /** A finger down on a chat's row (a phone's): its chat drawn ahead of the tap; released, or taken by a scroll. */
+  onPreviewChat?: (chat: ChatSummary, project: Project) => void;
+  onPreviewRelease?: (cancelled: boolean) => void;
+  /** The same, for jbot's row: its chat drawn ahead of the tap. */
+  onPreviewJbot?: () => void;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onOpenProject: (project: Project) => Promise<void>;
   onOpenProjectMaximized: (project: Project) => void;
@@ -536,7 +541,9 @@ export function Sidebar(props: {
       mobileReturnFocus = null;
       // Never the composer on a phone: focusing its field puts it in editing (and raises the keyboard) as the page slides
       // back -- a pick from the drawer swaps the page, so the control it was opened from is gone and the fallback decides.
-      queueMicrotask(() => restoreFocus(previous, phoneLayout() ? ['button[aria-label="Toggle Sidebar"]'] : ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']));
+      // On a phone once the page has slid back: a focus is a style and layout read, ~3ms of the frame the slide starts on.
+      const back = () => restoreFocus(previous, phoneLayout() ? ['button[aria-label="Toggle Sidebar"]'] : ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']);
+      if (phoneLayout()) window.setTimeout(back, 450); else queueMicrotask(back);
     }
     mobileWasOpen = open;
   });
@@ -675,6 +682,18 @@ export function Sidebar(props: {
   };
   const closeMobile = () => props.onMobileOpenChange(false);
   // A row opening a page: the drawer stays aside until that page is drawn, then slides back over it (main.tsx).
+  let pressTimer = 0;
+  // A touch held on a row on a phone draws what it opens ahead of the tap (onPreviewChat, onPreviewJbot): a moment
+  // after it goes down, as a scroll usually shows itself (the browser takes the touch) before then.
+  const pressToPreview = (preview: () => void, current: () => boolean | undefined = () => false) => ({
+    onPointerDown: (event: PointerEvent) => {
+      if (event.pointerType !== "touch" || !phoneLayout() || current()) return;
+      clearTimeout(pressTimer);
+      pressTimer = window.setTimeout(preview, 40);
+    },
+    onPointerUp: () => { clearTimeout(pressTimer); props.onPreviewRelease?.(false); },
+    onPointerCancel: () => { clearTimeout(pressTimer); props.onPreviewRelease?.(true); },
+  });
   const openOnto = (opening: Promise<unknown>) => {
     if (props.onMobileShutOnto) props.onMobileShutOnto(opening); else closeMobile();
     void opening.then(enterPane);
@@ -934,6 +953,7 @@ export function Sidebar(props: {
   const ChatMenu = (menuProps: { chat: ChatSummary; project: Project; indent?: boolean }) => {
     const guard = guardFor(menuProps.chat);
     const selected = () => selectedChatIds().has(menuProps.chat.id);
+    const press = pressToPreview(() => props.onPreviewChat?.(menuProps.chat, menuProps.project), () => props.selectedId === menuProps.chat.id);
     const title = chatTitle(menuProps.chat);
     const previousTitle = renderedChatTitles.get(menuProps.chat.id);
     const animateTitle = previousTitle !== undefined && previousTitle !== title && Boolean(menuProps.chat.title);
@@ -953,6 +973,9 @@ export function Sidebar(props: {
       draggable="true" data-doc-view={`chat:${menuProps.chat.id}`}
       aria-label={`${chatTitle(menuProps.chat)}, ${menuProps.chat.harnessId || "conduit"} harness${menuProps.chat.unread ? ", unread" : ""}${selected() ? ", selected" : ""}`}
       onPointerEnter={() => props.onPrefetchChat(menuProps.chat)}
+      onPointerDown={(event: PointerEvent) => { if (event.pointerType === "touch") props.onPrefetchChat(menuProps.chat); press.onPointerDown(event); }}
+      onPointerUp={press.onPointerUp}
+      onPointerCancel={press.onPointerCancel}
       onFocus={() => props.onPrefetchChat(menuProps.chat)}
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
@@ -1212,7 +1235,7 @@ export function Sidebar(props: {
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
           {/* jbot lives on the workspace rail on a desktop (Ctrl+J); the sidebar keeps it on a phone, for now. */}
-          <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenAgent(); enterPane(); }}><AgentAvatar /></RailAction></Show>
+          <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); }}><AgentAvatar /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={props.onNewPane}><RailAction label="New pane" onClick={() => props.onNewPane?.()}><Icons.Split /></RailAction></Show>
           <Show when={railFolders().length}>
@@ -1267,7 +1290,7 @@ export function Sidebar(props: {
       <Show when={area() === "conduit"}>
         <Row density="nav" element="button" lead={<Icons.Dashboard />} draggable="true" data-doc-view="page:dashboard" current={props.dashboard} onClick={() => { closeMobile(); props.onOpenDashboard(); enterPane(); }}>Conduit Dashboard</Row>
         <Show when={agentView()?.enabled && phoneLayout()}>
-          <Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:jbot" current={props.agent} meta={agentNeeds() || undefined} onClick={() => { closeMobile(); props.onOpenAgent(); enterPane(); }}>{agentView()?.settings?.name || "Agent"}</Row>
+          <Row density="nav" element="button" lead={<AgentAvatar />} draggable="true" data-doc-view="page:jbot" current={props.agent} meta={agentNeeds() || undefined} {...pressToPreview(() => props.onPreviewJbot?.(), () => props.agent)} onClick={() => { openOnto(Promise.resolve(props.onOpenAgent())); }}>{agentView()?.settings?.name || "Agent"}</Row>
 </Show>
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("folder")}>New project</Row>
         <Show when={props.onNewPane}><Row density="nav" element="button" lead={<Icons.Split />} onClick={() => props.onNewPane?.()}>New pane</Row></Show>

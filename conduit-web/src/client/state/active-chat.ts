@@ -442,7 +442,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     return true;
   };
 
-  const reset = (draftProfileId?: string) => {
+  const reset = (draftProfileId?: string) => batch(() => {
     navigationToken += 1;
     enteredOffline = null;
     logId = null;
@@ -482,7 +482,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setTemplateId(draftProfileId);
       setRuntimeIdentity(null);
     }
-  };
+  });
 
   /** The only client owner of assistant generation state and terminal handoff. */
   const applyGenerationEvent = (event: StructuredGenerationEvent | FoldedTurnEvent) => {
@@ -942,12 +942,40 @@ export function createActiveChat(options: ActiveChatOptions) {
    * a different subset of the work, which is how a chat could end up selected
    * with somebody else's permission modes still on screen.
    */
+  // An existing live process attaches before the scoped fetches. Chat selection is a document read and this
+  // attach-only request must not start an agent. It takes its model from the transcript detail rather than from the
+  // model store, which has not been told about this chat yet.
+  const warmAgent = (chat: ChatSummary, project: Project, detail: TranscriptDetail | undefined, selection: number) => {
+    const draft = chat.status === "draft";
+    void ensureAgent({
+      chatId: chat.id,
+      projectId: project.id,
+      intent: "open",
+      modelOverride: detail?.model,
+      thinkingOverride: detail?.thinkingLevel,
+    })
+      .then(async () => {
+        if (selection !== selectionToken || selectedId() !== chat.id) return;
+        // Read from the harness, so asked for once the agent can answer
+        // rather than in front of it.
+        await models.reloadChat(chat.id);
+        if (draft) return;
+        const projects = await catalogue.refresh();
+        if (selection !== selectionToken || selectedId() !== chat.id) return;
+        const refreshed = projects.flatMap((item) => item.sessions).find((session) => session.id === chat.id);
+        if (refreshed) setTitle(refreshed.title);
+      })
+      .catch(onError);
+  };
+
   const enterChat = async (chat: ChatSummary, project: Project, entry: {
     detail?: TranscriptDetail;
     history?: "push" | "replace" | "none";
     warm?: boolean;
     /** Opened while the hub could not be reached: nothing is asked of a harness that cannot answer. */
     offline?: boolean;
+    /** Drawn only (a press on its row, ahead of the tap: preview): not read, nor its agent asked, until adopted. */
+    preview?: boolean;
     onCommit?: () => void;
     onShown?: () => void;
   }) => {
@@ -955,6 +983,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     // Drop any previous chat's stream first: sending reuses an open socket
     // without re-checking ownership, so a stale one would carry this chat's
     // prompts into the previous chat's agent.
+    // One update from the chat it was on to this one, drawn once: torn down a setter at a time, each re-rendered
+    // (the old chat emptied, its foot re-measured), ~30ms of a tap.
+    const scopeReload = batch(() => {
     reset();
     const selection = selectionToken;
     batch(() => {
@@ -965,33 +996,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     // Opening is reading, however it was reached -- a click, a pasted URL, the
     // back button, or re-entering after a profile switch.
-    markChatRead(catalogue, chat);
-    // An existing live process attaches before the scoped fetches below. Chat
-    // selection is a document read and this attach-only request must not start
-    // an agent. It takes its model from the transcript detail rather than from
-    // the model store, which has not been told about this chat yet.
-    if (entry.warm) {
-      const draft = chat.status === "draft";
-      void ensureAgent({
-        chatId: chat.id,
-        projectId: project.id,
-        intent: "open",
-        modelOverride: detail?.model,
-        thinkingOverride: detail?.thinkingLevel,
-      })
-        .then(async () => {
-          if (selection !== selectionToken || selectedId() !== chat.id) return;
-          // Read from the harness, so asked for once the agent can answer
-          // rather than in front of it.
-          await models.reloadChat(chat.id);
-          if (draft) return;
-          const projects = await catalogue.refresh();
-          if (selection !== selectionToken || selectedId() !== chat.id) return;
-          const refreshed = projects.flatMap((item) => item.sessions).find((session) => session.id === chat.id);
-          if (refreshed) setTitle(refreshed.title);
-        })
-        .catch(onError);
-    }
+    if (!entry.preview) { markChatRead(catalogue, chat); previewed = null; }
+    if (entry.warm) warmAgent(chat, project, detail, selection);
     // Every store that holds one chat's answers is told which chat, in one
     // place, so adding one cannot mean remembering it in two.
     const scopeReload = reconcileChatScope(chat, project, detail, entry.warm || entry.offline);
@@ -1008,6 +1014,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       setBackendImplementation(chat.backend?.implementation || null);
     }
     setPresentation({ kind: "ready", chatId: chat.id });
+    return scopeReload;
+    });
     // The chat somebody asked for is on screen: navigation is done. Whether its
     // agent is warm is a separate question, answered in the sidebar by the
     // process itself.
@@ -1207,6 +1215,38 @@ export function createActiveChat(options: ActiveChatOptions) {
         applyDetail(fresh, true);
       }).catch(onError);
     }
+  };
+
+  /*
+   * A chat drawn as the finger goes down on its row (a phone's drawer), ahead of the tap: by the time the tap lands it
+   * is on screen, and the drawer only has to slide. Only from what this device holds (a cached transcript, not a live
+   * one), and drawn only: the tap adopts it (the address, the read receipt, the agent, a fresh read); a press that
+   * turns into a scroll goes back (the app selects what it was on).
+   */
+  let previewed: string | null = null;
+  const preview = (chat: ChatSummary, project: Project) => {
+    if (hubUnreachable() || chatIsLive(chat) || navigationRequest || selectedId() === chat.id) return false;
+    const cached = cachedTranscript(chat);
+    if (!cached) return false;
+    previewed = chat.id;
+    void enterChat(chat, project, { detail: cached, history: "none", preview: true }).catch(onError);
+    return true;
+  };
+  const adoptPreview = (chat: ChatSummary, project: Project) => {
+    const adopted = previewed === chat.id && selectedId() === chat.id && loadedId() === chat.id;
+    previewed = null;
+    if (!adopted) return false;
+    history.pushState({}, "", chatPath(chat.id));
+    markChatRead(catalogue, chat);
+    const selection = selectionToken;
+    const cached = cachedTranscript(chat);
+    if (attachOnOpen(chat)) warmAgent(chat, project, cached || undefined, selection);
+    // As a tap's open: corrected behind itself, an active one by its own stream.
+    if (cached?.status !== "active") void fetchTranscript(chat).then((fresh) => {
+      if (selection !== selectionToken || selectedId() !== chat.id) return;
+      applyDetail(fresh, true);
+    }).catch(onError);
+    return true;
   };
 
   const select = (
@@ -1716,7 +1756,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     live, messages, setMessages, tools, loadedId, pageBefore, loadingOlder, draft, setDraft,
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, loadBreakdown, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
-    initialize, select, prefetch, turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
+    initialize, select, prefetch, preview, adoptPreview, previewing: () => previewed,
+    /** Once this chat's transcript is read (from the prefetch under way, else a read now). */
+    whenRead: (chat: ChatSummary) => chatIsLive(chat) ? Promise.reject(new Error("live")) : loadTranscript(chat).then(() => undefined), turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
     agents, stopAgent, cancelOutbox,
     /** Open a chat from what this device holds, the hub being out of reach (a cold start's address): read again once it is back. */

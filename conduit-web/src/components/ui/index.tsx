@@ -50,6 +50,8 @@ export * from "./rider";
 export * from "./transcript";
 export * from "./chat";
 export * from "./tray";
+export { createTailWindow } from "./tail-window";
+export { cancelIdle, idle, Later } from "./later";
 export * from "./find";
 export * from "./code";
 export * from "./trace";

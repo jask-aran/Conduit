@@ -23,6 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
+import { prefetchJbotMessages } from "./dashboard/jbot-messages";
 import { JbotChip, JbotPanel, JbotPanelControl, JbotWays } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
@@ -1514,10 +1515,11 @@ function App() {
   // process teardown and durable deletion.
   const discardDraftImmediately = (id: string | null) => {
     if (!id) return;
-    catalogue.setProjects((current) => current.map((project) => ({
-      ...project,
-      sessions: project.sessions.filter((session) => session.id !== id),
-    })));
+    // Only the folder that lists it changes (every folder made anew re-rendered the whole sidebar), and once the chat
+    // opening in its place is drawn: its row going re-renders that folder, ~7ms that were part of the open.
+    const drop = () => catalogue.setProjects((current) => current.map((project) => project.sessions.some((session) => session.id === id)
+      ? { ...project, sessions: project.sessions.filter((session) => session.id !== id) } : project));
+    if ("requestIdleCallback" in window) requestIdleCallback(drop, { timeout: 1000 }); else setTimeout(drop, 200);
     void discardDraft(id).catch(showError);
   };
 
@@ -1676,11 +1678,20 @@ function App() {
     else if (historyMode === "replace") history.replaceState({}, "", "/");
   };
 
-  const openJbotPage = async (kind: "agent" | "jbot", historyMode: "push" | "none") => {
+  const openJbotPage = async (kind: "agent" | "jbot", historyMode: "push" | "none", preview = false) => {
+    if (!preview) {
+      clearTimeout(previewTimer);
+      const adopting = previewFrom?.jbot && routeKind() === kind;
+      previewFrom = null;
+      // Drawn by the press already: the tap gives it its address and lets the drawer go.
+      if (adopting) { if (historyMode === "push") history.pushState({}, "", kind === "agent" ? "/jbot/page" : "/jbot"); shutDrawerOnto(Promise.resolve()); return; }
+    }
     if (!(await leaveHarnessThread())) return;
     leaveChat(historyMode === "none");
     chat.reset();
-    setMobileSidebarOpen(false);
+    // A phone's drawer shuts onto it once it is drawn, as onto a chat (shutDrawerOnto), not before it is there; drawn
+    // under a press on its row (previewJbot), it stays open until the tap.
+    if (!preview) shutDrawerOnto(Promise.resolve());
     setWorkspaceViewRequest(null);
     setRouteKind(kind);
     setRouteBootstrapError("");
@@ -2152,7 +2163,58 @@ function App() {
     }
   };
 
+  // A press on a drawer row draws its chat ahead of the tap (chat.preview), so the drawer slides the moment the tap
+  // lands; the tap adopts it (openChat), and a press that turns into a scroll goes back to the chat it was on.
+  let previewFrom: { chat: ChatSummary; project: Project; jbot?: boolean } | null = null;
+  let previewTimer = 0;
+  // What a press may draw over: a chat at rest on a phone with its drawer open (nothing being said or written).
+  const previewBase = () => {
+    if (previewFrom) return previewFrom;
+    if (!isMobileLayout() || !mobileSidebarOpen() || routeKind() !== "chat" || paneAOverride() !== null) return null;
+    if (chat.presentation().kind !== "ready" || chat.generation() !== "idle" || chat.draft().trim() || currentDraftId()) return null;
+    const fromId = catalogue.selectedId();
+    const fromProject = fromId ? catalogue.projects().find((item) => item.sessions.some((session) => session.id === fromId)) : undefined;
+    const fromChat = fromProject?.sessions.find((session) => session.id === fromId);
+    return fromChat && fromProject ? { chat: fromChat, project: fromProject } : null;
+  };
+  /** A press on jbot's row: its chat drawn under the drawer (the route itself, without the address), the tap opening it. */
+  const previewJbot = () => {
+    clearTimeout(previewTimer);
+    const from = previewBase();
+    if (!from || from.jbot || !agentView()?.enabled) return;
+    previewFrom = { ...from, jbot: true };
+    void openJbotPage("jbot", "none", true);
+  };
+  const previewChat = (target: ChatSummary, project: Project) => {
+    clearTimeout(previewTimer);
+    const base = previewBase();
+    if (!base || base.jbot) return;
+    const from = base;
+    pressing = target.id;
+    if (chat.preview(target, project)) { previewFrom = from; return; }
+    // Not here yet: read now (the press's prefetch), drawn if it comes while the finger is still down.
+    void chat.whenRead(target).then(() => { if (pressing === target.id && mobileSidebarOpen() && chat.preview(target, project)) previewFrom = from; }).catch(() => {});
+  };
+  let pressing: string | null = null;
+  const releasePreview = (cancelled: boolean) => {
+    pressing = null;
+    clearTimeout(previewTimer);
+    if (!previewFrom) return;
+    // A tap's click follows its release at once: nothing by then, and it was a scroll or a hold.
+    previewTimer = window.setTimeout(() => {
+      const from = previewFrom;
+      previewFrom = null;
+      if (from?.jbot && (routeKind() === "jbot")) void chat.select(from.chat, from.project, { history: "none",
+        onCommit: () => { setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); } }).catch(showError);
+      else if (from && chat.previewing()) void chat.select(from.chat, from.project, { history: "none" }).catch(showError);
+    }, cancelled ? 0 : 350);
+  };
   const openChat = async (target: ChatSummary, project: Project) => {
+    if (previewFrom) {
+      clearTimeout(previewTimer);
+      previewFrom = null;
+      if (chat.adoptPreview(target, project)) { abandonPendingNewChat(); return; }
+    }
     if (!(await leaveHarnessThread())) return;
     abandonPendingNewChat();
     // Clicking a chat already open short-circuits below, so the receipt goes
@@ -3642,28 +3704,29 @@ function App() {
   const openJbotHere = () => openInFocusedPane("page:jbot", () => openJbot());
   const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
   /*
-   * A phone's drawer shuts onto what it opened: the page under it changes while the drawer is still aside (the chat
-   * loaded, its transcript, header and composer drawn and holding still for three frames), then the page slides back
-   * already whole, never arriving in pieces mid-slide. At most a beat (500ms): a slow load slides back and finishes
-   * in place, as before.
+   * A phone's drawer shuts onto what it opened: the page under it changes while the drawer is still aside, and the
+   * drawer slides back on the first frame everything on screen is drawn -- a transcript's rows in view (its tail is
+   * drawn first, createTailWindow; data-drawn), or the page itself -- never with the page arriving in pieces under the
+   * slide. At most a beat (500ms): a slow load slides back and finishes in place.
    */
+  // The drawer opening on a phone reads jbot's chat ahead too (its row is a tap away), as the chats it shows are.
+  createEffect(on(mobileSidebarOpen, (open) => { if (open && isMobileLayout() && agentView()?.enabled) prefetchJbotMessages(); }, { defer: true }));
+  const pageDrawn = () => routeKind() === "jbot" ? Boolean(document.querySelector(".chat-main [data-jbot-room] .ui-transcript[data-drawn]"))
+    : routeKind() !== "chat" || Boolean(document.querySelector(".chat-main .ui-transcript[data-drawn], .chat-main .ui-chat-empty"));
   const shutDrawerOnto = (opening: Promise<unknown>, shown: () => boolean = () => true) => {
     void opening.catch(() => {});
     if (!isMobileLayout() || !mobileSidebarOpen()) { setMobileSidebarOpen(false); return; }
-    let opened = false;
-    void opening.finally(() => { opened = true; }).catch(() => {});
+    // Not on the open's promise: that also waits on revalidating the chat with the server, long after it is drawn.
+    // The page it was on is drawn already: wait for the page to change (or the open to settle, on the same page).
+    let settled = false, failed = false;
+    // Settled on a page already drawn (a press drew it, chat.preview): shut at once, in the tap's own task.
+    void opening.then(() => { settled = true; if (mobileSidebarOpen() && shown() && pageDrawn()) setMobileSidebarOpen(false); }, () => { failed = true; });
+    const from = `${routeKind()}:${mainChatId()}`;
     const started = performance.now();
-    let last = "";
-    let still = 0;
     const step = () => {
       if (!mobileSidebarOpen()) return;
-      // Its header, column and composer at their sizes, and the transcript where it lands (a long one renders in
-      // passes and is carried to its foot as it does).
-      const shape = [...document.querySelectorAll<HTMLElement>(".chat-main .ui-pane-header, .chat-main .ui-chat-column, .chat-main .ui-composer-dock, .chat-main .ui-chat-viewport")]
-        .map((element) => `${element.offsetWidth}x${element.offsetHeight}@${Math.round(element.scrollTop)}`).join("|");
-      still = opened && shown() && shape === last ? still + 1 : 0;
-      last = shape;
-      if (still >= 3 || performance.now() - started > 500) setMobileSidebarOpen(false);
+      const moved = settled || `${routeKind()}:${mainChatId()}` !== from;
+      if (failed || (moved && shown() && pageDrawn()) || performance.now() - started > 500) setMobileSidebarOpen(false);
       else requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -6264,7 +6327,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "jbot" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "jbot" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}

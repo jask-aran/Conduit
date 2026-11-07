@@ -1,5 +1,5 @@
 import type { Accessor } from "solid-js";
-import { createEffect } from "solid-js";
+import { createComputed } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import type { Message, ToolItem } from "../api/contracts";
 import type {
@@ -224,7 +224,9 @@ export function createTimelineStore(
   };
 
   let laidOutNarration: Narration = "fold";
-  createEffect(() => {
+  // Before the render, as the chat it is of changes: the rows drawn are this chat's from the first (an effect drew the
+  // last chat's rows once more, and opened the transcript's tail on them).
+  createComputed(() => {
     const inputMessages = messages();
     const inputTools = tools();
     const layout = { narration: narration() };
