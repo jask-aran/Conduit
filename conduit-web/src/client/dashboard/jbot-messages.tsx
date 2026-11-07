@@ -132,7 +132,7 @@ export function JbotMessages(props: { onDrawn?: (drawn: boolean) => void; messag
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   // Its newest rows first, as a chat's transcript (createTailWindow): what is on screen drawn in the frame it opens.
   let list: HTMLElement | undefined;
-  const tailWindow = createTailWindow({ items: rows, key: () => "jbot",
+  const tailWindow = createTailWindow({ items: rows, key: () => "jbot", scroller: () => list?.closest<HTMLElement>(".ui-chat-viewport"),
     fills: () => { const viewport = list?.closest<HTMLElement>(".ui-chat-viewport"); return Boolean(list && viewport && list.offsetHeight >= viewport.clientHeight); } });
   createEffect(() => props.onDrawn?.(tailWindow.drawn()));
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>

@@ -22,7 +22,14 @@
 
 /* The head: centred on the top line, so its icons sit level with a pane header's and the wordmark on its baseline. */
 .ui-nav-head { display: flex; align-items: center; gap: var(--space-2xs); padding: calc(var(--nav-line) - var(--nav-brand) / 2) var(--space-md) var(--space-2xs); }
-.ui-nav-head > .ui-seg { order: 2; flex: none; }
+.ui-nav-head > .ui-seg { order: 3; flex: none; }
+.ui-nav-head-action { display: grid; order: 2; width: var(--pill-size); height: var(--pill-size); flex: none; margin-left: auto; place-items: center; position: relative; border-radius: var(--radius-round); padding: 0; color: var(--foreground); cursor: pointer; }
+.ui-nav-head-action > :not(small) { width: var(--icon-lg); height: var(--icon-lg); }
+/* An avatar fills the disc's inner slot, round (its own square tile otherwise sat inside the frost). */
+.ui-nav-head-action > .ui-agent-avatar { width: var(--pill-slot); height: var(--pill-slot); border-radius: var(--radius-round); object-fit: cover; }
+/* What waits on it (jbot's needs), a count at its corner. */
+.ui-nav-head-action > small { position: absolute; top: 0; right: 0; min-width: var(--icon-sm); border-radius: var(--radius-round); background: var(--primary); padding: 0 var(--space-2xs); color: var(--primary-foreground); font: var(--weight-strong) var(--text-caption)/var(--icon-sm) var(--font-sans); text-align: center; }
+.ui-nav-head-action:active { transform: scale(0.96); }
 .ui-nav-brand { display: flex; order: 1; min-width: 0; height: var(--nav-brand); flex: 1; align-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: inherit; }
 .ui-nav-brand > span { font: var(--weight-rest) var(--nav-wordmark)/1 var(--font-wordmark); letter-spacing: 0; }
 

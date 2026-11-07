@@ -3710,8 +3710,14 @@ function App() {
    * slide. At most a beat (500ms): a slow load slides back and finishes in place.
    */
   // The drawer opening on a phone reads jbot's chat ahead too (its row is a tap away), as the chats it shows are.
-  createEffect(on(mobileSidebarOpen, (open) => { if (open && isMobileLayout() && agentView()?.enabled) prefetchJbotMessages(); }, { defer: true }));
-  const pageDrawn = () => routeKind() === "jbot" ? Boolean(document.querySelector(".chat-main [data-jbot-room] .ui-transcript[data-drawn]"))
+  // Its home thread too (the jbot chat's composer is that thread's): looked up and read, so it is there at once.
+  const warmJbot = () => {
+    prefetchJbotMessages();
+    const home = agentView()?.home?.chatId;
+    if (home) void agentChat(home).then((target) => chat.prefetch(target.chat)).catch(() => {});
+  };
+  createEffect(on(mobileSidebarOpen, (open) => { if (open && isMobileLayout() && agentView()?.enabled) warmJbot(); }, { defer: true }));
+  const pageDrawn = () => routeKind() === "jbot" ? Boolean(document.querySelector(".chat-main [data-jbot-room] .ui-chat:not([data-opening]) .ui-transcript[data-drawn]"))
     : routeKind() !== "chat" || Boolean(document.querySelector(".chat-main .ui-transcript[data-drawn], .chat-main .ui-chat-empty"));
   const shutDrawerOnto = (opening: Promise<unknown>, shown: () => boolean = () => true) => {
     void opening.catch(() => {});
@@ -6194,6 +6200,7 @@ function App() {
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
+      composerReady={!agentView()?.home?.chatId || current.chat.loadedId() === agentView()?.home?.chatId}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
         <PageComposer session={current} keyboardOwner={owns} contextControl={<JbotChip />} /></Show>} />;
   };

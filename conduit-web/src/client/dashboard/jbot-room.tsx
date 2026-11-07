@@ -16,6 +16,8 @@ import { SplitEmpty } from "./primitives/split";
  */
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
+  /** false while its composer is still coming (its home thread loading): the chat is held unseen until it is there. */
+  composerReady?: boolean;
   /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
    *  desktop faded in just above the composer, the transcript left where it is. */
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void }) => JSX.Element;
@@ -105,7 +107,8 @@ export function JbotRoom(props: {
             options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false) })}</Show>}>
         {/* Hidden until what is on screen is drawn, then faded in, as every chat opens (ChatView opening). */}
-        <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || !drawn()}>
+        {/* And with its composer: a page drawn without it moved up as it came (the composer is its home thread's). */}
+        <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || !drawn() || props.composerReady === false}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>

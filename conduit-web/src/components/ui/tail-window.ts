@@ -21,6 +21,9 @@ export function createTailWindow<T>(options: {
   room?: () => number;
   /** Opened whole instead (read as it opens): a list coming back to a place read further up than its tail. */
   whole?: () => boolean;
+  /** What scrolls it, for one that does not hold its own foot (the chat transcript does): as older items go in above,
+   *  it keeps its distance from the foot, so what is in view stays put. */
+  scroller?: () => HTMLElement | null | undefined;
   /** How many older ones at a time, in idle time after the paint. */
   step?: number;
 }) {
@@ -63,7 +66,12 @@ export function createTailWindow<T>(options: {
     if (!start) return;
     // In idle time, never in a frame: the page may be sliding over it (a phone's drawer shutting onto it).
     cancelIdle(frame);
-    frame = idle(() => setOffset((at) => Math.max(0, at - step)));
+    frame = idle(() => {
+      const scroller = options.scroller?.();
+      const fromFoot = scroller ? scroller.scrollHeight - scroller.scrollTop : 0;
+      setOffset((at) => Math.max(0, at - step));
+      if (scroller) scroller.scrollTop = scroller.scrollHeight - fromFoot;
+    });
   }));
   onCleanup(() => cancelIdle(frame));
   return { shown, offset, drawn };

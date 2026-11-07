@@ -3,6 +3,7 @@ import * as Icons from "./icons";
 import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
 
 import { Button, Spinner } from "./controls";
+import { Frost } from "./frost";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
 import { Row, type RowProps } from "./row";
@@ -40,6 +41,14 @@ export function NavPane(props: JSX.HTMLAttributes<HTMLElement> & { collapsed?: b
     </div>
   </aside>;
 }
+
+/** A drawer head's own way to one page (a phone's: jbot), a frost disc the section switch's height, before it.
+ *  current: that page is the one open. */
+export const NavHeadAction = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; current?: boolean; children: JSX.Element }) => {
+  const [local, rest] = splitProps(props, ["label", "current", "children"]);
+  return <Frost as="button" type="button" {...rest} class="ui-nav-head-action" aria-label={local.label} title={local.label}
+    aria-current={local.current ? "page" : undefined}>{local.children}</Frost>;
+};
 
 /** The wordmark, which goes home. */
 export const NavBrand = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { name: string }) => {
