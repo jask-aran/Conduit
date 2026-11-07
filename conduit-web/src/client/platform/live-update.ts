@@ -11,24 +11,13 @@
  * Development builds only (`.dev`): a release client must not take whatever
  * interface the server it points at happens to run.
  *
- * On its own it only moves forward: an interface built before the one running is not taken, so switching between
- * servers on different builds does not swap the interface back and forth. Check for updates by hand takes whatever
- * the connected server serves.
+ * Each server's own interface, older or newer: the interface and the server it talks to are one build, so the
+ * interface follows the server connected to. A switch to a server on another build swaps it before anything is drawn
+ * (`swapInterface`); the native side keeps the one shown before, so switching back is no download.
  */
-
-/** Whether the server's interface was built after this one (its manifest's `builtAt`); unknown is not newer. */
-async function serverIsNewer(server: string): Promise<boolean> {
-  try {
-    const response = await authorizedFetch(`${server}/client-bundle/manifest.json`, { signal: AbortSignal.timeout(5000) });
-    const { builtAt } = await response.json() as { builtAt?: string };
-    const theirs = Date.parse(builtAt || ""), ours = Date.parse(clientBuild.builtAt || "");
-    return Number.isFinite(theirs) && (!Number.isFinite(ours) || theirs > ours);
-  } catch { return false; }
-}
 import { createSignal } from "solid-js";
 import { installedClientKind } from "./installed-client.ts";
 import { authorizedFetch } from "../api/native-auth-client.ts";
-import { clientBuild } from "./build-info.ts";
 import { rememberView } from "./resume-view.ts";
 
 /** Where a fetch of the server's interface is: asking which build it serves, then downloading it. */
@@ -51,6 +40,7 @@ let applyStaged: (() => Promise<unknown>) | null = null;
 export function applyStagedInterface() { return applyStaged?.(); }
 const stage = (build: string | null) => { staged = build; setInterfaceReady(Boolean(build)); };
 let checking = false;
+let swap: ((server: string) => Promise<boolean>) | null = null;
 let now: ((onProgress?: (progress: BundleProgress) => void) => Promise<"current" | "applying" | "unreachable" | "cancelled">) | null = null;
 
 /**
@@ -76,7 +66,6 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
     if (!server || checking) return;
     checking = true;
     try {
-      if (!(await serverIsNewer(server))) { stage(null); return; }
       const result = await plugin.stageBundle({ origin: server });
       stage(result.state === "staged" ? result.build : null);
     } catch {
@@ -102,6 +91,12 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
     }
   };
   applyStaged = async () => { if (staged) { rememberView(); await plugin.applyBundle({ build: staged }); } };
+  swap = async (server) => {
+    const result = await plugin.stageBundle({ origin: server });
+    if (result.state !== "staged") return false;
+    await plugin.applyBundle({ build: result.build });
+    return true;
+  };
   // The hub pushes what it offers (runtime stream): a new interface is staged as soon as it is there.
   window.addEventListener("conduit:updates-offered", () => void check());
   void check();
@@ -158,7 +153,6 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     if (!server || checking) return;
     checking = true;
     try {
-      if (!(await serverIsNewer(server))) { stage(null); return; }
       stage(await download(server));
     } catch {
       // Unreachable, or an older server without bundles: try again later.
@@ -179,6 +173,12 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     }
   };
   applyStaged = async () => { if (staged) await apply(staged); };
+  swap = async (server) => {
+    const build = await download(server);
+    if (!build) return false;
+    await invoke("interface_apply", { build });
+    return true;
+  };
   void check();
   // The hub pushes what it offers (runtime stream): a new interface is staged as soon as it is there. Asking now and
   // then as well is only for a hub that does not push.
@@ -191,6 +191,14 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     if (document.visibilityState === "visible") again();
     else if (staged) void apply(staged).catch(() => {});
   });
+}
+
+/**
+ * Take the interface `server` serves before drawing anything for it: true when the page is reloading into it, false
+ * when the one running is already that server's (or the server cannot say), so the app is drawn as it is.
+ */
+export async function swapInterface(server: string): Promise<boolean> {
+  try { return await swap?.(server) ?? false; } catch { return false; }
 }
 
 /** Stop a download under way, of an interface or an APK (they share the native worker). */

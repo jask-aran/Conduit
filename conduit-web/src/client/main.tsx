@@ -21,7 +21,7 @@ import { batch, createEffect, createMemo, createRenderEffect, createSignal, Erro
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
-import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
+import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate, swapInterface } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
 import { prefetchJbotMessages } from "./dashboard/jbot-messages";
 import { JbotChip, JbotPanel, JbotPanelControl, JbotWays } from "./dashboard/jbot-status";
@@ -552,10 +552,18 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
  * through `authorizedFetch`, and a 401 lands here as `NATIVE_AUTH_REQUIRED`.
  */
 /** Take down index.html's launch screen, once whatever replaces it is drawn. */
-const dismissLaunchMark = () => document.querySelector(".launch-mark")?.remove();
+const launchMark = document.querySelector(".launch-mark");
+const dismissLaunchMark = () => launchMark?.remove();
+/** Put the launch screen back over a server switch: dark until that server's app is drawn and fades in. */
+const showLaunchMark = () => { if (launchMark && !launchMark.isConnected) document.body.append(launchMark); };
+/** The server the interface is fetched from: the active route's address. */
+const liveUpdateOrigin = () => { const path = activePath(); return path ? dialOrigin(path) : null; };
 
 function NativeRoot() {
   const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
+  // The server the app is drawn for. A switch is not drawn on the interface it left: the launch screen covers it while
+  // the new server's interface is taken (a reload into it), and only then is the app drawn and faded in.
+  const [shown, setShown] = createSignal<string | null>(null);
   onMount(() => {
     const requireLogin = () => setState("login");
     window.addEventListener(NATIVE_AUTH_REQUIRED_EVENT, requireLogin);
@@ -566,15 +574,28 @@ function NativeRoot() {
     if (!origin) return setState("login");
     // Only the chosen server's answer counts: a slower check for the one
     // switched away from must not open, or sign out of, this one.
+    const switching = untrack(shown) !== null && untrack(shown) !== origin;
+    if (switching) setState("loading");
     void nativeBearerToken(origin)
-      .then((token) => { if (activeOrigin() === origin) setState(token ? "app" : "login"); })
+      .then(async (token) => {
+        if (activeOrigin() !== origin) return;
+        if (!token) return setState("login");
+        if (switching) {
+          showLaunchMark();
+          const server = untrack(liveUpdateOrigin);
+          if (server && await swapInterface(server)) return;
+          if (activeOrigin() !== origin) return;
+        }
+        setShown(origin);
+        setState("app");
+      })
       .catch(() => { if (activeOrigin() === origin) setState("login"); });
   });
   // Sign-in has no arrival to wait for; it fades in on its own.
   createEffect(() => { if (state() === "login") dismissLaunchMark(); });
   // The launch screen covers the wait for the token.
   return <Show when={state() !== "loading"}>
-    <Show when={state() === "app" ? activeOrigin() ?? undefined : undefined} keyed fallback={<NativeServerSetup onAuthenticated={() => setState("app")} />}>
+    <Show when={state() === "app" ? shown() ?? undefined : undefined} keyed fallback={<NativeServerSetup onAuthenticated={() => { setShown(activeOrigin()); setState("app"); }} />}>
       {(_origin: string) => <App />}
     </Show>
   </Show>;
@@ -6592,7 +6613,7 @@ window.addEventListener("vite:preloadError", (event) => {
 
 // A development Android client takes the interface its server serves, in
 // the background (platform/live-update.ts).
-void startLiveUpdate(() => { const path = activePath(); return path ? dialOrigin(path) : null; }).catch(() => {});
+void startLiveUpdate(liveUpdateOrigin).catch(() => {});
 void startPush().catch(() => {});
 void keepThisComputerConnected().catch(() => {});
 

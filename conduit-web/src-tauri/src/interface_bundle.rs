@@ -141,15 +141,16 @@ pub fn interface_apply<R: Runtime>(webview: Webview<R>, interface: State<'_, Int
     if !valid_build(&build) || !dir.join("index.html").exists() {
         return Err("That interface is not staged.".into());
     }
+    let previous = interface_build(interface.clone());
     fs::write(interface.root.join("current"), &build).map_err(|error| error.to_string())?;
     fs::write(interface.root.join("shell"), &interface.shell).map_err(|error| error.to_string())?;
     fs::write(interface.root.join("trial"), b"").map_err(|error| error.to_string())?;
     *interface.served.write().map_err(|_| "poisoned")? = Some(dir);
-    // The others go: the one showing now, the one just staged, nothing else is ever served again.
+    // The one shown before stays too: it is the other server's, and switching back to it is then no download.
     if let Ok(entries) = fs::read_dir(&interface.root) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if entry.path().is_dir() && name != build {
+            if entry.path().is_dir() && name != build && name != previous {
                 let _ = fs::remove_dir_all(entry.path());
             }
         }

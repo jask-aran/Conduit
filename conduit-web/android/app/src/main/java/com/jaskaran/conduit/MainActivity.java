@@ -94,6 +94,15 @@ public class MainActivity extends BridgeActivity {
         getBridge().setWebViewClient(new ConduitWebViewClient(getBridge()));
         // The frame, not white, under anything the page has not drawn yet.
         getBridge().getWebView().setBackgroundColor(getColor(R.color.conduit_frame));
+        /*
+         * The page's renderer at the app's own priority, hidden or not. By default it drops to a cached process while
+         * the app is out of sight, and the app stays alive (Float's service) while its renderer is the first thing
+         * Android reclaims: the next open showed the last frame, the launch screen while the page loaded again, then
+         * the app. Kept, an open is the page as it was left.
+         */
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            getBridge().getWebView().setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
         getBridge().addWebViewListener(new WebViewListener() {
             @Override
             public void onPageLoaded(WebView view) { pageVisible = true; }
