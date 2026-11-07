@@ -51,7 +51,7 @@ export function JbotRoom(props: {
   const [marks, setMarks] = createSignal(false);
   let wordsNeed = 0;
   const fitLead = (lead: HTMLElement) => {
-    const head = () => lead.closest<HTMLElement>(".ui-chat-beside-head, .ui-tray-head");
+    const head = () => lead.closest<HTMLElement>(".ui-panel-head");
     const fit = () => {
       const box = head();
       if (!box || !box.clientWidth) return;

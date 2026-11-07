@@ -56,32 +56,8 @@
 .ui-chat-beside { --chat-panel-width: var(--measure-lg); position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
 .ui-chat-beside-need { position: absolute; width: calc(var(--reading-width) + var(--chat-panel-width) + 2 * var(--space-4xl)); height: 0; visibility: hidden; pointer-events: none; }
 .ui-chat-beside-main { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
-/* Its head stays; what it holds scrolls under it, edge to edge (its scrollbar at the panel's edge, its gutter kept so
-   nothing moves). --panel-inset is its padding, for what reaches its edges (a full-width hairline). */
+/* Beside the chat: a PanelHead over a PanelBody (tray.tsx), as a Tray or a Ledge holds them. */
 .ui-chat-beside-panel { --panel-inset: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow: hidden; box-sizing: border-box; padding: var(--panel-inset); }
-.ui-chat-beside-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  margin-inline: calc(-1 * var(--panel-inset)); padding-inline: var(--panel-inset); scrollbar-gutter: stable; scrollbar-width: thin; }
-:is(.ui-chat-beside-panel, .ui-tray-panel) .ui-dash { flex: none; overflow: visible; }
-:is(.ui-chat-beside-panel, .ui-tray-panel) .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
-/* Its head: its name (or a lead) by its actions and close, never wrapping: the lead gives way (jbot's tabs fold to marks). */
-.ui-chat-beside-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
-.ui-chat-beside-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
-.ui-chat-beside-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-chat-beside-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-.ui-chat-beside[data-wide]:not([data-open]) .ui-chat-beside-panel { display: none; }
+:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge) .ui-dash { flex: none; overflow: visible; }
+:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge) .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
 .ui-chat-beside[data-wide] .ui-chat-beside-panel { flex: 0 0 var(--chat-panel-width); border-left: 1px solid var(--border); }
-/* above: a pointer's panel, faded in over the transcript just above the composer (the composer and the transcript
-   stay where they are), the composer's width; put away by its close, Esc, a press outside it or its control. */
-.ui-chat-beside[data-above]:not([data-wide]) .ui-chat-beside-panel { position: absolute; inset: auto 0 var(--chat-beside-above, var(--space-md)); z-index: 3;
-  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); margin-inline: auto;
-  /* One height whatever the tab holds (its body scrolls), so switching never moves its head; never most of the pane. */
-  height: min(calc(100% - var(--chat-beside-above, var(--space-md)) - var(--space-lg)), var(--measure-xl));
-  border-radius: var(--radius-surface); opacity: 0;
-  /* Shut, it stays drawn on its own layer, see-through and out of reach (inert): fading it in composites what is
-     already rastered and blurred, rather than painting the whole frost panel on its first frame. */
-  pointer-events: none; will-change: opacity;
-  transition: opacity var(--duration-quick) var(--ease-leave); }
-.ui-chat-beside[data-above]:not([data-wide])[data-open] .ui-chat-beside-panel { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
-/* Shut and settled (its fade played), it is skipped from layout and paint: a resize of the dock lays out the chat
-   alone, not the hidden panel as well. */
-.ui-chat-beside[data-above]:not([data-wide]):not([data-open]) .ui-chat-beside-panel { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }

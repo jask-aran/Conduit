@@ -1,7 +1,5 @@
-import { createEffect, createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
-import { IconButton } from "./actions";
-import { Tray } from "./tray";
-import * as Icons from "./icons";
+import { createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { Ledge, PanelBody, PanelHead, Tray } from "./tray";
 import { cn } from "@/lib/utils";
 
 /*
@@ -62,7 +60,6 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
-  let panel!: HTMLElement;
   const [wide, setWide] = createSignal(false);
   onMount(() => {
     if (props.beside === false) return;
@@ -73,35 +70,20 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     sizes.observe(root);
     onCleanup(() => sizes.disconnect());
   });
-  const sheet = () => !wide() && props.above === undefined;
-  const over = () => !wide() && props.open && props.above !== undefined;
-  // Above the composer, Esc puts it away wherever the keyboard is (its control is outside it: the composer's ring); a
-  // Tray minds its own.
-  createEffect(() => {
-    if (!over()) return;
-    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
-    window.addEventListener("keydown", away, true);
-    onCleanup(() => window.removeEventListener("keydown", away, true));
-    // A press anywhere but the panel and the composer (which holds its control, and stays usable under it) puts it
-    // away, as a menu's does.
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (!target?.closest || target.closest(".ui-chat-beside-panel") === panel || root.querySelector(".ui-composer-dock")?.contains(target)) return;
-      props.onClose();
-    };
-    window.addEventListener("pointerdown", outside, true);
-    onCleanup(() => window.removeEventListener("pointerdown", outside, true));
-  });
-  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-above={props.above !== undefined ? "" : undefined} style={props.above !== undefined ? { "--chat-beside-above": `${props.above}px` } : undefined}>
+  return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
-    {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane; a phone's, a Tray. */}
-    <Show when={sheet()} fallback={<aside ref={panel} class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
-      aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>
-      <Show when={!wide() || props.actions || props.lead}><div class="ui-chat-beside-head"><Show when={props.lead} fallback={<strong>{props.title}</strong>}><span class="ui-chat-beside-lead">{props.lead}</span></Show><span class="ui-chat-beside-actions">{props.actions}<Show when={!wide()}><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></Show></span></div></Show>
-      <div class="ui-chat-beside-body">{props.panel}</div>
-    </aside>}>
-      <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Tray>
+    {/* Beside the chat, part of the pane; over it, a Tray (a phone's) or a Ledge above the composer (a pointer's). */}
+    <Show when={wide()} fallback={props.above !== undefined
+      ? <Ledge open={props.open} onClose={() => props.onClose()} label={props.label} above={props.above} keep={() => root.querySelector(".ui-composer-dock")}
+          title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Ledge>
+      : <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Tray>}>
+      <Show when={props.open}>
+        <aside class="ui-chat-beside-panel" aria-label={props.label}>
+          <Show when={props.actions || props.lead}><PanelHead title={props.title} lead={props.lead} actions={props.actions} /></Show>
+          <PanelBody>{props.panel}</PanelBody>
+        </aside>
+      </Show>
     </Show>
   </div>;
 }

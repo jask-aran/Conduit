@@ -249,6 +249,6 @@
 .ui-dash-spend { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 /* A panel that scrolls its own body (jbot's: its day fixed above) leaves the surface's body still: no second
    scroller, no gutter cutting its full-width hairline short. */
-:is(.ui-chat-beside-body, .ui-tray-body):has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
+.ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
 /* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
 .ui-dash-panel .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }

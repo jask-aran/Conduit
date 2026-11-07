@@ -1,19 +1,27 @@
-/* Tray (tray.tsx): a phone's surface risen from the foot over its container, a scrim over the rest. */
+/* PanelHead, PanelBody (tray.tsx): the inside Tray and Ledge share, and a chat's panel beside it. */
+.ui-panel-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.ui-panel-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+.ui-panel-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
+.ui-panel-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+.ui-panel-grip { position: absolute; top: calc(var(--space-sm) - var(--space-lg)); left: 50%; width: var(--control-md); height: var(--track-size); border-radius: var(--radius-round); background: var(--tint); translate: -50% 0; }
+.ui-panel-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
+
+/* Tray: a phone's, risen from the foot over its container, a scrim over the rest. */
 .ui-tray { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .ui-tray-scrim { position: absolute; inset: 0; background: var(--frame); opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-tray[data-open] .ui-tray-scrim { opacity: .5; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
-/* One height whatever it holds; --panel-inset is its padding, for what reaches its edges (a full-width hairline). */
 .ui-tray-panel { --panel-inset: var(--space-lg); position: absolute; inset: auto 0 0; display: flex; height: min(85%, var(--measure-2xl)); flex-direction: column; gap: var(--space-md);
-  box-sizing: border-box; overflow: hidden; padding: 0 var(--panel-inset) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  box-sizing: border-box; overflow: hidden; padding: var(--space-lg) var(--panel-inset) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   border-radius: var(--radius-surface) var(--radius-surface) 0 0; pointer-events: auto;
   transform: translateY(100%); visibility: hidden; transition: transform var(--duration-gentle) var(--ease-leave), visibility 0s linear var(--duration-gentle); }
 .ui-tray[data-open] .ui-tray-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
-/* Its head: the grip over a title or lead, its actions and close, never wrapping. */
-.ui-tray-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); padding-top: var(--space-lg); }
-.ui-tray-grip { position: absolute; top: var(--space-sm); left: 50%; width: var(--control-md); height: var(--track-size); border-radius: var(--radius-round); background: var(--tint); translate: -50% 0; }
-.ui-tray-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-.ui-tray-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
-.ui-tray-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
-/* What it holds scrolls under its head, edge to edge (its scrollbar at the tray's edge), its gutter kept so nothing moves. */
-.ui-tray-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  margin-inline: calc(-1 * var(--panel-inset)); padding-inline: var(--panel-inset); scrollbar-gutter: stable; scrollbar-width: thin; }
+
+/* Ledge: a pointer's, faded in over its container just above the composer, at the composer's width. */
+.ui-ledge { --panel-inset: var(--space-lg); position: absolute; inset: auto 0 var(--ledge-above, var(--space-md)); z-index: 3; display: flex; flex-direction: column; gap: var(--space-md);
+  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); height: min(calc(100% - var(--ledge-above, var(--space-md)) - var(--space-lg)), var(--measure-xl));
+  box-sizing: border-box; margin-inline: auto; overflow: hidden; padding: var(--panel-inset); border-radius: var(--radius-surface);
+  opacity: 0; pointer-events: none; will-change: opacity; transition: opacity var(--duration-quick) var(--ease-leave); }
+.ui-ledge > .ui-panel-head { margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
+.ui-ledge[data-open] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+.ui-ledge:not([data-open]) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }

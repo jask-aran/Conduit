@@ -3,17 +3,31 @@ import * as Icons from "./icons";
 import { IconButton } from "./actions";
 import { overlayHaptics } from "./haptics";
 
+/*
+ * A panel over what it belongs to, in two pieces with one inside: Tray (a phone's, risen from the foot) and Ledge (a
+ * pointer's, faded in just above the composer). Both are a PanelHead over a PanelBody: one height whatever they hold,
+ * the body scrolling under the head edge to edge with its gutter kept (switching what it shows never moves it), the head
+ * never wrapping (a title or a lead, its actions, its close). --panel-inset is the surface's padding, for what reaches
+ * its edges (a full-width hairline).
+ */
+
+/** A panel's head: its title (or a lead: tabs, a switch) by its actions and close; the lead gives way, never the close. */
+export function PanelHead(props: { title?: JSX.Element; lead?: JSX.Element; actions?: JSX.Element; onClose?: () => void; grip?: boolean }) {
+  return <div class="ui-panel-head">
+    <Show when={props.grip}><span class="ui-panel-grip" aria-hidden="true" /></Show>
+    <Show when={props.lead} fallback={<strong>{props.title}</strong>}><span class="ui-panel-lead">{props.lead}</span></Show>
+    <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><IconButton kind="pane" close label="Close" onClick={() => props.onClose?.()}><Icons.Close /></IconButton></Show></span>
+  </div>;
+}
+/** What a panel holds, scrolling under its head edge to edge, its gutter kept. */
+export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-panel-body">{props.children}</div>;
+
 /**
- * Tray: a phone's surface risen from the foot over what it belongs to (a chat's panel, jbot's), the rest dimmed by a
- * scrim. It rides inside its container (absolute), so what holds it (the pane's header, its pill) stays live.
- *
- * - One height whatever it holds (min(85%, --measure-2xl)): its body scrolls under its head, so switching what it
- *   shows never moves it.
- * - Its head: a title (or a lead: tabs, a switch), its own actions, then its close, never wrapping.
- * - Put away by its close, a tap on the scrim, Esc, or a swipe down anywhere on it (its body once scrolled to its top),
- *   past a quarter of it or flicked.
- * - Raised frost, the safe area kept under it; felt opening and shutting (overlayHaptics).
- * - Shut, it stays laid out off the foot and inert, so it rises at once.
+ * Tray: a phone's panel risen from the foot over what it belongs to, the rest dimmed by a scrim. It rides inside its
+ * container (absolute), so what holds it (the pane's header, its pill) stays live. One height (min(85%,
+ * --measure-2xl)); put away by its close, a tap on the scrim, Esc, or a swipe down anywhere on it (its body once
+ * scrolled to its top), past a quarter of it or flicked; raised frost, the safe area kept under it; felt opening and
+ * shutting. Shut, it stays laid out off the foot and inert, so it rises at once.
  */
 export function Tray(props: {
   open: boolean;
@@ -82,12 +96,46 @@ export function Tray(props: {
   return <div class="ui-tray" data-open={props.open ? "" : undefined}>
     <div class="ui-tray-scrim" aria-hidden="true" onClick={() => props.onClose()} />
     <section ref={panel} class="ui-tray-panel ui-frost" data-surface="frost" data-lift="raised" role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
-      <div class="ui-tray-head">
-        <span class="ui-tray-grip" aria-hidden="true" />
-        <Show when={props.lead} fallback={<strong>{props.title}</strong>}><span class="ui-tray-lead">{props.lead}</span></Show>
-        <span class="ui-tray-actions">{props.actions}<IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></span>
-      </div>
-      <div class="ui-tray-body">{props.children}</div>
+      <PanelHead grip title={props.title} lead={props.lead} actions={props.actions} onClose={() => props.onClose()} />
+      <PanelBody>{props.children}</PanelBody>
     </section>
   </div>;
+}
+
+/**
+ * Ledge: a pointer's panel, faded in over what it belongs to just above its composer (`above`: px over its
+ * container's foot), at the composer's width; nothing dimmed, nothing moved. One height (never most of the pane); put
+ * away by its close, Esc or a press outside it (but in `keep`: the composer, which holds its control and stays usable
+ * under it), as a menu's is. Shut and settled it is skipped from layout and paint, kept on its own layer so fading in
+ * composites what is already drawn.
+ */
+export function Ledge(props: {
+  open: boolean;
+  onClose: () => void;
+  label: string;
+  above: number;
+  keep?: () => Element | null | undefined;
+  title?: JSX.Element;
+  lead?: JSX.Element;
+  actions?: JSX.Element;
+  children: JSX.Element;
+}) {
+  let panel!: HTMLElement;
+  createEffect(() => {
+    if (!props.open) return;
+    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || panel.contains(target) || props.keep?.()?.contains(target)) return;
+      props.onClose();
+    };
+    window.addEventListener("keydown", away, true);
+    window.addEventListener("pointerdown", outside, true);
+    onCleanup(() => { window.removeEventListener("keydown", away, true); window.removeEventListener("pointerdown", outside, true); });
+  });
+  return <section ref={panel} class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} aria-label={props.label}
+    inert={!props.open ? true : undefined} style={{ "--ledge-above": `${props.above}px` }}>
+    <PanelHead title={props.title} lead={props.lead} actions={props.actions} onClose={() => props.onClose()} />
+    <PanelBody>{props.children}</PanelBody>
+  </section>;
 }
