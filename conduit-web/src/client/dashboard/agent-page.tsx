@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX, untrack } from "solid-js";
+import { Portal } from "solid-js/web";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { AgentAvatar, Answer, approvalLineText, Empty, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
@@ -67,6 +68,8 @@ export function AgentPage(props: {
   panel?: JbotTab;
   /** In the panel: beside its day's timeline, at the top whatever the tab (jbot's spend). */
   panelTop?: JSX.Element;
+  /** In the panel: Needs you drawn here, not at the panel's top (a card over the Ledge, a phone's own sheet). */
+  needsMount?: () => HTMLElement | undefined;
   /** How a preview's report is drawn (the chat's markdown renderer). */
   markdownRenderer?: MarkdownRendererId;
   /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
@@ -477,10 +480,13 @@ export function AgentPage(props: {
     {/* In the panel its day stays at the top, whatever the tab; the tab's groups scroll under it. */}
     <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
       <DashPanel band={day()} figure={props.panelTop}
-        under={<Show when={agentNeeds()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>}>
+        under={<Show when={agentNeeds() && !props.needsMount}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>}>
           <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
             notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} list={<Show when={peek()} fallback={tabGroups(tab())}>{(shown) => peekView(shown())}</Show>} />
       </DashPanel>
+      <Show when={props.needsMount?.()}>{(mount) => <Show when={agentNeeds()}>
+        <Portal mount={mount()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Portal>
+      </Show>}</Show>
     </Show>}</Show>
     <Show when={!props.panel && view()} fallback={<Show when={!props.panel}><SplitEmpty>Loading…</SplitEmpty></Show>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>

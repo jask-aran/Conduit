@@ -141,15 +141,24 @@ export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title
   </nav>;
 }
 
+/** What waits by a header pill: a count in a frost capsule of its own beside it, opening what it counts. */
+export interface HeaderPillCount { value: number; label: string; open?: boolean; onClick: () => void }
+
 /** A phone's name for the page: its place's mark (a folder, a workspace's glyph, Conduit's for a chat in no folder)
  *  and its title, wrapping to two lines, a frost pill between the header's groups. opens: a press opens the page's
- *  menu (MenuControl as={HeaderPill} opens); the pill says so by being pressable, with no chevron to take its room. */
-export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon?: JSX.Element; opens?: boolean }) {
-  const [local, rest] = splitProps(props, ["label", "icon", "opens"]);
+ *  menu (MenuControl as={HeaderPill} opens); the pill says so by being pressable, with no chevron to take its room.
+ *  count: a number beside it (what waits on the person), its own press; the two are centred as one. */
+export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon?: JSX.Element; opens?: boolean; count?: HeaderPillCount }) {
+  const [local, rest] = splitProps(props, ["label", "icon", "opens", "count"]);
   const inner = () => <><Show when={local.icon}><span class="ui-header-pill-icon" aria-hidden="true">{local.icon}</span></Show><strong>{local.label}</strong></>;
-  return <Show when={local.opens} fallback={<div class="ui-header-pill" data-surface="frost">{inner()}</div>}>
+  const pill = () => <Show when={local.opens} fallback={<div class="ui-header-pill" data-surface="frost">{inner()}</div>}>
     <button type="button" tabIndex={-1} {...rest} class="ui-header-pill" data-surface="frost">{inner()}</button>
   </Show>;
+  return <Show when={local.count} fallback={pill()}>{(count) => <span class="ui-header-pills">
+    {pill()}
+    <button type="button" tabIndex={-1} class="ui-header-count" data-surface="frost" aria-label={count().label} title={count().label}
+      aria-expanded={count().open} onClick={() => count().onClick()}>{count().value}</button>
+  </span>}</Show>;
 }
 
 /** One of the header's controls: an icon, its label as its name. only: drawn on that layout alone. */

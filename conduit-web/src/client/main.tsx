@@ -6191,6 +6191,7 @@ function App() {
     const openFile = (path: string) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); };
     // A phone's pill and the composer's chip open jbot's panel (JbotPanelControl, from the room).
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
+      count={control?.needs && control.needs.count() ? { value: control.needs.count(), label: `${control.needs.count()} need you`, open: control.needs.open(), onClick: control.needs.toggle } : undefined}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
     // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
     const docked = () => !tool && !isMobileLayout() && inDock(slot as PaneKey);
@@ -6203,7 +6204,7 @@ function App() {
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
       presentation={tool ? "narrow" : docked() ? "phone" : undefined}
       panelActions={(done) => <JbotWays onOpenSettings={() => openSettings("agent")} onDone={done} />}
-      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} markdownRenderer={markdownRenderer()} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
+      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} markdownRenderer={markdownRenderer()} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done} needsMount={state.needsMount}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}

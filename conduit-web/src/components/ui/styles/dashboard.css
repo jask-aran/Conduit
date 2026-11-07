@@ -248,4 +248,4 @@
    scroller, no gutter cutting its full-width hairline short. */
 .ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
 /* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
-.ui-dash-panel .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }
+:is(.ui-dash-panel, .ui-ledge-over, .ui-tray-panel[data-fit]) .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }

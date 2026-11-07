@@ -60,6 +60,6 @@
 .ui-chat-beside-main { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
 /* Beside the chat: a PanelHead over a PanelBody (tray.tsx), as a Tray or a Ledge holds them. */
 .ui-chat-beside-panel { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow: hidden; box-sizing: border-box; padding: var(--panel-inset); }
-:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge) .ui-dash { flex: none; overflow: visible; }
-:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge) .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
+:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge, .ui-ledge-over) .ui-dash { flex: none; overflow: visible; }
+:is(.ui-chat-beside-panel, .ui-tray-panel, .ui-ledge, .ui-ledge-over) .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
 .ui-chat-beside[data-wide] .ui-chat-beside-panel { flex: 0 0 var(--chat-panel-width); border-left: var(--hairline) solid var(--border); }

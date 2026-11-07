@@ -49,9 +49,10 @@ export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-pa
  * container (absolute), so what holds it (the pane's header, its pill) stays live. One height (min(85%,
  * --measure-2xl)); put away by its close, a tap on the scrim, Esc, or a swipe down anywhere on it (its body once
  * scrolled to its top), past the drawer's commit of it or flicked (SWIPE, edge-swipe.ts: one feel for every swipe); raised frost, the safe area kept under it; felt opening and
- * shutting. Shut, it stays laid out off the foot and inert, so it rises at once.
+ * shutting. Shut, it stays laid out off the foot and inert, so it rises at once. fit: as tall as what it holds, up to
+ * that height (a short list of its own, beside a panel that keeps the one height).
  */
-export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; children: JSX.Element }) {
+export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   overlayHaptics(() => props.open);
   createEffect(() => {
@@ -110,7 +111,7 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
   });
   return <div class="ui-tray" data-open={props.open ? "" : undefined}>
     <div class="ui-tray-scrim" aria-hidden="true" onClick={() => props.onClose()} />
-    <section ref={panel} class="ui-tray-panel ui-frost" data-surface="frost" data-lift="raised" role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
+    <section ref={panel} class="ui-tray-panel ui-frost" data-surface="frost" data-lift="raised" data-fit={props.fit ? "" : undefined} role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
       <PanelHead grip title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
       <PanelBody>{props.children}</PanelBody>
     </section>
@@ -123,24 +124,34 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
  * away by its close, Esc or a press outside it (but in `keep`: the composer, which holds its control and stays usable
  * under it), as a menu's is. Shut and settled it is skipped from layout and paint, kept on its own layer so fading in
  * composites what is already drawn.
+ *
+ * `over`: a card of its own stacked above it (what waits on the person), only while given. It grows with what it holds
+ * into the room left above the panel and scrolls past that, so the panel keeps its height and its place.
  */
-export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above: number; keep?: () => Element | null | undefined; children: JSX.Element }) {
-  let panel!: HTMLElement;
+export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above: number; keep?: () => Element | null | undefined;
+  over?: JSX.Element; overLabel?: string; children: JSX.Element }) {
+  let stack!: HTMLDivElement;
   createEffect(() => {
     if (!props.open) return;
     const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
     const outside = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (!target || panel.contains(target) || props.keep?.()?.contains(target)) return;
+      if (!target || stack.contains(target) || props.keep?.()?.contains(target)) return;
       props.onClose();
     };
     window.addEventListener("keydown", away, true);
     window.addEventListener("pointerdown", outside, true);
     onCleanup(() => { window.removeEventListener("keydown", away, true); window.removeEventListener("pointerdown", outside, true); });
   });
-  return <section ref={panel} class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} aria-label={props.label}
-    inert={!props.open ? true : undefined} style={{ "--ledge-above": `${props.above}px` }}>
-    <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
-    <PanelBody>{props.children}</PanelBody>
-  </section>;
+  return <div ref={stack} class="ui-ledge-stack" data-open={props.open ? "" : undefined} style={{ "--ledge-above": `${props.above}px` }}>
+    <Show when={props.over}>
+      <section class="ui-ledge-over ui-frost" data-surface="frost" data-lift="raised" aria-label={props.overLabel} inert={!props.open ? true : undefined}>
+        <PanelBody>{props.over}</PanelBody>
+      </section>
+    </Show>
+    <section class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" aria-label={props.label} inert={!props.open ? true : undefined}>
+      <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
+      <PanelBody>{props.children}</PanelBody>
+    </section>
+  </div>;
 }

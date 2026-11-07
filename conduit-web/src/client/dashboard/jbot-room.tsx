@@ -1,7 +1,7 @@
-import { createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, RiderButton, rideBottom, Segmented, SheetFill } from "@/components/ui";
+import { createEffect, createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
+import { ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { agentView, refreshAgent } from "../state/agent";
+import { agentNeeds, agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
@@ -19,7 +19,7 @@ export function JbotRoom(props: {
   composerReady?: boolean;
   /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
    *  desktop faded in just above the composer, the transcript left where it is. */
-  panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void }) => JSX.Element;
+  panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void; needsMount?: () => HTMLElement | undefined }) => JSX.Element;
   /** The panel's ways on (JbotWays), in its head; done: the panel put away first, where it is over the chat. */
   panelActions?: (done: () => void) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
@@ -56,11 +56,18 @@ export function JbotRoom(props: {
     onCleanup(() => window.clearTimeout(handle));
   });
   const toggle = () => {
-    if (!wide()) return void setOver(!over());
+    if (!wide()) { setNeedsOpen(false); return void setOver(!over()); }
     const next = !beside();
     setBeside(next);
     try { localStorage.setItem(besideKey, next ? "1" : "0"); } catch { /* a per-viewer convenience */ }
   };
+  // What waits on the person, apart from the panel wherever the panel is over the chat: on a desktop a card of its own
+  // over the Ledge, while there is any; on a phone a sheet of its own, opened by the count beside jbot's pill.
+  const [needsMount, setNeedsMount] = createSignal<HTMLElement>();
+  const mountNeeds = (element: HTMLElement) => { setNeedsMount(element); onCleanup(() => { if (needsMount() === element) setNeedsMount(undefined); }); };
+  const [needsOpen, setNeedsOpen] = createSignal(false);
+  createEffect(() => { if (!agentNeeds() || wide()) setNeedsOpen(false); });
+  const needs = { count: () => agentNeeds(), open: needsOpen, toggle: () => { setOver(false); setNeedsOpen(!needsOpen()); } };
   onMount(() => {
     void refreshAgent();
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
@@ -103,14 +110,16 @@ export function JbotRoom(props: {
     }));
   };
 
-  return <JbotPanelControl.Provider value={{ open, toggle }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
+  return <JbotPanelControl.Provider value={{ open, toggle, needs: desktop ? undefined : needs }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
+          over={desktop && agentNeeds() ? <div ref={mountNeeds} /> : undefined} overLabel="Needs you"
           foldLead={(marks) => <><Segmented size="sm" icons={marks()} label={`${name()}'s panel`} value={tab()} onChange={setTab}
             options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
-          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false) })}</Show>}>
+          panel={<Show when={built() || open() || needsOpen()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false),
+            get needsMount() { return wide() ? undefined : needsMount; } })}</Show>}>
         {/* Hidden until what is on screen is drawn, then faded in, as every chat opens (ChatView opening). */}
         {/* And with its composer: a page drawn without it moved up as it came (the composer is its home thread's). */}
         <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
@@ -122,6 +131,9 @@ export function JbotRoom(props: {
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>
         </ChatBeside>
+        <Show when={!desktop}>
+          <Tray fit open={needsOpen()} onClose={() => setNeedsOpen(false)} label="Needs you" title={name()}><div ref={mountNeeds} /></Tray>
+        </Show>
       </Show>
     </Show>
   </SheetFill></JbotPanelControl.Provider>;

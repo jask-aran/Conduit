@@ -64,8 +64,10 @@ export function JbotSpend() {
   return <GaugeFigure value={status.share()} tone={tone()} used={money(status.spent())} of={status.budget() ? money(status.budget()) : undefined} label={`Spent ${words()}`} />;
 }
 
-/** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
-export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void } | null>(null);
+/** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. needs: on a phone,
+ *  what waits on the person is a sheet of its own, opened by the count beside jbot's pill. */
+export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void;
+  needs?: { count: () => number; open: () => boolean; toggle: () => void } } | null>(null);
 
 /**
  * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by
@@ -73,6 +75,8 @@ export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () 
  */
 export function JbotPanel(props: {
   tab: JbotTab;
+  /** Where Needs you is drawn instead of the panel's top (a card over the Ledge, a phone's own sheet). */
+  needsMount?: () => HTMLElement | undefined;
   onTab: (tab: JbotTab) => void;
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   onOpenFile: (path: string) => void;
@@ -82,7 +86,7 @@ export function JbotPanel(props: {
   markdownRenderer: MarkdownRendererId;
 }) {
   return <>
-    <AgentPage panel={props.tab} panelTop={<JbotSpend />} markdownRenderer={props.markdownRenderer} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
+    <AgentPage panel={props.tab} needsMount={props.needsMount} panelTop={<JbotSpend />} markdownRenderer={props.markdownRenderer} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
   </>;
 }
 

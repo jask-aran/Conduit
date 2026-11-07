@@ -1,6 +1,6 @@
 /* PanelHead, PanelBody (tray.tsx): the inside Tray and Ledge share, and a chat's panel beside it. --panel-inset is
    each surface's padding, declared once here, for what reaches its edges (a full-width hairline, the body's scroller). */
-:is(.ui-tray-panel, .ui-ledge, .ui-chat-beside-panel) { --panel-inset: var(--space-lg); }
+:is(.ui-tray-panel, .ui-ledge, .ui-ledge-over, .ui-chat-beside-panel) { --panel-inset: var(--space-lg); }
 .ui-panel-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); }
 .ui-panel-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-panel-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
@@ -19,13 +19,20 @@
   box-sizing: border-box; overflow: hidden; padding: var(--space-lg) var(--panel-inset) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   border-radius: var(--radius-surface) var(--radius-surface) 0 0; pointer-events: auto;
   transform: translateY(100%); visibility: hidden; transition: transform var(--duration-gentle) var(--ease-leave), visibility 0s linear var(--duration-gentle); }
+.ui-tray-panel[data-fit] { height: auto; max-height: min(var(--tray-reach), var(--measure-2xl)); }
 .ui-tray[data-open] .ui-tray-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
 
-/* Ledge: a pointer's, faded in over its container just above the composer, at the composer's width. */
-.ui-ledge { position: absolute; inset: auto 0 var(--ledge-above, var(--space-md)); z-index: var(--stack-over); display: flex; flex-direction: column; gap: var(--space-md);
-  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); height: min(calc(100% - var(--ledge-above, var(--space-md)) - var(--space-lg)), var(--measure-xl));
-  box-sizing: border-box; margin-inline: auto; overflow: hidden; padding: var(--panel-inset); border-radius: var(--radius-surface);
+/* Ledge: a pointer's, faded in over its container just above the composer, at the composer's width. Its stack holds
+   the panel at its one height at the foot and, above it, the over card: as tall as what it holds, up to the room left. */
+.ui-ledge-stack { position: absolute; inset: auto 0 var(--ledge-above, var(--space-md)); z-index: var(--stack-over); display: flex; flex-direction: column; justify-content: flex-end; gap: var(--space-md);
+  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); height: calc(100% - var(--ledge-above, var(--space-md)) - var(--space-lg));
+  margin-inline: auto; pointer-events: none; }
+.ui-ledge-stack > :is(.ui-ledge, .ui-ledge-over) { display: flex; flex-direction: column; gap: var(--space-md); box-sizing: border-box; overflow: hidden; padding: var(--panel-inset); border-radius: var(--radius-surface);
   opacity: 0; pointer-events: none; will-change: opacity; transition: opacity var(--duration-quick) var(--ease-leave); }
+.ui-ledge { flex: none; height: min(100%, var(--measure-xl)); }
+.ui-ledge-over { flex: 0 1 auto; min-height: 0; }
 .ui-ledge > .ui-panel-head { margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
-.ui-ledge[data-open] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
-.ui-ledge:not([data-open]) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }
+.ui-ledge-stack[data-open] > :is(.ui-ledge, .ui-ledge-over) { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+/* Given while the panel is open, the card fades in where it stands (the panel does not move). */
+.ui-ledge-stack[data-open] > .ui-ledge-over { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive); }
+.ui-ledge-stack:not([data-open]) > :is(.ui-ledge, .ui-ledge-over) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }
