@@ -32,3 +32,6 @@
 /* A foot line: what it says, in the lines' voice, its one control at the end. */
 .ui-reading-foot { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); }
 .ui-reading-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* GaugeFigure: a ring and its figure, used over what there is, in the data face. */
+.ui-gauge-figure small { color: var(--muted-foreground); font-size: inherit; opacity: var(--opacity-rest); }
+.ui-gauge-figure { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }

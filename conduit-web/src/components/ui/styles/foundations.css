@@ -47,7 +47,10 @@
   /* Room that closes under something following it (a transcript following the bottom as the composer's room goes):
      even at both ends, so no frame carries much of the move -- leave sped into its end, arrive out of its start. */
   --ease-room: cubic-bezier(.45, 0, .55, 1);
-  /* The page's stack, bottom to top. A piece's own stacking (1, 2, -1 inside it) stays local and is not a layer.
+  /* Within a chat, how its parts stack (the page's layers below hold whole surfaces): the transcript, the composer
+     docked over its foot, a panel over both (a Tray, a Ledge), and what rides over all of them (Scroll to latest). */
+  --stack-transcript: 1; --stack-composer: 2; --stack-over: 3; --stack-ride: 4;
+  /* The page's stack, bottom to top. A piece's own stacking (1, 2, -1 inside it) stays local and is not a layer, but a chat's is named (above).
      The sidebar's pane over what slides under its edge; the dock over the panes when it floats, and its edge with it. */
   --layer-nav: 20;
   --layer-dock: 40;

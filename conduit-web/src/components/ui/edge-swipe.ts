@@ -25,6 +25,9 @@ const FLICK_MIN_PX = 24;
 const COMMIT = 0.4;
 /** The finger's speed is read over its last few moves, not the last one alone, which a touch screen makes noisy. */
 const VELOCITY_MS = 80;
+/** The same feel for every swipe the library carries (the drawer, a Tray): how far a finger moves before the swipe
+ *  is taken, how far sideways is still a scroll, a flick's speed and least travel, and how far it lands past. */
+export const SWIPE = { lockPx: LOCK_PX, sidewaysRatio: SIDEWAYS_RATIO, flickPxPerMs: FLICK_PX_PER_MS, flickMinPx: FLICK_MIN_PX, commit: COMMIT } as const;
 
 /** travel: how far the panel moves between shut and open, in px, when it follows the finger (it lands past COMMIT of
  *  it). Without one the panel only opens or shuts on letting go, after the width's 30% (at most 120px). */

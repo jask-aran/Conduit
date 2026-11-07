@@ -1,6 +1,5 @@
 import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, Segmented, SheetFill } from "@/components/ui";
-import { unitPx } from "@/components/ui/layout";
+import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, rideBottom, Segmented, SheetFill } from "@/components/ui";
 import { clearDock } from "@/components/ui/dock-inset";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
@@ -46,22 +45,6 @@ export function JbotRoom(props: {
   const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(tabKey, next); } catch { /* a per-viewer convenience */ } };
   // A desktop never raises a sheet (a thumb's): without room beside, the panel fades in just above the composer.
   const desktop = !isMobileLayout();
-  // The tabs fold to their marks when the panel's head has no room for their words (its close and Settings never
-  // overflow): measured, the width they needed is kept, and the words come back once the head has it again.
-  const [marks, setMarks] = createSignal(false);
-  let wordsNeed = 0;
-  const fitLead = (lead: HTMLElement) => {
-    const head = () => lead.closest<HTMLElement>(".ui-panel-head");
-    const fit = () => {
-      const box = head();
-      if (!box || !box.clientWidth) return;
-      if (!marks() && box.scrollWidth > box.clientWidth) { wordsNeed = box.scrollWidth; setMarks(true); }
-      else if (marks() && box.clientWidth >= wordsNeed) setMarks(false);
-    };
-    const sizes = new ResizeObserver(fit);
-    requestAnimationFrame(() => { const box = head(); if (box) sizes.observe(box); });
-    onCleanup(() => sizes.disconnect());
-  };
   // How far above the chat's foot the composer's top is: where the panel (and Scroll to latest) sit.
   const [above, setAbove] = createSignal<number>();
   // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
@@ -91,7 +74,7 @@ export function JbotRoom(props: {
     const composer = dock?.firstElementChild?.getBoundingClientRect();
     const shell = root?.getBoundingClientRect();
     if (!latest || !composer || !shell || composer.height <= 0) return;
-    const bottom = Math.max(unitPx(0.5), shell.bottom - composer.top + unitPx(0.625));
+    const bottom = rideBottom(shell.bottom, composer.top);
     latest.style.setProperty("--ride-bottom", `${bottom}px`);
     if (bottom !== above()) setAbove(bottom);
   };
@@ -117,8 +100,8 @@ export function JbotRoom(props: {
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
-          lead={<span ref={fitLead} class="jbot-panel-lead"><Segmented size="sm" icons={marks()} label={`${name()}'s panel`} value={tab()} onChange={setTab}
-            options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></span>}
+          foldLead={(marks) => <><Segmented size="sm" icons={marks()} label={`${name()}'s panel`} value={tab()} onChange={setTab}
+            options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}

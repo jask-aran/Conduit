@@ -244,9 +244,6 @@
 .ui-dash-panel-glance { display: flex; align-items: center; gap: var(--space-2xl); }
 .ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
 .ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
-/* A spend ring and its figure (jbot's, by its day). */
-.ui-dash-spend small { color: var(--muted-foreground); font-size: inherit; opacity: var(--opacity-rest); }
-.ui-dash-spend { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 /* A panel that scrolls its own body (jbot's: its day fixed above) leaves the surface's body still: no second
    scroller, no gutter cutting its full-width hairline short. */
 .ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }

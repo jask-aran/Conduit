@@ -4,7 +4,8 @@ import { GroupCompactHeading } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Segmented } from "@/components/ui";
 import { Row, Group, GroupHeading, GroupToggle, Empty, Note, IconButton } from "@/components/ui";
-import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, LineCounts, DashPath, FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { Dashboard, DashHeader, QuickActions, QuickAction, QuickMore, GroupSwitches, GroupAction, DashDay, DashMore, ChangeRow, LineCounts, DashPath, FolderShelf, FolderTile, DashPanel, DashPeek } from "@/components/ui/dashboard";
+import { GaugeFigure, Glance, GlanceBody, GlanceHead } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 const dashboardScene = () => {
@@ -53,6 +54,13 @@ import { Icons } from "@/components/ui";
     {selector: ".ui-dash-aside",name: "Places",does: "holds projects and workspaces",from: "Dashboard aside"},
   ] },
   examples: [
+    row("DashPanel", "a dashboard in a panel: its band and figure fixed over a full-width hairline, its groups scrolling under it", () => <div style={{ display: "flex", height: "calc(16 * var(--u-space))", "--panel-inset": "var(--space-lg)", padding: "0 var(--space-lg)" }}>
+      <DashPanel band={<span>The day</span>} figure={<GaugeFigure value={24} tone="normal" used="$0.12" of="$0.50" label="Spent $0.12 of $0.50 today" />}>
+        <Dashboard label="Now" page="Agent" compact oneColumn stacked list={<>{["Context inbox", "Recent", "Decided for you"].map((label) => <Group kind="dash" id={label} labelled section={label}><GroupHeading>{label}</GroupHeading><Row density="list" lead={<Icons.Inbox />} label="1 report" context="Heartbeat · handled" meta="18h" /></Group>)}</>} />
+      </DashPanel></div>, { surfaces: ["frost"], source: "components/ui/dashboard.tsx · jbot's panel (agent-page.tsx)" }),
+    row("DashPeek", "a row previewed in place: Back and its way on, over a Glance", () => <DashPeek onBack={() => {}} open={{ label: "Open the file", icon: <Icons.FileText />, go: () => {} }}>
+      <Glance label="Heartbeat"><GlanceHead title="Heartbeat" facts={["Heartbeat · handled · 18h"]} /><GlanceBody><p>One new promotional email arrived; the two inbox entries have been marked handled.</p></GlanceBody></Glance>
+    </DashPeek>, { surfaces: ["frost"], source: "components/ui/dashboard.tsx · agent-page.tsx" }),
     row("GroupCompactHeading", "label, count and where", () => <GroupCompactHeading label="Unread" count={3} where="in Japan" />, { source: "components/ui/dashboard.tsx · dashboard/primitives/chat-list.tsx", phone: "only", code: "<GroupCompactHeading label count where />" }),
     row("GroupCompactHeading · label only", "no count, no place", () => <GroupCompactHeading label="All chats" />, { phone: "only", code: "<GroupCompactHeading label />" }),
     row("GroupHeading · the two section roles", "the strong one for dashboards and big lists; the quiet one for menus, Settings and the sidebar (Paper Mono capitals on both layouts, at each one's unit)", () => <div class="g-row g-top"><GroupHeading count={4}>Projects</GroupHeading><Group kind="nav" title="Projects"><Row density="nav" element="button" lead={<Icons.Folder />}>Japan</Row></Group></div>, { phone: true, code: "<GroupHeading count> · <Group label>" }),

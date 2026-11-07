@@ -3,6 +3,7 @@ import * as Icons from "./icons";
 import { children, createEffect, createSignal, For, Show, splitProps, type JSX } from "solid-js";
 import { RotateCwIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
+import { unitPx } from "./layout";
 import { Button, Keycap } from "./controls";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
@@ -25,6 +26,9 @@ export const RiderMark = (props: { icon: JSX.Element; label: string; title?: str
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
  *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
  *  reach, so it fades back in rather than being drawn again. */
+/** How high a RiderButton rides (--ride-bottom, px): clear of what it rides over (its top, coverTop) by a step and a
+ *  little, measured from its host's foot (hostBottom), never under the host's own edge. One rule for every host. */
+export const rideBottom = (hostBottom: number, coverTop: number) => Math.max(unitPx(0.5), hostBottom - coverTop + unitPx(0.625));
 /** ride: where it floats over what it rides (a transcript above its composer) -- centred, or beside a centred one; the host sets how high (--ride-bottom). */
 export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion; hidden?: boolean; ride?: "centre" | "beside" }) {
   const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion", "hidden", "ride"]);

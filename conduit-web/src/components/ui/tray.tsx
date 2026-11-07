@@ -1,7 +1,8 @@
-import { createEffect, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import * as Icons from "./icons";
 import { IconButton } from "./actions";
 import { overlayHaptics } from "./haptics";
+import { SWIPE } from "./edge-swipe";
 
 /*
  * A panel over what it belongs to, in two pieces with one inside: Tray (a phone's, risen from the foot) and Ledge (a
@@ -11,11 +12,32 @@ import { overlayHaptics } from "./haptics";
  * its edges (a full-width hairline).
  */
 
-/** A panel's head: its title (or a lead: tabs, a switch) by its actions and close; the lead gives way, never the close. */
-export function PanelHead(props: { title?: JSX.Element; lead?: JSX.Element; actions?: JSX.Element; onClose?: () => void; grip?: boolean }) {
-  return <div class="ui-panel-head">
+/** The parts of a panel's head a caller gives: a title, or a lead in its place; foldLead, a lead that folds (its
+ *  Segmented to marks) when the head has no room for it, so the actions and the close never overflow. */
+export interface PanelHeadParts { title?: JSX.Element; lead?: JSX.Element; foldLead?: (folded: () => boolean) => JSX.Element; actions?: JSX.Element }
+
+/** A panel's head: its title (or a lead: tabs, a switch) by its actions and close; the lead gives way, never the close.
+ *  A foldLead is measured: once the head overflows it folds, the width it needed kept, and it unfolds when the head has
+ *  that again (a breakpoint from its content, never a tuned width). */
+export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?: boolean }) {
+  let head!: HTMLDivElement;
+  const [folded, setFolded] = createSignal(false);
+  onMount(() => {
+    if (!props.foldLead) return;
+    let need = 0;
+    const fit = () => {
+      if (!head.clientWidth) return;
+      if (!folded() && head.scrollWidth > head.clientWidth) { need = head.scrollWidth; setFolded(true); }
+      else if (folded() && head.clientWidth >= need) setFolded(false);
+    };
+    const sizes = new ResizeObserver(fit);
+    sizes.observe(head);
+    onCleanup(() => sizes.disconnect());
+  });
+  const lead = () => props.foldLead?.(folded) ?? props.lead;
+  return <div ref={head} class="ui-panel-head">
     <Show when={props.grip}><span class="ui-panel-grip" aria-hidden="true" /></Show>
-    <Show when={props.lead} fallback={<strong>{props.title}</strong>}><span class="ui-panel-lead">{props.lead}</span></Show>
+    <Show when={props.lead || props.foldLead} fallback={<strong>{props.title}</strong>}><span class="ui-panel-lead">{lead()}</span></Show>
     <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><IconButton kind="pane" close label="Close" onClick={() => props.onClose?.()}><Icons.Close /></IconButton></Show></span>
   </div>;
 }
@@ -26,18 +48,10 @@ export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-pa
  * Tray: a phone's panel risen from the foot over what it belongs to, the rest dimmed by a scrim. It rides inside its
  * container (absolute), so what holds it (the pane's header, its pill) stays live. One height (min(85%,
  * --measure-2xl)); put away by its close, a tap on the scrim, Esc, or a swipe down anywhere on it (its body once
- * scrolled to its top), past a quarter of it or flicked; raised frost, the safe area kept under it; felt opening and
+ * scrolled to its top), past the drawer's commit of it or flicked (SWIPE, edge-swipe.ts: one feel for every swipe); raised frost, the safe area kept under it; felt opening and
  * shutting. Shut, it stays laid out off the foot and inert, so it rises at once.
  */
-export function Tray(props: {
-  open: boolean;
-  onClose: () => void;
-  label: string;
-  title?: JSX.Element;
-  lead?: JSX.Element;
-  actions?: JSX.Element;
-  children: JSX.Element;
-}) {
+export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; children: JSX.Element }) {
   let panel!: HTMLElement;
   overlayHaptics(() => props.open);
   createEffect(() => {
@@ -47,7 +61,7 @@ export function Tray(props: {
     onCleanup(() => window.removeEventListener("keydown", away, true));
   });
   // A swipe down anywhere on it carries it with the finger -- from its head, or from what it holds once that is scrolled
-  // to its top (a scroll up, or sideways, stays a scroll); let go past a quarter of it (or flicked), it goes. Touch
+  // to its top (a scroll up, or sideways, stays a scroll); let go past SWIPE.commit of it (or flicked), it goes. Touch
   // events, not pointer ones: the move must be able to stop the scroll it would otherwise start.
   const scrollerOf = (target: Element) => {
     for (let node: Element | null = target; node && node !== panel; node = node.parentElement) {
@@ -68,8 +82,8 @@ export function Tray(props: {
     if (!touch) return;
     const dy = touch.clientY - drag.y, dx = touch.clientX - drag.x;
     if (!drag.carrying) {
-      if (Math.abs(dx) > 8 || dy < -8 || (dy > 8 && !drag.atTop)) { drag = null; return; }
-      if (dy <= 8 || Math.abs(dy) <= Math.abs(dx)) return;
+      if (Math.abs(dx) > SWIPE.lockPx || dy < -SWIPE.lockPx || (dy > SWIPE.lockPx && !drag.atTop)) { drag = null; return; }
+      if (dy <= SWIPE.lockPx || Math.abs(dy) <= Math.abs(dx) * SWIPE.sidewaysRatio) return;
       drag.carrying = true;
     }
     event.preventDefault();
@@ -84,7 +98,8 @@ export function Tray(props: {
     if (!carrying) return;
     panel.style.transition = "";
     panel.style.transform = "";
-    if (dy > panel.offsetHeight / 4 || dy / Math.max(1, performance.now() - at) > 0.6) props.onClose();
+    const flicked = dy >= SWIPE.flickMinPx && dy / Math.max(1, performance.now() - at) > SWIPE.flickPxPerMs;
+    if (dy > panel.offsetHeight * SWIPE.commit || flicked) props.onClose();
   };
   onMount(() => {
     panel.addEventListener("touchstart", start, { passive: true });
@@ -96,7 +111,7 @@ export function Tray(props: {
   return <div class="ui-tray" data-open={props.open ? "" : undefined}>
     <div class="ui-tray-scrim" aria-hidden="true" onClick={() => props.onClose()} />
     <section ref={panel} class="ui-tray-panel ui-frost" data-surface="frost" data-lift="raised" role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
-      <PanelHead grip title={props.title} lead={props.lead} actions={props.actions} onClose={() => props.onClose()} />
+      <PanelHead grip title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
       <PanelBody>{props.children}</PanelBody>
     </section>
   </div>;
@@ -109,17 +124,7 @@ export function Tray(props: {
  * under it), as a menu's is. Shut and settled it is skipped from layout and paint, kept on its own layer so fading in
  * composites what is already drawn.
  */
-export function Ledge(props: {
-  open: boolean;
-  onClose: () => void;
-  label: string;
-  above: number;
-  keep?: () => Element | null | undefined;
-  title?: JSX.Element;
-  lead?: JSX.Element;
-  actions?: JSX.Element;
-  children: JSX.Element;
-}) {
+export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above: number; keep?: () => Element | null | undefined; children: JSX.Element }) {
   let panel!: HTMLElement;
   createEffect(() => {
     if (!props.open) return;
@@ -135,7 +140,7 @@ export function Ledge(props: {
   });
   return <section ref={panel} class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} aria-label={props.label}
     inert={!props.open ? true : undefined} style={{ "--ledge-above": `${props.above}px` }}>
-    <PanelHead title={props.title} lead={props.lead} actions={props.actions} onClose={() => props.onClose()} />
+    <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
     <PanelBody>{props.children}</PanelBody>
   </section>;
 }

@@ -54,8 +54,9 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; above?: number;
   /** Its own buttons, in its head (by its close, over the chat). */
   actions?: JSX.Element;
-  /** What leads its head in its title's place (jbot's tabs). */
+  /** What leads its head in its title's place (jbot's tabs); foldLead, one that folds when the head has no room. */
   lead?: JSX.Element;
+  foldLead?: (folded: () => boolean) => JSX.Element;
   /** false: never beside the chat, whatever the width (a tool in the dock: its panel only rides above the composer). */
   beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
@@ -76,11 +77,11 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     {/* Beside the chat, part of the pane; over it, a Tray (a phone's) or a Ledge above the composer (a pointer's). */}
     <Show when={wide()} fallback={props.above !== undefined
       ? <Ledge open={props.open} onClose={() => props.onClose()} label={props.label} above={props.above} keep={() => root.querySelector(".ui-composer-dock")}
-          title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Ledge>
-      : <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Tray>}>
+          title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions}>{props.panel}</Ledge>
+      : <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions}>{props.panel}</Tray>}>
       <Show when={props.open}>
         <aside class="ui-chat-beside-panel" aria-label={props.label}>
-          <Show when={props.actions || props.lead}><PanelHead title={props.title} lead={props.lead} actions={props.actions} /></Show>
+          <Show when={props.actions || props.lead || props.foldLead}><PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} /></Show>
           <PanelBody>{props.panel}</PanelBody>
         </aside>
       </Show>

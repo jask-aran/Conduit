@@ -1,7 +1,7 @@
 import { Icons } from "@/components/ui";
 import { Show } from "solid-js";
 import { Button, Menu } from "@/components/ui";
-import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot } from "@/components/ui";
+import { GaugeFigure, Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, ReadingStat, ReadingFoot } from "@/components/ui";
 import { ContextReadingDemo } from "../demos";
 import { row, token, type Page } from "../model";
 
@@ -25,6 +25,7 @@ export const readingPage: Page = {
     { selector: ".ui-reading-foot", name: "Foot", does: "shows compaction information and its action" },
   ] },
   examples: [
+    row("GaugeFigure", "a ring of what is used, its figure used over what there is (jbot's spend)", () => <GaugeFigure value={62} tone="normal" used="$0.31" of="$0.50" label="Spent $0.31 of $0.50 today" />, { source: "components/ui/reading.tsx · jbot-status.tsx" }),
     row("Unavailable", "Label only; no totals or reset detail", () => <Menu><Reading><ReadingTotal label="Context unavailable" /><ReadingParts label="Context breakdown"><ReadingPart hollow label="Waiting for the first response" /></ReadingParts><ReadingStats title="Plan · Plus"><ReadingStat label="Weekly" value="Unavailable" /></ReadingStats><ReadingFoot>Start a turn to measure context.</ReadingFoot></Reading></Menu>, { surfaces: ["ground"], phone: true, code: "<ReadingTotal label /> · <ReadingPart label /> · <ReadingStat label value /> · <ReadingFoot>" }),
     row("Long tool name", "Nested names in a narrow context menu", () => <Menu width="sm"><Reading><ReadingParts label="What fills the window"><ReadingPart sub label="mcp__codemode__read_workspace_configuration_and_project_instructions" value="12k · 6.0%" /></ReadingParts></Reading></Menu>, { surfaces: ["ground"], phone: true, code: '<Menu width="sm"><Reading><ReadingPart sub label value /></Reading></Menu>' }),
     row("Compaction unavailable", "Disabled action while context is loading", () => <Menu><Reading><ReadingFoot action={<Button variant="ghost" outline size="sm" disabled><Icons.Compact />Compact now</Button>}>Context is still loading</ReadingFoot></Reading></Menu>, { surfaces: ["ground"], phone: true, code: "<ReadingFoot action={<Button disabled />}>" }),

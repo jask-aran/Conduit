@@ -188,3 +188,30 @@ export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" 
     <Show when={local.meta}><span class="ui-folder-meta">{local.meta}</span></Show>
   </Dynamic>;
 }
+
+/**
+ * DashPanel: a dashboard drawn in a panel (jbot's), its top fixed whatever its tab -- a band (a day) by its figure (a
+ * GaugeFigure), and under them what needs the person -- with a full-width hairline under it, and its groups scrolling
+ * below, their gutter kept so nothing moves.
+ */
+export function DashPanel(props: { band: JSX.Element; figure?: JSX.Element; under?: JSX.Element; children: JSX.Element }) {
+  return <div class="ui-dash-panel">
+    <div class="ui-dash-panel-top">
+      <div class="ui-dash-panel-glance"><div class="ui-dash-panel-day">{props.band}</div>{props.figure}</div>
+      {props.under}
+    </div>
+    <div class="ui-dash-panel-body">{props.children}</div>
+  </div>;
+}
+
+/**
+ * DashPeek: a row previewed in place (in a DashPanel): Back, and its own way on (the file, the chat), as the group's
+ * quiet actions, over what it holds (a Glance).
+ */
+export function DashPeek(props: { onBack: () => void; open?: { label: string; icon: JSX.Element; go: (event: MouseEvent) => void }; children: JSX.Element }) {
+  return <div class="ui-dash-peek">
+    <div class="ui-dash-peek-bar"><GroupAction onClick={() => props.onBack()}><Icons.ChevronLeft />Back</GroupAction>
+      <Show when={props.open}>{(open) => <GroupAction onClick={(event: MouseEvent) => open().go(event)}>{open().icon}{open().label}</GroupAction>}</Show></div>
+    {props.children}
+  </div>;
+}

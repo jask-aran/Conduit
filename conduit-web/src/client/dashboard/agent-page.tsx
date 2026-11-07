@@ -4,7 +4,7 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { AgentAvatar, Answer, approvalLineText, Empty, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
-import { GroupAction } from "@/components/ui/dashboard";
+import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
 import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
@@ -149,9 +149,7 @@ export function AgentPage(props: {
     const text = () => peekText() ?? shown.text;
     // Drawn as chat search's preview is (Glance): its title the one strong line, its facts in the data face, what it
     // says at the row's size a tone under the text, not a transcript's answer.
-    return <div class="ui-dash-peek">
-      <div class="ui-dash-peek-bar"><GroupAction onClick={() => setPeek(null)}><Icons.ChevronLeft />Back</GroupAction>
-        <Show when={shown.open}>{(open) => <GroupAction onClick={(event: MouseEvent) => { setPeek(null); open().go(event); }}>{open().icon}{open().label}</GroupAction>}</Show></div>
+    return <DashPeek onBack={() => setPeek(null)} open={shown.open ? { ...shown.open, go: (event) => { setPeek(null); shown.open!.go(event); } } : undefined}>
       <Glance label={shown.title}>
         <GlanceHead title={shown.title} facts={[shown.context]} />
         {/* Keyed: the headline first, then the file's whole text once read, each drawn afresh. */}
@@ -159,7 +157,7 @@ export function AgentPage(props: {
           <GlanceBody><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.markdownRenderer} streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></GlanceBody>}
         </Show>
       </Glance>
-    </div>;
+    </DashPeek>;
   };
   const entryText = (entry: AgentInboxEntry) => entry.body && entry.body !== entry.headline ? entry.body : entry.headline || "";
   const runRow = (run: AgentRun, live: boolean) => {
@@ -478,16 +476,11 @@ export function AgentPage(props: {
     {props.header?.(`${name()}'s page`)}
     {/* In the panel its day stays at the top, whatever the tab; the tab's groups scroll under it. */}
     <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
-      <div class="ui-dash-panel">
-        <div class="ui-dash-panel-top">
-          <div class="ui-dash-panel-glance"><div class="ui-dash-panel-day">{day()}</div>{props.panelTop}</div>
-          <Show when={agentNeeds()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>
-        </div>
-        <div class="ui-dash-panel-body">
+      <DashPanel band={day()} figure={props.panelTop}
+        under={<Show when={agentNeeds()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>}>
           <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
             notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} list={<Show when={peek()} fallback={tabGroups(tab())}>{(shown) => peekView(shown())}</Show>} />
-        </div>
-      </div>
+      </DashPanel>
     </Show>}</Show>
     <Show when={!props.panel && view()} fallback={<Show when={!props.panel}><SplitEmpty>Loading…</SplitEmpty></Show>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>

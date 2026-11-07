@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { Show, splitProps, type JSX } from "solid-js";
 
-import { Swatch } from "./controls";
+import { Gauge, Swatch } from "./controls";
 
 /*
  * Reading: what a gauge measures, laid out to be read at a glance -- the context window in the composer's gauge
@@ -42,3 +42,9 @@ export const ReadingStat = (props: { value: JSX.Element; label: string; detail?:
 /** A foot line: what it says (where it compacts; the model) and one control at its end (Compact now; a session's copy). */
 export const ReadingFoot = (props: { children: JSX.Element; action?: JSX.Element }) =>
   <div class="ui-reading-foot"><span>{props.children}</span>{props.action}</div>;
+
+/** A ring of what is used and its figure, used over what there is (jbot's spend: $0.12 / $0.50), in the data face;
+ *  label: the whole of it in words, to a reader and on hover. */
+export const GaugeFigure = (props: { value: number; tone?: "idle" | "normal" | "warning" | "critical"; used: string; of?: string; label: string }) =>
+  <span class="ui-gauge-figure" role="img" aria-label={props.label} title={props.label}><Gauge value={props.value} tone={props.tone} />
+    <span>{props.used}<Show when={props.of}><small> / {props.of}</small></Show></span></span>;

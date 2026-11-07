@@ -314,9 +314,10 @@ export function createActiveChat(options: ActiveChatOptions) {
     return cached && cached.projectId === projectId && cached.expiresAt > Date.now() ? cached.request : fetchTurnArtifacts(projectId, chatId);
   };
 
+  // A chat already read at its revision is not read again (a phone's drawer warms what it shows each time it opens).
   const prefetch = (chat: ChatSummary) => {
     if (chatIsLive(chat)) return;
-    void loadTranscript(chat).catch(() => {});
+    if (transcriptCache.get(chat.id)?.revision !== transcriptRevision(chat)) void loadTranscript(chat).catch(() => {});
     if (chat.projectId) warmTurnArtifacts(chat.projectId, chat);
   };
   // A stop is finished when the turn says it stopped, settled or is stopping.

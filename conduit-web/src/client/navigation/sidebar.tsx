@@ -228,7 +228,32 @@ export function Sidebar(props: {
     const open = props.mobileOpen;
     if (drawerSettled() === open) return;
     setDrawerSettled(open);
-    if (open && phoneLayout()) focusFirst(sidebarRoot);
+    if (open && phoneLayout()) { focusFirst(sidebarRoot); warmShown(); }
+    if (!open) window.clearTimeout(warmTimer);
+  };
+  /*
+   * A phone finds out which chat is wanted only at the tap, too late to fetch it then (a pointer's hover is ahead of
+   * its click). So once the drawer lands, the chats it shows are read ahead, one every beat so none waits on the
+   * rest, and those scrolled into view after; the chat's cache keeps what is still current, so nothing is read twice.
+   */
+  let warmTimer = 0;
+  let warmed = new Set<string>();
+  const warmShown = () => {
+    window.clearTimeout(warmTimer);
+    if (!phoneLayout() || !props.mobileOpen || !sidebarList) return;
+    const view = sidebarList.getBoundingClientRect();
+    const byId = new Map(props.projects.flatMap((project) => project.sessions.map((chat) => [chat.id, chat] as const)));
+    const shown = [...sidebarList.querySelectorAll<HTMLElement>("[data-chat-id]")]
+      .filter((row) => { const box = row.getBoundingClientRect(); return box.bottom > view.top && box.top < view.bottom; })
+      .map((row) => byId.get(row.dataset.chatId!)).filter((chat): chat is ChatSummary => Boolean(chat) && !warmed.has(chat!.id));
+    const next = () => {
+      const chat = shown.shift();
+      if (!chat || !props.mobileOpen) return;
+      warmed.add(chat.id);
+      props.onPrefetchChat(chat);
+      warmTimer = window.setTimeout(next, 120);
+    };
+    next();
   };
   const cancelSidebarEdgeMotion = () => {
     if (sidebarEdgeRaf) {
@@ -498,6 +523,7 @@ export function Sidebar(props: {
       settleTimer = window.setTimeout(settleDrawer, 400);
     }
     if (open && !mobileWasOpen) {
+      warmed = new Set();
       mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (!phoneLayout()) queueMicrotask(() => focusFirst(sidebarRoot));
       // A chat opened while it was shut is shown as it opens (its folder was opened then).
@@ -1124,7 +1150,12 @@ export function Sidebar(props: {
     <Show when={phoneLayout()} fallback={<Show when={props.mobileOpen}><Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} /></Show>}>
       <Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} open={props.mobileOpen} />
     </Show>
-    <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => { sidebarList = element; }} data-region="sidebar"
+    <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => {
+        sidebarList = element;
+        // Scrolled, it warms what has come into view once the list rests (a phone's; warmShown checks).
+        let rest = 0;
+        element.addEventListener("scroll", () => { window.clearTimeout(rest); rest = window.setTimeout(warmShown, 150); }, { passive: true });
+      }} data-region="sidebar"
       data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
       aria-hidden={phoneLayout() && !drawerSettled() ? true : undefined} inert={phoneLayout() && !drawerSettled() ? true : undefined}

@@ -1,6 +1,5 @@
-import { AgentRows, Icons, RoutineIcon, RunLine } from "@/components/ui";
+import { AgentRows, Icons, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
-import { unitPx } from "@/components/ui/layout";
 import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
@@ -906,7 +905,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       const editActions = conversation.querySelector<HTMLElement>(".ui-phone-composer[data-show~=\"edit\"] > .ui-phone-edit");
       const editTop = editActions?.getBoundingClientRect().top ?? Infinity;
       if (shellRect.width <= 0 || shellRect.height <= 0 || composerRect.width <= 0 || composerRect.height <= 0) return;
-      const bottom = `${Math.max(unitPx(0.5), shellRect.bottom - Math.min(composerRect.top, captionsTop, editTop) + unitPx(0.625))}px`;
+      const bottom = `${rideBottom(shellRect.bottom, Math.min(composerRect.top, captionsTop, editTop))}px`;
       for (const button of anchored) {
         if (button.style.getPropertyValue("--ride-bottom") !== bottom) button.style.setProperty("--ride-bottom", bottom);
       }
