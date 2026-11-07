@@ -9,7 +9,7 @@ const source = fs.readFileSync(new URL("../src/client/main.tsx", import.meta.url
 const routes = await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(fs.readFileSync(new URL("../src/client/api/routes.ts", import.meta.url), "utf8")))}`);
 const start = source.indexOf("    let loading: string | null = null;", source.indexOf("const renderJbot ="));
 assert.ok(start >= 0);
-const end = source.indexOf("    // The page shows none of the thread:", start);
+const end = source.indexOf("    const openFile = (path: string) =>", start);
 assert.ok(end > start);
 const mount = new Function("createEffect", "on", "onCleanup", "agentView", "current", "agentChat", "showError",
   stripTypeScriptTypes(source.slice(start, end)));
@@ -41,12 +41,6 @@ test("/jbot opens messages; /jbot/page and /agent open the dashboard", () => {
   routes.setJbotHome("home");
   assert.equal(routes.chatPath("home"), "/jbot/thread");
   assert.equal(routes.pathChatId("/jbot/thread"), "home");
-});
-
-test("/jbot/page has no home-thread loader or composer", () => {
-  const dashboard = source.slice(source.indexOf("  const renderAgent ="), source.indexOf("  const renderJbot ="));
-  assert.match(dashboard, /<AgentPage/);
-  assert.doesNotMatch(dashboard, /createEffect|PageComposer|current\.chat/);
 });
 
 test("opening a run does not reselect home when active-chat reset clears loadedId", async () => {

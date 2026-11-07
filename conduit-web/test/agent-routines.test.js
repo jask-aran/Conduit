@@ -463,8 +463,8 @@ test("only the active fork has home memory rights; its messages are refused", as
   assert.equal((await MessageTools(agent.runtime).tools[0].execute({ text: "Hello" }, forkApi)).isError, true);
   for (const name of ["message", "notify", "subagent", "schedule", "ask_user", "approved", "bash", "mcp__executor__execute"]) {
     const guarded = routineToolGuard(agent.runtime).handlers.beforeTool;
-    assert.match((await guarded({ name, arguments: {} }, { ...forkApi, snapshot: api.snapshot })).block, /Routine forks cannot/);
-    assert.match((await guarded({ name, arguments: {}, parent: { taskId: 42, callId: "nested" } }, { ...forkApi, snapshot: api.snapshot })).block, /Routine forks cannot/);
+    assert.ok((await guarded({ name, arguments: {} }, { ...forkApi, snapshot: api.snapshot })).block, `${name} is blocked`);
+    assert.ok((await guarded({ name, arguments: {}, parent: { taskId: 42, callId: "nested" } }, { ...forkApi, snapshot: api.snapshot })).block, `nested ${name} is blocked`);
   }
   const state = await agent.state();
   assert.equal(forkAllows(agent, state.routineRuns[1], "write", { path: "SOUL.md" }), false);

@@ -1,6 +1,6 @@
-import { AgentRows, clockTime, Icons, onScrollRest, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
+import { AgentRows, clockTime, createTranscriptFollow, Icons, onScrollRest, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
 import { setLatestAway, setLatestScroller } from "./latest-away";
-import { COPY_FEEDBACK_MS, reducedMotion } from "@/components/ui/motion";
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
 import type { BooleanCapability, Message, ToolItem } from "../api/contracts";
@@ -32,20 +32,12 @@ import { mountTranscriptPanelMotion } from "./transcript-motion";
 import { mountTranscriptVisibility } from "./transcript-visibility";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout";
 import {
-  advanceTailFollow,
-  createTailFollowState,
-  decideTailScroll,
-  TAIL_REJOIN_PX,
-  rebaseTailFollowState,
   HISTORY_LOAD_TOP_PX,
   TAIL_NEAR_LATEST_PX,
   shouldFollowAfterHistoryRestore,
   shouldLoadEarlierHistory,
   shouldRestoreHistoryAnchor,
-  usedMaxScrollTop,
-  type TailFollowOwner,
-  type TailFollowState,
-} from "./transcript-tail-follow";
+} from "@/components/ui/tail-follow";
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
@@ -296,15 +288,24 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
   let previousMarkdownRenderer = props.markdownRenderer;
-  const [following, setFollowing] = createSignal(true);
+  // The follow (the library's createTranscriptFollow): held at the latest while the reader is there, the typewriter's
+  // spring carrying it down with live output; the transcript adds its history paging (onStep) and holds it while its
+  // virtualizer or a panel reflow moves the content.
+  const follow = createTranscriptFollow({
+    viewport: () => viewport,
+    spring: () => rendererUsesTypewriter(),
+    live: () => liveTail(),
+    empty: () => empty(),
+    holding: () => Boolean(transcriptVisibility?.refreshing() || transcriptVisibility?.moving()),
+    onStep: () => loadEarlier(),
+  });
+  const { following, setFollowing, latestDistance, latestAway } = follow;
   // A phone's composer has Scroll to latest in its own row, so the transcript's stays hidden there.
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => { const media = matchMedia(MOBILE_LAYOUT_QUERY), sync = () => setPhoneLayout(media.matches); media.addEventListener("change", sync); onCleanup(() => media.removeEventListener("change", sync)); });
-  const [latestDistance, setLatestDistance] = createSignal(0);
   /* The phone's voice composer carries its own scroll-to-latest in its row
      and hides the floating one: tell it when the latest is out of view, and
      take its press. */
-  const latestAway = createMemo(() => !following() && latestDistance() >= TAIL_NEAR_LATEST_PX);
   createEffect(() => setLatestAway(latestAway()));
   onCleanup(() => setLatestAway(false));
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
@@ -457,18 +458,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     requestAnimationFrame(() => { thread.style.minHeight = ""; });
   }, { defer: true }));
 
-  let scrollFrame: number | null = null;
-  let typewriterTailFrame: number | null = null;
-  let typewriterTailState: TailFollowState = createTailFollowState();
-  let typewriterTailRejoinTimer: number | null = null;
-  let programmaticScrollTop: number | null = null;
-  let previousScrollTop: number | null = null;
-  // Paired with previousScrollTop: an upward move is only a reader if the
-  // scrollable distance did not shrink out from under it.
-  let previousMaxScrollTop: number | null = null;
   let previousUserMessageId: string | null = null;
   let previousRenderer: MarkdownRendererId | null = null;
-  const currentViewportScrollTop = () => viewport?.scrollTop ?? 0;
   const rememberScrollPosition = (chatId: string) => {
     // At the foot there is nothing to find: it comes back to its foot (and leaving reads no layout, ~5ms of an open).
     if (following()) {
@@ -509,167 +500,23 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     }));
     return true;
   };
-  const cancelTypewriterTailFrame = () => {
-    if (typewriterTailFrame == null) return;
-    cancelAnimationFrame(typewriterTailFrame);
-    typewriterTailFrame = null;
-  };
-  const cancelTypewriterTailRejoin = () => {
-    if (typewriterTailRejoinTimer == null) return;
-    clearTimeout(typewriterTailRejoinTimer);
-    typewriterTailRejoinTimer = null;
-  };
-  const setTypewriterTailOwner = (owner: TailFollowOwner, rebase = false) => {
-    typewriterTailState = rebase
-      ? rebaseTailFollowState(typewriterTailState, currentViewportScrollTop(), owner)
-      : { ...typewriterTailState, owner, velocity: owner === "user" ? 0 : typewriterTailState.velocity };
-    if (owner === "user") {
-      cancelTypewriterTailFrame();
-    }
-  };
-  // Handing the tail back is only ever allowed after a downward scroll that
-  // actually reached the bottom. decideTailScroll gates the call site; this
-  // timer just waits for the gesture to go quiet before the spring resumes.
-  const scheduleTypewriterTailRejoin = () => {
-    cancelTypewriterTailRejoin();
-    if (!rendererUsesTypewriter() || !following()) return;
-    typewriterTailRejoinTimer = window.setTimeout(() => {
-      typewriterTailRejoinTimer = null;
-      if (!rendererUsesTypewriter() || !following()) return;
-      setTypewriterTailOwner("app", true);
-      requestTypewriterTailFollow();
-    }, 120);
-  };
-  // Normal tail movement uses whole pixels. Panel reflow anchoring must retain
-  // fractional scroll positions or each resize frame accumulates visible drift.
-  const setViewportScrollTop = (next: number, round = true, glide = false) => {
-    // The glide to the latest owns the viewport until it lands (glideToLatest).
-    if (latestGlide != null && !glide) return;
-    viewport.scrollTop = round ? Math.round(next) : next;
-    programmaticScrollTop = viewport.scrollTop;
-    previousScrollTop = viewport.scrollTop;
-    previousMaxScrollTop = viewportMaxScrollTop();
-  };
-  const viewportMaxScrollTop = () => usedMaxScrollTop({
-    scrollHeight: viewport.scrollHeight,
-    clientHeight: viewport.clientHeight,
-    scrollTop: viewport.scrollTop,
-  });
-  const syncLatestDistance = () => {
-    setLatestDistance(Math.max(0, viewportMaxScrollTop() - viewport.scrollTop));
-  };
-  /*
-   * Sending, and Scroll to latest, glide the view to the bottom: one ease,
-   * aimed at the bottom as it is on each frame (a send's message is already in
-   * the thread and the composer may be folding; an answer may be growing). The
-   * tail follow and every other scroll wait until it lands, so nothing snaps
-   * underneath it; a touch or wheel hands the view straight back.
-   */
-  let latestGlide: number | null = null;
-  const cancelLatestGlide = () => { if (latestGlide != null) cancelAnimationFrame(latestGlide); latestGlide = null; };
-  // Nothing else writes the scroll until it lands or is taken.
-  const glideToLatest = (then: () => void) => {
-    cancelLatestGlide();
-    const from = viewport.scrollTop;
-    // The message and its starting header are already in the transcript, so
-    // the bottom is final before the scroll starts; read each frame anyway,
-    // since their rows may be built a frame late.
-    const target = () => viewport.scrollHeight - viewport.clientHeight;
-    const first = target();
-    if (reducedMotion() || Math.abs(first - from) < 2) { setViewportScrollTop(first, true, true); then(); return; }
-    // About the pace of the browser's own smooth scroll: longer for further,
-    // eased at both ends.
-    const duration = Math.min(700, 280 + Math.sqrt(Math.abs(first - from)) * 6);
-    const started = performance.now();
-    const step = () => {
-      const progress = Math.min(1, (performance.now() - started) / duration);
-      const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
-      latestGlide = progress < 1 ? requestAnimationFrame(step) : null;
-      setViewportScrollTop(from + (target() - from) * eased, true, true);
-      if (latestGlide == null) then();
-    };
-    latestGlide = requestAnimationFrame(step);
-  };
-  const scrollBottomNow = () => {
-    if (scrollFrame != null) {
-      cancelAnimationFrame(scrollFrame);
-      scrollFrame = null;
-    }
-    setViewportScrollTop(viewport.scrollHeight);
-    loadEarlier();
-  };
-  const scrollBottom = () => {
-    if (scrollFrame != null) return;
-    scrollFrame = requestAnimationFrame(() => {
-      scrollFrame = null;
-      if (following()) scrollBottomNow();
-    });
-  };
+  const cancelTypewriterTailFrame = follow.cancelSpringFrame;
+  const cancelTypewriterTailRejoin = follow.cancelRejoin;
+  const setTypewriterTailOwner = follow.setOwner;
+  const setViewportScrollTop = follow.setScrollTop;
+  const viewportMaxScrollTop = follow.maxScrollTop;
+  const syncLatestDistance = follow.syncLatestDistance;
+  const scrollBottomNow = follow.scrollBottomNow;
+  const scrollBottom = follow.scrollBottom;
   // A turn that has just ended is still the live tail for a moment: its foot and last rows arrive as it settles, and
   // the spring takes the view down to them. Snapped -- as a chat opened finished is -- they landed in one frame (48px).
   let liveTailUntil = 0;
   const liveTail = () => Boolean(props.chat.activeGeneration()) || performance.now() < liveTailUntil;
   createEffect(on(() => Boolean(props.chat.activeGeneration()), (live, was) => { if (was && !live) liveTailUntil = performance.now() + 1500; }, { defer: true }));
-  const resumeTypewriterTailFollow = () => {
-    if (!rendererUsesTypewriter()) return;
-    cancelTypewriterTailRejoin();
-    setFollowing(true);
-    typewriterTailState = createTailFollowState(currentViewportScrollTop(), "app");
-    requestTypewriterTailFollow();
-  };
-  // Sending and Scroll to latest are both a request to watch the answer arrive: the view follows from the press, and the
-  // tail follow takes it from where the glide lands. Scroll to latest was the browser's smooth scroll, aimed at the
-  // bottom as it was when pressed: an answer growing meanwhile left it short of the follow's reach, and not following.
-  const followLatest = () => {
-    setFollowing(true);
-    glideToLatest(() => {
-      setFollowing(true);
-      if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
-      else scrollBottom();
-    });
-  };
-  const requestTypewriterTailFollow = () => {
-    if (!rendererUsesTypewriter() || !following() || typewriterTailState.owner !== "app") return;
-    if (!liveTail()) {
-      const targetScrollTop = viewportMaxScrollTop();
-      setViewportScrollTop(targetScrollTop);
-      typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
-    }
-    if (typewriterTailFrame != null) return;
-    if (scrollFrame != null) {
-      cancelAnimationFrame(scrollFrame);
-      scrollFrame = null;
-    }
-    typewriterTailFrame = requestAnimationFrame((now) => {
-      typewriterTailFrame = null;
-      if (!rendererUsesTypewriter() || !following() || typewriterTailState.owner !== "app") return;
-
-      const targetScrollTop = viewportMaxScrollTop();
-      // A persisted transcript is already complete. Keep its tail pinned while
-      // lazy Markdown resolves; the spring is for live output, where the target
-      // moves continuously and a snap would fight the display cadence.
-      if (!liveTail()) {
-        setViewportScrollTop(targetScrollTop);
-        typewriterTailState = rebaseTailFollowState(typewriterTailState, targetScrollTop, "app");
-      }
-      const currentScrollTop = viewport.scrollTop;
-      const frame = advanceTailFollow(typewriterTailState, targetScrollTop, now, currentScrollTop);
-      typewriterTailState = frame.state;
-      const nextScrollTop = frame.nextScrollTop;
-      if (!frame.rebased && Math.abs(nextScrollTop - currentScrollTop) > 0.05) setViewportScrollTop(nextScrollTop);
-      loadEarlier();
-
-      const stillMoving = Math.abs(targetScrollTop - nextScrollTop) > 0.25 || Math.abs(typewriterTailState.velocity) > 1;
-      if (following() && rendererUsesTypewriter() && typewriterTailState.owner === "app" && stillMoving) {
-        requestTypewriterTailFollow();
-      }
-    });
-  };
-  const settleInitialLayout = (epoch: number) => {
-    if (epoch !== layoutEpoch || !following()) return;
-    if (rendererUsesTypewriter()) requestTypewriterTailFollow();
-    else scrollBottomNow();
-  };
+  const resumeTypewriterTailFollow = () => { if (rendererUsesTypewriter()) follow.resume(); };
+  const followLatest = follow.followLatest;
+  const requestTypewriterTailFollow = () => { if (rendererUsesTypewriter()) follow.request(); };
+  const settleInitialLayout = (epoch: number) => { if (epoch === layoutEpoch) follow.settle(); };
   // Highlighting is a settled-content concern, so it runs off the idle queue and
   // only ever touches cards it has not already done. Coalesced because
   // onRendered fires on every streaming frame.
@@ -728,7 +575,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // latest, and the turns above arrive out of sight.
     const filling = settled && maxScrollTop < HISTORY_LOAD_TOP_PX;
     if (rendererUsesTypewriter() && !filling) {
-      cancelTypewriterTailRejoin();
       setTypewriterTailOwner("user", true);
       setFollowing(false);
     }
@@ -832,7 +678,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
     else {
       cancelTypewriterTailRejoin();
-      cancelTypewriterTailFrame();
       scrollPositions.clear();
       expandedItems.clear();
       setTypewriterTailOwner("app", true);
@@ -954,121 +799,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     };
     composerStack?.addEventListener("transitionend", composerLanded);
     const visualViewport = window.visualViewport;
-    /*
-     * The keyboard takes height from the bottom, so the transcript gives it
-     * back from the top.
-     *
-     * The shell shrinks for the keyboard, which moves the composer up but
-     * leaves the thread's scroll position where it was -- so the lines
-     * somebody was reading went behind the keyboard and the window onto the
-     * transcript slid backwards through the conversation. Shifting the scroll
-     * by exactly what the scroller lost keeps the same text against the
-     * composer, which is what "the keyboard pushed it up" means.
-     *
-     * A thread following its tail needs the same thing said differently, and
-     * not saying it at all was a bug: "pinned to the bottom" is a fact about
-     * a scroll position, not a promise the browser keeps. Shortening the
-     * scroller leaves `scrollTop` where it was and moves the bottom up to
-     * meet it, so the newest lines -- the whole reason for being down there
-     * -- end up behind the composer, and only a thread scrolled *away* from
-     * the bottom appeared to work. It is put back on the bottom instead,
-     * wherever the bottom now is.
-     *
-     * What it must not be driven by is the visual viewport. That is the
-     * keyboard's destination, not its position: Chromium takes the whole
-     * keyboard out of it on the first frame, so a correction made from it
-     * shoves the transcript the entire distance at once while the shell is
-     * still interpolating -- the lurch at the start of the animation. The
-     * scroller's own height is the honest signal, because it is the thing
-     * being corrected, and a `ResizeObserver` reports it once per frame,
-     * already measured, without reading layout back.
-     */
-    let lastScrollerHeight = 0;
-    /*
-     * The position asked for, which is not always the position the scroller is
-     * at.
-     *
-     * A scroller that grows lowers its own maximum scroll, and the browser
-     * quietly clamps `scrollTop` down to meet it. Reading `scrollTop` back and
-     * adding to it therefore builds every correction on top of a number the
-     * clamp has already eaten into, and the loss is permanent: the keyboard
-     * closed leaving the thread about ten pixels above where it opened, every
-     * time. Kept unclamped here, the arithmetic survives the travel, and the
-     * last frame -- by which point the scroller is full height again and the
-     * maximum is back -- lands exactly where it started. -1 means nothing has
-     * been asked for yet.
-     */
-    let intendedScrollTop = -1;
-    /*
-     * The thread's own height changes during a keyboard travel too, one frame
-     * behind the scroller's.
-     *
-     * The thread reserves the composer's height so the last output is not
-     * covered by it, and the composer is a navigation bar shorter while the
-     * keyboard is over it. So `scrollHeight` falls by that much as the
-     * keyboard arrives and climbs back as it leaves -- and a correction made
-     * from the scroller's height alone misses it entirely, leaving the thread
-     * a navigation bar from where it started every time. Measured: the gap
-     * from the bottom went 151 to 103 opening and 103 to 150 closing.
-     *
-     * It cannot simply be compensated whenever it happens: content arriving at
-     * the bottom of a thread also makes it taller, and holding the distance
-     * from the bottom then would scroll the reader down to chase it. The two
-     * are told apart by when they happen -- the thread's height follows the
-     * scroller's inside the same travel -- so a change is only taken as part
-     * of one for as long as a travel lasts.
-     */
-    const TRAVEL_MS = 500;
-    let lastContentHeight = 0;
-    let travellingUntil = 0;
-    /** The distance from the bottom being held, or -1 for nothing yet. */
-    let heldGap = -1;
-    const holdAgainstKeyboard = (height: number) => {
-      const content = viewport.scrollHeight;
-      const boxMoved = Math.abs(height - lastScrollerHeight) >= 1;
-      const contentMoved = Math.abs(content - lastContentHeight) >= 1;
-      lastScrollerHeight = height;
-      lastContentHeight = content;
-      if (boxMoved) travellingUntil = performance.now() + TRAVEL_MS;
-      if (!boxMoved && !(contentMoved && performance.now() < travellingUntil)) return;
-      if (following()) {
-        setViewportScrollTop(viewportMaxScrollTop(), false);
-        intendedScrollTop = -1;
-        heldGap = -1;
-        return;
-      }
-      // Scrolled up (Scroll to latest showing): the keyboard comes up over the transcript and it does not move -- the
-      // one rule for what being at the bottom means (components/ui/keyboard-travel.ts). Its scroll is left as it is.
-      if (latestAway() || viewport.hasAttribute("data-keyboard-away")) {
-        intendedScrollTop = -1;
-        heldGap = -1;
-        return;
-      }
-      const max = Math.max(0, content - height);
-      // Anything that moved the thread other than the last correction -- a
-      // finger, a fold, a new message -- is where the thread actually is now,
-      // and what was asked for before it is no longer worth holding.
-      const clamped = Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop));
-      if (heldGap < 0 || intendedScrollTop < 0 || Math.abs(viewport.scrollTop - clamped) > 1) {
-        heldGap = max - viewport.scrollTop;
-      }
-      // Held as a distance from the bottom, because that is the one quantity
-      // both changes leave alone: the scroller losing height and the thread
-      // losing the same height move the maximum together.
-      intendedScrollTop = max - heldGap;
-      setViewportScrollTop(Math.max(0, Math.min(viewportMaxScrollTop(), intendedScrollTop)), false);
-    };
-    // Both boxes, because a travel changes both: the scroller's height as the
-    // shell shortens, and the thread's as the composer it reserves room for
-    // loses the navigation bar's padding. Either entry is enough; the sizes
-    // are read from the scroller itself rather than the entry, so it does not
-    // matter which one arrived.
-    const scrollerResizeObserver = new ResizeObserver(() => {
-      holdAgainstKeyboard(viewport.clientHeight);
-      syncLatestDistance();
-    });
-    scrollerResizeObserver.observe(viewport);
-    scrollerResizeObserver.observe(thread);
+    // The follow's own listeners: who moved the view, the keyboard's travel, what it holds growing (createTranscriptFollow).
+    follow.attach({ viewport, thread });
     window.addEventListener("resize", scheduleLatestButtonAnchor);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
     scheduleLatestButtonAnchor();
@@ -1080,176 +812,23 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     transcriptVisibility = mountTranscriptVisibility(viewport, thread, (delta) => setViewportScrollTop(viewport.scrollTop + delta, false));
     turnCursor = mountTranscriptCursor({ viewport, thread, scrollTo: (top) => readerScroll(top), openMenu: openTurnMenu });
     find.register(viewport);
-    // When the reader last did something that can move the view: a wheel (a trackpad's momentum keeps sending them),
-    // any key, a touch and the fling after it, a press held in the chat (a scrollbar drag, a text selection dragged
-    // past the edge, middle-click scrolling), focus moving in it, and Find from when it opens until the page has focus
-    // again (its jumps happen in the browser's own bar, which the page never hears). A move up inside that is theirs.
-    let readerUntil = 0;
-    let finding = false;
-    // Whether the chat laid out again since the last scroll: a move up the page made itself follows a layout change.
-    let laidOut = false;
-    const reading = (ms: number) => { readerUntil = Math.max(readerUntil, performance.now() + ms); };
-    const byReader = () => finding || performance.now() <= readerUntil;
-    const claimUserScroll = () => {
-      if (empty()) return;
-      if (!rendererUsesTypewriter()) return;
-      programmaticScrollTop = null;
-      cancelTypewriterTailRejoin();
-      setTypewriterTailOwner("user", true);
-    };
-    readerScroll = (top) => {
-      cancelLatestGlide();
-      reading(800);
-      claimUserScroll();
-      viewport.scrollTop = Math.round(top);
-    };
-    const onWheel = (event: WheelEvent) => {
-      reading(300);
-      claimUserScroll();
-      // Wheeling down at the bottom moves nothing, so no scroll event would hand the tail back: hand it back here.
-      if (event.deltaY > 0 && viewportMaxScrollTop() - viewport.scrollTop <= TAIL_REJOIN_PX) {
-        setFollowing(true);
-        scheduleTypewriterTailRejoin();
-      }
-    };
-    const onScroll = () => {
-      const maxScrollTop = viewportMaxScrollTop();
-      setLatestDistance(Math.max(0, maxScrollTop - viewport.scrollTop));
-      if (empty()) {
-        setFollowing(true);
-        previousScrollTop = viewport.scrollTop;
-        previousMaxScrollTop = maxScrollTop;
-        return;
-      }
-      // The glide to the latest is not the reader scrolling: its frames neither
-      // drop nor decide the follow, which it hands back on landing.
-      if (latestGlide != null || (programmaticScrollTop != null && Math.abs(viewport.scrollTop - programmaticScrollTop) < 1)) {
-        programmaticScrollTop = null;
-        previousScrollTop = viewport.scrollTop;
-        previousMaxScrollTop = maxScrollTop;
-        return;
-      }
-      const wasProgrammatic = programmaticScrollTop != null;
-      programmaticScrollTop = null;
-      const decision = decideTailScroll({
-        scrollTop: viewport.scrollTop,
-        previousScrollTop,
-        maxScrollTop,
-        previousMaxScrollTop,
-        userOwned: typewriterTailState.owner === "user",
-        following: following(),
-      });
-      previousScrollTop = viewport.scrollTop;
-      previousMaxScrollTop = maxScrollTop;
-      // An unrequested upward move is always a user: the spring only ever
-      // travels toward the bottom, and browser scroll anchoring only pushes the
-      // position down as content grows above. wheel and touchstart catch just
-      // two ways a user produces one -- scrollbar drags, PageUp/Home, and
-      // trackpad momentum arriving after wheel-end land here instead, and used
-      // to leave the spring believing it still owned the viewport.
-      // A move up with no reader behind it is the page, not them: the browser keeping a block in place as one above it
-      // shrank (a trace settling, markdown laying out). It used to read as the reader leaving, and the tail let go
-      // mid-turn. Following, the tail just carries on to the bottom.
-      const relaid = laidOut;
-      laidOut = false;
-      if (decision.direction === "up" && following() && relaid && !byReader()) {
-        if (rendererUsesTypewriter()) requestTypewriterTailFollow();
-        else scrollBottom();
-        loadEarlier();
-        return;
-      }
-      if (decision.direction === "up") {
-        cancelTypewriterTailRejoin();
-        if (!wasProgrammatic) claimUserScroll();
-      }
-      if (!rendererUsesTypewriter() || typewriterTailState.owner === "user" || !following()) {
-        setFollowing(decision.following);
-      } else if (decision.direction === "up") {
-        setFollowing(false);
-      }
-      if (rendererUsesTypewriter() && decision.rejoin) scheduleTypewriterTailRejoin();
-      loadEarlier();
-    };
-    let touching = false;
-    const onTouchStart = () => { touching = true; reading(60_000); claimUserScroll(); };
-    // A fling carries on after the finger lifts.
-    const onTouchEnd = () => { if (!touching) return; touching = false; readerUntil = performance.now() + 2000; };
-    let dragging = false;
-    const onPointerDown = (event: PointerEvent) => {
-      finding = false;
-      dragging = true;
-      reading(60_000);
-      // A scrollbar drag lands on the viewport itself, outside any content box.
-      if (event.target === viewport) claimUserScroll();
-    };
-    const onPointerUp = () => { if (!dragging) return; dragging = false; readerUntil = performance.now() + 300; };
-    const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
-    const onKeyDown = (event: KeyboardEvent) => {
-      // Find is the page's wherever it is pressed; any other key only from the chat itself (or nothing focused), not
-      // from typing in the composer -- an arrow key there moves the caret, not the view.
-      if ((event.key === "f" || event.key === "g") && (event.ctrlKey || event.metaKey) || event.key === "F3") { finding = true; return; }
-      const target = event.target as Node | null;
-      if (target !== document.body && !(target && viewport.contains(target))) return;
-      reading(800);
-      if (SCROLL_KEYS.has(event.key)) claimUserScroll();
-    };
-    const onFocusIn = () => reading(500);
-    const onPageFocus = () => { finding = false; };
-    viewport.addEventListener("scroll", onScroll, { passive: true });
+    readerScroll = follow.readerScroll;
     // Where the reader is, kept as they stop scrolling: leaving a chat then reads nothing (once the next is drawn,
     // its rows are the ones on screen).
     onScrollRest(viewport, () => { const id = props.chat.loadedId(); if (id) rememberScrollPosition(id); });
-    viewport.addEventListener("wheel", onWheel, { passive: true });
-    viewport.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchend", onTouchEnd, { passive: true });
-    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    window.addEventListener("pointerup", onPointerUp, { passive: true });
-    viewport.addEventListener("wheel", cancelLatestGlide, { passive: true });
-    viewport.addEventListener("touchstart", cancelLatestGlide, { passive: true });
-    viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("keydown", onKeyDown, { passive: true, capture: true });
-    viewport.addEventListener("focusin", onFocusIn, { passive: true });
-    window.addEventListener("focus", onPageFocus);
-    const resizeObserver = new ResizeObserver(() => {
-      laidOut = true;
-      if (!following()) return;
-      // Hiding and showing blocks resizes the thread. Chasing the tail on those
-      // is a feedback loop: the scroll write changes what is in the overscan
-      // band, which toggles more blocks, which resizes the thread again.
-      // Panel reflow can resize the thread on every pointer frame. The motion
-      // layer already preserves a visible anchor; tail-following the same
-      // resize would move scrollTop a second time and make blocks jump.
-      if (transcriptVisibility?.refreshing() || transcriptVisibility?.moving()) return;
-      if (rendererUsesTypewriter()) requestTypewriterTailFollow();
-      else scrollBottom();
-    });
-    resizeObserver.observe(thread);
     onCleanup(() => {
       window.removeEventListener(CODE_BLOCK_TOGGLE_EVENT, onCodeBlockToggle);
       thread.removeEventListener("click", onExpanderClick);
       window.removeEventListener(UI_PREFERENCE_CHANGE_EVENT, syncUiPreference);
       layoutEpoch += 1;
-      resizeObserver.disconnect();
-      viewport.removeEventListener("scroll", onScroll);
-      viewport.removeEventListener("wheel", onWheel);
-      viewport.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchend", onTouchEnd);
-      window.removeEventListener("touchcancel", onTouchEnd);
-      window.removeEventListener("pointerup", onPointerUp);
-      viewport.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown, { capture: true });
-      viewport.removeEventListener("focusin", onFocusIn);
-      window.removeEventListener("focus", onPageFocus);
       stopClearingDock?.();
       composerStack?.removeEventListener("transitionend", composerLanded);
       window.removeEventListener("resize", scheduleLatestButtonAnchor);
-      scrollerResizeObserver.disconnect();
       visualViewport?.removeEventListener("resize", scheduleLatestButtonAnchor);
       if (latestButtonAnchorFrame != null) cancelAnimationFrame(latestButtonAnchorFrame);
       latestButton?.style.removeProperty("--ride-bottom");
       transcriptRoot.style.removeProperty("--transcript-composer-inset");
       scheduleLatestButtonAnchor = () => {};
-      if (scrollFrame != null) cancelAnimationFrame(scrollFrame);
       if (highlightIdle != null) cancelIdleCallback(highlightIdle);
       cancelTypewriterTailFrame();
       cancelTypewriterTailRejoin();

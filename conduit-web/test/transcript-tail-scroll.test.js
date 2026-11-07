@@ -8,7 +8,7 @@ import {
   usedMaxScrollTop,
   TAIL_NEAR_LATEST_PX,
   TAIL_REJOIN_PX,
-} from "../src/client/chat/transcript-tail-follow.ts";
+} from "../src/components/ui/tail-follow.ts";
 
 // A shrink-clamp: content above the viewport got `shrinkPx` shorter, so the
 // browser pulled scrollTop down to the new bottom without anyone touching it.

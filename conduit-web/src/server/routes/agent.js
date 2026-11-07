@@ -103,7 +103,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   const TASK_WORDS = { "conduit.subagent-reporter": "A run's report", "conduit.agent-routine": "A routine", "pi.generation": "A model turn", "pi.tool": "A tool call" };
   const parkedTasks = async () => {
     const harness = await agent.runtime.open();
-    const { tasks } = await harness.inspect(agent.context).catch(() => ({ tasks: [] }));
+    // A harness that cannot inspect (or fails to) has nothing parked to say.
+    const { tasks } = await Promise.resolve().then(() => harness.inspect(agent.context)).catch(() => ({ tasks: [] }));
     return tasks.filter((task) => task.state.kind === "blocked" && task.state.reason === "restart_limit").map((task) => ({
       id: `task-${task.record.id}`, kind: "parked", taskId: task.record.id, at: task.record.startedAt ? new Date(task.record.startedAt).toISOString() : null,
       text: `${TASK_WORDS[task.record.kind] || "A task"} stopped after restarting ${task.record.restarts ?? "too many"} times`,

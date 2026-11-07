@@ -54,6 +54,7 @@ export { createTailWindow } from "./tail-window";
 export { cancelIdle, idle, Later, onScrollRest } from "./later";
 export { clockTime, fullTime } from "./time";
 export { useChatDrawing } from "./chat-drawing";
+export { createTranscriptFollow, type TranscriptFollow } from "./transcript-follow";
 export { paneDrawn, pressAhead, shutDrawerOnto as handDrawerOnto } from "./drawer-handoff";
 export * from "./find";
 export * from "./code";

@@ -13,6 +13,11 @@ during iterative work.
 | **3: Browser** | 10–60s | Agent Browser, a probe, `npm run smoke:panes` | real DOM, focus and keyboard, layout, motion, panes |
 | **4: Full suite** | minutes | `npm test` | release verification only |
 
+**The tests only shrink.** Their count and their lines (everything under `test/`) may not rise above
+`test/budget.json`; `npm test` checks it first (`npm run test:budget`). A change that needs a new test cuts more
+than it adds: tests that pin wording, source text or a stub's shape rather than durable behaviour go first. Record a
+lower budget with `node scripts/test-budget.mjs --record` (it refuses a higher one).
+
 ## Local authentication
 
 ```bash

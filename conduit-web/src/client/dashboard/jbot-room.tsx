@@ -1,6 +1,5 @@
-import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, rideBottom, Segmented, SheetFill } from "@/components/ui";
-import { clearDock } from "@/components/ui/dock-inset";
+import { createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
+import { ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, RiderButton, rideBottom, Segmented, SheetFill } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
@@ -67,10 +66,12 @@ export function JbotRoom(props: {
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
   });
-  // As a thread's transcript: held at the latest while the person is there, left where they scrolled to otherwise,
-  // and clear of the composer by its measured height (dock-inset.ts).
+  // As a thread's transcript, with the same follow (the library's createTranscriptFollow): held at the latest while
+  // the person is there, left where they scrolled to otherwise, the glide to the latest, the keyboard's travel, and
+  // clear of the composer by its measured height.
+  const follow = createTranscriptFollow({ viewport: () => viewport });
   // Scrolled back from the latest: the transcript's own Scroll to latest, riding just above the composer.
-  const [away, setAway] = createSignal(false);
+  const away = follow.latestAway;
   let latest: HTMLButtonElement | undefined;
   const anchorLatest = () => {
     const composer = dock?.firstElementChild?.getBoundingClientRect();
@@ -80,21 +81,26 @@ export function JbotRoom(props: {
     latest.style.setProperty("--ride-bottom", `${bottom}px`);
     if (bottom !== above()) setAbove(bottom);
   };
-  const jumpToLatest = () => { if (viewport) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" }); };
-  const follow = (element: HTMLDivElement) => {
-    viewport = element;
-    let pinned = true;
-    const toLatest = () => { if (pinned && viewport) viewport.scrollTop = viewport.scrollHeight; };
-    const scrolled = () => { if (!viewport) return; pinned = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 48; setAway(!pinned); };
-    element.addEventListener("scroll", scrolled, { passive: true });
-    // The viewport and its reading column: every change to what it holds changes the column's size, so nothing watches
-    // the DOM itself (a mutation observer over the transcript re-observed every row on every change).
-    const sizes = new ResizeObserver(toLatest);
-    sizes.observe(element);
-    if (element.firstElementChild) sizes.observe(element.firstElementChild);
-    let stopClearing: (() => void) | null = null;
-    const frame = requestAnimationFrame(() => { if (root && dock) stopClearing = clearDock(root, dock, () => { toLatest(); anchorLatest(); }); anchorLatest(); });
-    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); stopClearing?.(); element.removeEventListener("scroll", scrolled); });
+  const jumpToLatest = () => follow.followLatest();
+  // Attached as the chat is built (it waits on jbot's view), the dock's clearing as the composer comes (it waits on the
+  // home thread): each under the piece it belongs to, undone with it.
+  const attachFollow = (column: HTMLDivElement) => {
+    const owner = getOwner();
+    queueMicrotask(() => runWithOwner(owner, () => {
+      if (!viewport || !column.isConnected) return;
+      follow.attach({ viewport, thread: column });
+      const frame = requestAnimationFrame(anchorLatest);
+      onCleanup(() => cancelAnimationFrame(frame));
+    }));
+  };
+  const clearUnderComposer = (element: HTMLDivElement) => {
+    dock = element;
+    const owner = getOwner();
+    queueMicrotask(() => runWithOwner(owner, () => {
+      if (!root || !element.isConnected) return;
+      const stop = follow.clearUnder(root, element, anchorLatest);
+      onCleanup(stop);
+    }));
   };
 
   return <JbotPanelControl.Provider value={{ open, toggle }}><SheetFill data-jbot-room="" data-presentation={props.presentation}>
@@ -108,12 +114,12 @@ export function JbotRoom(props: {
         {/* Hidden until what is on screen is drawn, then faded in, as every chat opens (ChatView opening). */}
         {/* And with its composer: a page drawn without it moved up as it came (the composer is its home thread's). */}
         <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
-          <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
+          <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />
           </ChatScroller>
-          <Show when={props.composer}><ComposerDock ref={(element) => { dock = element; }}>{props.composer}</ComposerDock></Show>
+          <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>
         </ChatBeside>
       </Show>

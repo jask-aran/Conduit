@@ -7,7 +7,7 @@ import {
   advanceTailFollow,
   createTailFollowState,
   rebaseTailFollowState,
-} from "../src/client/chat/transcript-tail-follow.ts";
+} from "../src/components/ui/tail-follow.ts";
 
 test("frame budget follows the measured display interval", () => {
   const refresh144Hz = 1000 / 144;
