@@ -1,5 +1,5 @@
 import { createContext, createSignal, Show, useContext } from "solid-js";
-import { Button, Gauge, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } from "@/components/ui";
+import { Button, Gauge, IconButton, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } from "@/components/ui";
 import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
 import { AgentPage, JBOT_TABS, type JbotTab } from "./agent-page";
@@ -36,26 +36,29 @@ function useJbotStatus() {
   return { name: () => settings()?.name || "jbot", spent, budget, share, running, dial: shownDial, setDial };
 }
 
-/** The head of jbot's panel: today's spend, the dial, what runs, and the ways on. */
-export function JbotStatus(props: { onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
+/** The ways on from jbot's panel, in its head by its close: jbot's thread, and Settings › jbot. */
+export function JbotWays(props: { onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
+  const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
+  return <>
+    <Show when={props.onOpenThread}><IconButton kind="pane" label="Open jbot's thread" title="Open jbot's thread" onClick={go(props.onOpenThread)}><Icons.Chat /></IconButton></Show>
+    <Show when={props.onOpenSettings}><IconButton kind="pane" label="jbot's settings" title="jbot's settings" onClick={go(props.onOpenSettings)}><Icons.Settings /></IconButton></Show>
+  </>;
+}
+
+/** The head of jbot's panel: today's spend, the dial and what runs. */
+export function JbotStatus() {
   const status = useJbotStatus();
   const tone = () => status.share() >= 100 ? "var(--destructive)" : status.share() >= 80 ? "var(--warning, var(--category-4))" : "var(--category-1)";
-  const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
   return <>
     <Reading>
       <ReadingTotal label={<strong>Today</strong>} value={status.budget() ? `${money(status.spent())} of ${money(status.budget())}` : money(status.spent())} />
       <Show when={status.budget()}>
         <Meter parts={[{ value: status.spent(), colour: tone() }, { value: Math.max(0, status.budget() - status.spent()), colour: "transparent" }]} />
       </Show>
-      <ReadingTotal label="Speaks up" />
-      <Segmented label="Speaks up" value={status.dial()} options={DIALS.map(({ value, label, title }) => ({ value, label, title }))} onChange={status.setDial} />
+      <ReadingTotal label="Speaks up" control={<Segmented size="sm" label="Speaks up" value={status.dial()} options={DIALS.map(({ value, label, title }) => ({ value, label, title }))} onChange={status.setDial} />} />
       <Show when={status.running()}>{(count) => <ReadingTotal label="Running" value={`${count()} ${count() === 1 ? "run" : "runs"}`} />}</Show>
     </Reading>
     <Rule />
-    <div class="ui-dash-room-actions">
-      <Show when={props.onOpenThread}><Button variant="ghost" size="sm" onClick={go(props.onOpenThread)}><Icons.Chat />Thread</Button></Show>
-      <Show when={props.onOpenSettings}><Button variant="ghost" size="sm" onClick={go(props.onOpenSettings)}><Icons.Settings />Settings</Button></Show>
-    </div>
   </>;
 }
 
@@ -78,7 +81,7 @@ export function JbotPanel(props: {
   onDone?: () => void;
 }) {
   return <>
-    <JbotStatus onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} onDone={props.onDone} />
+    <JbotStatus />
     <Show when={props.tabs}><Segmented label="jbot's panel" value={props.tab} options={JBOT_TABS} onChange={props.onTab} /></Show>
     <AgentPage panel={props.tab} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
   </>;

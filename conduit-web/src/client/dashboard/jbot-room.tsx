@@ -20,6 +20,8 @@ export function JbotRoom(props: {
   /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
    *  desktop faded in just above the composer, the transcript left where it is. */
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; tabs: boolean; done: () => void }) => JSX.Element;
+  /** The panel's ways on (JbotWays), in its head; done: the panel put away first, where it is over the chat. */
+  panelActions?: (done: () => void) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
   working?: boolean;
@@ -98,7 +100,7 @@ export function JbotRoom(props: {
     {props.header(name())}
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
-        <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide}
+        <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
           panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}

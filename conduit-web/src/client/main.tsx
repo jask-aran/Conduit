@@ -23,7 +23,7 @@ import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
 import { applyStagedInterface, cancelUpdateDownload, interfaceReady, liveUpdateNow, startLiveUpdate } from "./platform/live-update.ts";
 import { takeView, trackSidebar } from "./platform/resume-view.ts";
-import { JbotChip, JbotPanel, JbotPanelControl } from "./dashboard/jbot-status";
+import { JbotChip, JbotPanel, JbotPanelControl, JbotWays } from "./dashboard/jbot-status";
 import { HeaderPill } from "@/components/ui";
 import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
@@ -6098,6 +6098,7 @@ function App() {
     // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
       presentation={tool ? "narrow" : docked() ? "phone" : undefined}
+      panelActions={(done) => <JbotWays onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} onOpenSettings={() => openSettings("agent")} onDone={done} />}
       panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}

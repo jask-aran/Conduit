@@ -62,6 +62,7 @@
 .ui-chat-beside-scrim { display: none; }
 /* Over the chat: the panel's name by its close, the row a dialog's head is. */
 .ui-chat-beside-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
+.ui-chat-beside-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-chat-beside-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chat-beside[data-wide]:not([data-open]) .ui-chat-beside-panel { display: none; }
 .ui-chat-beside[data-wide] .ui-chat-beside-panel { flex: 0 0 var(--chat-panel-width); border-left: 1px solid var(--border); }

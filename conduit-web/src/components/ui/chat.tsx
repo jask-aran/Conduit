@@ -53,6 +53,8 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
  * that open it.
  */
 export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; above?: number;
+  /** Its own buttons, in its head (by its close, over the chat). */
+  actions?: JSX.Element;
   /** false: never beside the chat, whatever the width (a tool in the dock: its panel only rides above the composer). */
   beside?: boolean; onWide?: (wide: boolean) => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
@@ -93,7 +95,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane. */}
     <aside ref={panel} class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
       aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>
-      <Show when={!wide()}><div class="ui-chat-beside-head"><strong>{props.title}</strong><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></div></Show>
+      <Show when={!wide() || props.actions}><div class="ui-chat-beside-head"><strong>{props.title}</strong><span class="ui-chat-beside-actions">{props.actions}<Show when={!wide()}><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></Show></span></div></Show>
       {props.panel}
     </aside>
   </div>;
