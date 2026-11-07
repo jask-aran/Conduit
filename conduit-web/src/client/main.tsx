@@ -6098,8 +6098,8 @@ function App() {
     // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
       presentation={tool ? "narrow" : docked() ? "phone" : undefined}
-      panelActions={(done) => <JbotWays onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} onOpenSettings={() => openSettings("agent")} onDone={done} />}
-      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} tabs={state.tabs} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
+      panelActions={(done) => <JbotWays onOpenSettings={() => openSettings("agent")} onDone={done} />}
+      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} markdownRenderer={markdownRenderer()} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}

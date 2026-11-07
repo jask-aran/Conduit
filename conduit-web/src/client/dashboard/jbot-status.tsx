@@ -1,8 +1,9 @@
 import { createContext, createSignal, Show, useContext } from "solid-js";
-import { Button, Gauge, IconButton, Icons, Meter, Reading, ReadingTotal, Rule, Segmented } from "@/components/ui";
+import { Button, Gauge, IconButton, Icons, Segmented } from "@/components/ui";
 import { api } from "../api/client";
+import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
-import { AgentPage, JBOT_TABS, type JbotTab } from "./agent-page";
+import { AgentPage, type JbotTab } from "./agent-page";
 
 /*
  * jbot's particulars, where a chat keeps its own: how much it speaks up, what it has spent today against its budget,
@@ -36,7 +37,8 @@ function useJbotStatus() {
   return { name: () => settings()?.name || "jbot", spent, budget, share, running, dial: shownDial, setDial };
 }
 
-/** The ways on from jbot's panel, in its head by its close: jbot's thread, and Settings › jbot. */
+/** The ways on from jbot's panel, in its head by its close: Settings › jbot (and jbot's thread, where its tabs leave
+ *  room; the Threads tab's Home is it too). */
 export function JbotWays(props: { onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
   const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
   return <>
@@ -45,21 +47,20 @@ export function JbotWays(props: { onOpenThread?: () => void; onOpenSettings?: ()
   </>;
 }
 
-/** The head of jbot's panel: today's spend, the dial and what runs. */
-export function JbotStatus() {
+/** How much jbot speaks up, in its panel's head by its tabs: each a mark, its word and meaning on hover. */
+export function JbotDial() {
   const status = useJbotStatus();
-  const tone = () => status.share() >= 100 ? "var(--destructive)" : status.share() >= 80 ? "var(--warning, var(--category-4))" : "var(--category-1)";
-  return <>
-    <Reading>
-      <ReadingTotal label={<strong>Today</strong>} value={status.budget() ? `${money(status.spent())} of ${money(status.budget())}` : money(status.spent())} />
-      <Show when={status.budget()}>
-        <Meter parts={[{ value: status.spent(), colour: tone() }, { value: Math.max(0, status.budget() - status.spent()), colour: "transparent" }]} />
-      </Show>
-      <ReadingTotal label="Speaks up" control={<Segmented size="sm" label="Speaks up" value={status.dial()} options={DIALS.map(({ value, label, title }) => ({ value, label, title }))} onChange={status.setDial} />} />
-      <Show when={status.running()}>{(count) => <ReadingTotal label="Running" value={`${count()} ${count() === 1 ? "run" : "runs"}`} />}</Show>
-    </Reading>
-    <Rule />
-  </>;
+  const marks = { quiet: <Icons.Quiet />, normal: <Icons.Notification />, chatty: <Icons.Message /> };
+  return <Segmented size="sm" icons label="Speaks up" value={status.dial()} onChange={status.setDial}
+    options={DIALS.map(({ value, label, title }) => ({ value, label, icon: marks[value], title: `${label}: ${title}` }))} />;
+}
+
+/** What jbot has spent today against its budget, a ring by its day's timeline. */
+export function JbotSpend() {
+  const status = useJbotStatus();
+  const tone = () => !status.budget() ? "idle" : status.share() >= 100 ? "critical" : status.share() >= 80 ? "warning" : "normal";
+  const words = () => status.budget() ? `${money(status.spent())} of ${money(status.budget())} today` : `${money(status.spent())} today`;
+  return <span class="ui-dash-spend" role="img" aria-label={`Spent ${words()}`} title={`Spent ${words()}`}><Gauge value={status.share()} tone={tone()} /><span>{money(status.spent())}</span></span>;
 }
 
 /** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */
@@ -72,18 +73,15 @@ export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () 
 export function JbotPanel(props: {
   tab: JbotTab;
   onTab: (tab: JbotTab) => void;
-  /** Its own tab switch. */
-  tabs: boolean;
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
   onOpenFile: (path: string) => void;
   onOpenThread?: () => void;
   onOpenSettings: () => void;
   onDone?: () => void;
+  markdownRenderer: MarkdownRendererId;
 }) {
   return <>
-    <JbotStatus />
-    <Show when={props.tabs}><Segmented label="jbot's panel" value={props.tab} options={JBOT_TABS} onChange={props.onTab} /></Show>
-    <AgentPage panel={props.tab} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
+    <AgentPage panel={props.tab} panelTop={<JbotSpend />} markdownRenderer={props.markdownRenderer} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
   </>;
 }
 

@@ -1,11 +1,11 @@
 import { createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, SheetFill } from "@/components/ui";
+import { ChatBeside, ChatScroller, ChatView, ComposerDock, Icons, RiderButton, Segmented, SheetFill } from "@/components/ui";
 import { unitPx } from "@/components/ui/layout";
 import { clearDock } from "@/components/ui/dock-inset";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
-import { JbotPanelControl } from "./jbot-status";
+import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { SplitEmpty } from "./primitives/split";
@@ -19,7 +19,7 @@ export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
   /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
    *  desktop faded in just above the composer, the transcript left where it is. */
-  panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; tabs: boolean; done: () => void }) => JSX.Element;
+  panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void }) => JSX.Element;
   /** The panel's ways on (JbotWays), in its head; done: the panel put away first, where it is over the chat. */
   panelActions?: (done: () => void) => JSX.Element;
   markdownRenderer: MarkdownRendererId;
@@ -101,7 +101,8 @@ export function JbotRoom(props: {
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
-          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, tabs: true, done: () => setOver(false) })}</Show>}>
+          lead={<><Segmented size="sm" label={`${name()}'s panel`} value={tab()} options={JBOT_TABS} onChange={setTab} /><JbotDial /></>}
+          panel={<Show when={built() || open()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false) })}</Show>}>
         <ChatView aria-label={`Messages with ${name()}`}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={follow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"

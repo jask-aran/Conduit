@@ -231,3 +231,17 @@
 .ui-dash[data-room] .ui-dash-head { margin-bottom: var(--space-lg); }
 .ui-dash[data-room][data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph title actions" "glyph status actions"; }
 .ui-dash-room-actions { display: flex; grid-area: actions; justify-self: end; gap: var(--space-xs); }
+/* A row previewed in place (jbot's panel): Back and its way on, what it is, then what it says. */
+.ui-dash-peek { display: grid; gap: var(--space-md); padding-bottom: var(--space-md); }
+.ui-dash-peek-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.ui-dash-peek-head { display: grid; gap: var(--space-2xs); padding: 0 var(--row-inset); }
+.ui-dash-peek-head > strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
+.ui-dash-peek-head > span { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-peek-text { padding: 0 var(--row-inset); overflow-wrap: anywhere; }
+/* jbot's panel: its day (and its spend) fixed at the top, the tab's groups scrolling under it. */
+.ui-dash-panel { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-sm); min-height: 0; }
+.ui-dash-panel-top { display: flex; flex: none; align-items: center; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
+.ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
+.ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* A spend ring and its figure (jbot's, by its day). */
+.ui-dash-spend { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }

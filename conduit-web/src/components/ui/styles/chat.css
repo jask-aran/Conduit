@@ -56,12 +56,15 @@
 .ui-chat-beside { --chat-panel-width: var(--measure-lg); position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
 .ui-chat-beside-need { position: absolute; width: calc(var(--reading-width) + var(--chat-panel-width) + 2 * var(--space-4xl)); height: 0; visibility: hidden; pointer-events: none; }
 .ui-chat-beside-main { position: relative; display: flex; flex: 1 1 0; min-width: 0; min-height: 0; }
-.ui-chat-beside-panel { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: var(--space-lg); }
+/* Its head stays; what it holds scrolls under it. */
+.ui-chat-beside-panel { display: flex; flex-direction: column; gap: var(--space-md); min-height: 0; overflow: hidden; box-sizing: border-box; padding: var(--space-lg); }
+.ui-chat-beside-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .ui-chat-beside-panel .ui-dash { flex: none; overflow: visible; }
 .ui-chat-beside-panel .ui-dash:is([data-compact], :not([data-compact])) .ui-dash-body { overflow: visible; padding: 0; }
 .ui-chat-beside-scrim { display: none; }
 /* Over the chat: the panel's name by its close, the row a dialog's head is. */
-.ui-chat-beside-head { display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
+.ui-chat-beside-head { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm) var(--space-md); margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
+.ui-chat-beside-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
 .ui-chat-beside-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-chat-beside-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-chat-beside[data-wide]:not([data-open]) .ui-chat-beside-panel { display: none; }
@@ -77,7 +80,8 @@
    stay where they are), the composer's width; put away by its close, Esc or its control. The sheet risen from the
    foot is a phone's, for a thumb. */
 .ui-chat-beside[data-above]:not([data-wide]) .ui-chat-beside-panel { inset: auto 0 var(--chat-beside-above, var(--space-md));
-  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); margin-inline: auto; max-height: calc(100% - var(--chat-beside-above, var(--space-md)) - var(--space-lg));
+  width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); margin-inline: auto; /* One height whatever the tab holds (its body scrolls), so switching never moves its head; never most of the pane. */
+  height: min(calc(100% - var(--chat-beside-above, var(--space-md)) - var(--space-lg)), var(--measure-xl));
   transform: none; border-radius: var(--radius-surface); opacity: 0;
   /* Shut, it stays drawn on its own layer, see-through and out of reach (inert): fading it in composites what is
      already rastered and blurred, rather than painting the whole frost panel on its first frame. */

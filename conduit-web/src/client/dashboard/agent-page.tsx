@@ -1,5 +1,7 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, type JSX, untrack } from "solid-js";
-import { AgentAvatar, approvalLineText, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX, untrack } from "solid-js";
+import { ChatMarkdown } from "../chat/lazy-markdown";
+import type { MarkdownRendererId } from "../chat/markdown-settings";
+import { AgentAvatar, Answer, approvalLineText, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -60,6 +62,10 @@ export const JBOT_TABS: Array<{ value: JbotTab; label: string }> = [
 export function AgentPage(props: {
   /** Drawn as one tab of jbot's panel (beside or over the jbot chat): that tab's groups in one column, no header. */
   panel?: JbotTab;
+  /** In the panel: beside its day's timeline, at the top whatever the tab (jbot's spend). */
+  panelTop?: JSX.Element;
+  /** How a preview's report is drawn (the chat's markdown renderer). */
+  markdownRenderer?: MarkdownRendererId;
   /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
   onNeed?: (width: number) => void;
   /** The page's header in its pane, titled with the agent's name. */
@@ -121,9 +127,41 @@ export function AgentPage(props: {
     setAsking(false); setTask("");
   });
 
+  // In jbot's panel a row is previewed in place first (what a report said, why a call was decided), its own way on
+  // (the file, the run's chat) a press from there; Back returns to the tab.
+  type Peek = { title: string; context: string; text: string; file?: string; open?: { label: string; icon: JSX.Element; go: (event?: MouseEvent) => void } };
+  const [peek, setPeek] = createSignal<Peek | null>(null);
+  createEffect(on(() => props.panel, () => setPeek(null), { defer: true }));
+  // A report's whole text is its file (inbox/…md): read when previewed, its front matter left out.
+  const [peekText, setPeekText] = createSignal<string | null>(null);
+  createEffect(on(peek, (shown) => {
+    setPeekText(null);
+    const project = untrack(() => view()?.projectId);
+    if (!shown?.file || !project) return;
+    void api<{ content?: string }>(`/v0/projects/${encodeURIComponent(project)}/file?path=${encodeURIComponent(shown.file)}`)
+      .then((file) => { if (peek() === shown && file.content) setPeekText(file.content.replace(/^---\n[\s\S]*?\n---\n/, "").trim()); })
+      .catch(() => {});
+  }));
+  const peekView = (shown: Peek) => {
+    const text = () => peekText() ?? shown.text;
+    return <div class="ui-dash-peek">
+      <div class="ui-dash-peek-bar"><Button variant="ghost" size="sm" onClick={() => setPeek(null)}><Icons.ChevronLeft />Back</Button>
+        <Show when={shown.open}>{(open) => <Button variant="ghost" size="sm" onClick={(event: MouseEvent) => { setPeek(null); open().go(event); }}>{open().icon}{open().label}</Button>}</Show></div>
+      <div class="ui-dash-peek-head"><strong>{shown.title}</strong><span>{shown.context}</span></div>
+      {/* Keyed: the headline first, then the file's whole text once read, each drawn afresh. */}
+      <Show when={text()} keyed fallback={<SplitEmpty>It reported nothing.</SplitEmpty>}>{(shownText) =>
+        <div class="ui-dash-peek-text"><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.markdownRenderer} streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></div>}
+      </Show>
+    </div>;
+  };
+  const entryText = (entry: AgentInboxEntry) => entry.body && entry.body !== entry.headline ? entry.body : entry.headline || "";
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(String(run.conversationId));
-    return <Row density="list" element="button" disabled={!chatId()} onClick={(event: MouseEvent) => chatId() && props.onOpenChat(chatId()!, event)}
+    const report = () => inbox().find((entry) => entry.conversationId === run.conversationId);
+    const context = () => [RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null, age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
+    const preview = () => setPeek({ title: run.title || "A run", context: context(), text: report() ? entryText(report()!) : "", file: report()?.file,
+      open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event) => props.onOpenChat(chatId()!, event) } : undefined });
+    return <Row density="list" element="button" disabled={!props.panel && !chatId()} onClick={(event: MouseEvent) => props.panel && !live ? preview() : chatId() && props.onOpenChat(chatId()!, event)}
       lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
       label={run.title || "A run"}
       context={[RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null].filter(Boolean).join(" · ")}
@@ -194,7 +232,7 @@ export function AgentPage(props: {
     : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
   // A long group shows its latest few, the rest a press away (SplitGroupMore), never an endless list.
   const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set());
-  const capped = <T,>(id: string, list: () => readonly T[] | undefined, shown = 5) => ({
+  const capped = <T,>(id: string, list: () => readonly T[] | undefined, shown = props.panel ? 3 : 5) => ({
     rows: () => { const all = list() || []; return opened().has(id) ? all : all.slice(0, shown); },
     more: () => {
       const rest = (list()?.length || 0) - shown;
@@ -206,7 +244,10 @@ export function AgentPage(props: {
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
       {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inboxShown.rows()}>{(entry) =>
-        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => entry.file ? props.onOpenFile(entry.file) : setReadingEntry(entry)}
+        <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => props.panel
+            ? setPeek({ title: entry.title || tally([entry]), context: `${entryContext(entry)} · ${age(entry.at, now())}`, text: entryText(entry), file: entry.file,
+                open: entry.file ? { label: "Open the file", icon: <Icons.FileText />, go: () => props.onOpenFile(entry.file!) } : undefined })
+            : entry.file ? props.onOpenFile(entry.file) : setReadingEntry(entry)}
             lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.kind === "note" || entry.kind === "feedback" ? entry.headline : tally([entry])}
             context={entryContext(entry)} meta={age(entry.at, now())} />
           <ContextMenuContent>
@@ -229,11 +270,11 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  const workingGroup = () => <SplitGroup id="agent-working" order="first" label="Working on" count={working()?.runs.length || null}>
+  const workingGroup = () => <Show when={!props.panel || working()?.runs.length}><SplitGroup id="agent-working" order="first" label="Working on" count={working()?.runs.length || null}>
     <Show when={working()?.runs.length} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
       <For each={working()?.runs}>{(run) => runRow(run, true)}</For>
     </Show>
-  </SplitGroup>;
+  </SplitGroup></Show>;
 
   /*
    * Where the heartbeat fires through the day, by its timing rules (schedule.js): a windowed rule wins inside its window
@@ -326,14 +367,21 @@ export function AgentPage(props: {
   const readDecided = () => void api<{ records: Decided[] }>("/v0/agent/approvals?limit=20").then((result) => setDecided(result.records.filter((record) => record.verdict.outcome !== "escalate"))).catch(() => {});
   readDecided();
   createEffect(on(now, readDecided, { defer: true }));
-  const decidedShown = capped("decided", decided);
+  // What it decided for the person in the last few days; all it has kept, behind Show all.
+  const DECIDED_DAYS = 3;
+  const decidedLately = () => decided().filter((record) => now() - Date.parse(record.at) < DECIDED_DAYS * 86_400_000);
+  const decidedRows = () => opened().has("decided") ? decided() : decidedLately().slice(0, props.panel ? 3 : 5);
   const decidedGroup = () => <Show when={decided().length}>
-    <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decided().length} more={decidedShown.more()}>
-      <For each={decidedShown.rows()}>{(record) =>
-        <Row density="list" lead={record.verdict.outcome === "allow" ? <Icons.Check /> : <Icons.Close />} label={record.held.action}
-          context={`${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`}
-          title={record.verdict.reason} meta={age(record.at, now())} />}
-      </For>
+    <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decidedLately().length || null}
+      more={!opened().has("decided") && decided().length > decidedRows().length ? <SplitGroupMore count={decided().length - decidedRows().length} onClick={() => setOpened(new Set([...opened(), "decided"]))}>Show all</SplitGroupMore> : undefined}>
+      <Show when={decidedRows().length} fallback={<SplitEmpty>Nothing in the last {DECIDED_DAYS} days.</SplitEmpty>}>
+        <For each={decidedRows()}>{(record) => {
+          const context = () => `${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`;
+          return <Row density="list" element={props.panel ? "button" : undefined} lead={record.verdict.outcome === "allow" ? <Icons.Check /> : <Icons.Close />} label={record.held.action}
+            context={context()} title={record.verdict.reason} meta={age(record.at, now())}
+            onClick={props.panel ? () => setPeek({ title: record.held.action, context: `${context()} · ${age(record.at, now())}`, text: record.verdict.reason }) : undefined} />;
+        }}</For>
+      </Show>
     </SplitGroup>
   </Show>;
 
@@ -412,16 +460,22 @@ export function AgentPage(props: {
   const running = () => working()?.runs.length ? `${working()!.runs.length} running` : null;
 
   // jbot's panel: one tab's groups, a tab's own action first.
-  const tabGroups = (tab: JbotTab) => tab === "now" ? <>{needsGroup()}{workingGroup()}{inboxGroup()}{recentGroup()}</>
+  const tabGroups = (tab: JbotTab) => tab === "now" ? <>{needsGroup()}{workingGroup()}{inboxGroup()}{recentGroup()}{decidedGroup()}</>
     : tab === "routines" ? <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" onClick={() => setAsking(true)}><Icons.Play />Run a task</Button></div>{timedGroup()}{watchesGroup()}</>
-    : tab === "memory" ? <>{rememberedGroup()}{memoryGroup()}{decidedGroup()}{rulesGroup()}</>
+    : tab === "memory" ? <>{rememberedGroup()}{memoryGroup()}{rulesGroup()}</>
     : <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" disabled={busy() === "thread"} onClick={() => void newThread()}><Icons.NewChat />New thread</Button></div>{threadsGroup()}</>;
 
   return <>
     {props.header?.(`${name()}'s page`)}
+    {/* In the panel its day stays at the top, whatever the tab; the tab's groups scroll under it. */}
     <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
-      <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
-        notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} band={tab() === "now" ? day() : undefined} list={tabGroups(tab())} />
+      <div class="ui-dash-panel">
+        <div class="ui-dash-panel-top"><div class="ui-dash-panel-day">{day()}</div>{props.panelTop}</div>
+        <div class="ui-dash-panel-body">
+          <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
+            notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} list={<Show when={peek()} fallback={tabGroups(tab())}>{(shown) => peekView(shown())}</Show>} />
+        </div>
+      </div>
     </Show>}</Show>
     <Show when={!props.panel && view()} fallback={<Show when={!props.panel}><SplitEmpty>Loading…</SplitEmpty></Show>}>
       <Show when={view()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>

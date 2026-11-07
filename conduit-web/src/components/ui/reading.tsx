@@ -12,10 +12,9 @@ import { Swatch } from "./controls";
  */
 export const Reading = (props: { children: JSX.Element }) => <div class="ui-reading">{props.children}</div>;
 
-/** The totals under the bar: what is used of what there is (and where it compacts), a figure at the end; or, with
- *  control, what sets it there (a small Segmented: jbot's dial), at its own width. */
-export const ReadingTotal = (props: { label: JSX.Element; value?: JSX.Element; control?: JSX.Element }) =>
-  <div class="ui-reading-total"><span>{props.label}</span><Show when={props.value}><span class="ui-reading-figure">{props.value}</span></Show>{props.control}</div>;
+/** The totals under the bar: what is used of what there is (and where it compacts), a figure at the end. */
+export const ReadingTotal = (props: { label: JSX.Element; value?: JSX.Element }) =>
+  <div class="ui-reading-total"><span>{props.label}</span><Show when={props.value}><span class="ui-reading-figure">{props.value}</span></Show></div>;
 
 /** The parts, a legend of the bar: each its colour, its name, its share. */
 export const ReadingParts = (props: { label?: string; children: JSX.Element }) => <ul class="ui-reading-parts" aria-label={props.label}>{props.children}</ul>;
