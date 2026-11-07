@@ -29,8 +29,9 @@ const budgets = {
   // and costs the initial payload only its import. Revisit this allowance in the
   // planned performance review instead of hiding evidence behind a size cap.
   // Docked panes (any pane moved into the dock, with its rail icon) and the
-  // desktop composer + menu add a few kB.
-  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 400_000),
+  // desktop composer + menu add a few kB. jbot's panel (Tray, Ledge, Glance) and
+  // the v2 transcript took it to ~409 kB in 2026-11.
+  initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 420_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
 };
