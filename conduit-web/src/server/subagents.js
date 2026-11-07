@@ -276,10 +276,14 @@ export function Subagents(runtime) {
         const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
         const said = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
+        // How it ended by tool, if it did (nothing_to_report, run_failed: inbox.js), read before its report is decided.
+        const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
         // A run of jbot's whose final text is empty has not reported, whatever it did on the way: it failed, so its
-        // routine's window is not counted as done and is gathered again next time.
-        const empty = !said.trim() && Boolean(task.input.gate);
-        const answer = said.trim() ? said : empty && settled.status === "done" ? "The run ended without a report (its final text was empty)."
+        // routine's window is not counted as done and is gathered again next time. Unless it ended by saying it had
+        // nothing to report: that is its report, and the routine's window is done.
+        const quiet = end?.outcome === "quiet";
+        const empty = !said.trim() && Boolean(task.input.gate) && !quiet;
+        const answer = said.trim() ? said : quiet ? "Nothing to report." : empty && settled.status === "done" ? "The run ended without a report (its final text was empty)."
           : settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`;
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
         const report = await api.memo("report", { answer: capOutput(answer, limits().outputChars),
@@ -301,7 +305,6 @@ export function Subagents(runtime) {
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
         // The agent's runs: what they spent counts toward its day, and what they found goes to its inbox (inbox.js).
-        const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
         const level = task.input.gate ? runLevel(report, end) : null;
         if (task.input.gate && !task.input.origin?.test) {
           const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
