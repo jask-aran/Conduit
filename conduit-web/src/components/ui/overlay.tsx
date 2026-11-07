@@ -319,5 +319,9 @@ export const GlanceAnswer = (props: { html?: string; children?: JSX.Element }) =
   ? <div class="ui-glance-answer" data-math="" innerHTML={props.html} />
   : <p class="ui-glance-answer">{props.children}</p>;
 
+/** A whole text under a GlanceHead (a report jbot's panel previews): an Answer at the row's size, a tone under the
+ *  text, its own headings and bold a step heavier rather than a transcript's. */
+export const GlanceBody = (props: { children: JSX.Element }) => <div class="ui-glance-body">{props.children}</div>;
+
 /** An overlay's head without a field: what it is about (the leader's key and path). */
 export const OverlayHead = (props: { children: JSX.Element }) => <div class="ui-overlay-bar" data-head>{props.children}</div>;

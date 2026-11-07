@@ -91,10 +91,11 @@
 
 /* GroupHeading: the strong section name. Geist at the strong weight in sentence case, a step under the row, its
    count in data. (The quiet label is .ui-title; a phone's labels take this voice through --label-*.) */
-.ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent 52%);
-  font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
-.ui-group-heading small { margin-left: var(--space-md); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-group-heading > span { margin-left: var(--space-md); color: var(--muted-foreground); font-weight: var(--weight-rest); }
+/* The section label, as every section heading is (DESIGN.md): Paper Mono capitals, letter-spaced, muted, at rest. */
+.ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: var(--muted-foreground);
+  font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); text-overflow: ellipsis; white-space: nowrap; }
+.ui-group-heading small { margin-left: var(--space-md); letter-spacing: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-group-heading > span { margin-left: var(--space-md); color: var(--muted-foreground); font-weight: var(--weight-rest); letter-spacing: 0; }
 .ui-group-toggle { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent;
   padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); color: inherit; font: inherit; }
 .ui-group-toggle > svg { width: var(--icon-sm); height: var(--icon-sm); transition: rotate var(--duration-quick) var(--ease-change); }
@@ -231,17 +232,23 @@
 .ui-dash[data-room] .ui-dash-head { margin-bottom: var(--space-lg); }
 .ui-dash[data-room][data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph title actions" "glyph status actions"; }
 .ui-dash-room-actions { display: flex; grid-area: actions; justify-self: end; gap: var(--space-xs); }
-/* A row previewed in place (jbot's panel): Back and its way on, what it is, then what it says. */
+/* A row previewed in place (jbot's panel): Back and its way on, then the row as chat search previews it (Glance). */
 .ui-dash-peek { display: grid; gap: var(--space-md); padding-bottom: var(--space-md); }
 .ui-dash-peek-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
-.ui-dash-peek-head { display: grid; gap: var(--space-2xs); padding: 0 var(--row-inset); }
-.ui-dash-peek-head > strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
-.ui-dash-peek-head > span { color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-dash-peek-text { padding: 0 var(--row-inset); overflow-wrap: anywhere; }
+.ui-dash-peek > .ui-glance { padding: 0 var(--row-inset); }
 /* jbot's panel: its day (and its spend) fixed at the top, the tab's groups scrolling under it. */
 .ui-dash-panel { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-sm); min-height: 0; }
-.ui-dash-panel-top { display: flex; flex: none; align-items: center; gap: var(--space-md); padding-bottom: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
+/* Its hairline runs the panel's whole width (--panel-inset: the panel's padding), not the column's. */
+.ui-dash-panel-top { display: grid; flex: none; gap: var(--space-sm); margin-inline: calc(-1 * var(--panel-inset, 0px)); padding: 0 var(--panel-inset, 0px) var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
+/* Its day and its spend, a clear step apart. */
+.ui-dash-panel-glance { display: flex; align-items: center; gap: var(--space-2xl); }
 .ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
-.ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
 /* A spend ring and its figure (jbot's, by its day). */
+.ui-dash-spend small { color: var(--muted-foreground); font-size: inherit; opacity: var(--opacity-rest); }
 .ui-dash-spend { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+/* A panel that scrolls its own body (jbot's: its day fixed above) leaves the surface's body still: no second
+   scroller, no gutter cutting its full-width hairline short. */
+:is(.ui-chat-beside-body, .ui-tray-body):has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
+/* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
+.ui-dash-panel .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }

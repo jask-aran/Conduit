@@ -1,6 +1,8 @@
 import * as Icons from "./icons";
 import { splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { feel, type HapticProp } from "./haptics";
+import { callHandler } from "./shared";
 
 /**
  * IconButton: an action drawn as its icon alone, its label its name and its tooltip. The kind is where it sits, which
@@ -19,15 +21,18 @@ export type IconButtonKind = "dash" | "file" | "tool" | "pane" | "rail";
 
 export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
   kind?: IconButtonKind; label?: string; wide?: boolean; inMenu?: boolean; close?: boolean; current?: boolean; live?: boolean; "data-fold"?: string;
+  /** Felt as press when tapped on a phone (a close as dismiss); a kind overrides it, false silences it. */
+  haptic?: HapticProp;
 }) {
-  const [local, rest] = splitProps(props, ["kind", "label", "wide", "inMenu", "close", "current", "live", "children", "class"]);
+  const [local, rest] = splitProps(props, ["kind", "label", "wide", "inMenu", "close", "current", "live", "children", "class", "haptic", "onClick"]);
   const kind = () => local.kind ?? "tool";
   // A dash button with nothing in it is the ⋯; a rail's draws what the caller gives it.
   const children = () => local.children ?? (kind() === "dash" ? <Icons.More /> : undefined);
   return <button type="button" tabIndex={kind() === "pane" ? -1 : undefined} aria-label={local.label} title={local.label} {...rest}
     class="ui-icon-button" data-icon-button={kind()}
     data-wide={local.wide ? "" : undefined} data-in-menu={local.inMenu ? "" : undefined} data-close={local.close ? "" : undefined}
-    aria-current={local.current ? "page" : undefined} data-live={local.live ? "" : undefined}>{children()}</button>;
+    aria-current={local.current ? "page" : undefined} data-live={local.live ? "" : undefined}
+    onClick={(event) => { feel(local.haptic, local.close ? "dismiss" : "press"); callHandler(local.onClick, event); }}>{children()}</button>;
 }
 
 /**

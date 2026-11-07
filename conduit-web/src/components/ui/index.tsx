@@ -49,6 +49,7 @@ export * from "./composer";
 export * from "./rider";
 export * from "./transcript";
 export * from "./chat";
+export * from "./tray";
 export * from "./find";
 export * from "./code";
 export * from "./trace";

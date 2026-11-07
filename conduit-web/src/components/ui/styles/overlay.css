@@ -213,6 +213,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
+/* GlanceBody: a whole text in the answer's voice above, unclamped; its headings and bold a step heavier (lift), the
+   one strong line staying the title. */
+.ui-glance-body > .ui-answer { --answer-gap: var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); }
+.ui-glance-body > .ui-answer :is(h1, h2, h3, h4) { color: var(--foreground); font-size: inherit; font-weight: var(--weight-lift); }
+.ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-empty:where([data-empty="glance"]) { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
 

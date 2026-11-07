@@ -1,9 +1,11 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX, untrack } from "solid-js";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { AgentAvatar, Answer, approvalLineText, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
+import { AgentAvatar, Answer, approvalLineText, Empty, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { GroupAction } from "@/components/ui/dashboard";
+import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
@@ -54,9 +56,10 @@ const when = (schedule: AgentSchedule) => schedule.cadence ? schedule.cadence : 
   : "Once";
 
 /** jbot's panel's tabs: its page's groups, by what they are about. */
-export type JbotTab = "now" | "routines" | "memory" | "threads";
-export const JBOT_TABS: Array<{ value: JbotTab; label: string }> = [
-  { value: "now", label: "Now" }, { value: "routines", label: "Routines" }, { value: "memory", label: "Memory" }, { value: "threads", label: "Threads" },
+export type JbotTab = "now" | "routines" | "memory";
+export const JBOT_TABS: Array<{ value: JbotTab; label: string; icon: () => JSX.Element }> = [
+  { value: "now", label: "Now", icon: () => <Icons.Runtime /> }, { value: "routines", label: "Routines", icon: () => <Icons.Clock /> },
+  { value: "memory", label: "Memory", icon: () => <Icons.Reasoning /> },
 ];
 
 export function AgentPage(props: {
@@ -144,14 +147,18 @@ export function AgentPage(props: {
   }));
   const peekView = (shown: Peek) => {
     const text = () => peekText() ?? shown.text;
+    // Drawn as chat search's preview is (Glance): its title the one strong line, its facts in the data face, what it
+    // says at the row's size a tone under the text, not a transcript's answer.
     return <div class="ui-dash-peek">
-      <div class="ui-dash-peek-bar"><Button variant="ghost" size="sm" onClick={() => setPeek(null)}><Icons.ChevronLeft />Back</Button>
-        <Show when={shown.open}>{(open) => <Button variant="ghost" size="sm" onClick={(event: MouseEvent) => { setPeek(null); open().go(event); }}>{open().icon}{open().label}</Button>}</Show></div>
-      <div class="ui-dash-peek-head"><strong>{shown.title}</strong><span>{shown.context}</span></div>
-      {/* Keyed: the headline first, then the file's whole text once read, each drawn afresh. */}
-      <Show when={text()} keyed fallback={<SplitEmpty>It reported nothing.</SplitEmpty>}>{(shownText) =>
-        <div class="ui-dash-peek-text"><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.markdownRenderer} streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></div>}
-      </Show>
+      <div class="ui-dash-peek-bar"><GroupAction onClick={() => setPeek(null)}><Icons.ChevronLeft />Back</GroupAction>
+        <Show when={shown.open}>{(open) => <GroupAction onClick={(event: MouseEvent) => { setPeek(null); open().go(event); }}>{open().icon}{open().label}</GroupAction>}</Show></div>
+      <Glance label={shown.title}>
+        <GlanceHead title={shown.title} facts={[shown.context]} />
+        {/* Keyed: the headline first, then the file's whole text once read, each drawn afresh. */}
+        <Show when={text()} keyed fallback={<Empty kind="glance">It reported nothing.</Empty>}>{(shownText) =>
+          <GlanceBody><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.markdownRenderer} streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></GlanceBody>}
+        </Show>
+      </Glance>
     </div>;
   };
   const entryText = (entry: AgentInboxEntry) => entry.body && entry.body !== entry.headline ? entry.body : entry.headline || "";
@@ -336,7 +343,8 @@ export function AgentPage(props: {
         onClick={() => act(schedule.id, () => api(`/v0/agent/feeds/${encodeURIComponent(schedule.id)}`, { method: "DELETE" }))}><Icons.Delete /></IconButton> : undefined}
       </>} />;
   };
-  const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}>
+  const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}
+    actions={props.panel ? <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction> : undefined}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 
@@ -443,7 +451,8 @@ export function AgentPage(props: {
   // Its threads: home, where it talks to the person, then the side threads it or they started.
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
   const threadsShown = capped("threads", threads);
-  const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)} more={threadsShown.more()}>
+  const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)} more={threadsShown.more()}
+    actions={props.panel ? <GroupAction disabled={busy() === "thread"} onClick={() => void newThread()}><Icons.NewChat />New thread</GroupAction> : undefined}>
     <Show when={view()?.home}>{(home) =>
       <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(home().chatId, event)} lead={<Icons.Home />} label="Home" context="Where it talks to you" />}
     </Show>
@@ -460,17 +469,20 @@ export function AgentPage(props: {
   const running = () => working()?.runs.length ? `${working()!.runs.length} running` : null;
 
   // jbot's panel: one tab's groups, a tab's own action first.
-  const tabGroups = (tab: JbotTab) => tab === "now" ? <>{needsGroup()}{workingGroup()}{inboxGroup()}{recentGroup()}{decidedGroup()}</>
-    : tab === "routines" ? <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" onClick={() => setAsking(true)}><Icons.Play />Run a task</Button></div>{timedGroup()}{watchesGroup()}</>
-    : tab === "memory" ? <>{rememberedGroup()}{memoryGroup()}{rulesGroup()}</>
-    : <><div class="ui-dash-room-actions"><Button variant="ghost" size="sm" disabled={busy() === "thread"} onClick={() => void newThread()}><Icons.NewChat />New thread</Button></div>{threadsGroup()}</>;
+  // What needs the person is in the panel's top, whatever the tab; its threads close Now (no tab of their own).
+  const tabGroups = (tab: JbotTab) => tab === "now" ? <>{workingGroup()}{inboxGroup()}{recentGroup()}{decidedGroup()}{threadsGroup()}</>
+    : tab === "routines" ? <>{timedGroup()}{watchesGroup()}</>
+    : <>{rememberedGroup()}{memoryGroup()}{rulesGroup()}</>;
 
   return <>
     {props.header?.(`${name()}'s page`)}
     {/* In the panel its day stays at the top, whatever the tab; the tab's groups scroll under it. */}
     <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
       <div class="ui-dash-panel">
-        <div class="ui-dash-panel-top"><div class="ui-dash-panel-day">{day()}</div>{props.panelTop}</div>
+        <div class="ui-dash-panel-top">
+          <div class="ui-dash-panel-glance"><div class="ui-dash-panel-day">{day()}</div>{props.panelTop}</div>
+          <Show when={agentNeeds()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>
+        </div>
         <div class="ui-dash-panel-body">
           <Dashboard label={`${name()}: ${JBOT_TABS.find((item) => item.value === tab())?.label}`} page="Agent" compact oneColumn stacked
             notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} list={<Show when={peek()} fallback={tabGroups(tab())}>{(shown) => peekView(shown())}</Show>} />

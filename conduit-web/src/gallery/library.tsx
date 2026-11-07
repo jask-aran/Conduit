@@ -24,6 +24,7 @@ import { panesPage } from "./pages/panes";
 import { headerPage } from "./pages/header";
 import { shellPage } from "./pages/shell";
 import { chatPage } from "./pages/chat";
+import { trayPage } from "./pages/tray";
 import { readingPage } from "./pages/reading";
 import { popoverPage } from "./pages/popover";
 import { cardPage } from "./pages/card";
@@ -75,6 +76,7 @@ const piecePages: Page[] = [
   headerPage,
   shellPage,
   chatPage,
+  trayPage,
   readingPage,
   popoverPage,
   cardPage,

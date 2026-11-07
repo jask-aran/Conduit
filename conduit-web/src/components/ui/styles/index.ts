@@ -40,6 +40,7 @@
  *   pill            Pill*, Aura
  *   viewfinder      Viewfinder (the camera, picture in picture)
  *   phone-composer  PhoneComposer
+ *   tray            Tray: a phone's surface risen from the foot
  *   composer        DesktopComposer, Toolbar
  *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
  *   approval        ApprovalSummary (the question card's, an ApprovalCard's), ApprovalCard
@@ -97,6 +98,7 @@ import "./rider.css";
 import "./approval.css";
 import "./transcript.css";
 import "./chat.css";
+import "./tray.css";
 import "./find.css";
 import "./code.css";
 import "./trace.css";

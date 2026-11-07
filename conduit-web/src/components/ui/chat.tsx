@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { IconButton } from "./actions";
+import { Tray } from "./tray";
 import * as Icons from "./icons";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +48,8 @@ export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 
 /**
  * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
- * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone risen over the
- * chat from its foot, a scrim over the rest that closes it; with `above` (a pointer's) faded in over the transcript
+ * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone a Tray risen over
+ * the chat from its foot; with `above` (a pointer's) faded in over the transcript
  * just above the composer (`above` px over the chat's foot), the transcript left where it is, Esc or a press outside it putting it away. onWide: when that changes (it starts narrow), for the controls
  * that open it.
  */
@@ -72,16 +73,17 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     sizes.observe(root);
     onCleanup(() => sizes.disconnect());
   });
-  const over = () => !wide() && props.open;
-  // Esc puts it away wherever the keyboard is (its control is outside it: a pill, the composer's ring).
+  const sheet = () => !wide() && props.above === undefined;
+  const over = () => !wide() && props.open && props.above !== undefined;
+  // Above the composer, Esc puts it away wherever the keyboard is (its control is outside it: the composer's ring); a
+  // Tray minds its own.
   createEffect(() => {
     if (!over()) return;
     const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
     window.addEventListener("keydown", away, true);
     onCleanup(() => window.removeEventListener("keydown", away, true));
-    // Above the composer, a press anywhere but the panel and the composer (which holds its control, and stays usable
-    // under it) puts it away, as a menu's does.
-    if (props.above === undefined) return;
+    // A press anywhere but the panel and the composer (which holds its control, and stays usable under it) puts it
+    // away, as a menu's does.
     const outside = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (!target?.closest || target.closest(".ui-chat-beside-panel") === panel || root.querySelector(".ui-composer-dock")?.contains(target)) return;
@@ -93,12 +95,13 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   return <div ref={root} class="ui-chat-beside" data-wide={wide() ? "" : undefined} data-open={props.open ? "" : undefined} data-above={props.above !== undefined ? "" : undefined} style={props.above !== undefined ? { "--chat-beside-above": `${props.above}px` } : undefined}>
     <span ref={need} class="ui-chat-beside-need" aria-hidden="true" />
     <div class="ui-chat-beside-main">{props.children}</div>
-    <div class="ui-chat-beside-scrim" aria-hidden="true" onClick={() => props.onClose()} />
-    {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane. */}
-    <aside ref={panel} class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
+    {/* Over the chat it is frost, as a popover is, with its own close; beside it, part of the pane; a phone's, a Tray. */}
+    <Show when={sheet()} fallback={<aside ref={panel} class={wide() ? "ui-chat-beside-panel" : "ui-chat-beside-panel ui-frost"} data-surface={wide() ? undefined : "frost"} data-lift={wide() ? undefined : "raised"}
       aria-label={props.label} inert={!wide() && !props.open ? true : undefined}>
       <Show when={!wide() || props.actions || props.lead}><div class="ui-chat-beside-head"><Show when={props.lead} fallback={<strong>{props.title}</strong>}><span class="ui-chat-beside-lead">{props.lead}</span></Show><span class="ui-chat-beside-actions">{props.actions}<Show when={!wide()}><IconButton kind="pane" close label="Close" onClick={() => props.onClose()}><Icons.Close /></IconButton></Show></span></div></Show>
       <div class="ui-chat-beside-body">{props.panel}</div>
-    </aside>
+    </aside>}>
+      <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} actions={props.actions}>{props.panel}</Tray>
+    </Show>
   </div>;
 }

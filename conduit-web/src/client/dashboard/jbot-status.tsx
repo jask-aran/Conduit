@@ -60,7 +60,9 @@ export function JbotSpend() {
   const status = useJbotStatus();
   const tone = () => !status.budget() ? "idle" : status.share() >= 100 ? "critical" : status.share() >= 80 ? "warning" : "normal";
   const words = () => status.budget() ? `${money(status.spent())} of ${money(status.budget())} today` : `${money(status.spent())} today`;
-  return <span class="ui-dash-spend" role="img" aria-label={`Spent ${words()}`} title={`Spent ${words()}`}><Gauge value={status.share()} tone={tone()} /><span>{money(status.spent())}</span></span>;
+  // The ring is what is used of the day's budget; the figure says both, spent over budget.
+  return <span class="ui-dash-spend" role="img" aria-label={`Spent ${words()}`} title={`Spent ${words()}`}><Gauge value={status.share()} tone={tone()} />
+    <span>{money(status.spent())}<Show when={status.budget()}><small> / {money(status.budget())}</small></Show></span></span>;
 }
 
 /** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. */

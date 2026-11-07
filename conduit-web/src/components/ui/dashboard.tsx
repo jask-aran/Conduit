@@ -3,6 +3,8 @@ import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Row, type RowProps } from "./row";
 import { clearDock } from "./dock-inset";
+import { feel, type HapticProp } from "./haptics";
+import { callHandler } from "./shared";
 
 
 /*
@@ -131,14 +133,16 @@ export const GroupSwitches = (props: { children: JSX.Element }) => <div class="u
 
 
 /** A text action at a heading's right (Open, New, Filters ⌄); a menu's trigger takes it with `as`. */
-export function GroupAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type="button" {...props} class="ui-group-action" />;
+/** A group's quiet action (muted caption, at rest); felt as press when tapped on a phone, haptic overriding it. */
+export function GroupAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { haptic?: HapticProp }) {
+  const [local, rest] = splitProps(props, ["haptic", "onClick"]);
+  return <button type="button" {...rest} class="ui-group-action" onClick={(event) => { feel(local.haptic, "press"); callHandler(local.onClick, event); }} />;
 }
 /** A day's name over its chats. */
 export const DashDay = (props: { children: JSX.Element }) => <div class="ui-dash-day">{props.children}</div>;
 /** The row after the last: "Show 20 more", quieter. */
 export function DashMore(props: { count?: number | string; onClick: () => void; children: JSX.Element }) {
-  return <button type="button" class="ui-dash-more" onClick={() => props.onClick()}>{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button>;
+  return <button type="button" class="ui-dash-more" onClick={() => { feel(undefined, "fold"); props.onClick(); }}>{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button>;
 }
 /** A line of prose in a group (a note, an error). */
 
