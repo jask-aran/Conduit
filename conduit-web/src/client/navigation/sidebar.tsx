@@ -192,6 +192,8 @@ export function Sidebar(props: {
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
+  /** A phone's drawer shut onto what a row opens: held aside until the page shows it whole, then slid back. */
+  onMobileShutOnto?: (opening: Promise<unknown>) => void;
   command?: SidebarCommand | null;
 }) {
   onMount(() => { void refreshAgent(); });
@@ -506,7 +508,9 @@ export function Sidebar(props: {
     } else if (!open && mobileWasOpen) {
       const previous = mobileReturnFocus;
       mobileReturnFocus = null;
-      queueMicrotask(() => restoreFocus(previous, ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']));
+      // Never the composer on a phone: focusing its field puts it in editing (and raises the keyboard) as the page slides
+      // back -- a pick from the drawer swaps the page, so the control it was opened from is gone and the fallback decides.
+      queueMicrotask(() => restoreFocus(previous, phoneLayout() ? ['button[aria-label="Toggle Sidebar"]'] : ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']));
     }
     mobileWasOpen = open;
   });
@@ -644,6 +648,11 @@ export function Sidebar(props: {
     });
   };
   const closeMobile = () => props.onMobileOpenChange(false);
+  // A row opening a page: the drawer stays aside until that page is drawn, then slides back over it (main.tsx).
+  const openOnto = (opening: Promise<unknown>) => {
+    if (props.onMobileShutOnto) props.onMobileShutOnto(opening); else closeMobile();
+    void opening.then(enterPane);
+  };
   // Opening a page from the sidebar -- by click or Enter, and even the page
   // already open -- enters it: focus goes to its composer, else the pane.
   // Actions with a target of their own (a dialog, the palette, a terminal)
@@ -935,8 +944,7 @@ export function Sidebar(props: {
           props.onOpenChatBeside(menuProps.chat, menuProps.project);
           return;
         }
-        closeMobile();
-        void props.onOpenChat(menuProps.chat, menuProps.project).then(enterPane);
+        openOnto(props.onOpenChat(menuProps.chat, menuProps.project));
       }}
     >
       <SidebarChatTitle title={title} animate={animateTitle} />
@@ -978,8 +986,7 @@ export function Sidebar(props: {
           meta={cloning() ? "Cloning…" : undefined}
           link={{ draggable: "true", "data-doc-view": `page:project:${blockProps.project.id}`, onClick: () => {
             if (guard.suppressClick) { guard.suppressClick = false; return; }
-            closeMobile();
-            void props.onOpenProject(blockProps.project).then(enterPane);
+            openOnto(props.onOpenProject(blockProps.project));
           } }}
           toggle={{ "aria-label": `${open() ? "Collapse" : "Expand"} chat list`, title: `${open() ? "Collapse" : "Expand"} ${blockProps.project.name}`, onClick: (event: MouseEvent) => {
             event.stopPropagation();
@@ -1005,10 +1012,9 @@ export function Sidebar(props: {
   const PinnedRow = (rowProps: { item: PinnedItem }) => {
     const item = rowProps.item;
     const open = () => {
-      closeMobile();
-      if (item.type === "chat") void props.onOpenChat(item.chat, item.project).then(enterPane);
-      else if (item.type === "project") void props.onOpenProject(item.project).then(enterPane);
-      else props.onOpenPty(item.terminal);
+      if (item.type === "chat") openOnto(props.onOpenChat(item.chat, item.project));
+      else if (item.type === "project") openOnto(props.onOpenProject(item.project));
+      else { closeMobile(); props.onOpenPty(item.terminal); }
     };
     const label = () => item.type === "chat" ? chatTitle(item.chat)
       : item.type === "project" ? item.project.name

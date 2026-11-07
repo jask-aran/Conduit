@@ -3641,6 +3641,33 @@ function App() {
   const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
   const openJbotHere = () => openInFocusedPane("page:jbot", () => openJbot());
   const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
+  /*
+   * A phone's drawer shuts onto what it opened: the page under it changes while the drawer is still aside (the chat
+   * loaded, its transcript, header and composer drawn and holding still for three frames), then the page slides back
+   * already whole, never arriving in pieces mid-slide. At most a beat (500ms): a slow load slides back and finishes
+   * in place, as before.
+   */
+  const shutDrawerOnto = (opening: Promise<unknown>, shown: () => boolean = () => true) => {
+    void opening.catch(() => {});
+    if (!isMobileLayout() || !mobileSidebarOpen()) { setMobileSidebarOpen(false); return; }
+    let opened = false;
+    void opening.finally(() => { opened = true; }).catch(() => {});
+    const started = performance.now();
+    let last = "";
+    let still = 0;
+    const step = () => {
+      if (!mobileSidebarOpen()) return;
+      // Its header, column and composer at their sizes, and the transcript where it lands (a long one renders in
+      // passes and is carried to its foot as it does).
+      const shape = [...document.querySelectorAll<HTMLElement>(".chat-main .ui-pane-header, .chat-main .ui-chat-column, .chat-main .ui-composer-dock, .chat-main .ui-chat-viewport")]
+        .map((element) => `${element.offsetWidth}x${element.offsetHeight}@${Math.round(element.scrollTop)}`).join("|");
+      still = opened && shown() && shape === last ? still + 1 : 0;
+      last = shape;
+      if (still >= 3 || performance.now() - started > 500) setMobileSidebarOpen(false);
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
   const openChatFromPage = async (target: ChatSummary, project: Project) => {
     if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);
   };
@@ -5337,8 +5364,8 @@ function App() {
     deleteFolder: () => runSidebar("delete-project"),
     settings: (section) => openSettings(section),
     workspaceSettings: (id) => openSettings("workspaces", id),
-    openChat: (session, project) => { setMobileSidebarOpen(false); void openChatHere(session, project); },
-    openProject: (project) => { setMobileSidebarOpen(false); void openProjectHere(project); },
+    openChat: (session, project) => shutDrawerOnto(openChatHere(session, project), () => chat.loadedId() === session.id),
+    openProject: (project) => shutDrawerOnto(openProjectHere(project)),
     renameChat,
     moveChats,
     copyChatLinks,
@@ -6242,6 +6269,7 @@ function App() {
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
+      onMobileShutOnto={(opening) => shutDrawerOnto(opening, () => routeKind() !== "chat" || !mainChatId() || chat.loadedId() === mainChatId())}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
       onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) await openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}

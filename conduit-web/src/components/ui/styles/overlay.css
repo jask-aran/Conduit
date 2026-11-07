@@ -15,7 +15,7 @@
 .ui-backdrop[data-fade="open"] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 /* The sidebar's (a phone's, under the page): the dim goes with the page as it slides off the sidebar (nav.css --drawer). */
 .ui-backdrop[data-layer="drawer"][data-fade] { opacity: var(--drawer); transform: translateX(calc(var(--drawer) * var(--drawer-width)));
-  transition: opacity var(--duration-quick) var(--ease-leave), transform var(--duration-quick) var(--ease-leave); }
+  transition: opacity var(--duration-gentle) var(--ease-arrive), transform var(--duration-gentle) var(--ease-arrive); }
 .ui-backdrop[data-layer="drawer"][data-fade="open"] { --drawer: 1; transition-duration: var(--duration-gentle); transition-timing-function: var(--ease-arrive); }
 .ui-backdrop[data-layer="drawer"][data-drawer-drag] { transition: none; }
 .ui-backdrop[data-layer="drawer"][data-drawer-settle] { transition-duration: var(--duration-gentle); transition-timing-function: var(--ease-arrive); }

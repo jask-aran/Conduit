@@ -8,7 +8,8 @@
 /* A phone's page slides off the sidebar under it (nav.css --drawer), opaque so nothing shows through; at rest shut it has
    no transform, which would make it a stacking context and the box its fixed pieces (the workspace panel) sit in. */
 @media (--conduit-phone-layout) {
-  .ui-shell[data-drawer] { background: var(--background); transition: transform var(--duration-quick) var(--ease-leave); }
+  /* Shutting, the page comes back as a swipe lets it go: arriving, at the gentle duration (a quick leave read as a snap). */
+  .ui-shell[data-drawer] { background: var(--background); transition: transform var(--duration-gentle) var(--ease-arrive); }
   .ui-shell:is([data-drawer="open"], [data-drawer-drag]) { transform: translateX(calc(var(--drawer) * var(--drawer-width))); }
   .ui-shell[data-drawer="open"] { --drawer: 1; transition: transform var(--duration-gentle) var(--ease-arrive); }
   .ui-shell[data-drawer-drag] { transition: none; }
