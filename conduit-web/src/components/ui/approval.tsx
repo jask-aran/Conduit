@@ -51,22 +51,30 @@ export type ApprovalChoice = "allow" | "always" | "deny";
 
 /**
  * ApprovalCard: an approval in the thread. Pending, the summary over Allow / Always / Don't (Allow the one action
- * waiting); answered, one quiet line of what became of it. busy: an answer on its way.
+ * waiting); answered, one quiet line of what became of it. busy: an answer on its way. bare: inside a surface whose
+ * row already names it (Needs you): its lines and its answers under that row's label, no card or head of its own.
  */
 export function ApprovalCard(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
   /** What Always would allow from now on ("Gmail · send, any input"); null: no lasting rule fits, so no Always. */
-  always?: string | null; onChoose?: (choice: ApprovalChoice) => void }) {
+  always?: string | null; bare?: boolean; onChoose?: (choice: ApprovalChoice) => void }) {
+  const actions = () => <div class="ui-approval-actions">
+    <Button size="sm" disabled={props.busy} onClick={() => props.onChoose?.("allow")}>Allow</Button>
+    <Show when={props.always !== null}>
+      <Button size="sm" variant="ghost" outline disabled={props.busy} title={props.always ? `Always allow: ${props.always}` : undefined} onClick={() => props.onChoose?.("always")}>Always</Button>
+    </Show>
+    <Button size="sm" variant="ghost" disabled={props.busy} onClick={() => props.onChoose?.("deny")}>Don't</Button>
+  </div>;
   return <Switch>
+    <Match when={props.state === "pending" && props.bare}>
+      <div class="ui-approval" data-bare="" role="group" aria-label={`Approval: ${props.title}`}>
+        <Show when={props.lines?.length}><ul class="ui-approval-lines"><For each={props.lines}>{(line) => <Line line={line} />}</For></ul></Show>
+        {actions()}
+      </div>
+    </Match>
     <Match when={props.state === "pending"}>
       <Frost lift="raised" class="ui-approval" role="group" aria-label={`Approval: ${props.title}`} {...motionOf(props.motion)}>
         <ApprovalSummary title={props.title} service={props.service} lines={props.lines} meta={props.meta} />
-        <div class="ui-approval-actions">
-          <Button size="sm" disabled={props.busy} onClick={() => props.onChoose?.("allow")}>Allow</Button>
-          <Show when={props.always !== null}>
-            <Button size="sm" variant="ghost" outline disabled={props.busy} title={props.always ? `Always allow: ${props.always}` : undefined} onClick={() => props.onChoose?.("always")}>Always</Button>
-          </Show>
-          <Button size="sm" variant="ghost" disabled={props.busy} onClick={() => props.onChoose?.("deny")}>Don't</Button>
-        </div>
+        {actions()}
       </Frost>
     </Match>
     <Match when={props.state !== "pending"}>

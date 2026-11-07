@@ -2,7 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { Portal } from "solid-js/web";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { AgentAvatar, Answer, approvalLineText, Empty, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
+import { AgentAvatar, Answer, ApprovalCard, approvalLineText, type ApprovalChoice, Empty, Expand, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { Button, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
@@ -10,7 +10,7 @@ import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
-import { agentNeeds, agentView, refreshAgent, type AgentInboxEntry, type AgentRun, type AgentSchedule } from "../state/agent";
+import { agentNeeds, agentView, foldNotices, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
@@ -176,34 +176,63 @@ export function AgentPage(props: {
       meta={age(live ? run.startedAt : run.endedAt, now())} />;
   };
 
-  const needsGroup = () => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first">
+  // What waits on the person, each answered where it stands, never in a thread: an approval's Allow and Don't on its
+  // row, its whole card (what it sends, Always) unfolded by a tap; a notice's whole text the same; the rest by their
+  // own buttons. Only a question opens its chat (it is answered in the composer there).
+  const [unfolded, setUnfolded] = createSignal<string | null>(null);
+  const unfold = (key: string) => setUnfolded(unfolded() === key ? null : key);
+  const decideAsk = (id: string, choice: ApprovalChoice) => act(id, () => api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }));
+  const noticeRows = createMemo(() => foldNotices(needs()?.notices));
+  const dismissNotice = (row: AgentNoticeRow) => act(row.key, () => Promise.all(row.ids.map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" }))));
+  // Clear all: the notices that only tell (a parked task waits for Retry, a connector for connecting).
+  const clearable = () => noticeRows().filter((row) => row.taskId == null && row.kind !== "connector");
+  const clearAll = () => act("clear", () => Promise.all(clearable().flatMap((row) => row.ids).map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" }))));
+  const stop = (event: MouseEvent) => event.stopPropagation();
+  // How long an approval waits, as its card's meta (as the thread's card says it): "23 h left", "40 min left".
+  const left = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
+
+  const needsGroup = () => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first"
+    actions={clearable().length > 1 ? <GroupAction disabled={busy() !== null} onClick={() => void clearAll()}><Icons.Close />Clear all</GroupAction> : undefined}>
     <Show when={agentNeeds()} fallback={<SplitEmpty>Nothing waits on you.</SplitEmpty>}>
-      <For each={needs()?.asks}>{(ask) =>
-        <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(ask.chatId, event)}
+      <For each={needs()?.asks}>{(ask) => <>
+        <Row density="list" element="button" aria-expanded={unfolded() === ask.id} onClick={() => unfold(ask.id)}
           lead={<ServiceIcon service={ask.service || ""} fallback={<Icons.Permissions />} />} label={ask.title} title={ask.lines.map(approvalLineText).join("\n")}
-          context="Waiting for your approval · open to see it all"
-          meta={<>
-            <IconButton kind="dash" aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { event.stopPropagation(); void act(ask.id, () => api(`/v0/agent/asks/${encodeURIComponent(ask.id)}`, { method: "POST", body: JSON.stringify({ choice: "deny" }) })); }}><Icons.Close /></IconButton>
-          </>} />}
+          context={unfolded() === ask.id ? `Approval · ${left(ask.expiresAt)}` : `Approval · ${ask.lines[0] ? approvalLineText(ask.lines[0]).split("\n")[0] : "tap to see it all"}`}
+          meta={<Show when={unfolded() !== ask.id}>
+            <IconButton kind="dash" aria-label="Allow" title="Allow" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void decideAsk(ask.id, "allow"); }}><Icons.Check /></IconButton>
+            <IconButton kind="dash" aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void decideAsk(ask.id, "deny"); }}><Icons.Close /></IconButton>
+          </Show>} />
+        <Expand open={unfolded() === ask.id}>
+          <ApprovalCard bare title={ask.title} service={ask.service} lines={ask.lines} state="pending" busy={busy() !== null} always={ask.always ?? null}
+            onChoose={(choice) => void decideAsk(ask.id, choice)} />
+        </Expand>
+      </>}
       </For>
       <For each={needs()?.questions}>{(question) =>
         <Row density="list" element="button" onClick={(event: MouseEvent) => props.onOpenChat(question.chatId, event)}
-          lead={<StatusDot label="Waiting" tone="warn" />} label={question.title} context="Waiting for your answer" />}
+          lead={<StatusDot label="Waiting" tone="warn" />} label={question.title} context="Waiting for your answer · open to answer" />}
       </For>
-      <For each={needs()?.proposals}>{(proposal) =>
-        <Row density="list" lead={<Icons.FileText />} label={proposal.text} title={proposal.text}
+      <For each={needs()?.proposals}>{(proposal) => <>
+        <Row density="list" element="button" aria-expanded={unfolded() === proposal.id} onClick={() => unfold(proposal.id)} lead={<Icons.FileText />} label={proposal.text} title={proposal.text}
           context={`${proposal.op === "remove" ? "Forget" : "Remember"} · ${proposal.file}`}
           meta={<>
-            <IconButton kind="dash" aria-label="Keep" title="Keep" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/accept`, { method: "POST" }))}><Icons.Check /></IconButton>
-            <IconButton kind="dash" aria-label="Discard" title="Discard" disabled={busy() !== null} onClick={() => act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/reject`, { method: "POST" }))}><Icons.Close /></IconButton>
-          </>} />}
+            <IconButton kind="dash" aria-label="Keep" title="Keep" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/accept`, { method: "POST" })); }}><Icons.Check /></IconButton>
+            <IconButton kind="dash" aria-label="Discard" title="Discard" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void act(proposal.id, () => api(`/v0/agent/proposals/${encodeURIComponent(proposal.id)}/reject`, { method: "POST" })); }}><Icons.Close /></IconButton>
+          </>} />
+        <Expand open={unfolded() === proposal.id}><Note kind="dash">{proposal.text}</Note></Expand>
+      </>}
       </For>
-      <For each={needs()?.notices}>{(notice) =>
-        <Row density="list" lead={<Icons.Warning />} label={notice.text} title={notice.text} context={age(notice.at, now())}
-          meta={notice.taskId
+      <For each={noticeRows()}>{(notice) => <>
+        <Row density="list" element="button" aria-expanded={unfolded() === notice.key} onClick={() => unfold(notice.key)} lead={<Icons.Warning />} label={notice.text} title={notice.text}
+          context={[notice.ids.length > 1 ? `${notice.ids.length} times` : null, notice.at ? (notice.ids.length > 1 ? `last ${age(notice.at, now())}` : age(notice.at, now())) : null].filter(Boolean).join(" · ") || undefined}
+          meta={notice.taskId != null
             // Parked by the runtime after too many restarts: it runs again from where it stopped.
-            ? <IconButton kind="dash" aria-label="Retry" title="Retry" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/tasks/${notice.taskId}/retry`, { method: "POST" }))}><Icons.Refresh /></IconButton>
-            : <IconButton kind="dash" aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={() => act(notice.id, () => api(`/v0/agent/notices/${encodeURIComponent(notice.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton>} />}
+            ? <IconButton kind="dash" aria-label="Retry" title="Retry" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void act(notice.key, () => api(`/v0/agent/tasks/${notice.taskId}/retry`, { method: "POST" })); }}><Icons.Refresh /></IconButton>
+            : notice.kind === "connector"
+              ? <IconButton kind="dash" aria-label="Connect" title="Connect in Settings" onClick={(event: MouseEvent) => { stop(event); props.onOpenSettings(); }}><Icons.Settings /></IconButton>
+              : <IconButton kind="dash" aria-label="Dismiss" title="Dismiss" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void dismissNotice(notice); }}><Icons.Close /></IconButton>} />
+        <Expand open={unfolded() === notice.key}><Note kind="dash">{notice.text}</Note></Expand>
+      </>}
       </For>
     </Show>
   </SplitGroup>;

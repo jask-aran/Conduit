@@ -28,7 +28,7 @@ export interface AgentInboxEntry { id: string; at: string; kind: AgentRunKind; t
   /** Its text as a file in the agent's folder (inbox/…md), which a row opens in the file viewer. */
   file?: string }
 export interface AgentNotice { id: string; kind: string; text: string; at: string | null; taskId?: number }
-export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; decidedAt?: string; choice?: "allow" | "always" | "deny" }
+export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; /** What Always would allow from now on; null: no lasting rule fits. */ always?: string | null; decidedAt?: string; choice?: "allow" | "always" | "deny" }
 export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */
@@ -64,8 +64,22 @@ const store = createRoot(() => {
 
 export const agentView = store.view;
 export const refreshAgent = store.refresh;
-/** How many things wait on the person: questions, memory to review and notices. */
+/** A notice as Needs you shows it: the same one raised again (a routine failing each hour) is one row, counted, its
+ *  newest time; dismissing it dismisses every one. */
+export interface AgentNoticeRow { key: string; kind: string; text: string; at: string | null; taskId?: number; ids: string[] }
+export const foldNotices = (notices: AgentNotice[] = []): AgentNoticeRow[] => {
+  const rows = new Map<string, AgentNoticeRow>();
+  for (const notice of notices) {
+    const key = notice.taskId != null ? `task:${notice.taskId}` : `${notice.kind}:${notice.text}`;
+    const row = rows.get(key);
+    if (!row) { rows.set(key, { key, kind: notice.kind, text: notice.text, at: notice.at, taskId: notice.taskId, ids: [notice.id] }); continue; }
+    row.ids.push(notice.id);
+    if ((notice.at || "") > (row.at || "")) row.at = notice.at;
+  }
+  return [...rows.values()].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+};
+/** How many things wait on the person: approvals, questions, memory to review and notices (repeats as one). */
 export const agentNeeds = (view = agentView()) => {
   const needs = view?.attention?.needsYou;
-  return needs ? (needs.asks?.length || 0) + needs.questions.length + needs.proposals.length + needs.notices.length : 0;
+  return needs ? (needs.asks?.length || 0) + needs.questions.length + needs.proposals.length + foldNotices(needs.notices).length : 0;
 };
