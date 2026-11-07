@@ -66,7 +66,9 @@ export async function authorizedFetch(input: RequestInfo | URL, init: RequestIni
   const token = await nativeBearerToken(origin);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(input, { ...init, headers });
-  if (isInstalledClient() && response.status === 401) {
+  // Only a refusal of the token still held signs out: a request sent before sign-in finished (no token yet) or with
+  // a token since replaced must not wipe the one just saved.
+  if (isInstalledClient() && response.status === 401 && token === await nativeBearerToken(origin)) {
     await clearNativeBearerToken(origin);
     if (origin === activeOrigin()) window.dispatchEvent(new Event(NATIVE_AUTH_REQUIRED_EVENT));
   }
