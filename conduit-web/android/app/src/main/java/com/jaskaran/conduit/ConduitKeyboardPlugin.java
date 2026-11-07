@@ -11,6 +11,8 @@ import androidx.core.view.WindowInsetsCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import java.util.List;
@@ -62,6 +64,8 @@ public class ConduitKeyboardPlugin extends Plugin {
     private int lastSent = -1;
     /** Whether the keyboard is mid-travel, and so reporting its own position. */
     private boolean animating = false;
+    /** The insets last applied, for a page that starts after they were (`safeArea`). */
+    private WindowInsetsCompat lastInsets = null;
 
     @Override
     public void load() {
@@ -71,18 +75,8 @@ public class ConduitKeyboardPlugin extends Plugin {
         hostView = host;
 
 
-        /*
-         * Again on every page load: the variables live in the page, so insets dispatched before it committed (a cold
-         * start, a reload into another interface) were lost until the next change, and the composer sat under the
-         * gesture bar.
-         */
-        getBridge().addWebViewListener(new com.getcapacitor.WebViewListener() {
-            @Override public void onPageLoaded(android.webkit.WebView view) {
-                WindowInsetsCompat now = ViewCompat.getRootWindowInsets(host);
-                if (now != null) injectSafeArea(now);
-            }
-        });
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
+            lastInsets = insets;
             injectSafeArea(insets);
             // The end of the story, and the whole of it where the platform
             // declines to animate: a keyboard that appears without a curve
@@ -252,6 +246,26 @@ public class ConduitKeyboardPlugin extends Plugin {
      * behind the keyboard then, and padding the composer clear of something
      * nothing can touch is the strip of empty space under the transcript.
      */
+    /**
+     * The safe area as it stands, asked for by the page when it starts. The variables live in the page, so insets
+     * applied before it committed -- a cold start, the page coming back after its renderer was reclaimed -- left it
+     * with none until the next change, and the composer sat under the gesture bar.
+     */
+    @PluginMethod
+    public void safeArea(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            WindowInsetsCompat insets = lastInsets != null ? lastInsets : hostView == null ? null : ViewCompat.getRootWindowInsets(hostView);
+            if (insets == null) { call.reject("No insets yet"); return; }
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            JSObject result = new JSObject();
+            result.put("top", Math.round(bars.top / density));
+            result.put("right", Math.round(bars.right / density));
+            result.put("bottom", Math.round(bars.bottom / density));
+            result.put("left", Math.round(bars.left / density));
+            call.resolve(result);
+        });
+    }
+
     private void injectSafeArea(WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
         /*

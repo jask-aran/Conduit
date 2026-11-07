@@ -197,7 +197,19 @@ export function bindVisualViewportShell(): () => void {
           event: "keyboardAnimation",
           handler: (info: { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number }) => void,
         ): Promise<{ remove(): void }>;
+        safeArea?(): Promise<{ top: number; right: number; bottom: number; left: number }>;
       }>("ConduitKeyboard");
+      // Asked for, not only told: a page that starts after the insets were applied (a cold start, coming back after
+      // its renderer was reclaimed) had none, and the composer sat under the gesture bar. An older app has no answer.
+      void plugin.safeArea?.().then((area) => {
+        const style = document.documentElement.style;
+        style.setProperty("--safe-area-inset-top", `${area.top}px`);
+        style.setProperty("--safe-area-inset-right", `${area.right}px`);
+        style.setProperty("--safe-area-inset-bottom-rest", `${area.bottom}px`);
+        style.setProperty("--safe-area-inset-left", `${area.left}px`);
+        readRestBottom();
+        sync();
+      }).catch(() => {});
       const animation = await plugin.addListener("keyboardAnimation", (info) => {
         /*
          * `getDurationMillis` answers -1 when the platform will not say how
