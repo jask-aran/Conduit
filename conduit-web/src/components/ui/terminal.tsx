@@ -1,7 +1,7 @@
 import { Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
-import * as Icons from "./icons";
+import { CloseButton } from "./actions";
 
 /* A terminal's header is a PaneHeader (kind term, header.tsx), which folds it by measure. */
 /** A terminal's state: a dot or busy ring, with a label when needed. */
@@ -17,7 +17,7 @@ export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "clas
 export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { end?: JSX.Element; onClose?: () => void; closeLabel?: string }) {
   const [local, rest] = splitProps(props, ["children", "end", "onClose", "closeLabel"]);
   return <div {...rest} class="ui-term-identity">{local.children}
-    <Show when={local.onClose}><button type="button" class="ui-term-close" aria-label={local.closeLabel ?? "Close terminal"} title={local.closeLabel ?? "Close terminal"} onClick={() => local.onClose?.()}><Icons.Close /></button></Show>
+    <Show when={local.onClose}><CloseButton kind="tab" label={local.closeLabel ?? "Close terminal"} onClick={() => local.onClose?.()} /></Show>
     <Show when={local.end}><span class="ui-term-identity-end">{local.end}</span></Show></div>;
 }
 /** A context line that truncates within the identity. */

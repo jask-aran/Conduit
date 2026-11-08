@@ -87,8 +87,8 @@ export function syncCodeBlockCollapse(root: ParentNode, mode: CodeBlockCollapseM
     const fresh = shell.content.firstElementChild as HTMLElement;
     fillCodeBlocks(fresh.parentNode!);
     block.querySelector(":scope > figcaption")?.replaceWith(fresh.querySelector(":scope > figcaption")!);
-    block.querySelector(":scope > .ui-code-more")?.remove();
-    const more = fresh.querySelector(":scope > .ui-code-more");
+    block.querySelector(":scope > .ui-show-more")?.remove();
+    const more = fresh.querySelector(":scope > .ui-show-more");
     if (more) block.append(more);
     block.setAttribute("style", fresh.getAttribute("style") ?? "");
     // A block the user opened by hand stays open; the preference sets the default, it does not re-close it.

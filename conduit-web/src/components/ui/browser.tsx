@@ -13,7 +13,6 @@ export const BrowserCount = (props: { children: JSX.Element }) => <small class="
 export const BrowserSummary = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-summary" />;
 export const BrowserSpacer = () => <span class="ui-browser-spacer" />;
 export const BrowserMark = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-mark" />;
-export const BrowserDivider = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-browser-divider" />;
 export const BrowserGrid = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-browser-grid" />;
 export const BrowserEntry = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-entry" variant="ghost" />;
 export const BrowserPlace = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <Button {...props} class="ui-browser-place" variant="ghost" />;

@@ -19,7 +19,7 @@
 const ROW = '[data-slot="message-scroller-item"]';
 const SHOWN = "data-focus-shown";
 /** The folds Enter opens or closes: a row's own, not a code block's inside an answer. */
-const FOLD = ":is(.ui-trace, .ui-bubble-more, .ui-envelope-toggle, .ui-envelope-more, .ui-agent-open)[aria-expanded]:not(:disabled)";
+const FOLD = ":is(.ui-trace, .ui-show-more, .ui-envelope-toggle, .ui-agent-open)[aria-expanded]:not(:disabled)";
 
 export type TranscriptCursorOptions = {
   viewport: HTMLElement;

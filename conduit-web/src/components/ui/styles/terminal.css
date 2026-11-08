@@ -8,9 +8,8 @@
 .ui-pane-header:where([data-header="term"]) strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); margin-right: auto; overflow: hidden; }
 .ui-term-identity-end { display: flex; flex: none; align-items: center; margin-left: auto; }
-/* The document's ×, drawn as a lit tab's (pane.css .ui-tab-close): quiet until pointed at. */
-.ui-term-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); }
-@media (hover: hover) { .ui-term-close:hover { color: var(--foreground); } }
+/* The document's ×, a tab's (CloseButton kind tab). */
+.ui-term-identity > .ui-icon-button:where([data-icon-button="tab"]) { margin-left: calc(-1 * var(--space-xs)); }
 .ui-term-identity > strong, .ui-term-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-term-context { color: var(--muted-foreground); font: var(--text-label) var(--font-data); }
 .ui-term-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-md); flex: none; margin-right: var(--space-sm); }

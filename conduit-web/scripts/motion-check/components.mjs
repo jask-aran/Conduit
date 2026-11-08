@@ -52,10 +52,10 @@ try {
   }
   // CodeBlock: open and fold each foldable block, watching the pre and what follows the figure.
   await go("CodeBlock");
-  const nc = await page.evaluate(() => [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(".ui-code-more")).length);
+  const nc = await page.evaluate(() => [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(":scope > .ui-show-more")).length);
   for (let i = 0; i < Math.min(nc, 6); i++) for (const dir of ["open", "fold"]) report(`CodeBlock ${i} ${dir}`, await page.evaluate((i) => {
-    const c = [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(".ui-code-more"))[i]; c.scrollIntoView({ block: "center" });
-    return window.__probe2({ parts: () => [c.querySelector("pre"), c.querySelector(".ui-code-more"), ...(c.nextElementSibling ? [c.nextElementSibling] : [])], spots: () => [], act: () => c.querySelector(".ui-code-more").click() });
+    const c = [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(":scope > .ui-show-more"))[i]; c.scrollIntoView({ block: "center" });
+    return window.__probe2({ parts: () => [c.querySelector("pre"), c.querySelector(":scope > .ui-show-more"), ...(c.nextElementSibling ? [c.nextElementSibling] : [])], spots: () => [], act: () => c.querySelector(":scope > .ui-show-more").click() });
   }, i));
   // DesktopComposer: every pair of the slot's states and of the toolbar's states.
   await go("DesktopComposer");

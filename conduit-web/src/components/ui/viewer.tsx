@@ -11,8 +11,6 @@ export function FileBody(props: JSX.HTMLAttributes<HTMLDivElement> & { editing?:
   const [local, rest] = splitProps(props, ["editing", "wrap"]);
   return <div {...rest} class="ui-file-body" data-editing={local.editing ? "" : undefined} data-wrap={local.wrap ? "" : undefined} />;
 }
-/** The draggable rule between a viewer's two sides. */
-export const FileDivider = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-file-divider" />;
 /** The control over the rule that trades the viewer's sides. */
 export const FileSwap = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props} class="ui-file-swap" />;
 /** The quiet scope label beside a file's changes. */

@@ -34,7 +34,7 @@ export const SheetFill = (props: JSX.HTMLAttributes<HTMLDivElement>) => {
 
 /** The workspace's sheet at the row's end. expanded: it covers the panes; overlay: it floats over them. The app sets
  *  data-edge-instant while its edge is dragged and data-layer-switch while it moves between row and overlay. edge:
- *  its PaneEdge. On a phone, a full-screen sheet sliding in from the right. */
+ *  its ResizeEdge. On a phone, a full-screen sheet sliding in from the right. */
 export function Dock(props: JSX.HTMLAttributes<HTMLElement> & { open?: boolean; expanded?: boolean; overlay?: boolean; edge?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["class", "open", "expanded", "overlay", "edge", "children"]);
   return <aside {...rest} class={cn("ui-dock", local.class)} data-open={local.open ? "" : undefined} data-expanded={local.expanded ? "" : undefined}

@@ -32,11 +32,11 @@
 .ui-sheet-backdrop .solid-meteor-shower { contain: strict; }
 /* A split pane moved into the dock fills it in place of the tools (their state kept). */
 .ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
-.ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
+.ui-sheet:not([data-lead]) > div:not(.ui-resize-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* A pane easing open or shut: its content keeps its landing (or leaving) width against the moving edge, clipped, so
    nothing reflows mid-motion and the document travels with the edge. */
-.ui-sheet[data-moving] > :not(.ui-pane-edge, .ui-sheet-backdrop) { width: var(--pane-document-width, auto); max-width: none; align-self: flex-start; }
-.ui-sheet[data-moving][data-lead] > :not(.ui-pane-edge, .ui-sheet-backdrop) { align-self: flex-end; }
+.ui-sheet[data-moving] > :not(.ui-resize-edge, .ui-sheet-backdrop) { width: var(--pane-document-width, auto); max-width: none; align-self: flex-start; }
+.ui-sheet[data-moving][data-lead] > :not(.ui-resize-edge, .ui-sheet-backdrop) { align-self: flex-end; }
 /* The panes' shares easing: each sheet's room and margins move with them. */
 .ui-shell[data-settling] > .ui-sheet { transition: flex-grow var(--duration-fold) var(--ease-settle), margin var(--duration-fold) var(--ease-settle); }
 
@@ -57,11 +57,11 @@
 .ui-dock[data-overlay] .ui-dock-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
 /* Closed over the panes, its surface folds to nothing, and its lift and ring go too, or a bright line stays by the rail. */
 .ui-dock[data-overlay]:not([data-open]) .ui-dock-surface { box-shadow: none; }
-.ui-dock[data-overlay] .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
+.ui-dock[data-overlay] .ui-resize-edge[data-edge="pane"][data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
 /* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
 .ui-dock[data-expanded] .ui-dock-surface { width: calc(100cqw - var(--space-md)); }
 .ui-dock[data-layer-switch] .ui-dock-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
-.ui-sheet[data-docked="hidden"], .ui-dock[data-expanded] .ui-pane-edge[data-dock], .ui-dock-document { display: none; }
+.ui-sheet[data-docked="hidden"], .ui-dock[data-expanded] .ui-resize-edge[data-edge="pane"][data-dock], .ui-dock-document { display: none; }
 .ui-dock-document > div { display: contents; }
 .ui-dock-surface[data-documented] > :not(.ui-dock-document) { display: none !important; }
 .ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }

@@ -14,8 +14,9 @@ import { Button } from "./controls";
  *   tool   a ToolBar's
  *   pane   a pane's own controls after its title or tabs (dock, swap, close): out of the tab order
  *   rail   the folded sidebar's: current as a row is; live: a dot at its corner; count: what waits, over the dot's place
+ *   tab    a tab's × (a pane's tab, a terminal's document)
  */
-export type IconButtonKind = "dash" | "file" | "tool" | "pane" | "rail";
+export type IconButtonKind = "dash" | "file" | "tool" | "pane" | "rail" | "tab";
 
 export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
   kind?: IconButtonKind; label?: string; wide?: boolean; inMenu?: boolean; close?: boolean; current?: boolean; live?: boolean; count?: number; "data-fold"?: string;

@@ -1,8 +1,9 @@
 import { HarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons, Columns, Note, Empty, Loading, Actions, Heading } from "@/components/ui";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserDivider, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserMain, BrowserToolbar, BrowserCount, BrowserSummary, BrowserSpacer, BrowserMark, BrowserGrid, BrowserEntry, BrowserPlace, BrowserAddress, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
+import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
 import { harnessStatusLabel } from "../harness-brand";
 import { Button, Input, LeadInput } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
@@ -92,7 +93,6 @@ export function ComputerDashboard(props: {
   const [sidebarWidth, setSidebarWidth] = createSignal(Number(localStorage.getItem("conduit.computer.sidebar-width")) || 168);
   const [harnesses, setHarnesses] = createSignal<HarnessSummary[]>([]);
   let controller: AbortController | undefined;
-  let stopSidebarResize: (() => void) | undefined;
 
   // This machine's: a client's workspaces are browsed on its own machine, not among these files.
   const workspaces = () => props.projects.filter((project) => !isConduitManagedProject(project) && (props.dialog || props.device || !project.capabilities || project.capabilities.device.local));
@@ -129,7 +129,7 @@ export function ComputerDashboard(props: {
   });
   createEffect(() => localStorage.setItem("conduit.computer.view", view()));
   createEffect(() => localStorage.setItem("conduit.computer.order", order()));
-  onCleanup(() => { controller?.abort(); stopSidebarResize?.(); });
+  onCleanup(() => controller?.abort());
 
   const go = () => {
     const value = address().trim();
@@ -161,20 +161,12 @@ export function ComputerDashboard(props: {
     else if (entry.type === "file") props.onOpenFile(entry.path);
   };
   const copyPath = (path: string) => void navigator.clipboard.writeText(path);
-  const startSidebarResize = (event: PointerEvent) => {
-    event.preventDefault();
-    const startX = event.clientX;
+  const startSidebarResize = (): EdgeDrag => {
     const startWidth = sidebarWidth();
-    const move = (moveEvent: PointerEvent) => setSidebarWidth(Math.min(280, Math.max(120, startWidth + moveEvent.clientX - startX)));
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      localStorage.setItem("conduit.computer.sidebar-width", String(sidebarWidth()));
-      stopSidebarResize = undefined;
+    return {
+      move: (dx) => setSidebarWidth(Math.min(280, Math.max(120, startWidth + dx))),
+      end: () => localStorage.setItem("conduit.computer.sidebar-width", String(sidebarWidth())),
     };
-    stopSidebarResize = stop;
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
   };
 
   const WorkspaceActions = () => <>
@@ -209,7 +201,7 @@ export function ComputerDashboard(props: {
         }</For></BrowserPlaces>
         <Show when={!workspaces().length}><p>No workspaces</p></Show>
       </BrowserSidebar>
-      <BrowserDivider role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" aria-valuemin="120" aria-valuemax="280" aria-valuenow={sidebarWidth()} onPointerDown={startSidebarResize} />
+      <ResizeEdge kind="browser" aria-label="Resize locations sidebar" aria-valuemin={120} aria-valuemax={280} aria-valuenow={sidebarWidth()} startDrag={startSidebarResize} />
 
       <BrowserMain>
         <BrowserToolbar>

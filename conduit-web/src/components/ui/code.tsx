@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { createRoot, For, Show, type JSX } from "solid-js";
 
-import { Button } from "./controls";
+import { Button, ShowMore } from "./controls";
 import { CODE_BLOCK } from "./shared";
 export { CODE_BLOCK } from "./shared";
 
@@ -31,7 +31,7 @@ export function CodeBlock(props: { lang?: string; code?: string; lines?: number;
       <Show when={folds()}><Button variant="ghost" size="icon-xs" class="ui-code-toggle" aria-label={folded() ? "Expand code" : "Collapse code"} aria-expanded={!folded()} onClick={() => props.onToggle?.()}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></Button></Show>
     </figcaption>
     <pre><Show when={props.code === undefined} fallback={<code><For each={text()}>{(line) => <span class={CODE_BLOCK.line}>{line || " "}</span>}</For></code>}>{props.children}</Show></pre>
-    <Show when={folds()}><button type="button" class="ui-code-more" onClick={() => props.onToggle?.()}>{folded() ? moreLabel(count() - props.fold!) : "Show less"}</button></Show>
+    <Show when={folds()}><ShowMore bar open={!folded()} more={moreLabel(count() - props.fold!)} onToggle={() => props.onToggle?.()} /></Show>
   </figure>;
 }
 
@@ -47,7 +47,7 @@ export function codeBlockHtml(props: { lang?: string; code: string; lines: numbe
     + `<button type="button" data-slot="button" class="ui-button ui-copy" data-variant="ghost" data-size="icon-xs" aria-label="Copy code" data-copy-code></button>`
     + (folds ? `<button type="button" data-slot="button" class="ui-button ui-code-toggle" data-variant="ghost" data-size="icon-xs" aria-label="Expand code" aria-expanded="false" data-expand-code></button>` : "")
     + `</figcaption><pre><code>${(props.code.endsWith("\n") ? props.code.slice(0, -1) : props.code).split("\n").map((line) => `<span class="${CODE_BLOCK.line}">${escape(line)}</span>`).join("")}</code></pre>`
-    + (folds ? `<button type="button" class="ui-code-more" data-expand-code>${moreLabel(props.lines - props.fold!)}</button>` : "")
+    + (folds ? `<button type="button" class="ui-show-more" data-bar aria-expanded="false" data-expand-code>${moreLabel(props.lines - props.fold!)}</button>` : "")
     + "</figure>";
 }
 let icons: { copy: Node; check: Node; chevron: Node } | undefined;
@@ -63,6 +63,7 @@ export function setCodeBlockOpen(block: HTMLElement, open: boolean) {
   block.toggleAttribute("data-folded", !open);
   block.querySelector(".ui-code-toggle")?.setAttribute("aria-expanded", String(open));
   block.querySelector(".ui-code-toggle")?.setAttribute("aria-label", open ? "Collapse code" : "Expand code");
-  const more = block.querySelector(".ui-code-more");
+  const more = block.querySelector(":scope > .ui-show-more");
+  more?.setAttribute("aria-expanded", String(open));
   if (more) more.textContent = open ? "Show less" : moreLabel((Number(block.dataset.lines) || 0) - fold);
 }

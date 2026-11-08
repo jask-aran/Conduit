@@ -186,3 +186,11 @@
 /* Count (controls.tsx): one voice for every number beside what it counts. */
 .ui-count { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .ui-count[data-tone="alert"] { color: var(--warn); }
+
+/* ShowMore: muted caption words until pointed at; bar: across a box's foot, under a hairline. */
+.ui-show-more { border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
+.ui-show-more:focus-visible { color: var(--foreground); }
+@media (hover: hover) { .ui-show-more:hover { color: var(--foreground); } }
+.ui-show-more[data-bar] { display: block; width: 100%; height: var(--control-sm); border-top: var(--hairline) solid var(--tint); }
+.ui-show-more[data-bar]:focus-visible { background: var(--tint); }
+@media (hover: hover) { .ui-show-more[data-bar]:hover { background: var(--tint); } }

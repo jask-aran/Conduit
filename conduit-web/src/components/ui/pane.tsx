@@ -3,8 +3,10 @@ import { Dot } from "./nav";
 import { Frost } from "./frost";
 import { Notice } from "./state";
 import * as Icons from "./icons";
+import { CloseButton } from "./actions";
 import { Row, type RowProps } from "./row";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { For, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { callHandler } from "./shared";
 
 
 /* Panes (DESIGN Panes and windows): what a pane draws. Behaviour (fitting the row, dragging, resizing, focus) is the app's. */
@@ -48,16 +50,71 @@ export function PaneTab(props: {
       <Show when={props.live}><Dot tone="success" class="ui-tab-live" aria-label="Running" /></Show>
       <span class="ui-tab-title" data-text={props.title}><span>{props.title}</span></span>
     </button>}><span class="ui-tab-open"><span class="ui-tab-title"><span>{props.title}</span></span></span></Show>
-    <Show when={props.onClose}><button type="button" class="ui-tab-close" tabIndex={-1} aria-label={props.closeLabel ?? `Close ${props.title}`} title={props.closeTitle ?? "Close tab"} onClick={() => props.onClose?.()}><Icons.Close /></button></Show>
+    <Show when={props.onClose}><CloseButton kind="tab" tabIndex={-1} label={props.closeLabel ?? `Close ${props.title}`} title={props.closeTitle ?? "Close tab"} onClick={() => props.onClose?.()} /></Show>
   </span>;
 }
 
 /** A pane's own controls after its title or tabs (dock, swap, close); a menu's trigger takes IconButton with `as`. */
 
-/** The edge between two panes, or the dock's: a separator you drag (and, for the dock, step with the arrows). */
-export function PaneEdge(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; dock?: boolean; "aria-valuemin"?: number; "aria-valuemax"?: number; "aria-valuenow"?: number }) {
-  const [local, rest] = splitProps(props, ["dock"]);
-  return <div role="separator" aria-orientation="vertical" {...rest} class="ui-pane-edge" data-dock={local.dock ? "" : undefined} />;
+/** One drag of a ResizeEdge: move has how far the pointer is from the press, at most once a frame (the last frame's
+ *  drawn before end). */
+export type EdgeDrag = { move: (dx: number, event: PointerEvent) => void; end?: () => void };
+
+/** Where a ResizeEdge sits: pane, between two panes (dock: the dock's); split, the grid column between a navigator and
+ *  what it shows; sides, over the line between two files side by side; browser, between the file browser's places
+ *  and its folder. */
+export type ResizeEdgeKind = "pane" | "split" | "sides" | "browser";
+
+/** Follows the pointer from a press on the edge (captured, so the edge keeps its cursor) until it lets go, the window
+ *  loses focus or the edge loses the pointer; data-resizing on the edge meanwhile. Returns the drag's stop. */
+function dragEdge(event: PointerEvent, drag: EdgeDrag, done: () => void) {
+  const edge = event.currentTarget as HTMLElement;
+  event.preventDefault();
+  edge.setPointerCapture(event.pointerId);
+  edge.dataset.resizing = "";
+  const startX = event.clientX;
+  let last: PointerEvent | undefined;
+  let frame = 0;
+  let stopped = false;
+  const apply = () => { frame = 0; if (last) drag.move(last.clientX - startX, last); };
+  const move = (next: PointerEvent) => { last = next; if (!frame) frame = requestAnimationFrame(apply); };
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (frame) { cancelAnimationFrame(frame); apply(); }
+    for (const type of ["pointerup", "pointercancel", "blur"]) window.removeEventListener(type, stop);
+    window.removeEventListener("pointermove", move);
+    edge.removeEventListener("lostpointercapture", stop);
+    if (edge.hasPointerCapture(event.pointerId)) edge.releasePointerCapture(event.pointerId);
+    delete edge.dataset.resizing;
+    done();
+    drag.end?.();
+  };
+  window.addEventListener("pointermove", move);
+  for (const type of ["pointerup", "pointercancel", "blur"]) window.addEventListener(type, stop, { once: true });
+  edge.addEventListener("lostpointercapture", stop, { once: true });
+  return stop;
+}
+
+/** ResizeEdge: a separator dragged to resize what is beside it. startDrag starts one (given its stop; undefined: no
+ *  drag); onStep: an arrow key, -1 left and 1 right (it takes the focus then). */
+export function ResizeEdge(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "onPointerDown" | "onDrag"> & { kind: ResizeEdgeKind; dock?: boolean; ref?: (element: HTMLDivElement) => void;
+  startDrag?: (event: PointerEvent, stop: () => void) => EdgeDrag | undefined; onStep?: (direction: -1 | 1) => void;
+  "aria-valuemin"?: number; "aria-valuemax"?: number; "aria-valuenow"?: number }) {
+  const [local, rest] = splitProps(props, ["kind", "dock", "startDrag", "onStep", "onKeyDown"]);
+  let stop: (() => void) | undefined;
+  onCleanup(() => stop?.());
+  return <div role="separator" aria-orientation="vertical" tabIndex={local.onStep ? 0 : undefined} {...rest} class="ui-resize-edge" data-edge={local.kind} data-dock={local.dock ? "" : undefined}
+    onPointerDown={(event) => {
+      const drag = local.startDrag?.(event, () => stop?.());
+      if (!drag) return;
+      stop?.();
+      stop = dragEdge(event, drag, () => { stop = undefined; });
+    }}
+    onKeyDown={(event) => {
+      if (local.onStep && (event.key === "ArrowLeft" || event.key === "ArrowRight")) local.onStep(event.key === "ArrowLeft" ? -1 : 1);
+      callHandler(local.onKeyDown, event);
+    }} />;
 }
 
 /** Where a drop lands: the band it washes (placed by the app). */

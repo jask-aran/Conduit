@@ -40,11 +40,6 @@ export function DiffShell(props: JSX.HTMLAttributes<HTMLDivElement> & { collapse
 export const DiffRail = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-diff-rail" />;
 /** The comparison column beside the changed-file navigator. */
 export const DiffBody = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-diff-body" />;
-/** A resize separator in the grid column between navigator and comparison. */
-export function SplitEdge(props: JSX.HTMLAttributes<HTMLDivElement> & { resizing?: boolean; "aria-valuemin"?: number; "aria-valuemax"?: number; "aria-valuenow"?: number }) {
-  const [local, rest] = splitProps(props, ["resizing"]);
-  return <div role="separator" aria-orientation="vertical" {...rest} class="ui-split-edge" data-resizing={local.resizing ? "" : undefined} />;
-}
 /** A comment popup's action button. */
 export const AnnotationButton = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props} class="ui-annotation-button" />;
 /** A comment popup's resizable note field. */

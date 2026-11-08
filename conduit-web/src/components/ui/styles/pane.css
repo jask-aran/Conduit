@@ -37,24 +37,24 @@
 .ui-tab[data-none] .ui-tab-open { color: var(--muted-foreground); font-weight: var(--weight-rest); }
 /* The × takes room only on the lit tab; on another it lays over the title's end with the pointer, so unlit tabs
    sit close within their place. */
-.ui-tab-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-right: var(--space-2xs);
-  border: 0; border-radius: var(--radius-inset); background: var(--background); color: var(--muted-foreground); }
-.ui-tab:not([data-lit]) .ui-tab-close { position: absolute; right: var(--space-2xs); background: transparent; opacity: 0; }
+.ui-icon-button:where([data-icon-button="tab"]) { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); }
+@media (hover: hover) { .ui-icon-button:where([data-icon-button="tab"]):hover { color: var(--foreground); } }
+.ui-tab > .ui-icon-button:where([data-icon-button="tab"]) { margin-right: var(--space-2xs); }
+.ui-tab:not([data-lit]) .ui-icon-button:where([data-icon-button="tab"]) { position: absolute; right: var(--space-2xs); opacity: 0; }
 /* A short title ("jbot") under the × would be all ×: an unlit tab is at least the × and as much again of title, so
    a press on the title switches to it rather than closing it. */
 .ui-tab:not([data-lit]) { min-width: calc(3 * var(--control-2xs)); }
 /* Pointed at, the title fades out under the × (a mask: no fill laid over letters, which showed through it). */
 @media (hover: hover) {
-  .ui-tab:not([data-lit]):hover .ui-tab-close { opacity: 1; }
+  .ui-tab:not([data-lit]):hover .ui-icon-button:where([data-icon-button="tab"]) { opacity: 1; }
   .ui-tab:not([data-lit]):hover .ui-tab-title { mask-image: linear-gradient(to left, transparent calc(var(--control-2xs) + var(--space-2xs)), black calc(var(--control-2xs) + var(--space-xl))); }
 }
-.ui-tab[data-lit] .ui-tab-close { background: transparent; }
-@media (hover: hover) { .ui-tab-close:hover { color: var(--foreground); } }
 /* Unsaved: a dot where the × sits, the × on the pointer. */
-.ui-tab[data-unsaved] .ui-tab-close { color: var(--foreground); opacity: 1; }
-.ui-tab[data-unsaved]:not(:hover) .ui-tab-close { background: transparent; box-shadow: none; }
-.ui-tab[data-unsaved]:not(:hover) .ui-tab-close > svg { display: none; }
-.ui-tab[data-unsaved]:not(:hover) .ui-tab-close::after { width: var(--space-md); height: var(--space-md); border-radius: var(--radius-round); background: currentColor; content: ""; }
+.ui-tab[data-unsaved] .ui-icon-button:where([data-icon-button="tab"]) { color: var(--foreground); opacity: 1; }
+.ui-tab[data-unsaved]:not(:hover) .ui-icon-button:where([data-icon-button="tab"]) { background: transparent; box-shadow: none; }
+.ui-tab[data-unsaved]:not(:hover) .ui-icon-button:where([data-icon-button="tab"]) > svg { display: none; }
+.ui-tab[data-unsaved]:not(:hover) .ui-icon-button:where([data-icon-button="tab"])::after { width: var(--space-md); height: var(--space-md); border-radius: var(--radius-round); background: currentColor; content: ""; }
 .ui-pane-tabs > .ui-icon-button:where([data-icon-button="pane"]) { margin-left: var(--space-md); }
 
 /* A pane's controls after its title: small, quiet, the wash on the pointer. */
@@ -63,11 +63,13 @@
 .ui-icon-button:where([data-icon-button="pane"]):is(:focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
 @media (hover: hover) { .ui-icon-button:where([data-icon-button="pane"]):is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
 
-/* An edge: its hit target centred on the frame's gap, the gutter you drag. */
-.ui-pane-edge { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); cursor: col-resize; touch-action: none; }
-.ui-pane-edge[data-dock] { z-index: var(--layer-dock); left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
-.ui-pane-edge:focus-visible { outline: none; }
-.ui-pane-edge[data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
+/* ResizeEdge: every separator dragged to resize; the kinds place it. A pane's: its hit target centred on the frame's
+   gap, the gutter you drag. */
+.ui-resize-edge { cursor: col-resize; touch-action: none; }
+.ui-resize-edge[data-edge="pane"] { position: absolute; z-index: 5; inset-block: 0; left: calc(-1 * var(--space-md)); width: var(--space-md); }
+.ui-resize-edge[data-edge="pane"][data-dock] { z-index: var(--layer-dock); left: calc(-1 * var(--space-xl)); width: var(--control-xs); }
+.ui-resize-edge[data-edge="pane"]:focus-visible { outline: none; }
+.ui-resize-edge[data-edge="pane"][data-dock]:focus-visible::after { position: absolute; inset-block: var(--space-xl); left: 50%; width: var(--stroke-thin, 2px); border-radius: var(--radius-round); background: var(--tint); content: ""; translate: -50% 0; }
 
 /* A drop: the band washes where it lands; a pill by the pointer names the result. */
 .ui-drop-wash { position: fixed; z-index: var(--layer-drop); border-radius: var(--radius-surface); background: var(--tint); pointer-events: none;

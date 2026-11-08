@@ -105,10 +105,25 @@ Segmented (per-option disabled, a group tabIndex), the editor's search is a plai
 and replace buttons as extra content). ToolViews, rider Tabs, ChangeItem, SearchBar, SearchField and SearchActions
 are gone.
 
+## Wave 5
+
+What the family table missed, found by counting raw buttons and checking each export against its callers:
+
+- Resize edges: four separators (PaneEdge, SplitEdge, FileDivider, BrowserDivider) and six drags written by hand in
+  the app (the pane split, the dock, the file tree, the diff navigator, a viewer's two sides, the file browser's
+  places), each with its own capture, per-frame apply and listener cleanup. Now one ResizeEdge (pane.tsx, kinds
+  pane, split, sides and browser) whose startDrag returns the drag's move and end; arrows through onStep.
+- Show more: the bubble's, an envelope's and a code block's foot are one ShowMore (controls.tsx; bar for the code
+  block's, which codeBlockHtml writes with the same class).
+- A tab's ×: PaneTab's and the terminal document's are CloseButton kind="tab"; FileMore is an IconButton.
+- Left: DashMore (a group's "N more" row), the rider line's chevron and an email's ··· are their own forms. The ~200
+  exports with one caller are a screen's parts (the file browser's 16, the terminal's, a glance's), not copies.
+
 ## Size
 
 Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,710 after wave 4, 11,947 after the comments were
-tightened (only comments: each file's code, comments stripped, matches the one before; no API or prop doc lost), with the shared
+tightened (only comments: each file's code, comments stripped, matches the one before; no API or prop doc lost), 11,995 after wave 5 (the six drags moved
+into the library; the app lost 132 lines), with the shared
 pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
 state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
 every family, desktop and phone) and, by subagents, screenshots of base and current builds of every family and the

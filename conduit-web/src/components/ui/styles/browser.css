@@ -5,8 +5,8 @@
 .ui-heading:where([data-heading="browser"]) { margin: var(--space-lg) var(--space-sm) var(--space-xs); color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-label); text-transform: uppercase; }
 .ui-browser-place { width: 100%; justify-content: start; min-width: 0; }
 .ui-browser-place[data-active="true"] { font-weight: var(--weight-current); color: var(--foreground); }
-.ui-browser-divider { position: relative; cursor: col-resize; touch-action: none; border-inline-start: var(--hairline) solid var(--tint); }
-@media (hover: hover) { .ui-browser-divider:hover { border-color: var(--ring); } }
+.ui-resize-edge[data-edge="browser"] { position: relative; border-inline-start: var(--hairline) solid var(--tint); }
+@media (hover: hover) { .ui-resize-edge[data-edge="browser"]:hover { border-color: var(--ring); } }
 .ui-browser-main { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
 .ui-browser-toolbar, .ui-actions:where([data-actions="browser"]) { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: var(--space-xs); padding: var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
 .ui-browser-toolbar > .ui-button { width: var(--control); padding-inline: 0; flex: none; }
@@ -32,5 +32,5 @@
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > span { text-align: start; }
 .ui-note:where([data-note="browser"]) { margin: 0; padding: var(--space-sm); color: var(--destructive); font-size: var(--text-caption); }
 .ui-browser[data-compact] .ui-browser-layout { grid-template-columns: minmax(0, 1fr); }
-.ui-browser-grid[data-view="details"] .ui-browser-mark, .ui-browser[data-compact] :is(.ui-browser-sidebar, .ui-browser-divider) { display: none; }
-@media (--conduit-phone-layout) { .ui-browser-layout { grid-template-columns: minmax(0, 1fr); } .ui-browser-sidebar, .ui-browser-divider { display: none; } }
+.ui-browser-grid[data-view="details"] .ui-browser-mark, .ui-browser[data-compact] :is(.ui-browser-sidebar, .ui-resize-edge[data-edge="browser"]) { display: none; }
+@media (--conduit-phone-layout) { .ui-browser-layout { grid-template-columns: minmax(0, 1fr); } .ui-browser-sidebar, .ui-resize-edge[data-edge="browser"] { display: none; } }

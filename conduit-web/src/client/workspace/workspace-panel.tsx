@@ -9,7 +9,7 @@ import { unitPx } from "@/components/ui/layout";
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
-import { PaneEdge } from "@/components/ui/pane";
+import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import type { Connectivity } from "../state/runtime";
@@ -58,7 +58,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   jbotView?: () => JSX.Element; jbotModes?: () => JSX.Element }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
-  let resizeHandle: HTMLDivElement | undefined;
   let panelMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
@@ -439,75 +438,44 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
     mobileWasOpen = open;
   });
-  const startResize = (event: PointerEvent) => {
+  const startResize = (_event: PointerEvent, stop: () => void): EdgeDrag | undefined => {
     if (isMobileLayout()) return;
-    stopResize?.();
-    event.preventDefault();
-    resizeHandle?.setPointerCapture(event.pointerId);
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
     const startWidth = width();
     let pendingWidth = startWidth;
-    let frame = 0;
-    let stopped = false;
     const id = ++panelMotionId;
     // Open/close uses CSS width transition; resize must not, or the shell lags
     // the pointer and the gutter/transcript fight the ease.
     panelRoot?.setAttribute("data-edge-instant", "true");
     if (panelRoot) panelRoot.style.transition = "none";
     panelMotion({ phase: "begin", id, source: "workspace", size: startWidth + shellGap() });
-    const apply = () => {
-      frame = 0;
-      const nextWidth = clampWidth(pendingWidth);
-      // Resize edge is layout truth: shell and surface stay equal every frame so
-      // chat-main stays adjacent and the flex slot cannot outgrow the surface.
-      batch(() => {
-        setWidth(nextWidth);
-        setShellWidth(nextWidth);
-      });
-      panelMotion({ phase: "change", id, source: "workspace", size: nextWidth + shellGap() });
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pendingWidth = startWidth + startX - moveEvent.clientX;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      const nextWidth = clampWidth(pendingWidth);
-      batch(() => {
-        setWidth(nextWidth);
-        setShellWidth(nextWidth);
-      });
-      writeSetting(projectScope(), "width", String(nextWidth));
-      panelMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      resizeHandle?.removeEventListener("lostpointercapture", stop);
-      if (resizeHandle?.hasPointerCapture(pointerId)) resizeHandle.releasePointerCapture(pointerId);
-      panelRoot?.removeAttribute("data-edge-instant");
-      panelRoot?.style.removeProperty("transition");
-      stopResize = undefined;
-    };
+    // Resize edge is layout truth: shell and surface stay equal every frame so
+    // chat-main stays adjacent and the flex slot cannot outgrow the surface.
+    const apply = (nextWidth: number) => batch(() => {
+      setWidth(nextWidth);
+      setShellWidth(nextWidth);
+    });
     stopResize = stop;
-    // No class on body: the captured handle keeps its cursor, and its inherited
-    // cursor and user-select restyled the whole page at each end of the drag.
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
-    resizeHandle?.addEventListener("lostpointercapture", stop, { once: true });
+    return {
+      move: (dx) => {
+        pendingWidth = startWidth - dx;
+        const nextWidth = clampWidth(pendingWidth);
+        apply(nextWidth);
+        panelMotion({ phase: "change", id, source: "workspace", size: nextWidth + shellGap() });
+      },
+      end: () => {
+        const nextWidth = clampWidth(pendingWidth);
+        apply(nextWidth);
+        writeSetting(projectScope(), "width", String(nextWidth));
+        panelMotion({ phase: "end", id, source: "workspace", size: nextWidth + shellGap() });
+        panelRoot?.removeAttribute("data-edge-instant");
+        panelRoot?.style.removeProperty("transition");
+        stopResize = undefined;
+      },
+    };
   };
   onCleanup(() => {
     requests.reset();
     stopResize?.();
-    document.body.classList.remove("workspace-tree-resizing");
   });
 
   let loadedProjectId = "";
@@ -645,7 +613,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
     <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, "--dock-document-width": `${documentWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
-    <PaneEdge dock ref={(element) => { resizeHandle = element; }} aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => { if (event.key === "ArrowLeft") saveWidth(width() + 16); if (event.key === "ArrowRight") saveWidth(width() - 16); }} />
+    <ResizeEdge kind="pane" dock aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} startDrag={startResize} onStep={(direction) => saveWidth(width() - 16 * direction)} />
     <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab, "dock")}
     <ToolContent>

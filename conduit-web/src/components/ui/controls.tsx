@@ -179,5 +179,10 @@ export function Slider(props: { label: string; options: { value: string; label: 
 }
 
 /** How many, beside what it counts: muted caption digits in the data face; alert: what waits on the person. */
+/** ShowMore: the toggle under content cut short, saying what a press does (Show more and Show less, or the caller's
+ *  words); bar: across the foot of a box (a code block's). */
+export const ShowMore = (props: { open: boolean; onToggle: (event: MouseEvent) => void; more?: string; less?: string; bar?: boolean }) =>
+  <button type="button" class="ui-show-more" data-bar={props.bar ? "" : undefined} aria-expanded={props.open} onClick={(event) => props.onToggle(event)}>
+    {props.open ? props.less ?? "Show less" : props.more ?? "Show more"}</button>;
 export const Count = (props: { value: number | string; tone?: "alert"; label?: string; class?: string }) =>
   <small class={cn("ui-count", props.class)} data-tone={props.tone} aria-label={props.label}>{props.value}</small>;

@@ -41,7 +41,7 @@ import { Button, Spinner } from "@/components/ui/controls";
 import { attachRowMenus, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { HeaderCrumb } from "@/components/ui/header";
 import { FileEmptySide } from "@/components/ui/viewer";
-import { DragPill, DropWash, PaneEdge, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
+import { DragPill, DropWash, ResizeEdge, type EdgeDrag, PaneHome, PaneTab, TabPlace, PaneTabRow, PaneTabs } from "@/components/ui/pane";
 import { ChatHeader, Conversation } from "./chat/chat-screen";
 import { api, apiWhenServed, asList, chatPath, isUnreachableError, JBOT_THREAD_PATH, type ApiRequestMetadata, pathChatId, pathProjectId, projectMatchesPath, projectPath, readAhead, readShared } from "./api/client";
 import { buildHttpUrl, loginUrl, logoutUrl, normalizeServerOrigin, transcriptUrl } from "./api/transport";
@@ -4797,7 +4797,7 @@ function App() {
       }
       return <Sheet ref={(element) => { pane.setHost(element); onCleanup(() => { if (pane.host() === element) pane.setHost(undefined); }); }} class="main-split" pane={paneLetter(slot)} docked={docked ? (dockSlot() !== slot ? "hidden" : true) : false} backdrop={<Show when={!docked && meteorField() && (revealing() || arrived()) && Boolean(slotChatId(slot) || page() === "dashboard" || slotPageProject(slot))}><meteors.Window /></Show>} data-pane-slot={slot} data-region={slotChatId(slot) ? "chat" : page() ? "dashboard" : "workspace-panel"} aria-label={docked ? "Docked pane" : position() === 0 ? "Pane B" : "Pane C"} style={docked ? undefined : { flex: `${paneWeights()[position() + 1] ?? 0.5} 1 0`, "min-width": paneMotion()?.slot === slot ? "0px" : `${paneMinWidth(slot)}px`, ...(paneMotion()?.slot === slot ? { overflow: "hidden", ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === slot && paneMotion()!.collapsed ? { "margin-right": "0px" } : {}) }}
         data-moving={paneMotion()?.slot === slot ? paneMotion()!.phase : undefined}>
-        <Show when={!docked}><PaneEdge aria-label="Resize panes" onPointerDown={(event) => startSplitResize(event, position() + 1)} /></Show>
+        <Show when={!docked}><ResizeEdge kind="pane" aria-label="Resize panes" startDrag={() => startSplitResize(position() + 1)} /></Show>
         <Show when={!held()}>
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:") ? slotView(slot)!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument(slot, shell)}</Show>
@@ -5095,7 +5095,7 @@ function App() {
   const [panesSettling, setPanesSettling] = createSignal(false);
   // What a pane holds besides its drag edge and its ground: the documents that keep one width while it eases.
   const documentsOf = (element: HTMLElement) => [...element.children]
-    .filter((child): child is HTMLElement => child instanceof HTMLElement && !child.matches(".ui-pane-edge, .ui-sheet-backdrop"));
+    .filter((child): child is HTMLElement => child instanceof HTMLElement && !child.matches(".ui-resize-edge, .ui-sheet-backdrop"));
   // The width a pane arriving at `index` of the row lands at, from the shares it eases to: the room the row's panes
   // have now (with whatever margin the arriving one has yet), less the gutter it lands with.
   const landingWidth = (target: number[], index: number, arriving: HTMLElement | undefined) => {
@@ -5189,70 +5189,47 @@ function App() {
     };
     requestAnimationFrame(follow);
   };
-  const startSplitResize = (event: PointerEvent, position: number) => {
+  const startSplitResize = (position: number): EdgeDrag | undefined => {
     const shown = shownSlots();
     const paneAt = (index: number) => index === 0 ? document.querySelector<HTMLElement>(".chat-main") : index <= shown.length ? paneSlot(shown[index - 1]!).host() : undefined;
     const panes = Array.from({ length: shown.length + 1 }, (_, index) => paneAt(index));
     if (panes.some((pane) => !pane)) return;
-    event.preventDefault();
-    // Captured, the handle keeps its col-resize cursor and the pointer (over a
-    // PDF's frame too), and the prevented press starts no text selection -- no
-    // class on body, whose inherited cursor and user-select restyled the whole
-    // page as the drag began and again as it ended (~7ms each).
-    const handle = event.currentTarget as HTMLElement;
-    handle.setPointerCapture(event.pointerId);
     // Dragging an edge takes room from the pane beside it down to its
     // document's minimum, then from the next one on, and gives it to the pane
     // on the other side.
     const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
     const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || minSplitPaneWidth());
-    const startX = event.clientX;
     const weights = paneWeights();
     const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
     const widthSum = widths.reduce((sum, width) => sum + width, 0);
     let pending = [...weights];
-    // The room the panes beside A will take, from the widths just worked out:
-    // announcing it needs no measuring after the weights are written.
-    let pendingBeside = widths.slice(1).reduce((sum, width) => sum + width, 0);
-    let frame = 0;
     const apply = (next: number[]) => { if (next.length === 2) setSplitRatio(next[1]!); else setSplitRatios3(next); };
     splitMotionId += 1;
     const sized = (list: number[]) => panes.map((element, index) => ({ element: element!, width: list[index]! }));
-    let pendingWidths = widths;
-    announceSplit("begin", pendingBeside, sized(widths));
-    const move = (moveEvent: PointerEvent) => {
-      const delta = moveEvent.clientX - startX;
-      const next = [...widths];
-      let owed = Math.abs(delta);
-      const order = delta > 0 ? next.map((_, index) => index).slice(position) : next.map((_, index) => index).slice(0, position).reverse();
-      for (const index of order) {
-        const taken = Math.min(owed, Math.max(0, next[index]! - minimums[index]!));
-        next[index]! -= taken;
-        owed -= taken;
-      }
-      next[delta > 0 ? position - 1 : position]! += Math.abs(delta) - owed;
-      pending = next.map((width) => width / widthSum * weightSum);
-      pendingBeside = next.slice(1).reduce((sum, width) => sum + width, 0);
-      pendingWidths = next;
-      if (!frame) frame = requestAnimationFrame(() => {
-        frame = 0;
+    // The room the panes beside A will take, from the widths just worked out:
+    // announcing it needs no measuring after the weights are written.
+    announceSplit("begin", widths.slice(1).reduce((sum, width) => sum + width, 0), sized(widths));
+    return {
+      move: (delta) => {
+        const next = [...widths];
+        let owed = Math.abs(delta);
+        const order = delta > 0 ? next.map((_, index) => index).slice(position) : next.map((_, index) => index).slice(0, position).reverse();
+        for (const index of order) {
+          const taken = Math.min(owed, Math.max(0, next[index]! - minimums[index]!));
+          next[index]! -= taken;
+          owed -= taken;
+        }
+        next[delta > 0 ? position - 1 : position]! += Math.abs(delta) - owed;
+        pending = next.map((width) => width / widthSum * weightSum);
         apply(pending);
-        announceSplit("change", pendingBeside, sized(pendingWidths));
-      });
+        announceSplit("change", next.slice(1).reduce((sum, width) => sum + width, 0), sized(next));
+      },
+      end: () => {
+        if (pending.length === 2) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending[1]!));
+        else writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(pending));
+        requestAnimationFrame(() => { splitSize = besideWidth(); announceSplit("end", splitSize); });
+      },
     };
-    const stop = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-      apply(pending);
-      if (pending.length === 2) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(pending[1]!));
-      else writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(pending));
-      requestAnimationFrame(() => { splitSize = besideWidth(); announceSplit("end", splitSize); });
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
   };
   // A view dragged from the dock onto the main pane lands in its split.
   const dockDragging = (event: DragEvent) => document.body.dataset.toolDrag === "dock" && Boolean(event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) && !isMobileLayout();

@@ -3,7 +3,7 @@ import * as Icons from "./icons";
 import { children, createEffect, createRenderEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
-import { Spinner } from "./controls";
+import { ShowMore, Spinner } from "./controls";
 import { Loading } from "./state";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Later } from "./later";
@@ -43,7 +43,7 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
   createEffect(() => { if (props.fold && !props.open) requestAnimationFrame(measure); });
   return <Frost class="ui-bubble" data-editing={props.editing ? "true" : undefined}>
     <div ref={text} class="ui-bubble-text" data-folded={folded() ? "" : undefined} style={props.fold ? { "--bubble-fold": props.fold } : undefined}>{props.children}</div>
-    <Show when={foldable()}><button type="button" class="ui-bubble-more" aria-expanded={Boolean(props.open)} onClick={(event) => props.onToggle?.(event)}>{props.open ? "Show less" : "Show more"}</button></Show>
+    <Show when={foldable()}><ShowMore open={Boolean(props.open)} onToggle={(event) => props.onToggle?.(event)} /></Show>
   </Frost>;
 }
 
@@ -115,7 +115,7 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
     <Expand open={shown()} class="ui-disclosure-body"><div class="ui-envelope-rule">
       <Show when={props.noted}><ConduitAdded before text={props.noted!} /></Show>
       <div ref={watch} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
-      <Show when={props.fold && !fits()}><button type="button" class="ui-envelope-more" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Show less" : "Show all"}</button></Show>
+      <Show when={props.fold && !fits()}><ShowMore open={open()} more="Show all" onToggle={() => setOpen(!open())} /></Show>
       <Show when={props.appended}><ConduitAdded text={props.appended!} /></Show>
     </div></Expand>
   </section>;

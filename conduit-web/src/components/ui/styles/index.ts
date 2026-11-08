@@ -22,7 +22,7 @@
  *   nav             NavPane > Group > Row, NavFolder, IconButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
- *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
+ *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, ResizeEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
  *                   ToolBar, IconButton, LeadInput, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
  *                   ChangeList > RowGroup, ChangeNav, CommitList, PatchLines

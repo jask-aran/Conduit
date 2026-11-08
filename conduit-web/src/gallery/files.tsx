@@ -2,10 +2,11 @@ import { Icons } from "@/components/ui";
 
 import { FileView, FileViewer, FileName, FileGit, FileDirty, FileMore, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { FileSuffix } from "@/components/ui/file";
-import { FileImage, FileCard, FileBody, FileDivider, FileSwap, FileEmptySide, FileChanges, FileMedia, FileScope } from "@/components/ui/viewer";
-import { CodeSurface, CodeHost, CodeContent, AnnotationPopup, AnnotationInput, AnnotationButton, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
+import { FileImage, FileCard, FileBody, FileSwap, FileEmptySide, FileChanges, FileMedia, FileScope } from "@/components/ui/viewer";
+import { CodeSurface, CodeHost, CodeContent, AnnotationPopup, AnnotationInput, AnnotationButton, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody } from "@/components/ui/editor";
 import { Button, Input, LeadInput } from "@/components/ui/controls";
-import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
+import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserGrid, BrowserEntry, BrowserMark, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
+import { ResizeEdge } from "@/components/ui/pane";
 import { FolderShelf, FolderTile, LineCounts } from "@/components/ui/dashboard";
 import { HarnessMark, Columns, Empty, Loading, Note, Actions, IconButton, PaneHeader, Heading } from "@/components/ui";
 import { CaseSensitiveIcon, ListIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
@@ -103,7 +104,7 @@ const Assembled = (props: { compact?: boolean; details?: boolean }) => <div styl
     <Heading kind="browser">Workspaces</Heading>
     <BrowserPlaces><BrowserPlace type="button"><Icons.Workspace /><span>Conduit</span></BrowserPlace><BrowserPlace type="button"><Icons.Workspace /><span>Japan</span></BrowserPlace></BrowserPlaces>
   </BrowserSidebar>
-  <BrowserDivider role="separator" aria-label="Resize locations sidebar" aria-orientation="vertical" />
+  <ResizeEdge kind="browser" aria-label="Resize locations sidebar" />
   <BrowserMain><Toolbar /><FolderActions /><Grid details={props.details} /></BrowserMain>
 </BrowserLayout></Browser></div>;
 const Pane = (props: { children: JSX.Element }) => <div style={{ ...box(45), position: "relative", display: "flex", "flex-direction": "column", "min-height": "calc(12 * var(--u-space))" }}><BrowserMain>{props.children}</BrowserMain></div>;
@@ -139,9 +140,9 @@ import { Icons } from "@/components/ui";
     row("FileView · FileBody · Focused", "a text file; focused, its header takes the wash", () => <div style={box(30)}><File focused={true} /></div>, { surfaces: ["ground"], phone: true, code: "<FileView focused><PaneHeader /><FileBody /><StatusBar /></FileView>" }),
     row("FileImage", "an image on its checker ground, contained", () => <div style={{ ...box(22), height: "calc(12.5 * var(--u-space))", display: "flex" }}><FileImage><Icons.Image style={{ width: "calc(6 * var(--u-space))", height: "calc(6 * var(--u-space))" }} /></FileImage></div>, { surfaces: ["ground"], phone: true, code: "<FileImage><img /></FileImage>" }),
     row("FileCard", "a file the viewer cannot show: its kind, its size, and an action", () => <div style={{ ...box(22), display: "flex" }}><FileCard><Icons.FileText /><strong>archive.zip</strong><span>2.4 MB · application/zip</span><Button size="sm" variant="secondary"><Icons.Download />Download</Button></FileCard></div>, { surfaces: ["ground"], phone: true, code: "<FileCard><strong /><span /><Button /></FileCard>" }),
-    row("FileViewer · FileDivider · FileSwap", "two files beside each other: the divider between them (it drags, --side-a and --side-b), the swap over it", () => <FileViewer style={{ ...box(50), height: "calc(15 * var(--u-space))", position: "relative", display: "flex", "--side-a": "1", "--side-b": "1" }}>
-          <File focused /><FileDivider role="separator" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><Icons.Swap /></FileSwap><File />
-        </FileViewer>, { surfaces: ["ground"], code: "<FileViewer><FileView /><FileDivider /><FileSwap /><FileView /></FileViewer>" }),
+    row("FileViewer · ResizeEdge · FileSwap", "two files beside each other: the divider between them (it drags, --side-a and --side-b), the swap over it", () => <FileViewer style={{ ...box(50), height: "calc(15 * var(--u-space))", position: "relative", display: "flex", "--side-a": "1", "--side-b": "1" }}>
+          <File focused /><ResizeEdge kind="sides" aria-label="Resize the sides" style={{ left: "50%" }} /><FileSwap aria-label="Swap the sides" style={{ left: "calc(50% - var(--control-xs) / 2)" }}><Icons.Swap /></FileSwap><File />
+        </FileViewer>, { surfaces: ["ground"], code: "<FileViewer><FileView /><ResizeEdge kind=\"sides\" /><FileSwap /><FileView /></FileViewer>" }),
     row("FileEmptySide · Empty", "a side opened empty, waiting for a file", () => <FileViewer style={{ ...box(25), height: "calc(10 * var(--u-space))", display: "flex" }}><FileEmptySide><PaneHeader kind="file"><strong class="g-file-none">No file open</strong></PaneHeader><Empty kind="file" role="status">Open a file from Files to show it here.</Empty></FileEmptySide></FileViewer>, { surfaces: ["ground"], code: "<FileEmptySide><PaneHeader /><Empty /></FileEmptySide>" }),
     row("FileChanges · FileScope · Rest", "a file's changes in its column: the comparison (Editor › Comparison), its scope quiet beside the name; focused, it takes the wash. The app mounts CodeMirror where the text stands", () => <div style={box(37.5)}><FileChanges focused={false}><ComparisonSample scope="Changes" /></FileChanges></div>, { surfaces: ["ground"], phone: true, code: "<FileChanges focused><Comparison><PaneHeader><FileName /><FileScope /></PaneHeader>…</Comparison></FileChanges>" }),
     row("FileChanges · FileScope · Focused", "a file's changes in its column: the comparison (Editor › Comparison), its scope quiet beside the name; focused, it takes the wash. The app mounts CodeMirror where the text stands", () => <div style={box(37.5)}><FileChanges focused={true}><ComparisonSample scope="Changes" /></FileChanges></div>, { surfaces: ["ground"], phone: true, code: "<FileChanges focused><Comparison><PaneHeader><FileName /><FileScope /></PaneHeader>…</Comparison></FileChanges>" }),
@@ -180,8 +181,8 @@ import { FindBar } from "@/components/ui/find";
     row("AnnotationPopup · AnnotationInput · AnnotationButton", "a comment on the selected lines, before it goes to the chat", () => <div style={{ ...box(30), height: "calc(7 * var(--u-space))", position: "relative" }}><AnnotationPopup style={{ left: "var(--space-md)", top: "var(--space-md)" }}><AnnotationInput placeholder="Comment on lines 1–2" rows={2} /><AnnotationButton>Add</AnnotationButton></AnnotationPopup></div>, { surfaces: ["ground"], phone: true, code: "<AnnotationPopup><AnnotationInput /><AnnotationButton /></AnnotationPopup>" }),
     row("LineCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<Icons.ChevronDown />}>Turn 3</StatusPicker></TurnNavigation>}><LineCounts kind="bar" removed={4} added={12} /></StatusBar></div>, { surfaces: ["ground"], phone: true, code: "<LineCounts><span /><span /></LineCounts>" }),
     row("Comparison · ComparisonContent · ComparisonSource · TurnNavigation · LineCounts", "a turn's change to one file; the status bar leads with the source picker, older/newer turn and the endpoints. Static text where the app mounts CodeMirror", () => <div style={box(45)}><ComparisonSample /></div>, { surfaces: ["ground"], code: "<Comparison><PaneHeader /><ComparisonContent><CodeHost comparison /></ComparisonContent><StatusBar commands={<ComparisonSource />} /></Comparison>" }),
-    row("DiffShell · SplitEdge · DiffBody · Rest", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><Empty>Changed files</Empty><SplitEdge resizing={false} aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><SplitEdge resizing /><DiffBody /></DiffShell>" }),
-    row("DiffShell · SplitEdge · DiffBody · Resizing", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><Empty>Changed files</Empty><SplitEdge resizing={true} aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><SplitEdge resizing /><DiffBody /></DiffShell>" }),
+    row("DiffShell · ResizeEdge · DiffBody · Rest", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><Empty>Changed files</Empty><ResizeEdge kind="split" aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><ResizeEdge kind=\"split\" startDrag /><DiffBody /></DiffShell>" }),
+    row("DiffShell · ResizeEdge · DiffBody · Resizing", "the navigator open: changed files (stand-in here; Panes › Source control draws the real one), the edge that resizes it, then the comparison", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell width={160}><Empty>Changed files</Empty><ResizeEdge kind="split" data-resizing="" aria-label="Resize changed files" /><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell width><navigator /><ResizeEdge kind=\"split\" startDrag /><DiffBody /></DiffShell>" }),
     row("DiffShell collapsed · DiffRail", "the navigator folded to its rail: one button opens it again", () => <div style={{ ...box(55), height: "calc(15 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><IconButton kind="file" label="Show changed files"><Icons.ExpandFiles /></IconButton></DiffRail><DiffBody><ComparisonSample /></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffShell collapsed><DiffRail><IconButton /></DiffRail><DiffBody /></DiffShell>" }),
     row("DiffBody · nothing chosen", "the comparison column before a file is picked", () => <div style={{ ...box(55), height: "calc(8 * var(--u-space))", display: "flex" }}><DiffShell collapsed width={160}><DiffRail><IconButton kind="file" label="Show changed files"><Icons.ExpandFiles /></IconButton></DiffRail><DiffBody><Empty>Select a changed file.</Empty></DiffBody></DiffShell></div>, { surfaces: ["ground"], code: "<DiffBody><Empty /></DiffBody>" })
   ],
@@ -193,18 +194,18 @@ import { FindBar } from "@/components/ui/find";
     token("--space-xs", "small gaps"),
     token("--space-2xs", "smallest gaps")
   ] }],
-  api: ["CodeSurface", "FindBar", "LeadInput", "IconButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "Empty", "Comparison", "PaneHeader", "FileName", "FileScope", "Actions", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "LineCounts", "CodeExcerpt"],
+  api: ["CodeSurface", "FindBar", "LeadInput", "IconButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "ResizeEdge", "DiffRail", "DiffBody", "Empty", "Comparison", "PaneHeader", "FileName", "FileScope", "Actions", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "LineCounts", "CodeExcerpt"],
 };
 
 export const browserPage: Page = { title: "Browser", summary: "The file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries.", rail: "Blocks",
   preview: () => <Assembled />,
-  usage: `import { Browser, BrowserLayout, BrowserSidebar, Heading, BrowserPlace, BrowserDivider, BrowserMain, BrowserToolbar, BrowserAddress, BrowserGrid, BrowserEntry } from "@/components/ui/browser";
+  usage: `import { Browser, BrowserLayout, BrowserSidebar, Heading, BrowserPlace, ResizeEdge, BrowserMain, BrowserToolbar, BrowserAddress, BrowserGrid, BrowserEntry } from "@/components/ui/browser";
 import { Icons } from "@/components/ui";
 
 <Browser sidebarWidth={sidebarWidth()}>
   <BrowserLayout>
     <BrowserSidebar><Heading>Locations</Heading><BrowserPlace onClick={goHome}><Icons.Home />Home</BrowserPlace></BrowserSidebar>
-    <BrowserDivider role="separator" aria-label="Resize locations sidebar" onPointerDown={resizeSidebar} />
+    <ResizeEdge kind="browser" aria-label="Resize locations sidebar" startDrag={resizeSidebar} />
     <BrowserMain>
       <BrowserToolbar><BrowserAddress value={path()} onChange={changePath} /></BrowserToolbar>
       <BrowserGrid data-view="tiles"><BrowserEntry onDblClick={openFolder}><Icons.Folder /><span>Conduit</span></BrowserEntry></BrowserGrid>
@@ -213,7 +214,7 @@ import { Icons } from "@/components/ui";
 </Browser>`,
   anatomy: { scene: () => <Assembled />, parts: [
     { selector: ".ui-browser-sidebar", name: "Places", does: "lists locations and workspaces", from: "BrowserSidebar" },
-    { selector: ".ui-browser-divider", name: "Divider", does: "resizes the sidebar", from: "BrowserDivider" },
+    { selector: ".ui-resize-edge", name: "Edge", does: "resizes the sidebar", from: "ResizeEdge" },
     { selector: ".ui-browser-main", name: "Main", does: "holds the toolbar, actions and entries", from: "BrowserMain" }
   ] },
   examples: [
@@ -242,7 +243,7 @@ import { Icons } from "@/components/ui";
     token("--text-caption", "caption text size"),
     token("--measure-xs", "spacing and size")
   ] }],
-  api: ["Browser", "BrowserLayout", "BrowserSidebar", "Heading", "BrowserPlace", "BrowserPlaces", "BrowserDivider", "BrowserMain", "BrowserShelf", "BrowserToolbar", "BrowserMachine", "Button", "BrowserAddress", "LeadInput", "Input", "BrowserCount", "Actions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "Columns", "BrowserEntry", "BrowserMark", "Empty", "Loading", "Note"],
+  api: ["Browser", "BrowserLayout", "BrowserSidebar", "Heading", "BrowserPlace", "BrowserPlaces", "ResizeEdge", "BrowserMain", "BrowserShelf", "BrowserToolbar", "BrowserMachine", "Button", "BrowserAddress", "LeadInput", "Input", "BrowserCount", "Actions", "BrowserSummary", "BrowserSpacer", "BrowserGrid", "Columns", "BrowserEntry", "BrowserMark", "Empty", "Loading", "Note"],
 };
 
 export const filesPages = (): Page[] => [filesPage, editorPage, browserPage];

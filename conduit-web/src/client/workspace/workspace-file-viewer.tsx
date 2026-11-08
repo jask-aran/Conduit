@@ -4,7 +4,8 @@ import { createEffect, createResource, createSignal, Index, lazy, onCleanup, Sho
 
 import { MenuRow } from "@/components/ui/menus";
 import { FileViewer as Viewer } from "@/components/ui/file";
-import { FileDivider, FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
+import { FileSwap, FileScope, FileChanges } from "@/components/ui/viewer";
+import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
@@ -197,17 +198,9 @@ export default function FileViewer(props: {
   // Two sides share the width by a rule between them, dragged.
   const sides = () => props.entries.length + (props.splitEmpty ? 1 : 0);
   const share = () => Math.min(0.8, Math.max(0.2, props.share ?? 0.5));
-  const dragDivider = (event: PointerEvent) => {
-    const divider = event.currentTarget as HTMLElement;
+  const dragDivider = (): EdgeDrag => {
     const box = root!.getBoundingClientRect();
-    divider.setPointerCapture(event.pointerId);
-    divider.dataset.dragging = "";
-    const move = (next: PointerEvent) => props.onShare?.(Math.min(0.8, Math.max(0.2, (next.clientX - box.left) / box.width)));
-    const end = () => { delete divider.dataset.dragging; divider.removeEventListener("pointermove", move); divider.removeEventListener("pointerup", end); divider.removeEventListener("pointercancel", end); };
-    divider.addEventListener("pointermove", move);
-    divider.addEventListener("pointerup", end);
-    divider.addEventListener("pointercancel", end);
-    event.preventDefault();
+    return { move: (_dx, next) => props.onShare?.(Math.min(0.8, Math.max(0.2, (next.clientX - box.left) / box.width))) };
   };
   const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><IconButton kind="file" type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></IconButton></Show>;
   return <Viewer ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
@@ -250,7 +243,7 @@ export default function FileViewer(props: {
     }</Index>
     {props.emptySide}
     <Show when={props.entries.length === 2 && props.onSwapSides}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><Icons.Swap /></FileSwap></Show>
-    <Show when={sides() > 1}><FileDivider role="separator" aria-orientation="vertical" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} onPointerDown={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
+    <Show when={sides() > 1}><ResizeEdge kind="sides" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} startDrag={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
   </Viewer>;
 }
 

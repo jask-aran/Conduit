@@ -32,9 +32,9 @@ async function launch(chromium) {
   try { return await chromium.launch({ headless: !headed }); } catch (error) {
     // A cached Chromium from another Playwright version serves as well.
     const cache = path.join(os.homedir(), ".cache/ms-playwright");
-    const builds = (await fs.readdir(cache).catch(() => [])).filter((name) => /^chromium-\d+$/.test(name)).sort().reverse();
+    const builds = (await fs.readdir(cache).catch(() => [])).filter((name) => headed ? /^chromium-\d+$/.test(name) : /^chromium(_headless_shell)?-\d+$/.test(name)).sort().reverse();
     for (const build of builds) {
-      const executablePath = path.join(cache, build, "chrome-linux64/chrome");
+      const executablePath = path.join(cache, build, build.startsWith("chromium_headless_shell") ? "chrome-headless-shell-linux64/chrome-headless-shell" : "chrome-linux64/chrome");
       if (await fs.stat(executablePath).catch(() => null)) return chromium.launch({ headless: !headed, executablePath });
     }
     throw error;
@@ -82,7 +82,9 @@ async function scenario(name, run) {
   page.on("console", (message) => { if (message.type() === "error" && !message.text().startsWith("Failed to load resource")) errors.push(message.text().slice(0, 200)); });
   // Every file is asked for as text first; media answer 400 and load as media.
   const textFirst = (response) => response.status() === 400 && /\/file\?path=[^&]*$/.test(response.url());
-  page.on("response", (response) => { if (response.status() >= 400 && response.status() !== 403 && !textFirst(response)) errors.push(`HTTP ${response.status()} ${response.request().method()} ${decodeURIComponent(response.url().replace(origin, "")).slice(0, 160)}`); });
+  // A project on the hub itself has no node to read from directly: /direct answers 404, and files go through the hub.
+  const notOnNode = (response) => response.status() === 404 && /\/v0\/projects\/[^/]+\/direct\?/.test(response.url());
+  page.on("response", (response) => { if (response.status() >= 400 && response.status() !== 403 && !textFirst(response) && !notOnNode(response)) errors.push(`HTTP ${response.status()} ${response.request().method()} ${decodeURIComponent(response.url().replace(origin, "")).slice(0, 160)}`); });
   const failures = [];
   const check = (label, ok, detail = "") => { if (!ok) failures.push(`${label}${detail ? `: ${detail}` : ""}`); };
   let skipped = null;
@@ -230,7 +232,7 @@ await scenario("split opens an empty column; narrowing folds actions in order in
   check("a file fills it", await until(page, () => !document.querySelector(".ui-file-empty-side") && document.querySelectorAll(".ui-file-viewer > .ui-file").length === 2), JSON.stringify(await columns(page)));
   const shares = () => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => Math.round(column.getBoundingClientRect().width)));
   const before = await shares();
-  const divider = page.locator(".ui-file-divider");
+  const divider = page.locator('.ui-resize-edge[data-edge="sides"]');
   for (let step = 0; step < 5; step++) {
     const box = await divider.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + 200);
@@ -291,13 +293,13 @@ await scenario("dragging the dock's edge and a pane's edge resizes them in place
     return mid;
   };
   const before = await geometry();
-  const mid = await dragBy(".ui-pane-edge[data-dock]", -120);
+  const mid = await dragBy('.ui-resize-edge[data-edge="pane"][data-dock]', -120);
   const after = await geometry();
   check("mid-drag the dock stays at the right edge", mid.dock && Math.abs(mid.dock.right - before.dock.right) <= 2 && mid.dock.left < before.dock.left - 60, JSON.stringify({ before: before.dock, mid: mid.dock }));
   check("the dock took the width", after.dock.left < before.dock.left - 60 && Math.abs(after.dock.right - before.dock.right) <= 2, JSON.stringify({ before: before.dock, after: after.dock }));
   check("the panes gave it up", after.slot.right <= after.dock.left + 2 && after.main.left === before.main.left, JSON.stringify(after));
   const beforePanes = await geometry();
-  const midPanes = await dragBy(".ui-pane-edge:not([data-dock])", -100);
+  const midPanes = await dragBy('.ui-resize-edge[data-edge="pane"]:not([data-dock])', -100);
   const afterPanes = await geometry();
   check("mid-drag the panes follow the edge", midPanes.main.right < beforePanes.main.right - 50 && midPanes.slot.right === beforePanes.slot.right, JSON.stringify({ before: beforePanes, mid: midPanes }));
   check("the edge stays where it was dropped", Math.abs(afterPanes.main.right - midPanes.main.right) <= 4 && afterPanes.dock.left === beforePanes.dock.left, JSON.stringify({ mid: midPanes, after: afterPanes }));

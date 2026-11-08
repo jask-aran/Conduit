@@ -9,11 +9,10 @@ import { toast } from "@/components/ui/notifications";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { Rule } from "@/components/ui/popover";
 import { LeadInput, Spinner } from "@/components/ui/controls";
-import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { ToolBar, Tree as TreeList, TreeRow } from "@/components/ui/pane";
+import { ResizeEdge, ToolBar, Tree as TreeList, TreeRow, type EdgeDrag } from "@/components/ui/pane";
 import { Notice } from "@/components/ui/state";
 
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
@@ -666,7 +665,6 @@ export function FilesView(props: {
   openInPane?: (path: string) => "focused" | "shown" | undefined;
 }) {
   const c = props.control;
-  let treeResizeHandle: HTMLDivElement | undefined;
   let filesResizeObserver: ResizeObserver | undefined;
   let treeTypeaheadTimer = 0;
   let treeTypeahead = "";
@@ -719,42 +717,13 @@ export function FilesView(props: {
     } else return;
     event.preventDefault();
   };
-  const [treeResizing, setTreeResizing] = createSignal(false);
-  const startTreeResize = (event: PointerEvent) => {
-    event.preventDefault();
-    treeResizeHandle?.setPointerCapture(event.pointerId);
-    const startX = event.clientX;
+  const startTreeResize = (): EdgeDrag => {
     const startWidth = c.treeWidth();
     let pending = startWidth;
-    let frame = 0;
-    let stopped = false;
-    const apply = () => {
-      frame = 0;
-      c.setTreeWidth(c.clampTreeWidth(pending));
+    return {
+      move: (dx) => { pending = startWidth + dx; c.setTreeWidth(c.clampTreeWidth(pending)); },
+      end: () => c.saveTreeWidth(pending),
     };
-    const move = (moveEvent: PointerEvent) => {
-      pending = startWidth + moveEvent.clientX - startX;
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      if (stopped) return;
-      stopped = true;
-      if (frame) {
-        cancelAnimationFrame(frame);
-        apply();
-      }
-      c.saveTreeWidth(pending);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
-      window.removeEventListener("blur", stop);
-      setTreeResizing(false);
-    };
-    setTreeResizing(true);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
-    window.addEventListener("blur", stop, { once: true });
   };
 
   // One definition per quick action, rendered three ways: the horizontal
@@ -960,20 +929,8 @@ export function FilesView(props: {
           </ToolBar>
         </Show>
         <Show when={!props.navigatorOnly && c.filesWide()}>
-          <SplitEdge
-            ref={treeResizeHandle}
-            resizing={treeResizing()}
-            aria-label="Resize file tree"
-            aria-valuemin={unitPx(MIN_TREE_UNITS)}
-            aria-valuemax={unitPx(MAX_TREE_UNITS)}
-            aria-valuenow={c.treeWidth()}
-            tabIndex={0}
-            onPointerDown={startTreeResize}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowLeft") c.saveTreeWidth(c.treeWidth() - 8);
-              if (event.key === "ArrowRight") c.saveTreeWidth(c.treeWidth() + 8);
-            }}
-          />
+          <ResizeEdge kind="split" aria-label="Resize file tree" aria-valuemin={unitPx(MIN_TREE_UNITS)} aria-valuemax={unitPx(MAX_TREE_UNITS)} aria-valuenow={c.treeWidth()}
+            startDrag={startTreeResize} onStep={(direction) => c.saveTreeWidth(c.treeWidth() + 8 * direction)} />
         </Show>
           <Show when={!props.navigatorOnly}><WorkspaceFileSlot
             projectId={props.projectId}

@@ -31,7 +31,7 @@ export const codeBlockPage: Page = {
     { selector: ".ui-code .ui-copy", name: "Copy, and the fold's chevron beside it", does: "icon-xs ghost buttons with caption-sized icons, their glyphs as far from the end as the language is from the start", from: (el) => px(`${el.getBoundingClientRect().width}px`) },
     { selector: ".ui-code-line", name: "line numbers (the block's counter)", does: "muted, tabular, as wide as the last one", from: (el) => getComputedStyle(el, "::before").color },
     { selector: ".ui-code > pre", name: "the code", does: "the code face in the Row role, at 1.6", from: (el) => typeOf(el) },
-    { selector: ".ui-code-more", name: "folded", does: "the cut fades, the foot counts what it hides", from: (el) => px(`${el.getBoundingClientRect().height}px`) }
+    { selector: ".ui-code > .ui-show-more", name: "folded", does: "the cut fades, the foot counts what it hides", from: (el) => px(`${el.getBoundingClientRect().height}px`) }
   ] },
   examples: [
     row("No language", "Plain output without a language label", () => <Read class="g-read">{(() => <CodeBlock code="Workspace ready: /work/conduit" />)()}</Read>, { phone: true, code: '<CodeBlock code="Workspace ready: /work/conduit" />' }),

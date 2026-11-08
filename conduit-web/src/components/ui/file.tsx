@@ -1,5 +1,6 @@
 import * as Icons from "./icons";
 import { Dot } from "./nav";
+import { IconButton } from "./actions";
 import { Show, splitProps, type JSX } from "solid-js";
 
 
@@ -11,7 +12,7 @@ export function FileView(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (eleme
   const [local, rest] = splitProps(props, ["focused"]);
   return <section {...rest} class="ui-file" data-focused={local.focused ? "" : undefined} />;
 }
-/** The files tool: the FilesTree, then the open file. wide: the tree beside it (treeWidth px, a SplitEdge between;
+/** The files tool: the FilesTree, then the open file. wide: the tree beside it (treeWidth px, a ResizeEdge between;
  *  hidden when treeCollapsed); false: the tree a rail opening as a drawer (navigatorOpen); "navigator": the tree alone. */
 export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; wide?: boolean | "navigator"; treeCollapsed?: boolean; navigatorOpen?: boolean; treeWidth?: number }) {
   const [local, rest] = splitProps(props, ["wide", "treeCollapsed", "navigatorOpen", "treeWidth"]);
@@ -38,10 +39,9 @@ export const FileDirty = (props: { dirty: boolean }) => <Dot tone="warn" class="
 /** What a host adds to the header (a comparison's scope); goes with the actions. */
 export const FileSuffix = (props: { children?: JSX.Element }) => <span class="ui-file-suffix">{props.children}</span>;
 
-/** A header or status-bar control: an icon, or words with one (wide). inMenu: the ⋯ has it too. close: the header's ×. */
 /** The header's ⋯: what fitting folded, and what a pane's viewer keeps there. A menu's trigger takes it with `as`. */
 export function FileMore(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { ref?: (element: HTMLButtonElement) => void }) {
-  return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-icon-button" data-icon-button="file" data-more=""><Icons.More /></button>;
+  return <IconButton kind="file" label="More file actions" {...props} data-more=""><Icons.More /></IconButton>;
 }
 
 /** The status bar at a file's foot: its commands, then its details at the end. Both scroll sideways, never wrap. */

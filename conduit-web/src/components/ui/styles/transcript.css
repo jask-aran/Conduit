@@ -4,9 +4,7 @@
 /* Folded: cut at the fold's last line, half a line of it fading (the cut already falls on a line; the fade only says
    there is more). Show more under it, the foot's caption. */
 .ui-bubble-text[data-folded] { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--bubble-fold); --fade-length: 0.5lh; }
-.ui-bubble-more { display: block; margin-top: var(--space-xs); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
-.ui-bubble-more:is(:focus-visible) { color: var(--foreground); }
-@media (hover: hover) { .ui-bubble-more:is(:hover, :focus-visible) { color: var(--foreground); } }
+.ui-bubble > .ui-show-more { display: block; margin-top: var(--space-xs); }
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width. */
 .ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; margin-inline: auto; }
 /* Hung marks: a row that starts with a mark (a step, an agent, an envelope's sender) hangs it in the gutter, so every
@@ -66,9 +64,6 @@
 .ui-envelope[data-direction="in"] .ui-envelope-text { --foreground: var(--muted-foreground); color: var(--muted-foreground); }
 .ui-envelope-text[data-folded] { max-height: calc(var(--envelope-fold) * var(--text-body) * var(--leading-reading)); overflow: hidden; }
 .ui-envelope-text[data-folded]:not([data-fits]) { mask-image: linear-gradient(to bottom, #000 calc(100% - 2lh), transparent); }
-.ui-envelope-more { border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-sans); cursor: pointer; }
-@media (hover: hover) { .ui-envelope-more:is(:hover, :focus-visible) { color: var(--foreground); } }
-.ui-envelope-more:focus-visible { outline: none; color: var(--foreground); }
 .ui-conduit-added { justify-self: stretch; display: grid; gap: var(--flow-line); margin-top: var(--flow-attached); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
 .ui-conduit-added[data-before] { margin: 0 0 var(--flow-attached); }
 .ui-conduit-added > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,6 +1,7 @@
 import { Icons, Empty, IconButton } from "@/components/ui";
-import { DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
-import { createSignal, lazy, onCleanup, Show, Suspense, type JSX } from "solid-js";
+import { DiffShell, DiffRail, DiffBody } from "@/components/ui/editor";
+import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
+import { createSignal, lazy, Show, Suspense, type JSX } from "solid-js";
 
 import type { ComparisonPayload, ComparisonViewState } from "./workspace-comparison";
 import { WorkspaceReviewNavigator, type WorkspaceReviewFile } from "./workspace-review";
@@ -63,27 +64,10 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       note,
     });
   };
-  const [resizing, setResizing] = createSignal(false);
-  let stopResize: (() => void) | undefined;
-  const startResize = (event: PointerEvent) => {
-    event.preventDefault();
-    setResizing(true);
-    const startX = event.clientX;
+  const startResize = (): EdgeDrag => {
     const startWidth = navigatorWidth();
-    const move = (moveEvent: PointerEvent) => saveNavigatorWidth(startWidth + moveEvent.clientX - startX);
-    stopResize = () => {
-      setResizing(false);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", stopResize!);
-      window.removeEventListener("pointercancel", stopResize!);
-      document.body.classList.remove("workspace-tree-resizing");
-    };
-    document.body.classList.add("workspace-tree-resizing");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stopResize, { once: true });
-    window.addEventListener("pointercancel", stopResize, { once: true });
+    return { move: (dx) => saveNavigatorWidth(startWidth + dx) };
   };
-  onCleanup(() => stopResize?.());
   return <DiffShell collapsed={navigatorCollapsed()} width={navigatorWidth()}>
     <Show when={!navigatorCollapsed()} fallback={<DiffRail><IconButton kind="file" type="button" aria-label="Show changed files" title="Show changed files" onClick={() => setCollapsed(false)}><Icons.ExpandFiles /></IconButton></DiffRail>}>
       <WorkspaceReviewNavigator
@@ -94,10 +78,7 @@ export function WorkspaceDiffView(props: WorkspaceDiffViewProps) {
       onSelect={props.onSelect}
       onCollapse={() => setCollapsed(true)}
       />
-      <SplitEdge resizing={resizing()} role="separator" aria-label="Resize changed files" aria-orientation="vertical" aria-valuemin={MIN_NAVIGATOR_WIDTH} aria-valuemax={MAX_NAVIGATOR_WIDTH} aria-valuenow={navigatorWidth()} tabIndex={0} onPointerDown={startResize} onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") saveNavigatorWidth(navigatorWidth() - 8);
-        else if (event.key === "ArrowRight") saveNavigatorWidth(navigatorWidth() + 8);
-      }} />
+      <ResizeEdge kind="split" aria-label="Resize changed files" aria-valuemin={MIN_NAVIGATOR_WIDTH} aria-valuemax={MAX_NAVIGATOR_WIDTH} aria-valuenow={navigatorWidth()} startDrag={startResize} onStep={(direction) => saveNavigatorWidth(navigatorWidth() + 8 * direction)} />
     </Show>
     <DiffBody>
       <Show when={props.comparison} fallback={<Empty>{props.loading ? "Loading changes…" : props.files.length ? "Select a changed file." : props.error || props.empty}</Empty>}>
