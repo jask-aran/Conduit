@@ -32,7 +32,6 @@ li.ui-agent-row .ui-row-meta { opacity: var(--opacity-muted); }
 .ui-agent-verb { font-weight: var(--weight-lift); }
 /* Its glyph ends on the column's edge (a step's line does too): the wash bleeds past it by the padding. */
 .ui-agent-row .ui-button.ui-agent-report { flex: none; gap: var(--space-2xs); margin-right: calc(-1 * var(--space-sm)); padding-inline: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
-.ui-agent-report > svg { width: var(--icon-xs); height: var(--icon-xs); }
 span.ui-agent-stop { width: var(--control-sm); }
 /* On one line the stop fits the row rather than setting its height: running and ended rows are one height. */
 .ui-agent-row[data-line] .ui-agent-stop { height: auto; align-self: stretch; }

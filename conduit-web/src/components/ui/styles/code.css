@@ -4,7 +4,6 @@
 /* The caption: the language where the numbers start, Copy (and the fold's chevron) at the end, one size of icon button. */
 .ui-code > figcaption { position: sticky; top: 0; z-index: 1; display: flex; height: var(--control-sm); align-items: center; gap: var(--space-2xs); border-bottom: var(--hairline) solid var(--tint); background: linear-gradient(var(--tint), var(--tint)), var(--background); padding: 0 calc(var(--space-lg) - (var(--control-xs) - var(--icon-xs)) / 2) 0 var(--space-lg); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 /* Its buttons' icons are the caption's size, not a row's. */
-.ui-code > figcaption .ui-button svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-code-lang { margin-right: auto; }
 .ui-code > pre { height: auto; margin: 0; overflow: auto hidden; scrollbar-color: var(--muted-foreground) transparent; scrollbar-width: thin; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); transition: height var(--move) var(--move-ease); padding: var(--space-md) 0; font: var(--text-row)/var(--leading-code) var(--font-code); }
 /* Folded: the lines past the fold are cut, the last of them fading; the foot opens it. */

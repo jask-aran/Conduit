@@ -12,7 +12,6 @@
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
 /* A lone pill moves by its scope's move (styles/motion.css): fold on its own, tuck in a PhoneComposer's row. */
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
-.ui-pill[data-solo] > button { width: 100%; height: 100%; }
 /* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
 .ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
 .ui-pill > button:is(:focus-visible) { background: var(--tint); }

@@ -25,7 +25,6 @@
    harness mark -- fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
-.ui-icon > .ui-glyph svg { width: 100%; height: 100%; }
 .ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row:where([data-density="menu"]) > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
@@ -63,7 +62,6 @@
 .ui-row-group > .ui-row:where([data-density="menu"]) { min-width: 0; flex: 1; }
 .ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
 .ui-row-action { display: grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); cursor: pointer; }
-.ui-row-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row-action[data-highlighted] { background: var(--tint); color: var(--foreground); }
 .ui-row-action[data-destructive] { color: var(--destructive); }
 .ui-row:where([data-density="menu"])[data-destructive][data-highlighted], .ui-row-action[data-destructive][data-highlighted] { background: color-mix(in oklch, var(--destructive), transparent var(--tone-wash)); }
@@ -79,7 +77,6 @@
    voice, its value in the text's, quiet, and a small chevron -- the row that unfolds the section's reading under it. */
 .ui-row:where([data-density="menu"])[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-row:where([data-density="menu"])[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
-.ui-row:where([data-density="menu"])[data-field] > .ui-chevron { width: var(--icon-xs); height: var(--icon-xs); }
 
 /* An item's detail: a second line under its label (a route's address). */
 .ui-row:where([data-density="menu"]) > .ui-label[data-stacked] { display: flex; flex-direction: column; }
@@ -87,8 +84,6 @@
 /* Data: a second line that is a value reads in the data face, as a row's meta does. */
 .ui-label > .ui-detail[data-data] { font-family: var(--font-data); }
 /* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
-.ui-row:where([data-density="menu"]) > :is(svg, .ui-glyph, img):not(.ui-chevron) { width: var(--icon); height: var(--icon); flex: none; }
-.ui-row:where([data-density="menu"]) > .ui-harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
 /* A phone variant has no keyboard: shortcut keys are off wherever they sit (after the rows' keys, before the leader's,
@@ -97,7 +92,6 @@
 @media (--conduit-phone-layout) { .ui-row:where([data-density="menu"]) > .ui-keys { display: none; } }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
 
-.ui-menu-action > :is(svg, img), .ui-menu-action > :first-child:not(:last-child) { width: var(--icon); height: var(--icon); flex: none; }
 
 /* Its caps: a phone's popover is narrower and shorter by default; a popover sets its own (Menu width, height).
    Inside them and the room its host leaves it (--menu-room), it scrolls. */
@@ -111,7 +105,6 @@
 .ui-menu-panel { pointer-events: auto; z-index: calc(var(--layer-popover) + 1); width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-note:where([data-note="menu"]) { margin: 0; padding: var(--row-pad); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); white-space: normal; overflow-wrap: anywhere; }
 .ui-note:where([data-note="menu"])[data-error] { color: var(--destructive); }
-.ui-row:where([data-density="menu"]) > .ui-label[data-stacked] > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) { .ui-menu-parent { transition: none; } }
 
@@ -132,7 +125,6 @@
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
 /* A chevron that is its own press: the glyph's box, the wash under the pointer. */
 button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
-button.ui-chevron > svg { width: 100%; height: 100%; }
 @media (hover: hover) { button.ui-chevron:hover { background: var(--tint); color: var(--foreground); } }
 /* A child row sits an icon and a gap in, under its parent's label. */
 .ui-row:where([data-density="menu"]):not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }

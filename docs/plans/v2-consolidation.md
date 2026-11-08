@@ -78,6 +78,9 @@ once. Tick a family when every listed build goes through its single piece and th
   one Notice (state.tsx, kinds reading/nav/tool/header); Empty and Loading kinds in styles/state.css. Left:
   ReportCard's box (a --border card with its own hover), ApprovalCard (its own padding and width), TourCard
   (Overlay-based).
+- [x] 8 Repeated CSS (and after): 87 per-piece rules that only sized an icon's box, cut a line short or filled their
+  box are gathered into one rule per recipe at the end of foundations.css (zero-specificity :where() rules stay put,
+  as their order decides between them).
 - [x] 8 Repeated CSS: .ui-truncate, .ui-size-icon(-sm) and [data-wash] (foundations.css); 20 truncate and 19
   icon-size rules moved onto them, computed styles unchanged in every family. Left: rules aimed at children the
   library does not class, partial recipes, zero-specificity :where() pieces, washes that also set colour or more
@@ -99,7 +102,7 @@ once. Tick a family when every listed build goes through its single piece and th
 
 ## Size
 
-Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,933 after (a83a22f7), with the shared
+Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,855 after the recipes were gathered, with the shared
 pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
 state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
 every family, desktop and phone) and screenshots of base and current builds in the headed Chrome.

@@ -15,13 +15,11 @@
 .ui-rider[data-layout="wave"] > .ui-aura { z-index: -1; }
 .ui-frost.ui-rider[data-layout="card"] { display: grid; width: 100%; gap: var(--space-sm); margin-inline: auto; padding: var(--space-md); outline: 0; }
 .ui-rider-mark { display: grid; flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-rider-mark > svg { width: 100%; height: 100%; }
 .ui-actions:where([data-actions="rider"]) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-actions:where([data-actions="rider"])[data-stack] { flex-direction: column; }
 :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
 :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); } }
-:is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] svg { width: var(--icon); height: var(--icon); }
 
 /* Lines: text that waits (the queued messages), one line each until opened. */
 .ui-lines { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
@@ -31,7 +29,6 @@
 .ui-line-more { display: inline-flex; width: var(--icon-lg); height: var(--icon-lg); flex: none; align-items: center; justify-content: center; margin-top: var(--hairline); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
 .ui-line-more:is(:focus-visible) { background: var(--tint); color: inherit; }
 @media (hover: hover) { .ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; } }
-.ui-line-more svg { width: var(--icon); height: var(--icon); }
 /* References: a file's lines, wrapping; each a quiet tinted capsule, its name strong and the rest muted, cut short. */
 .ui-references { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: var(--space-xs); }
 .ui-reference { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs) 0 var(--space-sm); font-size: var(--text-caption); }
@@ -65,7 +62,6 @@
 .ui-chip-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-chip-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-chip .ui-chip-copy { max-width: var(--measure-xs); line-height: var(--leading-tight); }
-.ui-chip .ui-chip-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: var(--opacity-muted); }
 .ui-chip-ring { position: absolute; width: var(--icon-xl); height: var(--icon-xl); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: var(--glyph-shadow); }
 .ui-chip-ring circle:first-child { stroke: var(--frost-stroke); }
@@ -74,7 +70,6 @@
 .ui-chip[data-kind="file"]:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media > :not(.ui-chip-ring), .ui-chip[data-status="error"] .ui-chip-media img { opacity: var(--opacity-disabled); }
 .ui-chip-retry { position: absolute; width: var(--icon-lg); height: var(--icon-lg); color: var(--foreground); filter: var(--glyph-shadow); }
 .ui-chip-remove { position: absolute; top: var(--space-xs); right: var(--space-xs); display: grid; width: var(--icon-lg); height: var(--icon-lg); place-items: center; border: 0; border-radius: var(--radius-round); background: var(--on-media-ground); padding: 0; color: var(--on-media); cursor: pointer; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-reference > .ui-button svg, .ui-chip-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-chip:is(:focus-within) .ui-chip-remove { opacity: 1; }
 @media (hover: hover) { .ui-chip:is(:hover, :focus-within) .ui-chip-remove { opacity: 1; } }
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
@@ -92,7 +87,6 @@
 @media (hover: hover) { .ui-tabs > button:hover { background: var(--tint); color: var(--foreground); } }
 /* The current tab: white at the current weight, no fill (the wash is only the pointer). */
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-tabs svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
 .ui-choice { min-height: var(--control-lg); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); cursor: pointer; }
@@ -122,7 +116,6 @@
 .ui-summary > .ui-row { display: grid; min-height: var(--control); grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); color: var(--foreground); font-size: var(--text-body); cursor: pointer; }
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"], .ui-summary > .ui-row:is(:focus-visible) { background: var(--tint); }
 @media (hover: hover) { .ui-summary > .ui-row:is(:hover, :focus-visible) { background: var(--tint); } }
-.ui-summary > .ui-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-summary > .ui-row > .ui-row-title { color: var(--muted-foreground); }
 .ui-summary > .ui-row > .ui-row-context { color: var(--foreground); font-size: inherit; font-weight: var(--weight-strong); }
 .ui-summary > .ui-row[data-empty] > .ui-row-context { color: var(--muted-foreground); font-weight: var(--weight-rest); }
@@ -144,7 +137,6 @@
 .ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
-.ui-rider-button[data-labelled] svg { width: var(--icon); height: var(--icon); }
 .ui-rider-button:is(:focus-visible) { outline: 0; filter: brightness(var(--brighten)); }
 @media (hover: hover) { .ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(var(--brighten)); } }
 /* It fades in where it rides when there is something below, and out when there is not. */

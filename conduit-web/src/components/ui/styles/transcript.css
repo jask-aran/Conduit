@@ -46,7 +46,6 @@
 /* A failed request: its head in destructive, its facts in the data face, what the provider said in a code box. */
 .ui-failure { display: grid; gap: var(--space-xs); font-size: var(--text-row); }
 .ui-failure-head { display: flex; align-items: center; gap: var(--row-gap); color: var(--destructive); }
-.ui-failure-head > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-failure-head time { margin-left: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-failure-facts { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); }
 .ui-failure pre { margin: 0; overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-lg); white-space: pre-wrap; font: var(--text-caption)/var(--leading-code) var(--font-code); }
@@ -55,7 +54,6 @@
 /* Messages in and out (Envelope): a header of who and when, the text on a rule hung from the mark. */
 .ui-envelope { display: grid; gap: var(--flow-attached); min-width: 0; }
 .ui-envelope-head { display: flex; align-items: center; gap: var(--row-gap); min-width: 0; color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-row); }
-.ui-envelope-head > svg, .ui-envelope-toggle > svg:not(.ui-disclosure-chevron) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-envelope-head > b, .ui-envelope-toggle > b { flex: none; color: var(--foreground); font-weight: var(--weight-strong); }
 /* A shut envelope's header opens it: who and what, then the chevron. */
 .ui-envelope-toggle { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -67,7 +65,6 @@
 .ui-envelope-head > time { flex: none; margin-left: auto; font-size: var(--text-caption); }
 .ui-envelope-open { display: inline-flex; flex: none; align-items: center; margin-left: auto; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-xs); color: inherit; font: inherit; cursor: pointer; }
 .ui-envelope-head > time + .ui-envelope-open { margin-left: 0; }
-.ui-envelope-open > svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-envelope-open:focus-visible { outline: none; background: var(--tint); color: var(--foreground); }
 .ui-envelope-rule { display: grid; justify-items: start; gap: var(--flow-attached); margin-left: calc((var(--icon-sm) - var(--hairline)) / 2); border-left: var(--hairline) solid var(--border); padding-left: calc(var(--icon-sm) / 2 - var(--hairline) / 2 + var(--row-gap)); }
 .ui-envelope-text { justify-self: stretch; min-width: 0; }
@@ -85,10 +82,8 @@
 .ui-message > .ui-conduit-added { justify-self: end; max-width: min(var(--measure-2xl), 88cqw); margin: 0; text-align: left; }
 .ui-harness-prompt-unseen { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-harness-prompt > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */
 .ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
-.ui-harness-prompt-open > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-harness-prompt-open > svg:last-child { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-harness-prompt-open:focus-visible { outline: none; background: var(--tint); }
 .ui-harness-prompt-open:focus-visible > svg:last-child { opacity: 1; }
@@ -106,7 +101,6 @@
 /* A turn composed whole (trace, answer, foot): its answer is a step under its trace, as its own row would be. */
 .ui-turn > :is(.ui-trace, .ui-trace-fold) + .ui-answer { margin-top: calc(var(--flow-step) - var(--flow-attached)); }
 .ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach) - var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
-.ui-turn-orb > * { width: 100%; height: 100%; }
 /* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
    keeps the full column and draws no orb (trace.css too) -- on a line of its own it cost a line, and said less than the
    status and the stop button already do. */
@@ -124,7 +118,6 @@
 :is(.ui-message[data-entering] > *, .ui-message-foot[data-entering]) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--entered, 0s) backwards; }
 .ui-message-foot > time { margin-right: var(--space-xs); font-variant-numeric: tabular-nums; }
 .ui-message-bell { display: inline-flex; align-items: center; gap: var(--space-2xs); margin-right: var(--space-xs); }
-.ui-message-bell > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-message-status { margin-right: var(--space-xs); color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-stop-line { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-stop-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
@@ -143,7 +136,6 @@
 }
 /* Its buttons are the smallest icon buttons, whatever size they were asked for. */
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
-.ui-message-foot .ui-button[data-size^="icon"] svg { width: var(--icon-sm); height: var(--icon-sm); }
 /* The answer: no bubble, the Body role, one gap between blocks and none outside the first and last. */
 .ui-answer { --answer-gap: var(--flow-block); min-width: 0; color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-reading); overflow-wrap: anywhere; }
 .ui-answer :where(p, ul, ol, blockquote, pre, table, hr, figure, h1, h2, h3, h4) { margin: 0; }

@@ -2,7 +2,6 @@
 .ui-tool-line { min-height: calc(var(--control-lg) + var(--space-md)); flex: none; gap: var(--space-sm); border-bottom: var(--hairline) solid var(--border); border-radius: 0; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); }
 .ui-tool-line > .ui-row-end { gap: var(--space-2xs); padding-left: 0; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); white-space: nowrap; }
 .ui-tool-line > .ui-row-lead { gap: var(--space-sm); }
-.ui-tool-line > .ui-row-lead > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tool-line > .ui-row-title { min-width: 0; flex: 0 1 auto; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; }
 .ui-tool-line > .ui-row-context { flex: 0 1 auto; font-size: var(--text-caption); }
 

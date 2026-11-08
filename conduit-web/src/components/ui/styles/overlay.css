@@ -127,7 +127,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-control > .ui-seg { width: max-content; max-width: 100%; flex: 0 1 auto; }
 /* A setting's context mark: after its name, muted, brightening to say it opens what the setting changes. */
 .ui-setting-context { display: inline-flex; vertical-align: middle; margin-left: var(--space-xs); color: var(--muted-foreground); cursor: pointer; }
-.ui-setting-context > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-setting-context:focus-visible, .ui-setting-context[data-expanded] { color: var(--foreground); outline: none; }
 @media (hover: hover) { .ui-setting-context:hover { color: var(--foreground); } }
 /* What a line holds besides a field: a value read, not set; a link out; a note or details under
@@ -195,7 +194,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance { display: grid; min-width: 0; align-content: start; gap: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-glance > * { min-width: 0; }
 .ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/var(--leading-tight) var(--font-sans); }
-.ui-glance-title > :first-child:not(span) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-1 * var(--space-sm)); }
 .ui-glance-facts { font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-1 * var(--space-lg)); }
@@ -203,7 +201,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
 .ui-glance-orb { display: inline-grid; flex: none; }
-.ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }

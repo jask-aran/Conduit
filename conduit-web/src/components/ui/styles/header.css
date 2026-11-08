@@ -13,7 +13,6 @@
 
 /* The crumb: the place in caps, white at the strong weight; the title at the row's size. Each truncates. */
 .ui-header-crumb { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }
-.ui-header-crumb > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-header-crumb > strong { font-weight: var(--weight-strong); }
 .ui-header-place { flex: 0 1 auto; max-width: var(--measure-xs); border: 0; background: none; padding: 0; color: var(--foreground);
   font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label); letter-spacing: var(--label-tracking); text-transform: uppercase; }
@@ -44,7 +43,6 @@ button.ui-header-place { cursor: pointer; }
 [data-presentation="phone"] .ui-header-count { display: inline-grid; flex: none; place-items: center; min-width: var(--pill-size); height: var(--pill-size); box-sizing: border-box;
   padding: 0 var(--space-md); border-radius: var(--radius-round); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
 [data-presentation="phone"] .ui-header-pill-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
-[data-presentation="phone"] .ui-header-pill-icon > * { width: 100%; height: 100%; }
 [data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
 /* Pressed, or what it opens open: the frost takes the wash over it. */
 [data-presentation="phone"] :is(button.ui-header-pill, .ui-header-count):is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }

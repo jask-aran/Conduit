@@ -48,7 +48,6 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-group:where([data-group="card"]) + .ui-group:where([data-group="card"])::before { position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-group:where([data-group="card"]) > .ui-card-qr { width: 100%; }
 /* One QR wide, a detail keeps to its line: the value truncates, its whole in its title. */
-.ui-group:where([data-group="card"]) .ui-card-details dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-group:where([data-group="card"]) > h4 { margin: 0 0 var(--space-2xs); color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
 .ui-card-description { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -80,7 +79,6 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment-media { display: grid; flex: none; width: var(--control); place-items: center; overflow: hidden; border-radius: var(--radius-control); color: var(--muted-foreground); }
 .ui-attachment-media[data-image] { width: min(45%, var(--measure-xs)); }
 .ui-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
-.ui-attachment-media svg { width: var(--icon); height: var(--icon); }
 .ui-attachment .ui-chip-copy { flex: 1; gap: var(--space-xs); overflow-wrap: anywhere; }
 .ui-attachment[data-error] .ui-chip-copy small { color: var(--destructive); }
 /* Tray: the files a message was sent with, at the reading width under it; each framed, its image a thumbnail, its
@@ -91,4 +89,3 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachments[data-form="tray"] .ui-attachment-media, .ui-attachments[data-form="tray"] .ui-attachment-media[data-image] { width: var(--control-lg); height: var(--control-lg); background: var(--border); }
 .ui-attachments[data-form="tray"] .ui-attachment-media img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
 .ui-attachments[data-form="tray"] .ui-chip-copy { gap: 0; }
-.ui-attachments[data-form="tray"] .ui-chip-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

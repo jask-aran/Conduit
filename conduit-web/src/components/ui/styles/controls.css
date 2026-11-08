@@ -6,7 +6,6 @@
 .ui-keycap[data-editable] { display: inline-flex; height: var(--control-xs); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
 .ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-keycap[data-editable] > .ui-keycap-remove { width: var(--control-2xs); justify-content: center; border-left: var(--hairline) solid var(--tint); padding: 0; color: var(--muted-foreground); }
-.ui-keycap-remove svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-keycap[data-editable] > button:is(:focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 @media (hover: hover) { .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); } }
 
@@ -77,7 +76,6 @@
 @media (hover: hover) { .ui-input[data-look="title"]:is(:hover, :focus-visible) > svg { color: var(--foreground); } }
 /* A select as a toolbar's icon button: a ghost icon button's size and wash. */
 .ui-input[data-look="icon"] { width: var(--control-xs); min-width: var(--control-xs); height: var(--control-xs); flex: none; justify-content: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); }
-.ui-input[data-look="icon"] > svg { width: var(--icon); height: var(--icon); }
 .ui-input[data-look="icon"]:is(:focus-visible, [aria-expanded="true"]) { background: var(--tint); color: var(--foreground); }
 .ui-input[data-look="icon"]:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 
@@ -93,7 +91,6 @@
    on others, where Windows draws their text without ClearType, so they dim while it moves. */
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (var(--seg-cell) + var(--seg-gap)) * var(--segment)); width: var(--seg-cell); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
-.ui-seg button svg { width: var(--icon); height: var(--icon); }
 .ui-seg button:is(:focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
 @media (hover: hover) { .ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); } }
 /* Icons alone (the sidebar's Chat | Work) keep their square target and icon size: only worded segments came down. */

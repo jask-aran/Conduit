@@ -46,21 +46,18 @@
 /* The second level's icon sits where the first level's text starts. */
 .ui-row:where([data-density="nav"])[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
 .ui-row-lead:where([data-density="nav"] *) { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-row-lead:where([data-density="nav"] *) > * { width: 100%; height: 100%; }
 .ui-row-title:where([data-density="nav"] *) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-title:where([data-density="nav"] *)[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
 .ui-row-title:where([data-density="nav"] *)[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
 .ui-row-title:where([data-density="nav"] *) > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-row-meta:where([data-density="nav"] *) { flex: none; color: var(--muted-foreground); font-size: var(--text-label); }
 .ui-row-end:where([data-density="nav"] *) { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
-.ui-row-end:where([data-density="nav"] *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-nav-link { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
 .ui-nav-link::after { position: absolute; inset: 0; content: ""; }
 .ui-nav-link-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ui-nav-folder, .ui-nav-folder > .ui-row-end { position: relative; }
 .ui-nav-toggle { display: grid; width: 100%; height: 100%; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
-.ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
@@ -87,7 +84,6 @@
 .ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; }
 @media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; } }
 :is(.ui-row-lead:where([data-density="nav"] *), .ui-icon-button:where([data-icon-button="rail"])) > .ui-harness-mark-tinted { background-color: var(--foreground); }
-.ui-row-lead:where([data-density="nav"] *) > .ui-thread-harness-mark { width: var(--icon); height: var(--icon); }
 .ui-thread-harness-mark[data-lively] { position: relative; transition: color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark[data-lively] .ui-harness-mark { transition: background-color var(--duration-quick) var(--ease-change), opacity var(--duration-quick) var(--ease-change); }
 .ui-thread-harness-mark .ui-harness-mark-artwork { position: absolute; inset: 0; opacity: 0; }
@@ -163,7 +159,6 @@
 
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 /* A dot's size is --dot: the icon-dot by default; a tab's or a file's smaller mark sets its own. */
 .ui-status-dot { width: var(--dot, var(--icon-dot)); height: var(--dot, var(--icon-dot)); flex: none; border-radius: var(--radius-round); background: currentColor; }
 :is(.ui-status, .ui-status-dot)[data-tone="success"] { color: var(--status-success); }

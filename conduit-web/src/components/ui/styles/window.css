@@ -13,7 +13,6 @@
 
 .ui-window-controls { display: flex; flex: none; }
 .ui-window-controls > button { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted-foreground); cursor: default; }
-.ui-window-controls > button svg { width: var(--icon-sm); height: var(--icon-sm); }
 /* At a bar's end: Windows' own target widths, the full height of the bar. */
 .ui-window-controls[data-kind="bar"] { height: 100%; }
 .ui-window-controls[data-kind="bar"] > button { width: calc(var(--control) * 1.5); height: 100%; }
@@ -35,5 +34,4 @@
 .ui-title-bar-middle .ui-lead-input { width: var(--measure-sm); cursor: pointer; }
 /* The address field's input is a toolbar's height; in the bar it is the size of the bar's buttons, clear of its edges. */
 .ui-title-bar-middle .ui-lead-input > input { height: var(--control-xs); font-size: var(--text-caption); }
-.ui-title-bar .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-title-bar-middle .ui-lead-input input { cursor: pointer; }

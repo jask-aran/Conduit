@@ -6,7 +6,6 @@
 .ui-level:is([data-level="urgent"], [data-level="failed"]) { color: var(--destructive); }
 .ui-level[data-level="none"] > .ui-status-dot { border: var(--stroke-thin) solid var(--muted-foreground); background: transparent; }
 .ui-level[data-level="fyi"], .ui-level[data-handled] { color: var(--muted-foreground); }
-.ui-level > svg { width: 100%; height: 100%; }
 
 /* An inbox entry: the row, then its report unfolding under it, at the row's text edge. Handled ones rest quieter. */
 
@@ -22,7 +21,6 @@
 .ui-day-hours > span:first-child { translate: 0 0; }
 .ui-day-hours > span:nth-child(5) { translate: -100% 0; }
 .ui-day-quiet-label { display: grid; place-items: center; }
-.ui-day-quiet-label > svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-day-track { position: relative; height: var(--control-2xs); }
 .ui-day-track::before { position: absolute; inset: 50% 0 auto; border-top: var(--hairline) solid var(--tint); content: ""; }
 .ui-day-quiet { position: absolute; inset-block: 0; border-radius: var(--radius-inset); background: var(--tint); }
@@ -37,10 +35,8 @@
 /* Its row is a Row line inside the card (the card is its box and its wash): the mark the full icon, the title in the
    row's lift, its chevron always shown. */
 .ui-report-card > .ui-row { padding: 0; }
-.ui-report-card .ui-row-lead { width: var(--icon); height: var(--icon); }
 .ui-report-title { font-weight: var(--weight-lift); }
 .ui-clock-end, .ui-report-end { display: inline-flex; align-items: center; gap: var(--space-xs); }
-.ui-report-end > svg { width: var(--icon-sm); height: var(--icon-sm); }
 
 /* Another room's messages in jbot's stream, folded: one quiet line, opening in place to the exchange. */
 .ui-room { display: flex; min-width: 0; flex-direction: column; }

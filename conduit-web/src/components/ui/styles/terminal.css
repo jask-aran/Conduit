@@ -10,7 +10,6 @@
 .ui-term-identity-end { display: flex; flex: none; align-items: center; margin-left: auto; }
 /* The document's ×, drawn as a lit tab's (pane.css .ui-tab-close): quiet until pointed at. */
 .ui-term-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); }
-.ui-term-close > svg { width: var(--icon-sm); height: var(--icon-sm); }
 @media (hover: hover) { .ui-term-close:hover { color: var(--foreground); } }
 .ui-term-identity > strong, .ui-term-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-term-context { color: var(--muted-foreground); font: var(--text-label) var(--font-data); }

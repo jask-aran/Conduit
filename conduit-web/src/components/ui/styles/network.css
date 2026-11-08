@@ -4,7 +4,6 @@
 .ui-network-box:has(> .ui-title) { padding-top: var(--space-md); }
 .ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.ui-network-mark > svg { width: var(--icon); height: var(--icon); }
 .ui-network-box[data-hub] .ui-network-line > .ui-row-title { font-weight: var(--weight-strong); }
 /* The lines: a stem down from the hub to a bus, the bus over the spokes, a drop into each. The bus sits
    --space-md below the hub; a spoke starts --space-xl below it; each spoke draws its stretch of the bus (to the next
@@ -48,7 +47,6 @@ button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--mut
 .ui-chain-link[data-live] { border-style: dashed; }
 /* A notice: something Conduit writes into the thread later, not part of the prompt -- an inbound mark before its name. */
 .ui-network-mark, .ui-client-mark, .ui-chain-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
-.ui-client-mark > svg, .ui-chain-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-network-line[data-offline] > .ui-row-title, .ui-chain-link[data-live] .ui-chain-line > .ui-row-title { color: var(--muted-foreground); }
 .ui-chain-link[data-current] { border-color: var(--muted-foreground); background: var(--tint); }
 /* The line between two links; a break's label stands in the line, which stops either side of it. */

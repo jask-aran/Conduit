@@ -4,7 +4,6 @@
 .ui-trace:not(:disabled) { cursor: pointer; }
 .ui-trace-orb { position: absolute; top: 50%; right: calc(100% + var(--row-gap) + var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); translate: 0 -50%; }
 .ui-trace-orb:empty { display: none; }
-.ui-trace-orb > * { width: 100%; height: 100%; }
 .ui-trace-line { min-width: 0; grid-area: 1 / 1; }
 .ui-trace-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
 /* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
@@ -39,8 +38,6 @@ button.ui-step:is(:focus-visible) { background: var(--tint); }
 .ui-trace-fold[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--entered, 0s) backwards; }
 .ui-step-item[data-entering] { --rise: var(--space-xs); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-step-icon { display: grid; flex: none; place-items: center; }
-.ui-step-icon > svg { width: 100%; height: 100%; }
-.ui-step-icon > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-step-verb { flex: none; color: var(--foreground); white-space: nowrap; }
 /* The subject gives way before the verb, the aside before the subject: the line keeps what it did and on what. */
 .ui-step-subject { min-width: 0; flex: 0 1 auto; font: var(--text-caption) var(--font-code); }

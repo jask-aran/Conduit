@@ -32,7 +32,6 @@
 .ui-notice:where([data-notice="reading"]) p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
 /* Nav: what the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
 .ui-notice:where([data-notice="nav"]) { display: flex; align-items: center; gap: var(--row-gap); margin-bottom: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-notice:where([data-notice="nav"]) > :is(svg, .ui-spinner) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-notice:where([data-notice="nav"]) > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-notice:where([data-notice="nav"])[data-ready] { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); color: var(--foreground); }
 .ui-nav-lead > .ui-notice:where([data-notice="nav"]) { margin: 0; }
