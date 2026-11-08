@@ -336,7 +336,8 @@ export interface Message {
     /** The first prompt the conversation was given; `resent`: sent again because a compaction replaced what came before. */
     opening?: boolean;
     resent?: boolean;
-    sections: { name: string; chars: number }[];
+    /** removed: a piece the request took away. */
+    sections: { name: string; chars: number; removed?: boolean }[];
     tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number };
     summary?: { chars: number };
   };

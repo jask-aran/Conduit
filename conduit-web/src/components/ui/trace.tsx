@@ -81,14 +81,12 @@ export function StepOutput(props: { text: string; hidden?: number; full?: boolea
   </>;
 }
 /** What a context step opens to: each piece of context the model was given, under its name, in mono, and the tools it
- *  was offered as one line of names. Its text is fetched when it opens: `loading` until then. */
-export function StepSections(props: { sections?: { label: string; text: string }[]; tools?: string; loading?: boolean; error?: string }) {
+ *  was offered as one line of names. The caller opens it once its text is in, never to a note that then grows. */
+export function StepSections(props: { sections?: { label: string; text: string }[]; tools?: string; error?: string }) {
   return <div class="ui-step-sections">
-    <Show when={!props.loading} fallback={<p class="ui-step-sections-note">Loading…</p>}>
-      <Show when={!props.error} fallback={<p class="ui-step-sections-note">{props.error}</p>}>
-        <For each={props.sections}>{(section) => <section><h4>{section.label}</h4><pre class="ui-step-output">{section.text}</pre></section>}</For>
-        <Show when={props.tools}><section><h4>Tools</h4><p class="ui-step-sections-tools">{props.tools}</p></section></Show>
-      </Show>
+    <Show when={!props.error} fallback={<p class="ui-step-sections-note">{props.error}</p>}>
+      <For each={props.sections}>{(section) => <section><h4>{section.label}</h4><pre class="ui-step-output">{section.text}</pre></section>}</For>
+      <Show when={props.tools}><section><h4>Tools</h4><p class="ui-step-sections-tools">{props.tools}</p></section></Show>
     </Show>
   </div>;
 }

@@ -344,7 +344,7 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
     asked = true;
     props.loadContext(context().entryId).then(setText, (cause) => { asked = false; setFailure(String(cause?.message || cause)); });
   });
-  const pieces = () => context().sections.filter((section) => section.name !== "instructions").map((section) => sectionLabel(section.name));
+  const pieces = () => context().sections.filter((section) => section.name !== "instructions").map((section) => `${section.removed ? "\u2212" : ""}${sectionLabel(section.name)}`);
   const tools = () => {
     const change = context().tools;
     if (!change) return "";
@@ -362,13 +362,16 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
   const sections = () => {
     const loaded = text();
     if (!loaded) return undefined;
-    return [...loaded.sections.map((section) => ({ label: capitalised(sectionLabel(section.name)), text: section.text })), ...(loaded.summary ? [{ label: "Summary", text: loaded.summary }] : [])];
+    // A piece taken away has no text to show; the line names it.
+    return [...loaded.sections.filter((section) => section.text).map((section) => ({ label: capitalised(sectionLabel(section.name)), text: section.text })), ...(loaded.summary ? [{ label: "Summary", text: loaded.summary }] : [])];
   };
   const toolNames = () => { const loaded = text()?.tools; if (!loaded) return undefined;
     return loaded.all?.map((tool) => tool.name).join(", ") || [loaded.added.length ? `Added: ${loaded.added.join(", ")}` : "", loaded.removed.length ? `Removed: ${loaded.removed.join(", ")}` : "", loaded.changed?.length ? `Changed: ${loaded.changed.join(", ")}` : "", loaded.restated ? `${loaded.restated} restated, unchanged` : ""].filter(Boolean).join(" \u00b7 ") || undefined; };
+  // It opens once its text is in, to what it holds: opened to a note, the text landing mid-move jumped what follows.
+  const ready = () => Boolean(text() || failure() || !props.loadContext);
   return <Step icon={context().kind === "compaction" ? <Icons.Compact /> : <Icons.Context />} verb={verb()} subject={subject() || undefined} face="text" aside={chars() ? tokensOf(chars()) : undefined}
-    motion={props.motion} opens open={fold.open()} onToggle={fold.toggle}>
-    <StepSections loading={!text() && !failure()} error={failure() || undefined} sections={sections()} tools={toolNames()} />
+    motion={props.motion} opens open={fold.open() && ready()} onToggle={fold.toggle}>
+    <StepSections error={failure() || undefined} sections={sections()} tools={toolNames()} />
   </Step>;
 }
 /* What a trail line reads once its trace is open and the line itself opened, for find in chat (registerFoldFind). */

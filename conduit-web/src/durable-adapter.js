@@ -320,7 +320,8 @@ export function contextEntry(entry, before = null) {
   const changed = before ? (message.toolsAdded || []).filter((tool) => removedNames.has(tool.name) && before.has(tool.name) && before.get(tool.name) !== JSON.stringify(tool)).map((tool) => tool.name) : [];
   const restated = sameNames && !changed.length;
   return { kind: sections.some(([name, text]) => name === "instructions" && typeof text === "string") ? "prompt" : "update",
-    sections: sections.map(([name, text]) => ({ name, text: text ?? "" })),
+    // A null section is one the request took away.
+    sections: sections.map(([name, text]) => ({ name, text: text ?? "", ...(text == null ? { removed: true } : {}) })),
     ...(message.toolsAdded || message.toolsRemoved ? { tools: {
       added: added.filter((name) => !removedNames.has(name)), removed: removed.filter((name) => !addedNames.has(name)),
       ...(changed.length ? { changed } : {}), ...(restated ? { restated: added.length } : {}),
@@ -347,7 +348,7 @@ const contextOp = (entry, answers, before = null, place = null) => {
   const timestamp = entry.model?.[0]?.timestamp;
   return messageOpen({ id: `c${entry.conversationId}-${entry.id}`, role: "system", answers,
     context: { kind: context.kind, entryId: entry.id, ...(context.kind === "prompt" && place?.opening ? { opening: true } : {}),
-      ...(context.kind === "prompt" && place?.resent ? { resent: true } : {}), sections: context.sections.map(({ name, text }) => ({ name, chars: text.length })),
+      ...(context.kind === "prompt" && place?.resent ? { resent: true } : {}), sections: context.sections.map(({ name, text, removed }) => ({ name, chars: text.length, ...(removed ? { removed } : {}) })),
       ...(context.tools ? { tools: context.tools } : {}),
       ...(context.summary !== undefined ? { summary: { chars: context.summary.length } } : {}) },
     ...(timestamp ? { timestamp: new Date(timestamp).toISOString() } : {}) });
