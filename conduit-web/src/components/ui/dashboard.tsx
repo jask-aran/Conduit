@@ -1,10 +1,12 @@
 import * as Icons from "./icons";
+import { Dot } from "./nav";
 import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Row, type RowProps } from "./row";
 import { clearDock } from "./dock-inset";
 import { feel, type HapticProp } from "./haptics";
 import { callHandler } from "./shared";
+import { Count } from "./controls";
 
 
 /*
@@ -126,7 +128,7 @@ export function QuickMore(props: { ref?: (element: HTMLSpanElement) => void; kee
 
 /** The chats list's heading on a phone: the choice it shows, its count, and where. */
 export function GroupCompactHeading(props: { label: JSX.Element; count?: number | string | null; where?: JSX.Element }) {
-  return <h2 class="ui-group-heading" data-compact="">{props.label}<Show when={props.count != null}><small>{props.count}</small></Show><Show when={props.where}><span>{props.where}</span></Show></h2>;
+  return <h2 class="ui-group-heading" data-compact="">{props.label}<Show when={props.count != null}><Count value={props.count!} /></Show><Show when={props.where}><span>{props.where}</span></Show></h2>;
 }
 /** Switches in a heading's place (the chats list's All · Unread, Conduit · Computer): one line, never squeezed. */
 export const GroupSwitches = (props: { children: JSX.Element }) => <div class="ui-group-switches">{props.children}</div>;
@@ -142,7 +144,7 @@ export function GroupAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> &
 export const DashDay = (props: { children: JSX.Element }) => <div class="ui-dash-day">{props.children}</div>;
 /** The row after the last: "Show 20 more", quieter. */
 export function DashMore(props: { count?: number | string; onClick: () => void; children: JSX.Element }) {
-  return <button type="button" class="ui-dash-more" onClick={() => { feel(undefined, "fold"); props.onClick(); }}>{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button>;
+  return <button type="button" class="ui-dash-more" onClick={() => { feel(undefined, "fold"); props.onClick(); }}>{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></button>;
 }
 /** A line of prose in a group (a note, an error). */
 
@@ -183,7 +185,7 @@ export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" 
       <path data-part="back" d="M1 4a2 2 0 0 1 2-2h7l3 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
       <path data-part="front" d="M1 8h28v13a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
     </svg>}>{local.icon}</Show></Show>
-    <Show when={local.live}><span class="ui-folder-live" aria-label="Running" /></Show>
+    <Show when={local.live}><Dot tone="success" class="ui-folder-live" aria-label="Running" /></Show>
     <span class="ui-folder-name">{local.name}</span>
     <Show when={local.meta}><span class="ui-folder-meta">{local.meta}</span></Show>
   </Dynamic>;

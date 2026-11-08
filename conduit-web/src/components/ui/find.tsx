@@ -33,7 +33,7 @@ export function FindBar(props: {
   return <Frost class="ui-find-bar" role="search" aria-label={props.label ?? "Find in chat"} lift="raised">
     <LeadInput kind="tool" ref={props.inputRef} value={props.query} placeholder={props.label ?? "Find in chat"} aria-label={props.label ?? "Find in chat"}
       onInput={(event) => props.onQuery(event.currentTarget.value)} onKeyDown={onKeyDown} onClear={() => props.onQuery("")} />
-    <Show when={props.count}><span class="ui-find-count" aria-live="polite">{props.count}</span></Show>
+    <Show when={props.count}><small class="ui-count ui-find-count" aria-live="polite">{props.count}</small></Show>
     <IconButton kind="tool" label="Previous match (Shift+Enter)" onMouseDown={keep} onClick={() => props.onPrevious()}><Icons.ArrowUp /></IconButton>
     <IconButton kind="tool" label="Next match (Enter)" onMouseDown={keep} onClick={() => props.onNext()}><Icons.ArrowDown /></IconButton>
     <CloseButton kind="tool" label="Close find (Escape)" onClick={() => props.onClose()} />

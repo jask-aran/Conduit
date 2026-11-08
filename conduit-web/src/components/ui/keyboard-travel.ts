@@ -45,7 +45,7 @@ export type Travel = { from: number; to: number; durationMs: number; curve: numb
  * still in the bar's room. The keyboard's own curve spread the composer's move over the keyboard's whole travel: the
  * transcript arrived after the composer, a band of page showing under it until it did.
  */
-export function ridingCurve(travel: Travel): number[] {
+function ridingCurve(travel: Travel): number[] {
   const rest = travel.rest ?? 0;
   const at = (progress: number) => Math.max(rest, travel.from + (travel.to - travel.from) * progress);
   const start = at(0), end = at(1);

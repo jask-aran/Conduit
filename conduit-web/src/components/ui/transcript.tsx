@@ -4,6 +4,7 @@ import { children, createEffect, createRenderEffect, createSignal, For, onCleanu
 
 import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
+import { Loading } from "./state";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Later } from "./later";
 import { Expand } from "./expand";
@@ -233,7 +234,7 @@ export function TranscriptList<T>(props: Omit<JSX.HTMLAttributes<HTMLDivElement>
   </div>;
 }
 /** At a Transcript's top while earlier messages load: a spinner, centred. */
-export const LoadingEarlier = () => <div class="ui-loading-earlier" role="status" aria-label="Loading earlier messages"><Spinner /></div>;
+export const LoadingEarlier = () => <Loading kind="earlier" label="Loading earlier messages" />;
 /** How a row relates to the row above it, which sets the room between them (--flow-*, DESIGN Transcript › Rhythm):
  *  attached (belongs to it), step (the next part of one reply), exchange (the reply to a message), turn (the next
  *  exchange). */

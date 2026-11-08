@@ -5,6 +5,8 @@ import { RotateCwIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { unitPx } from "./layout";
 import { Button, Keycap } from "./controls";
+import { CloseButton } from "./actions";
+import { Row } from "./row";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
 /*
@@ -59,18 +61,21 @@ export function Chip(props: { name: string; detail?: string; image?: string | JS
       <span class="ui-chip-media"><Show when={image()} fallback={props.icon}>{typeof image() === "string" ? <img src={image() as string} alt="" /> : image()}</Show>
         <Show when={props.status === "uploading" || props.status === "queued"}><svg class="ui-chip-ring" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="9" stroke-dasharray={`${ring}`} stroke-dashoffset={ring * (1 - Math.min(100, props.progress ?? 40) / 100)} /></svg></Show>
         <Show when={props.retry}><RotateCwIcon class="ui-chip-retry" /></Show></span>
-      <Show when={!image()}><span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span></Show>
+      <Show when={!image()}><ChipCopy name={props.name} detail={props.detail} /></Show>
     </button>
     <button type="button" class="ui-chip-remove" aria-label={`Remove ${props.name}`} onClick={() => props.onRemove?.(chip)}><Icons.Close /></button>
   </div>;
 }
+/** A file's name and its detail, one over the other: a Chip's copy, and an Attachment's. */
+export const ChipCopy = (props: { name: string; detail?: string }) =>
+  <span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span>;
 /** A reference to lines of a file (a review comment): its mark, the file's name, the lines, the note, each cut short
  *  before the name is. onOpen: a press goes to it; onEdit, onRemove: small actions after it (in a composer's rider). */
 export function Reference(props: { icon: JSX.Element; name: string; at?: string; note?: string; title?: string; label?: string; onOpen?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   return <span class="ui-reference" title={props.title}>
     <button type="button" class="ui-reference-body" title={props.label} disabled={!props.onOpen} onClick={() => props.onOpen?.()}>{props.icon}<strong>{props.name}</strong><Show when={props.at}><span>{props.at}</span></Show><Show when={props.note}><span>· {props.note}</span></Show></button>
     <Show when={props.onEdit}><Button variant="ghost" size="icon-sm" aria-label={`Edit comment for ${props.name}`} onClick={() => props.onEdit?.()}><Icons.Edit /></Button></Show>
-    <Show when={props.onRemove}><Button variant="ghost" size="icon-sm" aria-label={`Remove reference to ${props.name}`} onClick={() => props.onRemove?.()}><Icons.Close /></Button></Show>
+    <Show when={props.onRemove}><CloseButton label={`Remove reference to ${props.name}`} onClick={() => props.onRemove?.()} /></Show>
   </span>;
 }
 /** References to files, wrapping onto as many lines as they need. */
@@ -79,14 +84,12 @@ export const References = (props: { label?: string; children: JSX.Element }) => 
 export const Choices = (props: { multi?: boolean; children: JSX.Element }) =>
   <div class="ui-choices" role="listbox" aria-multiselectable={props.multi ? "true" : undefined} onPointerOver={moveCursor}>{props.children}</div>;
 
-/** A numbered answer: label, description, and a check (a box when several may be chosen). own: the typed answer's
+/** A numbered answer: its key, label and description; chosen, it is white (several chosen: washed, multi). own: the typed answer's
  *  field in place of the label. onPick: chosen by a press; onPoint: the pointer is over it (the cursor moves to it). */
 export function Choice(props: { n: number; label?: string; detail?: string; title?: string; chosen?: boolean; active?: boolean; multi?: boolean; own?: JSX.Element; onPick?: () => void; onPoint?: () => void }) {
-  return <div role="option" class="ui-choice" aria-selected={props.chosen} data-active={props.active ? "true" : undefined} title={props.title} onClick={() => props.onPick?.()} onPointerMove={() => props.onPoint?.()}>
-    <span class="ui-choice-key">{props.n}</span><Show when={props.own} fallback={<span class="ui-choice-label">{props.label}</span>}>{props.own}</Show>
-    <Show when={props.detail}><span class="ui-choice-detail">{props.detail}</span></Show>
-    <span class="ui-choice-check" data-multi={props.multi ? "true" : undefined}><Show when={props.chosen}><Icons.Check /></Show></span>
-  </div>;
+  return <Row density="line" role="option" class="ui-choice" aria-selected={props.chosen} data-highlighted={props.active ? "" : undefined} data-own={props.own ? "" : undefined}
+    title={props.title} onClick={() => props.onPick?.()} onPointerMove={() => props.onPoint?.()}
+    lead={<span class="ui-choice-key">{props.n}</span>} label={props.own ?? props.label} context={props.detail} />;
 }
 
 /** Waiting lines under a rider's title (the steering and queued messages), a Line each. */
@@ -118,5 +121,5 @@ export const Prompt = (props: { multi?: boolean; children: JSX.Element }) =>
 export const ChoiceInput = (props: JSX.InputHTMLAttributes<HTMLInputElement>) => <input {...props} class={cn("ui-choice-input", props.class)} />;
 /** Before submitting: each question and its answer, a row each, opening its page; empty: not answered yet. */
 export const Summary = (props: { rows: { label: string; value: string; empty?: boolean; onOpen?: () => void }[] }) =>
-  <div class="ui-summary"><For each={props.rows}>{(row) => <button type="button" tabIndex={-1} onClick={() => row.onOpen?.()}>
-    <span>{row.label}</span><span data-empty={row.empty ? "true" : undefined}>{row.value}</span></button>}</For></div>;
+  <div class="ui-summary"><For each={props.rows}>{(row) => <Row element="button" density="line" tabIndex={-1} onClick={() => row.onOpen?.()}
+    data-empty={row.empty ? "" : undefined} label={row.label} context={row.value} />}</For></div>;

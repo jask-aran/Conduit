@@ -2,3 +2,47 @@
    and words in the row's gap, at rest in the row's tone. A density (data-density) sets the rest: nav and list in
    nav.css and dashboard.css, menu in popover.css, each with its parts and its cursor. Loaded before them. */
 .ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); text-align: left; }
+/* Its fold: the chevron last, the icon's small size, muted (it turns by the one fold rule, foundations.css). */
+.ui-row-fold { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; color: var(--muted-foreground); }
+/* A line: a light line at a list's height, at the foreground; its mark muted, its title held whole, its context muted
+   and cut short, its meta and end pushed to the end. Its owner (a commit, a choice, a network's client) sets the rest. */
+.ui-row:where([data-density="line"]) { padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); }
+.ui-row-lead:where([data-density="line"] *) { display: inline-flex; flex: none; align-items: center; gap: var(--row-gap); color: var(--muted-foreground); }
+.ui-row-title:where([data-density="line"] *) { flex: none; white-space: nowrap; }
+.ui-row-context:where([data-density="line"] *) { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
+.ui-row-meta:where([data-density="line"] *) { flex: none; margin-left: auto; padding-left: var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-row-end:where([data-density="line"] *) { display: inline-flex; flex: none; align-items: center; margin-left: auto; padding-left: var(--space-md); }
+.ui-row-meta:where([data-density="line"] *) + .ui-row-end { margin-left: 0; }
+
+/* A tree's row: a tool's height, muted, stepped in by its depth; its fold's chevron and its icon lead, its name is cut
+   short, a small mark at its end. Selected (open in the viewer) and pointed at, the wash and the foreground. */
+.ui-row:where([data-density="tree"]) { min-height: var(--control-tool); gap: var(--space-sm); padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth, 0) * .875) * var(--u-space)); color: var(--muted-foreground); }
+.ui-row:where([data-density="tree"])[data-selected] { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-row:where([data-density="tree"]):is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); } }
+.ui-row:where([data-density="tree"]):focus { outline: 0; }
+.ui-row:where([data-density="tree"]):focus-visible { outline: var(--hairline) solid var(--ring); outline-offset: calc(-1 * var(--hairline)); }
+.ui-row-lead:where([data-density="tree"] *) { display: inline-flex; flex: none; align-items: center; gap: var(--space-sm); }
+.ui-row-lead:where([data-density="tree"] *) > :is(svg, img, span) { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+.ui-row-title:where([data-density="tree"] *) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row-end:where([data-density="tree"] *) { display: inline-flex; flex: none; margin-left: auto; color: var(--muted-foreground); }
+.ui-row-end:where([data-density="tree"] *) > svg { width: var(--icon-xs); height: var(--icon-xs); }
+@media (--conduit-phone-layout) { .ui-row:where([data-density="tree"]) { min-height: var(--control); } }
+/* A trail's line: a light line in a trail or a room's list (an agent's, a room's, a run's), at its words' height, in the tone
+   it sits in; washed under the pointer or in focus. Its mark is the small icon, its title cut short with a muted
+   detail or context after it, its data in the data face; its fold shows under the pointer, in focus or open. */
+.ui-row:where([data-density="trail"]) { min-width: 0; min-height: 0; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); line-height: var(--leading-row); }
+.ui-row:where([data-density="trail"]):is(button, a) { cursor: pointer; }
+.ui-row:where([data-density="trail"]):disabled { cursor: default; }
+.ui-row:where([data-density="trail"]):focus-visible { outline: none; background: var(--tint); }
+@media (hover: hover) { .ui-row:where([data-density="trail"]):is(button, a):not(:disabled):hover { background: var(--tint); } }
+.ui-row-lead:where([data-density="trail"] *) { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-row-lead:where([data-density="trail"] *) > :is(svg, .ui-spinner) { width: 100%; height: 100%; }
+.ui-row-title:where([data-density="trail"] *) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row-title:where([data-density="trail"] *)[data-stacked] { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-row-title:where([data-density="trail"] *)[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
+:is(.ui-row-detail, .ui-row-context):where([data-density="trail"] *) { min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-row-context:where([data-density="trail"] *) { flex: 1 1 0; }
+.ui-row-meta:where([data-density="trail"] *) { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }
+.ui-row-fold:where([data-density="trail"] *) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change), rotate var(--duration-quick) var(--ease-change); }
+.ui-row:where([data-density="trail"]):is(:focus-visible, [aria-expanded="true"]) > .ui-row-fold { opacity: 1; }
+@media (hover: hover) { .ui-row:where([data-density="trail"]):hover > .ui-row-fold { opacity: 1; } }

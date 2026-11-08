@@ -48,7 +48,7 @@ if (typeof document !== "undefined") {
   }, true);
 }
 
-export function edgePadding() { return (edges ??= measureEdges()) as number; }
+function edgePadding() { return (edges ??= measureEdges()) as number; }
 function measureEdges() {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding:var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px))";
@@ -63,7 +63,7 @@ function measureEdges() {
 }
 /** The room between a control and the popover it opens (--popover-gap): touching it, the menu read as part of the
  *  control. A Kobalte gutter is a number, so the step is measured. */
-export function popoverGap() { return gapPx ??= measureGap(); }
+function popoverGap() { return gapPx ??= measureGap(); }
 function measureGap() {
   const probe = document.createElement("div");
   probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;width:var(--popover-gap)";

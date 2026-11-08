@@ -15,6 +15,8 @@
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
 .ui-card > pre { overflow: hidden; text-overflow: ellipsis; }
 .ui-card { position: relative; }
+/* Outline: an outlined box on its ground (an outline Card, a client's card, the network map's boxes): a hairline, no fill. */
+.ui-outline { border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); }
 .ui-card[data-size="wide"] { width: min(100%, var(--measure-2xl)); }
 /* The × sits in the corner, its box the edge's half in; the title keeps clear of it. */
 .ui-card-close { position: absolute; top: calc(var(--card-edge) / 2); right: calc(var(--card-edge) / 2); }
@@ -75,10 +77,8 @@
 .ui-attachment-media[data-image] { width: min(45%, var(--measure-xs)); }
 .ui-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
 .ui-attachment-media svg { width: var(--icon); height: var(--icon); }
-.ui-attachment-copy { display: grid; flex: 1; min-width: 0; gap: var(--space-xs); overflow-wrap: anywhere; }
-.ui-attachment-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
-.ui-attachment-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-attachment[data-error] .ui-attachment-copy small { color: var(--destructive); }
+.ui-attachment .ui-chip-copy { flex: 1; gap: var(--space-xs); overflow-wrap: anywhere; }
+.ui-attachment[data-error] .ui-chip-copy small { color: var(--destructive); }
 /* Tray: the files a message was sent with, at the reading width under it; each framed, its image a thumbnail, its
    name and detail on a line each, cut short. */
 .ui-attachments[data-form="tray"] { width: min(var(--reading-width), 100%); max-height: min(var(--measure-md), 40dvh); margin: 0 auto var(--space-md); overflow-y: auto;
@@ -86,10 +86,5 @@
 .ui-attachments[data-form="tray"] > .ui-attachment { width: min(var(--measure-lg), 100%); padding: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
 .ui-attachments[data-form="tray"] .ui-attachment-media, .ui-attachments[data-form="tray"] .ui-attachment-media[data-image] { width: var(--control-lg); height: var(--control-lg); background: var(--border); }
 .ui-attachments[data-form="tray"] .ui-attachment-media img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
-.ui-attachments[data-form="tray"] .ui-attachment-copy { gap: 0; }
-.ui-attachments[data-form="tray"] .ui-attachment-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Notice: across the reading column, above what follows it. */
-.ui-notice { position: relative; z-index: 2; display: flex; width: min(var(--reading-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
-.ui-notice > svg { width: var(--icon-lg); flex: none; }
-.ui-notice p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-attachments[data-form="tray"] .ui-chip-copy { gap: 0; }
+.ui-attachments[data-form="tray"] .ui-chip-copy :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

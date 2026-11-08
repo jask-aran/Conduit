@@ -3,6 +3,7 @@ import { Dynamic } from "solid-js/web";
 import { cn } from "@/lib/utils";
 import { callHandler } from "./shared";
 import { feel, type HapticProp } from "./haptics";
+import * as Icons from "./icons";
 
 /**
  * Row: one line in a list -- a mark, the title (a detail under it), muted context after it, data at its end and a
@@ -11,10 +12,14 @@ import { feel, type HapticProp } from "./haptics";
  * (styles/row.css, then nav.css, dashboard.css and popover.css); the states say where you are and what is chosen.
  *
  * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own.
+ * line: a light line in a list of facts (a commit, a choice, a network's client), its title whole, its context after;
+ * trail: a line in a trail or a room's list (an agent's, a room's, a run's), washed under the pointer, its fold shown
+ * then; tree: a file tree's, indented by depth.
+ *
  * bare: the children are the row's whole inside (a composition with parts of its own: a menu item, a folder's row).
  * A row that is a button or a link is felt as select when tapped on a phone; haptic overrides it (false: none).
  */
-export type RowDensity = "nav" | "list" | "menu";
+export type RowDensity = "nav" | "list" | "menu" | "line" | "trail" | "tree";
 
 export type RowProps = {
   density?: RowDensity;
@@ -33,6 +38,11 @@ export type RowProps = {
   end?: JSX.Element;
   /** Under the row it belongs to; 2: under one of those. */
   indent?: boolean | 2;
+  /** How deep it is in a tree: indented that many steps (--depth). */
+  depth?: number;
+  /** It opens what is under it: a chevron last, turning as the row's aria-expanded does (quarter: right to down, a
+   *  folder's; half: down to up, a fold's). */
+  fold?: "quarter" | "half";
   /** Where you are. */
   current?: boolean;
   /** Holds where you are (a folder holding the open chat): drawn as current. */
@@ -54,7 +64,7 @@ export type RowProps = {
   & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href" | "target" | "rel">>
   & Partial<Pick<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "type" | "disabled">>;
 
-const PARTS = ["density", "element", "lead", "label", "detail", "context", "meta", "end", "indent", "current", "within", "open", "selected", "quiet", "bare", "haptic", "class", "children"] as const;
+const PARTS = ["density", "element", "lead", "label", "detail", "context", "meta", "end", "indent", "depth", "fold", "current", "within", "open", "selected", "quiet", "bare", "haptic", "class", "children"] as const;
 
 export function Row(props: RowProps) {
   const [local, rest] = splitProps(props, PARTS);
@@ -67,6 +77,7 @@ export function Row(props: RowProps) {
   return <Dynamic component={element()} type={element() === "button" ? "button" : undefined} {...(rest as Record<string, unknown>)}
     onClick={click} class={cn("ui-row", local.class)} data-density={density()}
     data-indent={local.indent === 2 ? "2" : local.indent ? "" : undefined}
+    style={local.depth ? { "--depth": local.depth } : undefined}
     aria-current={local.current && density() !== "list" ? "page" : undefined}
     data-current={local.current && density() === "list" ? "" : undefined}
     data-within={local.within ? "" : undefined} data-open={local.open ? "" : undefined}
@@ -79,6 +90,9 @@ export function Row(props: RowProps) {
       <Show when={local.context !== undefined || keepsRoom()}><span class="ui-row-context">{local.context}</span></Show>
       <Show when={local.meta}><small class="ui-row-meta">{local.meta}</small></Show>
       <Show when={local.end}><span class="ui-row-end">{local.end}</span></Show>
+      <Show when={local.fold}>{(turn) => turn() === "half"
+        ? <Icons.ChevronDown class="ui-row-fold ui-fold-chevron" data-turn="half" aria-hidden="true" />
+        : <Icons.ChevronRight class="ui-row-fold ui-fold-chevron" aria-hidden="true" />}</Show>
     </Show>
   </Dynamic>;
 }

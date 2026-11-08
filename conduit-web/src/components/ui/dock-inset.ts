@@ -12,7 +12,7 @@
  * still taken, so the reservation keeps it rather than following the composer down and back up.
  */
 const CLEARANCE_PX = 40;
-export const DOCK_INSET = "--transcript-composer-inset";
+const DOCK_INSET = "--transcript-composer-inset";
 
 export function clearDock(target: HTMLElement, dock: HTMLElement, onResize?: () => void) {
   let measured = -1;

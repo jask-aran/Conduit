@@ -177,7 +177,7 @@ export function shouldFollowAfterHistoryRestore(distanceFromBottom: number) {
  * How close to the new bottom a clamped position has to land before an upward
  * move is read as the content shrinking rather than as a reader scrolling.
  */
-export const TAIL_CLAMP_TOLERANCE_PX = 1;
+const TAIL_CLAMP_TOLERANCE_PX = 1;
 
 export type TailScrollInput = {
   scrollTop: number;

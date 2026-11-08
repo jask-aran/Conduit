@@ -1,6 +1,9 @@
 import { dragRegion } from "./window";
+import { Dot } from "./nav";
 import { Frost } from "./frost";
+import { Notice } from "./state";
 import * as Icons from "./icons";
+import { Row, type RowProps } from "./row";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
 
@@ -46,7 +49,7 @@ export function PaneTab(props: {
     data-shown={props.shown ? "" : undefined} data-unsaved={props.unsaved ? "" : undefined} data-none={props.none ? "" : undefined}>
     <Show when={props.none} fallback={<button type="button" class="ui-tab-open" tabIndex={-1} title={props.hint ?? props.title} onClick={() => props.onOpen?.()}>
       {props.icon}
-      <Show when={props.live}><i class="ui-tab-live" aria-label="Running" /></Show>
+      <Show when={props.live}><Dot tone="success" class="ui-tab-live" aria-label="Running" /></Show>
       <span class="ui-tab-title" data-text={props.title}><span>{props.title}</span></span>
     </button>}><span class="ui-tab-open"><span class="ui-tab-title"><span>{props.title}</span></span></span></Show>
     <Show when={props.onClose}><button type="button" class="ui-tab-close" tabIndex={-1} aria-label={props.closeLabel ?? `Close ${props.title}`} title={props.closeTitle ?? "Close tab"} onClick={() => props.onClose?.()}><Icons.Close /></button></Show>
@@ -107,22 +110,15 @@ export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (ele
 }
 /** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
 /** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
-export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) {
-  return <div class="ui-tool-notice" data-tone={props.tone} role={props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}>
-    {props.children}
-    <Show when={props.action}>{(action) => <button type="button" disabled={action().disabled} onClick={() => action().onClick()}>{action().label}</button>}</Show>
-  </div>;
-}
+export const ToolNotice = (props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) => <Notice kind="tool" {...props} />;
 
 /** A row of a tree: indented by depth, a chevron for a folder (open turns it; none for a file keeps its place), its
  *  mark, its name, and a mark at the end (kept visible). selected: open in the viewer; data-open-file is the app's
  *  (open in a pane: the name strong; "focused" stronger). A context menu's trigger takes it with `as`. */
 export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
   const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);
-  return <button type="button" {...rest} class="ui-tree-row" data-selected={local.selected ? "" : undefined} style={{ "--depth": local.depth ?? 0 }}>
-    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><Icons.ChevronRight class="ui-tree-chevron ui-fold-chevron" data-open={local.open ? "" : undefined} /></Show>
-    {local.icon}<span class="ui-tree-name">{local.name}</span>{local.end}
-  </button>;
+  return <Row {...(rest as RowProps)} element="button" density="tree" depth={local.depth ?? 0} selected={local.selected} class="ui-tree-row" label={local.name} end={local.end}
+    lead={<><Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><Icons.ChevronRight class="ui-tree-chevron ui-fold-chevron" data-open={local.open ? "" : undefined} /></Show>{local.icon}</>} />;
 }
 /** A tree: the scrolling list its rows sit in. */
 export const Tree = (props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void }) => <nav role="tree" {...props} class="ui-tree" />;

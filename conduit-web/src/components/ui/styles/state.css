@@ -1,0 +1,58 @@
+/*
+ * States (state.tsx): Empty, Loading and Notice, each kind keyed on where it sits ([data-empty], [data-loading],
+ * [data-notice]). A Note's kinds stay with their families.
+ */
+
+/* Empty. */
+.ui-empty:where([data-empty="pane"]) { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
+.ui-empty:where([data-empty="pane"]) > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
+.ui-empty:where([data-empty="pane"]) svg { width: var(--icon-lg); height: var(--icon-lg); }
+.ui-empty:where([data-empty="pane"]) strong { color: var(--foreground); }
+.ui-empty:where([data-empty="pane"]) p { margin: 0; line-height: var(--leading-text); }
+.ui-empty:where([data-empty="dash"]) { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-empty:where([data-empty="change"]) { display: grid; min-height: calc(2.5 * var(--row-min)); flex: 1; place-items: center; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-empty:where([data-empty="overlay"]) { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
+.ui-empty:where([data-empty="glance"]) { margin: 0; padding-top: var(--space-4xl); text-align: center; }
+.ui-empty:where([data-empty="browser"]) { grid-column: 1 / -1; padding: var(--space-lg); text-align: center; color: var(--muted-foreground); }
+.ui-empty:where([data-empty="file"]) { display: flex; flex: 1; align-items: center; justify-content: center; color: var(--muted-foreground); }
+.ui-empty:where([data-empty="client"]) { margin: 0; color: var(--muted-foreground); }
+
+/* Loading. */
+.ui-loading:where([data-loading="setting"]) { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-loading:where([data-loading="pane"]) { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
+  padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-loading:where([data-loading="browser"]) { position: absolute; inset-inline-end: var(--space-sm); inset-block-end: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
+/* Nav: rows that have not arrived, the shape of a list, still. */
+.ui-loading:where([data-loading="nav"]) { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
+.ui-loading:where([data-loading="nav"]) > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--border); }
+.ui-loading:where([data-loading="nav"]) > span:nth-child(2n) { width: 72%; }
+.ui-loading:where([data-loading="nav"]) > span:nth-child(3n) { width: 58%; }
+.ui-loading:where([data-loading="earlier"]) { display: flex; justify-content: center; }
+
+/* Notice. Reading: across the reading column, above what follows it. */
+.ui-notice:where([data-notice="reading"]) { position: relative; z-index: 2; display: flex; width: min(var(--reading-width), calc(100% - var(--page-gutter))); gap: var(--space-md); margin: var(--space-md) auto; padding: var(--space-lg); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
+.ui-notice:where([data-notice="reading"]) > svg { width: var(--icon-lg); flex: none; }
+.ui-notice:where([data-notice="reading"]) p { margin: var(--space-2xs) 0 0; color: var(--muted-foreground); font-size: var(--text-row); }
+/* Nav: what the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
+.ui-notice:where([data-notice="nav"]) { display: flex; align-items: center; gap: var(--row-gap); margin-bottom: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-notice:where([data-notice="nav"]) > :is(svg, .ui-spinner) { width: var(--icon); height: var(--icon); flex: none; }
+.ui-notice:where([data-notice="nav"]) > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-notice:where([data-notice="nav"])[data-ready] { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); color: var(--foreground); }
+.ui-nav-lead > .ui-notice:where([data-notice="nav"]) { margin: 0; }
+/* Tool: a line about the tool's state, its action a word. */
+.ui-notice:where([data-notice="tool"]) { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-notice:where([data-notice="tool"])[data-tone="warn"] { border-bottom: var(--hairline) solid var(--border); color: var(--warn); }
+.ui-notice:where([data-notice="tool"]) > button { border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; text-decoration: underline; }
+.ui-notice:where([data-notice="tool"]) > button:disabled { cursor: wait; opacity: var(--opacity-disabled); }
+/* Header: a capsule of frost, its action a smaller one inside it. */
+.ui-notice:where([data-notice="header"]) { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-round);
+  padding: 0 var(--space-2xs) 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-label); white-space: nowrap; }
+.ui-notice:where([data-notice="header"]) > button { height: calc(var(--control-xs) - 2 * var(--space-2xs)); border: 0; border-radius: var(--radius-round); background: transparent; padding: 0 var(--space-sm);
+  color: var(--foreground); font: inherit; font-weight: var(--weight-strong); cursor: pointer; }
+.ui-notice:where([data-notice="header"]) > button:is(:focus-visible) { background: var(--tint); }
+@media (hover: hover) { .ui-notice:where([data-notice="header"]) > button:is(:hover, :focus-visible) { background: var(--tint); } }
+.ui-notice:where([data-notice="header"]) > button:disabled { color: var(--muted-foreground); cursor: default; }
+@media (--conduit-phone-layout) {
+  .ui-notice:where([data-notice="header"]) { height: var(--control-sm); padding-left: var(--space-lg); font-size: var(--text-caption); }
+  .ui-notice:where([data-notice="header"]) > button { height: calc(var(--control-sm) - 2 * var(--space-2xs)); }
+}

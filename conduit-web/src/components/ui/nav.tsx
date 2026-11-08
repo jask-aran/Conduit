@@ -5,7 +5,9 @@ import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
 import { Button, Spinner } from "./controls";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
+import { cn } from "@/lib/utils";
 import { Row, type RowProps } from "./row";
+import { Loading, Notice } from "./state";
 
 /*
  * Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). Rows rest grey; the cursor (pointer,
@@ -53,10 +55,12 @@ export const NavBrand = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon: JSX.Element; mark?: JSX.Element; meta?: JSX.Element; open: boolean; current?: boolean; within?: boolean;
   link: JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>; toggle: JSX.ButtonHTMLAttributes<HTMLButtonElement> }) {
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
-  return <Row density="nav" bare {...(rest as unknown as RowProps)} class="ui-nav-folder" data-folder-open={local.open ? "" : undefined} open={local.open} current={local.current} within={local.within}>
-    <button type="button" {...local.link} class="ui-nav-link"><span class="ui-row-lead">{local.icon}</span>{local.mark}<span class="ui-row-title">{local.children}</span><Show when={local.meta}><small class="ui-row-meta">{local.meta}</small></Show></button>
-    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight class="ui-fold-chevron" /></button>
-  </Row>;
+  // The link holds the mark and the name, stretched over the whole row (so the icon and the meta are its too); the
+  // chevron sits above it, in the row's end.
+  return <Row density="nav" {...(rest as unknown as RowProps)} class="ui-nav-folder" data-folder-open={local.open ? "" : undefined} open={local.open} current={local.current} within={local.within}
+    lead={local.icon} meta={local.meta}
+    label={<button type="button" {...local.link} class="ui-nav-link">{local.mark}<span class="ui-nav-link-name">{local.children}</span></button>}
+    end={<button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight class="ui-fold-chevron" /></button>} />;
 }
 
 /** A folder: its row, then its rows, which slide open and shut (Expand). Shut, nothing stays in the document. */
@@ -75,10 +79,8 @@ export const NavLead = (props: { server: JSX.Element; actions: JSX.Element; chil
   <div class="ui-nav-lead"><div class="ui-nav-lead-line">{props.server}<div class="ui-nav-lead-actions">{props.actions}</div></div>{props.children}</div>;
 
 
-/** Rows that have not arrived: the shape of a list, still. */
-export const NavSkeleton = (props: { rows: number }) => <div class="ui-nav-skeleton" role="status" aria-label="Loading">
-  <For each={Array.from({ length: props.rows })}>{() => <span />}</For>
-</div>;
+/** Rows that have not arrived: a nav Loading. */
+export const NavSkeleton = (props: { rows: number }) => <Loading kind="nav" rows={props.rows} />;
 
 /** The narrow rail's buttons, shown only while the pane is folded; sections of them sit under a hairline gap. */
 export const NavRail = (props: { label: string; children: JSX.Element }) => <div class="ui-nav-rail" aria-label={props.label}>{props.children}</div>;
@@ -86,13 +88,7 @@ export const NavRailSection = (props: { children: JSX.Element }) => <div class="
 /** One of the rail's buttons: an icon; current as a row is; live: a dot at its corner (something works there). */
 
 /** A state the app is in about itself, above the foot's server (an update): an icon, a line, one action. ready: it waits on a person, so it reads at full strength. */
-export function NavNotice(props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void; quiet?: boolean }; children: JSX.Element }) {
-  return <div class="ui-nav-notice" role="status" data-ready={props.ready ? "" : undefined}>
-    <Show when={props.busy} fallback={props.icon}><Spinner /></Show>
-    <span>{props.children}</span>
-    <Show when={props.action}>{(action) => <Button size="sm" variant={action().quiet ? "ghost" : undefined} onClick={() => action().onClick()}>{action().label}</Button>}</Show>
-  </div>;
-}
+export const NavNotice = (props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void; quiet?: boolean }; children: JSX.Element }) => <Notice kind="nav" {...props} />;
 
 /** A label and its links as icons (the installers). */
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";
@@ -100,5 +96,10 @@ export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "u
 export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: string; tone?: StatusTone; spinning?: boolean; stale?: boolean }) {
   const [local, rest] = splitProps(props, ["label", "tone", "spinning", "stale", "class"]);
   return <span role="status" {...rest} class="ui-status" aria-label={local.label} data-tone={local.tone ?? "muted"} data-stale={local.stale ? "" : undefined}>
-    <Show when={local.spinning} fallback={<span class="ui-status-dot" aria-hidden="true" />}><Spinner /></Show></span>;
+    <Show when={local.spinning} fallback={<Dot />}><Spinner /></Show></span>;
+}
+/** A StatusDot's dot alone, beside what it marks: in its tone, or the colour around it; hidden from readers unless it carries a label. */
+export function Dot(props: JSX.HTMLAttributes<HTMLSpanElement> & { tone?: StatusTone }) {
+  const [local, rest] = splitProps(props, ["tone", "class"]);
+  return <span aria-hidden={rest["aria-label"] ? undefined : "true"} {...rest} class={cn("ui-status-dot", local.class)} data-tone={local.tone} />;
 }

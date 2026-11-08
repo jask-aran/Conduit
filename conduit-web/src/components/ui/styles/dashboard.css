@@ -95,7 +95,7 @@
 /* The section label, as every section heading is (DESIGN.md): Paper Mono capitals, letter-spaced, muted, at rest. */
 .ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: var(--muted-foreground);
   font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); text-overflow: ellipsis; white-space: nowrap; }
-.ui-group-heading small { margin-left: var(--space-md); letter-spacing: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-group-heading .ui-count { margin-left: var(--space-md); }
 .ui-group-heading > span { margin-left: var(--space-md); color: var(--muted-foreground); font-weight: var(--weight-rest); letter-spacing: 0; }
 .ui-group-toggle { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent;
   padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); color: inherit; font: inherit; }
@@ -107,7 +107,7 @@
 .ui-group-action:is(:focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-group-action:is(:hover, :focus-visible, [data-expanded], [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
 .ui-group-action > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-group-action small { margin-left: auto; padding-left: var(--space-lg); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); }
+.ui-group-action .ui-count { margin-left: auto; padding-left: var(--space-lg); }
 .ui-group-actions:where([data-group="dash"] *) > .ui-counts:where([data-counts="list"]) { padding-inline: var(--space-md); font-size: var(--text-caption); }
 
 /* Rows: the sidebar's, at a page. */
@@ -137,8 +137,7 @@
   padding: var(--space-xs) var(--row-inset) var(--space-xs) calc(var(--row-inset) + var(--icon) + var(--row-gap)); color: color-mix(in oklch, var(--foreground), transparent 52%); font-size: var(--text-caption); text-align: left; }
 .ui-dash-more:is(:focus-visible, [data-held]) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-dash-more:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
-.ui-dash-more small { margin-left: var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-empty:where([data-empty="dash"]) { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-dash-more .ui-count { margin-left: var(--space-sm); }
 .ui-note:where([data-note="dash"]) { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-note:where([data-note="dash"])[data-error] { color: var(--destructive); }
 
@@ -174,7 +173,7 @@
 .ui-folder:is(:focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); }
 @media (hover: hover) { .ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); } }
 .ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: var(--control-tool); height: var(--control-tool); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
-.ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: var(--live); }
+.ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); }
 .ui-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: var(--row-text); text-overflow: ellipsis; white-space: nowrap; }
 .ui-folder[data-new] .ui-folder-name { color: var(--muted-foreground); }
 .ui-folder-meta { max-width: 100%; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }

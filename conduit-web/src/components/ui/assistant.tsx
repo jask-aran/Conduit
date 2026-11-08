@@ -1,7 +1,9 @@
 import * as Icons from "./icons";
+import { Dot } from "./nav";
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { Expand } from "./expand";
 import { Row } from "./row";
+import { FoldLine } from "./agents";
 
 /*
  * Assistant: the pieces of an agent that keeps going on its own (docs/plans/persistent-agent.md): how a report
@@ -18,7 +20,7 @@ export const levelWord = (level: string) => LEVEL_WORD[level as ReportLevel] ?? 
  *  text's colour, nothing to say hollow); handled, a quiet check. */
 export const LevelMark = (props: { level: string; handled?: boolean }) =>
   <span class="ui-level" data-level={props.level} data-handled={props.handled ? "" : undefined} role="img" aria-label={props.handled ? "Handled" : levelWord(props.level)}>
-    <Show when={props.handled} fallback={<i />}><Icons.Check /></Show>
+    <Show when={props.handled} fallback={<Dot />}><Icons.Check /></Show>
   </span>;
 
 
@@ -29,9 +31,8 @@ export const LevelMark = (props: { level: string; handled?: boolean }) =>
  */
 export function ReportCard(props: { title: string; line?: string; time?: string; notified?: boolean; onOpen: () => void }) {
   return <button type="button" class="ui-report-card" onClick={() => props.onOpen()}>
-    <span class="ui-report-mark"><Icons.FileText aria-hidden="true" /></span>
-    <span class="ui-report-text"><b class="ui-report-title">{props.title}</b><Show when={props.line}><span class="ui-report-line">{props.line}</span></Show></span>
-    <span class="ui-report-end"><Show when={props.notified}><Icons.Notification aria-label="Sent to your phone" /></Show><Show when={props.time}><time>{props.time}</time></Show><Icons.ChevronRight aria-hidden="true" /></span>
+    <Row density="trail" lead={<Icons.FileText aria-hidden="true" />} label={<b class="ui-report-title">{props.title}</b>} detail={props.line}
+      meta={<span class="ui-report-end"><Show when={props.notified}><Icons.Notification aria-label="Sent to your phone" /></Show><Show when={props.time}><time>{props.time}</time></Show></span>} fold="quarter" />
   </button>;
 }
 
@@ -41,18 +42,11 @@ export function ReportCard(props: { title: string; line?: string; time?: string;
  * exchange (children); it never notifies, having reached the person there already.
  */
 export function RoomRow(props: { icon: JSX.Element; channel: string; room: string; count: number; last?: string; time?: string; children?: JSX.Element }) {
-  const [open, setOpen] = createSignal(false);
-  return <div class="ui-room" data-open={open() ? "" : undefined}>
-    <button type="button" class="ui-room-row" aria-expanded={open()} onClick={() => setOpen(!open())}>
-      <span class="ui-room-mark">{props.icon}</span>
-      <span class="ui-room-head"><span class="ui-room-where">Over {props.channel}</span><b class="ui-room-name">{props.room}</b>
-        <span class="ui-room-count">{props.count} {props.count === 1 ? "message" : "messages"}</span>
-        <Show when={props.last}><span class="ui-room-last">{props.last}</span></Show></span>
-      <Show when={props.time}><time class="ui-room-time">{props.time}</time></Show>
-      <Icons.ChevronDown class="ui-room-fold ui-fold-chevron" data-turn="half" aria-hidden="true" />
-    </button>
-    <Expand open={open()}><div class="ui-room-body">{props.children}</div></Expand>
-  </div>;
+  return <FoldLine folds class="ui-room" rowClass="ui-room-row" lead={props.icon}
+    label={<span class="ui-room-head"><span class="ui-room-where">Over {props.channel}</span><b class="ui-room-name">{props.room}</b>
+      <span class="ui-room-count">{props.count} {props.count === 1 ? "message" : "messages"}</span>
+      <Show when={props.last}><span class="ui-room-last">{props.last}</span></Show></span>}
+    meta={props.time ? <time>{props.time}</time> : undefined} body={(exchange) => <div class="ui-room-body">{exchange}</div>}>{props.children}</FoldLine>;
 }
 
 /** jbot's picture: the Conduit app icon (the same asset the app installs with) until jbot has a look of its own. Sized by

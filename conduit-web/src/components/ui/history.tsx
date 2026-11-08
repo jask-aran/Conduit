@@ -1,5 +1,6 @@
 import * as Icons from "./icons";
 import { Show, splitProps, type JSX } from "solid-js";
+import { Row } from "./row";
 
 
 /** The chat history's scrolling list, with optional text wrapping. */
@@ -17,33 +18,26 @@ type HistoryRowContent = {
   time?: string;
   datetime?: string;
 };
-type HistoryRowProps = HistoryRowContent & (
-  | (Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "classList"> & { run?: false })
-  | (Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class" | "classList"> & { run: true; open: boolean })
-);
+type HistoryRowProps = HistoryRowContent & Omit<JSX.HTMLAttributes<HTMLElement>, "class" | "classList"> & {
+  /** A folded run of tool calls: a button opening just that run. */
+  run?: boolean;
+  open?: boolean;
+};
 
-/** An entry's timestamp and text, or a button for a folded run of tool calls. */
+/** An entry's timestamp and text, or a button for a folded run of tool calls: one Row line in the history's grid. */
 export function HistoryRow(props: HistoryRowProps) {
-  const [local] = splitProps(props, ["kind", "discarded", "active", "leaf", "connected", "time", "datetime", "children", "run"]);
-  const content = () => <>
+  const [local, rest] = splitProps(props, ["kind", "discarded", "active", "leaf", "connected", "time", "datetime", "children", "run", "open"]);
+  return <Row density="trail" bare element={local.run ? "button" : "div"} {...rest} class={local.run ? "ui-history-row ui-history-run" : "ui-history-row"}
+    data-kind={local.kind} data-discarded={local.discarded ? "" : undefined}
+    data-active={local.active ? "" : undefined} data-leaf={local.leaf ? "" : undefined}
+    data-collapsed={local.run && !local.open ? "" : undefined}>
     <Show when={local.connected}><span class="ui-history-tick" aria-hidden="true" /></Show>
     <Show when={local.time}><time class="ui-history-time" datetime={local.datetime}>{local.time}</time></Show>
     <span class="ui-history-text">
-      <Show when={props.run}><Icons.ChevronDown class="ui-history-chevron ui-fold-chevron" data-turn="half" data-open={props.run && props.open ? "" : undefined} aria-hidden="true" /></Show>
+      <Show when={local.run}><Icons.ChevronDown class="ui-history-chevron ui-fold-chevron" data-turn="half" data-open={local.open ? "" : undefined} aria-hidden="true" /></Show>
       {local.children}
     </span>
-  </>;
-  if (props.run) {
-    const [, rest] = splitProps(props, ["kind", "discarded", "active", "leaf", "connected", "time", "datetime", "children", "run", "open"]);
-    return <button type="button" {...rest} class="ui-history-row ui-history-run"
-      data-kind={local.kind} data-discarded={local.discarded ? "" : undefined}
-      data-active={local.active ? "" : undefined} data-leaf={local.leaf ? "" : undefined}
-      data-collapsed={!props.open ? "" : undefined}>{content()}</button>;
-  }
-  const [, rest] = splitProps(props, ["kind", "discarded", "active", "leaf", "connected", "time", "datetime", "children", "run"]);
-  return <div {...rest} class="ui-history-row"
-    data-kind={local.kind} data-discarded={local.discarded ? "" : undefined}
-    data-active={local.active ? "" : undefined} data-leaf={local.leaf ? "" : undefined}>{content()}</div>;
+  </Row>;
 }
 
 /** A side branch's rail and body, with its text's nesting depth. */

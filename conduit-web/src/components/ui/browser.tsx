@@ -9,7 +9,7 @@ export const BrowserSidebar = (props: { children: JSX.Element }) => <aside class
 export const BrowserPlaces = (props: { children: JSX.Element }) => <div class="ui-browser-places">{props.children}</div>;
 export const BrowserMain = (props: { children: JSX.Element }) => <div class="ui-browser-main">{props.children}</div>;
 export const BrowserToolbar = (props: { children: JSX.Element }) => <div class="ui-browser-toolbar">{props.children}</div>;
-export const BrowserCount = (props: { children: JSX.Element }) => <span class="ui-browser-count">{props.children}</span>;
+export const BrowserCount = (props: { children: JSX.Element }) => <small class="ui-count ui-browser-count">{props.children}</small>;
 export const BrowserSummary = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-summary" />;
 export const BrowserSpacer = () => <span class="ui-browser-spacer" />;
 export const BrowserMark = (props: JSX.HTMLAttributes<HTMLSpanElement>) => <span {...props} class="ui-browser-mark" />;

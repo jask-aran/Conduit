@@ -19,7 +19,7 @@ export const headerPage: Page = {
   anatomy: { scene: chat, parts: [
     { selector: ".ui-header-place", name: "Place", does: "the project or workspace the chat sits in; opens it", from: "HeaderCrumb place" },
     { selector: ".ui-header-crumb > :last-child", name: "Title", does: "the chat's name, cut short when the line is full", from: "HeaderCrumb title" },
-    { selector: ".ui-header-note", name: "Note", does: "what the page is, and the one thing to do about it", from: "HeaderNote (after)" },
+    { selector: ".ui-notice[data-notice=header]", name: "Note", does: "what the page is, and the one thing to do about it", from: "HeaderNote (after)" },
     { selector: ".ui-header-group[data-actions]", name: "Actions", does: "quiet icon buttons, each named by its label", from: "HeaderButton (actions)" },
   ] },
   examples: [

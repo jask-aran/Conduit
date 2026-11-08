@@ -1,4 +1,5 @@
 import * as Icons from "./icons";
+import { Dot } from "./nav";
 import { Show, splitProps, type JSX } from "solid-js";
 
 
@@ -37,7 +38,7 @@ export const FileName = (props: { path: string; icon: JSX.Element }) =>
 /** Its git letter: M, A, U, D. */
 export const FileGit = (props: { status: string }) => <code class="ui-file-git" data-status={props.status} title="Git status">{props.status}</code>;
 /** The unsaved dot: there while the file has changes not saved. */
-export const FileDirty = (props: { dirty: boolean }) => <span class="ui-file-dirty" data-dirty={props.dirty ? "" : undefined} aria-hidden="true" />;
+export const FileDirty = (props: { dirty: boolean }) => <Dot tone="warn" class="ui-file-dirty" data-dirty={props.dirty ? "" : undefined} />;
 /** The file's actions (review, copy, download): the ones fitting folds first. */
 /** The editor's tools (find, wrap): they go last, only when the header is bare. */
 /** What a host adds to the header (a comparison's scope); goes with the actions. */

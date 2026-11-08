@@ -7,7 +7,6 @@
 .ui-tour-placement[data-placement="start"] { left: var(--space-2xl); }
 .ui-frost.ui-tour { --overlay-width: var(--measure-xl); width: 100%; }
 .ui-tour .ui-overlay-bar[data-head] { justify-content: space-between; }
-.ui-tour-count { color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-text) var(--font-label); font-variant-numeric: tabular-nums; }
 .ui-tour-body { display: grid; gap: var(--space-md); padding: var(--space-lg); }
 .ui-tour-title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-strong); line-height: var(--leading-text); }
 .ui-tour-text, .ui-tour-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-reading); }

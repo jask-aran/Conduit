@@ -20,7 +20,8 @@
 .ui-lead-input:where([data-lead-input="browser"]) { display: flex; align-items: center; gap: var(--space-xs); flex: 1; min-width: var(--control-lg); max-width: var(--measure-xs); }
 .ui-lead-input:where([data-lead-input="browser"]) > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-lead-input:where([data-lead-input="browser"]) > input { min-width: 0; }
-.ui-browser-count, .ui-browser-summary { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-browser-count { display: inline-flex; align-items: center; gap: var(--space-xs); }
+.ui-browser-summary { display: inline-flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-browser-summary > svg { width: var(--icon); height: var(--icon); }
 .ui-browser-spacer { flex: 1; }
 .ui-browser-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: repeat(auto-fill, minmax(calc(var(--control-lg) * 2), 1fr)); grid-auto-rows: calc(var(--control-lg) * 2); align-content: start; gap: var(--space-2xs); overflow: auto; padding: var(--space-sm); }
@@ -35,8 +36,6 @@
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > :first-child { position: absolute; inset-inline-start: var(--space-sm); width: var(--icon); height: var(--icon); }
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > span { text-align: start; }
 .ui-browser-grid[data-view="details"] .ui-browser-mark { display: none; }
-.ui-empty:where([data-empty="browser"]) { grid-column: 1 / -1; padding: var(--space-lg); text-align: center; color: var(--muted-foreground); }
-.ui-loading:where([data-loading="browser"]) { position: absolute; inset-inline-end: var(--space-sm); inset-block-end: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-note:where([data-note="browser"]) { margin: 0; padding: var(--space-sm); color: var(--destructive); font-size: var(--text-caption); }
 .ui-browser[data-compact] .ui-browser-layout { grid-template-columns: minmax(0, 1fr); }
 .ui-browser[data-compact] :is(.ui-browser-sidebar, .ui-browser-divider) { display: none; }

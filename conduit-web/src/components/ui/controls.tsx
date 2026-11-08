@@ -116,7 +116,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
-      onClick={() => { if (option.value === props.value) return; feel(props.haptic, "select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <small>{option.count}</small>}</button>}</For>
+      onClick={() => { if (option.value === props.value) return; feel(props.haptic, "select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <Count value={option.count} />}</button>}</For>
   </Frost>;
 }
 
@@ -189,3 +189,11 @@ export function Slider(props: { label: string; options: { value: string; label: 
     <div class="ui-slider-ticks" aria-hidden="true"><For each={props.options}>{(_, index) => <i data-reached={index() <= preview() ? "" : undefined} />}</For></div>
   </div>;
 }
+
+/**
+ * Count: how many, beside what it counts -- after a heading, in a control, at a group's foot: the data face's
+ * caption digits, muted. alert: what waits on the person (the warn tone). label: what the number means, when the
+ * words around it do not say.
+ */
+export const Count = (props: { value: number | string; tone?: "alert"; label?: string; class?: string }) =>
+  <small class={cn("ui-count", props.class)} data-tone={props.tone} aria-label={props.label}>{props.value}</small>;

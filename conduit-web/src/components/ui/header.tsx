@@ -1,5 +1,6 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
+import { Notice } from "./state";
 import { createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
 import { createFolds } from "./fit";
 import { PaneMark } from "./row";
@@ -141,11 +142,5 @@ export function HeaderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> 
 }
 
 /** Beside the title: what the page is, when that needs saying, and the one thing to do about it. A capsule of frost. */
-export function HeaderNote(props: { label: string; title?: string; action?: { label: string; name?: string; busy?: boolean; busyLabel?: string; onClick: () => void } }) {
-  return <Frost as="span" class="ui-header-note" title={props.title}>
-    <span>{props.label}</span>
-    <Show when={props.action}>{(action) =>
-      <button type="button" tabIndex={-1} disabled={action().busy} aria-label={action().name ?? action().label} onClick={() => action().onClick()}>{action().busy ? action().busyLabel ?? action().label : action().label}</button>}
-    </Show>
-  </Frost>;
-}
+export const HeaderNote = (props: { label: string; title?: string; action?: { label: string; name?: string; busy?: boolean; busyLabel?: string; onClick: () => void } }) =>
+  <Notice kind="header" hint={props.title} action={props.action}>{props.label}</Notice>;

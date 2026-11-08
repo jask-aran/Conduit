@@ -1,6 +1,7 @@
 import * as Icons from "./icons";
-import { cn } from "@/lib/utils";
 import { children, createSignal, Match, Show, Switch, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
+import { Row } from "./row";
 import { Button, Spinner, StopGlyph } from "./controls";
 import { Expand } from "./expand";
 import { Group } from "./group";
@@ -24,9 +25,29 @@ export const RoutineIcon = (props: { routine?: string }) => <Switch fallback={<I
 </Switch>;
 
 /** A state's mark: a spinner while it works, the agent's glyph once it has finished, a warning when it failed. */
-const Mark = (props: { state: AgentState }) => <span class="ui-agent-mark">
-  <Show when={props.state === "running"} fallback={props.state === "failed" ? <Icons.Warning /> : <Icons.Agent />}><Spinner /></Show>
-</span>;
+const Mark = (props: { state: AgentState }) =>
+  <Show when={props.state === "running"} fallback={props.state === "failed" ? <Icons.Warning /> : <Icons.Agent />}><Spinner /></Show>;
+
+/**
+ * A line that drops down what it holds (Expand under it), or does onOpen when it holds nothing: a Row line, its mark,
+ * its words, data at its end, then beside it, outside its button, anything of its own (after: a jump). AgentLine's,
+ * and a room's (RoomRow). item: drawn as a list item; folds: it opens even while it holds nothing yet.
+ */
+export function FoldLine(props: { item?: boolean; folds?: boolean; class?: string; rowClass?: string; lineClass?: string; attrs?: Record<string, unknown>; lineAttrs?: Record<string, unknown>; lead: JSX.Element; label: JSX.Element; meta?: JSX.Element; after?: JSX.Element; "aria-label"?: string; onOpen?: () => void; bodyClass?: string; body?: (children: JSX.Element) => JSX.Element; children?: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).
+  const body = children(() => props.children);
+  const folds = () => props.folds || !!body();
+  return <Dynamic component={props.item ? "li" : "div"} class={props.class} data-open={open() ? "" : undefined} {...props.attrs}>
+    <div class={props.lineClass} {...props.lineAttrs}>
+      <Row density="trail" element="button" class={props.rowClass} disabled={!folds() && !props.onOpen} aria-expanded={folds() ? open() : undefined}
+        aria-label={props["aria-label"]} onClick={() => folds() ? setOpen(!open()) : props.onOpen?.()}
+        lead={props.lead} label={props.label} meta={props.meta} fold={folds() ? "half" : undefined} />
+      {props.after}
+    </div>
+    <Expand open={open()} class={props.bodyClass}>{props.body ? props.body(body()) : body()}</Expand>
+  </Dynamic>;
+}
 
 /** A turn's subagents, one AgentRow each. */
 export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
@@ -41,15 +62,9 @@ export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
 export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
   const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
-    <button type="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.id ? `${props.id}, ` : ""}${props.title}`} onClick={() => props.onOpen?.()}>
-      <Mark state={props.state} />
-      <span class="ui-agent-copy">
-        <span class="ui-agent-head"><Show when={props.id}><code class="ui-agent-id">{props.id}</code></Show><span class="ui-agent-title">{props.title}</span></span>
-        <span class="ui-agent-line">{line()}</span>
-      </span>
-      <Show when={props.time}><span class="ui-agent-time">{props.time}</span></Show>
-      <Show when={props.onOpen}><Icons.ChevronRight class="ui-agent-chevron" /></Show>
-    </button>
+    <Row density="trail" element="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.id ? `${props.id}, ` : ""}${props.title}`} onClick={() => props.onOpen?.()}
+      lead={<Mark state={props.state} />} label={<span class="ui-agent-head"><Show when={props.id}><code class="ui-agent-id">{props.id}</code></Show><span class="ui-agent-title">{props.title}</span></span>}
+      detail={props.line ? undefined : line()} context={props.line ? line() : undefined} meta={props.time} fold={props.onOpen ? "quarter" : undefined} />
     {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column; `stopRoom` keeps
         it on a row that has none (a foreground agent beside background ones). */}
     <Show when={props.state === "running" && props.onStop} fallback={props.line && (props.onStop || props.stopRoom) ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>
@@ -61,24 +76,16 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
 /** One quiet line for agents taken together, a disclosure of what it holds (Expand under it): the verb, the ids, the
  *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
 function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; keys?: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
-  const [open, setOpen] = createSignal(false);
-  // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).
-  const body = children(() => props.children);
-  return <li class="ui-agent-spawn" data-kind={props.kind} data-spawn={props.kind === "spawn" ? (props.keys || props.ids).join(" ") : undefined}
-    data-open={open() ? "" : undefined} data-quiet={props.quiet ? "" : undefined} {...motionOf(props.motion)}>
-    <div class="ui-agent-row" data-state={props.failed ? "failed" : undefined}>
-      <button type="button" class="ui-agent-open" disabled={!body() && !props.onOpen} aria-expanded={body() ? open() : undefined}
-        aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onClick={() => body() ? setOpen(!open()) : props.onOpen?.()}>
-        <span class="ui-agent-mark">{props.icon || <Icons.Agent />}</span>
-        <span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
-          <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>
-        <Show when={props.status}><span class={props.kind === "run" ? "ui-agent-run-status ui-agent-status" : "ui-agent-line ui-agent-status"}>{props.status}</span></Show>
-        <Show when={body()}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold ui-fold-chevron" data-turn="half" /></Show>
-      </button>
-      <Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>
-    </div>
-    <Expand open={open()} class="ui-agent-started"><ul class="ui-agent-rows">{body()}</ul></Expand>
-  </li>;
+  return <FoldLine item class="ui-agent-spawn" lineClass="ui-agent-row" rowClass="ui-agent-open" bodyClass="ui-agent-started"
+    attrs={{ "data-kind": props.kind, "data-spawn": props.kind === "spawn" ? (props.keys || props.ids).join(" ") : undefined, "data-quiet": props.quiet ? "" : undefined, ...motionOf(props.motion) }}
+    lineAttrs={{ "data-state": props.failed ? "failed" : undefined }}
+    aria-label={`${props.verb} ${props.count || props.ids.join(", ")}${props.title ? `, ${props.title}` : ""}`} onOpen={props.onOpen}
+    lead={props.icon || <Icons.Agent />}
+    label={<span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
+      <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>}
+    meta={props.status ? <span class={props.kind === "run" ? "ui-agent-run-status" : "ui-agent-line"}>{props.status}</span> : undefined}
+    after={<Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>}
+    body={(rows) => <ul class="ui-agent-rows">{rows}</ul>}>{props.children}</FoldLine>;
 }
 
 /**

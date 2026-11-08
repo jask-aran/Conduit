@@ -46,10 +46,10 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
   <AgentRiderGroup label="Background"><AgentRow line id="bg-1" title="Research pricing" state="running" activity="answering" time="1m 12s" onOpen={open} onStop={stop} /></AgentRiderGroup>
 </AgentRider>`,
   anatomy: { scene: () => turn(ROWS.slice(0, 1)), parts: [
-    { selector: ".ui-agent-mark", name: "Mark", does: "a spinner while it works; the agent's glyph, or a warning, after", from: "Spinner · Icons.Agent" },
+    { selector: ".ui-agent-row .ui-row-lead", name: "Mark", does: "a spinner while it works; the agent's glyph, or a warning, after", from: "Spinner · Icons.Agent" },
     { selector: ".ui-agent-title", name: "Task", does: "what it was handed, cut short", from: "title", side: "above" },
-    { selector: ".ui-agent-line", name: "Now", does: "what it is doing, in mono; how it ended, after", from: "activity · state", side: "below" },
-    { selector: ".ui-agent-time", name: "Time", does: "how long it has run", from: "time" }] },
+    { selector: ".ui-agent-row .ui-row-detail", name: "Now", does: "what it is doing, in mono; how it ended, after", from: "activity · state", side: "below" },
+    { selector: ".ui-agent-row .ui-row-meta", name: "Time", does: "how long it has run", from: "time" }] },
   examples: [
     row("AgentRow states", "a turn's own (no id) and background ones (an id, and Stop while they work); finished, failed, stopped", () => turn(ROWS), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentRider", "a chat's background agents on its composer, a line each: mark, id, task, status, time; Stop while it works; past five it scrolls", () => strip(STRIP), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),

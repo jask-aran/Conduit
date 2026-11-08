@@ -22,17 +22,15 @@ export function cssTime(element: Element, name: string, fallback: number) {
 /**
  * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
  * does, so only one row of a list is ever washed. A list's container passes
- * this to onPointerOver; a row is a ui-row (data-highlighted) or a ui-choice (data-active). Only a pointer that hovers
+ * this to onPointerOver; a row is a ui-row, its cursor data-highlighted. Only a pointer that hovers
  * moves it: a tap is a choice, and a cursor it moved stayed on the row tapped, washed, once the list was left.
  */
 export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   if (!hovers(event)) return;
-  const row = (event.target as Element).closest(".ui-row, .ui-choice");
-  if (!row || !event.currentTarget.contains(row) || row.hasAttribute("data-disabled")) return;
-  const attr = row.classList.contains("ui-choice") ? "data-active" : "data-highlighted";
-  if (row.getAttribute(attr) === (attr === "data-active" ? "true" : "")) return;
-  event.currentTarget.querySelectorAll(`[${attr}]`).forEach((other) => other.removeAttribute(attr));
-  row.setAttribute(attr, attr === "data-active" ? "true" : "");
+  const row = (event.target as Element).closest(".ui-row");
+  if (!row || !event.currentTarget.contains(row) || row.hasAttribute("data-disabled") || row.hasAttribute("data-highlighted")) return;
+  event.currentTarget.querySelectorAll("[data-highlighted]").forEach((other) => other.removeAttribute("data-highlighted"));
+  row.setAttribute("data-highlighted", "");
 }
 
 /** A piece's move, drawn by the piece from Foundations · Motion: entering, leaving (back the way it came), removing (fades in place). */

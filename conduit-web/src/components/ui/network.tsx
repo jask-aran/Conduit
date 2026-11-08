@@ -1,6 +1,8 @@
 import { For, Show, type JSX } from "solid-js";
 import * as Icons from "./icons";
-import { StatusDot } from "./nav";
+import { Dot, StatusDot } from "./nav";
+import { Row } from "./row";
+import { Empty } from "./state";
 
 /**
  * A client of the network: an environment (an OS, a WSL distro) whose node makes its folders available, an app or a
@@ -25,12 +27,8 @@ export const clientMark = (client: NetworkClient): JSX.Element => client.headed 
   : client.headed === "browser" ? <Icons.Browser /> : client.headed ? <Icons.Monitor /> : <Icons.Shell />;
 
 function Line(props: { icon: JSX.Element; name: string; meta?: string; online: boolean }) {
-  return <li class="ui-network-line" data-offline={props.online ? undefined : ""}>
-    <span class="ui-network-mark" aria-hidden="true">{props.icon}</span>
-    <span class="ui-network-name">{props.name}</span>
-    <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
-    <StatusDot label={props.online ? "Connected" : "Offline"} tone={props.online ? "success" : "muted"} />
-  </li>;
+  return <li><Row density="line" class="ui-network-line" data-offline={props.online ? undefined : ""} lead={<span class="ui-network-mark" aria-hidden="true">{props.icon}</span>}
+    label={props.name} context={props.meta} end={<StatusDot label={props.online ? "Connected" : "Offline"} tone={props.online ? "success" : "muted"} />} /></li>;
 }
 
 /**
@@ -40,14 +38,14 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
  */
 export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <section class="ui-network-box" data-hub="" aria-label={props.hub.name}>
+    <section class="ui-outline ui-network-box" data-hub="" aria-label={props.hub.name}>
       <Show when={props.hub.device}><h4 class="ui-title">{props.hub.device}</h4></Show>
       <ul><Line icon={<Icons.Server />} name={props.hub.name} meta={props.hub.meta} online /></ul>
     </section>
     <Show when={props.devices.length}>
       <div class="ui-network-spokes">
         <For each={props.devices}>{(device) => <div class="ui-network-spoke" data-offline={device.clients.some((client) => client.online) ? undefined : ""}>
-          <section class="ui-network-box" aria-label={device.name}>
+          <section class="ui-outline ui-network-box" aria-label={device.name}>
             <h4 class="ui-title">{device.name}</h4>
             <ul><For each={device.clients}>{(client) => <Line icon={clientMark(client)} name={client.name} meta={client.meta} online={client.online} />}</For></ul>
           </section>
@@ -65,7 +63,7 @@ export const ClientCards = (props: { label?: string; children: JSX.Element }) =>
  * app, Offline since …), the workspaces it mounts on the network, then its actions along its foot.
  */
 export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
-  return <section class="ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
+  return <section class="ui-outline ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
     <header class="ui-client-head">
       <span class="ui-client-mark" aria-hidden="true">{props.mark ?? clientMark(props.client)}</span>
       <h4>{props.client.name}</h4>
@@ -82,7 +80,7 @@ export function ClientCard(props: { client: NetworkClient; status: string; mark?
 export function ClientPlaces(props: { label?: string; none?: boolean; empty?: string; children?: JSX.Element }) {
   return <>
     <h5>{props.label ?? "Workspaces"}</h5>
-    <Show when={!props.none} fallback={<p class="ui-client-empty">{props.empty ?? "None mounted"}</p>}>{props.children}</Show>
+    <Show when={!props.none} fallback={<Empty kind="client">{props.empty ?? "None mounted"}</Empty>}>{props.children}</Show>
   </>;
 }
 
@@ -99,16 +97,17 @@ export const ChainMap = (props: { label: string; children: JSX.Element }) => <fi
  *  is, at the end. onSelect: the box is chosen by a click (current: the chosen one), and what can be done to it is
  *  beside the chain (ChainLayout's detail), never hidden behind hover. */
 export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; notice?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
-  const inner = () => <>
-    <Show when={props.index != null}><span class="ui-chain-index" aria-hidden="true">{props.index}</span></Show>
-    <Show when={props.notice}><span class="ui-chain-mark" aria-hidden="true"><Icons.ArrowDownLeft /></span></Show>
-    <span class="ui-chain-name">{props.name}<Show when={props.modified}><span class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></span>
-    <Show when={props.meta}><span class="ui-network-meta">{props.meta}</span></Show>
-    <Show when={props.size}><span class="ui-chain-size">{props.size}</span></Show>
-  </>;
+  const parts = () => ({
+    lead: props.index != null || props.notice ? <>
+      <Show when={props.index != null}><span class="ui-chain-index" aria-hidden="true">{props.index}</span></Show>
+      <Show when={props.notice}><span class="ui-chain-mark" aria-hidden="true"><Icons.ArrowDownLeft /></span></Show>
+    </> : undefined,
+    label: <>{props.name}<Show when={props.modified}><Dot tone="unread" class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></>,
+    context: props.meta, meta: props.size,
+  });
   return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-notice={props.notice ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
-    <Show when={props.onSelect} fallback={<div class="ui-chain-line">{inner()}</div>}>
-      <button type="button" class="ui-chain-line ui-chain-open" aria-pressed={Boolean(props.current)} onClick={() => props.onSelect?.()}>{inner()}</button>
+    <Show when={props.onSelect} fallback={<Row density="line" class="ui-chain-line" {...parts()} />}>
+      <Row element="button" density="line" class="ui-chain-line ui-chain-open" aria-pressed={Boolean(props.current)} onClick={() => props.onSelect?.()} {...parts()} />
     </Show>
   </section>;
 }

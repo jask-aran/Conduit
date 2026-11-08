@@ -95,7 +95,6 @@
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (var(--seg-cell) + var(--seg-gap)) * var(--segment)); width: var(--seg-cell); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button svg { width: var(--icon); height: var(--icon); }
-.ui-seg button small { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-seg button:is(:focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
 @media (hover: hover) { .ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); } }
 /* Icons alone (the sidebar's Chat | Work) keep their square target and icon size: only worded segments came down. */
@@ -200,3 +199,6 @@
 .ui-meter-bar > span { min-width: var(--stroke); flex-basis: 0; }
 .ui-meter-mark { position: absolute; top: calc(-1 * var(--space-xs)); width: var(--hairline); height: calc(var(--track-size) + 2 * var(--space-xs)); background: var(--foreground); opacity: var(--opacity-rest); }
 .ui-meter-label { position: absolute; top: calc(var(--track-size) + var(--space-xs)); translate: -100% 0; padding-right: var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
+/* Count (controls.tsx): one voice for every number beside what it counts. */
+.ui-count { color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.ui-count[data-tone="alert"] { color: var(--warn); }

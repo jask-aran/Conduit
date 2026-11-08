@@ -16,14 +16,14 @@
  *   popover         Menu > Section > Item, Match
  *   reading         Reading: a gauge's totals, parts, figures and foot
  *   group           Group, Columns (every titled run of rows; kinds per family)
- *   states          Empty, Loading, Note (kinds per family)
+ *   state           Empty, Loading, Notice (each kind keyed on where it sits); Note (kinds per family)
  *   actions         IconButton, Actions (kinds per family)
  *   row             Row (nav, list, menu densities: the box and voice every row shares)
  *   nav             NavPane > Group > Row, NavFolder, IconButton
  *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
  *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
  *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
- *                   ToolBar, IconButton, LeadInput, ToolNotice, Tree > TreeRow
+ *                   ToolBar, IconButton, LeadInput, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
  *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
@@ -31,8 +31,8 @@
  *   web             WebView > (ToolBar, LeadInput), WebScreen: a page in a pane (the hub's browser)
  *   file, viewer    FilesPane > FilesTree; FileView > PaneHeader, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
  *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
- *   header          Header, HeaderCrumb, HeaderButton, HeaderNote
- *   card, toast     Card, Notice; Toast
+ *   header          Header, HeaderCrumb, HeaderButton
+ *   card, toast     Card (frost or .ui-outline); Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   network         NetworkMap: devices, their environments and clients, hung from the head's
  *   leader          Leader, Crumbs, Spotlight
@@ -68,6 +68,7 @@ import "./fade.css";
 import "./orb.css";
 import "./row.css";
 import "./popover.css";
+import "./state.css";
 import "./reading.css";
 import "./nav.css";
 import "./dashboard.css";

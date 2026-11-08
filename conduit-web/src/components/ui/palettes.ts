@@ -10,13 +10,13 @@ export const paletteColour = (palette: Palette, colour: string) => `var(--${pale
 
 const named = (...ids: string[]) => ids.map((id) => ({ id, label: id.split("-").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ") }));
 
-export const CATPPUCCIN_MOCHA: Palette = { id: "catppuccin-mocha", label: "Catppuccin Mocha", source: "catppuccin.com/palette, its accents",
+const CATPPUCCIN_MOCHA: Palette = { id: "catppuccin-mocha", label: "Catppuccin Mocha", source: "catppuccin.com/palette, its accents",
   colours: named("rosewater", "flamingo", "pink", "mauve", "red", "peach", "yellow", "green", "teal", "sky", "sapphire", "blue", "lavender") };
-export const ONE_DARK: Palette = { id: "one-dark", label: "One Dark", source: "Atom's One Dark, with a terminal's brights and Conduit's terminal ground",
+const ONE_DARK: Palette = { id: "one-dark", label: "One Dark", source: "Atom's One Dark, with a terminal's brights and Conduit's terminal ground",
   colours: named("foreground", "comment", "red", "orange", "yellow", "green", "cyan", "blue", "purple", "invalid", "invalid-text",
     "black", "white", "bright-black", "bright-red", "bright-green", "bright-yellow", "bright-blue", "bright-purple", "bright-cyan", "bright-white",
     "ground", "text", "cursor", "selection") };
-export const CONDUIT_CATEGORIES: Palette = { id: "conduit-categories", label: "Conduit categories", source: "Conduit's own: nine hues at one lightness",
+const CONDUIT_CATEGORIES: Palette = { id: "conduit-categories", label: "Conduit categories", source: "Conduit's own: nine hues at one lightness",
   colours: named("violet", "slate", "azure", "amber", "coral", "rose", "gold", "jade", "clay") };
 export const PALETTES = [CATPPUCCIN_MOCHA, ONE_DARK, CONDUIT_CATEGORIES] as const;
 

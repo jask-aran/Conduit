@@ -1,18 +1,14 @@
 /* NetworkMap: the hub, and every device hung from it. A box is the one outline the map draws (a hairline, no fill:
    what groups is the machine, not a card); its clients are lines in the row's voice. */
 .ui-network { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
-.ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-sm); list-style: none; }
+.ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; padding: var(--space-sm); list-style: none; }
 .ui-network-box:has(> .ui-title) { padding-top: var(--space-md); }
 .ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.ui-network-line { display: flex; min-height: var(--row-min); align-items: center; gap: var(--row-gap); padding: 0 var(--space-sm); font-size: var(--text-row); }
 .ui-network-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
 .ui-network-mark > svg { width: var(--icon); height: var(--icon); }
-.ui-network-name { flex: none; white-space: nowrap; }
-.ui-network-box[data-hub] .ui-network-name { font-weight: var(--weight-strong); }
-.ui-network-line[data-offline] > .ui-network-name { color: var(--muted-foreground); }
-.ui-network-meta { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
-.ui-network-line > .ui-status { flex: none; margin-left: auto; padding-left: var(--space-md); }
+.ui-network-box[data-hub] .ui-network-line > .ui-row-title { font-weight: var(--weight-strong); }
+.ui-network-line[data-offline] > .ui-row-title { color: var(--muted-foreground); }
 /* The lines: a stem down from the hub to a bus, the bus over the spokes, a drop into each. The bus sits
    --space-md below the hub; a spoke starts --space-xl below it; each spoke draws its stretch of the bus (to the next
    one across the gap), the first from its centre, the last to its centre. */
@@ -30,7 +26,7 @@
 /* ClientCards: outlined as the map's boxes are (a hairline, no fill: only a row's wash fills), as many to a line as
    fit. A card: its head (mark, name in the label's voice, dot), what it says, facts, workspaces, actions at its foot. */
 .ui-client-cards { margin-block: var(--space-xs) var(--space-md); display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--measure-sm), 1fr)); gap: var(--space-sm); }
-.ui-client-card { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); padding: var(--space-md); font-size: var(--text-caption); }
+.ui-client-card { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); padding: var(--space-md); font-size: var(--text-caption); }
 .ui-client-head { display: flex; align-items: center; gap: var(--space-sm); }
 .ui-client-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
 .ui-client-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
@@ -40,7 +36,6 @@
 .ui-client-places { display: grid; margin-top: var(--space-xs); }
 .ui-client-places > h5 { margin-bottom: var(--space-2xs); }
 .ui-client-places .ui-row:where([data-density="nav"]) { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
-.ui-client-empty { margin: 0; color: var(--muted-foreground); }
 .ui-client-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: auto; padding-top: var(--space-xs); margin-inline: calc(-1 * var(--space-sm)); }
 
 /* ChainMap: the map's boxes stacked down one line. Every part is the column's width (a measure, never wider than the
@@ -48,23 +43,22 @@
 .ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
 .ui-chain > :not(.ui-chain-gap) { width: min(100%, var(--measure-lg)); }
 .ui-chain-box { gap: 0; padding-block: var(--space-xs); }
-.ui-chain-line { display: flex; min-width: 0; min-height: var(--row-min); flex: 1; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); text-align: left; }
+.ui-chain-line { min-width: 0; flex: 1; }
+.ui-chain-line > .ui-row-title { display: inline-flex; align-items: center; gap: var(--space-xs); }
 /* A link is chosen by a click: no wash when pointed at (the chosen one is the only wash), a ring on keyboard focus. */
 button.ui-chain-open { cursor: pointer; }
 button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--muted-foreground); outline-offset: calc(-1 * var(--stroke-thin)); }
-.ui-chain-name { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-chain-index { flex: none; min-width: var(--icon-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
-.ui-chain-modified { width: var(--space-xs); height: var(--space-xs); border-radius: 50%; background: var(--status-unread); }
-.ui-chain-size { flex: none; margin-left: auto; padding-left: var(--space-md); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-chain-link { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
 .ui-chain-link[data-live] { border-style: dashed; }
 /* A notice: something Conduit writes into the thread later, not part of the prompt -- an inbound mark before its name. */
 .ui-chain-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
 .ui-chain-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-chain-link[data-live] .ui-chain-name { color: var(--muted-foreground); }
+.ui-chain-link[data-live] .ui-chain-line > .ui-row-title { color: var(--muted-foreground); }
 .ui-chain-link[data-current] { border-color: var(--muted-foreground); background: var(--tint); }
 /* The line between two links; a break's label stands in the line, which stops either side of it. */
 .ui-chain-gap { width: 0; height: var(--space-lg); border-left: var(--hairline) solid var(--tint); }
 .ui-chain-break { display: flex; flex-direction: column; align-items: center; }
 .ui-chain-break::before, .ui-chain-break::after { height: var(--space-md); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-chain-break > .ui-title { margin: 0; padding: var(--space-2xs) var(--space-sm); }
+.ui-chain-modified { --dot: var(--space-xs); }

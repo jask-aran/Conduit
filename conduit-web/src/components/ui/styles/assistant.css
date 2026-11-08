@@ -3,11 +3,10 @@
 
 /* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
 .ui-level { display: grid; width: var(--icon-sm); height: var(--icon-sm); place-items: center; color: var(--foreground); }
-.ui-level > i { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
 .ui-level[data-level="fyi"] { color: var(--muted-foreground); }
 .ui-level[data-level="attention"] { color: var(--warn); }
 .ui-level:is([data-level="urgent"], [data-level="failed"]) { color: var(--destructive); }
-.ui-level[data-level="none"] > i { border: var(--stroke-thin) solid var(--muted-foreground); background: transparent; }
+.ui-level[data-level="none"] > .ui-status-dot { border: var(--stroke-thin) solid var(--muted-foreground); background: transparent; }
 .ui-level[data-handled] { color: var(--muted-foreground); }
 .ui-level > svg { width: 100%; height: 100%; }
 
@@ -41,28 +40,25 @@
 .ui-report-card { display: flex; width: min(100%, var(--measure-xl)); min-width: 0; align-items: center; gap: var(--space-md); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); padding: var(--space-md) var(--space-lg); color: var(--foreground); text-align: left; cursor: pointer; transition: border-color var(--duration-quick) var(--ease-change); }
 @media (hover: hover) { .ui-report-card:hover { border-color: var(--muted-foreground); } }
 .ui-report-card:focus-visible { outline: none; border-color: var(--foreground); }
-.ui-report-mark { display: grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-report-mark > svg { width: 100%; height: 100%; }
-.ui-report-text { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-2xs); }
-.ui-report-title { overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-lift); line-height: var(--leading-row); text-overflow: ellipsis; white-space: nowrap; }
-.ui-report-line { overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); text-overflow: ellipsis; white-space: nowrap; }
-.ui-report-end { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+/* Its row is a Row line inside the card (the card is its box and its wash): the mark the full icon, the title in the
+   row's lift, its chevron always shown. */
+.ui-report-card > .ui-row { padding: 0; }
+.ui-report-card .ui-row-lead { width: var(--icon); height: var(--icon); }
+.ui-report-title { font-weight: var(--weight-lift); }
+.ui-report-card .ui-row-fold { opacity: 1; }
+.ui-report-end { display: inline-flex; align-items: center; gap: var(--space-xs); }
 .ui-report-end > svg { width: var(--icon-sm); height: var(--icon-sm); }
 
 /* Another room's messages in jbot's stream, folded: one quiet line, opening in place to the exchange. */
 .ui-room { display: flex; min-width: 0; flex-direction: column; }
-.ui-room-row { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control); background: none; padding: var(--space-2xs) var(--space-sm); margin-inline: calc(-1 * var(--space-sm)); color: var(--muted-foreground); font-size: var(--text-row); line-height: var(--leading-row); text-align: left; cursor: pointer; }
-@media (hover: hover) { .ui-room-row:hover { background: var(--tint); } }
-.ui-room-row:focus-visible { outline: none; background: var(--tint); }
-.ui-room-mark { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; }
-.ui-room-mark > svg { width: 100%; height: 100%; }
-.ui-room-head { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: var(--space-sm); overflow: hidden; white-space: nowrap; }
-.ui-room-where { flex: none; }
-.ui-room-name { flex: none; max-width: 40%; overflow: hidden; color: var(--foreground); font-weight: var(--weight-lift); text-overflow: ellipsis; }
-.ui-room-count { flex: none; font-size: var(--text-caption); }
-.ui-room-last { min-width: 0; overflow: hidden; font-size: var(--text-caption); opacity: var(--opacity-muted); text-overflow: ellipsis; }
-.ui-room-time { flex: none; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-room-fold { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
+/* Its line is a Row line (row.css), muted, bleeding past the column by its padding; its fold always shown. */
+.ui-room-row { width: calc(100% + 2 * var(--space-sm)); margin-inline: calc(-1 * var(--space-sm)); gap: var(--space-sm); color: var(--muted-foreground); }
+.ui-room-row > .ui-row-fold { opacity: 1; }
+.ui-room-head { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); }
+.ui-room-head > * { flex: none; }
+.ui-room-name { max-width: 40%; overflow: hidden; color: var(--foreground); font-weight: var(--weight-lift); text-overflow: ellipsis; }
+.ui-room-count { font-size: var(--text-caption); }
+.ui-room-head > .ui-room-last { min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: var(--text-caption); opacity: var(--opacity-muted); text-overflow: ellipsis; }
 .ui-room-body { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-sm) 0 var(--space-xs) calc(var(--icon-sm) + var(--space-sm)); }
 
 /* jbot's picture, in an icon's place: its box, the app icon's own rounding. */

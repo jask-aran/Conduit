@@ -1,6 +1,7 @@
 import * as Icons from "./icons";
 import { Show, untrack, type JSX } from "solid-js";
 import { Expand } from "./expand";
+import { Count } from "./controls";
 
 /**
  * Group: a titled run of rows or lines -- Settings' groups and columns, the sidebar's, a workbench's side sections, a
@@ -77,10 +78,10 @@ export const Columns = (props: { kind?: "setting" | "card" | "browser"; children
 
 /** A dash group's heading: the strong one, sentence case, with a count in data. The quiet label is the other kinds'. */
 export function GroupHeading(props: { id?: string; count?: number | string | null; children: JSX.Element }) {
-  return <h2 id={props.id} class="ui-group-heading">{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></h2>;
+  return <h2 id={props.id} class="ui-group-heading">{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></h2>;
 }
 /** A heading that folds its group: the chevron turns as it opens. */
 export function GroupToggle(props: { id?: string; open: boolean; count?: number | string | null; onClick: () => void; children: JSX.Element }) {
   return <h2 id={props.id} class="ui-group-heading"><button type="button" class="ui-group-toggle" aria-expanded={props.open} onClick={() => props.onClick()}>
-    <Icons.ChevronRight class="ui-fold-chevron" />{props.children}<Show when={props.count != null}><small>{props.count}</small></Show></button></h2>;
+    <Icons.ChevronRight class="ui-fold-chevron" />{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></button></h2>;
 }

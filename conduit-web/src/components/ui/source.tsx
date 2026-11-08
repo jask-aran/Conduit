@@ -1,5 +1,6 @@
 import { For, Show, splitProps, type JSX } from "solid-js";
-import { Button } from "./controls";
+import { Row, type RowProps } from "./row";
+import { Button, Count } from "./controls";
 
 /*
  * Source control (DESIGN Panes and windows): the branch's line, the commit box, the staged and unstaged groups of
@@ -9,10 +10,7 @@ import { Button } from "./controls";
 
 /** A tool's status line under its header: a mark, the strong name and a muted detail; controls at its end. */
 export function ToolLine(props: { icon?: JSX.Element; title: JSX.Element; detail?: JSX.Element; end?: JSX.Element }) {
-  return <div class="ui-tool-line">
-    <span class="ui-tool-line-main">{props.icon}<strong>{props.title}</strong><Show when={props.detail}><small>{props.detail}</small></Show></span>
-    <Show when={props.end}><span class="ui-tool-line-end">{props.end}</span></Show>
-  </div>;
+  return <Row density="line" class="ui-tool-line" lead={props.icon} label={props.title} context={props.detail} end={props.end} />;
 }
 
 /** The commit box: a message that grows with what is typed, and the commit button (its count under the word). */
@@ -31,7 +29,7 @@ export function CommitBox(props: {
     <textarea aria-label="Commit message" placeholder={props.placeholder} rows="1" value={props.value}
       onInput={(event) => { const input = event.currentTarget; props.onInput(input.value); input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; }}
       onKeyDown={(event) => { if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-    <Button type="submit" variant="primary" size="sm" disabled={props.disabled}>{props.busy ? props.busyIcon : props.icon}<span>Commit</span><Show when={props.count}><small>{props.count}</small></Show></Button>
+    <Button type="submit" variant="primary" size="sm" disabled={props.disabled}>{props.busy ? props.busyIcon : props.icon}<span>Commit</span><Show when={props.count}><Count value={props.count!} /></Show></Button>
   </form>;
 }
 
@@ -47,12 +45,9 @@ export const ChangeItem = (props: { action?: JSX.Element; children: JSX.Element 
 /** A commit: the graph's column, the subject and its refs (HEAD's lit), the author, the short hash. A context menu's trigger takes it with `as`. */
 export function CommitRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { graph: string; subject: string; refs?: { label: string; current?: boolean; kind?: string }[]; author: string; hash: string }) {
   const [local, rest] = splitProps(props, ["graph", "subject", "refs", "author", "hash"]);
-  return <button type="button" {...rest} class="ui-commit">
-    <code class="ui-commit-graph" aria-hidden="true">{local.graph}</code>
-    <span class="ui-commit-subject"><span>{local.subject}</span><Show when={local.refs?.length}><span class="ui-commit-refs"><For each={local.refs}>{(ref) => <code data-kind={ref.kind} data-current={ref.current ? "" : undefined}>{ref.label}</code>}</For></span></Show></span>
-    <small>{local.author}</small>
-    <code class="ui-commit-hash">{local.hash}</code>
-  </button>;
+  return <Row {...(rest as RowProps)} element="button" density="line" class="ui-commit" lead={<code class="ui-commit-graph" aria-hidden="true">{local.graph}</code>}
+    label={<><span>{local.subject}</span><Show when={local.refs?.length}><span class="ui-commit-refs"><For each={local.refs}>{(ref) => <code data-kind={ref.kind} data-current={ref.current ? "" : undefined}>{ref.label}</code>}</For></span></Show></>}
+    context={local.author} meta={local.hash} />;
 }
 export const CommitList = (props: { children: JSX.Element }) => <div class="ui-commit-list">{props.children}</div>;
 

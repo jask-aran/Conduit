@@ -58,7 +58,6 @@
 .ui-overlay-hints button:is(:focus-visible) { outline: none; background: var(--tint); }
 @media (hover: hover) { .ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); } }
 .ui-overlay-hints > b { color: var(--foreground); font-weight: var(--weight-strong); white-space: nowrap; }
-.ui-empty:where([data-empty="overlay"]) { margin: 0; padding: var(--space-2xl) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); text-align: center; }
 /* The phone's bar of actions, in the hints' place: a desktop has the hints. */
 .ui-actions:where([data-actions="overlay"]) { display: none; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
@@ -104,7 +103,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
    (a button's tint, a field's line, a switch's border). The wash is for rows that are one action (the rail, a list). */
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
 .ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
-.ui-recorder-dot { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); background: var(--destructive); animation: ui-recorder-pulse var(--duration-pulse) ease-in-out infinite; }
+.ui-recorder-dot { animation: ui-recorder-pulse var(--duration-pulse) ease-in-out infinite; }
 @keyframes ui-recorder-pulse { 50% { opacity: var(--opacity-faint); } }
 @media (prefers-reduced-motion: reduce) { .ui-recorder-dot { animation: none; } }
 .ui-recorder-prompt { color: var(--muted-foreground); }
@@ -159,7 +158,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
    inside itself rather than making the page as long as the text. */
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
-.ui-loading:where([data-loading="setting"]) { display: flex; align-items: center; gap: var(--row-gap); padding: var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
 /* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
 .ui-overlay-page-head > .ui-overlay-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-overlay-status { display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-row); }
@@ -217,7 +215,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-body > .ui-answer { --answer-gap: var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-glance-body > .ui-answer :is(h1, h2, h3, h4) { color: var(--foreground); font-size: inherit; font-weight: var(--weight-lift); }
 .ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }
-.ui-empty:where([data-empty="glance"]) { margin: 0; padding-top: var(--space-4xl); text-align: center; }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
 
 /* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */

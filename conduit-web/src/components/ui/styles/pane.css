@@ -40,7 +40,6 @@
 @media (hover: hover) { .ui-tab:hover .ui-tab-open { color: var(--foreground); } }
 .ui-tab[data-lit] .ui-tab-open { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-tab[data-none] .ui-tab-open { color: var(--muted-foreground); font-weight: var(--weight-rest); }
-.ui-tab-live { width: var(--space-sm); height: var(--space-sm); flex: none; border-radius: var(--radius-round); background: var(--live); }
 /* The × takes room only on the lit tab; on another it lays over the title's end with the pointer, so unlit tabs
    sit close within their place. */
 .ui-tab-close { display: inline-flex; width: var(--control-2xs); height: var(--control-2xs); flex: none; align-items: center; justify-content: center; margin-right: var(--space-2xs);
@@ -125,9 +124,6 @@
   .ui-pane-header:where([data-header="tool"]) [data-only="desktop"] { display: none; }
 }
 
-.ui-empty:where([data-empty="pane"]) { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }
-.ui-loading:where([data-loading="pane"]) { position: absolute; inset: auto var(--space-lg) var(--space-lg) auto; display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-round);
-  padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 
 /* A tool's strips and its tree: the file tree, its filter and actions, a folded tree's rail. */
 .ui-tool-bar { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; padding: var(--space-xs) var(--space-sm); border-bottom: var(--hairline) solid var(--border); }
@@ -149,29 +145,13 @@
 .ui-lead-input:where([data-lead-input="tool"]) > input:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 @media (hover: hover) { .ui-lead-input:where([data-lead-input="tool"]) > input:hover { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); } }
 .ui-lead-input:where([data-lead-input="tool"]) > input::placeholder { color: var(--muted-foreground); }
-.ui-tool-notice { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-tool-notice[data-tone="warn"] { border-bottom: var(--hairline) solid var(--border); color: var(--warn); }
-.ui-tool-notice > button { border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; text-decoration: underline; }
-.ui-tool-notice > button:disabled { cursor: wait; opacity: var(--opacity-disabled); }
 .ui-tree { min-height: var(--control-lg); flex: 1; overflow: auto; overscroll-behavior: contain; padding: var(--space-sm) var(--space-2xs); }
-.ui-tree-row { display: flex; width: 100%; min-height: var(--control-tool); align-items: center; gap: var(--space-sm); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth) * .875) * var(--u-space)); color: var(--muted-foreground); font-size: var(--text-row); text-align: left; }
-.ui-tree-row:is([data-selected]) { background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-tree-row:is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); } }
-.ui-tree-row:focus { outline: 0; }
-.ui-tree-row:focus-visible { outline: var(--hairline) solid var(--ring); outline-offset: calc(-1 * var(--hairline)); }
-.ui-tree-row > svg, .ui-tree-row > img { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
 .ui-tree-row[data-open-file] { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-tree-row[data-open-file="focused"] { font-weight: var(--weight-current); }
-.ui-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-tree-name + svg { width: var(--icon-xs); height: var(--icon-xs); margin-left: auto; color: var(--muted-foreground); }
-.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); }
+/* A folder's chevron sits a step closer to its icon. */
+.ui-tree-chevron { margin-right: calc(-1 * var(--space-xs)); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
-/* An empty tool with a mark, a title and a line under it. */
-.ui-empty:where([data-empty="pane"]) > div { display: grid; max-width: var(--measure-md); justify-items: center; gap: var(--space-sm); }
-.ui-empty:where([data-empty="pane"]) svg { width: var(--icon-lg); height: var(--icon-lg); }
-.ui-empty:where([data-empty="pane"]) strong { color: var(--foreground); }
-.ui-empty:where([data-empty="pane"]) p { margin: 0; line-height: var(--leading-text); }
 
 /* An empty pane's Home: a column centred in the pane, its pieces (head, actions, groups) the library's own. */
 /* Above the middle, where the eye lands (two parts above, three below); the head's status line in data, the groups
@@ -195,8 +175,6 @@
   .ui-lead-input:where([data-lead-input="tool"]) > svg { left: var(--space-md); }
   .ui-lead-input:where([data-lead-input="tool"]) > input { height: var(--space-4xl); padding-left: var(--space-4xl); font-size: var(--text-row); }
   .ui-tool-bar[data-vertical] { gap: var(--space-xs); padding-block: var(--space-sm); }
-  .ui-tree-row { min-height: var(--control); gap: var(--space-sm); font-size: var(--text-row); }
-  .ui-tree-row > svg, .ui-tree-row > img, .ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); }
 }
 /* The tree scrolls on the native bar, its thumb the shared one. */
 .ui-tree { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
@@ -206,3 +184,4 @@
 /* DropOverlay: over the pane's content (its own stacking), the card at its centre. */
 .ui-drop-overlay { position: absolute; inset: 0; z-index: var(--layer-drop); display: grid; place-items: center; pointer-events: none; background: var(--fog); backdrop-filter: var(--fog-blur); }
 .ui-drop-overlay-card { padding: var(--space-xl) var(--space-2xl); border-radius: var(--radius-surface); font-size: var(--text-row); }
+.ui-tab-live { --dot: var(--space-sm); }

@@ -1,5 +1,6 @@
 import { Show, type JSX } from "solid-js";
 import { Note } from "./state";
+import { Row } from "./row";
 
 /*
  * A workbench: a page that works on one thing at a time (Settings › Prompts: a document; Blocks: a block). Its title
@@ -21,9 +22,8 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element }) 
 </div>;
 /** A titled group in the side column (Used in, Slots). */
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
-export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) => <div class="ui-workbench-fact" title={props.title}>
-  {props.code ? <code>{props.name}</code> : <span>{props.name}</span>}<Show when={props.value}><span class="ui-workbench-fact-value">{props.value}</span></Show>{props.children}
-</div>;
+export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) =>
+  <Row density="line" class="ui-workbench-fact" title={props.title} label={props.code ? <code>{props.name}</code> : props.name} context={props.value} end={props.children} />;
 
 /** A quiet line in a Group or under a title: what there is none of, or what follows (Conduit then adds…). */
 

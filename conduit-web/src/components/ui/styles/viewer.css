@@ -17,7 +17,6 @@
 .ui-file-changes { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .ui-file-changes > :not(.ui-pane-header:where([data-header="file"])) { min-height: 0; flex: 1; }
 .ui-file-scope { flex: none; color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-empty:where([data-empty="file"]) { display: flex; flex: 1; align-items: center; justify-content: center; color: var(--muted-foreground); }
 .ui-file-divider { position: absolute; top: 0; bottom: 0; z-index: 6; width: var(--space-md); margin-left: calc(-1 * var(--space-xs)); cursor: col-resize; touch-action: none; }
 .ui-file-divider[data-dragging] { background: linear-gradient(to right, transparent calc(50% - var(--hairline)), var(--ring) calc(50% - var(--hairline)), var(--ring) 50%, transparent 50%); }
 @media (hover: hover) { .ui-file-divider:hover { background: linear-gradient(to right, transparent calc(50% - var(--hairline)), var(--ring) calc(50% - var(--hairline)), var(--ring) 50%, transparent 50%); } }

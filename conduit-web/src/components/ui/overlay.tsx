@@ -1,4 +1,5 @@
 import { Frost } from "./frost";
+import { Dot } from "./nav";
 import * as Icons from "./icons";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { haptic } from "./haptics";
@@ -182,7 +183,7 @@ export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: 
   const capture = () => Boolean(props.onKeyDown);
   return <div ref={props.ref} class="ui-setting-recorder" role={capture() ? "application" : "status"} aria-live={capture() ? undefined : "polite"} aria-label={props.label} tabIndex={capture() ? 0 : undefined}
     onKeyDown={(event) => { if (event.target === event.currentTarget) props.onKeyDown?.(event); }}>
-    <span class="ui-recorder-dot" aria-hidden="true" />
+    <Dot tone="danger" class="ui-recorder-dot" />
     <Show when={props.keys?.length} fallback={<span class="ui-recorder-prompt">Press a shortcut</span>}>
       <Keycap class="ui-recorder-keys">{props.keys!.join(" ")}</Keycap>
     </Show>

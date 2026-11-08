@@ -56,8 +56,12 @@
 .ui-row-end:where([data-density="nav"] *) { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-row-end:where([data-density="nav"] *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
-.ui-nav-link { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
-.ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
+.ui-nav-folder { position: relative; }
+.ui-nav-link { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
+.ui-nav-link::after { position: absolute; inset: 0; content: ""; }
+.ui-nav-link-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-nav-folder > .ui-row-end { position: relative; }
+.ui-nav-toggle { display: grid; width: 100%; height: 100%; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 @media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
 
@@ -107,12 +111,6 @@
 .ui-nav-folder-body { contain: layout paint; }
 
 .ui-note:where([data-note="nav"]) { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-/* Static: nothing here is worth an animation. */
-.ui-nav-skeleton { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-xs) var(--space-md) var(--space-sm); }
-.ui-nav-skeleton > span { height: var(--space-lg); border-radius: var(--radius-inset); background: var(--border); }
-.ui-nav-skeleton > span:nth-child(2n) { width: 72%; }
-.ui-nav-skeleton > span:nth-child(3n) { width: 58%; }
-
 /* The rail: shown only while the pane is folded, when the list's other rows are away. */
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
@@ -123,13 +121,7 @@
 .ui-icon-button:where([data-icon-button="rail"])[data-count]::before { position: absolute; top: 0; right: 0; min-width: var(--icon-sm); height: var(--icon-sm); box-sizing: border-box;
   padding: 0 var(--space-2xs); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--warn); color: var(--frame);
   font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: calc(var(--icon-sm) - 2 * var(--stroke-thin)); font-variant-numeric: tabular-nums; text-align: center; content: attr(data-count); }
-.ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
-
-/* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */
-.ui-nav-notice { display: flex; align-items: center; gap: var(--row-gap); margin-bottom: var(--space-xs); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); padding: var(--space-xs) var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); }
-.ui-nav-notice > :is(svg, .ui-spinner) { width: var(--icon); height: var(--icon); flex: none; }
-.ui-nav-notice > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-nav-notice[data-ready] { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); color: var(--foreground); }
+.ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--status-success); content: ""; }
 
 /* Folded to the rail: the head stacks (its switch too), the brand, the list's rows and the links go, and the rail's
    buttons fade in once the edge has moved. */
@@ -172,17 +164,17 @@
 .ui-nav-lead-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-nav-lead-line > :first-child { min-width: 0; flex: 1; }
 .ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
-.ui-nav-lead > .ui-nav-notice { margin: 0; }
 
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-status-dot { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
-.ui-status[data-tone="success"] { color: var(--status-success); }
-.ui-status[data-tone="active"] { color: var(--muted-foreground); }
-.ui-status[data-tone="warn"] { color: var(--status-warn); }
-.ui-status[data-tone="danger"] { color: var(--destructive); }
-.ui-status[data-tone="unread"] { color: var(--status-unread); }
+/* A dot's size is --dot: the icon-dot by default; a tab's or a file's smaller mark sets its own. */
+.ui-status-dot { width: var(--dot, var(--icon-dot)); height: var(--dot, var(--icon-dot)); flex: none; border-radius: var(--radius-round); background: currentColor; }
+:is(.ui-status, .ui-status-dot)[data-tone="success"] { color: var(--status-success); }
+:is(.ui-status, .ui-status-dot)[data-tone="active"] { color: var(--muted-foreground); }
+:is(.ui-status, .ui-status-dot)[data-tone="warn"] { color: var(--status-warn); }
+:is(.ui-status, .ui-status-dot)[data-tone="danger"] { color: var(--destructive); }
+:is(.ui-status, .ui-status-dot)[data-tone="unread"] { color: var(--status-unread); }
 .ui-status[data-stale] { opacity: var(--opacity-muted); }
 /* PaneMark (row.tsx): the pane a chat is open in, at the row's end; its showing tab at the foreground. */
 .ui-pane-mark { color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/1 var(--font-data); letter-spacing: 0; }

@@ -47,7 +47,6 @@
   animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-xs)); }
 .ui-connection-status-mark { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-connection-status-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-connection-status[data-state="found"] .ui-status-dot { background: var(--status-success); }
 .ui-connection-status[data-state="missing"] .ui-connection-status-mark { color: var(--destructive); }
 .ui-connection-status > strong { flex: none; color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-connection-status[data-state="checking"] > strong { color: var(--muted-foreground); font-weight: var(--weight-rest); }

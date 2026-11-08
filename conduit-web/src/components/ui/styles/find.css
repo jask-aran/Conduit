@@ -6,7 +6,7 @@
   display: flex; width: min(var(--measure-md), calc(100% - 2 * var(--space-xl))); align-items: center; gap: var(--space-2xs);
   border-radius: var(--radius-surface); padding: var(--frost-inset); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-md)); }
 .ui-find-bar > .ui-lead-input { flex: 1; }
-.ui-find-count { flex: none; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption)/1 var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ui-find-count { flex: none; padding-inline: var(--space-xs); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .ui-frost.ui-find-bar { animation: none; } }
 @media (--conduit-phone-layout) { .ui-frost.ui-find-bar { width: calc(100% - 2 * var(--space-lg)); } }
 

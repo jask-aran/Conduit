@@ -33,7 +33,6 @@
    row by a step so text never touches its edge. Paint only, on that row alone: no geometry moves and nothing inside
    restyles. */
 .ui-transcript-row[data-focus-shown] { border-radius: var(--radius-surface); background: var(--tint); box-shadow: 0 0 0 var(--space-md) var(--tint); }
-.ui-loading-earlier { display: flex; justify-content: center; }
 /* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
    what either is. Drawn row by row the row says so (TranscriptRow `flow`); composed of parts, the parts do: a reply
    under its message, a message after a reply, the next part of one reply. A part with no relation (the first) has none. */

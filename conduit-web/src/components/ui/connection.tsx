@@ -1,7 +1,7 @@
 import * as Icons from "./icons";
 import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
 import { CircleAlertIcon } from "lucide-solid";
-import { StatusDot } from "./nav";
+import { Dot, StatusDot } from "./nav";
 import { Button, Input, Spinner } from "./controls";
 
 export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
@@ -40,7 +40,7 @@ export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElemen
 /** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
 export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {
   return <p class="ui-connection-status" data-state={props.state} role={props.state === "missing" ? "alert" : "status"}>
-    <span class="ui-connection-status-mark" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <span class="ui-status-dot" /> : <CircleAlertIcon />}><Spinner /></Show></span>
+    <span class="ui-connection-status-mark" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <Dot tone="success" /> : <CircleAlertIcon />}><Spinner /></Show></span>
     <strong>{props.title}</strong><Show when={props.detail}><small title={props.detail}>{props.detail}</small></Show>
   </p>;
 }

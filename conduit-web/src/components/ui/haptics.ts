@@ -89,7 +89,7 @@ function scaledEffect(effect: HapticEffect): { steps: Step[]; weight: string } |
 export function hapticSteps(kind: Haptic) { return touchOnly() ? scaledEffect(HAPTIC_EFFECT[kind]) : null; }
 
 /** Plays an effect token at this device's strength (the gallery plays them directly). */
-export function playEffect(effect: HapticEffect) {
+function playEffect(effect: HapticEffect) {
   const scaledOne = scaledEffect(effect);
   if (!scaledOne) return;
   const { steps: scaled, weight } = scaledOne;

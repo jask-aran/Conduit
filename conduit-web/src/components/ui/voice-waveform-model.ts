@@ -5,7 +5,7 @@ const VOICE_LEVEL_PEAK_GAIN = 4;
 const VOICE_PEAK_RMS_GAIN = 3.2;
 const VOICE_PEAK_GAIN = 1.6;
 
-export const clampVoiceLevel = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
+const clampVoiceLevel = (value: number) => Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
 
 export function normalizeVoiceLevel(level: { rms: number; peak: number }) {
   return clampVoiceLevel(Math.max(level.rms * VOICE_LEVEL_RMS_GAIN, level.peak * VOICE_LEVEL_PEAK_GAIN));

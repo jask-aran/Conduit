@@ -6,7 +6,7 @@ import { Decoration, drawSelection, EditorView, highlightSpecialChars, keymap, l
 import { tags } from "@lezer/highlight";
 import { createCodeSearchPanel } from "./code-search-panel";
 
-export const editorTheme = EditorView.theme({
+const editorTheme = EditorView.theme({
   "&": {
     height: "100%",
     backgroundColor: "transparent",
@@ -116,7 +116,7 @@ export const editorTheme = EditorView.theme({
   },
 }, { dark: true });
 
-export const codeHighlightStyle = HighlightStyle.define([
+const codeHighlightStyle = HighlightStyle.define([
   { tag: tags.content, color: "var(--code-foreground)" },
   { tag: tags.punctuation, color: "var(--code-foreground)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment, tags.quote], color: "var(--code-comment)", fontStyle: "italic" },

@@ -5,7 +5,7 @@
 export const MOBILE_LAYOUT_BREAKPOINT_PX = 760;
 
 /** Query for a primary pointer with touch input and no hover. */
-export const TOUCH_ONLY_QUERY = "(hover: none) and (pointer: coarse)";
+const TOUCH_ONLY_QUERY = "(hover: none) and (pointer: coarse)";
 
 /** Whether the primary pointer has touch input and no hover. */
 export const touchOnly = () => typeof matchMedia === "function" && matchMedia(TOUCH_ONLY_QUERY).matches;

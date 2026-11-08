@@ -1,7 +1,8 @@
 // Every element's computed style (and ::before/::after) across two gallery builds, every family at both densities plus
 // the phone, phone sidebar and desktop previews, animations held at frame 0. Build each with
 // `npx vite build --mode gallery --outDir <dir>`, then: node scripts/probes/gallery-style-diff.mjs <dirA> <dirB>
-// --ignore --a,--b leaves custom properties a change meant to rename; --keys lists every differing element's path.
+// --ignore --a,--b leaves custom properties a change meant to rename; --keys lists every differing element's path;
+// --no-class keys elements by tag and place alone, for a change that only moves rules onto other classes.
 // The live mic level, the aura's level, a wave's bars and the servers' origins are left out: they differ run to run.
 import http from "node:http";
 import fs from "node:fs/promises";
@@ -29,12 +30,12 @@ const browser = await launchHeadless(chromium);
 const origins = [await serve(a), await serve(b)];
 
 // Every element: a path key and its full computed style (pseudo ::before/::after too).
-const dumpScript = (ignore) => {
+const dumpScript = ([ignore, noClass]) => {
   document.getAnimations().forEach((x) => { try { x.pause(); x.currentTime = 0; } catch {} });
   const out = {};
-  const key = (el) => { const parts = []; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { let i = 0; for (let s = e; (s = s.previousElementSibling);) i++; parts.push(`${e.tagName.toLowerCase()}.${[...e.classList].filter((c) => !c.startsWith("solid")).join(".")}[${i}]`); } return parts.reverse().join(">"); };
+  const key = (el) => { const parts = []; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { let i = 0; for (let s = e; (s = s.previousElementSibling);) i++; parts.push(noClass ? `${e.tagName.toLowerCase()}[${i}]` : `${e.tagName.toLowerCase()}.${[...e.classList].filter((c) => !c.startsWith("solid")).join(".")}[${i}]`); } return parts.reverse().join(">"); };
   const read = (cs) => { const r = []; for (let i = 0; i < cs.length; i++) { const p = cs[i]; if (p === "--voice-level" || p === "--aura-level" || ignore.includes(p)) continue; r.push(`${p}:${cs.getPropertyValue(p).replace(/http:\/\/127\.0\.0\.1:\d+/g, "ORIGIN")}`); } return r.join("\n"); };
-  for (const el of document.querySelectorAll("*")) { if (el.matches(".ui-pill-wave > i")) continue;
+  for (const el of document.querySelectorAll("body *")) { if (el.matches(".ui-pill-wave > i")) continue;
     const k = key(el);
     out[k] = read(getComputedStyle(el));
     for (const pseudo of ["::before", "::after"]) { const cs = getComputedStyle(el, pseudo); if (cs.content && cs.content !== "none") out[k + pseudo] = read(cs); }
@@ -71,11 +72,11 @@ for (const family of families.filter((name) => !ONLY.length || ONLY.includes(nam
   const pages = await Promise.all(origins.map((o) => page(o, setup)));
   if (density === "phone") for (const p of pages) { for (const btn of await p.$$('.g-cell-toggle button:text-is("Phone")')) await btn.click(); await p.waitForTimeout(800); }
   if (family === families[0] && density === "desktop") for (const p of pages) { for (const v of ["Phone sidebar", "Desktop"]) await p.click(`.g-toggle button:text-is("${v}")`); await p.waitForTimeout(2000); }
-  const dumps = await Promise.all(pages.map((p) => p.evaluate(dumpScript, IGNORE)));
+  const dumps = await Promise.all(pages.map((p) => p.evaluate(dumpScript, [IGNORE, flag("--no-class")])));
   total += compare(`${family} · ${density}`, dumps[0], dumps[1]);
   if (family === families[0] && density === "desktop") for (const name of ["Phone", "Phone sidebar"]) {
     const frames = await Promise.all(pages.map(async (p) => (await p.$(`iframe[title="${name}"]`))?.contentFrame()));
-    if (frames.every(Boolean)) { const d = await Promise.all(frames.map((f) => f.evaluate(dumpScript, IGNORE))); total += compare(`preview ${name}`, d[0], d[1]); }
+    if (frames.every(Boolean)) { const d = await Promise.all(frames.map((f) => f.evaluate(dumpScript, [IGNORE, flag("--no-class")]))); total += compare(`preview ${name}`, d[0], d[1]); }
   }
   await Promise.all(pages.map((p) => p.context().close()));
 }

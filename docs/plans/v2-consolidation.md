@@ -52,10 +52,20 @@ once. Tick a family when every listed build goes through its single piece and th
 
 ## Progress
 
-- [ ] 1 Heads
-- [ ] 2 Dismiss and motion
-- [ ] 3 Frost
-- [ ] 4 Fold / unfold
+- [x] 1 Heads (688a25bb): PanelHead + createFolds (fit.ts) for PanelHead and PaneHeader tool/term; CloseButton
+  (actions.tsx) for every head's x; OverlayRail/OverlayPage share OverlayPageHead. Left: Card's head (bare h3/p
+  under .ui-card), OverlayHead (a bar of free children), Approval's (no close).
+- [x] 2 Dismiss and motion (688a25bb): createDismiss (dismiss.ts) for Tray and Ledge; one rise/drop rule for raised
+  frost (frost.css); one dim paint (overlay.css); overlay reads motion.ts. Left: element-scoped Escape ladders
+  (find, composer, menus' sub-menu back, viewfinder) stay on their elements; Tray/Backdrop/Scrim keep their own
+  fades (data-open, data-fade with the drawer's drag, motionOf).
+- [x] 3 Frost (688a25bb): Tray, Ledge, header pills and count through <Frost>; one --fog-blur; popover's restated
+  frost gone. Left: header groups are frost on a phone only, so header.css draws the recipe there; the phone
+  header block is written twice (@media phone and [data-presentation="phone"], jbot's dock column), as CSS cannot
+  OR a media query with a selector.
+- [x] 4 Fold / unfold (688a25bb): one .ui-fold-chevron rule (foundations.css) for ten; Trace, Step, Envelope and
+  Group's change fold through Expand. Left: rider Line is a clamp that grows, not a body that comes and goes;
+  SettingDetails is a native <details>.
 - [ ] 5 Rows
 - [ ] 6 Counts, dots, chips
 - [ ] 7 Cards and notices

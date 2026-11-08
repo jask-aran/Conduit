@@ -26,7 +26,7 @@ export function TourCard(props: {
   return <div class="ui-tour-placement" data-placement={props.placement ?? "end"} role="region" aria-label={props.label}
     onMouseDown={(event) => event.preventDefault()}>
     <Overlay embedded label={props.label} class="ui-tour" motion={props.motion}>
-      <OverlayHead><span class="ui-title">{props.label}</span><span class="ui-tour-count">{props.step} / {props.steps}</span></OverlayHead>
+      <OverlayHead><span class="ui-title">{props.label}</span><small class="ui-count ui-tour-count">{props.step} / {props.steps}</small></OverlayHead>
       <div class="ui-tour-body" aria-live="polite">
         <h3 class="ui-tour-title">{props.title}</h3>
         <p class="ui-tour-text">{props.children}</p>

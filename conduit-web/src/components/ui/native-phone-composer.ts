@@ -20,7 +20,7 @@ function bezier(value: string): Bezier {
   return [a, b, c, d];
 }
 /** Live Foundations tokens; no native timing constants. */
-export function motionSpec(element: Element = document.documentElement) {
+function motionSpec(element: Element = document.documentElement) {
   return { quick: duration("--duration-quick", element), gentle: duration("--duration-gentle", element),
     arrive: bezier(easing("--ease-arrive", element)), leave: bezier(easing("--ease-leave", element)),
     change: bezier(easing("--ease-change", element)), room: bezier(easing("--ease-room", element)), reducedMotion: reducedMotion() };
