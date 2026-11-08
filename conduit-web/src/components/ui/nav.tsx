@@ -55,8 +55,7 @@ export const NavBrand = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon: JSX.Element; mark?: JSX.Element; meta?: JSX.Element; open: boolean; current?: boolean; within?: boolean;
   link: JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>; toggle: JSX.ButtonHTMLAttributes<HTMLButtonElement> }) {
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
-  // The link holds the mark and the name, stretched over the whole row (so the icon and the meta are its too); the
-  // chevron sits above it, in the row's end.
+  // The link is stretched over the whole row (its icon and meta are the link's too); the chevron sits above it.
   return <Row density="nav" {...(rest as unknown as RowProps)} class="ui-nav-folder" data-folder-open={local.open ? "" : undefined} open={local.open} current={local.current} within={local.within}
     lead={local.icon} meta={local.meta}
     label={<button type="button" {...local.link} class="ui-nav-link">{local.mark}<span class="ui-nav-link-name">{local.children}</span></button>}

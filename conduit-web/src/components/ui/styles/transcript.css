@@ -69,7 +69,6 @@
 .ui-envelope-head > time + .ui-envelope-open { margin-left: 0; }
 .ui-envelope-open > svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-envelope-open:focus-visible { outline: none; background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-envelope-open:hover { background: var(--tint); color: var(--foreground); } }
 .ui-envelope-rule { display: grid; justify-items: start; gap: var(--flow-attached); margin-left: calc((var(--icon-sm) - var(--hairline)) / 2); border-left: var(--hairline) solid var(--border); padding-left: calc(var(--icon-sm) / 2 - var(--hairline) / 2 + var(--row-gap)); }
 .ui-envelope-text { justify-self: stretch; min-width: 0; }
 .ui-envelope[data-direction="in"] .ui-envelope-text { --foreground: var(--muted-foreground); color: var(--muted-foreground); }
@@ -169,7 +168,7 @@
 /* A citation: a chip carrying the host, the whole URL on its title; a run of them after one claim is one cluster. */
 .ui-answer [data-citation] { display: inline-flex; max-width: 14em; align-items: baseline; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round); padding: 0 var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); text-decoration: none; text-overflow: ellipsis; vertical-align: baseline; white-space: nowrap; }
 .ui-answer [data-citation]:is(:focus-visible) { background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-answer [data-citation]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); } }
+@media (hover: hover) { .ui-envelope-open:hover, .ui-answer [data-citation]:is(:hover, :focus-visible) { background: var(--tint); color: var(--foreground); } }
 .ui-answer [data-citation] + [data-citation] { margin-left: var(--space-2xs); }
 .ui-answer hr { border: 0; border-top: var(--hairline) solid var(--tint); }
 .ui-answer table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--text-row); }

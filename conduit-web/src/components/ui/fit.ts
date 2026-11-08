@@ -1,12 +1,8 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 
-/**
- * createFolds: a strip that gives way by measure, never by a tuned width. It has `steps` folds (the first given up
- * first); while what it holds overflows it takes the next, keeping the width it needed, and gives each back once it is
- * that wide again. over: how much is cut (default: how far it overflows; a header whose parts truncate counts what they
- * cut). content: a change to what it holds measures it again from unfolded (another view's name and modes).
- * Use: `<header ref={folds.ref}>`; folds.count() is how many are taken.
- */
+/** A strip that gives way by measure, never a tuned width: while it overflows (or `over` says how much is cut) it takes
+ *  its next of `steps` folds, keeping the width it needed, and gives each back once that wide again; content: a change
+ *  to what it holds measures it again unfolded. `ref` it; count() is how many are taken. */
 export function createFolds(steps: number, options: { over?: (element: HTMLElement) => number; content?: boolean } = {}): {
   ref: (element: HTMLElement) => void;
   count: Accessor<number>;

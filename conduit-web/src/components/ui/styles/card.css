@@ -17,10 +17,8 @@
 .ui-card { position: relative; }
 /* Outline: an outlined box on its ground (an outline Card, a client's card, the network map's boxes): a hairline, no fill. */
 .ui-outline { border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); }
-/* Compact: a card in a thread (an approval); row: one row in a stream (a report). */
 .ui-card[data-size="compact"] { --card-edge: var(--space-lg); --card-gap: var(--space-lg); width: min(100%, var(--measure-lg)); }
 .ui-card[data-size="row"] { padding: var(--space-md) var(--space-lg); }
-/* A card that is one press: its line answers hover and focus. */
 button.ui-outline { color: var(--foreground); text-align: left; cursor: pointer; transition: border-color var(--duration-quick) var(--ease-change); }
 @media (hover: hover) { button.ui-outline:hover { border-color: var(--muted-foreground); } }
 button.ui-outline:focus-visible { outline: none; border-color: var(--foreground); }

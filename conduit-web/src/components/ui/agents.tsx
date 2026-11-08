@@ -28,11 +28,8 @@ export const RoutineIcon = (props: { routine?: string }) => <Switch fallback={<I
 const Mark = (props: { state: AgentState }) =>
   <Show when={props.state === "running"} fallback={props.state === "failed" ? <Icons.Warning /> : <Icons.Agent />}><Spinner /></Show>;
 
-/**
- * A line that drops down what it holds (Expand under it), or does onOpen when it holds nothing: a Row line, its mark,
- * its words, data at its end, then beside it, outside its button, anything of its own (after: a jump). AgentLine's,
- * and a room's (RoomRow). item: drawn as a list item; folds: it opens even while it holds nothing yet.
- */
+/** A trail Row that drops down what it holds (or does onOpen), `after` beside it outside its button: AgentLine's and
+ *  RoomRow's. item: a list item; folds: it opens while it holds nothing yet. */
 export function FoldLine(props: { item?: boolean; folds?: boolean; class?: string; rowClass?: string; lineClass?: string; attrs?: Record<string, unknown>; lineAttrs?: Record<string, unknown>; lead: JSX.Element; label: JSX.Element; meta?: JSX.Element; after?: JSX.Element; "aria-label"?: string; onOpen?: () => void; bodyClass?: string; body?: (children: JSX.Element) => JSX.Element; children?: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
   // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).

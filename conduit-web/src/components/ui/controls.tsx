@@ -190,10 +190,6 @@ export function Slider(props: { label: string; options: { value: string; label: 
   </div>;
 }
 
-/**
- * Count: how many, beside what it counts -- after a heading, in a control, at a group's foot: the data face's
- * caption digits, muted. alert: what waits on the person (the warn tone). label: what the number means, when the
- * words around it do not say.
- */
+/** How many, beside what it counts: muted caption digits in the data face; alert: what waits on the person. */
 export const Count = (props: { value: number | string; tone?: "alert"; label?: string; class?: string }) =>
   <small class={cn("ui-count", props.class)} data-tone={props.tone} aria-label={props.label}>{props.value}</small>;

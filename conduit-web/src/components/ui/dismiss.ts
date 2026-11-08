@@ -1,11 +1,7 @@
 import { createEffect, onCleanup } from "solid-js";
 
-/**
- * createDismiss: how an open piece is put away from outside it, one way for every panel and bar. While open(), Esc
- * closes it (in the capture phase, ahead of the app's own Escape, and only if nothing has taken the key); with
- * `inside`, so does a press anywhere outside the nodes it gives (its own, and what it keeps live: the composer under a
- * Ledge). A piece with its own rungs of the Escape ladder passes onEscape instead of closing at once.
- */
+/** While open: Esc (captured ahead of the app's, if untaken) closes it, or runs onEscape; with `inside`, so does a
+ *  press outside those nodes (its own, and what it keeps live: the composer under a Ledge). */
 export function createDismiss(props: {
   open: () => boolean;
   onClose: () => void;

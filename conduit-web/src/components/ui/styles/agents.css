@@ -5,8 +5,7 @@
 .ui-agent-rows { display: flex; flex-direction: column; gap: var(--space-2xs); margin: var(--space-xs) 0 0; padding: 0; list-style: none; }
 .ui-agent-row { display: flex; min-width: 0; align-items: center; gap: var(--space-2xs); }
 .ui-agent-row[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
-/* Its line is a Row line (row.css) bleeding past the column by its padding, so its mark sits on the column's edge;
-   the room a stop or a jump takes after it is not bled into. */
+/* Its line bleeds past the column by its padding, so its mark sits on the column's edge (not into a stop's room). */
 .ui-agent-open { flex: 1; width: calc(100% + 2 * var(--space-sm)); margin-inline: calc(-1 * var(--space-sm)); }
 .ui-agent-row > .ui-agent-open:not(:last-child) { margin-right: 0; }
 .ui-agent-row:not([data-line]) > .ui-agent-open { padding-block: var(--space-xs); }
@@ -19,8 +18,7 @@
 .ui-agent-open :is(.ui-row-detail, .ui-row-context), .ui-agent-line { font-family: var(--font-code); font-weight: var(--weight-rest); line-height: normal; }
 li.ui-agent-row .ui-row-meta { opacity: var(--opacity-muted); }
 .ui-agent-stop { flex: none; color: var(--muted-foreground); }
-/* A background spawn: one line, the verb in the row's weight, the ids in data type, the task muted after them. What
-   it drops down sits under the task, indented once. */
+/* A background spawn: the verb, the ids in data type, the task muted; what it drops down indented once. */
 .ui-agent-spawn { display: flex; flex-direction: column; }
 .ui-agent-started > .ui-agent-rows { margin: 0 0 var(--space-xs); padding-left: calc(var(--icon-sm) + var(--row-gap)); }
 .ui-agent-run-status { font-family: var(--font-sans); font-weight: var(--weight-rest); }
@@ -39,8 +37,7 @@ span.ui-agent-stop { width: var(--control-sm); }
 /* On one line the stop fits the row rather than setting its height: running and ended rows are one height. */
 .ui-agent-row[data-line] .ui-agent-stop { height: auto; align-self: stretch; }
 
-/* One line: the status after the task, at the row's gap; the task takes a fixed share, so every row's status starts in
-   one column whatever the task's width. */
+/* One line: the task takes a fixed share, so every row's status starts in one column. */
 .ui-agent-row[data-line] .ui-row-title { flex: 0 0 50%; }
 .ui-agent-spawn .ui-agent-title, .ui-agent-spawn[data-quiet], .ui-agent-row:not([data-state="running"]) .ui-agent-title { color: var(--muted-foreground); }
 

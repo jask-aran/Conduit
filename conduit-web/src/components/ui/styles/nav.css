@@ -61,7 +61,6 @@
 .ui-nav-folder, .ui-nav-folder > .ui-row-end { position: relative; }
 .ui-nav-toggle { display: grid; width: 100%; height: 100%; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
-@media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
@@ -72,7 +71,7 @@
 .ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-icon-button:where([data-icon-button="rail"])[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-row:where([data-density="nav"])[data-open] { color: var(--foreground); }
 .ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); }
-@media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); } }
+@media (hover: hover) { .ui-nav-toggle:hover, .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [aria-current="page"], [data-within]) .ui-row-lead:where([data-density="nav"] *) { color: var(--foreground); } }
 :is(.ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-icon-button:where([data-icon-button="rail"])[aria-current="page"]) svg.lucide { stroke-width: 3; }
 /* While the keyboard moves the cursor, a row under a still pointer rests until the pointer moves: only the cursor
    is washed. An override, not pointer-events: Chromium keeps :hover on an element that stops taking the pointer. */

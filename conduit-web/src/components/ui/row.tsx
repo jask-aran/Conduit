@@ -13,9 +13,7 @@ import * as Icons from "./icons";
  *
  * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own, a
  * label when its click is its control's.
- * line: a light line in a list of facts (a commit, a choice, a network's client), its title whole, its context after;
- * trail: a line in a trail or a room's list (an agent's, a room's, a run's), washed under the pointer, its fold shown
- * then; tree: a file tree's, indented by depth.
+ * line: a fact's (a commit, a choice, a client); trail: an agent's, a room's, a run's; tree: a file's, by depth.
  *
  * bare: the children are the row's whole inside (a composition with parts of its own: a menu item, a folder's row).
  * A row that is a button or a link is felt as select when tapped on a phone; haptic overrides it (false: none).

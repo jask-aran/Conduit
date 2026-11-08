@@ -1,7 +1,4 @@
-/*
- * States (state.tsx): Empty, Loading and Notice, each kind keyed on where it sits ([data-empty], [data-loading],
- * [data-notice]). A Note's kinds stay with their families.
- */
+/* States (state.tsx): Empty, Loading and Notice, each kind keyed on where it sits. */
 
 /* Empty. */
 .ui-empty:where([data-empty="pane"]) { display: grid; min-height: calc(4 * var(--row-min)); flex: 1; place-items: center; padding: var(--space-xl); color: var(--muted-foreground); font-size: var(--text-caption); text-align: center; }

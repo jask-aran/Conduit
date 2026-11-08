@@ -139,14 +139,13 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 @media (hover: hover) { .ui-setting-state-link:hover { color: var(--foreground); } }
 .ui-setting-link { white-space: nowrap; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
 .ui-setting-link:is(:focus-visible) { outline: none; color: var(--foreground); }
-@media (hover: hover) { .ui-setting-link:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
 .ui-note:where([data-note="setting"]) { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-note:where([data-note="setting"])[data-tone="error"] { color: var(--destructive); }
 .ui-setting-details { padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); }
 .ui-setting-details > summary { width: fit-content; list-style: none; cursor: pointer; }
 .ui-setting-details > summary::-webkit-details-marker { display: none; }
 .ui-setting-details > summary:is(:focus-visible) { outline: none; color: var(--foreground); }
-@media (hover: hover) { .ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
+@media (hover: hover) { .ui-setting-link:is(:hover, :focus-visible), .ui-setting-details > summary:is(:hover, :focus-visible) { outline: none; color: var(--foreground); } }
 .ui-setting-details :is(ol, p) { margin: var(--space-xs) 0 0; }
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }

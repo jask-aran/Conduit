@@ -324,19 +324,14 @@
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
 /* Expand: what opens and shuts in place under its row; only its height moves (expand.tsx). */
 .ui-expand { overflow: hidden; overflow-anchor: none; }
-/* A fold's chevron: it turns as what it opens opens -- a quarter (right to down), or half (data-turn=half, down to up).
-   Open is its control's aria-expanded, or data-open on the chevron itself. */
+/* A fold's chevron turns as its control opens (aria-expanded, or its own data-open): a quarter, or data-turn=half. */
 .ui-fold-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open]) { rotate: 90deg; }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open])[data-turn="half"] { rotate: 180deg; }
 
-/* Utilities: the recipes many pieces share, added on the element rather than written per piece. They sit early in the
-   cascade, so a piece's own later rule still wins. ui-icon is the menu's icon slot (popover.css), so sizes are ui-size-icon. */
-/* Truncate: one line, cut with an ellipsis. */
+/* Utilities, early in the cascade so a piece's own rule still wins: one line cut short, an icon's box, the wash. */
 .ui-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* An icon-sized box, the row icon or the small one. */
 .ui-size-icon { width: var(--icon); height: var(--icon); }
 .ui-size-icon-sm { width: var(--icon-sm); height: var(--icon-sm); }
-/* The wash: the tint on keyboard focus, and on hover where there is one. */
 [data-wash]:focus-visible { background: var(--tint); }
 @media (hover: hover) { [data-wash]:hover { background: var(--tint); } }

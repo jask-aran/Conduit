@@ -63,11 +63,8 @@ export function Actions(props: JSX.HTMLAttributes<HTMLElement> & { kind?: Action
     {...(rest as Record<string, unknown>)} class="ui-actions" data-actions={kind()} data-stack={local.stack ? "" : undefined} />;
 }
 
-/**
- * CloseButton: the one × that puts a piece away (Close, Dismiss, Remove). Where it sits sets its size, as any button's:
- * a kind, an IconButton's (pane: a panel's or pane's head; tool: a bar's; file: a file header's); else size, a quiet
- * Button's (sm: a card's or an overlay's head; xs: a toast's, a chip's). Felt as dismiss.
- */
+/** The one × that puts a piece away, felt as dismiss: kind, an IconButton's (a head's, a bar's, a file's); else size,
+ *  a quiet Button's (sm: a card's or overlay's head; xs: a toast's). */
 export function CloseButton(props: { onClick: (event: MouseEvent) => void; label?: string; title?: string; kind?: IconButtonKind; size?: "sm" | "xs";
   class?: string; disabled?: boolean; tabIndex?: number; onMouseDown?: (event: MouseEvent) => void }) {
   const label = () => props.label ?? "Close";

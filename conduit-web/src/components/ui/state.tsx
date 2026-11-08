@@ -28,11 +28,11 @@ export type LoadingKind = "setting" | "pane" | "browser" | "nav" | "earlier";
 /** Still loading: said as a status. rows: how many still rows a nav Loading draws. label: its name, when it has no words. */
 export function Loading(props: { kind?: LoadingKind; rows?: number; label?: string; children?: JSX.Element }) {
   const kind = props.kind ?? "setting";
-  if (kind === "nav") return <div class="ui-loading" data-loading="nav" role="status" aria-label={props.label ?? "Loading"}><For each={Array.from({ length: props.rows ?? 0 })}>{() => <span />}</For></div>;
-  if (kind === "earlier") return <div class="ui-loading" data-loading="earlier" role="status" aria-label={props.label}><Spinner /></div>;
-  if (kind === "pane") return <Frost class="ui-loading" data-loading="pane" role="status">{props.children}</Frost>;
-  if (kind === "browser") return <div class="ui-loading" data-loading="browser" role="status">{props.children}</div>;
-  return <div class="ui-loading" data-loading="setting"><Spinner />{props.children}</div>;
+  return <Dynamic component={kind === "pane" ? Frost : "div"} class="ui-loading" data-loading={kind} role={kind === "setting" ? undefined : "status"}
+    aria-label={kind === "nav" ? props.label ?? "Loading" : props.label}>
+    <Show when={kind === "setting" || kind === "earlier"}><Spinner /></Show>
+    <Show when={kind === "nav"} fallback={props.children}><For each={Array.from({ length: props.rows ?? 0 })}>{() => <span />}</For></Show>
+  </Dynamic>;
 }
 
 /** Where a Note sits: under a setting, in a dashboard group, on a card, in a menu, in the sidebar, in a workbench's
@@ -49,31 +49,24 @@ export function Note(props: JSX.HTMLAttributes<HTMLElement> & { kind?: NoteKind;
     data-error={kind() !== "setting" && local.tone === "error" ? "" : undefined} />;
 }
 
-/** Where a Notice sits: a pane's reading column (a warning's icon, a strong line and what it means, on a card ground),
- *  the sidebar's foot (an update: an icon or a spinner, a line, a small button), a tool's strip (a muted or warn line,
- *  its action a word), a header's note (a frost capsule, its action a smaller one inside). */
+/** Where a Notice sits: a reading column (on a card ground), the sidebar's foot, a tool's strip, beside a header's title
+ *  (a frost capsule). */
 export type NoticeKind = "reading" | "nav" | "tool" | "header";
 export type NoticeAction = { label: string; name?: string; busy?: boolean; busyLabel?: string; disabled?: boolean; quiet?: boolean; onClick: () => void };
 
-/** A state worth a line where it sits: its icon, its line (title in reading, else children), what it means (children in
- *  reading), one action. busy: a spinner for the icon. ready: it waits on a person (full strength). tone warn: a
- *  tool's warning. live: said politely as it changes. hint: the whole, on hover. */
+/** A line worth saying where it sits, with one action: busy, a spinner for its icon; ready, it waits on a person; live,
+ *  said politely as it changes; hint, the whole on hover. In reading, title is the line and children what it means. */
 export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: JSX.Element; busy?: boolean; ready?: boolean; tone?: "warn"; live?: boolean; hint?: string; action?: NoticeAction; children?: JSX.Element }) {
   const kind = props.kind ?? "reading";
-  if (kind === "reading") return <div class="ui-notice" data-notice="reading" role="note">{props.icon}<div><strong>{props.title}</strong><Show when={props.children}><p>{props.children}</p></Show></div></div>;
-  if (kind === "nav") return <div class="ui-notice" data-notice="nav" role="status" data-ready={props.ready ? "" : undefined}>
+  const act = (action: NoticeAction) => kind === "nav"
+    ? <Button size="sm" variant={action.quiet ? "ghost" : undefined} onClick={() => action.onClick()}>{action.label}</Button>
+    : <button type="button" tabIndex={kind === "header" ? -1 : undefined} disabled={action.busy || action.disabled} aria-label={kind === "header" ? action.name ?? action.label : undefined}
+      onClick={() => action.onClick()}>{action.busy ? action.busyLabel ?? action.label : action.label}</button>;
+  return <Dynamic component={kind === "header" ? Frost : "div"} as={kind === "header" ? "span" : undefined} class="ui-notice" data-notice={kind} title={props.hint}
+    role={kind === "reading" ? "note" : kind === "nav" || props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}
+    data-ready={props.ready ? "" : undefined} data-tone={props.tone}>
     <Show when={props.busy} fallback={props.icon}><Spinner /></Show>
-    <span>{props.children}</span>
-    <Show when={props.action}>{(action) => <Button size="sm" variant={action().quiet ? "ghost" : undefined} onClick={() => action().onClick()}>{action().label}</Button>}</Show>
-  </div>;
-  if (kind === "tool") return <div class="ui-notice" data-notice="tool" data-tone={props.tone} role={props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}>
-    {props.children}
-    <Show when={props.action}>{(action) => <button type="button" disabled={action().disabled} onClick={() => action().onClick()}>{action().label}</button>}</Show>
-  </div>;
-  return <Frost as="span" class="ui-notice" data-notice="header" title={props.hint}>
-    <span>{props.children}</span>
-    <Show when={props.action}>{(action) =>
-      <button type="button" tabIndex={-1} disabled={action().busy} aria-label={action().name ?? action().label} onClick={() => action().onClick()}>{action().busy ? action().busyLabel ?? action().label : action().label}</button>}
-    </Show>
-  </Frost>;
+    {kind === "reading" ? <div><strong>{props.title}</strong><Show when={props.children}><p>{props.children}</p></Show></div> : kind === "tool" ? props.children : <span>{props.children}</span>}
+    <Show when={props.action}>{(action) => act(action())}</Show>
+  </Dynamic>;
 }
