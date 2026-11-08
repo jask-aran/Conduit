@@ -19,7 +19,8 @@ you found it.
 
 - Window: your own home thread between {{windowStart}} and {{windowEnd}}.
   You are reading it as context above; earlier context can explain events.
-- Rules: SOUL.md and routines in your agent folder. Propose changes only.
+- Rules: SOUL.md in your agent folder, and your routines (`routine` list, then
+  `routine` read for the file). Propose changes only.
 - Memory: USER.md, MEMORY.md and the diary in your agent folder.
 - NOTES.md entries appended since the last Reflection (may be empty):
 
@@ -33,8 +34,8 @@ you found it.
 
 {{declinedBlock}}
 
-- Earlier reports: reports/reflect/*.md and reflections/*.md in your agent folder.
-  Read the last few.
+- Earlier reports: reports/reflect/<YYYY-MM-DD>.md in your agent folder, one per
+  day. Read the last few by date with `read`; a missing day just means no run.
   Don't repeat a rejected proposal unless there is clearly new evidence, and
   say what's new if you do.
 - Write your report to: {{reportPath}}

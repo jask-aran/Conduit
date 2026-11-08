@@ -25,6 +25,8 @@ export function forkAllows(agent, record, name, args) {
     return ids.length > 0 && ids.every((id) => record.outcome?.inboxIds?.includes(id));
   }
   if (name === "read") return !args?.device;
+  // Its own routines, to read before proposing a change to one (never to save, test or remove them).
+  if (name === "routine") return args?.action === "list" || args?.action === "read";
   if (!["write", "edit"].includes(name) || args?.device || !record.reportPath) return false;
   return path.resolve(agent.folder, String(args?.path || "")) === path.resolve(agent.folder, record.reportPath);
 }
@@ -32,7 +34,7 @@ export function routineToolGuard(runtime) {
   return hook(ToolTask, { beforeTool: async (call, api, context) => {
     const record = forkRecord(await api.snapshot(AgentDoc, context), api.conversationId);
     if (record && !forkAllows(runtime.agent, record, call.name, call.arguments)) {
-      return { block: "A routine run cannot send, post, notify, request approval, or start other work. Put what the person should hear in your final text: that is your report, and jbot tells them. Memory and conduit_inbox handle (for gathered entries) are yours to use." };
+      return { block: "A routine run cannot send, post, notify, request approval, or start other work. Put what the person should hear in your final text: that is your report, and jbot tells them. Memory, read, routine list/read and conduit_inbox handle (for gathered entries) are yours to use." };
     }
   } });
 }
