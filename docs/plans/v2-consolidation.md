@@ -60,28 +60,25 @@ once. Tick a family when every listed build goes through its single piece and th
   (find, composer, menus' sub-menu back, viewfinder) stay on their elements; Tray/Backdrop/Scrim keep their own
   fades (data-open, data-fade with the drawer's drag, motionOf).
 - [x] 3 Frost (688a25bb): Tray, Ledge, header pills and count through <Frost>; one --fog-blur; popover's restated
-  frost gone. Left: header groups are frost on a phone only, so header.css draws the recipe there; the phone
-  header block is written twice (@media phone and [data-presentation="phone"], jbot's dock column), as CSS cannot
-  OR a media query with a selector.
+  frost gone; the phone header is written once (wave 3). Left: header groups are frost on a phone only, so
+  header.css draws the recipe there.
 - [x] 4 Fold / unfold (688a25bb): one .ui-fold-chevron rule (foundations.css) for ten; Trace, Step, Envelope and
   Group's change fold through Expand. Left: rider Line is a clamp that grows, not a body that comes and goes;
   SettingDetails is a native <details>.
 - [x] 5 Rows (662daed8): Row gains depth, fold and the line, trail and tree densities; AgentLine and RoomRow are one
   FoldLine (agents.tsx); AgentRow, HistoryRow, ReportCard's line, TreeRow, ToolLine, CommitRow, network and chain
-  lines, NavFolderRow, WorkbenchFact, Choice and Summary draw through Row. Left: Readout (a menu's cursor would
-  take it), SettingLine (a <label> whose clicks need label.control), ConnectionChoice and ServerControl (ghost
-  Buttons), ChangeItem (its actions are menuitems).
+  lines, NavFolderRow, WorkbenchFact, Choice and Summary draw through Row; Readout and SettingLine too (wave 3).
 - [x] 6 Counts, dots, chips (662daed8): Count (controls.tsx) for every inline number; Dot (nav.tsx) for every bare
   dot, sized by --dot; Chip and Attachment share ChipCopy; removes are CloseButtons. Left: the rail's count badge
   and the header's count capsule keep their forms; Chip's on-media remove badge; OverlayChip's x is its mark.
 - [x] 7 Cards and notices (662daed8): Card surface="outline" (.ui-outline) for ClientCard and the network's boxes;
-  one Notice (state.tsx, kinds reading/nav/tool/header); Empty and Loading kinds in styles/state.css. Left:
-  ReportCard's box (a --border card with its own hover), ApprovalCard (its own padding and width), TourCard
-  (Overlay-based).
+  one Notice (state.tsx, kinds reading/nav/tool/header); Empty and Loading kinds in styles/state.css; ReportCard
+  and ApprovalCard are Cards (wave 3).
 - [x] 8 Repeated CSS (and after): 87 per-piece rules that only sized an icon's box, cut a line short or filled their
   box, or (25 more) held a flexible cut line, the muted caption, a small action row or a clipped line, are gathered
   into one rule per recipe at the end of foundations.css (zero-specificity :where() rules stay put,
-  as their order decides between them).
+  as their order decides between them). Every icon's box is a token now: the five that drew at the SVG's own 24px
+  (a field label's, a keycap's, a quick action's, the file card's) take --icon-sm, --icon-xs, --icon and --icon-xl.
 - [x] 8 Repeated CSS: .ui-truncate, .ui-size-icon(-sm) and [data-wash] (foundations.css); 20 truncate and 19
   icon-size rules moved onto them, computed styles unchanged in every family. Left: rules aimed at children the
   library does not class, partial recipes, zero-specificity :where() pieces, washes that also set colour or more
@@ -95,7 +92,7 @@ once. Tick a family when every listed build goes through its single piece and th
 - The phone header is written once: a phone's root is [data-presentation="phone"] (layout.ts, and the gallery's
   phone frame), so the @media block keeps only what is a phone's own (safe areas, the lead group, phone-only
   controls).
-- Still apart, as they are not the same build: ConnectionChoice and ServerControl (ghost Buttons, their wash, ring
+- Built from shared pieces, not copies of another (so nothing to fold into):  ConnectionChoice and ServerControl (ghost Buttons, their wash, ring
   and pressed state are Button's), ChangeItem (a wrapper round a Row button and a sibling action), TourCard (an
   Overlay with a head bar and a ruled foot), tabs (rider Tabs, PaneTabs, ToolViews: ticks, drag/close, disabled
   views), trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's
