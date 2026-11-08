@@ -4,10 +4,8 @@ import { Dot, StatusDot } from "./nav";
 import { Row } from "./row";
 import { Empty } from "./state";
 
-/**
- * A client of the network: an environment (an OS, a WSL distro) whose node makes its folders available, an app or a
- * browser driving Conduit, or both at once -- Windows with the app open on it is one client, headed.
- */
+/** A client of the network: an environment (an OS, a WSL distro) whose node shares its folders, an app or browser
+ *  driving Conduit, or both (Windows with the app open on it is one client, headed). */
 export type NetworkClient = {
   id: string;
   name: string;
@@ -31,11 +29,8 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
     label={props.name} context={props.meta} end={<StatusDot label={props.online ? "Connected" : "Offline"} tone={props.online ? "success" : "muted"} />} /></li>;
 }
 
-/**
- * The network as it stands: the hub at the top, every device hung from it by a line (dashed while none of its
- * clients is connected), each device's clients inside it. Clients talk to the hub, never to each other, so the hub
- * is the root and the devices its spokes -- the device the hub runs on among them.
- */
+/** The network as it stands: the hub at the top, every device hung from it by a line (dashed while none of its clients
+ *  is connected), its clients inside. Clients talk only to the hub, so the hub is the root and devices its spokes. */
 export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
     <section class="ui-outline ui-network-box" data-hub="" aria-label={props.hub.name}>
@@ -58,10 +53,7 @@ export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; l
 /** Cards of clients side by side, as many to a line as the room holds: a device's clients, opened. */
 export const ClientCards = (props: { label?: string; children: JSX.Element }) => <div class="ui-client-cards" role="list" aria-label={props.label}>{props.children}</div>;
 
-/**
- * One client, outlined: its mark and its name in the label's voice with its dot, what it says (Conduit Dev · this
- * app, Offline since …), the workspaces it mounts on the network, then its actions along its foot.
- */
+/** One client, outlined: mark, name and dot, what it says (Offline since …), the workspaces it mounts, its actions. */
 export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
   return <section class="ui-outline ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
     <header class="ui-client-head">
@@ -85,17 +77,12 @@ export function ClientPlaces(props: { label?: string; none?: boolean; empty?: st
 }
 
 
-/**
- * A chain: one thing at the top and what it is made of hung under it in order, a line between each -- the network
- * map's boxes and lines, stacked rather than spread. A document's blocks under the role it starts (Settings ›
- * Prompts). ChainLink a box in the chain (live: filled in by something else, drawn dashed);
- * ChainGap the line between two links, carrying a control on it (insert here); ChainBreak a labelled stretch of line
- * where the chain changes part ("First message").
- */
+/** A chain: one thing at the top and what it is made of hung under it in order, the network map's boxes and lines
+ *  stacked (a document's blocks under its role, Settings › Prompts). ChainLink a box (live: filled in elsewhere,
+ *  dashed); ChainGap the line between two, carrying a control (insert here); ChainBreak a labelled stretch ("First message"). */
 export const ChainMap = (props: { label: string; children: JSX.Element }) => <figure class="ui-chain" aria-label={props.label}>{props.children}</figure>;
-/** index: its place in the chain. meta: what it is (shared, yours, filled in by Conduit). size: how much of it there
- *  is, at the end. onSelect: the box is chosen by a click (current: the chosen one), and what can be done to it is
- *  beside the chain (ChainLayout's detail), never hidden behind hover. */
+/** meta: what it is (shared, yours, filled in by Conduit). size: how much there is, at the end. onSelect: chosen by a
+ *  click (current), its actions beside the chain (ChainLayout's detail), never behind hover. */
 export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; notice?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
   const parts = () => ({
     lead: props.index != null || props.notice ? <>

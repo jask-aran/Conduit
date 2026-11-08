@@ -4,16 +4,12 @@ import { Aura } from "./pill";
 import { collapse, glide, MoveContext } from "./motion";
 
 /**
- * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode says which
- * shows, and nothing reflows between them: idle (the row), typing (the field fades in above it), listening (the
- * row's other pills fade where they stand, the stretched mic shrinks to a short pill at the row's end, filling with colour, the voice
- * track sweeps out of it to the row's start, captions open above). edit: pills over the field while its cursor is
- * moved by hand, fading in when editing. onTrack: a tap on the track while listening (the app stops). level: the voice level (0-1) while listening; the mic's Aura answers it.
- * under: a menu opened from one of the row's pills (PillButton open) is over it; the rest dims at once, as a menu under its submenu.
- * layout: bar (the default: each pill its own frost, the mic stretched) or surface (the row one frost capsule, its pills slots in it,
- * the mic at its end; listening, an Aura fills the capsule under the track). riders: Riders over the field, as on a
- * DesktopComposer's top edge (queued messages, attachments, a question). opening: its chat is still arriving
- * (reattaching), so its riders and edit pills keep their room unseen; the row, which is the field's way in, stays.
+ * PhoneComposer: the phone's composer, Pills on the page: a PillField over a row of PillButtons. mode: idle (the row),
+ * typing (the field fades in above), listening (the other pills fade, the mic shrinks to the row's end, the voice track
+ * sweeps out, captions open above); nothing reflows between them. edit: pills over the field while its cursor is moved.
+ * level: the voice level (0-1), answered by the mic's Aura. under: a menu from a pill is over it; the rest dims.
+ * layout: bar (each pill its own frost) or surface (one frost capsule). riders: Riders over the field, as on a
+ * DesktopComposer. opening: its chat is still arriving, so riders and edit pills keep their room unseen.
  */
 export type VoiceMode = "idle" | "typing" | "listening";
 /** PhoneComposer's parts, as its state table names them: the field, the row's pills (not the mic or Send, which are
@@ -31,8 +27,7 @@ export type PhoneState = keyof typeof PHONE_COMPOSER_STATES;
 export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; layout?: "bar" | "surface"; field: JSX.Element; track?: JSX.Element; onTrack?: () => void; captions?: JSX.Element; edit?: JSX.Element; editing?: boolean; under?: boolean; level?: number; children: JSX.Element ; opening?: boolean}) {
   const state = (): PhoneState => props.mode === "typing" && props.editing ? "editing" : props.mode;
   const shows = (part: PhonePart) => (PHONE_COMPOSER_STATES[state()] as readonly PhonePart[]).includes(part);
-  // Each holder tells the parts it holds how they move (motion.ts, MoveScope): the edit pills', the field's, the row's
-  // and the track's. The edit pills are resolved under theirs.
+  // Each holder tells the parts it holds how they move (motion.ts, MoveScope).
   const under = () => !!props.under;
   const edit = children(() => <MoveContext.Provider value={{ out: () => !shows("edit") }}>{props.edit}</MoveContext.Provider>);
   // The captions stay mounted while they go, until their ground has faded.
@@ -52,12 +47,8 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
         <MoveContext.Provider value={{ get out() { return surface() ? () => !shows("track") : undefined; }, voice: () => shows("orb") }}><Show when={surface()}><Aura /></Show>{props.track}</MoveContext.Provider></div></Frost>
   </div>;
 }
-/**
- * Captions: what a dictation has heard so far, for PhoneComposer's captions. lead: the end of what was already in the
- * draft, upright and already there, so the new words read as continuing it. words: each heard word with the space
- * after it; a new one fades in as the transcript's words do (colour), and a revised one keeps its node, so it does not
- * replay. A new line glides the ones above it up rather than jumping. ref: the line's element (the app measures it).
- */
+/** Captions: what a dictation has heard so far. lead: the end of the draft already there, so new words continue it.
+ *  words: each heard word; a new one fades in (colour), a revised one keeps its node so it does not replay. */
 export function Captions(props: { lead?: string; words: string[]; ref?: (element: HTMLElement) => void }) {
   const line = (element: HTMLElement) => { onCleanup(glide(element)); props.ref?.(element); };
   return <p><span ref={line} class="ui-captions"><Show when={props.lead}><span class="ui-captions-lead">{props.lead}</span></Show><Index each={props.words}>{(word) => <span>{word()}</span>}</Index></span></p>;

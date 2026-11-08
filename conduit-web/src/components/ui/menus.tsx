@@ -7,30 +7,22 @@ import { haptic, overlayHaptics } from "./haptics";
 import { createFullscreenPortalMount } from "./portal";
 import { Note } from "./state";
 
-/*
- * Row menus wait for the first open to have been shown. Every chat, folder and project row carries a context menu, and
- * building the menu machinery for each one was a tenth of a second of a phone's first open. Until `attachRowMenus()` the
- * rows draw as the elements they wrap and their menus are absent; then each row is redrawn with its menu, well before
- * anyone could right-click or long-press it.
- */
+/* Row menus wait for the first open to have been shown: building every chat, folder and project row's menu machinery
+ * was a tenth of a second of a phone's first open. Until `attachRowMenus()` rows draw as the elements they wrap. */
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
 import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, Section, MenuPanel, MenuParent, SearchSection } from "./popover";
 import { Button, SelectTrigger, SliderValue } from "./controls";
 import { PillButton } from "./pill";
-// Both are measured once and kept until the window or the Interface size changes: Kobalte reads them on every position
-// update, and a probe each time laid the page out again before floating-ui measured.
+// Both are measured once, until the window or Interface size changes: Kobalte reads them on every position update,
+// and a probe each time laid the page out again.
 let edges: unknown, gapPx: number | undefined;
 if (typeof window !== "undefined") for (const change of ["resize", "conduit:ui-scale"]) addEventListener(change, () => { edges = gapPx = undefined; });
 /** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
  *  under (the safe area), so a menu never runs under a phone's navigation bar. */
-/*
- * A touch that picks a row closes the menu on its pointerup, and the browser's click for that same touch then lands on
- * whatever was under the menu (a dashboard row, a New button). The click a touch on a menu surface makes is spent
- * there: once that surface has gone, the next click within the tap's time does nothing. A click on the surface while it
- * is still open, and any mouse, are untouched.
- */
+/* A touch that picks a row closes the menu on pointerup, and its click would then land on whatever was under the menu.
+ * That click is spent: once the surface has gone, the next click within the tap's time does nothing. Mice are untouched. */
 const SURFACES = "[data-slot='ui-menu-content'], [data-slot='ui-menu-sub-content'], [data-slot='ui-context-menu-content'], [data-slot='ui-popover-content']";
 let spent: { surface: Element; until: number } | null = null;
 if (typeof document !== "undefined") {
@@ -57,12 +49,11 @@ function measureEdges() {
   const side = (inset: string) => 8 + (parseFloat(inset) || 0);
   const padding = { top: side(style.paddingTop), right: side(style.paddingRight), bottom: side(style.paddingBottom), left: side(style.paddingLeft) };
   probe.remove();
-  // Each edge its own: one number for all four pushed a menu off a phone's left edge by its status bar's height.
-  // Kobalte passes it to floating-ui, which takes a side each, though Kobalte's type says a number.
+  // Each edge its own (one number pushed a menu off a phone's left edge by its status bar); floating-ui takes a side
+  // each, though Kobalte's type says a number.
   return padding as unknown as number;
 }
-/** The room between a control and the popover it opens (--popover-gap): touching it, the menu read as part of the
- *  control. A Kobalte gutter is a number, so the step is measured. */
+/** The room between a control and its popover (--popover-gap), so the menu does not read as part of the control. */
 function popoverGap() { return gapPx ??= measureGap(); }
 function measureGap() {
   const probe = document.createElement("div");
@@ -84,8 +75,7 @@ export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bo
   <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
     <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={(open) => { haptic(open ? "hold" : "dismiss"); props.onOpenChange?.(open); }}>{props.children}</KContextMenu>
   </Show>;
-/* Until the first open has been shown (attachRowMenus), a row draws as the element it wraps and has no menu:
-   building every row's menu machinery was a tenth of a second of a phone's first open. */
+/* Until attachRowMenus, a row draws as the element it wraps and has no menu (see the top of the file). */
 const RowMenuDeferred = createContext(false);
 // Typed as Kobalte's own trigger, so each row's props are checked as before.
 export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
@@ -98,9 +88,8 @@ export const ContextMenuGroup = KContextMenu.Group;
 /** A menu opened by the caller's own control (`as`: a HeaderButton). */
 export const MenuControl = KMenu.Trigger;
 export function MenuTrigger(props: ParentProps<{ disabled?: boolean; "aria-label"?: string }>) { return <KMenu.Trigger as={Button} variant="ghost" {...props} />; }
-/** A pill that opens a menu without taking focus from what is being typed: a tap leaves focus where it
- *  is, and while `keep()` the menu's closing focus is not handed to it either (on a phone, even a
- *  moment away from the text makes Android drop and re-raise the keyboard). */
+/** A pill that opens a menu without taking focus from what is being typed, nor handing it back on close while `keep()`
+ *  (on a phone, a moment away from the text makes Android drop and re-raise the keyboard). */
 export function MenuPillTrigger(props: { label: string; icon: JSX.Element; open?: boolean; disabled?: boolean; keep: () => boolean; ref?: (element: HTMLButtonElement) => void }) {
   return <KMenu.Trigger as={(attrs: ComponentProps<typeof PillButton>["button"]) => <PillButton label={props.label} icon={props.icon} open={props.open} button={attrs} />}
     disabled={props.disabled} onPointerDown={(event: PointerEvent) => event.preventDefault()}
@@ -152,8 +141,8 @@ export function MenuSubContent(props: ParentProps<Caps>) {
     style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
 export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
-/** actions: the row's own actions beside it, each a menu item (RowGroup): Down reaches them in turn after the row, and
- *  choosing one runs it and closes the menu as the row does. A getter keeps one live (disabled while busy). */
+/** actions: the row's own actions beside it, each a menu item (RowGroup) Down reaches after the row; a getter keeps one
+ *  live (disabled while busy). */
 export type MenuRowAction = { label: string; icon: JSX.Element; onSelect: () => void; disabled?: boolean; destructive?: boolean };
 export const MenuRow = (props: RowProps & { actions?: MenuRowAction[] }) => {
   const [local, rest] = splitProps(props, ["actions"]);
@@ -218,9 +207,8 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
     const inset = parseFloat(getComputedStyle(panel).paddingLeft);
     const offset = parent.querySelector<HTMLElement>(".ui-row")?.getBoundingClientRect().height ?? 0;
     const size = panel.getBoundingClientRect();
-    // It opens from the row that opened it, in the direction its menu opened: under a menu hanging from the top of
-    // the screen its top is the row's, over one rising from the bottom (the composer's) its foot is. Kept to its
-    // menu's foot, every submenu sat at the bottom, far from a row near a hanging menu's top.
+    // It opens from its row in the direction its menu opened: top to the row's top under a hanging menu, foot to its
+    // foot over a rising one (the composer's).
     const row = anchor!.getBoundingClientRect();
     const edge = edgePadding() as unknown as { top: number; bottom: number };
     const hangs = box.top + box.height / 2 < innerHeight / 2;
@@ -289,11 +277,9 @@ export function SearchList<T>(props: {
 }
 
 /**
- * A select drawn by the library: SelectTrigger opening a Menu of its choices. The native select stays
- * the value's owner -- its options, value, ref and change event work as a form's do -- but is hidden;
- * its id, name and title go to the trigger, so a label's `for` reaches what can be pressed.
- * search: a long list's choices open under a search instead (SearchList), its text the field's placeholder;
- * an option with no value (a prompt such as "Choose a provider") is the trigger's text, not a choice.
+ * A select drawn by the library: SelectTrigger opening a Menu of its choices. The hidden native select stays the value's
+ * owner (options, value, ref, change event), and its id, name and title go to the trigger so a label's `for` reaches it.
+ * search: a long list opens under a search (SearchList); a valueless option ("Choose a provider") is the trigger's text.
  */
 export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean; search?: string; look?: "field" | "title" | "icon"; icon?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare", "search", "look", "icon"]);
@@ -303,9 +289,7 @@ export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { ba
   const [label, setLabel] = createSignal("");
   const [options, setOptions] = createSignal<Array<{ value: string; label: string; disabled: boolean }>>([]);
   const read = () => {
-    // A value given before its options existed (options drawn by a <For>) did
-    // not take: the native select fell back to its first option. Put it back
-    // once the option is there.
+    // A value given before its options existed (drawn by a <For>) fell back to the first option: put it back.
     const wanted = rest.value == null ? null : String(rest.value);
     if (wanted !== null && select.value !== wanted && Array.from(select.options).some((option) => option.value === wanted)) select.value = wanted;
     setValue(select.value);

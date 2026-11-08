@@ -5,12 +5,10 @@ import { LeadInput } from "./controls";
 import { CloseButton, IconButton } from "./actions";
 
 /**
- * FindBar: a pane's find, floating over the top of what it searches (a chat's transcript, under its header): a search
- * field (LeadInput, its × clearing the query), the count ("3 of 12", "No results"), Previous, Next and Close. Frost,
- * as floating chrome inside a pane is. It rises in as it opens; the caller mounts it while open and owns the search:
- * Enter is Next and Shift+Enter Previous, Escape clears the query and then closes (the Escape ladder), all through
- * onKeyDown's caller-side handlers. children: more of the find after the field (the editor's replace and toggles);
- * plain: drawn in its host's row (CodeMirror's panel) instead of floating frost.
+ * FindBar: a pane's find, frost floating over the top of what it searches: a LeadInput, the count ("3 of 12"),
+ * Previous, Next, Close. The caller mounts it while open and owns the search; Enter is Next, Shift+Enter Previous,
+ * Escape clears then closes (the Escape ladder). children: more after the field (the editor's replace and toggles);
+ * plain: drawn in its host's row (CodeMirror's panel).
  */
 export function FindBar(props: {
   query: string;

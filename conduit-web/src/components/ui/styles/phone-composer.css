@@ -1,14 +1,11 @@
 /* PhoneComposer: a PillField over a row of Pills, one gap apart. What shows is its state table (PHONE_COMPOSER_STATES
    in index.tsx), rendered on the root as data-show: field, pills, edit, track, captions, orb (the mic as an orb pill).
-   Every move between two states follows from three moves, each a part's own -- none depends on the state it came from:
-   - In: its room opens (the field glides, or a part is revealed by a clip), and it fades in over gentle from the first frame.
-   - Out: it fades over the quick duration from the first frame; its room goes after (or, a row pill, with it: it
-     slides under its left neighbour at its own size, so it is never seen squeezed).
-   - In place (the mic's shape, the track's wipe, the room before the orb): over the gentle duration, from the first frame.
-   And the library's invariants: fixed layers (the captions' ground, the captions, the field, the row -- its track under
-   its pills -- the edit pills); one transition list per part, states setting only values and timing variables; one
-   spot, one text (the captions come in once the field's quick fade is done, and their words are clipped above the
-   field going); a frost fades itself. */
+   Every move follows from three, each a part's own, none depending on the state it came from, all from the first frame:
+   - In: its room opens (a glide or a clip), and it fades in over gentle.
+   - Out: it fades over quick; its room goes after (a row pill slides under its left neighbour, never seen squeezed).
+   - In place (the mic's shape, the track's wipe, the room before the orb): over gentle.
+   Invariants: fixed layers (captions' ground, captions, field, row with its track under its pills, edit pills); one
+   transition list per part, states setting only values; one spot, one text; a frost fades itself. */
 .ui-phone-composer { --voice-pill: calc(1.5 * var(--pill-size)); position: relative; isolation: isolate; min-width: 0; display: flex; flex-direction: column; gap: var(--space-md); }
 /* Its riders: the composer's rider stack, over the field. */
 /* Layers. */
@@ -18,9 +15,8 @@
 .ui-phone-edit { z-index: 4; }
 .ui-phone-row > .ui-pill[data-folded] { z-index: 0; }
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { z-index: 2; }
-/* Its parts move by the library's moves (styles/motion.css); the state table says, through each holder's MoveScope,
-   which are out. The field: a measured collapse on its holder (motion.ts). Line changes and room taken/given
-   glide over --duration-gentle on --ease-room; room given waits for its frost's quick fade. */
+/* Its parts move by the library's moves (styles/motion.css); each holder's MoveScope says which are out. The field is a
+   measured collapse (motion.ts); room given waits for its frost's quick fade. */
 .ui-phone-field { --collapse-gap: var(--space-md); }
 /* The frost fills the moving holder. Its textarea keeps its natural height, measured independently by collapse. */
 .ui-phone-field > .ui-pill-field { height: 100%; align-items: flex-start; }
@@ -28,29 +24,23 @@
 .ui-phone-field { display: flex; flex-direction: column; justify-content: flex-end; }
 .ui-phone-field > .ui-pill-field { flex: none; }
 
-/* The row's pills tuck (motion.css): not shown, they fade where they stand (the track takes their place); a folded one
-   (Send with nothing to send, Scroll to latest at the latest) keeps its size and slides under its left neighbour as it
-   fades, its room going with the fade, so the mic beside it grows in the same move. */
+/* The row's pills tuck (motion.css): not shown, they fade where they stand; a folded one (Send with nothing to send)
+   slides under its left neighbour as it fades, its room going with it, so the mic grows in the same move. */
 .ui-phone-row { --tuck-gap: var(--space-md); }
-/* The mic: stretched, it shrinks to its orb pill at the row's end by giving its grow to the room before it (flex-grow,
-   so its edge, radius and icon stay crisp), and grows back the same way. */
+/* The mic shrinks to its orb pill by giving its grow to the room before it (flex-grow keeps edge and icon crisp). */
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: 1 1 var(--voice-pill); min-width: var(--voice-pill); overflow: clip; }
 .ui-pill-room { flex: 0 0 0; margin-inline-start: calc(-1 * var(--space-md)); }
 .ui-phone-composer[data-show~="orb"] .ui-pill-room { flex-grow: 1; }
 .ui-phone-composer[data-show~="orb"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
-/* The voice track: no surface, from the row's start to the orb pill, under the pills. A wipe: in, out of the orb pill
-   as the mic shrinks; out, it fades over the quick duration as it wipes back. */
+/* The voice track, under the pills up to the orb pill: wiped out of it as the mic shrinks; out, it fades as it wipes back. */
 .ui-voice-track { position: absolute; inset-block: 0; left: 0; right: calc(var(--voice-pill) + var(--space-md)); display: flex; align-items: center; overflow: hidden; border-radius: var(--radius-round); --wipe-radius: var(--radius-round); }
 .ui-voice-track[data-out] { pointer-events: none; }
 .ui-phone-composer[data-show~="track"] .ui-voice-track { right: calc(var(--voice-pill) + 2 * var(--space-md) + var(--pill-size)); }
-/* PillWave: bars a whole pixel wide on a fixed pitch (sub-pixel bars dropped out at 1x), the height of the pill's
-   inside, the newest at the right end. Its parent sets the width; in a track, it fills it. */
+/* PillWave: bars a whole pixel wide on a fixed pitch (sub-pixel bars dropped out at 1x), newest at the right. */
 .ui-pill-wave { display: flex; width: 100%; height: calc(var(--pill-size) - 2 * var(--space-xs)); align-items: center; justify-content: flex-end; gap: var(--stroke); overflow: hidden; }
 .ui-pill-wave > i { flex: 0 0 var(--stroke); border-radius: var(--radius-round); background: currentColor; opacity: var(--opacity-rest); }
-/* Captions: the newest three lines above the row (older ones cut off at the top), a step smaller than the field's
-   text. Under them their ground, the page's colour, runs from just above them down past the row and out to the
-   screen's sides, so the transcript never shows through them or between the row's pills; it is the lowest layer, so
-   the field and the row are always over it. In, they wait the quick duration (for the field, if it is going). */
+/* Captions: the newest three lines above the row. Their ground, the page's colour, runs down past the row to the
+   screen's sides so the transcript never shows through; it is the lowest layer. In, they wait for the field's fade. */
 .ui-voice-captions { position: absolute; left: 0; right: 0; bottom: calc(var(--pill-size) + var(--space-md));
   padding: var(--space-lg) var(--space-lg) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-row); font-style: italic; line-height: var(--leading-row); pointer-events: none;
   animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
@@ -61,16 +51,13 @@
 .ui-captions { display: block; }
 .ui-captions > span { animation: ui-word-in var(--duration-gentle) var(--ease-arrive) both; }
 .ui-captions > .ui-captions-lead { margin-inline-end: 0.3em; font-style: normal; animation: none; }
-/* Out, their words go over the quick duration, clipped above the field's box (PhoneComposer keeps its height as
-   --under-field); their ground holds until whatever comes in over it is in, then fades, so nothing behind shows
-   through a part as it arrives. */
+/* Out, their words go clipped above the field's box (--under-field); their ground holds until what comes in over it is
+   in, so nothing behind shows through. */
 .ui-voice-captions[data-leaving] { animation: ui-fade-out var(--duration-gentle) var(--ease-leave) var(--duration-gentle) forwards; }
 .ui-voice-captions[data-leaving] > * { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; clip-path: inset(0 0 calc(var(--under-field, 0px) - var(--space-xs)) 0); }
-/* Under a menu opened from one of its pills, the rest dims at once (as a menu under its submenu), its opener lit: the
-   field's and the row's scopes say so (data-under on each pill). */
-/* Surface: the row is one frost capsule (the field still its own above it), its pills slots in it as a PillGroup's,
-   the mic at its end, unstretched. Listening, an Aura fills the capsule under the waveform, which runs from its start
-   to the mic; the other slots fade where they stand and Stop and send unfolds beside the mic. */
+/* Under a menu opened from one of its pills, the rest dims at once, its opener lit (data-under on each pill). */
+/* Surface: the row is one frost capsule, its pills slots as a PillGroup's. Listening, an Aura fills it under the
+   waveform; the other slots fade and Stop and send unfolds beside the mic. */
 .ui-phone-composer[data-layout="surface"] > .ui-phone-row { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { border: 0; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { width: var(--pill-slot); height: var(--pill-slot-height); }
@@ -83,9 +70,8 @@
 .ui-phone-composer[data-layout="surface"][data-show~="track"] .ui-voice-track { right: 0; }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur): their scope's. */
 .ui-phone-edit { position: relative; display: flex; flex-direction: column; justify-content: flex-end; --collapse-gap: var(--space-md); }
-/* In the composer's flow, a collapse (motion.css) as the field is: its room is the composer's, so the dock's height --
-   and so the transcript's inset above it -- includes it while it shows, and gives it back in one glide as it goes. Its
-   pills sit at its foot, so they fade where they stand as the room goes from above them. */
+/* In the composer's flow, a collapse as the field is, so the dock's height (and the transcript's inset) includes it
+   and gives it back in one glide. Its pills sit at its foot, fading where they stand. */
 .ui-phone-edit-pills { display: flex; gap: var(--space-md); pointer-events: none; }
 .ui-phone-composer[data-show~="edit"] .ui-phone-edit-pills > .ui-pill { pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) {

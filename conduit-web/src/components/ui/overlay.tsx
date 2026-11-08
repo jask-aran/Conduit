@@ -12,34 +12,21 @@ import { duration, easing, reducedMotion } from "./motion";
 import { DropdownMenu, MenuContent, MenuRow, MenuSection } from "./menus";
 import { Row } from "./row";
 
-/*
- * Overlay: raised frost over a dimmed page -- the app's large surfaces (the
- * command palette, chat search, settings). Its sections run edge to edge,
- * divided by rules: a Bar (the field), a body -- a List, a List beside an
- * aside (OverlaySplit), or a Rail beside a Page -- and Hints. Its rows are
- * the popover's Items at the overlay's scale; the Rail is the sidebar's
- * NavGroups. Its width is the caller's (--overlay-width).
- */
+/** Scrim: the dimmed page an Overlay rises over (placement: under the top edge, or centred). */
 export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: "top" | "center"; dialog?: boolean; motion?: Motion }) {
   const [local, rest] = splitProps(props, ["class", "placement", "dialog", "motion"]);
   return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }
 
-/** Backdrop: the page dimmed under a phone's drawer (layer: the sidebar's, or the workspace panel's), a tap on it
- *  dismissing the drawer; it fades in. open: kept mounted and fading both ways with its drawer (the sidebar), rather
- *  than mounted while open. */
+/** Backdrop: the page dimmed under a phone's drawer (layer: sidebar or workspace panel); a tap dismisses the drawer.
+ *  open: kept mounted, fading both ways with its drawer, rather than mounted while open. */
 export const Backdrop = (props: { layer: "drawer" | "panel"; label: string; onDismiss: () => void; open?: boolean }) =>
   <button type="button" class="ui-backdrop" data-layer={props.layer} aria-label={props.label} onClick={() => props.onDismiss()}
     data-fade={props.open === undefined ? undefined : props.open ? "open" : "shut"} aria-hidden={props.open === false ? true : undefined} tabIndex={props.open === false ? -1 : undefined} />;
 
-/** core: frost on a solid backing, kept for the phone's full-screen overlays should the page behind them be too busy -- off for now.
- *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
-/*
- * An overlay that changes width (Settings opening wider on a two-column page) settles to it as panes do (shell.css
- * .ui-sheet[data-moving]): the frame eases on --duration-fold and --ease-settle, starting from rest, while the page
- * beside the rail holds the width it lands at and the frame clips it, so nothing re-wraps mid-motion. Interrupted, it
- * eases on from where it is. Reduced motion: it lands at once.
- */
+/* An overlay that changes width (Settings opening wider) settles as panes do (shell.css .ui-sheet[data-moving]): the
+   frame eases from rest while the page beside the rail holds its landing width and is clipped, so nothing re-wraps
+   mid-motion. Interrupted, it eases on from where it is; reduced motion lands at once. */
 function createWidthSettle(frame: () => HTMLElement | undefined, width: () => unknown) {
   let settled = 0;
   let running: Animation | undefined;
@@ -72,6 +59,11 @@ function createWidthSettle(frame: () => HTMLElement | undefined, width: () => un
   });
 }
 
+/** Overlay: raised frost over a dimmed page (command palette, chat search, settings). Sections run edge to edge
+ *  between rules: a Bar, a body (a List, an OverlaySplit, or a Rail beside a Page) and Hints. Rows are the popover's
+ *  Items at the overlay's scale; the Rail is the sidebar's NavGroups. Width is the caller's (--overlay-width).
+ *  core: frost on a solid backing for the phone's full-screen overlays, off for now.
+ *  embedded: inside a behaviour's dialog (OverlayDialog), which carries the role and the name. */
 export function Overlay(props: { label: string; layout?: "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
   const [frame, setFrame] = createSignal<HTMLElement>();
   createWidthSettle(frame, () => (props.style as Record<string, unknown> | undefined)?.["--overlay-width"]);
@@ -79,9 +71,8 @@ export function Overlay(props: { label: string; layout?: "rail"; core?: boolean;
     data-density={props.density} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
-/** The field across the top: a lead (a prompt glyph, a search icon, a back button), chips (OverlayChip: a scope, a view),
- *  the input, then end controls and close. field: what a behaviour adds to the input (combobox state, keys, focus).
- *  Neither the close nor a chip takes focus from the field. */
+/** The field across the top: a lead, chips (OverlayChip), the input, end controls and close; neither close nor a chip
+ *  takes focus from the field. field: what a behaviour adds to the input (combobox state, keys, focus). */
 export function OverlayBar(props: { lead?: JSX.Element; chips?: JSX.Element; placeholder: string; value?: string; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement>; end?: JSX.Element; onClose?: () => void; closeLabel?: string }) {
   return <div class="ui-overlay-bar">
     <Show when={props.lead}><span class="ui-overlay-lead">{props.lead}</span></Show>
@@ -102,10 +93,8 @@ export function OverlayList(props: JSX.HTMLAttributes<HTMLDivElement> & { manage
   const [local, rest] = splitProps(props, ["managed", "children"]);
   return <div role="listbox" {...rest} class="ui-overlay-list" onPointerOver={local.managed ? undefined : moveCursor}>{local.children}</div>;
 }
-/** In place of a list's rows: nothing matched, nothing yet. */
 
-/** A list beside an aside (a preview of what the list has selected). */
-/** aside: optional, so a preview that can be hidden (chat search's Ctrl+P) leaves the list the whole width. */
+/** A list beside an aside (a preview of the selection); with no aside (chat search's Ctrl+P) the list takes the width. */
 export const OverlaySplit = (props: { aside?: JSX.Element; children: JSX.Element }) =>
   <div class="ui-overlay-split" data-aside={props.aside ? "" : undefined}>{props.children}<Show when={props.aside}><aside class="ui-overlay-aside">{props.aside}</aside></Show></div>;
 
@@ -148,8 +137,7 @@ export const OverlayFact = (props: { label: string; value: string; title?: strin
 /** The page beside a rail: its title, its save status (Saving, Saved, Not saved: settings save as they change), close, and SettingGroups.
  *  busy: a spinner before the status (Saving); failed: the status in the destructive colour, why in its title, and Retry when onRetry. */
 export function OverlayPage(props: { title: string; status?: string; busy?: boolean; failed?: boolean; why?: string; onRetry?: () => void; onBack?: () => void; onClose?: () => void; children: JSX.Element }) {
-  /* A save is often quicker than the spinner's turn, which then cut out and jumped to Saved. Saving is held until its
-     spinner has made one whole turn (--duration-spin); a failure is said at once. */
+  // Saving is held until its spinner makes one whole turn (--duration-spin), so a quick save does not flash; a failure shows at once.
   const [held, setHeld] = createSignal<string | null>(null);
   // A screen of its own (a phone's section, with its way back): felt arriving from the list, and going back to it.
   onMount(() => { if (props.onBack) haptic("open"); });
@@ -176,10 +164,9 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
   </main>;
 }
 
-/** Recording a shortcut: a second line under the setting, the same height, in place of a panel. A red dot and
- *  "Press a shortcut" until keys arrive, then the chord as one keycap, as the list shows it; the keys that steer it, and Save once there is something to save.
- *  A behaviour hears the keys: onKeyDown makes the line the focusable capture (role application, named by label); onCancel makes the Esc hint its button.
- *  Keys pressed on the line's own buttons are theirs, not the capture's. */
+/** Recording a shortcut: a second line under the setting, the same height: "Press a shortcut" until keys arrive, then
+ *  the chord as one keycap, the steering keys, and Save. onKeyDown makes the line the focusable capture (role
+ *  application); onCancel makes the Esc hint its button. Keys pressed on the line's own buttons are theirs. */
 export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: (element: HTMLDivElement) => void; onKeyDown?: (event: KeyboardEvent) => void; onSave?: () => void; onCancel?: () => void; saveDisabled?: boolean }) {
   const capture = () => Boolean(props.onKeyDown);
   return <div ref={props.ref} class="ui-setting-recorder" role={capture() ? "application" : "status"} aria-live={capture() ? undefined : "polite"} aria-label={props.label} tabIndex={capture() ? 0 : undefined}
@@ -198,27 +185,16 @@ export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: 
 /** Said to a screen reader, not shown: what an action did (a shortcut saved, cleared). */
 export const LiveNote = (props: { children: JSX.Element }) => <p class="ui-live-note" aria-live="polite">{props.children}</p>;
 
-/** A titled group of SettingLines; groups after the first are ruled off. */
-/**
- * A group's subject named large, under the group's label: the thing the lines below are about (This device's own
- * name). Editable where it may be renamed, as a field that reads as a title until pointed at.
- */
+/** A group's subject named large under its label (This device's name); editable, a field that reads as a title. */
 export const SettingTitle = (props: { value: string; label: string; editable?: boolean; onChange?: (value: string) => void }) => props.editable
   ? <input class="ui-setting-title" aria-label={props.label} value={props.value} spellcheck={false}
       onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.currentTarget.value = props.value; event.currentTarget.blur(); } }}
       onChange={(event) => props.onChange?.(event.currentTarget.value)} />
   : <h3 class="ui-setting-title">{props.value}</h3>;
-/** A group's lines in columns, as many as the room holds, a hairline between: This device's clients beside its workspaces. */
-/** One column of lines, under a label in the group's voice (so its edge is the lines' edge). */
-/** What can be done with a group's subject, a row of small buttons at the lines' edge, wrapping as they must. */
 
-/** A setting: its name (state that matters muted after it), then its control in the one control column.
- *  plain: what it holds is buttons, a value or a link, not one field, so the line is not that field's label. */
-/** mono: the name is data (a model id, a tool's name), in the data face. */
 export type SettingContextItem = { label: string; kind: "block" | "document"; onOpen: () => void };
-/** context: what the setting changes in an agent's context (Settings › Blocks and Prompts). A quiet mark after its name
- *  opens a menu of those blocks and documents. The mark is a span with a button's role, not a <button>: a non-plain
- *  line is a <label>, whose control is its first labelable descendant, and a button there would take the switch's clicks. */
+/** context: a mark after the name opening a menu of the blocks and documents the setting changes (Settings › Blocks and
+ *  Prompts). A span, not a <button>: a non-plain line is a <label>, and a button there would take the switch's clicks. */
 function SettingContext(props: { items: SettingContextItem[] }) {
   return <DropdownMenu modal={false} placement="bottom-start">
     <DropdownMenu.Trigger as="span" class="ui-setting-context" aria-label="What this changes in context" title="What this changes in context"
@@ -230,10 +206,11 @@ function SettingContext(props: { items: SettingContextItem[] }) {
     </MenuContent>
   </DropdownMenu>;
 }
+/** A setting: its name (state muted after it), then its control in the one control column.
+ *  plain: it holds buttons, a value or a link, so the line is not a field's label. mono: the name is data (a model id). */
 export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element; context?: SettingContextItem[] }) => {
   const inner = () => <><span data-mono={props.mono ? "" : undefined}>{props.label}<Show when={props.context?.length}><SettingContext items={props.context!} /></Show><Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
-  // A label hands a click anywhere on it to its control: right for a field, a switch or a menu, wrong for a button that
-  // acts (Disconnect, Remove). A click on the line, not on the button itself, is not that button's.
+  // A label hands any click to its control: right for a field, switch or menu, wrong for an acting button (Remove).
   const guard = (event: MouseEvent) => {
     const control = (event.currentTarget as HTMLLabelElement).control;
     if (control instanceof HTMLButtonElement && !control.matches("[aria-haspopup], [role='switch'], [role='combobox'], [role='checkbox']")
@@ -241,13 +218,9 @@ export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; pl
   };
   return <Row element={props.plain ? "div" : "label"} density="line" bare haptic={false} class="ui-setting-line" title={props.title} onClick={props.plain ? undefined : guard}>{inner()}</Row>;
 };
-/**
- * A credential: its name and how it is held (state), then its actions: the caller's own first (actions: Sign in),
- * Add or Replace (stored), Remove (onRemove). Add or Replace opens the secret's field in their place, with Save and
- * Cancel (Esc), and what goes with the secret (fields: an account ID) a line each under it. Saving keeps the field
- * open if onSave throws, so the caller's error shows beside what was typed. editable false: held elsewhere (the
- * server's environment), nothing to enter here.
- */
+/** A credential: its name and state, then the caller's actions, Add or Replace, and Remove. Add or Replace opens the
+ *  secret's field with Save and Cancel (Esc), fields (an account ID) a line each under it; a throwing onSave keeps it open
+ *  beside what was typed. editable false: held elsewhere (the server's environment). */
 export function SettingCredential(props: {
   label: string; state?: JSX.Element; title?: string; stored?: boolean; editable?: boolean; busy?: boolean;
   add?: string; placeholder?: string; actions?: JSX.Element;
@@ -294,23 +267,18 @@ export function SettingCredential(props: {
 }
 /** A setting's value that is read, not set; mono for ids, addresses and versions. */
 export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value ui-truncate" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
-/** A link out, as a setting's control: Docs, Open sign-in. */
 /** A setting's state that leads somewhere in Settings ("6 tools" opens Tools): text in the state's voice, a button. */
 export const SettingStateLink = (props: { onClick: () => void; children: JSX.Element }) =>
   <button type="button" class="ui-setting-state-link" onClick={() => props.onClick()}>{props.children}</button>;
+/** A link out, as a setting's control: Docs, Open sign-in. */
 export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
-/** A line under a setting: what went wrong (error), or a quiet note. */
 /** More about a setting, folded under it until asked for. */
 export const SettingDetails = (props: { summary: string; children: JSX.Element }) => <details class="ui-setting-details"><summary>{props.summary}</summary>{props.children}</details>;
 /** Something a setting needs the page's width for: a prompt's text, a download's progress. */
 export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-setting-wide">{props.children}</div>;
-/** Waiting on what a page shows. */
 
-/*
- * Glance: what chat search's cursor rests on, told apart without opening it -- a chat's title and
- * facts, its last prompt, how that turn ended and the start of its answer; or a folder and its
- * latest chats. The app reads the chat; these only draw what it read.
- */
+/* Glance: what chat search's cursor rests on, told apart without opening it: a chat's title, facts, last prompt, how
+   that turn ended and its answer's start; or a folder and its latest chats. These only draw what the app read. */
 export const Glance = (props: { label: string; children: JSX.Element }) => <div class="ui-glance" aria-label={props.label} aria-live="polite">{props.children}</div>;
 export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: string[] }) => <>
   <div class="ui-glance-title">{props.mark}<span>{props.title}</span></div>
@@ -326,8 +294,7 @@ export const GlanceAnswer = (props: { html?: string; children?: JSX.Element }) =
   ? <div class="ui-glance-answer" data-math="" innerHTML={props.html} />
   : <p class="ui-glance-answer">{props.children}</p>;
 
-/** A whole text under a GlanceHead (a report jbot's panel previews): an Answer at the row's size, a tone under the
- *  text, its own headings and bold a step heavier rather than a transcript's. */
+/** A whole text under a GlanceHead (a report jbot's panel previews), headings and bold a step heavier than a transcript's. */
 export const GlanceBody = (props: { children: JSX.Element }) => <div class="ui-glance-body">{props.children}</div>;
 
 /** An overlay's head without a field: what it is about (the leader's key and path). */

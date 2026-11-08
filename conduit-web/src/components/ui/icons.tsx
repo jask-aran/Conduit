@@ -102,8 +102,8 @@ import {
   XIcon
 } from "lucide-solid";
 
-/* The shared icon vocabulary: one glyph per concept, imported as Icons (Icons.Settings). Every icon two or more files use is
-   here; one a single file uses may stay its own import. Named exports, so a bundle takes only the glyphs it uses. */
+/* The shared icon vocabulary, one glyph per concept (Icons.Settings): every icon two or more files use. Named exports,
+   so a bundle takes only the glyphs it uses. */
 /** Runtime activity and status. */
 export const Runtime = ActivityIcon;
 /** An agent's heartbeat: its tick, and the quiet line a beat leaves. */
@@ -146,7 +146,6 @@ export const Agent = BotIcon;
 /** A message waiting to steer the running turn; one waiting its turn after it. */
 export const Steer = CornerDownRightIcon;
 export const Queued = ListEndIcon;
-/** Capture a photo attachment. */
 export const Camera = CameraIcon;
 /** A chat or its messages. */
 export const Chat = MessageSquareIcon;
@@ -164,7 +163,6 @@ export const Close = XIcon;
 export const Code = CodeXmlIcon;
 /** Compact the chat context. */
 export const Compact = ShrinkIcon;
-/** Copy content to the clipboard. */
 export const Copy = CopyIcon;
 /** A model hosted on this machine. */
 export const LocalModel = CpuIcon;
@@ -192,7 +190,6 @@ export const Focus = FocusIcon;
 export const Folder = FolderIcon;
 /** The model service level. */
 export const ServiceLevel = GaugeIcon;
-/** A source-control branch. */
 export const GitBranch = GitBranchIcon;
 /** Review source-control changes. */
 export const GitCompareArrows = GitCompareArrowsIcon;
@@ -202,11 +199,9 @@ export const Fetch = GlobeIcon;
 export const Hide = EyeOffIcon;
 /** The home directory or home view. */
 export const Home = HomeIcon;
-/** An image file or attachment. */
 export const Image = ImageIcon;
 /** Insert or edit text at the cursor. */
 export const InsertText = TextCursorInputIcon;
-/** Keyboard input and shortcuts. */
 export const Keyboard = KeyboardIcon;
 /** Sign out of the server. */
 export const LogOut = LogOutIcon;
@@ -217,7 +212,6 @@ export const SwitchCamera = SwitchCameraIcon;
 export const Message = MessageSquareTextIcon;
 /** Feedback on something said (a message's foot). */
 export const Feedback = MessageSquareQuoteIcon;
-/** Microphone. */
 export const Microphone = MicIcon;
 /** Restore a pane to its smaller size. */
 export const Minimize = Minimize2Icon;
@@ -229,9 +223,7 @@ export const Pointer = MousePointer2Icon;
 export const More = EllipsisIcon;
 /** Move a chat into a folder. */
 export const MoveToFolder = FolderInputIcon;
-/** Start a new chat. */
 export const NewChat = MessageSquarePlusIcon;
-/** Create a folder. */
 export const NewFolder = FolderPlusIcon;
 /** Edit the workspace identity. */
 export const WorkspaceIdentity = PaletteIcon;
@@ -263,9 +255,7 @@ export const Refresh = RefreshCwIcon;
 export const Reset = RotateCcwIcon;
 /** Find content, commands or items. */
 export const Search = SearchIcon;
-/** Send a message. */
 export const Send = ArrowUpIcon;
-/** A connected server. */
 export const Server = ServerIcon;
 /** Application, workspace and terminal settings. */
 export const Settings = SettingsIcon;
@@ -281,7 +271,6 @@ export const User = CircleUserIcon;
 export const Sidebar = PanelLeftIcon;
 /** Show two panes or comparison columns. */
 export const Split = Columns2Icon;
-/** Stop the current operation. */
 export const Stop = SquareIcon;
 /** A terminal, command or command palette. */
 export const Terminal = TerminalIcon;
@@ -289,13 +278,11 @@ export const Terminal = TerminalIcon;
 export const Thinking = LightbulbIcon;
 /** Undo an edit or discard changes. */
 export const Undo = Undo2Icon;
-/** Upload a file. */
 export const Upload = UploadIcon;
 /** A warning or failed operation. */
 export const Warning = TriangleAlertIcon;
 /** Show or hide the workspace panel. */
 export const Workspace = PanelRightIcon;
-/** Toggle line wrapping. */
 export const WrapText = WrapTextIcon;
 /** How a transcript draws the work between replies: Narrated or Folded. */
 export const Narration = ListCollapseIcon;

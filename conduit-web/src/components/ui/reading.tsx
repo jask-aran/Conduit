@@ -3,13 +3,9 @@ import { Show, splitProps, type JSX } from "solid-js";
 
 import { Gauge, Swatch } from "./controls";
 
-/*
- * Reading: what a gauge measures, laid out to be read at a glance -- the context window in the composer's gauge
- * and the chat menu's Context (DESIGN Pieces: Reading). Under its Meter, the session's lines: its totals, the parts as a
- * legend, the cache, compaction with its control; last, the account's figures (a plan's windows) as tiles.
- * Every line is the caption's size: the numbers in the data face, the names in the text's, so nothing outweighs
- * the bar. Shapes only; what is measured and what a part does stay with the caller.
- */
+/* Reading: what a gauge measures, read at a glance (the composer's gauge, the chat menu's Context; DESIGN Pieces:
+   Reading). Under its Meter the session's lines, then the account's figures as tiles; all at the caption's size, so
+   nothing outweighs the bar. Shapes only. */
 export const Reading = (props: { children: JSX.Element }) => <div class="ui-reading">{props.children}</div>;
 
 /** The totals under the bar: what is used of what there is (and where it compacts), a figure at the end. */
@@ -19,8 +15,7 @@ export const ReadingTotal = (props: { label: JSX.Element; value?: JSX.Element })
 /** The parts, a legend of the bar: each its colour, its name, its share. */
 export const ReadingParts = (props: { label?: string; children: JSX.Element }) => <ul class="ui-reading-parts" aria-label={props.label}>{props.children}</ul>;
 
-/** One part. hollow: room rather than content (free space). opens: it holds parts of its own, shown under it while
- *  expanded; the caller makes it act (role="button", its keys). sub: one of those, under its part. */
+/** One part. hollow: room, not content. opens: it holds sub parts, shown while expanded (the caller makes it act). */
 export function ReadingPart(props: Omit<JSX.LiHTMLAttributes<HTMLLIElement>, "class" | "value"> & { label: JSX.Element; value?: JSX.Element; colour?: string; hollow?: boolean; opens?: boolean; expanded?: boolean; sub?: boolean }) {
   const [, rest] = splitProps(props, ["label", "value", "colour", "hollow", "opens", "expanded", "sub"]);
   return <li {...rest} class="ui-reading-part" aria-expanded={props.opens ? !!props.expanded : undefined} data-sub={props.sub ? "" : undefined}>
@@ -43,8 +38,7 @@ export const ReadingStat = (props: { value: JSX.Element; label: string; detail?:
 export const ReadingFoot = (props: { children: JSX.Element; action?: JSX.Element }) =>
   <div class="ui-reading-foot"><span>{props.children}</span>{props.action}</div>;
 
-/** A ring of what is used and its figure, used over what there is (jbot's spend: $0.12 / $0.50), in the data face;
- *  label: the whole of it in words, to a reader and on hover. */
+/** A ring of what is used and its figure (jbot's spend: $0.12 / $0.50); label: the whole in words, for readers and hover. */
 export const GaugeFigure = (props: { value: number; tone?: "idle" | "normal" | "warning" | "critical"; used: string; of?: string; label: string }) =>
   <span class="ui-gauge-figure" role="img" aria-label={props.label} title={props.label}><Gauge value={props.value} tone={props.tone} />
     <span>{props.used}<Show when={props.of}><small> / {props.of}</small></Show></span></span>;

@@ -5,24 +5,13 @@ export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
 
 /**
  * The keyboard's travel with no layout in it, while the native composer is up (native-phone-composer.ts).
- *
- * Drawn the old way, a travel sets --app-height on every frame, and every frame is then a whole-app style and layout
- * pass (5-13ms on a phone): the transcript falls to every other frame at 120Hz, and further behind on anything faster.
- * Here the layout changes twice, at the travel's ends: at its start the app is laid out at the keyboard's lower
- * position (the taller of the two), at its end at the keyboard's final one. Between them what rides the keyboard --
- * the composer's dock (its riders; its field and row are drawn natively) and the transcript above it -- is
- * moved by one transform animation each, on the system's own curve (CSS linear() from its samples), which the
- * compositor runs at the display's rate whatever that is, with no frame waiting on script or layout.
- *
- * What a transcript does follows one rule, the same one that shows Scroll to latest (the caller's `away`): at the bottom (no
- * pill) it rides the keyboard, held against the composer; scrolled up (the pill showing) it does not move at all --
- * the keyboard and composer come up over it, and what is being read stays where it is. The transcript's own hold
- * (transcript.tsx, holdAgainstKeyboard) keeps the same rule, so neither the ride nor the layout at the ends moves it.
- * The one thing that can still shift one scrolled up is the scroller growing as the keyboard leaves past the end of
- * what there is to show (its scroll clamped); that shift is put on the travel too, from where it was back to rest.
- *
- * The animation is started in phase: the shell stamps when the system began the travel (wall clock, the same one
- * Date.now reads), so a description that took a few frames to cross the bridge starts that far along, not behind.
+ * Setting --app-height every frame costs a whole-app style and layout pass (5-13ms on a phone), so the layout changes
+ * only at the travel's ends (start: the keyboard's lower position, the taller; end: its final one). Between them the
+ * composer's dock and the transcript above it each ride one transform animation on the system's curve (CSS linear()),
+ * which the compositor runs at the display's rate with no frame waiting on script or layout.
+ * A transcript follows the Scroll to latest rule (the caller's `away`): at the bottom it rides, held against the
+ * composer; scrolled up it never moves (the same rule as holdAgainstKeyboard in transcript.tsx), except a scroll clamp
+ * as the scroller grows, which is put on the travel too. The animation starts in phase from the shell's wall-clock stamp.
  */
 const RIDERS = ".ui-composer-dock";
 const SCROLLERS = ".ui-chat-scroller, .ui-dash-conversation-scroll";
@@ -39,12 +28,8 @@ export const travelEasing = (curve: number[]) => CSS.supports("animation-timing-
  *  covers before the composer moves at all. */
 export type Travel = { from: number; to: number; durationMs: number; curve: number[]; startedAt?: number; rest?: number };
 
-/**
- * The curve of what rides the composer: the composer sits on the keyboard or on the navigation bar's room, whichever is
- * higher, so it moves only while the keyboard is above that room -- landing (or setting off) while the keyboard is
- * still in the bar's room. The keyboard's own curve spread the composer's move over the keyboard's whole travel: the
- * transcript arrived after the composer, a band of page showing under it until it did.
- */
+/** The curve of what rides the composer: it sits on the keyboard or the navigation bar's room, whichever is higher, so
+ *  it moves only while the keyboard is above that room (the keyboard's own curve left a band of page under it). */
 function ridingCurve(travel: Travel): number[] {
   const rest = travel.rest ?? 0;
   const at = (progress: number) => Math.max(rest, travel.from + (travel.to - travel.from) * progress);
@@ -66,11 +51,8 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const still = away ? [...document.querySelectorAll<HTMLElement>(".ui-chat-viewport, .ui-dash-conversation-scroll")].filter(shown) : [];
   for (const scroller of still) scroller.setAttribute("data-keyboard-away", "");
   const scrolls = still.map((scroller) => scroller.scrollTop);
-  // Where the composer's top sits at each end, measured, not computed: what rides the keyboard -- the riders at the
-  // dock's top, and a transcript held against the composer -- moves with it, and it moves by the keyboard's travel
-  // (less the navigation bar's room, given up as the keyboard takes it) and by the rooms the composer's own change
-  // takes or gives (the field, the edit pills). Measured once as it starts, then again with the composer's change
-  // made and its rooms settled at once (they are hidden: the native composer draws them), so all of it rides here.
+  // Where the composer's top sits at each end, measured, not computed: it moves by the keyboard's travel (less the
+  // navigation bar's room) and by the rooms its own change takes or gives (field, edit pills), so all of it rides here.
   const probe = riders[0]?.querySelector(".ui-phone-composer") ?? riders[0] ?? scrollers[0];
   const top = (height: number) => { setKeyboard(height); return probe ? probe.getBoundingClientRect().top : 0; };
   const atFrom = top(travel.from);

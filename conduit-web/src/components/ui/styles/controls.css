@@ -1,17 +1,14 @@
-/* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop), and its text the label size. */
+/* A keycap is small inside a row, so its corner is a share of the control radius (~4px on desktop). */
 .ui-keycap { display: inline-grid; white-space: nowrap; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground); font: var(--weight-lift) var(--text-label)/var(--leading-none) var(--font-label); }
 .ui-row:where([data-density="menu"])[data-highlighted] .ui-keycap { color: var(--foreground); }
-/* A keycap that can be pressed (to record another) and cleared: taller, for a pointer and a finger, the
-   chord and a × each a button, a second tint under the one the cursor is on. */
+/* An editable keycap (press to record another, × to clear): taller, for a pointer and a finger. */
 .ui-keycap[data-editable] { display: inline-flex; height: var(--control-xs); overflow: hidden; padding: 0; color: var(--foreground); font-size: var(--text-caption); }
 .ui-keycap[data-editable] > button { display: inline-flex; height: 100%; align-items: center; border: 0; background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; cursor: pointer; }
 .ui-keycap[data-editable] > .ui-keycap-remove { width: var(--control-2xs); justify-content: center; border-left: var(--hairline) solid var(--tint); padding: 0; color: var(--muted-foreground); }
 .ui-keycap[data-editable] > button:is(:focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); }
 @media (hover: hover) { .ui-keycap[data-editable] > button:is(:hover, :focus-visible) { outline: 0; background: var(--tint); color: var(--foreground); } }
 
-/* The box: what holds a value is a --tint line at the control corner -- an input, a text area in a
-   card or a setting, the code preview, a chip, a segmented track. What you type into fills with the
-   surface's well; a text area and the preview pad their text half a unit by three quarters. */
+/* The box: what holds a value is a --tint line at the control corner; what you type into fills with the surface's well. */
 .ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview, .ui-code, .ui-chip-body, .ui-seg { border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
 .ui-input, .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea { background: var(--well); }
 .ui-card .ui-textarea, .ui-setting-wide > .ui-textarea, .ui-preview { padding: var(--space-md) var(--space-lg); }
@@ -19,9 +16,8 @@
 .ui-field[data-inline] { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-lg); }
 .ui-field-label { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-lift); text-box: trim-both cap alphabetic; }
 
-/* Button: a rounded rectangle. Secondary is the surface's well inside its line (on frost, a
-   hairline with nothing inside); ghost is text until washed. Outline draws primary, ghost or
-   destructive as a line in its colour with nothing inside. */
+/* Button: secondary is the well inside its line (on frost, a hairline alone); ghost is text until washed; outline
+   draws primary, ghost or destructive as a line in its colour. */
 :where(.ui-button) { display: inline-flex; height: var(--control); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border: var(--hairline) solid transparent; border-radius: var(--radius-control); padding: 0 var(--space-xl); font-size: var(--text-row); font-weight: var(--weight-strong); white-space: nowrap; cursor: pointer; transition: background-color var(--duration-quick) var(--ease-change), border-color var(--duration-quick) var(--ease-change), filter var(--duration-quick) var(--ease-change); outline: none; }
 /* Zero-specificity: where the button sits sets its icon (a header, a composer), as in the app. */
 :where(.ui-button) svg { width: var(--icon); height: var(--icon); flex: none; }
@@ -78,21 +74,17 @@
 .ui-input[data-look="icon"]:is(:focus-visible, [aria-expanded="true"]) { background: var(--tint); color: var(--foreground); }
 .ui-input[data-look="icon"]:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 
-/* Segmented choice: a hairline track and a sliding thumb (the app's
-   settings and dashboard filters): the surface's tint for both. The
-   pill form is the phone header's: the track is itself frost. */
-/* The track at --radius-control; the wash and segments 2px in (its line and 1px), so their corner is
-   the track's less those 2px: the space round the wash is even, corners included. Segments touch. */
-/* The thumb and a pointed-at segment sit inset from the hairline, and segments a gap apart, so the wash of the one
-   pointed at never touches the thumb's beside it. */
+/* Segmented choice: a hairline track and a sliding thumb; the pill form (the phone header's) is frost. Wash and segments
+   sit 2px in with a corner the track's less those 2px, so the space round the wash is even; segments a gap apart, so a
+   pointed-at wash never touches the thumb's. */
 .ui-seg { --seg-pad: calc(2 * var(--hairline)); --seg-gap: var(--seg-pad); --seg-inner: calc(var(--radius-control) - var(--hairline) - var(--seg-pad)); --seg-cell: calc((100% - 2 * var(--seg-pad) - (var(--segments) - 1) * var(--seg-gap)) / var(--segments)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: var(--seg-gap); background: transparent; padding: var(--seg-pad); }
-/* The thumb slides by left, not transform: a transform puts it on a layer of its own and the labels over it
-   on others, where Windows draws their text without ClearType, so they dim while it moves. */
+/* The thumb slides by left, not transform: a layer of its own would put the labels on others, where Windows drops
+   ClearType, so they dim while it moves. */
 .ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (var(--seg-cell) + var(--seg-gap)) * var(--segment)); width: var(--seg-cell); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button:is(:focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
 @media (hover: hover) { .ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); } }
-/* Icons alone (the sidebar's Chat | Work) keep their square target and icon size: only worded segments came down. */
+/* Icons alone (the sidebar's Chat | Work) keep their square target and icon size. */
 .ui-seg[data-icons] button { width: var(--control); min-height: calc(var(--control-sm) - 2 * var(--seg-pad)); padding: 0; }
 .ui-seg[data-icons] button svg { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-seg[data-pill] { height: var(--pill-size); gap: var(--pill-gap); border-color: var(--frost-stroke); border-radius: var(--radius-round); background: var(--frost-fill); padding: var(--hairline); }
@@ -105,18 +97,16 @@
 [data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--border); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
 .ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
-/* The cursor on the chosen segment (already washed) brightens that wash a step: a second tint over the thumb's. */
+/* The cursor on the chosen segment adds a second tint over the thumb's. */
 .ui-seg button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
 /* The cursor on an unchosen segment is the wash (DESIGN Interaction); held: the window is away and it waits there. */
 .ui-seg button:not([aria-checked="true"]):is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
-/* A small segmented choice, for a bar's end (chat search's sort). */
-/* Only its size changes: the same hairline, thumb and type as the Segmented it scales. */
+/* A small segmented choice for a bar's end (chat search's sort): only its size changes. */
 .ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-sm); font-size: var(--text-caption); }
 
-/* Slider: the label is a section title, the value an item (one that opens,
-   when it opens the levels); track, thumb and ticks follow density. */
+/* Slider: the label is a section title, the value an item; track, thumb and ticks follow density. */
 .ui-slider { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-md); }
 .ui-slider[data-disabled] { opacity: var(--opacity-disabled); }
 .ui-slider-head { display: flex; align-items: center; justify-content: space-between; gap: var(--row-gap); }
@@ -177,8 +167,8 @@
 .ui-swatch { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); }
 .ui-swatch[data-fill] { width: 100%; height: 100%; border-radius: inherit; }
 .ui-swatch[data-hollow] { box-shadow: inset 0 0 0 var(--hairline) var(--muted-foreground); }
-/* Series: a column per period growing from the foot by its share of the largest, a stroke between; an empty period the
-   ground's hairline. Resting columns a step back, the current one and the one pointed at full; the ends named under it. */
+/* Series: a column per period, its share of the largest; an empty period the ground's hairline; the current and
+   pointed-at full, the rest a step back. */
 .ui-series { display: grid; gap: var(--space-xs); margin: 0; }
 .ui-series-bars { display: flex; height: var(--series-height); align-items: flex-end; gap: var(--stroke); border-bottom: var(--hairline) solid var(--tint); }
 .ui-series-bars > span { min-width: var(--hairline); height: calc(var(--share) * 100%); flex: 1 1 0; border-radius: var(--stroke) var(--stroke) 0 0; background: var(--foreground); opacity: var(--opacity-muted); transition: opacity var(--duration-quick) var(--ease-change); }

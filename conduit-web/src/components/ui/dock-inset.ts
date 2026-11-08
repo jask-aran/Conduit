@@ -1,15 +1,9 @@
 /**
- * The composer floats over the foot of what scrolls under it (a thread, a room's messages), so that scroller has to
- * reserve the composer's height itself. A fixed reservation only ever matched the resting composer: a multi-line
- * draft, attachments, or the queued-message card each grew the stack over the newest output and left it covered.
- * Reserving the measured height instead (--transcript-composer-inset on `target`, the dock's border box plus a
- * clearance) makes the content taller, which a tail that follows reads as the bottom moving -- so the output steps up
- * out of the way while the card is there, and back down when it goes.
- *
- * Border box, because the only thing the keyboard changes about the stack is its padding: the pill inside stays its
- * height whether or not the navigation bar is owed room underneath, so a content-box observation reports once and
- * never again. Dictating on a phone, the text pill folds away under captions that float where it was: the room is
- * still taken, so the reservation keeps it rather than following the composer down and back up.
+ * The composer floats over the foot of what scrolls under it, so that scroller reserves the composer's measured height
+ * (--transcript-composer-inset on `target`: the dock's border box plus a clearance). A multi-line draft, attachments or
+ * the queued-message card grow it, and a following tail steps the output up out of their way.
+ * Border box, because the keyboard changes only the stack's padding: a content-box observation reports once and never
+ * again. Dictating on a phone, the pill folds under captions where it was; the room is still taken, so it is kept.
  */
 const CLEARANCE_PX = 40;
 const DOCK_INSET = "--transcript-composer-inset";

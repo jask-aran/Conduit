@@ -3,11 +3,9 @@ import { Note } from "./state";
 import { Row } from "./row";
 
 /*
- * A workbench: a page that works on one thing at a time (Settings › Prompts: a document; Blocks: a block). Its title
- * is the thing, and pressing it chooses another (a Select look="title"); its actions beside, what it is under. Below,
- * the split takes the rest of the height so the page never scrolls: a side column (a chain, the facts about it) that
- * scrolls on its own, and the main column, one pane that fills it (a TextEditor fill) -- its actions in the pane's
- * bar, what is known of it in the pane's foot.
+ * A workbench: a page that works on one thing at a time (Settings › Prompts: a document; Blocks: a block). Below its
+ * title, the split takes the rest of the height so the page never scrolls: a side column scrolling on its own, and
+ * the main column, one pane that fills it (a TextEditor fill).
  */
 export const Workbench = (props: { label: string; children: JSX.Element }) => <div class="ui-workbench" role="region" aria-label={props.label}>{props.children}</div>;
 /** title: the thing worked on, a Select look="title" to choose another. actions: icon buttons beside it. meta: what it is. */
@@ -27,7 +25,5 @@ export const WorkbenchFact = (props: { name: string; value?: string; title?: str
 
 /** A quiet line in a Group or under a title: what there is none of, or what follows (Conduit then adds…). */
 
-/*
- * A TextEditor's head (its `head` slot), here rather than with the editor so a page can draw it without loading
- * CodeMirror: the pane's title -- live: what it shows is filled in as it stands, quieter -- and its actions at the end.
- */
+/* A TextEditor's head (its `head` slot), here so a page can draw it without loading CodeMirror. live: what it shows
+ * is filled in as it stands, quieter. */

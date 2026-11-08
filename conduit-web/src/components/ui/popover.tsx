@@ -9,15 +9,11 @@ import { type Density, type Motion, hovers, motionOf, moveCursor } from "./share
 
 /** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
 /** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
-/** unfolds: its rows unfold -- open in place, the menu growing with them (Expand; the chat menu's Context, the gauge's
- *  parts): as wide as its cap from the start, and as tall as what is open, up to the room it has, before it scrolls. */
+/** unfolds: its rows open in place (the chat menu's Context): as wide as its cap from the start, growing with them. */
 /** A measure (Foundations · Space): a popover's width or height cap. */
 export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
-/**
- * A popover is as wide as its rows and as tall as they are, inside two caps -- a phone's narrower and shorter by
- * default (--menu-width-cap, --menu-height-cap) -- and the room its host leaves it (--menu-room: the adapter gives
- * it Kobalte's, inside the safe area); past that it scrolls. width, height: this popover's own caps, in a measure.
- */
+/** A popover fits its rows inside its caps (--menu-width-cap, --menu-height-cap, a phone's smaller) and the room its
+ *  host leaves (--menu-room, Kobalte's inside the safe area), then scrolls. width, height: its own caps, in a measure. */
 export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
   const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
@@ -34,8 +30,8 @@ export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX
   </div>;
 }
 
-/** A search section: the field alone. It filters the list section after it, or opens a full search; keys shows its shortcut, which a phone variant never shows.
- *  field: what a behaviour adds to the input (combobox state, keys, focus). */
+/** A search section: the field alone, filtering the list after it or opening a full search; keys: its shortcut (never
+ *  on a phone). field: what a behaviour adds to the input. */
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement> }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
     <Icons.Search /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
@@ -43,9 +39,8 @@ export function SearchSection(props: { placeholder: string; value?: string; keys
   </div>;
 }
 
-/** RowGroup: a row and its actions side by side, each an item of its own, so the arrow keys reach every one and
- *  Enter runs it. The actions are icons at the row's end, shown on the hovered row or the one holding the cursor
- *  (always where nothing hovers). */
+/** RowGroup: a row and its icon actions side by side, each its own item for the arrow keys; actions show on the hovered
+ *  or cursor row (always where nothing hovers). */
 export const RowGroup = (props: { actions: JSX.Element; children: JSX.Element }) =>
   <div class="ui-row-group">{props.children}<span class="ui-row-actions">{props.actions}</span></div>;
 /** RowAction: one action in a RowGroup, an icon named by its label; destructive, it washes red. */
@@ -57,11 +52,9 @@ export function RowAction(props: JSX.HTMLAttributes<HTMLDivElement> & { label: s
 /** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
-  /** detailData: the second line is a value (an address, a command, a session's place and age), so it takes the Data
-   *  voice; without it the second line is a description, in the Caption voice. */
+  /** detailData: the second line is a value (an address, a command), in the Data voice, not the Caption voice. */
   detailData?: boolean;
-  /** field: the row is its section's title -- the name in the label's voice, meta its value in the text's, as in "CONTEXT  8% used ›"
-   *  (the row that unfolds a reading under it, like the plus menu's EFFORT). */
+  /** field: the row is its section's title, the name in the label's voice and meta its value ("CONTEXT  8% used ›"). */
   field?: boolean;
   /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
@@ -111,7 +104,7 @@ export function matchedLetters(text: string, query: string): Set<number> | null 
   return hits;
 }
 
-/** Typing lights the match: the matched letters white and heavier, the rest of the label muted. A keyword-only match stays plain. */
+/** Typing lights the match, the rest of the label muted; a keyword-only match stays plain. */
 export function Match(props: { text: string; query: string }) {
   const hits = () => matchedLetters(props.text, props.query);
   return <Show when={hits()} fallback={props.text}>{(lit) =>

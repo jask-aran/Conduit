@@ -3,10 +3,7 @@ import { cn } from "@/lib/utils";
 import { Overlay, OverlayHead, OverlayList } from "./overlay";
 import { type Motion, motionOf } from "./shared";
 
-/**
- * A breadcrumb of places: the one uppercase label (DESIGN Typography). The
- * current place is white with no fill; the cursor washes the others.
- */
+/** A breadcrumb of places: the one uppercase label (DESIGN Typography); the current place white with no fill. */
 export function Crumbs(props: { label: string; items: { label: string; current?: boolean; disabled?: boolean; onClick?: () => void }[] }) {
   return <nav class="ui-crumbs" aria-label={props.label}><For each={props.items}>{(item, index) => <>
     <Show when={index() > 0}><span class="ui-crumbs-sep" aria-hidden="true">›</span></Show>
@@ -15,10 +12,9 @@ export function Crumbs(props: { label: string; items: { label: string; current?:
 }
 
 /**
- * The leader menu (Ctrl+G): a small raised frost card that floats without
- * covering the page, above the composer. Its head is the leader's key and the
- * region path; its rows lead with their keys; its rail holds the go-to chords
- * and Esc. The page dims round it all but the current region (Spotlight).
+ * The leader menu (Ctrl+G): a raised frost card above the composer. Its head is the leader's key and the region path;
+ * its rows lead with their keys; its rail holds the go-to chords and Esc. The page dims round it all but the current
+ * region (Spotlight).
  */
 /** foot: fixed above the composer; the wrapper marks shortcut events from inside the card. path, hints and rows
  *  are each optional, so a part can be shown alone in its card. */

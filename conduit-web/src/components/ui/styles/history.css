@@ -7,8 +7,7 @@
   --history-step: calc(1.71875 * var(--u-space));
   --history-tick: calc(0.625 * var(--u-space));
   --history-line-height: calc(1.17188 * var(--u-space));
-  /* Where the text column begins, measured from a row's left edge. Tree rails
-     and ticks hang off this, so the timestamp gutter is never crossed. */
+  /* Where the text column begins; rails and ticks hang off it, so the timestamp gutter is never crossed. */
   --history-gutter: calc(var(--history-time-width) + var(--history-gap) + var(--history-row-pad));
   min-height: 0;
   flex: 1;
@@ -47,9 +46,8 @@
 @media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
 }
 .ui-history-row[data-kind="user"], .ui-history-row[data-kind="assistant"] { color: var(--foreground); }
-/* A step the harness keeps in its tree but leaves out of every later request:
-   an answer it was interrupted writing. Struck through and dimmed, so the
-   history reads as the conversation the agent actually has. */
+/* A step the harness leaves out of every later request (an interrupted answer): struck and dimmed, so the history
+   reads as the conversation the agent actually has. */
 .ui-history-row[data-discarded] .ui-history-text { text-decoration: line-through; opacity: var(--opacity-muted); }
 .ui-history-row strong { font-weight: var(--weight-strong); }
 .ui-history-row[data-kind="user"] strong, .ui-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }

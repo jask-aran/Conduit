@@ -1,11 +1,7 @@
 
 
-/**
- * desktop or phone: the rules a shell's sections and items are built at. The
- * layout sets it once (the phone layout's media rule in styles/foundations.css, or
- * data-density on an ancestor); a shell inherits it and its sections follow.
- * The prop is an override, for drawing one layout inside another.
- */
+/** desktop or phone: the rules a shell is built at, set once by the layout (styles/foundations.css, or data-density
+ *  on an ancestor); the prop is an override, for drawing one layout inside another. */
 export type Density = "desktop" | "phone";
 
 /** Whether a pointer event is from a pointer that hovers (a mouse, a pen above the screen), not a touch. */
@@ -19,12 +15,8 @@ export function cssTime(element: Element, name: string, fallback: number) {
   return value.endsWith("ms") ? amount : value.endsWith("s") ? amount * 1000 : amount;
 }
 
-/**
- * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
- * does, so only one row of a list is ever washed. A list's container passes
- * this to onPointerOver; a row is a ui-row (not a data-still one: a readout), its cursor data-highlighted. Only a pointer that hovers
- * moves it: a tap is a choice, and a cursor it moved stayed on the row tapped, washed, once the list was left.
- */
+/** The one cursor (DESIGN Interaction): the pointer moves it as the keyboard does, so only one row is ever washed; a
+ *  list passes this to onPointerOver. Only a hovering pointer moves it: a tap is a choice, and would leave a wash. */
 export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   if (!hovers(event)) return;
   const row = (event.target as Element).closest(".ui-row");
@@ -40,14 +32,9 @@ export type Motion = "entering" | "leaving" | "removing";
 export const sinceOf = (since?: number) => since ? { "--entered": `${-Math.round(since)}ms` } : undefined;
 export const motionOf = (motion?: Motion) => ({ "data-entering": motion === "entering" ? "" : undefined, "data-leaving": motion === "leaving" ? "" : motion === "removing" ? "remove" : undefined });
 
-/**
- * What a Markdown renderer drawing into an Answer marks: a wrapper of its own holding the answer's blocks (flow,
- * spaced as the Answer's own), a table's scroll box (table), a link it opens itself (link, a button), words just
- * streamed in (word: they fade in, over --answer-word-fade) and a formula's new parts (math: they fade in too, and the
- * renderer takes the class off once they have). A citation (a link whose text is its URL) carries data-citation;
- * formulas are KaTeX's own. A wide block -- a table, or a CodeBlock -- may grow past the column, centred, up to
- * --answer-bleed (tables) and --answer-bleed-code (code), which the pane declares; never past what it needs.
- */
+/** What a Markdown renderer drawing into an Answer marks: flow, table, link (a button), word (fading in) and math
+ *  (fading in; the renderer takes the class off after). A citation carries data-citation. A wide block may grow past
+ *  the column up to --answer-bleed / --answer-bleed-code, which the pane declares. */
 export const ANSWER_MARKDOWN = { flow: "ui-answer-flow", table: "ui-answer-table", link: "ui-answer-link", word: "ui-answer-word", math: "ui-answer-math-in" } as const;
 
 /** What a caller drawing its own lines into a CodeBlock marks: each line (line), which the block numbers. */

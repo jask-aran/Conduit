@@ -13,10 +13,7 @@ import { type Motion } from "./shared";
  * on (async) -- so an approval reads the same wherever it is answered.
  */
 
-/**
- * A detail line: plain text, or an action with what it sends as labelled fields ("To", "Subject"), and a command or
- * script as it will run, in a block of its own.
- */
+/** A detail line: plain text, or an action with labelled fields ("To", "Subject") and a command in a block of its own. */
 export type ApprovalLine = string | { text?: string; fields?: { label: string; value: string }[]; code?: string };
 
 /** A line as plain text: for a tooltip or a notification. */
@@ -50,9 +47,8 @@ export type ApprovalState = "pending" | "allowed" | "declined" | "expired" | "us
 export type ApprovalChoice = "allow" | "always" | "deny";
 
 /**
- * ApprovalCard: an approval in the thread. Pending, the summary over Allow / Always / Don't (Allow the one action
- * waiting); answered, one quiet line of what became of it. busy: an answer on its way. bare: inside a surface whose
- * row already names it (Needs you): its lines and its answers under that row's label, no card or head of its own.
+ * ApprovalCard: an approval in the thread. Pending, the summary over Allow / Always / Don't; answered, one quiet line.
+ * busy: an answer on its way. bare: inside a surface whose row already names it (Needs you), no card or head of its own.
  */
 export function ApprovalCard(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
   /** What Always would allow from now on ("Gmail · send, any input"); null: no lasting rule fits, so no Always. */

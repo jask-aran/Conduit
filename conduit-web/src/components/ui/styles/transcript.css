@@ -10,11 +10,8 @@
 /* Transcript (DESIGN Transcript), at the transcript's scale. The reading column is the composer's width. */
 .ui-transcript { display: flex; width: min(100%, var(--transcript-width, var(--composer-width, var(--reading-width)))); flex-direction: column; margin-inline: auto; }
 /* Hung marks: a row that starts with a mark (a step, an agent, an envelope's sender) hangs it in the gutter, so every
-   line of text a turn writes starts on the column's edge -- the answer's, the commentary's, a step's verb -- and the
-   turn's orb hangs in a column of its own beyond the marks, never over one. Neither moves the text: where the room
-   beside the column (100cqw less the column, halved, resolved where it is used) holds the orb and the marks, the marks
-   hang (--mark-hang, the mark and its gap); where it does not (a narrow pane, a phone) they stay in the column (0)
-   and the orb keeps its own place. */
+   line a turn writes starts on the column's edge, the turn's orb in a column of its own beyond the marks. Where the
+   room beside the column (100cqw less the column, halved) cannot hold them, the marks stay in the column (0). */
 .ui-transcript { --mark-reach: calc(var(--icon-sm) + var(--row-gap));
   --mark-hang: clamp(0px, ((100cqw - 100%) / 2 - var(--icon-xl) - 2 * var(--row-gap) - var(--mark-reach) - var(--space-xs)) * 1000, var(--mark-reach)); }
 /* Narrated has no orb: its marks hang wherever the room beside the column holds them, and its turns never step in,
@@ -29,13 +26,11 @@
    --turn-step, for the orb), it steps in by as much, then hangs its mark. */
 :is(.ui-transcript, .ui-transcript-row) > .ui-envelope { margin-left: calc(max(0px, var(--icon-xl) + var(--row-gap) + var(--space-xs) - (100cqw - 100%) / 2) - var(--mark-hang)); }
 .ui-transcript-row { min-width: 0; }
-/* The transcript's keyboard cursor (client/chat/transcript-cursor.ts): the wash on the one row it is on, bled past the
-   row by a step so text never touches its edge. Paint only, on that row alone: no geometry moves and nothing inside
-   restyles. */
+/* The transcript's keyboard cursor (client/chat/transcript-cursor.ts): the wash on its row, bled a step past it.
+   Paint only, on that row alone: no geometry moves and nothing inside restyles. */
 .ui-transcript-row[data-focus-shown] { border-radius: var(--radius-surface); background: var(--tint); box-shadow: 0 0 0 var(--space-md) var(--tint); }
-/* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above it, never by
-   what either is. Drawn row by row the row says so (TranscriptRow `flow`); composed of parts, the parts do: a reply
-   under its message, a message after a reply, the next part of one reply. A part with no relation (the first) has none. */
+/* Rhythm (DESIGN Transcript › Rhythm): the room above a part is set by how it relates to the part above, never by
+   what either is: TranscriptRow `flow` drawn row by row, the parts themselves when composed. The first has none. */
 .ui-transcript > :not(.ui-transcript-row) + :not(.ui-transcript-row) { margin-top: var(--flow-turn); }
 .ui-transcript > .ui-message + :is(.ui-turn, .ui-harness-prompt, .ui-envelope), .ui-transcript-row[data-flow="exchange"] { margin-top: var(--flow-exchange); }
 .ui-transcript > .ui-turn + .ui-turn, .ui-transcript-row[data-flow="step"] { margin-top: var(--flow-step); }
@@ -100,9 +95,8 @@
 /* A turn composed whole (trace, answer, foot): its answer is a step under its trace, as its own row would be. */
 .ui-turn > :is(.ui-trace, .ui-trace-fold) + .ui-answer { margin-top: calc(var(--flow-step) - var(--flow-attached)); }
 .ui-turn-orb { position: absolute; top: 0; left: calc(var(--turn-step) - var(--turn-orb-reach) - var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); }
-/* A phone has no gutter, and stepping every turn in to make one costs each answer a sixth of its width: there the turn
-   keeps the full column and draws no orb (trace.css too) -- on a line of its own it cost a line, and said less than the
-   status and the stop button already do. */
+/* A phone has no gutter, and stepping every turn in costs each answer a sixth of its width: there the turn keeps the
+   full column and draws no orb (trace.css too); the status and the stop button already say as much. */
 @media (--conduit-phone-layout) {
   .ui-turn:not([data-density="desktop"] *) { --turn-step: 0px; }
   .ui-turn:not([data-density="desktop"] *) > .ui-turn-orb { display: none; }
@@ -122,9 +116,8 @@
 .ui-stop-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
-/* A message's time and actions show while its row is hovered or holds focus, and on the latest exchange (a trial,
-   2026-11-01), and under the keyboard's cursor. On touch: the latest exchange's, and an older message's once it is tapped ([data-revealed]).
-   How it ended (status) and what it changed (Changes) are facts, never hidden. Opacity only: nothing moves. */
+/* A message's time and actions show on hover or focus, under the keyboard's cursor and on the latest exchange (a
+   trial, 2026-11-01); on touch, once tapped ([data-revealed]). Status and Changes are facts, never hidden. Opacity only. */
 @media (hover: hover) {
   .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
   .ui-transcript-row:is(:hover, :focus-within, [data-latest], [data-focus-shown]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
@@ -179,10 +172,9 @@
 .ui-answer :is(.katex-display, .incremark-math-block)::-webkit-scrollbar { display: none; }
 .ui-answer .katex-display { display: flex; margin: 0; align-items: center; justify-content: safe center; }
 .ui-answer .katex-display > .katex { flex: 0 0 auto; }
-/* Streaming: a word just written fades in once, its layout already final. Its colour fades, not its opacity (an
-   opacity fade gives every word mid-fade a compositor layer, and a few dozen of them cost more than a frame); backwards
-   only, so a finished fade is not an animation still in effect. A formula's new parts fade their opacity instead: a
-   colour is inherited, and fading it restyled every span of the formula each frame. */
+/* Streaming: a word just written fades in once, layout final. Its colour fades, not its opacity (a few dozen
+   compositor layers cost more than a frame); backwards only, so a finished fade is no longer in effect. A formula's
+   parts fade opacity instead: an inherited colour fade restyles every span of the formula each frame. */
 .ui-answer-word { animation: ui-word-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer-math-in { animation: ui-fade-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer th { font-weight: var(--weight-strong); }
@@ -200,13 +192,10 @@
 .ui-welcome { display: grid; height: 100%; min-height: 100%; place-content: center; padding-bottom: var(--welcome-room, 0); text-align: center; }
 .ui-welcome h1 { margin: 0; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); letter-spacing: -0.02em; }
 
-/* A turn said as a message (Turn bubble: the agent's page, a messaging app): its answer in a hairline bubble at the
-   left, no wider than most of the column, its foot under it. Its tail rises from its top-left corner, flush with its
-   left edge: one stroke (::after, the line's colour through a mask of one path) going up from the corner to the tip and
-   back down, easing into the top edge, so nothing is drawn twice where pieces would meet; under it (::before) the pane's fill
-   covers the top edge where the tail opens into the bubble. As wide as a messaging app's: about two thirds of the
-   room (most of it on a phone, as a messaging app's), capped at a line's length. Nothing fills it: the hairline is the
-   bubble, and what is behind the pane (the meteors) shows through. Drawn in px, a hairline's own unit: 14 wide, 12 tall. */
+/* A turn said as a message (Turn bubble: the agent's page): its answer in a hairline bubble at the left, about two
+   thirds of the room, capped at a line's length, its foot under it. Its tail rises from the top-left corner as one
+   stroke (::after, a mask of one path), so nothing is drawn twice where pieces would meet. Nothing fills it: what is
+   behind the pane (the meteors) shows through. Drawn in px, a hairline's own unit: 14 wide, 12 tall. */
 .ui-turn[data-bubble] { --turn-step: 0px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
 .ui-turn[data-bubble] > .ui-answer { position: relative; width: fit-content; max-width: min(100%, var(--measure-2xl)); min-width: calc(1lh + 2 * var(--space-md));
   margin-top: 11px; border: var(--hairline) solid var(--border); border-radius: var(--radius-message); border-top-left-radius: 0;

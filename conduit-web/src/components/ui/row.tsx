@@ -6,17 +6,11 @@ import { feel, type HapticProp } from "./haptics";
 import * as Icons from "./icons";
 
 /**
- * Row: one line in a list -- a mark, the title (a detail under it), muted context after it, data at its end and a
- * control's room after that. Every row is one: the sidebar's (density nav), a page's list (list), a menu's (menu:
- * popover.tsx's Item is a Row with a menu's own parts). The density sets its height, padding, voice and cursor
- * (styles/row.css, then nav.css, dashboard.css and popover.css); the states say where you are and what is chosen.
- *
- * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own, a
- * label when its click is its control's.
- * line: a fact's (a commit, a choice, a client); trail: an agent's, a room's, a run's; tree: a file's, by depth.
- *
- * bare: the children are the row's whole inside (a composition with parts of its own: a menu item, a folder's row).
- * A row that is a button or a link is felt as select when tapped on a phone; haptic overrides it (false: none).
+ * Row: one line in a list -- a mark, the title (a detail under it), muted context, data at its end, a control's room.
+ * Every row is one: nav (the sidebar's), list, menu (popover.tsx's Item), line (a fact's), trail (an agent's, a run's),
+ * tree (a file's); the density sets its height, voice and cursor (styles/row.css, nav.css, dashboard.css, popover.css).
+ * element: button (does one thing), link (goes somewhere), div (holds controls), label (its click is its control's).
+ * bare: the children are the whole inside. Felt as select when tapped on a phone; haptic overrides it (false: none).
  */
 export type RowDensity = "nav" | "list" | "menu" | "line" | "trail" | "tree";
 
@@ -96,12 +90,8 @@ export function Row(props: RowProps) {
   </Dynamic>;
 }
 
-/**
- * self: a pane's own letter, first in its header (PaneHeader, while there are several panes).
- * Where a document is open: the letter of the pane holding it (A, then the panes beside it, then the dock's, in
- * reading order), in Paper Mono at a row's end (its meta). shown: the pane's showing tab, at the foreground; a tab
- * behind another, muted.
- */
+/** The letter of the pane holding a document (in reading order), in Paper Mono at a row's end; self: a pane's own,
+ *  first in its PaneHeader. shown: the pane's showing tab, at the foreground; a tab behind another, muted. */
 export const PaneMark = (props: { pane: string; shown?: boolean; self?: boolean }) =>
   <span class="ui-pane-mark" data-shown={props.shown ? "" : undefined} data-self={props.self ? "" : undefined}
     title={props.self ? `Pane ${props.pane}` : props.shown ? `Showing in pane ${props.pane}` : `A tab in pane ${props.pane}`}

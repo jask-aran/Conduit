@@ -10,17 +10,10 @@ import * as Icons from "./icons";
 /** The page's column: the bar, then the screen taking the rest of the pane. */
 export const WebView = (props: { label: string; children: JSX.Element }) => <section class="ui-web" aria-label={props.label}>{props.children}</section>;
 
-/**
- * The live page: a canvas the caller draws each frame into (`canvas`), shown whole in the pane on the ground, taking
- * the pointer and, once focused, the keys. `state` is said over it while there is no frame to show (starting, gone) --
- * `tone` error when it cannot be shown at all.
- */
-/**
- * AgentPointer: where an agent acts on a page, drawn over the screen (the page's own frames carry no cursor). It glides
- * to each place (--duration-gentle), rings out on a press or click, names what it does beside it ("Click", "Type"), and
- * fades once the agent has been still a while. x, y: on the screen, CSS px from its top left. key: changes on each
- * announcement, so the same place twice still rings.
- */
+/** The live page: a canvas the caller draws each frame into, taking the pointer and, focused, the keys. `state` is
+ *  said over it while there is no frame (`tone` error when it cannot be shown at all). */
+/** AgentPointer: where an agent acts on a page (its frames carry no cursor): it glides to each place, rings on a
+ *  press, names what it does ("Click"), and fades once still. x, y: CSS px. key: changes per announcement, so it rings. */
 export type AgentPointerState = { x: number; y: number; phase: "move" | "down" | "up" | "click" | "type" | "scroll"; label?: string; key: number; resting?: boolean };
 export const AgentPointer = (props: { pointer: AgentPointerState; by?: string }) =>
   <div class="ui-agent-pointer" aria-hidden="true" data-phase={props.pointer.phase} data-resting={props.pointer.resting ? "" : undefined}

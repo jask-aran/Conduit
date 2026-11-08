@@ -2,17 +2,11 @@ import { Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 
 /**
- * Product marks for the coding harnesses, served from `public/brand/`.
- *
- * `tint: true` marks are single-colour artwork: they render as a mask filled
- * with `currentColor` so they follow the surrounding theme. Codex is shown in
- * one colour like the rest, except where a surface asks for `artwork`: its
- * official gradient mark, rendered as an image and never tinted or inverted.
- * Claude Code does the same with its orange mark.
- * `brand` is the colour a one-colour mark is shown in when a surface lights it
- * (the sidebar, on hover); a mark without one lights to the foreground.
- * Entries beyond the shipped adapters are staged for the ones that follow;
- * see `docs/brand/README.md` for provenance.
+ * Product marks for the coding harnesses, served from `public/brand/` (provenance: `docs/brand/README.md`).
+ * `tint: true` marks are one-colour artwork, a mask filled with `currentColor`. Where a surface asks for `artwork`,
+ * Codex and Claude Code show their official mark as an image, never tinted or inverted. `brand` is the colour a
+ * one-colour mark lights to (the sidebar, on hover); without one it lights to the foreground. Entries beyond the
+ * shipped adapters are staged for the ones that follow.
  */
 export type Mark = { src: string; tint?: boolean; artwork?: string; brand?: string };
 
@@ -40,11 +34,7 @@ export function HarnessMark(props: { id: string; class?: string; artwork?: boole
   </Show>;
 }
 
-/**
- * `lively`: the mark is greyed like the rest of the row until the row is
- * hovered or focused, then shows in its own colours -- Codex's gradient
- * artwork, Claude's orange, the rest at full foreground.
- */
+/** `lively`: greyed like its row until the row is hovered or focused, then in its own colours. */
 export function ThreadHarnessMark(props: { id?: string; lively?: boolean; label?: string }) {
   const id = () => props.id || "conduit";
   const label = () => props.label || id();

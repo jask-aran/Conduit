@@ -7,10 +7,8 @@
 @property --tab-label-gap { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --tab-more { syntax: "<length>"; inherits: true; initial-value: 0px; }
 
-/* The tab row (DESIGN Tabs): runs by place, each a breadcrumb -- the place's caps, the titles with a muted middot
-   between -- and a hairline between runs. Where you are is text alone: the lit title and its place white at the
-   current weight, the rest grey; the wash is only the pointer. Titles hold their lit width, so switching moves
-   nothing; what does not fit waits in the ⋯ at the row's end. */
+/* The tab row (DESIGN Tabs): runs by place, each a breadcrumb, a hairline between runs. Where you are is text alone
+   (lit, white); the wash is only the pointer. Titles hold their lit width, so switching moves nothing. */
 .ui-tabs-row { display: flex; min-width: 0; flex: 1 1 auto; align-self: stretch; align-items: center; overflow: hidden; font-size: var(--text-row); line-height: var(--space-2xl); }
 .ui-pane-tabs { --tab-gap: var(--space-lg); --tab-place-gap: calc(2.5 * var(--u-space)); --tab-max: calc(17.1875 * var(--u-space)); --tab-more: calc(var(--control-xs) + var(--space-md)); --tab-label-gap: var(--space-md);
   display: flex; height: 100%; min-width: 0; flex: 1; align-items: center; overflow: hidden; }

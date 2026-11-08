@@ -4,33 +4,21 @@ import { touchOnly } from "./layout";
 
 /**
  * Haptics: what a touch that changes something feels like on a phone. Two layers, as colour has:
- *
- * Effects are tokens (styles/foundations.css, --haptic-*): each a short list of the platform's clear primitives
- * (tick, low-tick, click, thud, quick-rise, slow-rise, quick-fall, spin), every one at a scale (0-1) and after a
- * delay (ms) -- `click .7` or `tick .5, click .7 40`. Never a timed buzz: a key click is 10-20ms of drive, and a long
- * one-shot rings on in the actuator (Android's haptics principles).
- *
- * Kinds are meanings, each a piece's own (callers do not fire them), and each names its effect. Every control has a
- * default kind, so what is built from the library is felt without asking; its `haptic` prop overrides it (a kind), or
- * silences it (false):
- * - select (tick): a side chosen in a Segmented (a pill one too), a Switch turned, each stop a Slider passes, an entry
- *   tapped in a list (a Row that is a button or a link);
- * - press (click): a PillButton that acts at once (the mic, Send, Stop: its haptic prop), a Button (secondary or
- *   ghost: Retry, Cancel, Replace);
- * - confirm (rise): a change committed, a primary Button (Save, Add, Set up);
- * - destructive (knock): a change that cannot be taken back, a destructive Button (Disconnect, Delete chats), or one
- *   that says so in its haptic prop (a ghost Remove, Sign out);
- * - hold (thud): a long press opening a context menu;
- * - fold (tick): what an Expand or Disclosure holds opening or shutting;
- * - open (click): an overlay opening (a menu, submenu, popover, dialog, the phone's drawer: a tap or a swipe in, or
- *   carried past where it lands), or a phone's OverlayPage arriving from its list (a Settings section);
- * - dismiss (settle): an overlay closing (a menu, submenu, popover, dialog, the phone's drawer), or that page going back.
- * fold, open and dismiss are felt only just after a touch, so what opens or closes on its own (rows a search filters in,
- * a drawer shut by navigation from the keyboard) is not. Only a touch screen with nothing that hovers feels them.
- *
- * The person's strength (Settings › Interface › Haptics, this device's) scales every effect; off is silent. In the app
- * the native player (ConduitHapticsPlugin) composes the primitives, falling back to the nearest predefined click;
- * in a browser, a vibration of a few milliseconds.
+ * Effects are tokens (styles/foundations.css, --haptic-*): lists of the platform's primitives (tick, low-tick, click,
+ * thud, quick-rise, slow-rise, quick-fall, spin), each at a scale (0-1) and delay (ms) -- `tick .5, click .7 40`.
+ * Never a timed buzz: a key click is 10-20ms of drive, and a long one-shot rings on in the actuator.
+ * Kinds are meanings, each a piece's own (callers do not fire them), each naming its effect. Every control has a
+ * default kind; its `haptic` prop overrides it (a kind) or silences it (false):
+ * - select (tick): a Segmented side, a Switch, each Slider stop, a Row that is a button or link;
+ * - press (click): a PillButton that acts at once (mic, Send, Stop), a secondary or ghost Button;
+ * - confirm (rise): a primary Button; destructive (knock): a destructive Button, or one saying so (a ghost Remove);
+ * - hold (thud): a long press opening a context menu; fold (tick): an Expand or Disclosure opening or shutting;
+ * - open (click): an overlay opening (menu, popover, dialog, the phone's drawer), or an OverlayPage arriving;
+ * - dismiss (settle): an overlay closing, or that page going back.
+ * fold, open and dismiss are felt only just after a touch, so what opens on its own (a drawer shut from the keyboard)
+ * is not. Only a touch screen with nothing that hovers feels them.
+ * The strength (Settings › Interface › Haptics, per device) scales every effect. In the app the native player
+ * (ConduitHapticsPlugin) composes the primitives, falling back to the nearest predefined click; a browser vibrates.
  */
 export type Haptic = "select" | "press" | "confirm" | "destructive" | "hold" | "fold" | "open" | "dismiss";
 /** A control's haptic prop: a kind in place of its default, or false for none. */
@@ -57,8 +45,7 @@ export function saveHapticStrength(strength: HapticStrength): HapticStrength {
 }
 
 type Step = { primitive: string; scale: number; delay: number };
-/** An effect token's steps: `primitive scale [delay]`, comma separated. */
-// The effect tokens are read once each (a computed-style read on a tap forced the page's style, ~4ms of it).
+// Effect tokens are read once each (a computed-style read on a tap forced the page's style, ~4ms of it).
 const read = new Map<HapticEffect, Step[]>();
 function steps(effect: HapticEffect): Step[] {
   let known = read.get(effect);
@@ -75,8 +62,8 @@ const hasNative = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvaila
 /* A browser has only a vibration: a few milliseconds by the strongest step's primitive. */
 const BROWSER_MS: Record<string, number> = { tick: 6, "low-tick": 6, click: 10, "quick-rise": 10, "quick-fall": 8, "slow-rise": 14, spin: 14, thud: 16 };
 
-/** An effect at this device's strength, as the native player takes it: its steps scaled, and the predefined effect
- *  nearest it (the heaviest step's) for an actuator without the primitives. null when silent. */
+/** An effect at this device's strength: its steps scaled, plus the nearest predefined effect for an actuator without
+ *  the primitives. null when silent. */
 function scaledEffect(effect: HapticEffect): { steps: Step[]; weight: string } | null {
   const gain = HAPTIC_STRENGTHS.find((option) => option.value === hapticStrength())!.gain;
   if (!gain) return null;
@@ -102,9 +89,8 @@ function playEffect(effect: HapticEffect) {
 // Read ahead of the first touch, while the page is idle.
 if (typeof requestIdleCallback === "function") requestIdleCallback(() => { for (const effect of new Set(Object.values(HAPTIC_EFFECT))) steps(effect); });
 let touchedAt = -Infinity;
-// One feel per touch: a piece told both by its own change and by its owner's (an overlay's open prop and its
-// onOpenChange), or two pieces the one tap reached (a Row that folds an Expand), is felt once. A different effect
-// straight after replaces it (the platform plays the latest): a Row's tick, then the page it opens.
+// One feel per touch: a piece told twice (open prop and onOpenChange) or two pieces one tap reached is felt once.
+// A different effect straight after replaces it (the platform plays the latest).
 let last = { kind: "", at: -Infinity };
 // Down as well as up: a tap outside a menu closes it on the way down.
 const touched = (event: PointerEvent) => { if (event.pointerType === "touch") touchedAt = performance.now(); };

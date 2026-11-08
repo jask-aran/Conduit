@@ -1,7 +1,5 @@
-/* Dashboard (dashboard.tsx): a place's page. Two columns while the left one holds the composer's controls and the chats
-   heading at full size beside the aside (the app measures it and sets data-one-column); the composer and the list on
-   the left, what is live and what changed on the right, each scrolling on its own. In units, so a phone's sizes are
-   its density's; data-compact (a phone) changes only the layout. */
+/* Dashboard (dashboard.tsx): a place's page. Two columns (composer and list; what is live and changed) while the left
+   holds its controls at full size (the app measures and sets data-one-column); data-compact (a phone) changes only layout. */
 /* Registered, so the app reads them back as lengths when it measures where two columns stop fitting. */
 @property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
@@ -206,11 +204,9 @@
    height the head leaves; on a phone the composer docks at the foot as a dashboard's does. */
 .ui-dash[data-room] { --dash-aside: 0px; --dash-gap: 0px; --dash-min: 0px; }
 .ui-dash[data-room] .ui-dash-body { grid-template-areas: "head" "notice" "band" "main"; grid-template-columns: minmax(0, var(--reading-width)); grid-template-rows: auto auto auto minmax(0, 1fr); }
-/* A room with no head (jbot's): the messages start right under the tab row, fading there as a chat's do, not a head's
-   height lower. */
+/* A room with no head (jbot's): the messages start right under the tab row, fading there as a chat's do. */
 .ui-dash[data-headless] .ui-dash-body { padding-top: 0; }
-/* And no fade at its top: a chat-like page reads as a chat does, its messages running up under the tabs (desktop) or
-   the frost pills (phone), not dimming into a gradient. */
+/* And no fade at its top: its messages run up under the tabs or the frost pills, as a chat's do. */
 .ui-dash[data-headless] .ui-dash-conversation-scroll { mask-image: none; }
 .ui-dash[data-room] .ui-dash-conversation { flex: 1 1 0; max-block-size: none; }
 /* A phone's room scrolls as a thread does: the messages run under the composer's dock (its own gradient at the foot),
@@ -233,8 +229,7 @@
 .ui-dash-panel-glance { display: flex; align-items: center; gap: var(--space-2xl); }
 .ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
 .ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
-/* A panel that scrolls its own body (jbot's: its day fixed above) leaves the surface's body still: no second
-   scroller, no gutter cutting its full-width hairline short. */
+/* A panel that scrolls its own body (jbot's) leaves the surface's still: no second scroller cutting its hairline short. */
 .ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
 /* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
 :is(.ui-dash-panel, .ui-ledge[data-fit], .ui-tray-panel[data-fit]) .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }

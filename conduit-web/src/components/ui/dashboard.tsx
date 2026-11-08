@@ -9,13 +9,9 @@ import { callHandler } from "./shared";
 import { Count } from "./controls";
 
 
-/*
- * Dashboard: a place's page. A head across the top (its mark, title, quick actions and status line); under it the
- * composer with the chats list on the left and what is live and what changed on the right, each scrolling on its own.
- * One column (oneColumn) stacks them in order: head, notice, composer, first, list, rest. The sections are Groups:
- * a GroupHeading (or switches) with actions at its right, then plain one-line Rows (list) -- the sidebar's rows at a page.
- * Behaviour (when to go to one column, the cursor, folding) is the app's: these draw.
- */
+/* Dashboard: a place's page. A head (mark, title, quick actions, status line); under it the composer and chats list
+   left, what is live and what changed right, each scrolling on its own; oneColumn stacks head, notice, composer, first,
+   list, rest. Sections are Groups of the sidebar's Rows at a page. Behaviour (one column, cursor, folding) is the app's. */
 type Order = "first" | "list" | "rest";
 
 export function Dashboard(props: {
@@ -63,10 +59,8 @@ export function Dashboard(props: {
   </section>;
 }
 
-/**
- * DashConversation: a page's own thread in an inset over its composer, held at the newest while you are there; open:
- * the whole thread, at its foot. children: its messages, scrolled here; or (scrolls) a transcript that scrolls itself.
- */
+/** DashConversation: a page's own thread in an inset over its composer, held at the newest; open: the whole thread.
+ *  children: its messages, scrolled here, or (scrolls) a transcript that scrolls itself. */
 export function DashConversation(props: { label: string; open?: { label: string; onOpen: () => void }; scrolls?: boolean; children: JSX.Element }) {
   let scroller!: HTMLDivElement;
   let pinned = true;
@@ -78,9 +72,8 @@ export function DashConversation(props: { label: string; open?: { label: string;
     const tree = new MutationObserver(watch);
     tree.observe(scroller, { childList: true, subtree: true, characterData: true });
     watch();
-    // A room's messages scroll under its composer's dock as a thread's do, and reserve its measured height the same
-    // way (dock-inset.ts); the dock may arrive after the messages, so it is looked for until it does.
-    // Looked for a frame on, once the messages are in the page (at mount they may not be yet).
+    // A room's messages scroll under its composer's dock and reserve its measured height (dock-inset.ts); the dock may
+    // arrive after the messages, so it is looked for from a frame on until it does.
     let stopClearing: (() => void) | null = null;
     let room: HTMLElement | null = null;
     const findDock = () => {
@@ -100,7 +93,6 @@ export function DashConversation(props: { label: string; open?: { label: string;
   </section>;
 }
 
-/** The page's head, in a Dashboard's head: its mark centred on the title and the status line under it. */
 /** DashPath: a place's working path in its header's context, copied on a tap; it says Copied for a moment. */
 export const DashPath = (props: { path?: string; copied?: boolean; onCopy: () => void }) =>
   <button type="button" class="ui-dash-path" title="Copy working path" onClick={() => props.onCopy()}><code>{props.copied ? "Copied" : props.path || "Working path unavailable"}</code></button>;
@@ -134,8 +126,7 @@ export function GroupCompactHeading(props: { label: JSX.Element; count?: number 
 export const GroupSwitches = (props: { children: JSX.Element }) => <div class="ui-group-switches">{props.children}</div>;
 
 
-/** A text action at a heading's right (Open, New, Filters ⌄); a menu's trigger takes it with `as`. */
-/** A group's quiet action (muted caption, at rest); felt as press when tapped on a phone, haptic overriding it. */
+/** A group's quiet action at a heading's right (Open, New, Filters ⌄); a menu's trigger takes it with `as`. */
 export function GroupAction(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { haptic?: HapticProp }) {
   const [local, rest] = splitProps(props, ["haptic", "onClick"]);
   return <button type="button" {...rest} class="ui-group-action" onClick={(event) => { feel(local.haptic, "press"); callHandler(local.onClick, event); }} />;
@@ -158,11 +149,8 @@ export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement
   </Row>;
 }
 
-/**
- * LineCounts: lines removed, then added, each in its change colour. The kind is where it sits (under
- * .ui-counts[data-counts]): list (a change row's, a group's heading: data's voice, light, said whole to assistive tech),
- * bar (a comparison's status bar: the bar's voice). title: what the counts are (approximate, say).
- */
+/** LineCounts: lines removed, then added, in their change colours; the voice is where it sits (.ui-counts[data-counts]:
+ *  list or bar). title: what the counts are (approximate, say). */
 export function LineCounts(props: { kind?: "list" | "bar"; added: number | null; removed: number | null; title?: string }) {
   const bar = () => props.kind === "bar";
   return <span class="ui-counts" data-counts={bar() ? "bar" : "list"} title={props.title} aria-label={bar() ? undefined : `${props.added ?? 0} added, ${props.removed ?? 0} removed`}>
@@ -173,11 +161,8 @@ export function LineCounts(props: { kind?: "list" | "bar"; added: number | null;
 /** Project folders as folders, no box; two rows until all. */
 export const FolderShelf = (props: { ref?: (element: HTMLDivElement) => void; all?: boolean; children: JSX.Element }) =>
   <div ref={props.ref} class="ui-folder-shelf" data-all={props.all ? "" : undefined}>{props.children}</div>;
-/**
- * A folder on the shelf: its mark (a dot when something runs in it), name and a line of data. A link, a button, or a
- * menu's trigger with `as`. `icon`: an action's (New project), quiet; `mark`: a thing's own mark in its colours (a
- * harness on the hub's page), in place of the folder.
- */
+/** A folder on the shelf: mark (a dot when something runs), name and a line of data; a link, button or trigger (`as`).
+ *  icon: an action's (New project); mark: a thing's own mark (a harness on the hub's page) in place of the folder. */
 export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" | "children"> & Partial<Pick<JSX.AnchorHTMLAttributes<HTMLAnchorElement>, "href">> & { element?: "a" | "button"; name: string; meta?: string; live?: boolean; icon?: JSX.Element; mark?: JSX.Element; ref?: (element: HTMLElement) => void }) {
   const [local, rest] = splitProps(props, ["element", "name", "meta", "live", "icon", "mark"]);
   return <Dynamic component={local.element || (rest.href ? "a" : "button")} {...rest} class="ui-folder" data-new={local.icon ? "" : undefined}>
@@ -191,11 +176,8 @@ export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" 
   </Dynamic>;
 }
 
-/**
- * DashPanel: a dashboard drawn in a panel (jbot's), its top fixed whatever its tab -- a band (a day) by its figure (a
- * GaugeFigure), and under them what needs the person -- with a full-width hairline under it, and its groups scrolling
- * below, their gutter kept so nothing moves.
- */
+/** DashPanel: a dashboard in a panel (jbot's): a fixed top (a band by its GaugeFigure, then what needs the person) over
+ *  groups scrolling below, their gutter kept so nothing moves. */
 export function DashPanel(props: { band: JSX.Element; figure?: JSX.Element; under?: JSX.Element; children: JSX.Element }) {
   return <div class="ui-dash-panel">
     <div class="ui-dash-panel-top">
@@ -206,10 +188,7 @@ export function DashPanel(props: { band: JSX.Element; figure?: JSX.Element; unde
   </div>;
 }
 
-/**
- * DashPeek: a row previewed in place (in a DashPanel): Back, and its own way on (the file, the chat), as the group's
- * quiet actions, over what it holds (a Glance).
- */
+/** DashPeek: a row previewed in place in a DashPanel: Back and its way on (the file, the chat) over a Glance. */
 export function DashPeek(props: { onBack: () => void; open?: { label: string; icon: JSX.Element; go: (event: MouseEvent) => void }; children: JSX.Element }) {
   return <div class="ui-dash-peek">
     <div class="ui-dash-peek-bar"><GroupAction onClick={() => props.onBack()}><Icons.ChevronLeft />Back</GroupAction>

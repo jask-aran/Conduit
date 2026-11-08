@@ -6,21 +6,16 @@ import { createDismiss } from "./dismiss";
 import { createFolds } from "./fit";
 import { Frost } from "./frost";
 
-/*
- * A panel over what it belongs to, in two pieces with one inside: Tray (a phone's, risen from the foot) and Ledge (a
- * pointer's, faded in just above the composer). Both are a PanelHead over a PanelBody: one height whatever they hold,
- * the body scrolling under the head edge to edge with its gutter kept (switching what it shows never moves it), the head
- * never wrapping (a title or a lead, its actions, its close). --panel-inset is the surface's padding, for what reaches
- * its edges (a full-width hairline).
- */
+/* A panel over what it belongs to: Tray (a phone's, risen from the foot) and Ledge (a pointer's, above the composer),
+   each a PanelHead over a PanelBody at one height whatever they hold (switching what it shows never moves it), the
+   head never wrapping. --panel-inset is the surface's padding, for what reaches its edges (a full-width hairline). */
 
 /** The parts of a panel's head a caller gives: a title, or a lead in its place; foldLead, a lead that folds (its
  *  Segmented to marks) when the head has no room for it, so the actions and the close never overflow. */
 export interface PanelHeadParts { title?: JSX.Element; lead?: JSX.Element; foldLead?: (folded: () => boolean) => JSX.Element; actions?: JSX.Element }
 
 /** A panel's head: its title (or a lead: tabs, a switch) by its actions and close; the lead gives way, never the close.
- *  A foldLead is measured: once the head overflows it folds, the width it needed kept, and it unfolds when the head has
- *  that again (a breakpoint from its content, never a tuned width). */
+ *  A foldLead folds once the head overflows and unfolds at the width it needed (from its content, never a tuned width). */
 export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?: boolean }) {
   const folds = createFolds(1);
   const lead = () => props.foldLead?.(() => folds.count() > 0) ?? props.lead;
@@ -34,20 +29,16 @@ export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?:
 export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-panel-body">{props.children}</div>;
 
 /**
- * Tray: a phone's panel risen from the foot over what it belongs to, the rest dimmed by a scrim. It rides inside its
- * container (absolute), so what holds it (the pane's header, its pill) stays live. One height (min(85%,
- * --measure-2xl)); put away by its close, a tap on the scrim, Esc, or a swipe down anywhere on it (its body once
- * scrolled to its top), past the drawer's commit of it or flicked (SWIPE, edge-swipe.ts: one feel for every swipe); raised frost, the safe area kept under it; felt opening and
- * shutting. Shut, it stays laid out off the foot and inert, so it rises at once. fit: as tall as what it holds, up to
- * that height (a short list of its own, beside a panel that keeps the one height).
+ * Tray: a phone's panel risen from the foot over a scrim, inside its container, so what holds it stays live. Put away
+ * by its close, the scrim, Esc, or a swipe down past SWIPE.commit (edge-swipe.ts: one feel for every swipe). Shut, it
+ * stays laid out off the foot and inert, so it rises at once. fit: as tall as what it holds, up to the one height.
  */
 export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   overlayHaptics(() => props.open);
   createDismiss({ open: () => props.open, onClose: () => props.onClose() });
-  // A swipe down anywhere on it carries it with the finger -- from its head, or from what it holds once that is scrolled
-  // to its top (a scroll up, or sideways, stays a scroll); let go past SWIPE.commit of it (or flicked), it goes. Touch
-  // events, not pointer ones: the move must be able to stop the scroll it would otherwise start.
+  // A swipe down carries it with the finger (from what it holds once scrolled to its top). Touch events, not pointer
+  // ones: the move must be able to stop the scroll it would otherwise start.
   const scrollerOf = (target: Element) => {
     for (let node: Element | null = target; node && node !== panel; node = node.parentElement) {
       if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) return node;
@@ -114,12 +105,9 @@ export function LedgeStack(props: { above: number; keep?: () => Element | null |
 }
 
 /**
- * Ledge: a pointer's panel, faded in over what it belongs to just above its composer (`above`: px over its
- * container's foot), at the composer's width; nothing dimmed, nothing moved. One height (never most of the pane); put
- * away by its close, Esc or a press outside it (but in `keep`: the composer, which holds its control and stays usable
- * under it), as a menu's is. Shut and settled it is skipped from layout and paint, kept on its own layer so fading in
- * composites what is already drawn. In a LedgeStack it takes its place in the stack (no `above` of its own); fit: as
- * tall as what it holds, up to the room left (a short list beside a panel that keeps the one height).
+ * Ledge: a pointer's panel faded in just above its composer (`above`: px over the foot), at the composer's width,
+ * nothing dimmed. Put away by its close, Esc or a press outside it and `keep` (the composer). Shut and settled it is
+ * skipped from layout and paint, on its own layer so fading in composites what is drawn. fit: as tall as it holds.
  */
 export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above?: number; keep?: () => Element | null | undefined; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;

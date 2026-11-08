@@ -1,5 +1,5 @@
-/* Assistant: an agent that keeps going on its own. Its inbox (InboxRow under a LevelMark), what runs on its clock
-   (ClockRow), and its day (DayStrip). Rows are Rows in the list density; only their parts are drawn here. */
+/* Assistant: an agent that keeps going on its own: its inbox (InboxRow, LevelMark), its clock (ClockRow), its day
+   (DayStrip). Rows are list-density Rows; only their parts are drawn here. */
 
 /* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
 .ui-level { display: grid; place-items: center; color: var(--foreground); }
@@ -32,8 +32,7 @@
 .ui-day-now::before { position: absolute; top: 0; left: 50%; width: calc(3 * var(--stroke-thin)); height: calc(3 * var(--stroke-thin)); border-radius: var(--radius-round); background: var(--foreground); content: ""; translate: -50% -50%; }
 
 /* A report in jbot's stream: a card at the answer's place, its title and first line, when it came, and the way in. */
-/* Its row is a Row line inside the card (the card is its box and its wash): the mark the full icon, the title in the
-   row's lift, its chevron always shown. */
+/* Its row is a Row line inside the card (the card is its box and wash), its chevron always shown. */
 .ui-report-card > .ui-row { padding: 0; }
 .ui-report-title { font-weight: var(--weight-lift); }
 .ui-clock-end, .ui-report-end { display: inline-flex; align-items: center; gap: var(--space-xs); }

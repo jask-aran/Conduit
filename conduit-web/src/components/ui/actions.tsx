@@ -6,18 +6,14 @@ import { callHandler } from "./shared";
 import { Button } from "./controls";
 
 /**
- * IconButton: an action drawn as its icon alone, its label its name and its tooltip. The kind is where it sits, which
- * sets its size and its rest and cursor (each kind's look in its family's stylesheet, under .ui-icon-button):
- *
+ * IconButton: an action drawn as its icon alone, its label its name and tooltip; a menu's trigger takes one with `as`.
+ * The kind is where it sits:
  *   dash   a dashboard line's small button (the ⋯ when given nothing)
- *   file   a file header's or status bar's control: an icon, or words with one (wide); inMenu: the ⋯ has it too, so a
+ *   file   a file header's or status bar's control (wide: words with the icon); inMenu: the ⋯ has it too, so a
  *          narrow header folds it there; close: the header's ×
  *   tool   a ToolBar's
  *   pane   a pane's own controls after its title or tabs (dock, swap, close): out of the tab order
- *   rail   the folded sidebar's: current as a row is; live: a dot at its corner; count: a number at its top corner
- *          (what waits on the person), over the dot's place
- *
- * A menu's trigger takes one with `as`.
+ *   rail   the folded sidebar's: current as a row is; live: a dot at its corner; count: what waits, over the dot's place
  */
 export type IconButtonKind = "dash" | "file" | "tool" | "pane" | "rail";
 
@@ -38,9 +34,7 @@ export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & 
 }
 
 /**
- * Actions: a run of controls that act on what they sit with. The kind is the family whose spacing and folding it takes
- * (under .ui-actions[data-actions]):
- *
+ * Actions: a run of controls that act on what they sit with; the kind is the family whose spacing and folding it takes:
  *   card      a card's buttons, at its foot
  *   setting   what can be done with a group's subject, at the lines' edge, wrapping
  *   rider     a rider's buttons; stack: one above another

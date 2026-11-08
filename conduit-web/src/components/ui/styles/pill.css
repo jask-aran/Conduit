@@ -1,7 +1,5 @@
-/* Pill: the phone's floating frost controls -- one family for the header's
-   groups, the sidebar's toggle and the composer's buttons. One icon is a
-   circle; more share a capsule, each slot a pill-shaped target 1px from its
-   edge. Its tokens size every member. */
+/* Pill: the phone's floating frost controls (the header's groups, the sidebar's toggle, the composer's buttons). One
+   icon is a circle; more share a capsule, each slot a pill-shaped target 1px from its edge. */
 /* One height for every pill: group, lone button, the field at one line -- in the phone's unit at any density (a finger's
    row, a --control-lg slot, a --space-2xs gap, a --space-lg + 2xs field inset there). */
 :root { --pill-size: calc(2.75 * var(--u-touch)); --pill-slot: calc(2.5 * var(--u-touch)); --pill-slot-height: var(--pill-slot);
@@ -23,10 +21,9 @@
 /* The mic: listening, its pill fills with an Aura (below) under its icon. */
 .ui-pill > button > .ui-aura { z-index: -1; }
 
-/* Aura: a field of colour behind frost, drawn by Aura (index.tsx) as a mesh: every point's colour is a blend of all its
-   blobs at once by distance, kept at full chroma, so no colour is painted over another and none passes through grey.
-   This holds its frame: the level it reads (--aura-level, 0-1, from --voice-level unless set, eased here), whether it
-   shows (a parent turns it on, or `on`), how strongly (--aura-strength, 0-1, from `strength`), and the frost over it. The one coloured glow DESIGN.md allows. */
+/* Aura: a field of colour behind frost, drawn by Aura (index.tsx) as a mesh blending all its blobs by distance at full
+   chroma, so none passes through grey. The one coloured glow DESIGN.md allows. This holds its frame: --aura-level
+   (0-1, from --voice-level), whether it shows, --aura-strength, and the frost over it. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level var(--duration-follow) linear; }

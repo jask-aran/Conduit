@@ -5,11 +5,8 @@ import { Button } from "./controls";
 import { CODE_BLOCK } from "./shared";
 export { CODE_BLOCK } from "./shared";
 
-/**
- * Copy, and what it says once it has: the icon turns to a check for a moment (the caller holds `copied` about
- * 1.2s, or sets data-copied on the button itself). Whatever was copied marks itself `data-copied` and takes the
- * copied wash: a --tint that fades out.
- */
+/** Copy: its icon turns to a check while the caller holds `copied` (about 1.2s) or data-copied is set on it. Whatever
+ *  was copied marks itself `data-copied` and takes the fading copied wash. */
 export function CopyButton(props: { copied?: boolean; label?: string; onCopy?: () => void }) {
   return <Button variant="ghost" size="icon-xs" class="ui-copy" data-copied={props.copied ? "" : undefined} aria-label={props.copied ? "Copied" : props.label ?? "Copy"} onClick={() => props.onCopy?.()}>
     <Icons.Copy class="ui-copy-idle" /><Icons.Check class="ui-copy-done" />
@@ -17,15 +14,10 @@ export function CopyButton(props: { copied?: boolean; label?: string; onCopy?: (
 }
 const moreLabel = (hidden: number) => `Show ${hidden} more ${hidden === 1 ? "line" : "lines"}`;
 /**
- * A fenced block: a box, its language and Copy over numbered lines that scroll sideways. A long one folds to
- * `fold` lines, fading at the cut, "Show N more lines" under it and a chevron beside Copy (the caption pins as
- * the block scrolls by, so it is the way out part-way down); opened, the foot says Show less. `streaming`
- * pulses the foot of a folded block still being written.
- *
- * code: the text, split into lines here. Or children: the caller's own <code>, one CODE_BLOCK.line a line (already
- * highlighted, and grown in place as the block streams, so a finished line is never built again), with `lines`
- * their count. Lines are numbered by the block, not their markup. A renderer that writes HTML has the same block
- * as a string (codeBlockHtml).
+ * A fenced block: language and Copy over numbered lines that scroll sideways. A long one folds to `fold` lines,
+ * "Show N more lines" under it and a chevron beside Copy (the caption pins, so it is the way out part-way down).
+ * `streaming` pulses a folded block's foot. code: the text; or children: the caller's <code>, one CODE_BLOCK.line a
+ * line, grown in place as it streams so a finished line is never rebuilt, with `lines` their count.
  */
 export function CodeBlock(props: { lang?: string; code?: string; lines?: number; onCopy?: () => void; copied?: boolean; fold?: number; open?: boolean; onToggle?: () => void; streaming?: boolean; children?: JSX.Element }) {
   const text = () => (props.code ?? "").split("\n");
@@ -44,12 +36,8 @@ export function CodeBlock(props: { lang?: string; code?: string; lines?: number;
 }
 
 const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-/**
- * The CodeBlock for a renderer that writes HTML: the same markup, its controls marked for one delegated listener
- * (data-copy-code, data-expand-code) since a string has no handlers; the listener opens and folds it with
- * setCodeBlockOpen. A sanitizer keeps no SVG, so fillCodeBlocks puts the icons in once the string is parsed. Its
- * lines are plain; a caller may colour them afterwards.
- */
+/** The CodeBlock as an HTML string: controls marked for one delegated listener (data-copy-code, data-expand-code),
+ *  which folds it with setCodeBlockOpen. A sanitizer keeps no SVG, so fillCodeBlocks adds the icons after parsing. */
 export function codeBlockHtml(props: { lang?: string; code: string; lines: number; fold?: number; streaming?: boolean }) {
   const folds = props.fold != null && props.lines > props.fold;
   const lang = escape(props.lang ?? "text");

@@ -1,9 +1,7 @@
 /*
- * Moves: the library's named moves, on Foundations' timing tokens and variables (foundations.css, Motion). A part makes
- * one, named in data-move; each move's base rule names every property it moves (invariant 2), on the part's own timing
- * variables, and is its in; data-out is its out (not shown), data-folded its room given. What decides a part's state is
- * its piece's (a MoveScope from what holds it, motion.ts); how it moves is only here. Last in the cascade: a move's
- * state is drawn over a family's resting geometry.
+ * Moves: the library's named moves on Foundations' timing (foundations.css, Motion), named in data-move. Each base rule
+ * names every property it moves (invariant 2) and is its in; data-out its out, data-folded its room given. A part's
+ * state is its piece's (a MoveScope, motion.ts); how it moves is only here, last in the cascade.
  *
  * Which move a part makes follows from what happens to its room, so each part has one way to go:
  *   - its room goes to a neighbour: tuck (every pill that comes and goes with what there is: Send, Stop, Scroll to latest)
@@ -12,13 +10,10 @@
  *
  *   fade      comes and goes where it stands: in over the gentle duration from its first frame, out over the quick one
  *   tuck      a part in a row that goes keeps its size and slides under its left neighbour (--tuck-size, --tuck-gap),
- *             its room going with it, so a neighbour that takes the room grows in the same move -- never seen squeezed,
- *             and never seen meeting its neighbour: out, it fades first (quick, decelerating) and slides half a quick
- *             duration after, nearly gone before it reaches it; in, it slides out from under it first and fades in once
- *             clear, half a quick duration on
- *   collapse  a holder glides its height and room over gentle on ease-room, including content changes, from the
- *             first frame both ways: out, what it holds fades over the quick duration as its room goes (measured by
- *             motion.ts), so whatever moves with the room makes one move
+ *             its room going with it, never seen squeezed or meeting its neighbour: out, it fades first (quick) and
+ *             slides half a quick duration after; in, it slides out first and fades in half a quick duration on
+ *   collapse  a holder glides its height and room over gentle on ease-room from the first frame both ways; out, what
+ *             it holds fades over quick as its room goes (measured by motion.ts), so all of it makes one move
  *   wipe      revealed by a clip opening from its end over the gentle duration (shown at once); out, it fades over the
  *             quick one as the clip closes (--wipe-radius rounds the clip)
  *   give      room handed between neighbours by grow: whatever takes it grows as the other gives it

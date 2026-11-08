@@ -3,8 +3,7 @@ import { haptic } from "./haptics";
 import { duration } from "./motion";
 import { feelDrawerAhead } from "./nav";
 
-/** What the phone's drawer swipe reads and sets: the drawer (the NavPane's, under its AppShell) and the panel at the
- *  other edge (the workspace's), which a swipe from the right opens and one across it shuts. */
+/** What the phone's drawer swipe reads and sets: the NavPane's drawer and the workspace panel at the other edge. */
 export type DrawerSwipeOptions = {
   /** Whether the layout is a phone's now: the swipe is heard only then. */
   phone: () => boolean;
@@ -15,19 +14,16 @@ export type DrawerSwipeOptions = {
   other: { open: () => boolean; setOpen: (open: boolean) => void; available: () => boolean };
 };
 
-/**
- * The phone's drawer swipe, heard on the window: the sidebar's drawer opens from the left edge and the other panel
- * from the right, and either shuts across itself (edge-swipe.ts). Started once; returns its stop.
- */
+/** The phone's drawer swipe, heard on the window: the drawer opens from the left edge, the other panel from the right,
+ *  either shuts across itself (edge-swipe.ts). Started once; returns its stop. */
 export function drawerSwipe(options: DrawerSwipeOptions): () => void {
   const { phone, open: drawerOpen, setOpen: setDrawerOpen, other } = options;
   let swipe: { id: number; gesture: EdgeSwipe } | null = null;
   // Safari outside an installed app takes the left edge for its own Back.
   const browserOwnsEdges = /iP(hone|ad|od)/.test(navigator.userAgent) && !(navigator as Navigator & { standalone?: boolean }).standalone;
   const keyboardUp = () => Boolean(window.visualViewport && window.visualViewport.height < window.innerHeight * 0.75);
-  // The sidebar follows the finger (nav.css --drawer): its pane, the pane's body, the page's shell and the backdrop
-  // take the swipe's progress, written once a frame; let go, they settle from there. The workspace panel still opens
-  // or shuts on letting go.
+  // The sidebar follows the finger (nav.css --drawer, written once a frame); let go, it settles from there. The
+  // workspace panel only opens or shuts on letting go.
   type DrawerParts = { pane: HTMLElement; body: HTMLElement; shell: HTMLElement; backdrop: HTMLElement };
   const drawerParts = (): DrawerParts | null => {
     const pane = document.querySelector<HTMLElement>(".ui-nav-pane[data-drawer]");
@@ -36,8 +32,8 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     const backdrop = document.querySelector<HTMLElement>('.ui-backdrop[data-layer="drawer"][data-fade]');
     return pane && body && shell && backdrop ? { pane, body, shell, backdrop } : null;
   };
-  // Carried past where it lands, it is felt there (open, or shut), and back again if it comes back; let go, the landing
-  // already felt plays nothing more, and one a flick changed plays as a tap's does.
+  // Carried past where it lands, it is felt there, and again if it comes back; let go, a landing already felt plays
+  // nothing more, and one a flick changed plays as a tap's does.
   let drag: { parts: DrawerParts; progress: number; frame: number; from: boolean; felt: boolean } | null = null;
   let settleTimer = 0;
   const carry = (progress: number, lands: boolean) => {
@@ -60,8 +56,7 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
       for (const part of [drag.parts.body, drag.parts.shell, drag.parts.backdrop]) part.style.setProperty("--drawer", String(drag.progress));
     });
   };
-  /** How open the sidebar is drawn now, when it is still on its way open or shut (0 to 1); null at rest. The page's
-   *  slide is read, not the state: the state already says where it is going. */
+  /** How open the sidebar is drawn while still moving (0 to 1); null at rest. Read from the slide, not the state. */
   const drawerMoving = (): number | null => {
     const parts = drawerParts();
     const width = parts?.pane.offsetWidth;
@@ -83,10 +78,9 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     // Kept for as long as the settle takes (the Animation speed setting slows it), not a fixed time it can outlast.
     settleTimer = window.setTimeout(() => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); }, duration("--duration-gentle") * 2 + 150);
   };
-  // A swipe hears its touch first, on the window as it is captured: an open popover stops a touch outside it from
-  // going on (dismissing itself), which left a carried sidebar never let go. Its moves and end also go to where it
-  // started, even once that is out of the document (a row the touch removed), when they never reach the window:
-  // they are heard there too, once each.
+  // Heard first, on the window in capture: an open popover stops a touch outside it, which left a carried sidebar
+  // never let go. Moves and end are also heard where the touch started (once each), since once that target leaves
+  // the document they never reach the window.
   let heard: EventTarget | null = null;
   let last: Event | null = null;
   const once = (event: Event) => { if (event === last) return false; last = event; return true; };
@@ -111,8 +105,7 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     if (swipeBlocked(event.target) || String(window.getSelection() || "")) return;
     const touch = event.touches[0]!;
     const opening = !drawerOpen() && !other.open();
-    // A sidebar still on its way open or shut is caught where it is drawn, and held there: a finger that then carries
-    // it carries it on from that place, and one that does not lets it settle from there.
+    // A sidebar still moving is caught and held where it is drawn, carried on or settled from there.
     const caught = other.open() ? null : drawerMoving();
     if (caught !== null) carry(caught, false);
     if (opening && browserOwnsEdges && caught === null) return;

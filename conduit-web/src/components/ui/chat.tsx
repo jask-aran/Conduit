@@ -3,15 +3,11 @@ import { Ledge, LedgeStack, PanelBody, PanelHead, Tray } from "./tray";
 import { ChatDrawingProvider, createChatDrawing } from "./chat-drawing";
 import { cn } from "@/lib/utils";
 
-/*
- * A chat in its pane (DESIGN Transcript): the transcript scrolling under the pane's header, the composer docked over
- * its foot. The app keeps the behaviour (following the tail, measuring the composer into --transcript-composer-inset,
- * the panel motion) and reaches the layers through the refs.
- */
+/* A chat in its pane (DESIGN Transcript). The app keeps the behaviour (following the tail, measuring the composer into
+ * --transcript-composer-inset, the panel motion) and reaches the layers through the refs. */
 
-/** A chat: its ChatScroller, then its ComposerDock. empty: nothing said yet, the composer centred under the welcome
- *  (on a phone, at the foot); sending: the first send waiting on its agent, docked, with no welcome; opening: a chat
- *  still arriving (reattaching), its transcript withheld. */
+/** A chat: its ChatScroller, then its ComposerDock. empty: the composer centred under the welcome (on a phone, at the
+ *  foot); sending: the first send waiting on its agent; opening: still arriving, its transcript withheld. */
 export function ChatView(props: JSX.HTMLAttributes<HTMLElement> & { empty?: boolean; sending?: boolean; opening?: boolean }) {
   const [local, rest] = splitProps(props, ["class", "empty", "sending", "opening", "children"]);
   // Held unseen (opening) while a TranscriptList in it is still drawing what is on screen too, then faded in.
@@ -22,11 +18,9 @@ export function ChatView(props: JSX.HTMLAttributes<HTMLElement> & { empty?: bool
   </section>;
 }
 
-/** The transcript's scroller: it takes the header's height back, so text scrolls to the pane's top edge under the
- *  header, and the reading column restates it as its top padding. Its layers: the root (ref), the motion shell the
- *  panel motion moves (motionRef, the column's width container), the viewport that scrolls (viewportRef) and the
- *  reading column (columnRef), which holds children. over: what floats over the viewport in the motion shell (a
- *  jump to the latest, a way out of an edit). */
+/** The transcript's scroller: text scrolls up under the header to the pane's top edge. Layers: root (ref), the motion
+ *  shell the panel motion moves (motionRef, the column's width container), the viewport (viewportRef) and the reading
+ *  column (columnRef). over: what floats over the viewport (a jump to the latest). */
 export function ChatScroller(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; motionRef?: (element: HTMLDivElement) => void; viewportRef?: (element: HTMLDivElement) => void; columnRef?: (element: HTMLDivElement) => void; over?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["class", "ref", "motionRef", "viewportRef", "columnRef", "over", "children"]);
   return <div ref={local.ref} {...rest} class={cn("ui-chat-scroller", local.class)}>
@@ -42,20 +36,15 @@ export function ChatScroller(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?:
 /** An empty chat's greeting in the reading column (a Welcome), keeping room for the centred composer. */
 export const ChatEmpty = (props: { children?: JSX.Element }) => <div class="ui-chat-empty">{props.children}</div>;
 
-/** The composer docked over the foot of what scrolls above it (a chat's transcript, a phone dashboard's page), on a
- *  phone on its own gradient clear of the safe area. Only its children take the pointer. */
+/** The composer docked over the foot of what scrolls above it; only its children take the pointer. */
 export function ComposerDock(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void }) {
   const [local, rest] = splitProps(props, ["class"]);
   return <div {...rest} class={cn("ui-composer-dock", local.class)} />;
 }
 
-/**
- * A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both, the transcript at
- * its reading width (measured from the tokens, never a tuned width). Otherwise, while open: on a phone a Tray risen over
- * the chat from its foot; with `above` (a pointer's) faded in over the transcript
- * just above the composer (`above` px over the chat's foot), the transcript left where it is, Esc or a press outside it putting it away. onWide: when that changes (it starts narrow), for the controls
- * that open it.
- */
+/** A chat with a panel of its own (jbot's): beside the transcript where the pane has room for both at its reading width
+ *  (measured from the tokens). Otherwise, while open: on a phone a Tray; with `above` (a pointer's), a Ledge faded in
+ *  `above` px over the chat's foot. onWide: when that changes (it starts narrow). */
 export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: () => void; label: string; /** Over the chat: its name, by its close. */ title?: string; above?: number;
   /** Its own buttons, in its head (by its close, over the chat). */
   actions?: JSX.Element;
@@ -72,8 +61,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   onMount(() => {
     if (props.beside === false) return;
     const measure = () => { const next = root.clientWidth >= need.offsetWidth; if (next !== wide()) { setWide(next); props.onWide?.(next); } };
-    // Measured when the observer first reports, after layout and before paint: a read at mount forced a layout of
-    // the whole new chat in the middle of drawing it.
+    // Measured when the observer first reports: a read at mount forced a layout of the whole new chat mid-draw.
     const sizes = new ResizeObserver(measure);
     sizes.observe(root);
     onCleanup(() => sizes.disconnect());

@@ -1,13 +1,7 @@
 import { finalizeFrame, makeProj, radiusScale, type Dot, type ModeFrame } from "thinking-orbs/engine";
 
-/*
- * The orb's frames drawn for Conduit rather than taken from the library,
- * built from the engine's own pieces -- its camera, its dot scaling and its
- * z-sort -- in its depth language: near dots larger and brighter, far ones
- * smaller and dimmer. So they are the same object as the library's, moving
- * differently. `t` is seconds. The catalogue in docs/design/orb-catalogue shows each
- * beside every other frame the orb can draw, and which state uses each.
- */
+/* The orb's frames drawn for Conduit from the engine's own pieces (camera, dot scaling, z-sort) in its depth language:
+   the same object as the library's, moving differently. `t` is seconds. docs/design/orb-catalogue shows each frame. */
 const TAU = Math.PI * 2;
 const SPIN = 0.5;
 const LAT_RINGS = 6;
@@ -66,13 +60,9 @@ function turning(segments: Segment[]) {
   };
 }
 
-/* The sputter: brief stretches of the plain sphere's turn, each snagging to
-   a stop, and between them jolts past the mark and back, stutters, kicks
-   backwards and jolts that ring -- about fourteen seconds before it repeats.
-   Every change of pace keeps its speed where it meets a cruise: a cubic ease
-   out starts at three times its average speed, so one out of a cruise covers
-   a third of what the cruise would have in that time, and an ease back in
-   ends at cruising speed the same way. */
+/* The sputter: stretches of the plain sphere's turn snagging to a stop, between them jolts, stutters and kicks
+   backwards (about fourteen seconds before it repeats). Each change of pace keeps its speed where it meets a cruise: a
+   cubic ease out starts at three times its average, so it covers a third of what the cruise would in that time. */
 const cruise = (seconds: number): Segment => [seconds, SPIN * seconds, linear];
 const slow = (seconds: number): Segment => [seconds, (SPIN * seconds) / 3, easeOut];
 const recover = (seconds: number): Segment => [seconds, (SPIN * seconds) / 3, easeIn];

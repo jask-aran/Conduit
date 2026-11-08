@@ -65,14 +65,9 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 /**
- * LeadInput: a field led by its mark, the mark inside the field's start. The kind is where it sits, which sets its
- * size and its voice (each kind's look in its family's stylesheet, under .ui-lead-input[data-lead-input]):
- *
- *   tool      a ToolBar's filter (the Files tree's): a search on the tint
- *   web       a web page's address in its bar: the address in data's voice; lead: a lock when the page is https
- *   browser   the file browser's search in its toolbar: the mark beside a standard field
- *
- * lead: the mark (search when given none).
+ * LeadInput: a field led by its mark (`lead`, search by default). The kind sets size and voice (each in its family's
+ * stylesheet): tool (a ToolBar's filter, on the tint), web (a page's address in data's voice, a lock for https),
+ * browser (the file browser's search).
  */
 export type LeadInputKind = "tool" | "web" | "browser";
 
@@ -89,7 +84,7 @@ export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { k
     <Show when={local.onClear && String(rest.value ?? "")}><IconButton kind="file" class="ui-lead-input-clear" label="Clear" onMouseDown={(event) => event.preventDefault()} onClick={clear}><Icons.Close /></IconButton></Show></label>;
 }
 
-/** A select's trigger: a field with a chevron, or bare (its value and a chevron, as in a settings row). A menu's behaviour opens it (Select in components/menus.tsx). */
+/** A select's trigger, opened by a menu's behaviour (Select in components/menus.tsx). */
 /** A select's trigger. look: field (the value in a field, or bare: the value quiet), title (the value as a page's title,
  *  what the page is showing, its chevron saying it can be changed), icon (an icon button for a toolbar, the value or
  *  title said on hover and to a screen reader). */
@@ -146,12 +141,8 @@ export function Meter(props: { parts: { value: number; colour: string }[]; mark?
   </div>;
 }
 
-/**
- * A quantity over time (a day's spend): a column per period, grown from the foot by its share of the largest, on the
- * track's ground; a period with nothing is the ground alone. The first and last periods are named under it (`ends`
- * for other words), each column's title is its reading, and `label` says the whole for assistive tech. `current`: the
- * period you are in (today), at full strength; the others rest a step back.
- */
+/** A quantity over time (a day's spend): a column per period by its share of the largest; first and last named under
+ *  it (`ends`), `label` for assistive tech. `current`: the period you are in, at full strength, the others a step back. */
 export function Series(props: { label: string; points: { label: string; value: number; title?: string; current?: boolean }[]; ends?: [string, string] }) {
   const max = () => props.points.reduce((most, point) => Math.max(most, point.value), 0);
   return <figure class="ui-series" role="img" aria-label={props.label}>
@@ -163,11 +154,8 @@ export function Series(props: { label: string; points: { label: string; value: n
   </figure>;
 }
 
-/**
- * One choice from an ordered list, set by sliding along it. The value follows
- * the thumb and is chosen on release, each stop it passes felt as select; with onOpen the value is a SliderValue
- * that opens the levels, and control puts the caller's own there (a submenu).
- */
+/** One choice from an ordered list, set by sliding, chosen on release, each stop felt as select; with onOpen the value
+ *  is a SliderValue that opens the levels, and control puts the caller's own there (a submenu). */
 export function Slider(props: { label: string; options: { value: string; label: string }[]; value: string; disabled?: boolean; onChange: (value: string) => void; onOpen?: () => void; control?: (shown: () => string) => JSX.Element; haptic?: HapticProp }) {
   const id = createUniqueId();
   const indexOf = (value: string) => Math.max(0, props.options.findIndex((option) => option.value === value));

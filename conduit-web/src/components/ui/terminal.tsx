@@ -12,9 +12,8 @@ export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "clas
     <Show when={local.label}><small>{local.label}</small></Show>
   </div>;
 }
-/** Status, a strong title and muted context, followed by the caller's controls. end: what closes the line at its far
- *  end (a pane's own actions, when the terminal is a pane's document). */
-/** onClose: the terminal is a pane's document, closed as any is -- a tab's ×, after its name (the pane stays, empty). */
+/** Status, a strong title and muted context, then the caller's controls. end: a pane's own actions at the far end.
+ *  onClose: as a pane's document, a tab's × after its name (the pane stays, empty). */
 export function TermIdentity(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { end?: JSX.Element; onClose?: () => void; closeLabel?: string }) {
   const [local, rest] = splitProps(props, ["children", "end", "onClose", "closeLabel"]);
   return <div {...rest} class="ui-term-identity">{local.children}
@@ -45,14 +44,12 @@ export function TermState(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class
   return <div {...rest} class="ui-term-state" data-empty={local.empty ? "" : undefined} />;
 }
 /** An error above the terminal's lower corner. */
-/** TermKeys: a phone's key bar under the terminal, the keys its keyboard lacks in one row that scrolls sideways. A tap
- *  on it never takes the focus from the terminal (so the keyboard stays up). */
+/** TermKeys: a phone's key bar of the keys its keyboard lacks, scrolling sideways; a tap never takes the terminal's focus. */
 export function TermKeys(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "onMouseDown">) {
   return <div role="toolbar" data-mobile-swipe-ignore="" {...props} class="ui-term-keys" onMouseDown={(event) => event.preventDefault()} />;
 }
 
-/** TermKey: one key, Keycap's face at a finger's size; felt as it is pressed. armed: a modifier waiting for the next
- *  key (aria-pressed), ringed until it is used. */
+/** TermKey: one key, Keycap's face at a finger's size. armed: a modifier waiting for the next key (aria-pressed). */
 export function TermKey(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "class" | "onClick"> & { armed?: boolean; onClick: () => void }) {
   const [local, rest] = splitProps(props, ["armed", "onClick"]);
   return <button type="button" {...rest} class="ui-term-key" aria-pressed={local.armed === undefined ? undefined : local.armed}

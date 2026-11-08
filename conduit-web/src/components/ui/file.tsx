@@ -3,21 +3,16 @@ import { Dot } from "./nav";
 import { Show, splitProps, type JSX } from "solid-js";
 
 
-/*
- * A file in a pane or the dock (DESIGN Panes and windows): its header -- the name (or the pane's tabs), its git
- * letter and unsaved dot, its actions and tools, the ⋯ they fold into -- and the status bar at its foot. The app
- * measures a header (fitting) and sets data-folded on the actions that do not fit, lowest data-fold first.
- * Behaviour is the app's: these draw.
- */
+/* A file in a pane or the dock (DESIGN Panes and windows): its header and status bar. The app measures a header and
+   sets data-folded on the actions that do not fit, lowest data-fold first. */
 
 /** A file's column: header, body, status bar. focused: it holds the keyboard (its header lifts). */
 export function FileView(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void; focused?: boolean }) {
   const [local, rest] = splitProps(props, ["focused"]);
   return <section {...rest} class="ui-file" data-focused={local.focused ? "" : undefined} />;
 }
-/** The files tool: the FilesTree, then the open file. wide: the tree beside the file, its width treeWidth (px) and a
- *  SplitEdge between them (the edge and the tree hidden when treeCollapsed); false: the tree folded to a rail, opening
- *  over the file as a drawer (navigatorOpen); "navigator": the tree alone. On a phone the tree stacks over the file. */
+/** The files tool: the FilesTree, then the open file. wide: the tree beside it (treeWidth px, a SplitEdge between;
+ *  hidden when treeCollapsed); false: the tree a rail opening as a drawer (navigatorOpen); "navigator": the tree alone. */
 export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; wide?: boolean | "navigator"; treeCollapsed?: boolean; navigatorOpen?: boolean; treeWidth?: number }) {
   const [local, rest] = splitProps(props, ["wide", "treeCollapsed", "navigatorOpen", "treeWidth"]);
   return <div {...rest} class="ui-files" data-wide={local.wide === undefined ? undefined : String(local.wide)} data-tree-collapsed={local.treeCollapsed ? "" : undefined}
@@ -25,8 +20,7 @@ export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (e
 }
 /** The files tool's tree: its ToolBar and filter, the TreeList, the tree's actions. */
 export const FilesTree = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-files-tree" />;
-/** One file or two side by side in a pane: its sides share the width by --side-a/--side-b. Inside it a header's ⋯
- *  is always there, and the buttons it also holds (inMenu: copy, wrap) stay in it. */
+/** One file or two side by side in a pane (--side-a/--side-b); inside it the ⋯ is always there, holding inMenu buttons. */
 export function FileViewer(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void }) {
   return <div {...props} class="ui-file-viewer" />;
 }
@@ -44,8 +38,7 @@ export const FileDirty = (props: { dirty: boolean }) => <Dot tone="warn" class="
 /** What a host adds to the header (a comparison's scope); goes with the actions. */
 export const FileSuffix = (props: { children?: JSX.Element }) => <span class="ui-file-suffix">{props.children}</span>;
 
-/** A header or status-bar control: an icon (label is its name and tooltip), or words with an icon (wide).
- *  inMenu: the file's ⋯ has it too, so a pane's viewer leaves it there. close: the header's ×, after everything. */
+/** A header or status-bar control: an icon, or words with one (wide). inMenu: the ⋯ has it too. close: the header's ×. */
 /** The header's ⋯: what fitting folded, and what a pane's viewer keeps there. A menu's trigger takes it with `as`. */
 export function FileMore(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { ref?: (element: HTMLButtonElement) => void }) {
   return <button type="button" aria-label="More file actions" title="More file actions" {...props} class="ui-icon-button" data-icon-button="file" data-more=""><Icons.More /></button>;
@@ -60,8 +53,7 @@ export function StatusBar(props: { label?: string; commands: JSX.Element; childr
 }
 /** A fact in the status bar (Working copy, 1,204 × 800, UTF-8). */
 export const StatusText = (props: { children: JSX.Element }) => <span class="ui-status-text">{props.children}</span>;
-/** A status-bar picker: its value in words, then its icon, a chevron (language, indentation). strong: a mode (Edit,
- *  Preview), its mark leading. A menu's trigger takes it with `as`. */
+/** A status-bar picker (language, indentation): value, icon, chevron. strong: a mode (Edit, Preview), its mark leading. */
 export function StatusPicker(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { strong?: boolean; icon?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["strong", "icon", "children"]);
   return <button type="button" {...rest} class="ui-status-picker" data-strong={local.strong ? "" : undefined}>

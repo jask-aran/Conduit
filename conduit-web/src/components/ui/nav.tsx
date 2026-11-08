@@ -9,19 +9,13 @@ import { cn } from "@/lib/utils";
 import { Row, type RowProps } from "./row";
 import { Loading, Notice } from "./state";
 
-/*
- * Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). Rows rest grey; the cursor (pointer,
- * keyboard focus, a press, a held focus, a selection) is the wash and white; where you are is white at the
- * current weight with no fill, and so is the folder holding it. The keys that move the cursor are the caller's
- * (navigation/sidebar-cursor.ts); these draw what it lands on. The pane marks `data-keyboard-cursor` while the
- * keyboard moves it, and a row under a still pointer then rests.
- */
+/* Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). The cursor is the wash and white; where you
+   are (and its folder) is white with no fill. The keys are the caller's (navigation/sidebar-cursor.ts); while they move
+   it the pane marks `data-keyboard-cursor`, and a row under a still pointer rests. */
 
-/** The sidebar itself: a head, the list and a foot. collapsed: the narrow rail's width (its edge moves with
- *  --panel-motion; instant: at once); folded: drawn as the rail, the list's rows away and its RailButtons shown
- *  (set once the edge has moved); drawer: a phone's, under the page, open or shut. */
-/** The drawer's next open or shut was already felt as a finger carried it past where it lands (drawer-swipe.ts):
- *  that change plays no haptic of its own. */
+/** The sidebar: head, list, foot. collapsed: the rail's width (instant: at once); folded: drawn as the rail with its
+ *  RailButtons (set once the edge has moved); drawer: a phone's, under the page. The drawer's next change, already
+ *  felt as a finger carried it past (drawer-swipe.ts), plays no haptic of its own. */
 let drawerFeltAhead = false;
 export function feelDrawerAhead() { drawerFeltAhead = true; }
 
@@ -50,8 +44,8 @@ export const NavBrand = (props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { 
 };
 
 
-/** A folder's row: its link (icon, a mark such as unread, the name, a muted meta such as "Cloning…") and the chevron
- *  that opens it. The chevron is out of the tab order: → and ← press it. The row is a div so a menu's trigger can hold both. */
+/** A folder's row: its link (icon, mark, name, meta such as "Cloning…") and the chevron, out of the tab order (→ and ←
+ *  press it). A div, so a menu's trigger can hold both. */
 export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon: JSX.Element; mark?: JSX.Element; meta?: JSX.Element; open: boolean; current?: boolean; within?: boolean;
   link: JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>; toggle: JSX.ButtonHTMLAttributes<HTMLButtonElement> }) {
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
@@ -70,10 +64,8 @@ export function NavFolder(props: { open: boolean; row: JSX.Element; children: JS
   </div>;
 }
 
-/** What a list says when it has nothing: one muted line. */
-/** A phone's first lines of the list, on its ground: the server it is on (its switcher) with the actions a phone
- *  reaches from the sidebar beside it (New chat, search, the palette), then what the server has to say (an update).
- *  It scrolls with the list, so it grows without moving the head; it is not one of the list's arrow stops. */
+/** A phone's first lines of the list: the server switcher beside New chat, search and the palette, then what the server
+ *  says (an update). It scrolls with the list, so it grows without moving the head; not an arrow stop. */
 export const NavLead = (props: { server: JSX.Element; actions: JSX.Element; children?: JSX.Element }) =>
   <div class="ui-nav-lead"><div class="ui-nav-lead-line">{props.server}<div class="ui-nav-lead-actions">{props.actions}</div></div>{props.children}</div>;
 
@@ -86,7 +78,7 @@ export const NavRail = (props: { label: string; children: JSX.Element }) => <div
 export const NavRailSection = (props: { children: JSX.Element }) => <div class="ui-nav-rail-section">{props.children}</div>;
 /** One of the rail's buttons: an icon; current as a row is; live: a dot at its corner (something works there). */
 
-/** A state the app is in about itself, above the foot's server (an update): an icon, a line, one action. ready: it waits on a person, so it reads at full strength. */
+/** A state the app is in about itself, above the foot's server (an update); ready: it waits on a person, at full strength. */
 
 /** A label and its links as icons (the installers). */
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";
@@ -96,7 +88,7 @@ export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: 
   return <span role="status" {...rest} class="ui-status ui-size-icon" aria-label={local.label} data-tone={local.tone ?? "muted"} data-stale={local.stale ? "" : undefined}>
     <Show when={local.spinning} fallback={<Dot />}><Spinner /></Show></span>;
 }
-/** A StatusDot's dot alone, beside what it marks: in its tone, or the colour around it; hidden from readers unless it carries a label. */
+/** A StatusDot's dot alone, beside what it marks; hidden from readers unless it carries a label. */
 export function Dot(props: JSX.HTMLAttributes<HTMLSpanElement> & { tone?: StatusTone }) {
   const [local, rest] = splitProps(props, ["tone", "class"]);
   return <span aria-hidden={rest["aria-label"] ? undefined : "true"} {...rest} class={cn("ui-status-dot", local.class)} data-tone={local.tone} />;

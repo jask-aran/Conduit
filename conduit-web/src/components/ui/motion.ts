@@ -21,12 +21,8 @@ export function duration(token: `--duration-${string}`, element: Element = docum
   return cssTime(element, token, 0);
 }
 
-/*
- * Every motion drawn at its normal length or slowed down, to look at one closely (the app's Animation speed). It
- * multiplies the duration tokens (foundations.css --duration-*), which the stylesheet's transitions and the code's
- * animations both read (duration()), so whatever waits for a motion to end waits as long as it now takes. A motion with
- * a length of its own, not a token, keeps it.
- */
+/* Animation speed: multiplies the duration tokens (foundations.css --duration-*), which CSS transitions and duration()
+   both read, so whatever waits for a motion waits as long as it now takes. A motion with its own length keeps it. */
 const SCALED_DURATIONS = ["quick", "gentle", "fold", "travel", "follow", "flash", "spin", "pulse", "breathe"].map((name) => `--duration-${name}`);
 
 const ms = (value: string) => {
@@ -53,13 +49,9 @@ export function easing(token: `--ease-${string}`, element: Element = document.do
   return getComputedStyle(element).getPropertyValue(token).trim() || "ease";
 }
 
-/*
- * Moves: the library's named moves (styles/motion.css). A part makes one, named in data-move -- fade, fold, tuck,
- * collapse, wipe, give -- and says its state in data-out (not shown) and, when it gives its room, data-folded.
- * Whatever holds parts that move themselves (a frost fades itself, never through its holder) tells them through a
- * MoveScope: whether they are out, how one that folds gives its room, whether a menu is over them, whether the voice
- * is on.
- */
+/* Moves: the library's named moves (styles/motion.css), named in data-move (fade, fold, tuck, collapse, wipe, give),
+   state in data-out and, giving its room, data-folded. A holder of parts that move themselves (a frost fades itself,
+   never through its holder) tells them through a MoveScope. */
 export type MoveScope = {
   /** The parts are not shown: each fades itself (a voice control stays). */
   out?: Accessor<boolean>;
@@ -71,8 +63,7 @@ export type MoveScope = {
 export const MoveContext = createContext<MoveScope>({});
 export const useMoveScope = () => useContext(MoveContext);
 
-/** Glide: a block that grows (a new line of captions) glides what was there up into place, over the quick duration,
- *  rather than jumping. Returns its stop. */
+/** Glide: a block that grows (a new line of captions) glides what was there up into place. Returns its stop. */
 export function glide(element: HTMLElement): () => void {
   let height = 0;
   const observer = new ResizeObserver(() => {
@@ -84,11 +75,8 @@ export function glide(element: HTMLElement): () => void {
   return () => observer.disconnect();
 }
 
-/*
- * The keyboard's travel under way, if one is (the shell says so as one starts): a room given while the keyboard moves
- * goes on the keyboard's own time and curve, so what moves with both -- the transcript above a closing composer -- makes
- * one move that ends with the keyboard, not a second one after it.
- */
+/* The keyboard's travel under way, if any: a room given meanwhile goes on the keyboard's time and curve, so the
+   transcript above a closing composer makes one move ending with the keyboard, not a second after it. */
 let travel: { ends: number; easing: string } | null = null;
 const travelWatchers = new Set<() => void>();
 export function keyboardTravel(durationMs: number, easing: string) {
@@ -97,20 +85,15 @@ export function keyboardTravel(durationMs: number, easing: string) {
   for (const watcher of travelWatchers) watcher();
 }
 const travelLeft = () => travel && travel.ends - performance.now() > 16 ? travel : null;
-/*
- * A keyboard is about to come (the native composer is opening it): a holder taking its room holds where it is until
- * the travel starts, then takes it on the keyboard's time and curve -- one motion with the keyboard and the transcript,
- * not the room on the tap and the keyboard a beat after. Given up after `withinMs` without one (a hardware keyboard).
- */
+/* A keyboard is about to come (the native composer opens it): a holder taking its room holds until the travel starts,
+   then rides it, one motion rather than the room on the tap and the keyboard a beat after. Given up after `withinMs`
+   (a hardware keyboard). */
 let expected = 0;
 /** Every live collapse, so a travel can settle them all at once (settleRooms). */
 const collapses = new Set<() => void>();
-/*
- * Settle every collapse to what its state now says, at once and unanimated. The native composer's keyboard travel does
- * this after measuring where the (hidden) web composer starts and before measuring where it ends: the whole change --
- * the keyboard's and the rooms' -- then rides the travel's one compositor animation (keyboard-travel.ts)
- * rather than a room gliding by layout on the main thread beside it.
- */
+/* Settle every collapse to its state at once, unanimated. The native composer's keyboard travel calls it between
+   measuring the hidden web composer's start and end, so the whole change rides the travel's one compositor animation
+   (keyboard-travel.ts) rather than a room gliding by layout on the main thread. */
 export function settleRooms() {
   expected = 0;
   for (const settle of collapses) settle();
@@ -120,8 +103,8 @@ export function expectKeyboardTravel(withinMs = 400) {
   setTimeout(() => { if (expected && performance.now() >= expected) { expected = 0; for (const watcher of travelWatchers) watcher(); } }, withinMs + 10);
 }
 
-/** Measured collapse: content and room glide together, from the first frame both ways (the content fades over the
- *  quick duration as its room goes), so what moves with the room -- a transcript above the composer -- makes one move. */
+/** Measured collapse: content and room glide together from the first frame both ways, so what moves with the room (a
+ *  transcript above the composer) makes one move. */
 export function collapse(holder: HTMLElement): () => void {
   const content = holder.firstElementChild;
   if (!(content instanceof HTMLElement)) return () => {};
@@ -169,8 +152,7 @@ export function collapse(holder: HTMLElement): () => void {
     const fromMargin = animation ? parseFloat(getComputedStyle(holder).marginBlockEnd) || 0 : margin;
     animation?.cancel();
     const delay = 0;
-    // Going, what it holds keeps the height it had and stays at its foot (the holder's own CSS) while its room goes from
-    // above it, so it fades where it stands rather than being pressed flat; coming, it fills the holder again.
+    // Going, its content keeps its height at the foot while the room goes from above, so it fades rather than flattens.
     if (nextOut && !out) content.style.height = `${fromHeight}px`;
     else if (!nextOut) content.style.removeProperty("height");
     out = nextOut; height = nextHeight; margin = nextMargin;
@@ -193,8 +175,7 @@ export function collapse(holder: HTMLElement): () => void {
   sizes.observe(content);
   if (input) sizes.observe(input);
   const state = new MutationObserver(() => sync());
-  // A glide that began a moment before the keyboard said it was moving (the two news cross in either order) is put on
-  // the keyboard's time from where it has got to.
+  // A glide begun just before the keyboard said it was moving (either order happens) moves onto the keyboard's time.
   const retime = () => { if (holding) { holding = false; sync(true); } else if (animation && performance.now() - startedAt < 80) sync(true); };
   travelWatchers.add(retime);
   const settle = () => { if (!holding && !animation) { sync(); return; } holding = false; animation?.cancel(); animation = undefined; sync(); };

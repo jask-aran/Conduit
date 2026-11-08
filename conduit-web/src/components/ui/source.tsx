@@ -2,11 +2,8 @@ import { For, Show, splitProps, type JSX } from "solid-js";
 import { Row, type RowProps } from "./row";
 import { Button, Count } from "./controls";
 
-/*
- * Source control (DESIGN Panes and windows): the branch's line, the commit box, the staged and unstaged groups of
- * ChangeRows with an action each, the history's commits and a patch's lines. Git (what runs, what is staged) is the
- * app's: these draw.
- */
+/* Source control (DESIGN Panes and windows): branch line, commit box, staged and unstaged ChangeRows, commits, patches.
+   Git itself is the app's. */
 
 /** A tool's status line under its header: a mark, the strong name and a muted detail; controls at its end. */
 export function ToolLine(props: { icon?: JSX.Element; title: JSX.Element; detail?: JSX.Element; end?: JSX.Element }) {
@@ -54,8 +51,7 @@ const lineKind = (line: string) => line.startsWith("+") && !line.startsWith("+++
 export const PatchLines = (props: { lines: string[] }) =>
   <pre class="ui-patch"><code><For each={props.lines}>{(line) => <span data-kind={lineKind(line)}>{line || " "}</span>}</For></code></pre>;
 
-/** The source control tool: its ToolBar, then the working tree's SourceOverview, or a commit's or the tree's
- *  SourcePatch. Measured by its own width (the ledger's two groups side by side once there is room). */
+/** The source control tool: its ToolBar, then a SourceOverview or a SourcePatch; measured by its own width. */
 export const SourceView = (props: JSX.HTMLAttributes<HTMLElement>) => <section {...props} class="ui-source-view" />;
 /** The working tree: the branch's line, the commit box and the ledger. */
 export const SourceOverview = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-source-overview" />;

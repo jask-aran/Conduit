@@ -107,7 +107,8 @@ are gone.
 
 ## Size
 
-Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,710 after wave 4, with the shared
+Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,710 after wave 4, 11,947 after the comments were
+tightened (only comments: each file's code, comments stripped, matches the one before; no API or prop doc lost), with the shared
 pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
 state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
 every family, desktop and phone) and, by subagents, screenshots of base and current builds of every family and the

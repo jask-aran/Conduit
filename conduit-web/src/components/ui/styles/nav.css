@@ -1,8 +1,6 @@
-/* Nav: the sidebar on the frame (DESIGN Interaction, List row). A pane of a head, a list and a foot; a list of
-   groups under labels, rows, folders that open, and the narrow rail's buttons. Rows rest grey; the cursor (hover,
-   keyboard focus, a press, a held focus, a selection) is the wash and white; current is white at the current
-   weight with a heavier stroke and no fill, and so is the folder holding it (within); open beside is white at
-   the resting weight. The sizes are the density's tokens. */
+/* Nav: the sidebar on the frame (DESIGN Interaction, List row): a head, a list and a foot, and the narrow rail. Rows
+   rest grey; the cursor is the wash and white; current is white at the current weight, no fill, and so is the folder
+   holding it (within); open beside is white at the resting weight. */
 @font-face { font-family: "Conduit Wordmark"; src: url("../../../client/assets/fonts/druk-wide-web-super.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
 :root, [data-density], .ui-nav-pane {
   /* The pane open and folded to its rail, in the sidebar's size. */
@@ -27,9 +25,8 @@
 .ui-nav-brand { display: flex; order: 1; min-width: 0; height: var(--nav-brand); flex: 1; align-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: inherit; }
 .ui-nav-brand > span { font: var(--weight-rest) var(--nav-wordmark)/1 var(--font-wordmark); letter-spacing: 0; }
 
-/* The list: scrolled on the compositor (below 1.5x a transparent scroller is not, and each frame laid the page out
-   into layers again). Scroll anchoring is off while a folder slides: every frame of the slide looked like a reason
-   to move the scroll, and the rows above jumped. */
+/* The list: scrolled on the compositor (below 1.5x a transparent scroller is not, and each frame re-layered the page).
+   Scroll anchoring is off while a folder slides: every frame moved the scroll, and the rows above jumped. */
 .ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
 .ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--border); }
 
@@ -58,8 +55,7 @@
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
-   opens the row's menu, which says what it is for. Pressed, and while its menu is open (Kobalte's data-expanded on
-   its trigger), a row is washed only where a pointer hovers. */
+   opens its menu. Pressed or with its menu open, a row is washed only where a pointer hovers. */
 .ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-icon-button:where([data-icon-button="rail"]):is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, :active, [data-focus-shown], [data-held], [data-held-within], [data-selected], [data-expanded]), .ui-icon-button:where([data-icon-button="rail"]):is(:hover, :focus-visible, :active, [data-held]) { background: var(--border); color: var(--foreground); } }
 .ui-row:where([data-density="nav"]):is([aria-current="page"], [data-within]), .ui-icon-button:where([data-icon-button="rail"])[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
@@ -113,8 +109,7 @@
   font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: calc(var(--icon-sm) - 2 * var(--stroke-thin)); font-variant-numeric: tabular-nums; text-align: center; content: attr(data-count); }
 .ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--status-success); content: ""; }
 
-/* Folded to the rail: the head stacks (its switch too), the brand, the list's rows and the links go, and the rail's
-   buttons fade in once the edge has moved. */
+/* Folded to the rail: the head stacks, the brand, rows and links go, and the rail's buttons fade in once the edge moved. */
 @keyframes ui-nav-rail-in { from { opacity: 0; } to { opacity: 1; } }
 .ui-nav-pane[data-folded] .ui-nav-head { flex-direction: column; align-items: center; gap: var(--space-lg); padding-inline: 0; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-button { margin-top: var(--space-xs); }
@@ -126,12 +121,10 @@
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
 
-/* A phone's: under the page, which slides --drawer-width off it to show it, the page dimmed; the sidebar comes forward to
-   meet you as it goes, from a step back and in the dark. --drawer is how open it is, 0 to 1: 1 open, 0 shut, and while a
-   finger carries it (data-drawer-drag) the finger's own, written to the pane's body, the shell and the backdrop. Let go
-   (data-drawer-settle), it lands from where the finger left it, at speed, on the arrive curve, either way. No foot. The head
-   is the wordmark on the ground and the switch, a frost pill; the server is the list's first line (NavLead), so what it
-   says never moves the head. */
+/* A phone's: under the page, which slides --drawer-width off to show it, dimmed; the sidebar comes forward from a step
+   back and in the dark. --drawer is how open it is (0-1), the finger's own while carried (data-drawer-drag); let go
+   (data-drawer-settle), it lands from there on the arrive curve. No foot; the server is the list's first line
+   (NavLead), so what it says never moves the head. */
 @property --drawer { syntax: "<number>"; inherits: false; initial-value: 0; }
 /* Off screen at rest shut, so it is not drawn under the page; there at once to open, and put away once the page is back. */
 .ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: 0; width: var(--drawer-width); background: #000; transform: translateX(-100%);

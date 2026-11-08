@@ -15,8 +15,8 @@ export function createTailWindow<T>(options: {
   fills: () => boolean;
   /** How many it draws first, and how many more at a time until they fill (before the paint). */
   tail?: number;
-  /** A guess at an item's drawn height, px, and the height to fill: with both it opens on as many items as the guess
-   *  says fill it (with a margin), so the list is drawn and laid out once; `fills` still has the last word. */
+  /** A guess at an item's height and the height to fill (px): it opens on that many items (with a margin), drawn and
+   *  laid out once; `fills` still has the last word. */
   estimate?: (item: T) => number;
   room?: () => number;
   /** Opened whole instead (read as it opens): a list coming back to a place read further up than its tail. */
@@ -60,7 +60,7 @@ export function createTailWindow<T>(options: {
   // Drawn and not yet filling: more, at once (still before the paint). Filling: drawn, and the rest a frame at a time.
   createEffect(on(offset, (start) => {
     if (untrack(drawn) && start === 0) return;
-    // Measured only until drawn: after that each step is just more above (a measure was a forced layout a step).
+    // Measured only until drawn: a measure is a forced layout a step.
     if (start > 0 && !untrack(drawn) && !options.fills()) return void setOffset(Math.max(0, start - tail));
     setDrawn(true);
     if (!start) return;

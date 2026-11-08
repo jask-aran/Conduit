@@ -3,11 +3,8 @@ import { Dynamic } from "solid-js/web";
 import { Frost } from "./frost";
 import { Button, Spinner } from "./controls";
 
-/*
- * States: what a place says when it has nothing to show, is still loading, or has a line to add. One of each, its kind
- * the family it sits in (Empty's, Loading's and Notice's kinds are drawn in styles/state.css, a Note's in its family's stylesheet
- * under .ui-note[data-note]).
- */
+/* States: what a place says when it has nothing to show, is loading, or has a line to add; its kind the family it sits
+   in (styles/state.css; a Note's in its family's stylesheet under .ui-note[data-note]). */
 
 /** Where an Empty sits: a pane or tool (centred, quiet), a dashboard group, a source group, an overlay's list, the file
  *  browser, a glance, a file viewer's empty side, a client card's workspaces. */

@@ -8,12 +8,8 @@ import { Group } from "./group";
 import { Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
-/*
- * Agents: work an agent handed to another, in Conduit's words for every harness. A subagent's transcript is a chat
- * of its own; these are where it is reached from. AgentRows: a list of them, an icon and a status each, no boxes: a
- * turn's under its head, where the folded trail does not hide them, and a chat's background ones in an AgentRider on
- * its composer, one line each.
- */
+/* Agents: work an agent handed to another, in Conduit's words for every harness; where a subagent's own chat is
+   reached from. AgentRows sit under a turn's head, and a chat's background ones in an AgentRider on its composer. */
 export type AgentState = "running" | "finished" | "failed" | "stopped";
 const ENDED: Record<Exclude<AgentState, "running">, string> = { finished: "Finished", failed: "Failed", stopped: "Stopped" };
 
@@ -50,12 +46,8 @@ export function FoldLine(props: { item?: boolean; folds?: boolean; class?: strin
 export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
   <ul class="ui-agent-rows" aria-label={props.label ?? "Subagents"} onPointerOver={moveCursor}>{props.children}</ul>;
 
-/**
- * A subagent: its mark, its id when it runs in the background (sa-3), its task, and its status: what it is doing
- * now, in mono, or how it ended; its time at the end. Under the task, or beside it on one line (line: the rider's).
- * The row opens its transcript (onOpen); onStop: stops it while it works, for one the turn does not own (a
- * background agent; a turn's own stops with the turn).
- */
+/** A subagent: its mark, its id when in the background (sa-3), its task, its status (mono) and time; `line`: on one
+ *  line (the rider's). onOpen opens its transcript; onStop stops one the turn does not own (a background agent). */
 export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
   const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
@@ -86,23 +78,18 @@ function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb:
 }
 
 /**
- * Background subagents where they branched off a turn: one quiet line, not live rows -- they belong to no turn once
- * started, so how they are doing rides on the composer's AgentRider, and each answer joins the thread later as a
- * report. ids: one, or several started together ("sa-1, sa-2, sa-3"); title for one; status, how they are doing taken
- * together ("2 of 3 running", "Finished"), so the shut line says it. The line drops down what was started (children:
- * an AgentRow line each, which opens that agent's run). Once one has reported, onReport jumps to the report.
- * data-spawn holds the agents' keys (`keys`, their conversations; else the ids), for a report to jump back to.
+ * Background subagents where they branched off a turn: one quiet line, not live rows (they belong to no turn once
+ * started; the AgentRider shows how they are doing). ids: one or several ("sa-1, sa-2"); status taken together
+ * ("2 of 3 running"). Drops down an AgentRow line each; onReport jumps to a report. data-spawn holds `keys` (else
+ * the ids), for a report to jump back to.
  */
 export function AgentSpawn(props: { ids: string[]; keys?: string[]; title?: string; status?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="spawn" verb="Started" ids={props.ids} keys={props.keys} title={props.title} where="in the background" status={props.status} motion={props.motion}
     jump={props.onReport ? { label: "Report", onClick: props.onReport } : undefined}>{props.children}</AgentLine>;
 }
 
-/**
- * The join, the other end of AgentSpawn: background agents' answers where they reached the thread, one line for those
- * that landed together ("Reported sa-4, sa-5, sa-6"), the same line as where they started. It drops down each
- * (children: an AgentReportItem each, its line and what it said); onBack jumps to where they started.
- */
+/** The join, AgentSpawn's other end: answers that landed together on one line ("Reported sa-4, sa-5"), dropping down
+ *  an AgentReportItem each; onBack jumps to where they started. */
 export function AgentReport(props: { ids: string[]; title?: string; status?: string; onBack?: () => void; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="report" verb="Reported" ids={props.ids} title={props.title} status={props.status} motion={props.motion}
     jump={props.onBack ? { label: "Started", up: true, onClick: props.onBack } : undefined}>{props.children}</AgentLine>;

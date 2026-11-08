@@ -21,11 +21,9 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
   </button>;
 }
 /**
- * Trace: a turn's work, folded under its head. The head is a TraceHeader (pass its props); the trail (children, a
- * Trail of Steps) unfolds under it as a Disclosure's body does. With no children there is nothing to open. A turn
- * not yet started is a Trace with status "Starting", a connecting Orb and live. motion and since: its entrance
- * (entering fades it in), and how far into it it already is. opens: the trail is drawn only once opened (foldBody).
- * pinned: what the fold never hides, between the head and the trail (a turn's subagents, AgentRows).
+ * Trace: a turn's work, folded under its head (a TraceHeader; pass its props); the trail (a Trail of Steps) unfolds as
+ * a Disclosure's body. A turn not yet started: status "Starting", a connecting Orb, live. opens: the trail is drawn
+ * only once opened (foldBody). pinned: what the fold never hides (a turn's subagents, AgentRows).
  */
 /* find: what the closed trail would read, for find in chat (registerFoldFind). */
 export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; find?: () => string; children?: JSX.Element }) {
@@ -44,12 +42,10 @@ export const Trail = (props: { nested?: "group" | "calls"; children: JSX.Element
 const NOT_KEPT = "Not kept";
 export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier";
 /**
- * A step: its kind's icon (a spinner while running), a verb, its subject, what qualifies it (aside: `on example.com`,
- * `in src/client`, `and 2 more`, quieter), then at the end flags, an edit's lines added and removed (changes) and its
- * duration. face: the subject's -- `code` (a command, a file) in mono, `text` (a query, a page) at the line's own face. summary: a line of text instead of verb and subject (thinking, narration). note: not a step, nothing to open
- * (reasoning the provider kept). discarded: text a stop threw away, struck, flagged Not kept. flags: words beside the
- * time (repeats). With children it opens in place to them -- its output, its prose, a group's or a script's steps;
- * opens: they are drawn only once it has opened (foldBody).
+ * A step: its kind's icon (a spinner while running), a verb, its subject, `aside` (`on example.com`, quieter), then
+ * flags, `changes` and its duration. face: `code` (mono) or `text`. summary: a line instead of verb and subject
+ * (thinking). note: nothing to open (reasoning the provider kept). discarded: text a stop threw away, struck, Not kept.
+ * With children it opens in place to them; opens: drawn only once opened (foldBody).
  */
 export function Step(props: { label?: string; icon?: JSX.Element; verb?: string; subject?: string; face?: "code" | "text"; aside?: string; changes?: { added: number; removed: number }; summary?: JSX.Element; time?: string; state?: StepState; flags?: string[]; note?: boolean; discarded?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void; motion?: Motion; children?: JSX.Element ; find?: () => string}) {
   const fold = foldBody(props), body = fold.body;

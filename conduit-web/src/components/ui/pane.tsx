@@ -7,11 +7,7 @@ import { Row, type RowProps } from "./row";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
 
-/*
- * Panes (DESIGN Panes and windows): a pane's tab row, the controls after it, the edge you drag, the wash a drop
- * lands in and the pill that names it; the workspace rail and the dock's header. Behaviour (fitting the row,
- * dragging, resizing, where focus goes) is the app's: these draw.
- */
+/* Panes (DESIGN Panes and windows): what a pane draws. Behaviour (fitting the row, dragging, resizing, focus) is the app's. */
 
 /** A pane's tab row (PaneTabRow, in its header's title) and its strip (Tabs): runs of tabs by place, then the ⋯ for what folded. The app
  *  measures the row (--tab-gap, --tab-place-gap and --tab-more are registered lengths) and hides what does not fit. */
@@ -103,9 +99,8 @@ export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (ele
 /** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
 /** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
 
-/** A row of a tree: indented by depth, a chevron for a folder (open turns it; none for a file keeps its place), its
- *  mark, its name, and a mark at the end (kept visible). selected: open in the viewer; data-open-file is the app's
- *  (open in a pane: the name strong; "focused" stronger). A context menu's trigger takes it with `as`. */
+/** A row of a tree: indented by depth, a chevron for a folder, its mark, name and an end mark. selected: open in the
+ *  viewer; data-open-file is the app's (open in a pane; "focused" stronger). A context menu takes it with `as`. */
 export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
   const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);
   return <Row {...(rest as RowProps)} element="button" density="tree" depth={local.depth ?? 0} selected={local.selected} class="ui-tree-row" label={local.name} end={local.end}

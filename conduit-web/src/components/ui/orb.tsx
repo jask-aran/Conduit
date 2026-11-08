@@ -5,28 +5,18 @@ import { MODE_FRAMES, paintFrame, resolvePreset, type ModeFrame, type ModeOpts, 
 export type { ModeFrame, ModeOpts, OrbState };
 
 /*
- * A turn's mark: a dotted orb whose motion says what it is doing, drawn by
- * thinking-orbs' canvas engine -- the geometry and painter are the library's,
- * only the loop is Conduit's, since its own component is React. The 20px
- * preset is the one tuned for inline text.
- *
- * Live, it plays, and paints only while on screen and the tab is visible. A
- * change of state is held off until the current one has shown for a moment,
- * then crossfades: the new state fades in over the old as the old fades out,
- * both still moving, so there is never a frame with nothing in it. Paused --
- * a settled turn, or reduced motion -- it is one still frame, and changes
- * without a fade. `frame` replaces the state's geometry outright, for a
- * frame drawn in the engine's terms rather than taken from the library; it
- * is given plain seconds, not the state's preset speed. A settled turn's orb
- * moves slowly enough to be drawn less often (`rate`, draws a second).
+ * A turn's mark: a dotted orb drawn by thinking-orbs' canvas engine (its geometry and painter; the loop is Conduit's,
+ * since its own component is React). Live, it paints only while on screen and the tab is visible; a change of state
+ * waits until the current one has shown for a moment, then crossfades with both still moving, so no frame is empty.
+ * Paused (a settled turn, reduced motion) it is one still frame and changes without a fade. `frame` is given plain
+ * seconds, not the state's preset speed.
  */
 const SIZE = 20;
 const DWELL_MS = 250;
 const FADE_MS = 200;
 const STILL_AT = 0.6;
 
-/* A CSS colour, var() included, as the painter's RGB: resolved on the canvas
-   itself, then read back off a one-pixel fill. */
+/* A CSS colour, var() included, as the painter's RGB: resolved on the canvas, read back off a one-pixel fill. */
 function rgbOf(element: HTMLElement, color: string) {
   const before = element.style.color;
   element.style.color = color;
@@ -42,20 +32,14 @@ function rgbOf(element: HTMLElement, color: string) {
 
 type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 
-/*
- * One animation frame loop for every orb on the page, running only while one
- * plays: each orb was its own rAF loop, so a transcript with a few settled
- * turns in view ran as many loops, all drawing every frame
- * (docs/design/performance-pass.md, 13). An orb given a `rate` draws at most
- * that many times a second.
- */
+/* One animation frame loop for every orb on the page, running only while one plays: a loop per orb drew every settled
+ * turn in view every frame (docs/design/performance-pass.md, 13). */
 type Player = { draw: (now: number) => void; interval: number; last: number };
 const players = new Set<Player>();
 let tick = 0;
 let wait: ReturnType<typeof setTimeout> | undefined;
-// Asking for a frame makes the browser run a whole frame -- style, intersection
-// observers, commit -- whether or not anything draws in it. So with only
-// throttled orbs playing, the loop sleeps until the next is due.
+// Asking for a frame runs a whole frame (style, observers, commit) whether or not anything draws, so with only
+// throttled orbs playing the loop sleeps until the next is due.
 const schedule = () => {
   if (tick || wait !== undefined || !players.size) return;
   const now = performance.now();
@@ -73,8 +57,7 @@ const run = (now: number) => {
   }
   schedule();
 };
-// A newly playing orb (a live one draws every frame) may be due before the
-// sleep ends, so the sleep is redone.
+// A newly playing orb may be due before the sleep ends, so the sleep is redone.
 const play = (player: Player) => { players.add(player); clearTimeout(wait); wait = undefined; schedule(); };
 const stop = (player: Player) => {
   players.delete(player);
@@ -85,9 +68,8 @@ const stop = (player: Player) => {
   wait = undefined;
 };
 
-/* A settled orb's slow turn (a full one in ~12s: ~0.3px a step at 20px) reads
-   the same at 15 draws a second as at the display's rate; the sputter's
-   snags and kicks want 30. */
+/* A settled orb's slow turn (~12s a turn, ~0.3px a step at 20px) reads the same at 15 draws a second; the sputter
+   wants 30. */
 export const settledOrbRate = (unfinished: boolean) => unfinished ? 30 : 15;
 
 /**
@@ -131,11 +113,8 @@ export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame
   const backPreset = createMemo(() => { const item = leaving(); return item ? presetOf(item) : null; });
 
   onMount(() => {
-    /* The canvas is as many pixels across as its box is on screen -- the box
-       is sized in rem, so it grows with the UI scale, and the screen's own
-       density and the browser's zoom multiply that -- and the 20px geometry
-       is drawn scaled to fill it. Drawn at 20px and stretched, every dot was
-       upscaled at any scale above 100%. */
+    /* The canvas is as many pixels across as its box is on screen (rem-sized, times density and zoom), the 20px geometry
+       drawn scaled to fill it; drawn at 20px and stretched, every dot blurred above 100%. */
     let pixels = 0;
     const fit = (side: number) => {
       const next = Math.max(1, Math.min(256, Math.round(side)));
@@ -186,9 +165,7 @@ export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame
     });
     const observer = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); sync(); });
     observer.observe(front);
-    // Watched in device pixels so a zoom, which leaves the box's CSS size
-    // alone, still reaches it. Resizing a canvas clears it, so a resize
-    // repaints at once.
+    // Watched in device pixels so a zoom still reaches it; resizing a canvas clears it, so a resize repaints at once.
     const resized = new ResizeObserver(([entry]) => {
       const side = (entry?.contentRect.width || 0) * (window.devicePixelRatio || 1);
       if (side && fit(side)) draw(plays ? performance.now() / 1000 : STILL_AT);

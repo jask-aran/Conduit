@@ -4,11 +4,7 @@ import { Expand } from "./expand";
 import { Count } from "./controls";
 
 /**
- * Group: a titled run of rows or lines -- Settings' groups and columns, the sidebar's, a workbench's side sections, a
- * card's two sides, a page's groups on a dashboard, source control's staged and unstaged. The kind sets how its title
- * reads and what it holds (styles: the kind's family -- overlay.css, nav.css, workbench.css, card.css, agents.css,
- * dashboard.css, source.css -- under .ui-group[data-group]):
- *
+ * Group: a titled run of rows or lines; the kind sets how its title reads and what it holds:
  *   setting, column   the quiet label over lines (a column is one of several side by side, in Columns)
  *   nav               the sidebar's label, or none; away: what the rows are on is not there now ("Offline since …")
  *   workbench         a side section's title
@@ -22,7 +18,7 @@ type Order = "first" | "list" | "rest";
 
 export function Group(props: {
   kind?: GroupKind;
-  /** What the group is called. A dash group's is its heading instead. */
+  /** What the group is called; a dash group's is its heading instead. */
   title?: JSX.Element;
   /** A dash group's heading (GroupHeading, GroupToggle, GroupCompactHeading, GroupSwitches). */
   heading?: JSX.Element;
@@ -48,7 +44,7 @@ export function Group(props: {
   going?: boolean;
   children?: JSX.Element;
 }) {
-  // A group's kind is what it is for its life: its markup is chosen once.
+  // A group's kind is fixed for its life: its markup is chosen once.
   const kind = untrack(() => props.kind ?? "setting");
   const name = () => (typeof props.title === "string" ? props.title : undefined);
   switch (kind) {

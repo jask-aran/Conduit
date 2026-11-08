@@ -5,14 +5,10 @@ import { Card } from "./card";
 import { type Motion } from "./shared";
 
 /**
- * TourCard: one step of a guided tour that teaches by doing (the keyboard tour). The leader's language: a small
- * raised frost card that floats in a corner without covering the page, the region it is about lit by a Spotlight
- * round it (the caller's). A Card: its title the tour's name, its detail how far along it is; its body the step's title, a
- * sentence or two, then its tasks -- what to press, as keycaps, each ticked when seen -- and the keys it only
- * mentions; its actions Back, Skip and End, and Next once the step is done (or has nothing to wait for).
- *
- * It never takes focus: the keys it teaches belong to where the person is, so a press on it keeps focus there.
- * Its buttons are still buttons, reached by Tab, for leaving it by keyboard.
+ * TourCard: one step of a guided tour that teaches by doing (the keyboard tour): a small raised frost Card in a corner,
+ * the region it is about lit by the caller's Spotlight. Its body: the step's title, a sentence, its tasks as keycaps
+ * (each ticked when seen); its actions Back, Skip, End, and Next once the step is done.
+ * It never takes focus: the keys it teaches belong to where the person is. Its buttons are still reached by Tab.
  */
 export type TourTask = { label: string; keys: string[]; state: "waiting" | "done" | "absent" };
 

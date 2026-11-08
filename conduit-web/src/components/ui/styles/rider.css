@@ -1,10 +1,9 @@
 .ui-frost.ui-rider { border-radius: var(--cmp-radius); }
 
-/* Rider: frost on a composer's top edge (either composer). A row (a title, a
-   body, actions) or a card (the question). Its parts below. */
+/* Rider: frost on a composer's top edge (either composer): a row (title, body, actions) or a card (the question). */
 .ui-rider { --rider-gap: var(--space-lg); --rider-slot: var(--control-sm); }
-/* A rider rises out of the composer and drops back into it when it takes it (frost.css); removed by hand, it fades in place. */
-/* A takeover card rises further, once the composer has gone. */
+/* A rider rises out of the composer and drops back in (frost.css); removed by hand, it fades in place. A takeover card
+   rises further, once the composer has gone. */
 .ui-rider[data-layout="card"] { --rise: var(--space-4xl); --frost-enter-delay: var(--duration-quick); }
 .ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
@@ -73,16 +72,14 @@
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
 .ui-chip[data-entering] { --grow: .85; animation: ui-grow var(--duration-gentle) var(--ease-arrive) backwards; }
 
-/* The question: a card rider. Its top (a title or tabs, close), the prompt,
-   choices (number, label, description, check), and a foot of hints and buttons. */
+/* The question: a card rider. Its top (title or tabs, close), the prompt, choices, a foot of hints and buttons. */
 .ui-rider-top { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); }
 .ui-rider-top > .ui-title-text { min-width: 0; flex: 1; overflow: hidden; padding-left: var(--space-md); text-overflow: ellipsis; white-space: nowrap; }
 .ui-rider-top > .ui-button:last-child { margin-left: auto; }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
-/* A choice follows Interaction: grey at rest; the cursor is the wash, white;
-   the current choice is white at the current weight, no tick; several chosen
-   (pick any) are the wash on each, and the cursor on one brightens it a step. */
+/* A choice follows Interaction: the current one white at the current weight, no tick; several chosen (pick any)
+   are the wash on each, and the cursor on one brightens it a step. */
 .ui-choice { min-height: var(--control-lg); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); cursor: pointer; }
 .ui-choice[data-highlighted] { background: var(--tint); color: var(--foreground); }
 .ui-choice[aria-selected="true"] { color: var(--foreground); }
@@ -122,8 +119,7 @@
 /* A Choice holding its own answer: a TextArea (several lines) or a bare input (one), set as the label is. */
 .ui-choice .ui-row-title > .ui-textarea { min-width: 0; flex: 1; font-size: var(--text-body); line-height: var(--leading-row); }
 
-/* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit):
-   resting frost, a square of 2.5 units at the surface radius, or its words beside the icon. */
+/* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit), resting frost. */
 .ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }

@@ -9,11 +9,8 @@ import { CloseButton } from "./actions";
 import { Row } from "./row";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
-/*
- * Rider: frost on a composer's top edge, either composer's. A row (title,
- * body, actions), a strip (chips, actions) or a card (the question, which takes
- * the keyboard: the app passes its ref, tabIndex and keys).
- */
+/* Rider: frost on either composer's top edge. A row (title, body, actions), a strip (chips, actions) or a card (the
+ * question, which takes the keyboard: the app passes its ref, tabIndex and keys). */
 export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
   // `ui-rider-going` as it leaves: what holds it (the composer's under row) closes its room by it, a class for :has().
@@ -21,25 +18,21 @@ export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: stri
 }
 /** A card rider's title (RiderTop); title: what it means, on hover. */
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
-/** A row rider's mark: what it holds as an icon, its word on hover and to a reader, so the row keeps its width for
- *  what it holds (a word in Paper Mono took a column of it). */
+/** A row rider's mark: an icon, its word on hover and to a reader, so the row keeps its width for what it holds. */
 export const RiderMark = (props: { icon: JSX.Element; label: string; title?: string }) =>
   <span class="ui-rider-mark ui-size-icon" role="img" aria-label={props.label} title={props.title ?? props.label}>{props.icon}</span>;
-/** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
- *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
- *  reach, so it fades back in rather than being drawn again. */
-/** How high a RiderButton rides (--ride-bottom, px): clear of what it rides over (its top, coverTop) by a step and a
- *  little, measured from its host's foot (hostBottom), never under the host's own edge. One rule for every host. */
+/** How high a RiderButton rides (--ride-bottom, px): clear of what it rides over (coverTop) by a little more than a
+ *  step, measured from its host's foot, never under the host's own edge. */
 export const rideBottom = (hostBottom: number, coverTop: number) => Math.max(unitPx(0.5), hostBottom - coverTop + unitPx(0.625));
-/** ride: where it floats over what it rides (a transcript above its composer) -- centred, or beside a centred one; the host sets how high (--ride-bottom). */
+/** A button riding over the transcript above the composer: scroll to latest, cancel an edit. hidden: faded out and out
+ *  of reach but kept, so it fades back in. ride: centred, or beside a centred one; the host sets --ride-bottom. */
 export function RiderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; show?: "icon" | "label"; motion?: Motion; hidden?: boolean; ride?: "centre" | "beside" }) {
   const [local, rest] = splitProps(props, ["icon", "label", "show", "class", "motion", "hidden", "ride"]);
   return <Frost as="button" type="button" {...rest} {...motionOf(local.motion)} class={cn("ui-rider-button", local.class)} data-labelled={local.show === "label" ? "" : undefined} data-ride={local.ride}
     data-hidden={local.hidden ? "" : undefined} aria-hidden={local.hidden ? "true" : undefined} tabIndex={local.hidden ? -1 : undefined}
     aria-label={local.show === "label" ? undefined : local.label} title={local.show === "label" ? undefined : local.label}>{local.icon}<Show when={local.show === "label"}><span>{local.label}</span></Show></Frost>;
 }
-/** A line of waiting text, one line until opened; it offers to open only when it is really cut short (measured, not
- *  guessed from its length, since that depends on its width). clipped: decided by the caller instead. */
+/** A line of waiting text, one line until opened; offers to open only when measured cut short. clipped: the caller decides. */
 export function Line(props: { text: string; clipped?: boolean }) {
   const [open, setOpen] = createSignal(false);
   const [measured, setMeasured] = createSignal(false);
@@ -48,9 +41,8 @@ export function Line(props: { text: string; clipped?: boolean }) {
   return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p ref={body} class="ui-line-body">{props.text}</p>
     <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><Icons.ChevronDown class="ui-fold-chevron" data-turn="half" /></button></Show></li>;
 }
-/** An attached thing: an image's thumbnail, or a file's mark, name and size. image: its source, or the app's own image
- *  (one that loads itself); icon: a file's mark. status: queued or uploading rings its progress (0-100); error outlines
- *  it, and retry marks it so a press retries. onOpen: a press; onRemove: its remove button, handed the chip. */
+/** An attached thing: an image's thumbnail, or a file's mark, name and size. image: a source or the app's own image.
+ *  status: queued or uploading rings its progress (0-100); error outlines it; retry makes a press retry. */
 export function Chip(props: { name: string; detail?: string; image?: string | JSX.Element; icon?: JSX.Element; status?: "queued" | "uploading" | "error" | "done"; progress?: number; retry?: boolean; title?: string; motion?: Motion;
   onOpen?: () => void; onRetry?: () => void; onRemove?: (chip: HTMLElement) => void }) {
   const ring = 2 * Math.PI * 9;
@@ -69,8 +61,8 @@ export function Chip(props: { name: string; detail?: string; image?: string | JS
 /** A file's name and its detail, one over the other: a Chip's copy, and an Attachment's. */
 export const ChipCopy = (props: { name: string; detail?: string }) =>
   <span class="ui-chip-copy"><strong>{props.name}</strong><small>{props.detail}</small></span>;
-/** A reference to lines of a file (a review comment): its mark, the file's name, the lines, the note, each cut short
- *  before the name is. onOpen: a press goes to it; onEdit, onRemove: small actions after it (in a composer's rider). */
+/** A reference to lines of a file (a review comment): mark, name, lines and note, each cut short before the name.
+ *  onEdit, onRemove: small actions after it. */
 export function Reference(props: { icon: JSX.Element; name: string; at?: string; note?: string; title?: string; label?: string; onOpen?: () => void; onEdit?: () => void; onRemove?: () => void }) {
   return <span class="ui-reference" title={props.title}>
     <button type="button" class="ui-reference-body" title={props.label} disabled={!props.onOpen} onClick={() => props.onOpen?.()}>{props.icon}<strong>{props.name}</strong><Show when={props.at}><span>{props.at}</span></Show><Show when={props.note}><span>· {props.note}</span></Show></button>
@@ -84,8 +76,8 @@ export const References = (props: { label?: string; children: JSX.Element }) => 
 export const Choices = (props: { multi?: boolean; children: JSX.Element }) =>
   <div class="ui-choices" role="listbox" aria-multiselectable={props.multi ? "true" : undefined} onPointerOver={moveCursor}>{props.children}</div>;
 
-/** A numbered answer: its key, label and description; chosen, it is white (several chosen: washed, multi). own: the typed answer's
- *  field in place of the label. onPick: chosen by a press; onPoint: the pointer is over it (the cursor moves to it). */
+/** A numbered answer: key, label, description; chosen is white (washed when multi). own: the typed answer's field in
+ *  place of the label. onPoint: the pointer is over it (the cursor moves to it). */
 export function Choice(props: { n: number; label?: string; detail?: string; title?: string; chosen?: boolean; active?: boolean; multi?: boolean; own?: JSX.Element; onPick?: () => void; onPoint?: () => void }) {
   return <Row density="line" role="option" class="ui-choice" aria-selected={props.chosen} data-highlighted={props.active ? "" : undefined} data-own={props.own ? "" : undefined}
     title={props.title} onClick={() => props.onPick?.()} onPointerMove={() => props.onPoint?.()}

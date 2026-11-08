@@ -1,5 +1,5 @@
-/* The trace header: Status · time · work, a chevron when there is a trail, the latest line under it, in the column
-   with the answer; its orb hangs in the gutter at the column's left (a .ui-turn steps in where there is none). */
+/* The trace header: Status · time · work, a chevron when there is a trail, the latest line under it; its orb hangs in
+   the gutter at the column's left. */
 .ui-trace { position: relative; display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2xs) var(--row-gap); border: 0; background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
 .ui-trace:not(:disabled) { cursor: pointer; }
 .ui-trace-orb { position: absolute; top: 50%; right: calc(100% + var(--row-gap) + var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); translate: 0 -50%; }
@@ -16,20 +16,17 @@
 .ui-trace[data-quiet] .ui-trace-line > b { color: inherit; font-weight: inherit; }
 
 .ui-trace-latest { min-width: 0; grid-area: 2 / 1 / 3 / 3; }
-/* No gutter (a phone, transcript.css): no orb at all -- squeezed into the column it cost a line or an indent and said
-   less than the status beside it. */
+/* No gutter (a phone): no orb, which in the column cost a line or an indent and said less than the status. */
 @media (--conduit-phone-layout) { .ui-trace > .ui-trace-orb:not([data-density="desktop"] *) { display: none; } }
 [data-density="phone"] .ui-trace > .ui-trace-orb { display: none; }
 
-/* The trail: one light line per step, no boxes, under the header's text; a step under the answer's size. A step's
-   row washes on the cursor and opens in place (a Disclosure: its body unfolds gentle, folds quick); what it opens
-   to sits under its verb. */
+/* The trail: one light line per step, no boxes, under the header's text; a step opens in place (a Disclosure), its body
+   under its verb. */
 .ui-trace-fold { gap: var(--space-2xs); }
 .ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
 .ui-step-item { gap: 0; }
-/* A line's last glyph ends on the column's edge, as the bubble's and the answer's do: the wash bleeds past the column
-   by its padding at both ends, and the chevron, shown on hover or open, takes the place of what ends the line (its
-   time), which steps aside for it -- the line never keeps room for something hidden. */
+/* A line's last glyph ends on the column's edge, the wash bleeding past by its padding; the chevron, on hover or open,
+   takes the time's place, so the line never keeps room for something hidden. */
 .ui-step { position: relative; display: flex; width: calc(100% + 2 * var(--space-sm)); min-width: 0; min-height: var(--control-xs); align-items: center; gap: var(--row-gap); margin-inline: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-sm); color: inherit; font: inherit; text-align: left; }
 button.ui-step { cursor: pointer; }
 button.ui-step:is(:focus-visible) { background: var(--tint); }
@@ -57,7 +54,7 @@ button.ui-step:is(:focus-visible) { background: var(--tint); }
 .ui-step-meta { display: flex; flex: none; gap: var(--space-md); margin-left: auto; font-size: var(--text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ui-step-flag { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-step-changes [data-change="removed"], .ui-step-diff-line[data-sign="removed"] > :first-child, .ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
-/* The chevron is there when it is wanted: on the cursor, or open. */
+/* On the cursor, or open. */
 .ui-step > .ui-disclosure-chevron { position: absolute; top: 50%; right: var(--space-sm); margin: calc(-0.5 * var(--icon-sm)) 0 0; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change), rotate var(--duration-quick) var(--ease-change); }
 button.ui-step .ui-step-meta { min-width: var(--icon-sm); justify-content: flex-end; }
 .ui-step-meta > :last-child { transition: opacity var(--duration-quick) var(--ease-change); }
@@ -93,5 +90,5 @@ button.ui-step:is(:focus-visible, [aria-expanded="true"]) .ui-step-meta > :last-
 .ui-trace-latest .chat-markdown { display: contents; font-size: inherit; line-height: inherit; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .ui-trace-latest :is(.chat-markdown, .incremark) > *:not(:last-child)::after { content: " "; }
-/* Open, the trail itself is the latest line: said again under the head it was the same step twice. */
+/* Open, the trail is the latest line: under the head too it would say the same step twice. */
 .ui-trace-fold[data-open="true"] > .ui-trace > .ui-trace-latest { display: none; }

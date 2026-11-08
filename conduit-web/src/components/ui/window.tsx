@@ -1,13 +1,9 @@
 import { createSignal, Show, type JSX } from "solid-js";
 import { CopyIcon, MinusIcon, SquareIcon, XIcon } from "lucide-solid";
 
-/*
- * The window's own chrome, for a desktop client whose native caption is off (Settings › Desktop › Title bar):
- *   TitleBar        Conduit's bar across the top: lead, middle and end slots; its empty space drags the window
- *   WindowControls  minimise, maximise (restore once maximised) and close -- a row at a bar's end ("bar", Windows'
- *                   own widths, close washing red), or a stack at the top of the tool rail ("rail")
- * Dragging is the shell's: `data-tauri-drag-region` marks what drags, and only that element, not what it holds.
- */
+/* The window's own chrome when the native caption is off (Settings › Desktop › Title bar): TitleBar (lead, middle and
+   end slots; its empty space drags) and WindowControls (a "bar" row in Windows' widths, or a "rail" stack). Dragging is
+   the shell's: `data-tauri-drag-region` marks what drags, and only that element, not what it holds. */
 /** Whether the window has no caption of its own, so the app's own empty chrome (a pane's header, the tool rail, the
  *  sidebar's head) drags it: set by the desktop client; false everywhere else. */
 export const [windowDrags, setWindowDrags] = createSignal(false);

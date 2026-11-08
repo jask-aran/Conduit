@@ -14,20 +14,15 @@ import {
 } from "./tail-follow";
 
 /*
- * A transcript's follow (DESIGN Transcript): held at its latest while the reader is there, left where they scrolled to
- * otherwise, the one engine every chat's transcript runs on (the chat's, the jbot chat's).
- *
- * - Who moved the view: a move up is the reader's only with a reader behind it (a wheel, a key, a touch and its fling,
- *   a press held in it, Find); a move up made by the page laying out (a block above shrinking) is not, and the follow
- *   carries on to the foot.
+ * A transcript's follow (DESIGN Transcript): held at its latest while the reader is there, left where they scrolled
+ * otherwise; the one engine every chat's transcript runs on.
+ * - A move up is the reader's only with a reader behind it (wheel, key, touch and fling, a held press, Find); one made
+ *   by the page laying out is not, and the follow carries on to the foot.
  * - Scroll to latest, and a send: one glide to the foot (glideToLatest), nothing else writing the scroll until it lands.
- * - spring: the typewriter's tail spring (tail-follow.ts) carries the view down with live output (live) instead of
- *   snapping, the reader taking it by scrolling up and handing it back by reaching the foot again.
- * - The keyboard takes height from the bottom, so the transcript gives it back from the top; following, it stays on
- *   its foot wherever that now is.
- * - The composer docked over its foot is cleared by its measured height (dock-inset.ts), the foot held through it.
- *
- * createTranscriptFollow in the component's body; attach once the viewport and its content are there (onMount).
+ * - spring: the tail spring (tail-follow.ts) carries the view down with live output; the reader takes it by scrolling
+ *   up and hands it back by reaching the foot.
+ * - The keyboard takes height from the bottom, so the transcript gives it back from the top.
+ * - The docked composer is cleared by its measured height (dock-inset.ts).
  * holding: something else is moving the content (a panel reflow, a virtualizer refresh): its resizes are not chased.
  * onStep: after each follow step or reader scroll (a chat pages in its history there).
  */
@@ -56,15 +51,13 @@ export function createTranscriptFollow(options: {
   let rejoinTimer: number | null = null;
   let programmaticScrollTop: number | null = null;
   let previousScrollTop: number | null = null;
-  // Paired with previousScrollTop: an upward move is only a reader if the scrollable distance did not shrink out from
-  // under it.
+  // An upward move is only a reader's if the scrollable distance did not shrink out from under it.
   let previousMaxScrollTop: number | null = null;
   let latestGlide: number | null = null;
 
   const scrollTop = () => vp()?.scrollTop ?? 0;
   const maxScrollTop = () => usedMaxScrollTop({ scrollHeight: vp().scrollHeight, clientHeight: vp().clientHeight, scrollTop: vp().scrollTop });
-  // Normal tail movement uses whole pixels. Panel reflow anchoring must retain fractional scroll positions or each
-  // resize frame accumulates visible drift.
+  // Tail moves use whole pixels; panel reflow anchoring keeps fractions, or each resize frame drifts.
   const setScrollTop = (next: number, round = true, glide = false) => {
     // The glide to the latest owns the viewport until it lands (glideToLatest).
     if (latestGlide != null && !glide) return;
@@ -84,8 +77,8 @@ export function createTranscriptFollow(options: {
       : { ...springState, owner, velocity: owner === "user" ? 0 : springState.velocity };
     if (owner === "user") cancelSpringFrame();
   };
-  // Handing the tail back is only ever allowed after a downward scroll that actually reached the bottom.
-  // decideTailScroll gates the call site; this timer just waits for the gesture to go quiet before the spring resumes.
+  // Handing the tail back needs a downward scroll that reached the bottom (decideTailScroll); this waits for the
+  // gesture to go quiet.
   const scheduleRejoin = () => {
     cancelRejoin();
     if (!spring() || !following()) return;
@@ -98,8 +91,7 @@ export function createTranscriptFollow(options: {
   };
 
   const cancelGlide = () => { if (latestGlide != null) cancelAnimationFrame(latestGlide); latestGlide = null; };
-  // One ease to the foot, aimed at the foot as it is on each frame (a send's message may be built a frame late, an
-  // answer may be growing). Nothing else writes the scroll until it lands or is taken.
+  // One ease to the foot, re-aimed each frame (a send's message may land a frame late, an answer may be growing).
   const glideToLatest = (then: () => void) => {
     cancelGlide();
     const from = vp().scrollTop;
@@ -144,8 +136,8 @@ export function createTranscriptFollow(options: {
       springFrame = null;
       if (!spring() || !following() || springState.owner !== "app") return;
       const target = maxScrollTop();
-      // A persisted transcript is already complete: its tail is kept pinned while lazy Markdown resolves. The spring
-      // is for live output, where the target moves continuously and a snap would fight the display cadence.
+      // A persisted transcript is complete: its tail is pinned while lazy Markdown resolves. The spring is for live
+      // output, where a snap would fight the display cadence.
       if (!(options.live?.() ?? false)) {
         setScrollTop(target);
         springState = rebaseTailFollowState(springState, target, "app");
@@ -174,8 +166,7 @@ export function createTranscriptFollow(options: {
     if (!following()) return;
     if (spring()) requestSpring(); else scrollBottomNow();
   };
-  // Sending and Scroll to latest are both a request to watch the answer arrive: the view follows from the press, and
-  // the tail follow takes it from where the glide lands.
+  // Sending and Scroll to latest both ask to watch the answer arrive; the tail follow takes over where the glide lands.
   const followLatest = () => {
     setFollowing(true);
     glideToLatest(() => { setFollowing(true); resume(); });
@@ -193,9 +184,8 @@ export function createTranscriptFollow(options: {
     onDock?.();
   });
 
-  /** Mount it on the viewport and what it scrolls (the transcript's content box): call in onMount. root and dock: the
-   *  host and its composer dock, the composer cleared by its height (onDock after each change, as a Scroll to latest
-   *  riding above it is re-anchored). */
+  /** Mount it on the viewport and what it scrolls (the transcript's content box), in onMount; root and dock: the host
+   *  and its composer dock, cleared as in clearUnder. */
   const attach = (target: { viewport: HTMLElement; thread: HTMLElement; root?: HTMLElement; dock?: HTMLElement | null; onDock?: () => void }) => {
     attached = target.viewport;
     const viewport = target.viewport;
@@ -203,13 +193,10 @@ export function createTranscriptFollow(options: {
     const stopClearingDock = target.root && target.dock ? clearUnder(target.root, target.dock, target.onDock) : null;
 
     /*
-     * The keyboard takes height from the bottom, so the transcript gives it back from the top -- driven by the
-     * scroller's own height (a ResizeObserver, once a frame, already measured), never the visual viewport, which is
-     * the keyboard's destination and lurches it the whole distance at once. The position asked for is held unclamped
-     * (the browser clamps scrollTop as the scroller grows, and the clamp ate ten pixels every travel), and as a
-     * distance from the bottom, the one quantity a shrinking scroller and its shrinking content both leave alone.
-     * The content's own change follows the scroller's inside the same travel only (TRAVEL_MS): content arriving at
-     * the bottom outside one must not be chased.
+     * Keyboard travel is driven by the scroller's own height (a ResizeObserver, once a frame), never the visual
+     * viewport, the keyboard's destination, which lurches it the whole distance at once. The position is held
+     * unclamped (the browser's clamp ate ten pixels every travel), as a distance from the bottom, which a shrinking
+     * scroller and its content both leave alone. Content changes are followed inside a travel only (TRAVEL_MS).
      */
     const TRAVEL_MS = 500;
     let lastScrollerHeight = 0, lastContentHeight = 0, travellingUntil = 0;
@@ -223,8 +210,7 @@ export function createTranscriptFollow(options: {
       if (boxMoved) travellingUntil = performance.now() + TRAVEL_MS;
       if (!boxMoved && !(contentMoved && performance.now() < travellingUntil)) return;
       if (following()) { setScrollTop(maxScrollTop(), false); intendedScrollTop = -1; heldGap = -1; return; }
-      // Scrolled up (Scroll to latest showing): the keyboard comes up over the transcript and it does not move
-      // (components/ui/keyboard-travel.ts).
+      // Scrolled up, the keyboard comes up over the transcript and it does not move (keyboard-travel.ts).
       if (latestAway() || viewport.hasAttribute("data-keyboard-away")) { intendedScrollTop = -1; heldGap = -1; return; }
       const max = Math.max(0, content - height);
       const clamped = Math.max(0, Math.min(maxScrollTop(), intendedScrollTop));
@@ -236,10 +222,8 @@ export function createTranscriptFollow(options: {
     scrollerSizes.observe(viewport);
     scrollerSizes.observe(thread);
 
-    // When the reader last did something that can move the view: a wheel (a trackpad's momentum keeps sending them),
-    // any key, a touch and the fling after it, a press held in it (a scrollbar drag, a selection dragged past the
-    // edge), focus moving in it, and Find from when it opens until the page has focus again. A move up inside that is
-    // theirs.
+    // When the reader last did something that can move the view: a wheel (momentum keeps sending), a key, a touch and
+    // its fling, a held press (scrollbar, selection drag), focus, Find while open. A move up inside that is theirs.
     let readerUntil = 0, finding = false;
     // Whether it laid out again since the last scroll: a move up the page made itself follows a layout change.
     let laidOut = false;
@@ -271,8 +255,7 @@ export function createTranscriptFollow(options: {
       const decision = decideTailScroll({ scrollTop: viewport.scrollTop, previousScrollTop, maxScrollTop: max, previousMaxScrollTop, userOwned: springState.owner === "user", following: following() });
       previousScrollTop = viewport.scrollTop;
       previousMaxScrollTop = max;
-      // A move up with no reader behind it is the page, not them (the browser keeping a block in place as one above
-      // it shrank): following, the tail just carries on to the bottom.
+      // A move up with no reader behind it is the page (keeping a block in place as one above shrank).
       const relaid = laidOut;
       laidOut = false;
       if (decision.direction === "up" && following() && relaid && !byReader()) { request(); step(); return; }
@@ -295,8 +278,7 @@ export function createTranscriptFollow(options: {
     const onPointerUp = () => { if (!dragging) return; dragging = false; readerUntil = performance.now() + 300; };
     const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
     const onKeyDown = (event: KeyboardEvent) => {
-      // Find is the page's wherever it is pressed; any other key only from the transcript itself (or nothing focused),
-      // not from typing in the composer.
+      // Find is the page's wherever pressed; other keys only from the transcript (or nothing focused), not the composer.
       if ((event.key === "f" || event.key === "g") && (event.ctrlKey || event.metaKey) || event.key === "F3") { finding = true; return; }
       const from = event.target as Node | null;
       if (from !== document.body && !(from && viewport.contains(from))) return;
@@ -317,8 +299,8 @@ export function createTranscriptFollow(options: {
     window.addEventListener("keydown", onKeyDown, { passive: true, capture: true });
     viewport.addEventListener("focusin", onFocusIn, { passive: true });
     window.addEventListener("focus", onPageFocus);
-    // Following, what it holds growing takes the view down with it -- unless something else is moving it (holding):
-    // chasing a virtualizer's own resizes is a feedback loop, and a panel reflow keeps its own anchor.
+    // Following, growing content takes the view down -- unless holding: chasing a virtualizer's own resizes is a
+    // feedback loop, and a panel reflow keeps its own anchor.
     const contentSizes = new ResizeObserver(() => {
       laidOut = true;
       if (!following() || options.holding?.()) return;

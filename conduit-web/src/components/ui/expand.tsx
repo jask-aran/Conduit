@@ -3,21 +3,15 @@ import { createComputed, createEffect, createSignal, on, onCleanup, Show, type J
 import { haptic } from "./haptics";
 
 /**
- * What opens and shuts in place under the row that owns it -- a folder's rows, a group's -- over --duration-fold, on
- * --ease-fold. Shut, nothing is in the document; open, the rows are, at their natural height. The page is laid out
- * once, at the move's start (opening) or its end (shutting); between, nothing is laid out or repainted: what follows
- * it in its scroller slides on a transform, and its rows are revealed by a clip whose edge runs with them. Shutting,
- * the rows stay drawn for the slide: Expand keeps its own children until it ends, and when the caller drops its rows
- * at once (a list rebuilt from what is open), the slide runs over a still of them, taken before they went (inert,
- * out of the accessibility tree, without ids). A height resolved per frame repainted everything under it (it missed
- * a 120 Hz phone's frames), and a grid track per frame for a whole list stuttered.
- * In a scroller as tall as its content (a menu, data-fits), the scroller's own edge runs with the rows: its height
- * moves between the two it has, open and shut, on the same timing -- laid out per frame, but only that small box,
- * out of the page's flow. Without it the menu's edge jumped at the move's start and the rows slid in after it.
- * Shutting in a scroller scrolled near its end, the list will be too short to stay where it is when the rows go: its
- * scroll comes back by that much at the end. So everything in it slides down that far with the move (the rows above
- * as well as what follows), and the end, scroll clamped and slides let go, looks as the last frame did -- without it
- * the whole list jumped down as the slide ended.
+ * What opens and shuts in place under the row that owns it (a folder's rows) over --duration-fold, on --ease-fold.
+ * Shut, nothing is in the document. The page is laid out once, at the move's start (opening) or end (shutting);
+ * between, what follows slides on a transform and the rows are revealed by a clip. Shutting, the rows stay drawn:
+ * when the caller drops them at once, the slide runs over a still taken before they went (inert, no ids). A height
+ * per frame repainted everything under it (missing a 120 Hz phone's frames); a grid track per frame stuttered.
+ * In a scroller as tall as its content (a menu, data-fits), the scroller's height moves with the rows, laid out per
+ * frame but only that small box; without it the menu's edge jumped first.
+ * Shutting in a scroller near its end, the scroll will come back when the rows go, so everything in it slides down
+ * that far with the move and the end looks as the last frame did, rather than the list jumping down.
  */
 export function Expand(props: { open: boolean; class?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(props.open);
@@ -28,8 +22,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
   // How much of the rows shows, 0 to 1, and where the move under way is taking it.
   let showing = props.open ? 1 : 0;
   let target = showing;
-  // One toggle can write the open state more than once (the click, then the preference coming back); acting on
-  // each would cancel the slide begun. Only a change from the state the rows are in moves them.
+  // One toggle can write the open state twice (the click, then the preference coming back): only a real change moves.
   let was = props.open;
   const settle = () => {
     // A move cut short leaves the rows where it reached, for the next to go on from.
@@ -62,8 +55,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       const back = to === 0 && edge && edge.dataset.fits === undefined && showing > 0
         ? Math.max(0, edge.scrollTop - Math.max(0, edge.scrollHeight - height - edge.clientHeight)) : 0;
       const drop = (shows: number) => back * (showing - shows) / showing;
-      // The scroller's own child holding the rows (or the rows themselves): it and what is before it drop; what follows
-      // drops too, inside it by being in it, beside it by its own slide.
+      // The scroller's child holding the rows: it and what is before it drop; what follows beside it, by its own slide.
       let top: HTMLElement = node;
       while (top.parentElement && top.parentElement !== edge) top = top.parentElement;
       const beside = (next: HTMLElement) => back > 0 && next.parentElement === edge;
@@ -87,8 +79,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       motions[0]!.onfinish = () => { for (const motion of motions) motion.cancel(); motions = []; showing = to; still?.remove(); still = undefined; done(); };
     };
     if (wanted) {
-      // Once the rows are in the document, laid out, and before it is painted: a frame later, they showed whole for
-      // a frame before the slide began.
+      // Once the rows are laid out, before paint: a frame later, they showed whole for a frame first.
       queueMicrotask(() => {
         if (!box || props.open !== wanted) return;
         slide(box, 1, () => {});
@@ -109,8 +100,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
   return <Show when={shown()}><div ref={box} class={props.class ? `ui-expand ${props.class}` : "ui-expand"}>{props.children}</div></Show>;
 }
 
-// What comes after it in its scroller: its next siblings, then each ancestor's, up to the scroller. Those slide; a
-// still beside it is part of it.
+// What comes after it in its scroller: its next siblings, then each ancestor's. A still beside it is part of it.
 function following(node: HTMLElement) {
   const out: HTMLElement[] = [];
   for (let at: HTMLElement | null = node; at && !scrolls(at); at = at.parentElement) {

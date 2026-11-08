@@ -6,36 +6,24 @@ import "./layout";
 import { PaneMark } from "./row";
 import { Button } from "./controls";
 
-/*
- * Header: a pane's top line (DESIGN The top line, Pane header). The name or the tab row at the left, what the page
- * is beside it, quiet controls at the right. On a phone the title gives way, and the leading controls, the page's
- * name (HeaderPill) and the actions float over the transcript as frost pills (DESIGN Phone header pills).
- */
+/* Header: on a phone the title gives way, and the leading controls, the page's name (HeaderPill) and the actions float
+   over the transcript as frost pills (DESIGN Phone header pills). */
 
-/** lead: the phone's leading controls (the sidebar's toggle, New chat); on a desktop the sidebar's head holds them.
- *  pill: a phone's name for the page between its groups (HeaderPill); a desktop's title says it.
- *  after: beside the title (a Notice kind=header). frost: the strip itself is frost, for a tab row read
- *  over the transcript scrolling under it. */
 /** Where a pane's top line is: a page's (pane), a tool's in the dock or a pane (tool), a file's (file), a terminal's (term). */
 export type PaneHeaderKind = "pane" | "tool" | "file" | "term";
-/** What a terminal's header folds when it is too narrow, first to last: the shortcuts into the ⋯, then the actions' labels. */
+/** What a terminal's header folds as it narrows, first to last: the shortcuts into the ⋯, then the actions' labels. */
 const TERM_FOLDS = ["shortcuts", "labels"] as const;
 /** What a tool's header gives up as it narrows (data-compact), first to last. */
 const TOOL_FOLDS = ["labels", "name"] as const;
 
 /**
- * PaneHeader: a pane's top line (DESIGN The top line, Pane header), the kind its family's (under
- * .ui-pane-header[data-header]):
- *
- *   pane   a page's: lead (the phone's leading controls), the title (children), pill (a phone's name for the page),
- *          after (beside the title: a Notice kind=header), actions; frost: the strip itself is frost, for a tab row read over
- *          the transcript scrolling under it
- *   tool   a tool's in the dock or a pane: its name, the place it shows (the dock follows places), its modes (a
- *          Segmented), views and controls; fit: it measures itself short (compact: "labels", "name"). Its drag handle.
- *   file   a file's: what the file is, then its controls in a fixed order (save, actions, tools, the ⋯, close)
- *   term   a terminal's: leading controls, identity, shortcuts, overflow, then actions. It folds by measure: while its
- *          content overflows or the identity's title or context is cut, the next fold goes (TERM_FOLDS); each comes
- *          back once the header is as wide as it was needed at. A change to what it holds measures it again unfolded.
+ * PaneHeader: a pane's top line (DESIGN The top line, Pane header), by kind:
+ *   pane   lead (the phone's leading controls; a desktop's sidebar head holds them), the title (children), pill (a
+ *          phone's HeaderPill), after (a Notice kind=header), actions; frost: the strip is frost, for a tab row over the transcript
+ *   tool   its name, the place it shows (the dock follows places), modes (a Segmented), views, controls, drag handle; fit
+ *   file   what the file is, then controls in a fixed order (save, actions, tools, the ⋯, close)
+ *   term   leading controls, identity, shortcuts, overflow, actions. While content overflows or the identity is cut, the
+ *          next fold goes (TERM_FOLDS); each returns once the header is as wide as it needed. New content re-measures unfolded.
  */
 /* The letter of the pane a header heads (Sheet's `pane`), when there are several: PaneHeader draws it first, the same
    letter the sidebar's PaneMark gives the chats open there. */
@@ -59,8 +47,7 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   }
   if (kind === "tool") {
     const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost", "fit"]);
-    // The header holds the view's name and its modes. When they stop fitting,
-    // the modes drop their labels, then the name goes: measured, not a width.
+    // Measured, not a width.
     const folds = createFolds(2, { content: true });
     const fitHeader = (element: HTMLElement) => { if (untrack(() => local.fit)) folds.ref(element); };
     return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool" data-compact={TOOL_FOLDS[folds.count() - 1]} data-frost={local.frost ? "" : undefined}>
@@ -102,8 +89,7 @@ export function Heading(props: { kind: "browser" | "editor" | "connection"; live
   return <h2 class="ui-heading" data-heading="browser">{props.children}</h2>;
 }
 
-/** A page's name under its place: the place in the section label's caps (a link when onPlace), then the title.
- *  No place: the page is a place itself. */
+/** A page's name under its place (in the section label's caps, a link when onPlace); no place: the page is a place. */
 export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title: string }) {
   return <nav aria-label="breadcrumb" class="ui-header-crumb">
     <Show when={props.place}>
@@ -118,10 +104,9 @@ export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title
 /** What waits by a header pill: a count in a frost capsule of its own beside it, opening what it counts. */
 export interface HeaderPillCount { value: number; label: string; open?: boolean; onClick: () => void }
 
-/** A phone's name for the page: its place's mark (a folder, a workspace's glyph, Conduit's for a chat in no folder)
- *  and its title, wrapping to two lines, a frost pill between the header's groups. opens: a press opens the page's
- *  menu (MenuControl as={HeaderPill} opens); the pill says so by being pressable, with no chevron to take its room.
- *  count: a number beside it (what waits on the person), its own press; the two are centred as one. */
+/** A phone's name for the page: its place's mark and title, wrapping to two lines, a frost pill between the header's
+ *  groups. opens: a press opens the page's menu (MenuControl as={HeaderPill} opens), with no chevron to take its room.
+ *  count: what waits on the person, its own press beside it; the two centre as one. */
 export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon?: JSX.Element; opens?: boolean; count?: HeaderPillCount }) {
   const [local, rest] = splitProps(props, ["label", "icon", "opens", "count"]);
   const inner = () => <><Show when={local.icon}><span class="ui-header-pill-icon" aria-hidden="true">{local.icon}</span></Show><strong>{local.label}</strong></>;

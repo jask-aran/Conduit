@@ -1,14 +1,13 @@
 /* The shell: AppShell's row, the Sheets the panes are, the Dock at its end (shell.tsx). */
 
-/* The row: the panes and the dock beside the sidebar. A chat is never drawn narrower than it declares
-   (MIN_MAIN_PANE_UNITS, DESIGN.md "Documents and room"): on a desktop window too narrow for it beside the sidebar,
-   the shell scrolls sideways instead (#root, the app's). The row holds the main pane and its margins; its own
-   intrinsic width is no help, as a size container it has none. A phone is full-bleed at any width. */
+/* The row: panes and dock beside the sidebar. A chat is never narrower than it declares (MIN_MAIN_PANE_UNITS, DESIGN.md
+   "Documents and room"): a too-narrow desktop window scrolls sideways (#root) instead; the row holds the main pane and
+   its margins, since a size container has no intrinsic width. A phone is full-bleed. */
 .ui-shell { position: relative; display: flex; min-width: 0; flex: 1; overflow: hidden; container-type: inline-size; }
-/* A phone's page slides off the sidebar under it (nav.css --drawer), opaque so nothing shows through; at rest shut it has
-   no transform, which would make it a stacking context and the box its fixed pieces (the workspace panel) sit in. */
+/* A phone's page slides off the sidebar under it (nav.css --drawer), opaque; shut at rest it has no transform, which
+   would make it the containing box of its fixed pieces (the workspace panel). */
 @media (--conduit-phone-layout) {
-  /* Shutting, the page comes back as a swipe lets it go: arriving, at the gentle duration (a quick leave read as a snap). */
+  /* Shutting, the page comes back at the gentle duration (a quick one read as a snap). */
   .ui-shell[data-drawer] { background: var(--background); transition: transform var(--duration-gentle) var(--ease-arrive); }
   .ui-shell:is([data-drawer="open"], [data-drawer-drag]) { transform: translateX(calc(var(--drawer) * var(--drawer-width))); }
   .ui-shell[data-drawer="open"] { --drawer: 1; transition: transform var(--duration-gentle) var(--ease-arrive); }
@@ -19,8 +18,7 @@
   .ui-shell { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
 }
 
-/* A pane: the rounded charcoal ground inset on the frame. The main pane's 8px right margin is the gutter between
-   panes; a split pane's drag edge sits in it. */
+/* A pane: the rounded charcoal ground inset on the frame; the 8px right margin is the gutter a split's drag edge sits in. */
 .ui-sheet { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl) - var(--title-bar-room, 0px)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex: 1 1 auto; flex-direction: column; container-type: inline-size; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
 .ui-sheet[data-lead] { isolation: isolate; margin-left: var(--space-2xs); overflow: hidden; outline: none; }
 @media (--conduit-wide-layout) {
@@ -30,14 +28,13 @@
 .ui-sheet[data-under] { margin-inline: 0; pointer-events: none; }
 /* What is drawn on the ground, under everything the sheet holds. */
 .ui-sheet-backdrop { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-/* The meteor field launches and lands spans every few frames: laid out on its own, so none of that dirties the page. */
+/* The meteor field adds and drops spans every few frames: laid out on its own, so none of that dirties the page. */
 .ui-sheet-backdrop .solid-meteor-shower { contain: strict; }
 /* A split pane moved into the dock fills it in place of the tools (their state kept). */
 .ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
 .ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
-/* A pane easing open or shut: what it holds keeps one width (the one it lands at, or leaves from) against the
-   pane's moving edge -- a beside pane's left, pane A's right -- and the pane clips it, so nothing reflows mid-motion
-   and the document travels with the edge. */
+/* A pane easing open or shut: its content keeps its landing (or leaving) width against the moving edge, clipped, so
+   nothing reflows mid-motion and the document travels with the edge. */
 .ui-sheet[data-moving] > :not(.ui-pane-edge, .ui-sheet-backdrop) { width: var(--pane-document-width, auto); max-width: none; align-self: flex-start; }
 .ui-sheet[data-moving][data-lead] > :not(.ui-pane-edge, .ui-sheet-backdrop) { align-self: flex-end; }
 /* The panes' shares easing: each sheet's room and margins move with them. */
@@ -58,8 +55,7 @@
 /* Over the panes: the dock takes no room in the row and floats above it, its edge at its surface's. */
 .ui-dock[data-overlay] { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
 .ui-dock[data-overlay] .ui-dock-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
-/* Closed over the panes, its surface folds to nothing at the panes' edge; its lift and hairline ring would still draw
-   there, a bright line beside the rail. */
+/* Closed over the panes, its surface folds to nothing, and its lift and ring go too, or a bright line stays by the rail. */
 .ui-dock[data-overlay]:not([data-open]) .ui-dock-surface { box-shadow: none; }
 .ui-dock[data-overlay] .ui-pane-edge[data-dock] { left: calc(-1 * var(--workspace-shell-width) - var(--space-md) - var(--control-xs) / 2); }
 /* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
@@ -69,8 +65,7 @@
 .ui-dock-document > div { display: contents; }
 .ui-dock-surface[data-documented] > :not(.ui-dock-document) { display: none !important; }
 .ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-/* Held at the width it is open at while the dock eases open or shut, against the dock's right edge, the surface
-   clipping the rest: nothing in it re-lays out per frame. A resize drag moves the width itself, so it follows. */
+/* Held at its open width against the dock's right edge while the dock eases, clipped, so nothing re-lays out per frame. */
 .ui-dock:not([data-expanded]) .ui-dock-surface[data-documented] > .ui-dock-document { width: var(--dock-document-width, 100%); max-width: none; align-self: flex-end; }
 @media (--conduit-phone-layout) { .ui-dock .ui-dock-surface[data-documented] > .ui-dock-document { width: auto; align-self: stretch; } }
 
@@ -78,9 +73,8 @@
 .ui-tool-content { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; overflow: hidden; outline: none; }
 .ui-tool-content > * { min-width: 0; flex: 1; }
 
-/* A phone: the main pane is the whole visual viewport (safe-area padding belongs to the controls that touch each
-   edge), the other panes are not drawn, and the dock is a full-screen sheet sliding in from the right, sized for a
-   finger (36px rows, 32px controls), its surface inside the system's status and navigation bars. */
+/* A phone: the main pane is the whole visual viewport (safe-area padding is the edge controls'), other panes are not
+   drawn, and the dock is a full-screen sheet from the right, sized for a finger, inside the system bars. */
 @media (--conduit-phone-layout) {
   .ui-sheet[data-lead] { width: 100%; min-height: 0; height: var(--app-height, 100dvh); max-height: var(--app-height, 100dvh); margin: 0; border-radius: 0; }
   .ui-sheet:not([data-lead]) { display: none; }

@@ -153,10 +153,8 @@ export function mirror(root: HTMLElement, input: HTMLTextAreaElement, plugin: Na
         placeholder: input.placeholder, colours: fieldColours(input), states: PHONE_COMPOSER_STATES, blurStates: blurStates(), motion: motionSpec(root), haptics });
       if (stopped) { await plugin.end(); return; }
       ready = true; preference.addEventListener("change", sync);
-      // Only what changes where the parts end up: the row's width and the draft's lines. Not the parts that move
-      // (a gliding field, a tucking pill): they resize every frame of their move, and describing the composer (a copy
-      // laid out) on each of those frames cost the frame -- the transcript fell to every other frame. State changes come
-      // through the attributes.
+      // Only what changes where the parts end up (row width, draft lines), not the parts that move: describing the
+      // composer on each frame of a move cost the frame. State changes come through the attributes.
       for (const element of [root.querySelector(".ui-phone-row"), input]) if (element) sizes.observe(element);
       attributes.observe(root, { subtree: true, attributes: true, childList: true }); sync();
     } catch (error) { restore(); throw error; }

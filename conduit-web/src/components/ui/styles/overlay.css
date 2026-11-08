@@ -39,8 +39,7 @@
 .ui-overlay-chip > svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
 .ui-overlay-chip:is(:focus-visible) > svg { color: var(--foreground); }
 @media (hover: hover) { .ui-overlay-chip:is(:hover, :focus-visible) > svg { color: var(--foreground); } }
-/* Its rows: a popover's Items at the overlay's scale, full colour; its group titles plain, not ruled. */
-/* Its rows are the shared row (Type · Scale, Space). */
+/* Its rows: a popover's Items at the overlay's scale (Type · Scale, Space), full colour; group titles plain, not ruled. */
 .ui-overlay-list {
   min-height: 0; flex: 1; overflow: auto; padding: var(--space-sm) var(--space-md); }
 .ui-overlay-list .ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
@@ -92,15 +91,13 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
 .ui-actions:where([data-actions="setting"]) > .ui-button { white-space: nowrap; }
 .ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
-/* At least a row's height: a finger's on a phone, as every row is there. */
-/* A settings line's height, at least a row's (a finger's on a phone): the setting line and the recorder under it. */
+/* A settings line (and the recorder under it) is at least a row's height, a finger's on a phone. */
 :root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }
 /* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
 .ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 /* Focus anywhere in a row, or the pointer on it, is the row's wash: every row alike, a switch's row too (its thumb
    and segments sit inset in it, see .ui-seg). */
-/* No wash on a setting line: the line is not one target, its control is, and that control shows hover and focus itself
-   (a button's tint, a field's line, a switch's border). The wash is for rows that are one action (the rail, a list). */
+/* No wash on a setting line: its control is the target and shows hover and focus itself; the wash is for one-action rows. */
 /* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
 .ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 .ui-recorder-dot { animation: ui-recorder-pulse var(--duration-pulse) ease-in-out infinite; }
@@ -129,8 +126,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-context { display: inline-flex; vertical-align: middle; margin-left: var(--space-xs); color: var(--muted-foreground); cursor: pointer; }
 .ui-setting-context:focus-visible, .ui-setting-context[data-expanded] { color: var(--foreground); outline: none; }
 @media (hover: hover) { .ui-setting-context:hover { color: var(--foreground); } }
-/* What a line holds besides a field: a value read, not set; a link out; a note or details under
-   it; something at the page's width; waiting. All in the row's voice, muted, on the surface's tint. */
+/* What a line holds besides a field (a value read, a link out, a note or details, waiting): muted, on the tint. */
 .ui-setting-value { min-width: 0; color: var(--muted-foreground); }
 .ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-state-link { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentcolor, transparent 60%); text-underline-offset: 0.2em; cursor: pointer; }
@@ -151,8 +147,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* A command or a name in a note (set a password with …): the data face, as in details. */
 .ui-note:where([data-note="setting"]) code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
-/* Source text (a prompt): in the code face, so its own line breaks read as meant, and a measure tall at most, scrolling
-   inside itself rather than making the page as long as the text. */
+/* Source text (a prompt): the code face, so its line breaks read as meant; a measure tall at most, scrolling inside. */
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 /* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
@@ -188,8 +183,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
   .ui-scrim .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
 }
 
-/* Glance: chat search's preview column, in the row's voice: the title at the strong weight, facts in
-   the data face, the prompt as the user's message is drawn, the answer a step under the text colour. */
+/* Glance: chat search's preview column, in the row's voice; the prompt as the user's message, the answer a step dimmer. */
 .ui-glance { display: grid; min-width: 0; align-content: start; gap: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-glance > * { min-width: 0; }
 .ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/var(--leading-tight) var(--font-sans); }
@@ -203,8 +197,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
-/* GlanceBody: a whole text in the answer's voice above, unclamped; its headings and bold a step heavier (lift), the
-   one strong line staying the title. */
+/* GlanceBody: a whole text in the answer's voice, unclamped; headings and bold a step heavier (lift) under the title. */
 .ui-glance-body > .ui-answer { --answer-gap: var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-glance-body > .ui-answer :is(h1, h2, h3, h4) { color: var(--foreground); font-size: inherit; font-weight: var(--weight-lift); }
 .ui-glance-turn b, .ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }

@@ -1,7 +1,7 @@
-/* Agents: a list of subagents (AgentRows > AgentRow), an icon and a status each: a turn's under its head, a chat's
-   background ones in an AgentRider on its composer, one line each. */
+/* Agents: subagents (AgentRows > AgentRow), one line each: a turn's under its head, a chat's background ones in an
+   AgentRider on its composer. */
 
-/* A turn's subagents sit under its head, outside the fold, at the trail's left edge: rows, no box round them. */
+/* A turn's subagents sit under its head, outside the fold, at the trail's left edge, no box. */
 .ui-agent-rows { display: flex; flex-direction: column; gap: var(--space-2xs); margin: var(--space-xs) 0 0; padding: 0; list-style: none; }
 .ui-agent-row { display: flex; min-width: 0; align-items: center; gap: var(--space-2xs); }
 .ui-agent-row[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
@@ -42,13 +42,12 @@ span.ui-agent-stop { width: var(--control-sm); }
 
 /* The rider: the list alone, its rows meeting the rider's edge as the queued lines do; past five it scrolls. */
 .ui-frost.ui-rider.ui-agent-rider { display: flex; padding: var(--space-xs); }
-/* In the rider the wash is the whole row, stop included, rounded as the rider's slots: the row's own button sat in a
-   scroller that cut its left corners square, and stopped short of the stop. The icon stays on the composer's text. */
+/* In the rider the wash is the whole row, stop included, rounded as the rider's slots; the icon stays on the composer's text. */
 .ui-agent-rider .ui-agent-row { border-radius: var(--cmp-slot-radius); }
 .ui-agent-rider .ui-agent-open { width: auto; margin-left: 0; padding-left: calc(var(--space-lg) - var(--space-xs)); }
 .ui-agent-rider .ui-agent-open:focus-visible { background: transparent; }
-/* A rider row reads mark, time, who, then what it is doing against the stop (which lines up with the composer's send):
-   the time leads, as a turn's header's does, and the row itself opens the run (no chevron). */
+/* A rider row: mark, time, who, then what it does against the stop (lined up with the composer's send); the row opens
+   the run, no chevron. */
 .ui-agent-rider .ui-agent-row[data-line] .ui-row-meta { order: -1; min-width: calc(3 * var(--text-caption)); }
 .ui-agent-rider .ui-agent-row[data-line] .ui-row-lead { order: -2; }
 .ui-agent-rider .ui-agent-row[data-line] .ui-row-title { flex: 1 1 auto; }
@@ -62,8 +61,8 @@ span.ui-agent-stop { width: var(--control-sm); }
 .ui-group:where([data-group="agent"]) { display: grid; min-width: 0; gap: var(--space-2xs); }
 .ui-group:where([data-group="agent"]) > h4 { margin: 0; padding: var(--space-2xs) 0 0 calc(var(--space-lg) - var(--space-xs)); color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-group:where([data-group="agent"]) > .ui-agent-rows { min-width: 0; margin: 0; }
-/* Under way, then not: a row whose agent has ended, or a list left empty, closes its room as it fades (the rider
-   shrinks gently, a transcript following the bottom with it) -- unless the whole rider is going, which it does as one. */
+/* An ended row, or an emptied list, closes its room as it fades (the transcript follows the bottom), unless the whole
+   rider is going, which goes as one. */
 .ui-agent-rider .ui-agent-row, .ui-group:where([data-group="agent"]) { height: auto; interpolate-size: allow-keywords;
   overflow: clip; transition: height var(--duration-gentle) var(--ease-room), opacity var(--duration-gentle) var(--ease-change); }
 .ui-agent-rider:not(.ui-rider-going) :is(.ui-agent-row[data-leaving], .ui-group:where([data-group="agent"][data-going])) { height: 0; overflow: clip; opacity: 0; pointer-events: none; }

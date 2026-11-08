@@ -5,14 +5,9 @@ import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
 import { TextArea } from "./controls";
 
-/*
- * Pill: the phone's floating frost controls, one family on shared tokens
- * (--pill-*). The kind decides the shape, never a prop:
- *   PillButton  one action: a circle (stretch: across its row, as the mic)
- *   (a switch is a Segmented pill: one slot chosen under a sliding thumb)
- *   PillField   a capsule holding text (the phone composer's field)
- *   PillWave    the voice, as bars on the page (a PhoneComposer's track)
- */
+/* Pill: the phone's floating frost controls on shared tokens (--pill-*); the kind decides the shape, never a prop:
+   PillButton (a circle; stretch: across its row), PillField (a capsule of text), PillWave (the voice as bars). A switch
+   is a Segmented pill. */
 type PillAction = { label: string; icon: JSX.Element };
 /** A pill's button: its label and icon, and the caller's own button attributes (a handler, disabled, a title). */
 type PillAttrs = JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>;
@@ -20,17 +15,15 @@ const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: Pi
   {...(onPick ? { onClick: (event: MouseEvent) => { event.stopPropagation(); onPick(item.label); } } : {})}>{item.icon}</button>;
 
 /**
- * folded: a circle that comes and goes in its row (Send, Scroll to latest) folds to nothing, its gap with it, so a
- * stretched neighbour gives and takes the room. voice: one of the voice controls, which stay while a PhoneComposer
- * listens (Stop and send). aura: the mic -- listening, its pill fills with an Aura under its icon; stretched, it
- * shrinks to a short pill at the row's end. open: its menu is open, so it stays lit while its row dims (PhoneComposer under).
+ * folded: a circle that comes and goes (Send, Scroll to latest) folds to nothing, its gap with it, so a stretched
+ * neighbour takes the room. voice: stays while a PhoneComposer listens. aura: the mic, filled with an Aura while
+ * listening; stretched, a short pill at the row's end. open: its menu is open, so it stays lit while its row dims.
+ * haptic: a press that acts at once (mic, Send, Stop) is felt on a phone.
  */
-/** haptic: a press that acts at once (the mic, Send, Stop) is felt on a phone (see haptics.ts). */
 export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; haptic?: Haptic; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
-  // Its move (styles/motion.css): a tuck, wherever it is; out when folded, or when its
-  // scope's parts are out and it is not a voice control (they stay while listening); dimmed under its scope's menu
-  // unless it opened it.
+  // A tuck: out when folded, or when its scope's parts are out and it is not a voice control; dimmed under its scope's
+  // menu unless it opened it.
   const scope = useMoveScope();
   const out = () => !!props.folded || (!(props.voice || mic) && !!scope.out?.());
   // The caller's attributes stay live on the one button (merged lazily, so a change never rebuilds it).
@@ -45,21 +38,18 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
   // Stretched, the mic gives its grow to the room before it to become an orb pill at the row's end (a give).
   return mic && props.stretch ? <><span class="ui-pill-room" data-move="give" />{pill}</> : pill;
 }
-/** Its own textarea, or the caller's field as children (the composer's, with its behaviour). It fades itself, out and
- *  under as its scope says. */
+/** Its own textarea, or the caller's field as children; it fades itself as its scope says. */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
   const scope = useMoveScope();
   return <Frost class={cn("ui-pill ui-pill-field", props.class)} data-move="fade" data-out={scope.out?.() ? "" : undefined} data-under={scope.under?.() ? "" : undefined}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
 }
 
 /**
- * Aura: a field of colour behind a surface. Its blobs are numbers: the direction each comes in from, its colour
- * (OKLCh), its orbit (seconds a turn, negative turning back) and its swell (how its reach answers the level, negative
- * shrinking). Each circles near its edge and breathes twice a turn. Every point of the field is a blend of all of
- * them by distance (a mesh gradient, as Apple's glows are), its hue their weighted mean and its chroma held, so the
- * colours meet in colour, never grey, and none lies over another; a faint ground of the middle hue settles meetings. The level (--aura-level, eased by styles/pill.css)
- * turns them faster, brightens them and moves their balance; strength (0-1, --aura-strength) how strongly it shows, fainter
- * on a large surface. Drawn small and scaled up; it runs only while shown.
+ * Aura: a field of colour behind a surface. Each blob is a direction, an OKLCh colour, an orbit (seconds a turn,
+ * negative turning back) and a swell (how its reach answers the level); each circles near its edge, breathing twice a
+ * turn. Every point blends them all by distance (a mesh gradient), hue their weighted mean and chroma held, so colours
+ * meet in colour, never grey. The level (--aura-level) turns them faster, brighter and rebalanced; strength (0-1,
+ * --aura-strength) how strongly it shows. Drawn small and scaled up; it runs only while shown.
  */
 const AURA_BLOBS = [
   { from: 180, l: .58, c: .2, h: 290, orbit: 7, swell: .5 },
@@ -85,21 +75,18 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
     const ctx = canvas.getContext("2d")!;
     let width = AURA_SIDE, height = AURA_SIDE, image = ctx.createImageData(width, height), frame = 0, last = 0, seen = true;
     const turns = AURA_BLOBS.map((_, i) => i * 1.3);
-    // Sizing a canvas clears it, so it is resized only when its grid changes, and redrawn there at once: resized after
-    // the frame's draw (as it is every frame its surface moves), it painted blank and the colour vanished mid-move.
+    // Sizing a canvas clears it, so it resizes only when its grid changes and redraws at once, or it paints blank mid-move.
     const fit = () => { const r = box.getBoundingClientRect(); if (!r.width || !r.height) return; const k = AURA_SIDE / Math.max(r.width, r.height);
       const w = Math.max(4, Math.round(r.width * k)), h = Math.max(4, Math.round(r.height * k));
       if (w === width && h === height && canvas.width === w) return;
       width = w; height = h; canvas.width = w; canvas.height = h; image = ctx.createImageData(w, h); render(0); };
     let level = 0;
-    // It draws only while it shows: hidden it is faded out (opacity 0), and its loop stops there rather than asking for
-    // every frame to read that it is still hidden. Its fade starting (after any delay) or a change to what shows it
-    // starts the loop again, which runs at least a moment so a fade in that starts from 0 is not taken for hidden.
+    // At opacity 0 its loop stops rather than polling every frame. A fade starting or a change to what shows it restarts
+    // the loop, which runs at least a moment so a fade in from 0 is not taken for hidden.
     let wake = 0;
     const draw = (now: number) => {
       frame = 0;
-      // Out of the document (built but never placed, or taken out) it has no opacity to read: it stops there too, and
-      // its view starts it again if it is placed.
+      // Out of the document it has no opacity to read: it stops too, restarted if placed.
       const style = getComputedStyle(box);
       if (!seen || !box.isConnected || (style.opacity === "0" && now > wake)) { last = 0; return; }
       frame = requestAnimationFrame(draw);
@@ -142,11 +129,8 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
   return <span ref={box} class="ui-aura" data-on={props.on || scope.voice?.() ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
 }
 
-/**
- * PillWave: the voice as it comes, no surface: whole-pixel bars on a fixed pitch filling the width, the newest at the
- * right end, so it runs up to its neighbour's gap. levels: 0-1, oldest first (as many as fit are drawn, the rest
- * flat); silence is a dotted line. gain: how much a level is lifted before it is drawn (speech sits low).
- */
+/** PillWave: the voice as it comes, no surface: whole-pixel bars on a fixed pitch, newest at the right; silence is a
+ *  dotted line. levels: 0-1, oldest first. gain: how much a level is lifted before drawing (speech sits low). */
 export function PillWave(props: { levels: number[]; gain?: number }) {
   // In a scope that says when it is out (a surface composer's track), it fades itself.
   const scope = useMoveScope();

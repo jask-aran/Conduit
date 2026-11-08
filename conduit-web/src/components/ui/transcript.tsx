@@ -13,20 +13,15 @@ import { createTailWindow } from "./tail-window";
 import { useChatDrawing } from "./chat-drawing";
 export { ANSWER_MARKDOWN } from "./shared";
 
-/**
- * The user's words in frost. Given `fold` lines, a message that runs past them folds to them, its last line fading,
- * "Show more" under it; `open` and `onToggle` are the caller's (opening adds height above whatever follows, so the
- * caller holds the reading position). It measures itself, only when folded, and again when its width changes.
- * `editing`: the message being edited, muted.
- */
+/** The user's words in frost. Past `fold` lines it folds, its last line fading, "Show more" under it; `open` and
+ *  `onToggle` are the caller's, which holds the reading position. `editing`: the message being edited, muted. */
 export function Bubble(props: { children: JSX.Element; fold?: number; open?: boolean; onToggle?: (event: MouseEvent) => void; editing?: boolean }) {
   let text!: HTMLDivElement;
   // Folded from the first paint: measuring it unfolded would compare the text with itself and always fit.
   const [fits, setFits] = createSignal(false);
   const foldable = () => Boolean(props.fold) && !fits();
   const folded = () => foldable() && !props.open;
-  // Whether the text fits its fold: its whole height (scrollHeight, folded or not) against the fold's lines. Never by
-  // folding it again to look -- a resize does that every frame of a drag, and the fold's line came and went with it.
+  // Fits its fold: scrollHeight against the fold's lines, never by refolding to look (a drag resize flickers the fold).
   const measure = () => {
     const line = Number.parseFloat(getComputedStyle(text).lineHeight);
     if (Number.isFinite(line)) setFits(text.scrollHeight <= (props.fold ?? 0) * line + 1);
@@ -52,11 +47,8 @@ export function Bubble(props: { children: JSX.Element; fold?: number; open?: boo
   </Frost>;
 }
 
-/*
- * Transcript (DESIGN Transcript): what is read, at the transcript's scale. A Turn is its trace header, the
- * answer and the answer's foot; the user's Message is a Bubble and its foot. Shapes only: the orb, the
- * markdown and every action are the caller's.
- */
+/* Transcript (DESIGN Transcript): what is read, at the transcript's scale. Shapes only: the orb, the markdown and
+   every action are the caller's. */
 /** The answer: Markdown with no bubble, the Body role, one gap between blocks. html for rendered Markdown. copied: it
  *  was just copied, and takes the copied wash. A Markdown renderer marks what it draws into it with ANSWER_MARKDOWN. */
 /** What a turn says: its answer, and under Narrated what it says on the way there, drawn alike (DESIGN.md, Turns). */
@@ -83,13 +75,9 @@ export const HarnessPrompt = (props: { onOpen?: () => void; icon?: JSX.Element; 
 export const ConduitAdded = (props: { text: string; before?: boolean }) =>
   <div class="ui-conduit-added" data-before={props.before ? "" : undefined}><span>Conduit added</span><p>{props.text}</p></div>;
 /**
- * A message that crosses the thread's edge, drawn as it crossed (DESIGN Transcript, Messages in and out). Inbound: a
- * prompt the person did not write -- a run reporting back, Conduit saying how an approval went -- exactly as the agent
- * was given it. Outbound: what the agent sent the person outside the thread (a notification). Both at the left: a
- * header of who and when (its mark, its name, what it was in `meta`, the time; Open at the right when it has a
- * transcript), then the text on a hairline rule hung from the mark, folding past `fold` lines. What Conduit added to it
- * for the agent sits apart, labelled, quieter -- shown, never hidden: notes before the text (`noted`), the decision it
- * asks for after it (`appended`).
+ * A message that crosses the thread's edge, drawn as it crossed (DESIGN Transcript, Messages in and out), at the left:
+ * a header (mark, name, `meta`, time; Open when it has a transcript), then the text on a hairline rule hung from the
+ * mark, folding past `fold` lines. What Conduit added sits apart, labelled, never hidden: `noted` before, `appended` after.
  */
 function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: string; meta?: string; time?: string; dateTime?: string; title?: string;
   onOpen?: () => void; openLabel?: string; fold?: number; noted?: string; appended?: string; shut?: boolean;
@@ -99,8 +87,7 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
   const [open, setOpen] = createSignal(false);
   // shut: starts as its header alone (who, what, when), opening in place to its text -- a run's report, a notification.
   const [shown, setShown] = createSignal(!props.shut);
-  // Held to its fold until opened; whether it runs past it is measured against the fold itself, again whenever the
-  // text grows (its Markdown arrives after the first paint) or the column changes width.
+  // Held to its fold until opened; measured again when the text grows (late Markdown) or the column changes width.
   const [fits, setFits] = createSignal(true);
   const folded = () => Boolean(props.fold) && !open();
   const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
@@ -141,16 +128,10 @@ export const Outbound = (props: Omit<Parameters<typeof Envelope>[0], "direction"
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
   <button type="button" class="ui-changes" data-wash title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
-/**
- * A fold's body (Trace, Step). Given opens -- that it has something to open to, known without drawing it --
- * the body is drawn the first time it opens and kept from then on (Expand puts it in and takes it out of the
- * document), so a long trail costs nothing until it is read. Without, the children are drawn to learn whether there is anything to open.
- */
-/*
- * Find reaches what a closed fold has not drawn (client/chat/transcript-find.ts). A fold given `find` (Trace, Step) is
- * marked data-find-fold while closed and registered here: `text` is what opening it would draw, read only when a
- * search runs; `open` opens it, so a match inside can be shown. Matches are counted where the fold is.
- */
+/** A fold's body (Trace, Step). Given opens (known without drawing), the body is drawn on first open and kept, so a
+ *  long trail costs nothing until read; without, the children are drawn to learn whether there is anything to open. */
+/* Find reaches what a closed fold has not drawn (client/chat/transcript-find.ts): a fold given `find` is marked
+   data-find-fold while closed; `text` (read only when a search runs) is what opening would draw, `open` opens it. */
 const foldFinds = new WeakMap<Element, { text: () => string; open: () => void }>();
 export const foldFindOf = (element: Element) => foldFinds.get(element);
 export const registerFoldFind = (element: Element, text: () => string, open: () => void) => { foldFinds.set(element, { text, open }); };
@@ -164,9 +145,8 @@ export function foldBody(props: { opens?: boolean; open?: boolean; children?: JS
  *  the answer ended when it did not finish (Interrupted, Stopping…), after the time. */
 /** The message's action row; `notified`: where it was pushed besides ("Sent to Phone"), a bell and those words before
  *  the time, always shown. */
-/** at: when it was said (an ISO time): its time, datetime and full title from that, each formatted once (time.ts),
- *  in time/dateTime/title's place. Its actions (children) are built in idle time after the rows are drawn (Later):
- *  unseen until the row is revealed, but the latest exchange's -- eager: drawn with it (that one, shown). */
+/** at: when it was said (ISO), formatted once (time.ts) in place of time/dateTime/title. Its actions are built in idle
+ *  time (Later), unseen until the row is revealed; `eager` (the latest exchange's) draws them with it. */
 export const MessageFoot = (props: { at?: string | null; time?: string; dateTime?: string; title?: string; status?: string; notified?: string; end?: boolean; eager?: boolean; motion?: Motion; children?: JSX.Element }) => {
   const time = () => props.time ?? clockTime(props.at);
   return <div class="ui-message-foot" data-end={props.end ? "" : undefined} {...motionOf(props.motion)}><Show when={props.notified}><span class="ui-message-bell"><Icons.Notification aria-hidden="true" />{props.notified}</span></Show><Show when={time()}><time dateTime={props.dateTime ?? props.at ?? undefined} title={props.title ?? (props.at ? fullTime(props.at) : undefined)}>{time()}</time></Show><Show when={props.status}><b class="ui-message-status">{props.status}</b></Show><Later now={props.eager}>{props.children}</Later></div>;
@@ -203,13 +183,10 @@ export function Transcript(props: JSX.HTMLAttributes<HTMLDivElement>) {
   return <div {...rest} class={cn("ui-transcript", local.class)}>{local.children}</div>;
 }
 /**
- * A Transcript of a list, drawn the fast way by default (createTailWindow): opening on as many of its newest items as
- * fill the viewport it is in (estimate: a guess at an item's height at a column width; measured once, before the
- * paint), the older ones added above in idle time. `of`: what it is a list of (a new one opens at its tail again);
- * whole: open it whole instead (a place to come back to above its foot). Drawn -- everything on screen is --
- * it says so (data-drawn), and the ChatView it is in shows only then (ChatDrawing). holdsFoot (on): as older items go
- * in above, its scroller keeps its distance from the foot; off for a host that holds its own (a chat's transcript).
- * before/after: rows around the list's (a loading spinner, a working row). children: a row, by its item and index.
+ * A Transcript of a list, drawn fast (createTailWindow): its newest items that fill the viewport first (`estimate`: an
+ * item's height at a column width), older ones above in idle time. `of`: what it lists (a new one opens at its tail);
+ * `whole`: open it whole. Once drawn it says so (data-drawn) and its ChatView shows (ChatDrawing). `holdsFoot` (on):
+ * keeps the scroller's distance from the foot as items go in above; off for a host that holds its own.
  */
 export function TranscriptList<T>(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "children" | "ref"> & {
   each: readonly T[]; of: unknown; estimate?: (item: T, width: number) => number; whole?: () => boolean; holdsFoot?: boolean;
