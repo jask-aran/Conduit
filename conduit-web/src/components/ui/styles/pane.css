@@ -21,7 +21,6 @@
 .ui-tab-place-label { flex: 0 1 auto; max-width: var(--measure-xs); margin-right: var(--space-2xs); overflow: hidden; border: 0; background: none; padding: 0;
   color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-strong) var(--text-label)/var(--leading-row) var(--font-label);
   letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
-.ui-tab-place-label > span { overflow: hidden; text-overflow: ellipsis; }
 .ui-tab-place[data-current] .ui-tab-place-label { color: var(--foreground); }
 @media (hover: hover) { .ui-tab-place-label:hover { color: var(--foreground); } }
 

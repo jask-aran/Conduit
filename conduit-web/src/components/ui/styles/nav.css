@@ -46,10 +46,7 @@
 /* The second level's icon sits where the first level's text starts. */
 .ui-row:where([data-density="nav"])[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
 .ui-row-lead:where([data-density="nav"] *) { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-row-title:where([data-density="nav"] *) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-title:where([data-density="nav"] *)[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
-.ui-row-title:where([data-density="nav"] *)[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
-.ui-row-title:where([data-density="nav"] *) > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-row-meta:where([data-density="nav"] *) { flex: none; color: var(--muted-foreground); font-size: var(--text-label); }
 .ui-row-end:where([data-density="nav"] *) { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }

@@ -6,7 +6,6 @@
 .ui-pane-header:where([data-header="pane"])[data-frost] { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
 .ui-header-title { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; overflow: hidden; }
 .ui-header-title:has(> nav[aria-label="Tabs"]) { flex: 1 1 auto; align-self: stretch; }
-.ui-header-group { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-header-group[data-lead] { display: none; }
 .ui-header-group[data-actions] { margin-left: auto; }
 .ui-header-group:empty { display: none; }

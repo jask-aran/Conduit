@@ -31,9 +31,7 @@
 .ui-row:where([data-density="trail"]):focus-visible { outline: none; background: var(--tint); }
 @media (hover: hover) { .ui-row:where([data-density="trail"]):is(button, a):not(:disabled):hover { background: var(--tint); } }
 .ui-row-lead:where([data-density="trail"] *) { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-row-title:where([data-density="trail"] *) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-title:where([data-density="trail"] *)[data-stacked] { display: flex; flex-direction: column; gap: var(--space-2xs); }
-.ui-row-title:where([data-density="trail"] *)[data-stacked] > * { overflow: hidden; text-overflow: ellipsis; }
 :is(.ui-row-detail, .ui-row-context):where([data-density="trail"] *) { min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-context:where([data-density="trail"] *) { flex: 1 1 0; }
 .ui-row-meta:where([data-density="trail"] *) { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }

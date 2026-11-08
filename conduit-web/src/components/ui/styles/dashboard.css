@@ -80,7 +80,6 @@
 .ui-group-head:where([data-group="dash"] *):empty { display: none; }
 .ui-dash-main .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
 .ui-group:where([data-group="dash"])[data-folded] .ui-group-head:where([data-group="dash"] *) { padding-bottom: 0; }
-.ui-group-actions:where([data-group="dash"] *) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-group:where([data-group="dash"]), .ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
 /* Switches in the heading's place keep their size on one line; the actions take the rest and fold. */
 .ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }

@@ -12,7 +12,6 @@
 .ui-identity-control, .ui-identity-icon-browser { display: flex; min-width: 0; flex-direction: column; gap: var(--space-md); }
 .ui-identity-control-heading, .ui-identity-icon-choice, .ui-identity-custom-color { display: flex; align-items: center; gap: var(--space-md); }
 .ui-identity-control-heading { justify-content: space-between; }
-.ui-identity-label { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-identity-icon-choice > .ui-button { min-width: 0; }
 .ui-identity-search { display: flex; align-items: center; gap: var(--space-sm); }
 .ui-identity-search > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }

@@ -13,7 +13,6 @@
 .ui-card > h3 { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
 .ui-card > p { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
-.ui-card > pre { overflow: hidden; text-overflow: ellipsis; }
 .ui-card { position: relative; }
 /* Outline: an outlined box on its ground (an outline Card, a client's card, the network map's boxes): a hairline, no fill. */
 .ui-outline { border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); }

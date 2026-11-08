@@ -63,7 +63,6 @@
 .ui-input::placeholder { color: var(--muted-foreground); }
 .ui-input:is(:focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 @media (hover: hover) { .ui-input:is(:hover, :focus, [aria-expanded="true"]) { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); } }
-.ui-input > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-input > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--muted-foreground); }
 .ui-input[data-bare] { width: auto; height: auto; border: 0; background: transparent; padding: var(--space-xs) 0; color: var(--muted-foreground); }
 .ui-input[data-bare]:is(:focus-visible) { color: var(--foreground); }

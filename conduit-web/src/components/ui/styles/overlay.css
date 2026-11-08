@@ -156,7 +156,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
 /* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
-.ui-overlay-page-head > .ui-overlay-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-overlay-status { display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-status[data-failed] { color: var(--destructive); }
 /* On a phone an overlay is full screen, nothing round it dimmed: one column, the split's aside

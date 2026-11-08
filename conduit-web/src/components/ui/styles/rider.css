@@ -15,7 +15,6 @@
 .ui-rider[data-layout="wave"] > .ui-aura { z-index: -1; }
 .ui-frost.ui-rider[data-layout="card"] { display: grid; width: 100%; gap: var(--space-sm); margin-inline: auto; padding: var(--space-md); outline: 0; }
 .ui-rider-mark { display: grid; flex: none; place-items: center; color: var(--muted-foreground); }
-.ui-actions:where([data-actions="rider"]) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-actions:where([data-actions="rider"])[data-stack] { flex-direction: column; }
 :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] { width: var(--rider-slot); min-width: var(--rider-slot); height: var(--rider-slot); border-radius: var(--cmp-slot-radius); padding: 0; color: var(--muted-foreground); }
 :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
@@ -60,7 +59,6 @@
 /* ChipCopy (a Chip's, an Attachment's): the name over its detail. A Chip's keeps to one line each, cut short. */
 .ui-chip-copy { display: grid; min-width: 0; }
 .ui-chip-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
-.ui-chip-copy small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-chip .ui-chip-copy { max-width: var(--measure-xs); line-height: var(--leading-tight); }
 .ui-chip:is([data-status="uploading"], [data-status="queued"]) .ui-chip-media img { opacity: var(--opacity-muted); }
 .ui-chip-ring { position: absolute; width: var(--icon-xl); height: var(--icon-xl); transform: rotate(-90deg); fill: none; stroke-width: 2.5; filter: var(--glyph-shadow); }

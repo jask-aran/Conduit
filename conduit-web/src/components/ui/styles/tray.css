@@ -4,7 +4,6 @@
 .ui-panel-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); }
 .ui-panel-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-panel-lead { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); }
-.ui-panel-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-panel-grip { position: absolute; top: calc(var(--space-sm) - var(--space-lg)); left: 50%; width: var(--control-md); height: var(--track-size); border-radius: var(--radius-round); background: var(--tint); translate: -50% 0; }
 .ui-panel-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }

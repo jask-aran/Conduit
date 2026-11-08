@@ -80,7 +80,6 @@
 .ui-conduit-added > span { font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 /* Before the person's message: at the bubble's side, as wide as a bubble may be. */
 .ui-message > .ui-conduit-added { justify-self: end; max-width: min(var(--measure-2xl), 88cqw); margin: 0; text-align: left; }
-.ui-harness-prompt-unseen { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-harness-prompt { display: flex; justify-content: flex-start; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 /* A report from a subagent opens its transcript: the line is a button, its chevron on the cursor. */
 .ui-harness-prompt-open { display: inline-flex; min-width: 0; align-items: center; gap: var(--row-gap); margin-left: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; cursor: pointer; }

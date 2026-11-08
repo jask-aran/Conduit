@@ -26,7 +26,6 @@
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
 .ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-row:where([data-density="menu"]) > .ui-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Meta: muted mono beside the title, right-aligned, tabular. */
 /* The meta gives way before the label does: a long one (a model's spec) truncates first. */
 .ui-row:where([data-density="menu"]) > small { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
@@ -137,4 +136,3 @@ button.ui-chevron { display: inline-grid; flex: none; place-items: center; borde
 .ui-row:where([data-density="menu"])[data-picked] > .ui-row-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
 
 /* Text a row is given as its own span (not a label part) runs out in an ellipsis, as a label does. */
-.ui-row:where([data-density="menu"]) > span:not(.ui-icon, .ui-keys, .ui-row-end, .ui-row-check) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
