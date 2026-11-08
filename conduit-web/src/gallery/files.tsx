@@ -17,8 +17,8 @@ import { row, token, type Page } from "./model";
 
 /*
  * Files and the editor (components/ui/file.tsx, viewer.tsx, editor.tsx): a file's header, body and status bar, the
- * viewer's two sides, and the code surface's find bar, line comments and comparison. The app fits the header (it sets
- * data-folded on what does not fit, lowest data-fold first); here each state is set by hand.
+ * viewer's two sides, and the code surface's find bar, line comments and comparison. PaneHeader fits the header (it sets
+ * data-folded on what does not fit, lowest data-fold first), here as in the app.
  */
 
 const SAMPLE = ["export function greet(name: string) {", "  return `Hello, ${name}`;", "}", "", "greet(\"Conduit\");"];
@@ -26,19 +26,18 @@ const Code = () => <pre class="g-file-code">{SAMPLE.map((line, index) => <span><
 // A sample fills its cell up to a width of its own.
 const box = (units: number) => ({ width: "100%", "max-width": `calc(${units} * var(--u-space))` });
 
-function Head(props: { folded?: boolean; dirty?: boolean; git?: string }) {
-  const fold = (key: string) => props.folded && key !== "close" ? { "data-folded": "" } : {};
+function Head(props: { dirty?: boolean; git?: string }) {
   return <PaneHeader kind="file">
     <FileName path="src/greet.ts" icon={<Icons.FileCode />} />
     {props.git ? <FileGit status={props.git} /> : null}
     <FileDirty dirty={Boolean(props.dirty)} />
     <Actions kind="file">
-      <IconButton kind="file" label="Copy contents" data-fold="1" {...fold("copy")}><Icons.Copy /></IconButton>
-      <IconButton kind="file" label="Download" data-fold="2" {...fold("download")}><Icons.Download /></IconButton>
+      <IconButton kind="file" label="Copy contents" data-fold="1"><Icons.Copy /></IconButton>
+      <IconButton kind="file" label="Download" data-fold="2"><Icons.Download /></IconButton>
     </Actions>
     <Actions kind="tools">
-      <IconButton kind="file" label="Find or replace" data-fold="3" {...fold("find")}><Icons.Search /></IconButton>
-      <IconButton kind="file" label="Wrap lines" inMenu data-fold="4" {...fold("wrap")}><Icons.WrapText /></IconButton>
+      <IconButton kind="file" label="Find or replace" data-fold="3"><Icons.Search /></IconButton>
+      <IconButton kind="file" label="Wrap lines" inMenu data-fold="4"><Icons.WrapText /></IconButton>
     </Actions>
     <FileMore aria-label="More file actions" />
     <IconButton kind="file" label="Close file" close><Icons.Close /></IconButton>
@@ -133,7 +132,7 @@ import { Icons } from "@/components/ui";
   examples: [
     row("PaneHeader · FileName · FileGit · FileDirty", "a modified file with unsaved changes: the git letter, then the dot", () => <div style={box(30)}><Head git="M" dirty /></div>, { surfaces: ["ground"], phone: true, code: "<PaneHeader><FileName path icon /><FileGit status /><FileDirty dirty />…</PaneHeader>" }),
     row("Actions · Actions · IconButton", "everything fits: copy and download, then find and wrap; close last; --control-tool buttons · --icon-sm", () => <div style={box(30)}><Head /></div>, { surfaces: ["ground"], phone: true, code: '<IconButton label data-fold="1" />' }),
-    row("FileMore · data-folded", "too narrow: every action folds into the ⋯ (shown by the viewer once anything folds)", () => <FileViewer style={{ ...box(18.75), height: "auto" }}><FileView><Head folded /></FileView></FileViewer>, { surfaces: ["ground"], phone: true, code: "data-folded on each folded button" }),
+    row("FileMore · data-folded", "too narrow: the actions fold into the ⋯, lowest data-fold first (shown by the viewer once anything folds)", () => <FileViewer style={{ ...box(14), height: "auto" }}><FileView><Head /></FileView></FileViewer>, { surfaces: ["ground"], phone: true, code: "PaneHeader kind=\"file\" sets data-folded on each folded button" }),
     row("StatusBar · StatusPicker · StatusText · Viewing", "the mode picker leads with its mark (Edit, or Preview while editing); pickers end with a chevron; details at the right; --text-caption", () => <div style={box(37.5)}><Status editing={false} /></div>, { surfaces: ["ground"], phone: true, code: "<StatusBar commands={<StatusPicker strong icon />}><StatusText /></StatusBar>" }),
     row("StatusBar · StatusPicker · StatusText · Editing", "the mode picker leads with its mark (Edit, or Preview while editing); pickers end with a chevron; details at the right; --text-caption", () => <div style={box(37.5)}><Status editing={true} /></div>, { surfaces: ["ground"], phone: true, code: "<StatusBar commands={<StatusPicker strong icon />}><StatusText /></StatusBar>" }),
     row("FileView · FileBody · Rest", "a text file; focused, its header takes the wash", () => <div style={box(30)}><File focused={false} /></div>, { surfaces: ["ground"], phone: true, code: "<FileView focused><PaneHeader /><FileBody /><StatusBar /></FileView>" }),

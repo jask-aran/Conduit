@@ -4502,64 +4502,8 @@ function App() {
       return runs;
     }, [], { equals: (a, b) => a.length === b.length && a.every((run, index) => run.place === b[index]!.place && run.keys.join() === b[index]!.keys.join()) });
     const [folded, setFolded] = createSignal<string[]>([]);
-    let strip: HTMLDivElement | undefined;
-    const fit = () => {
-      if (!strip) return;
-      const groupElements = [...strip.querySelectorAll<HTMLElement>(".ui-tab-place")];
-      const tabElements = [...strip.querySelectorAll<HTMLElement>(".ui-tab")];
-      // The row's spacing, as pane.css sets it (registered lengths, so they read back in px).
-      const style = getComputedStyle(strip);
-      const tabGap = parseFloat(style.getPropertyValue("--tab-gap")) || 0;
-      const placeGap = parseFloat(style.getPropertyValue("--tab-place-gap")) || 0;
-      const moreWidth = parseFloat(style.getPropertyValue("--tab-more")) || 0;
-      const labelGap = parseFloat(style.getPropertyValue("--tab-label-gap")) || 0;
-      for (const element of [...groupElements, ...tabElements]) element.style.display = "";
-      for (const element of tabElements) element.removeAttribute("data-lead");
-      const runs = groups();
-      if (!options.keys() || groupElements.length !== runs.length) return setFolded([]);
-      const room = strip.clientWidth;
-      // What every tab needs, for a header that folds its own actions first.
-      // Tabs give way to a squeeze by cutting their titles, so each is measured with its whole title.
-      // A tab's own cap (max-width) still holds.
-      const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".ui-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
-      const natural = (element: HTMLElement) => element.classList.contains("ui-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".ui-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
-      const all = groupElements.reduce((sum, element) => sum + natural(element) + (element === groupElements[0] ? 0 : placeGap), 0);
-      // What must stay -- the lit and showing tabs, their labels and the ⋯ -- for a header
-      // that folds its own actions only after the other tabs have folded.
-      const litKey = options.lit();
-      const staying = tabElements.filter((element) => element.dataset.tab === litKey || options.shown?.(element.dataset.tab!));
-      const need = String(Math.ceil(staying.reduce((sum, element) => sum + natural(element) + tabGap, 0) + (staying.length < tabElements.length ? moreWidth : 0)
-        + groupElements.filter((group) => staying.some((element) => group.contains(element))).reduce((sum, group) => sum + (group.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0), 0)));
-      if (strip.dataset.need !== need) strip.dataset.need = need;
-      if (all <= room) return setFolded([]);
-      // Each tab with the gap and middot before it; each place with its label and the rule before it.
-      const width = new Map(tabElements.map((element) => [element.dataset.tab!, natural(element) + tabGap]));
-      const labels = groupElements.map((element, index) => (element.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0) + labelGap + (index ? placeGap : 0));
-      // The lit tab and any other showing (a viewer's other side) never fold.
-      const lit = options.lit();
-      const reserved = (options.keys() ?? []).filter((key) => key === lit || options.shown?.(key));
-      const kept = new Set(runs.flatMap((run, index) => run.keys.some((key) => reserved.includes(key)) ? [index] : []));
-      let budget = room - moreWidth - reserved.reduce((sum, key) => sum + (width.get(key) ?? 0), 0) - [...kept].reduce((sum, index) => sum + (labels[index] ?? 0), 0);
-      const hidden: string[] = [];
-      runs.forEach((run, index) => run.keys.forEach((key) => {
-        if (reserved.includes(key)) return;
-        const cost = (width.get(key) ?? 0) + (kept.has(index) ? 0 : labels[index]!);
-        if (hidden.length === 0 && cost <= budget) { budget -= cost; kept.add(index); } else hidden.push(key);
-      }));
-      tabElements.forEach((element) => { if (hidden.includes(element.dataset.tab!)) element.style.display = "none"; });
-      // A folded tab's middot goes with it: the first tab left in a place leads it.
-      groupElements.forEach((group) => { let lead = true; group.querySelectorAll<HTMLElement>(".ui-tab").forEach((element) => { const shown = element.style.display !== "none"; element.toggleAttribute("data-lead", shown && lead); if (shown) lead = false; }); });
-      groupElements.forEach((element, index) => { if (!kept.has(index)) element.style.display = "none"; });
-      setFolded(hidden);
-    };
     const has = createMemo(() => Boolean(options.keys()));
-    return createMemo(() => has() ? untrack(() => <PaneTabs ref={(element) => {
-      strip = element;
-      const observer = new ResizeObserver(() => fit());
-      observer.observe(element);
-      onCleanup(() => observer.disconnect());
-      createEffect(on(() => [groups(), options.lit()] as const, () => requestAnimationFrame(fit)));
-    }}>
+    return createMemo(() => has() ? untrack(() => <PaneTabs onFold={setFolded}>
       <For each={groups()}>{(run) => {
         const current = () => run.keys.includes(options.lit() ?? "");
         const label = () => options.placeLabel?.(run.keys[0]!) ?? "";

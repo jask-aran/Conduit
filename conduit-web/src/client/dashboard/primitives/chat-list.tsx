@@ -5,7 +5,9 @@ import { createSignal, For, Index, onMount, Show, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, MenuControl } from "@/components/ui/menus";
 import { DashDay, GroupAction, GroupCompactHeading } from "@/components/ui/dashboard";
 
-import { SplitGroupMore, watchFold } from "./split";
+import { SplitGroupMore } from "./split";
+import { foldRow } from "@/components/ui/fit";
+import { isMobileLayout } from "../../navigation/mobile-layout";
 import type { Project } from "../../api/contracts";
 import { PlaceGlyph } from "../../chat/place-picker";
 
@@ -89,13 +91,13 @@ function ChoiceFilter(props: { choice: ListChoice }) {
 /**
  * The heading's filters on its one line, beside the switches: each choice its
  * own dropdown, and as room runs out the last ones fold, in order, into a ⋯
- * menu before search (the children), as watchFold has it.
+ * menu before search (the children), as foldRow has it.
  */
 export function FilterBar(props: { choices: Array<ListChoice | false | null | undefined>; children?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   const [fit, setFit] = createSignal(Infinity);
   let more!: HTMLSpanElement;
-  onMount(() => watchFold(more, setFit));
+  onMount(() => foldRow(more, setFit, isMobileLayout));
   return <>
     <Index each={choices()}>{(choice, index) => <span data-fold data-folded={index >= fit() ? "" : undefined}><ChoiceFilter choice={choice()} /></span>}</Index>
     <span ref={more} data-fold-more data-folded={fit() >= choices().length ? "" : undefined}><FiltersMenu title="More filters" trigger={<Icons.More />} choices={choices().slice(fit())} /></span>

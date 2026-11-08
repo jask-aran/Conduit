@@ -119,6 +119,15 @@ What the family table missed, found by counting raw buttons and checking each ex
 - Left: DashMore (a group's "N more" row), the rider line's chevron and an email's ··· are their own forms. The ~200
   exports with one caller are a screen's parts (the file browser's 16, the terminal's, a glance's), not copies.
 
+## Wave 6
+
+Fold by measure: the rows that fold controls into a ⋯ or + measured themselves four ways in the app (the composer's
+row, a file header, the pane tab strip, the dashboards' watchFold), each with its own observers. Now fit.ts holds
+watchFit (what changes a row's fit, measured where the observer delivers), keptParts (how many stay, the ⋯ taken once
+one goes) and foldRow (a [data-fold] row with its ⋯); PaneTabs fits its own tabs (onFold), PaneHeader kind="file" its
+own actions (headerfold), and the composer's row folds through keptParts and watchFit. createFolds watches through
+watchFit too.
+
 ## Size
 
 Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,710 after wave 4, 11,947 after the comments were

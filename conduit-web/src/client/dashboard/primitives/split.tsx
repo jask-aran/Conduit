@@ -4,6 +4,7 @@ import { createContext, createEffect, createSignal, For, Index, onCleanup, onMou
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { LineCounts, DashHeader, Dashboard, DashMore, QuickAction, QuickActions, QuickMore } from "@/components/ui/dashboard";
 import { installSplitCursor, type SplitPage } from "./split-cursor";
+import { foldRow } from "@/components/ui/fit";
 import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../../navigation/mobile-layout";
 
 // The library's Dashboard (components/ui/dashboard.tsx) with its behaviour:
@@ -172,41 +173,6 @@ export function SplitHeader(props: {
   return <DashHeader title={props.title} glyph={props.glyph} context={[props.kind, ...(props.context ?? [])]} />;
 }
 
-/**
- * Folds a row's [data-fold] items, last first, into its [data-fold-more] as
- * room runs out. A folded item stays laid out, hidden, so its width is known
- * when room comes back; [data-fold-keep] on the ⋯ counts it whether or not
- * anything has folded. Call from onMount; a phone never folds.
- */
-export function watchFold(more: HTMLElement, setFit: (count: number) => void) {
-  const bar = more.parentElement;
-  if (!bar) return;
-  const measure = () => {
-    if (isMobileLayout()) return setFit(Infinity);
-    const gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
-    const children = [...bar.children] as HTMLElement[];
-    const widths = children.filter((child) => child.hasAttribute("data-fold")).map((child) => child.offsetWidth + gap);
-    const keep = more.hasAttribute("data-fold-keep");
-    let used = children.filter((child) => !child.matches("[data-fold], [data-fold-more]")).reduce((sum, child) => sum + child.offsetWidth + gap, 0)
-      + (keep ? more.offsetWidth + gap : 0);
-    const room = bar.clientWidth + gap + .5;
-    if (used + widths.reduce((sum, width) => sum + width, 0) <= room) return setFit(widths.length);
-    if (!keep) used += more.offsetWidth + gap;
-    let count = 0;
-    while (count < widths.length && used + widths[count]! <= room) used += widths[count++]!;
-    setFit(count);
-  };
-  // Measured from the observer alone, which reports every element it starts
-  // watching, once, before the frame is drawn. Measuring on each change to the
-  // row as well laid the page out once per item while it was being built.
-  const observer = new ResizeObserver(measure);
-  const observeAll = () => { observer.disconnect(); observer.observe(bar); for (const child of bar.children) observer.observe(child); };
-  const mutations = new MutationObserver(observeAll);
-  mutations.observe(bar, { childList: true });
-  observeAll();
-  onCleanup(() => { observer.disconnect(); mutations.disconnect(); });
-}
-
 export type SplitQuickAction = { icon: JSX.Element; label: string; onClick: () => void };
 
 /**
@@ -223,7 +189,7 @@ export function SplitQuickActions(props: { items: Array<SplitQuickAction | false
   const [fit, setFit] = createSignal(Infinity);
   const folded = () => items().slice(fit());
   let more!: HTMLSpanElement;
-  onMount(() => watchFold(more, setFit));
+  onMount(() => foldRow(more, setFit, isMobileLayout));
   return <QuickActions>
     <Index each={items()}>{(item, index) => <QuickAction icon={item().icon} label={item().label} folded={index >= fit()} onClick={() => item().onClick()} />}</Index>
     <QuickMore ref={(element) => { more = element; }} keep={Boolean(props.manage)} hidden={!props.manage && !folded().length}>

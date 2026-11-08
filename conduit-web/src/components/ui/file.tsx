@@ -4,8 +4,8 @@ import { IconButton } from "./actions";
 import { Show, splitProps, type JSX } from "solid-js";
 
 
-/* A file in a pane or the dock (DESIGN Panes and windows): its header and status bar. The app measures a header and
-   sets data-folded on the actions that do not fit, lowest data-fold first. */
+/* A file in a pane or the dock (DESIGN Panes and windows): its header and status bar. PaneHeader (kind file) measures
+   the header and sets data-folded on the actions that do not fit, lowest data-fold first. */
 
 /** A file's column: header, body, status bar. focused: it holds the keyboard (its header lifts). */
 export function FileView(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (element: HTMLElement) => void; focused?: boolean }) {

@@ -106,7 +106,7 @@ export function DashHeader(props: { title: string; glyph?: JSX.Element; context?
   </>;
 }
 
-/** Plain words on the title's line; a phone draws them as a row of large targets with their icons. The app folds them
+/** Plain words on the title's line; a phone draws them as a row of large targets with their icons. foldRow folds them
  *  (data-fold, data-folded) into the ⋯ (QuickMore). */
 export const QuickActions = (props: { children: JSX.Element }) => <nav class="ui-dash-quick" aria-label="Quick actions">{props.children}</nav>;
 export function QuickAction(props: { icon: JSX.Element; label: string; folded?: boolean; onClick: () => void }) {

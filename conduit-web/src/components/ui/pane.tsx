@@ -7,6 +7,7 @@ import { CloseButton } from "./actions";
 import { Row, type RowProps } from "./row";
 import { For, onCleanup, Show, splitProps, type JSX } from "solid-js";
 import { callHandler } from "./shared";
+import { keptParts, watchFit } from "./fit";
 
 
 /* Panes (DESIGN Panes and windows): what a pane draws. Behaviour (fitting the row, dragging, resizing, focus) is the app's. */
@@ -14,7 +15,61 @@ import { callHandler } from "./shared";
 /** A pane's tab row (PaneTabRow, in its header's title) and its strip (Tabs): runs of tabs by place, then the ⋯ for what folded. The app
  *  measures the row (--tab-gap, --tab-place-gap and --tab-more are registered lengths) and hides what does not fit. */
 export const PaneTabRow = (props: { side?: string; children: JSX.Element }) => <nav aria-label="Tabs" class="ui-tabs-row" data-file-side={props.side}>{props.children}</nav>;
-export const PaneTabs = (props: { ref?: (element: HTMLDivElement) => void; children: JSX.Element }) => <div ref={props.ref} class="ui-pane-tabs">{props.children}</div>;
+/** The tab row's tabs (TabPlace > PaneTab, then the caller's ⋯ and +). onFold: it fits itself, by measure: the tabs that
+ *  do not fit go, last first -- never the lit tab or one showing (a viewer's other side) -- and a place with all of
+ *  its; the tabs it hid are onFold's, for the ⋯ that lists them. data-need: what must stay, for a header that folds its
+ *  own actions only after the other tabs have gone. */
+export const PaneTabs = (props: { ref?: (element: HTMLDivElement) => void; onFold?: (hidden: string[]) => void; children: JSX.Element }) =>
+  <div ref={(element) => { props.ref?.(element); if (props.onFold) fitTabs(element, props.onFold); }} class="ui-pane-tabs">{props.children}</div>;
+
+function fitTabs(strip: HTMLElement, onFold: (hidden: string[]) => void) {
+  let reported = "";
+  const report = (hidden: string[]) => { if (hidden.join() !== reported) { reported = hidden.join(); onFold(hidden); } };
+  const fit = () => {
+    const places = [...strip.querySelectorAll<HTMLElement>(".ui-tab-place")];
+    const tabs = [...strip.querySelectorAll<HTMLElement>(".ui-tab")];
+    // The row's spacing, as pane.css sets it (registered lengths, so they read back in px).
+    const style = getComputedStyle(strip);
+    const tabGap = parseFloat(style.getPropertyValue("--tab-gap")) || 0;
+    const placeGap = parseFloat(style.getPropertyValue("--tab-place-gap")) || 0;
+    const moreWidth = parseFloat(style.getPropertyValue("--tab-more")) || 0;
+    const labelGap = parseFloat(style.getPropertyValue("--tab-label-gap")) || 0;
+    for (const element of [...places, ...tabs]) element.style.display = "";
+    for (const element of tabs) element.removeAttribute("data-lead");
+    if (!tabs.length) return report([]);
+    const room = strip.clientWidth;
+    // Tabs give way to a squeeze by cutting their titles, so each is measured with its whole title; a tab's own cap
+    // (max-width) still holds.
+    const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".ui-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
+    const natural = (element: HTMLElement) => element.classList.contains("ui-tab") ? whole(element) : element.getBoundingClientRect().width + [...element.querySelectorAll<HTMLElement>(".ui-tab")].reduce((sum, tab) => sum + whole(tab) - tab.getBoundingClientRect().width, 0);
+    const all = places.reduce((sum, element, index) => sum + natural(element) + (index ? placeGap : 0), 0);
+    const label = (place: HTMLElement) => place.querySelector<HTMLElement>(".ui-tab-place-label")?.getBoundingClientRect().width ?? 0;
+    const staying = tabs.filter((tab) => tab.hasAttribute("data-lit") || tab.hasAttribute("data-shown"));
+    const need = String(Math.ceil(staying.reduce((sum, tab) => sum + natural(tab) + tabGap, 0) + (staying.length < tabs.length ? moreWidth : 0)
+      + places.filter((place) => staying.some((tab) => place.contains(tab))).reduce((sum, place) => sum + label(place), 0)));
+    if (strip.dataset.need !== need) strip.dataset.need = need;
+    if (all <= room) return report([]);
+    // Each tab with the gap and middot before it; each place with its label and the rule before it, paid once a tab of
+    // it stays.
+    const placeOf = (tab: HTMLElement) => places.findIndex((place) => place.contains(tab));
+    const placeCost = (index: number) => label(places[index]!) + labelGap + (index ? placeGap : 0);
+    const paid = new Set(staying.map(placeOf));
+    const budget = room - moreWidth - staying.reduce((sum, tab) => sum + natural(tab) + tabGap, 0) - [...paid].reduce((sum, index) => sum + placeCost(index), 0);
+    const others = tabs.filter((tab) => !staying.includes(tab));
+    const costs = others.map((tab) => { const index = placeOf(tab); const cost = natural(tab) + tabGap + (paid.has(index) ? 0 : placeCost(index)); paid.add(index); return cost; });
+    const hidden = others.slice(keptParts(budget, costs));
+    hidden.forEach((tab) => { tab.style.display = "none"; });
+    // A folded tab's middot goes with it: the first tab left in a place leads it.
+    places.forEach((place) => {
+      let lead = true;
+      place.querySelectorAll<HTMLElement>(".ui-tab").forEach((tab) => { const shown = tab.style.display !== "none"; tab.toggleAttribute("data-lead", shown && lead); if (shown) lead = false; });
+      if (lead) place.style.display = "none";
+    });
+    report(hidden.map((tab) => tab.dataset.tab!));
+  };
+  watchFit(strip, fit, { content: fit, attributes: ["data-lit", "data-shown"] });
+  queueMicrotask(fit);
+}
 
 /** One place's run of tabs: the place named once in caps (a button that goes to the tab used there last). */
 export function TabPlace(props: { current?: boolean; label?: string; labelProps?: JSX.ButtonHTMLAttributes<HTMLButtonElement>; onLabel?: () => void; children: JSX.Element }) {

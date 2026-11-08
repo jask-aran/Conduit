@@ -40,7 +40,7 @@
 .ui-icon-button:where([data-icon-button="dash"]) { display: inline-grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
 .ui-icon-button:where([data-icon-button="dash"]):is(:focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-icon-button:where([data-icon-button="dash"]):is(:hover, :focus-visible, [data-expanded]) { outline: none; background: var(--border); color: var(--foreground); } }
-/* Folding (the app's watchFold): a folded item stays laid out, hidden, so its width is known when room comes back. */
+/* Folding (foldRow, fit.ts): a folded item stays laid out, hidden, so its width is known when room comes back. */
 :is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > :is([data-fold], [data-fold-more]) { display: inline-flex; }
 :is(.ui-group-actions:where([data-group="dash"] *), .ui-dash-quick) > [data-folded] { position: absolute; top: 0; right: 0; visibility: hidden; pointer-events: none; }
 

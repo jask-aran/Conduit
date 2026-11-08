@@ -143,43 +143,7 @@ export default function FileViewer(props: {
       listeners.forEach((listener) => { window.removeEventListener("conduit:workspace-changed", listener); window.removeEventListener("conduit:device-online", listener); });
     });
   });
-  // A header that no longer fits drops the actions its context menu also
-  // has, then gathers the rest into its overflow menu, before the file's name
-  // goes -- measured, not a width.
   let root: HTMLDivElement | undefined;
-  const fitHeaders = () => root?.querySelectorAll<HTMLElement>(".ui-pane-header[data-header=file]").forEach((header) => {
-    header.removeAttribute("data-compact");
-    // The name needs room for at least the file's own name, measured from its text.
-    const name = header.querySelector<HTMLElement>(".ui-file-name > span");
-    // Headed by tabs, every tab is the name: the actions fold before a tab does.
-    const tabs = header.querySelector<HTMLElement>(".ui-pane-tabs[data-need]");
-    const nameFits = () => {
-      if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
-      const text = name?.firstChild;
-      if (!name || !(text instanceof Text)) return true;
-      const range = document.createRange();
-      range.setStart(text, text.data.lastIndexOf("/") + 1);
-      range.setEnd(text, text.data.length);
-      return name.clientWidth + 1 >= range.getBoundingClientRect().width;
-    };
-    const squeezed = () => header.scrollWidth > header.clientWidth || !nameFits();
-    // Actions fold one at a time, lowest data-fold first, into the header's ⋯.
-    const foldable = [...header.querySelectorAll<HTMLElement>("[data-fold]")].sort((a, b) => Number(a.dataset.fold) - Number(b.dataset.fold));
-    foldable.forEach((element) => element.removeAttribute("data-folded"));
-    const gone: string[] = [];
-    for (const element of foldable) {
-      if (!squeezed()) break;
-      element.setAttribute("data-folded", "");
-      gone.push(element.dataset.fold!);
-    }
-    if (header.dataset.foldedActions !== gone.join()) {
-      header.dataset.foldedActions = gone.join();
-      header.dispatchEvent(new CustomEvent("headerfold", { detail: gone }));
-    }
-  });
-  const resized = new ResizeObserver(fitHeaders);
-  const changed = new MutationObserver(fitHeaders);
-  onCleanup(() => { resized.disconnect(); changed.disconnect(); });
   const leaveContents = async (index: number) => !handles[index]?.hasUnsavedChanges() || (await confirmDialog("Discard unsaved changes to this file?"));
   const closeEntry = async (index: number) => {
     if (handles[index]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and close this file?"))) return;
@@ -203,7 +167,7 @@ export default function FileViewer(props: {
     return { move: (_dx, next) => props.onShare?.(Math.min(0.8, Math.max(0.2, (next.clientX - box.left) / box.width))) };
   };
   const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><IconButton kind="file" type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></IconButton></Show>;
-  return <Viewer ref={(element) => { root = element; resized.observe(element); changed.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-need"] }); }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
+  return <Viewer ref={(element) => { root = element; }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot

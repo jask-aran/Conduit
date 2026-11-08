@@ -1,7 +1,7 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
 import { createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
-import { createFolds } from "./fit";
+import { createFolds, watchFit } from "./fit";
 import "./layout";
 import { PaneMark } from "./row";
 import { Button } from "./controls";
@@ -21,7 +21,9 @@ const TOOL_FOLDS = ["labels", "name"] as const;
  *   pane   lead (the phone's leading controls; a desktop's sidebar head holds them), the title (children), pill (a
  *          phone's HeaderPill), after (a Notice kind=header), actions; frost: the strip is frost, for a tab row over the transcript
  *   tool   its name, the place it shows (the dock follows places), modes (a Segmented), views, controls, drag handle; fit
- *   file   what the file is, then controls in a fixed order (save, actions, tools, the ⋯, close)
+ *   file   what the file is, then controls in a fixed order (save, actions, tools, the ⋯, close). While it is squeezed (it
+ *          overflows, or the name has less room than the file's own name) its [data-fold] controls fold, lowest first
+ *          (data-folded), and a "headerfold" event names them for the ⋯ that lists them
  *   term   leading controls, identity, shortcuts, overflow, actions. While content overflows or the identity is cut, the
  *          next fold goes (TERM_FOLDS); each returns once the header is as wide as it needed. New content re-measures unfolded.
  */
@@ -30,6 +32,40 @@ const TOOL_FOLDS = ["labels", "name"] as const;
 const PaneLetterContext = createContext<() => string | undefined>(() => undefined);
 export const PaneLetter = (props: { letter?: string; children?: JSX.Element }) =>
   <PaneLetterContext.Provider value={() => props.letter}>{props.children}</PaneLetterContext.Provider>;
+
+/* The file header's folding (PaneHeader kind file), measured, not a width. */
+function fitFileHeader(header: HTMLElement) {
+  const fit = () => {
+    // The name needs room for at least the file's own name, measured from its text; headed by tabs, every tab is the
+    // name (their data-need), and the actions fold before a tab does.
+    const name = header.querySelector<HTMLElement>(".ui-file-name > span");
+    const tabs = header.querySelector<HTMLElement>(".ui-pane-tabs[data-need]");
+    const nameFits = () => {
+      if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
+      const text = name?.firstChild;
+      if (!name || !(text instanceof Text)) return true;
+      const range = document.createRange();
+      range.setStart(text, text.data.lastIndexOf("/") + 1);
+      range.setEnd(text, text.data.length);
+      return name.clientWidth + 1 >= range.getBoundingClientRect().width;
+    };
+    const squeezed = () => header.scrollWidth > header.clientWidth || !nameFits();
+    const foldable = [...header.querySelectorAll<HTMLElement>("[data-fold]")].sort((a, b) => Number(a.dataset.fold) - Number(b.dataset.fold));
+    foldable.forEach((element) => element.removeAttribute("data-folded"));
+    const gone: string[] = [];
+    for (const element of foldable) {
+      if (!squeezed()) break;
+      element.setAttribute("data-folded", "");
+      gone.push(element.dataset.fold!);
+    }
+    if (header.dataset.foldedActions !== gone.join()) {
+      header.dataset.foldedActions = gone.join();
+      header.dispatchEvent(new CustomEvent("headerfold", { detail: gone }));
+    }
+  };
+  watchFit(header, fit, { content: fit, attributes: ["data-need"] });
+  queueMicrotask(fit);
+}
 
 export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   kind?: PaneHeaderKind; ref?: HTMLElement | ((element: never) => void);
@@ -43,7 +79,7 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   const mark = () => <Show when={letter()}>{(pane) => <PaneMark pane={pane()} self />}</Show>;
   if (kind === "file") {
     const [local, rest] = splitProps(props, ["kind", "class", "children"]);
-    return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="file">{mark()}{local.children}</header>;
+    return <header ref={fitFileHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="file">{mark()}{local.children}</header>;
   }
   if (kind === "tool") {
     const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost", "fit"]);

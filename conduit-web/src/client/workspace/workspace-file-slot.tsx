@@ -470,7 +470,7 @@ export default function WorkspaceFileSlot(props: {
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
   /*
    * A file viewer's header folds its actions one at a time (data-fold, first to
-   * fold first) into its ⋯, which the viewer measures (workspace-file-viewer.tsx)
+   * fold first) into its ⋯, which PaneHeader measures (kind file)
    * and reports with a "headerfold" event; the ⋯ lists only what has folded,
    * besides copying and wrapping, which live there.
    */

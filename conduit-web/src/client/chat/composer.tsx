@@ -48,7 +48,8 @@ import { HostUiRequests } from "./host-ui-card";
 export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
 
 import { FolderPicker, type FolderOptions, type PlaceOptions } from "./place-picker";
-import { COMPOSER_FOLDS, foldsFor, type ComposerFold } from "./composer-folds";
+import { COMPOSER_FOLDS, type ComposerFold } from "./composer-folds";
+import { keptParts, watchFit } from "@/components/ui/fit";
 import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
@@ -213,19 +214,17 @@ export function Composer(props: {
     const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft());
     const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
       - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
-    const next = foldsFor(available, fixed, widths, gap);
+    // What stays, last to fold first: the rest fold, least used first.
+    const keep = COMPOSER_FOLDS.filter((key) => widths.has(key)).reverse();
+    const kept = keptParts(available - fixed, keep.map((key) => widths.get(key)! + gap));
+    const next = new Set(keep.slice(kept));
     const current = folded();
     if (next.size !== current.size || [...next].some((key) => !current.has(key))) setFolded(next);
   };
   const refit = () => { cancelAnimationFrame(refitFrame); refitFrame = requestAnimationFrame(fit); };
   const shows = (key: ComposerFold) => phoneLayout() || !folded().has(key);
-  // The desktop row's folding, observed from whenever its Toolbar is drawn; a phone's row has none of it.
-  // Measured where the observer delivers, after layout: its reads are free there. Deferred to the next frame, they came
-  // after that frame's writes -- the dock easing open set every pane's width -- and forced a whole layout of the page
-  // per composer per frame (440ms of a 3s dock toggle with three composers drawn).
-  const foldObserver = new ResizeObserver(() => { cancelAnimationFrame(refitFrame); fit(); });
-  onCleanup(() => foldObserver.disconnect());
-  const toolbarRef = (element: HTMLDivElement) => { actionsRow = element; foldObserver.observe(element); refit(); };
+  // The desktop row's folding, watched from whenever its Toolbar is drawn; a phone's row has none of it.
+  const toolbarRef = (element: HTMLDivElement) => { actionsRow = element; watchFit(element, () => { cancelAnimationFrame(refitFrame); fit(); }); refit(); };
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let pushToTalkActive = false;
   /* One take per press of the mic. A stopped take keeps finalising on its own
