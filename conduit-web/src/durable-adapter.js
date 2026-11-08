@@ -342,11 +342,23 @@ function contextPlace(entries, entry) {
   return { opening: !prompted, resent: prompted && compacted };
 }
 
-const contextOp = (entry, answers, before = null, place = null) => {
+/**
+ * A request that only took context away, then the next that sent all of it again: pi-durable restating its prompt.
+ * The two are one change, drawn as the second under the first's id, so a live transcript's first line becomes it.
+ */
+function restores(away, entry) {
+  const gone = away?.kind === "pi.system" && away.model?.[0];
+  if (!gone || gone.toolsAdded?.length || gone.toolsRemoved?.length || entry?.kind !== "pi.system") return false;
+  const names = Object.entries(gone.sections || {});
+  const sent = entry.model?.[0]?.sections || {};
+  return names.length > 0 && names.every(([name, text]) => text == null && typeof sent[name] === "string");
+}
+
+const contextOp = (entry, answers, before = null, place = null, as = entry) => {
   const context = contextEntry(entry, before);
   if (!context) return null;
   const timestamp = entry.model?.[0]?.timestamp;
-  return messageOpen({ id: `c${entry.conversationId}-${entry.id}`, role: "system", answers,
+  return messageOpen({ id: `c${as.conversationId}-${as.id}`, role: "system", answers,
     context: { kind: context.kind, entryId: entry.id, ...(context.kind === "prompt" && place?.opening ? { opening: true } : {}),
       ...(context.kind === "prompt" && place?.resent ? { resent: true } : {}), sections: context.sections.map(({ name, text, removed }) => ({ name, chars: text.length, ...(removed ? { removed } : {}) })),
       ...(context.tools ? { tools: context.tools } : {}),
@@ -399,6 +411,10 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
     .map((entry) => { const result = entry.model[0]; return [result.toolCallId, new Date(result.timestamp - (result.durationMs || 0)).toISOString()]; }));
   for (const slot of runningTools) if (slot.details && !details.get(slot.callId)) details.set(slot.callId, slot.details);
   const children = new Map([...details.values()].filter((detail) => detail?.subagentId).map((detail) => [detail.subagentId, detail]));
+  // Each request that restores the one before it, to the one it restores (restores).
+  const restating = new Map();
+  for (let at = 1; at < entries.length; at++) if (restores(entries[at - 1], entries[at])) restating.set(entries[at].id, entries[at - 1]);
+  const restated = new Set([...restating.values()].map((entry) => entry.id));
   let prompt = null;
   let last = null;
   const settle = () => {
@@ -418,7 +434,7 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
         ...(data.timestamp ? { timestamp: data.timestamp } : {}),
         ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
     } else if (entry.kind === "pi.system" || entry.kind === "pi.compaction") {
-      ops.push(contextOp(entry, prompt, offered, contextPlace(entries, entry)));
+      if (!restated.has(entry.id)) ops.push(contextOp(entry, prompt, offered, contextPlace(entries, entry), restating.get(entry.id)));
       if (entry.kind === "pi.system") offerTools(offered, entry);
     } else if (entry.kind === "conduit.agent-beat") {
       // Its own settled line: not a prompt, so a turn around it goes on as it was.
@@ -1066,7 +1082,8 @@ export class DurableAdapter extends EventEmitter {
       // Read the entry order on first use too, including a session attached after its last prompt.
       const entries = await this.entries(record.conversation);
       const prompt = entries.findLast((item) => item.id < entry.id && (item.kind === USER_ENTRY || item.kind === "conduit.subagent-report"));
-      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null, toolsBefore(entries, entry.id), contextPlace(entries, entry)));
+      const away = entries.findLast((item) => item.id < entry.id);
+      this.publish(record, contextOp(entry, prompt ? prompt.data?.messageId || `u${prompt.conversationId}-${prompt.id}` : null, toolsBefore(entries, entry.id), contextPlace(entries, entry), restores(away, entry) ? away : entry));
       return;
     }
     if (entry?.kind === "conduit.agent-beat") { for (const op of beatOps(entry)) this.publish(record, op); return; }
