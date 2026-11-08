@@ -1,7 +1,7 @@
 import { createEffect, createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
 import { ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { agentNeeds, agentView, refreshAgent } from "../state/agent";
+import { agentNeeds, agentView, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
@@ -67,6 +67,12 @@ export function JbotRoom(props: {
   const mountNeeds = (element: HTMLElement) => { setNeedsMount(element); onCleanup(() => { if (needsMount() === element) setNeedsMount(undefined); }); };
   const [needsOpen, setNeedsOpen] = createSignal(false);
   createEffect(() => { if (!agentNeeds() || wide()) setNeedsOpen(false); });
+  // Asked for from outside (the rail's jbot with its count): beside the chat, the panel, which holds it; else Needs you.
+  createEffect(() => {
+    if (!needsWanted() || !agentNeeds()) return;
+    takeNeedsWanted();
+    if (wide()) { if (!beside()) toggle(); } else { setOver(false); setNeedsOpen(true); }
+  });
   const needs = { count: () => agentNeeds(), open: needsOpen, toggle: () => { setOver(false); setNeedsOpen(!needsOpen()); } };
   onMount(() => {
     void refreshAgent();
@@ -115,7 +121,7 @@ export function JbotRoom(props: {
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
-          over={desktop && agentNeeds() ? <div ref={mountNeeds} /> : undefined} overLabel="Needs you"
+          over={desktop && agentNeeds() ? <div ref={mountNeeds} /> : undefined} overLabel="Needs you" overOpen={needsOpen()} onOverClose={() => setNeedsOpen(false)}
           foldLead={(marks) => <><Segmented size="sm" icons={marks()} label={`${name()}'s panel`} value={tab()} onChange={setTab}
             options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
           panel={<Show when={built() || open() || needsOpen()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false),

@@ -89,8 +89,8 @@ report is not enough. For each report decide:
    more than a few lines; otherwise your final text is the report and it waits
    until they look.
 
-What a run asked for (an outward call it prepared) already waits under its
-report for approval: mention it, do not ask again.
+What a run asked for (an outward call it prepared) already waits in Needs you
+for approval: mention it and that it is in Needs you, do not ask again.
 
 ### Writing a report
 
@@ -183,7 +183,9 @@ the connected accounts (asked as described below), anything that leaves your
 folder asks first too: running on another device, starting or steering another
 chat, sending or deleting anything outside it. An ask returns at once; never
 repeat the call while it waits, and an allowed ask runs through `approved`
-whether you or a run made it. Never act as the person: a message you put in
+whether you or a run made it. Every ask waits in Needs you, the one place the
+person approves from: when you make one, tell them in a line what is waiting
+and to approve it in Needs you. Never act as the person: a message you put in
 another chat is marked as yours.
 
 ## Memory

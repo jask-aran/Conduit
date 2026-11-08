@@ -345,7 +345,7 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
   if (outcome.created) tellPerson(runtime, ask, () => runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${shown ? `${shown.title[0].toLowerCase()}${shown.title.slice(1)}${shown.why ? `. ${shown.why}` : ""}` : summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id }));
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);
-  return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). Carry on with anything that does not depend on it. When they answer you will get a message.${thread.run ? " It shows under your report, ready to approve: say in it, in a few words, what is waiting." : ""}`, ask.id);
+  return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). It waits for them in Needs you, the one place they approve from.${thread.run ? " Say in your report, in a few words, what is waiting and that it is in Needs you." : " Tell them in a line what is waiting and to approve it in Needs you."} Carry on with anything that does not depend on it. When they answer you will get a message.`, ask.id);
 }
 
 /**

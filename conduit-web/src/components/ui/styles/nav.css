@@ -121,6 +121,9 @@
 .ui-icon-button:where([data-icon-button="rail"]) svg, .ui-icon-button:where([data-icon-button="rail"]) > :is(.ui-harness-mark, .ui-glyph) { width: var(--icon-lg); height: var(--icon-lg); }
 .ui-icon-button:where([data-icon-button="rail"]):disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-icon-button:where([data-icon-button="rail"]):is([data-open], [aria-pressed="true"]) { color: var(--foreground); }
+.ui-icon-button:where([data-icon-button="rail"])[data-count]::before { position: absolute; top: 0; right: 0; min-width: var(--icon-sm); height: var(--icon-sm); box-sizing: border-box;
+  padding: 0 var(--space-2xs); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--warn); color: var(--frame);
+  font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: calc(var(--icon-sm) - 2 * var(--stroke-thin)); font-variant-numeric: tabular-nums; text-align: center; content: attr(data-count); }
 .ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--live); content: ""; }
 
 /* What the app is doing about itself, above the server: hairline and near-monochrome; ready waits on a person. */

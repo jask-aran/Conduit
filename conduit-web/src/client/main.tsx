@@ -129,7 +129,7 @@ import { createAgentUiBridge } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
-import { agentNeeds, agentView, refreshAgent } from "./state/agent";
+import { agentNeeds, agentView, refreshAgent, wantNeeds } from "./state/agent";
 import { agentDashboardLaidOut, agentPageLaidOut } from "./state/arrival";
 import { pathJbotPage } from "./api/routes";
 import { ServerSwitcher } from "./navigation/server-switcher";
@@ -6571,7 +6571,9 @@ function App() {
     <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
-      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: jbotShownInDock(), onOpen: () => void chooseRailTool("jbot") } : undefined}
+      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: jbotShownInDock(),
+        // With something waiting, jbot opens on Needs you (already open: Needs you, rather than putting jbot away).
+        onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot"); } } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

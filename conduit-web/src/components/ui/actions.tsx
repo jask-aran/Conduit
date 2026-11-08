@@ -13,25 +13,26 @@ import { callHandler } from "./shared";
  *          narrow header folds it there; close: the header's ×
  *   tool   a ToolBar's
  *   pane   a pane's own controls after its title or tabs (dock, swap, close): out of the tab order
- *   rail   the folded sidebar's: current as a row is; live: a dot at its corner
+ *   rail   the folded sidebar's: current as a row is; live: a dot at its corner; count: a number at its top corner
+ *          (what waits on the person), over the dot's place
  *
  * A menu's trigger takes one with `as`.
  */
 export type IconButtonKind = "dash" | "file" | "tool" | "pane" | "rail";
 
 export function IconButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
-  kind?: IconButtonKind; label?: string; wide?: boolean; inMenu?: boolean; close?: boolean; current?: boolean; live?: boolean; "data-fold"?: string;
+  kind?: IconButtonKind; label?: string; wide?: boolean; inMenu?: boolean; close?: boolean; current?: boolean; live?: boolean; count?: number; "data-fold"?: string;
   /** Felt as press when tapped on a phone (a close as dismiss); a kind overrides it, false silences it. */
   haptic?: HapticProp;
 }) {
-  const [local, rest] = splitProps(props, ["kind", "label", "wide", "inMenu", "close", "current", "live", "children", "class", "haptic", "onClick"]);
+  const [local, rest] = splitProps(props, ["kind", "label", "wide", "inMenu", "close", "current", "live", "count", "children", "class", "haptic", "onClick"]);
   const kind = () => local.kind ?? "tool";
   // A dash button with nothing in it is the ⋯; a rail's draws what the caller gives it.
   const children = () => local.children ?? (kind() === "dash" ? <Icons.More /> : undefined);
   return <button type="button" tabIndex={kind() === "pane" ? -1 : undefined} aria-label={local.label} title={local.label} {...rest}
     class="ui-icon-button" data-icon-button={kind()}
     data-wide={local.wide ? "" : undefined} data-in-menu={local.inMenu ? "" : undefined} data-close={local.close ? "" : undefined}
-    aria-current={local.current ? "page" : undefined} data-live={local.live ? "" : undefined}
+    aria-current={local.current ? "page" : undefined} data-live={local.live ? "" : undefined} data-count={local.count ? String(local.count) : undefined}
     onClick={(event) => { feel(local.haptic, local.close ? "dismiss" : "press"); callHandler(local.onClick, event); }}>{children()}</button>;
 }
 

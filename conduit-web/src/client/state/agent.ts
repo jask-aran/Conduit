@@ -64,6 +64,12 @@ const store = createRoot(() => {
 
 export const agentView = store.view;
 export const refreshAgent = store.refresh;
+/** Needs you asked for from outside the jbot chat (the rail's jbot, its count): the jbot chat opens it once drawn. */
+const [needsWanted, setNeedsWanted] = createSignal(false);
+export const wantNeeds = () => setNeedsWanted(true);
+export const takeNeedsWanted = () => { const wanted = needsWanted(); if (wanted) setNeedsWanted(false); return wanted; };
+export { needsWanted };
+
 /** A notice as Needs you shows it: the same one raised again (a routine failing each hour) is one row, counted, its
  *  newest time; dismissing it dismisses every one. */
 export interface AgentNoticeRow { key: string; kind: string; text: string; at: string | null; taskId?: number; ids: string[] }

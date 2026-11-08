@@ -105,7 +105,7 @@ export function WorkspaceRail(props: {
         onClick={() => props.onChoose(tool)}><Icon /></IconButton>;
     }}</For></Show>
     <Show when={props.jbot}>{(jbot) => <IconButton kind="rail" tabIndex={-1} data-doc-view="page:jbot" aria-label={jbot().needs ? `${jbot().name}, ${jbot().needs} waiting on you` : jbot().name} title={jbot().name}
-      current={jbot().current} onClick={() => jbot().onOpen()}><Icons.Agent /></IconButton>}</Show>
+      current={jbot().current} count={jbot().needs || undefined} onClick={() => jbot().onOpen()}><Icons.Agent /></IconButton>}</Show>
     <Show when={props.tools || props.jbot}><RailRule /></Show>
     <Show when={props.docked.some((doc) => doc.view !== "page:jbot")}>
       <For each={props.docked.filter((doc) => doc.view !== "page:jbot")}>{(doc) => {

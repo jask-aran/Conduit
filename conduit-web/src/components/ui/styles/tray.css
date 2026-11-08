@@ -32,7 +32,9 @@
 .ui-ledge { flex: none; height: min(100%, var(--measure-xl)); }
 .ui-ledge-over { flex: 0 1 auto; min-height: 0; }
 .ui-ledge > .ui-panel-head { margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
-.ui-ledge-stack[data-open] > :is(.ui-ledge, .ui-ledge-over) { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
-/* Given while the panel is open, the card fades in where it stands (the panel does not move). */
-.ui-ledge-stack[data-open] > .ui-ledge-over { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive); }
-.ui-ledge-stack:not([data-open]) > :is(.ui-ledge, .ui-ledge-over) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }
+.ui-ledge-stack > :is(.ui-ledge, .ui-ledge-over)[data-open] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
+/* Given while shown, the card fades in where it stands (the panel does not move). */
+.ui-ledge-stack > .ui-ledge-over[data-open] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive); }
+.ui-ledge-stack > :is(.ui-ledge, .ui-ledge-over):not([data-open]) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }
+/* Shut, the panel fades where it stood out of the column, so the card shown alone sits just above the composer. */
+.ui-ledge:not([data-open]) { position: absolute; inset: auto 0 0; }

@@ -65,7 +65,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
   /** false: never beside the chat, whatever the width (a tool in the dock: its panel only rides above the composer). */
   beside?: boolean; onWide?: (wide: boolean) => void;
   /** Over the chat above the composer (a Ledge): a card of its own stacked above the panel, while given. */
-  over?: JSX.Element; overLabel?: string; children: JSX.Element }) {
+  over?: JSX.Element; overLabel?: string; overOpen?: boolean; onOverClose?: () => void; children: JSX.Element }) {
   let root!: HTMLDivElement;
   let need!: HTMLSpanElement;
   const [wide, setWide] = createSignal(false);
@@ -84,7 +84,7 @@ export function ChatBeside(props: { panel: JSX.Element; open: boolean; onClose: 
     {/* Beside the chat, part of the pane; over it, a Tray (a phone's) or a Ledge above the composer (a pointer's). */}
     <Show when={wide()} fallback={props.above !== undefined
       ? <Ledge open={props.open} onClose={() => props.onClose()} label={props.label} above={props.above} keep={() => root.querySelector(".ui-composer-dock")}
-          over={props.over} overLabel={props.overLabel} title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions}>{props.panel}</Ledge>
+          over={props.over} overLabel={props.overLabel} overOpen={props.overOpen} onOverClose={props.onOverClose} title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions}>{props.panel}</Ledge>
       : <Tray open={props.open} onClose={() => props.onClose()} label={props.label} title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions}>{props.panel}</Tray>}>
       <Show when={props.open}>
         <aside class="ui-chat-beside-panel" aria-label={props.label}>

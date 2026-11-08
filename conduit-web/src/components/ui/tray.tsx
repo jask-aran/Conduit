@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { children, createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
 import * as Icons from "./icons";
 import { IconButton } from "./actions";
 import { overlayHaptics } from "./haptics";
@@ -126,30 +126,35 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
  * composites what is already drawn.
  *
  * `over`: a card of its own stacked above it (what waits on the person), only while given. It grows with what it holds
- * into the room left above the panel and scrolls past that, so the panel keeps its height and its place.
+ * into the room left above the panel and scrolls past that, so the panel keeps its height and its place. Shown with
+ * the panel, or alone (overOpen), just above the composer; put away the same ways (onOverClose).
  */
 export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above: number; keep?: () => Element | null | undefined;
-  over?: JSX.Element; overLabel?: string; children: JSX.Element }) {
+  over?: JSX.Element; overLabel?: string; overOpen?: boolean; onOverClose?: () => void; children: JSX.Element }) {
   let stack!: HTMLDivElement;
+  // Resolved once: read twice (whether there is one, and what it holds), a card given as JSX was built twice.
+  const over = children(() => props.over);
+  const overShown = () => props.open || Boolean(props.overOpen);
+  const shut = () => { if (props.open) props.onClose(); if (props.overOpen) props.onOverClose?.(); };
   createEffect(() => {
-    if (!props.open) return;
-    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
+    if (!props.open && !(props.overOpen && over())) return;
+    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); shut(); } };
     const outside = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target || stack.contains(target) || props.keep?.()?.contains(target)) return;
-      props.onClose();
+      shut();
     };
     window.addEventListener("keydown", away, true);
     window.addEventListener("pointerdown", outside, true);
     onCleanup(() => { window.removeEventListener("keydown", away, true); window.removeEventListener("pointerdown", outside, true); });
   });
-  return <div ref={stack} class="ui-ledge-stack" data-open={props.open ? "" : undefined} style={{ "--ledge-above": `${props.above}px` }}>
-    <Show when={props.over}>
-      <section class="ui-ledge-over ui-frost" data-surface="frost" data-lift="raised" aria-label={props.overLabel} inert={!props.open ? true : undefined}>
-        <PanelBody>{props.over}</PanelBody>
+  return <div ref={stack} class="ui-ledge-stack" style={{ "--ledge-above": `${props.above}px` }}>
+    <Show when={over()}>
+      <section class="ui-ledge-over ui-frost" data-surface="frost" data-lift="raised" data-open={overShown() ? "" : undefined} aria-label={props.overLabel} inert={!overShown() ? true : undefined}>
+        <PanelBody>{over()}</PanelBody>
       </section>
     </Show>
-    <section class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" aria-label={props.label} inert={!props.open ? true : undefined}>
+    <section class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} aria-label={props.label} inert={!props.open ? true : undefined}>
       <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
       <PanelBody>{props.children}</PanelBody>
     </section>
