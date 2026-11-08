@@ -100,7 +100,8 @@ once. Tick a family when every listed build goes through its single piece and th
 
 ## Size
 
-Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,835 after (b94bbba2), with the shared
+Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,813 after (61a90139), with the shared
 pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
 state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
-every family, desktop and phone) and screenshots of base and current builds in the headed Chrome.
+every family, desktop and phone) and, by subagents, screenshots of base and current builds of every family and the
+phone frame in the headed Chrome.
