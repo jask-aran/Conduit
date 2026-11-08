@@ -52,7 +52,7 @@ export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Eleme
   onCleanup(() => watch?.disconnect());
   return <div ref={slot} class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
     <div ref={stack} class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}
-    <Show when={under.toArray().length}><div class="ui-composer-under">{under()}</div></Show></div>;
+    <Show when={under.toArray().some((part) => part != null && part !== false && part !== "")}><div class="ui-composer-under">{under()}</div></Show></div>;
 }
 /** The voice while dictating, over the composer: a PillWave across a wave Rider, an Aura under it. levels: the
  *  waveform's history (0-1); level: the voice now (0-1), which the Aura follows. */

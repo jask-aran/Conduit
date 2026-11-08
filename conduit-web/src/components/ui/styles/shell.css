@@ -61,7 +61,8 @@
 /* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
 .ui-dock[data-expanded] .ui-dock-surface { width: calc(100cqw - var(--space-md)); }
 .ui-dock[data-layer-switch] .ui-dock-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
-.ui-sheet[data-docked="hidden"], .ui-dock[data-expanded] .ui-resize-edge[data-edge="pane"][data-dock], .ui-dock-document { display: none; }
+/* A shut dock has no edge to drag: its grab area would hang past the frame, and the frame could slide sideways. */
+.ui-sheet[data-docked="hidden"], .ui-dock:is([data-expanded], :not([data-open])) .ui-resize-edge[data-edge="pane"][data-dock], .ui-dock-document { display: none; }
 .ui-dock-document > div { display: contents; }
 .ui-dock-surface[data-documented] > :not(.ui-dock-document) { display: none !important; }
 .ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
