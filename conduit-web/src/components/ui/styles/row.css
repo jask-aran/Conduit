@@ -3,7 +3,7 @@
    nav.css and dashboard.css, menu in popover.css, each with its parts and its cursor. Loaded before them. */
 .ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); text-align: left; }
 /* Its fold: the chevron last, the icon's small size, muted (it turns by the one fold rule, foundations.css). */
-.ui-row-fold { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; color: var(--muted-foreground); }
+.ui-row-fold { flex: none; margin-left: auto; color: var(--muted-foreground); }
 /* A line: a light line at a list's height, at the foreground; its mark muted, its title held whole, its context muted
    and cut short, its meta and end pushed to the end. Its owner (a commit, a choice, a network's client) sets the rest. */
 .ui-row:where([data-density="line"]) { padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); }

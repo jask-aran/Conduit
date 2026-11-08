@@ -98,7 +98,7 @@
 /* frost: a tool whose content scrolls under its header (jbot's chat): the pane header's own fade over it. */
 .ui-pane-header:where([data-header="tool"])[data-frost] { position: relative; z-index: 2; background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
 .ui-pane-header:where([data-header="tool"]) > strong { flex: none; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-.ui-tool-place { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-tool-place { min-width: 0; flex: 0 1 auto; color: var(--muted-foreground); }
 .ui-pane-header:where([data-header="tool"]) > .ui-seg { flex: none; }
 .ui-pane-header:where([data-header="tool"])[data-compact] .ui-tool-place, .ui-pane-header:where([data-header="tool"])[data-compact="name"] > strong { display: none; }
 .ui-pane-header:where([data-header="tool"])[data-compact] > .ui-seg button > span { display: none; }

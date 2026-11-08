@@ -152,7 +152,7 @@ export function DashMore(props: { count?: number | string; onClick: () => void; 
 export function ChangeRow(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children" | "class"> & { icon: JSX.Element; name: string; directory?: string; added?: number | null; removed?: number | null; status: string; statusTitle?: string; conflict?: boolean; selected?: boolean }) {
   const [local, rest] = splitProps(props, ["icon", "name", "directory", "added", "removed", "status", "statusTitle", "conflict", "selected"]);
   return <Row element="button" density="list" bare {...(rest as unknown as RowProps)} data-change-row="" selected={local.selected}>
-    {local.icon}<span class="ui-change-name">{local.name}</span><span class="ui-change-directory">{local.directory}</span>
+    {local.icon}<span class="ui-change-name ui-truncate">{local.name}</span><span class="ui-change-directory ui-truncate">{local.directory}</span>
     <Show when={local.added != null} fallback={<span class="ui-counts" data-counts="list" aria-label="Counts unknown">—</span>}><LineCounts added={local.added ?? 0} removed={local.removed ?? 0} /></Show>
     <code class="ui-change-status" data-status={local.status} data-conflict={local.conflict ? "" : undefined} title={local.statusTitle}>{local.status}</code>
   </Row>;
@@ -186,8 +186,8 @@ export function FolderTile(props: Omit<JSX.HTMLAttributes<HTMLElement>, "class" 
       <path data-part="front" d="M1 8h28v13a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z" />
     </svg>}>{local.icon}</Show></Show>
     <Show when={local.live}><Dot tone="success" class="ui-folder-live" aria-label="Running" /></Show>
-    <span class="ui-folder-name">{local.name}</span>
-    <Show when={local.meta}><span class="ui-folder-meta">{local.meta}</span></Show>
+    <span class="ui-folder-name ui-truncate">{local.name}</span>
+    <Show when={local.meta}><span class="ui-folder-meta ui-truncate">{local.meta}</span></Show>
   </Dynamic>;
 }
 

@@ -170,7 +170,7 @@
 @media (prefers-reduced-motion: reduce) { .ui-spinner { animation-duration: calc(3 * var(--duration-spin)); } }
 
 /* Gauge: a ring in the text colour, the icon's size; its track the colour faded, the value drawn round from the top. */
-.ui-gauge { width: var(--icon-sm); height: var(--icon-sm); flex: none; rotate: -90deg; }
+.ui-gauge { flex: none; rotate: -90deg; }
 .ui-gauge > circle { fill: none; stroke: currentColor; stroke-width: 2.4; }
 .ui-gauge > circle:first-child { stroke: color-mix(in oklch, currentColor, transparent var(--tone-line)); }
 .ui-gauge > circle:last-child { stroke-linecap: round; transition: stroke-dasharray var(--duration-gentle) var(--ease-change); }

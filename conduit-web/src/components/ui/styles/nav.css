@@ -166,7 +166,7 @@
 .ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
 
 /* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
-.ui-status { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
+.ui-status { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-status > .ui-spinner { width: var(--icon-sm); height: var(--icon-sm); }
 /* A dot's size is --dot: the icon-dot by default; a tab's or a file's smaller mark sets its own. */
 .ui-status-dot { width: var(--dot, var(--icon-dot)); height: var(--dot, var(--icon-dot)); flex: none; border-radius: var(--radius-round); background: currentColor; }

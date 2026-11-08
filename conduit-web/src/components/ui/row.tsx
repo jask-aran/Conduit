@@ -91,8 +91,8 @@ export function Row(props: RowProps) {
       <Show when={local.meta}><small class="ui-row-meta">{local.meta}</small></Show>
       <Show when={local.end}><span class="ui-row-end">{local.end}</span></Show>
       <Show when={local.fold}>{(turn) => turn() === "half"
-        ? <Icons.ChevronDown class="ui-row-fold ui-fold-chevron" data-turn="half" aria-hidden="true" />
-        : <Icons.ChevronRight class="ui-row-fold ui-fold-chevron" aria-hidden="true" />}</Show>
+        ? <Icons.ChevronDown class="ui-row-fold ui-fold-chevron ui-size-icon-sm" data-turn="half" aria-hidden="true" />
+        : <Icons.ChevronRight class="ui-row-fold ui-fold-chevron ui-size-icon-sm" aria-hidden="true" />}</Show>
     </Show>
   </Dynamic>;
 }

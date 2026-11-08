@@ -24,7 +24,7 @@ export const RiderTitle = (props: { title?: string; children: JSX.Element }) => 
 /** A row rider's mark: what it holds as an icon, its word on hover and to a reader, so the row keeps its width for
  *  what it holds (a word in Paper Mono took a column of it). */
 export const RiderMark = (props: { icon: JSX.Element; label: string; title?: string }) =>
-  <span class="ui-rider-mark" role="img" aria-label={props.label} title={props.title ?? props.label}>{props.icon}</span>;
+  <span class="ui-rider-mark ui-size-icon" role="img" aria-label={props.label} title={props.title ?? props.label}>{props.icon}</span>;
 /** A button riding over the transcript just above the composer: scroll to latest (an icon alone), cancel an edit
  *  (an icon and its words). Resting frost at the surface radius. hidden: kept where it rides but faded out and out of
  *  reach, so it fades back in rather than being drawn again. */

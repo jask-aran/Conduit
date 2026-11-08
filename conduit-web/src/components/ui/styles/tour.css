@@ -17,7 +17,7 @@
 .ui-tour-tasks > li { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-tour-tasks > li[data-state="done"] { color: var(--foreground); }
 .ui-tour-tasks > li[data-state="absent"] { opacity: var(--opacity-muted); }
-.ui-tour-mark { display: inline-grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round); }
+.ui-tour-mark { display: inline-grid; flex: none; place-items: center; border: var(--hairline) solid var(--tint); border-radius: var(--radius-round); }
 .ui-tour-tasks > li[data-state="done"] .ui-tour-mark { border-color: transparent; }
 .ui-tour-mark > svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--foreground); }
 .ui-tour-tasks[data-also] .ui-tour-mark { display: none; }

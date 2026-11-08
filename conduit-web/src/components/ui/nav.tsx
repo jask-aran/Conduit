@@ -95,7 +95,7 @@ export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "u
 /** A row's live state in an --icon slot: a dot in its tone, or a Spinner while it works; stale: it may be out of date. */
 export function StatusDot(props: JSX.HTMLAttributes<HTMLSpanElement> & { label: string; tone?: StatusTone; spinning?: boolean; stale?: boolean }) {
   const [local, rest] = splitProps(props, ["label", "tone", "spinning", "stale", "class"]);
-  return <span role="status" {...rest} class="ui-status" aria-label={local.label} data-tone={local.tone ?? "muted"} data-stale={local.stale ? "" : undefined}>
+  return <span role="status" {...rest} class="ui-status ui-size-icon" aria-label={local.label} data-tone={local.tone ?? "muted"} data-stale={local.stale ? "" : undefined}>
     <Show when={local.spinning} fallback={<Dot />}><Spinner /></Show></span>;
 }
 /** A StatusDot's dot alone, beside what it marks: in its tone, or the colour around it; hidden from readers unless it carries a label. */

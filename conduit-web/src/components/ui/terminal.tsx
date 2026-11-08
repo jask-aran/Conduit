@@ -8,7 +8,7 @@ import * as Icons from "./icons";
 export function TermStatus(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { tone: "success" | "busy" | "warn" | "danger" | "muted"; busy?: boolean; label?: string }) {
   const [local, rest] = splitProps(props, ["tone", "busy", "label"]);
   return <div role="status" {...rest} class="ui-term-status" data-tone={local.tone} data-busy={local.busy ? "" : undefined}>
-    <div class="ui-term-status-mark" aria-hidden="true"><Show when={local.busy} fallback={<i />}><Spinner /></Show></div>
+    <div class="ui-term-status-mark ui-size-icon" aria-hidden="true"><Show when={local.busy} fallback={<i />}><Spinner /></Show></div>
     <Show when={local.label}><small>{local.label}</small></Show>
   </div>;
 }

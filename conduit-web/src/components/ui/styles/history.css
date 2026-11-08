@@ -63,7 +63,7 @@
 .ui-history-row[data-leaf] { background: var(--tint); }
 .ui-history-row code { overflow: hidden; color: var(--muted-foreground); font-weight: var(--weight-strong); white-space: pre; opacity: var(--opacity-rest); }
 /* The span is the grid's second column, so it can be clipped on its own. */
-.ui-history-text { grid-column: 2; padding-left: calc(var(--history-depth, 0) * var(--history-step)); display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-history-text { grid-column: 2; padding-left: calc(var(--history-depth, 0) * var(--history-step)); display: block; min-width: 0; }
 .ui-history[data-wrap] .ui-history-row { align-items: start; }
 .ui-history[data-wrap] .ui-history-text { overflow: visible; text-overflow: clip; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-history[data-wrap] .ui-history-row code { white-space: pre-wrap; overflow-wrap: anywhere; }

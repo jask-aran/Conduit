@@ -19,7 +19,7 @@ export const levelWord = (level: string) => LEVEL_WORD[level as ReportLevel] ?? 
 /** How a report reads at a glance: a dot by level (urgent and failed in destructive, attention in warn, FYI in the
  *  text's colour, nothing to say hollow); handled, a quiet check. */
 export const LevelMark = (props: { level: string; handled?: boolean }) =>
-  <span class="ui-level" data-level={props.level} data-handled={props.handled ? "" : undefined} role="img" aria-label={props.handled ? "Handled" : levelWord(props.level)}>
+  <span class="ui-level ui-size-icon-sm" data-level={props.level} data-handled={props.handled ? "" : undefined} role="img" aria-label={props.handled ? "Handled" : levelWord(props.level)}>
     <Show when={props.handled} fallback={<Dot />}><Icons.Check /></Show>
   </span>;
 
@@ -61,7 +61,7 @@ export const AgentAvatar = (props: { class?: string; label?: string }) =>
 export function EmailItem(props: { from: string; to?: string; time?: string; dateTime?: string; quoted?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(false);
   return <article class="ui-email">
-    <header class="ui-email-head"><b class="ui-email-from">{props.from}</b><Show when={props.to}><span class="ui-email-to">to {props.to}</span></Show>
+    <header class="ui-email-head"><b class="ui-email-from">{props.from}</b><Show when={props.to}><span class="ui-email-to ui-truncate">to {props.to}</span></Show>
       <Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></header>
     <div class="ui-email-body">{props.children}</div>
     <Show when={props.quoted}>

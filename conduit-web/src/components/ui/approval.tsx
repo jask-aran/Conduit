@@ -38,7 +38,7 @@ function Line(props: { line: ApprovalLine }) {
 export function ApprovalSummary(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string }) {
   return <div class="ui-approval-summary">
     <div class="ui-approval-head">
-      <span class="ui-approval-icon"><ServiceIcon service={props.service || ""} fallback={<Icons.Permissions />} /></span>
+      <span class="ui-approval-icon ui-size-icon"><ServiceIcon service={props.service || ""} fallback={<Icons.Permissions />} /></span>
       <b>{props.title}</b>
       <Show when={props.meta}><span class="ui-approval-meta">{props.meta}</span></Show>
     </div>
@@ -79,9 +79,9 @@ export function ApprovalCard(props: { title: string; service?: string | null; li
     </Match>
     <Match when={props.state !== "pending"}>
       <p class="ui-approval-done" data-state={props.state}>
-        <span class="ui-approval-icon"><ServiceIcon service={props.service || ""} fallback={<Icons.Permissions />} /></span>
+        <span class="ui-approval-icon ui-size-icon"><ServiceIcon service={props.service || ""} fallback={<Icons.Permissions />} /></span>
         <span>{{ allowed: "Allowed", used: "Allowed", declined: "Not allowed", expired: "Expired" }[props.state as Exclude<ApprovalState, "pending">]}</span>
-        <span class="ui-approval-done-title">{props.title}</span>
+        <span class="ui-approval-done-title ui-truncate">{props.title}</span>
       </p>
     </Match>
   </Switch>;

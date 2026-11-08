@@ -9,7 +9,7 @@
 .ui-reading-part { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); margin-inline: calc(-1 * var(--space-xs)); padding-inline: var(--space-xs); border-radius: var(--radius-inset); color: var(--foreground); }
 .ui-reading-part[data-sub] { padding-inline-start: calc(var(--space-xs) + var(--icon-dot) + var(--space-sm)); color: var(--muted-foreground); }
 .ui-reading-part[data-sub] > .ui-swatch { display: none; }
-.ui-reading-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-reading-name { min-width: 0; flex: 1; }
 .ui-reading-value { flex: none; color: var(--muted-foreground); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-reading-chevron { width: var(--icon-xs); height: var(--icon-xs); flex: none; color: var(--muted-foreground); }
 .ui-reading-part[role="button"] { cursor: pointer; }

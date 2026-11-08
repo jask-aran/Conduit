@@ -25,7 +25,7 @@ export function ReadingPart(props: Omit<JSX.LiHTMLAttributes<HTMLLIElement>, "cl
   const [, rest] = splitProps(props, ["label", "value", "colour", "hollow", "opens", "expanded", "sub"]);
   return <li {...rest} class="ui-reading-part" aria-expanded={props.opens ? !!props.expanded : undefined} data-sub={props.sub ? "" : undefined}>
     <Swatch colour={props.colour} hollow={props.hollow} />
-    <span class="ui-reading-name">{props.label}</span>
+    <span class="ui-reading-name ui-truncate">{props.label}</span>
     <Show when={props.value}><span class="ui-reading-value">{props.value}</span></Show>
     <Show when={props.opens}><Icons.ChevronRight class="ui-reading-chevron ui-fold-chevron" aria-hidden="true" /></Show>
   </li>;

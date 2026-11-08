@@ -66,7 +66,19 @@ once. Tick a family when every listed build goes through its single piece and th
 - [x] 4 Fold / unfold (688a25bb): one .ui-fold-chevron rule (foundations.css) for ten; Trace, Step, Envelope and
   Group's change fold through Expand. Left: rider Line is a clamp that grows, not a body that comes and goes;
   SettingDetails is a native <details>.
-- [ ] 5 Rows
-- [ ] 6 Counts, dots, chips
-- [ ] 7 Cards and notices
-- [ ] 8 Repeated CSS
+- [x] 5 Rows (662daed8): Row gains depth, fold and the line, trail and tree densities; AgentLine and RoomRow are one
+  FoldLine (agents.tsx); AgentRow, HistoryRow, ReportCard's line, TreeRow, ToolLine, CommitRow, network and chain
+  lines, NavFolderRow, WorkbenchFact, Choice and Summary draw through Row. Left: Readout (a menu's cursor would
+  take it), SettingLine (a <label> whose clicks need label.control), ConnectionChoice and ServerControl (ghost
+  Buttons), ChangeItem (its actions are menuitems).
+- [x] 6 Counts, dots, chips (662daed8): Count (controls.tsx) for every inline number; Dot (nav.tsx) for every bare
+  dot, sized by --dot; Chip and Attachment share ChipCopy; removes are CloseButtons. Left: the rail's count badge
+  and the header's count capsule keep their forms; Chip's on-media remove badge; OverlayChip's x is its mark.
+- [x] 7 Cards and notices (662daed8): Card surface="outline" (.ui-outline) for ClientCard and the network's boxes;
+  one Notice (state.tsx, kinds reading/nav/tool/header); Empty and Loading kinds in styles/state.css. Left:
+  ReportCard's box (a --border card with its own hover), ApprovalCard (its own padding and width), TourCard
+  (Overlay-based).
+- [x] 8 Repeated CSS: .ui-truncate, .ui-size-icon(-sm) and [data-wash] (foundations.css); 20 truncate and 19
+  icon-size rules moved onto them, computed styles unchanged in every family. Left: rules aimed at children the
+  library does not class, partial recipes, zero-specificity :where() pieces, washes that also set colour or more
+  states; the muted caption pair has no font-shorthand token to become.

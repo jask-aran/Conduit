@@ -72,7 +72,7 @@ export const VoiceRider = (props: { levels: number[]; gain?: number; level?: num
 export function Picker(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon?: JSX.Element; value?: JSX.Element; quiet?: JSX.Element; subject?: boolean }) {
   const [local, rest] = splitProps(props, ["icon", "value", "quiet", "subject", "children"]);
   return <Button variant="ghost" size="sm" {...rest} class="ui-picker" data-subject={local.subject ? "" : undefined}>
-    {local.icon}<Show when={local.value}><span class="ui-picker-value">{local.value}</span></Show><Show when={local.quiet}><span class="ui-picker-quiet">{local.quiet}</span></Show>{local.children}<Icons.ChevronDown class="ui-picker-chevron" />
+    {local.icon}<Show when={local.value}><span class="ui-picker-value ui-truncate">{local.value}</span></Show><Show when={local.quiet}><span class="ui-picker-quiet">{local.quiet}</span></Show>{local.children}<Icons.ChevronDown class="ui-picker-chevron" />
   </Button>;
 }
 

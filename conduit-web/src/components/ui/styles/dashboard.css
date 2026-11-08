@@ -143,8 +143,8 @@
 
 /* Changes: the workspace panel's rows -- file mark, name, folder, counts, a status letter in its colour. */
 .ui-row:where([data-density="list"])[data-change-row] > svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
-.ui-change-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
-.ui-change-directory { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-change-name { min-width: 0; flex: 0 1 auto; color: var(--foreground); }
+.ui-change-directory { min-width: 0; flex: 1; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-change-status { width: var(--icon-sm); flex: none; color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
 .ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--change-modified); }
 .ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--change-added); }
@@ -174,9 +174,9 @@
 @media (hover: hover) { .ui-folder:is(:hover, :focus-visible) .ui-folder-mark [data-part="front"] { fill: color-mix(in oklch, var(--foreground), transparent 55%); } }
 .ui-folder > :not(.ui-folder-mark, .ui-folder-live, span) { width: var(--control-tool); height: var(--control-tool); margin: 0 var(--space-2xs); color: var(--muted-foreground); }
 .ui-folder-live { position: absolute; top: calc(var(--space-md) + var(--space-2xs)); left: calc(var(--row-inset) + 1.75 * var(--u-icon)); }
-.ui-folder-name { max-width: 100%; overflow: hidden; color: var(--foreground); font-size: var(--row-text); text-overflow: ellipsis; white-space: nowrap; }
+.ui-folder-name { max-width: 100%; color: var(--foreground); font-size: var(--row-text); }
 .ui-folder[data-new] .ui-folder-name { color: var(--muted-foreground); }
-.ui-folder-meta { max-width: 100%; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-folder-meta { max-width: 100%; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 
 /* The keyboard's cursor (the app's): a row left under a still pointer draws at rest until the pointer moves. */
 @media (hover: hover) { .ui-dash[data-keyboard-cursor] :is(.ui-row:where([data-density="list"]), .ui-dash-more, .ui-folder):hover:not(:focus-visible, [data-expanded], [data-held]) { background: transparent; } }

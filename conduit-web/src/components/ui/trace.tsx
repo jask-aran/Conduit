@@ -15,9 +15,9 @@ import { Failure, foldBody, registerFoldFind } from "./transcript";
 export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; quiet?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void }) {
   return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
-    <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
-    <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></Show>
-    <Show when={props.latest || props.live}><span class="ui-trace-latest">{props.latest || "\u00a0"}</span></Show>
+    <span class="ui-trace-line ui-truncate"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
+    <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></Show>
+    <Show when={props.latest || props.live}><span class="ui-trace-latest ui-truncate">{props.latest || "\u00a0"}</span></Show>
   </button>;
 }
 /**
@@ -56,8 +56,8 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
   const opens = () => fold.opens() && !props.note;
   const flags = () => [...(props.flags ?? []), ...(props.discarded ? [NOT_KEPT] : []), ...(props.state === "failed" ? ["Failed"] : props.state === "stopped" ? ["Stopped"] : [])];
   const row = () => <>
-    <span class="ui-step-icon"><Show when={props.state === "running"} fallback={props.icon}><Spinner /></Show></span>
-    <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><span class="ui-step-subject" data-face={props.face ?? "code"}>{props.subject}</span></Show><Show when={props.aside}><span class="ui-step-aside">{props.aside}</span></Show></>}><span class="ui-step-summary">{props.summary}</span></Show>
+    <span class="ui-step-icon ui-size-icon-sm"><Show when={props.state === "running"} fallback={props.icon}><Spinner /></Show></span>
+    <Show when={props.summary} fallback={<><Show when={props.verb}><span class="ui-step-verb">{props.verb}</span></Show><Show when={props.subject}><span class="ui-step-subject ui-truncate" data-face={props.face ?? "code"}>{props.subject}</span></Show><Show when={props.aside}><span class="ui-step-aside ui-truncate">{props.aside}</span></Show></>}><span class="ui-step-summary ui-truncate">{props.summary}</span></Show>
     <span class="ui-step-meta"><For each={flags()}>{(flag) => <span class="ui-step-flag" title={flag === NOT_KEPT ? "Interrupted — the agent has no record of this" : undefined}>{flag}</span>}</For>
       <Show when={props.changes}>{(changes) => <span class="ui-step-changes"><Show when={changes().added}><span data-change="added">+{changes().added}</span></Show><Show when={changes().removed}><span data-change="removed">{"\u2212"}{changes().removed}</span></Show></span>}</Show>
       <Show when={props.time}><span class="ui-step-time">{props.time}</span></Show></span>
@@ -65,7 +65,7 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
   return <li ref={(element) => { if (props.find) registerFoldFind(element, () => props.find!(), () => { if (!props.open) props.onToggle?.(); }); }}
     data-find-fold={props.find && opens() && !props.open ? "" : undefined} class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
-      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></button>
+      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></button>
       <Expand open={Boolean(props.open)} class="ui-disclosure-body ui-step-body">{body()}</Expand>
     </Show>
   </li>;

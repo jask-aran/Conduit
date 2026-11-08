@@ -10,7 +10,7 @@ export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
 export const ConnectionChoices = (props: { children: JSX.Element }) => <ul class="ui-connection-choices">{props.children}</ul>;
 export function ConnectionChoice(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; detail?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["icon", "detail", "children"]);
-  return <li><Button {...rest} variant="ghost" class="ui-connection-choice"><span class="ui-connection-icon">{local.icon}</span><span>{local.children}</span><code>{local.detail}</code></Button></li>;
+  return <li><Button {...rest} variant="ghost" class="ui-connection-choice"><span class="ui-connection-icon ui-size-icon">{local.icon}</span><span>{local.children}</span><code>{local.detail}</code></Button></li>;
 }
 export const ConnectionGroup = (props: { children: JSX.Element }) => <p class="ui-connection-group">{props.children}</p>;
 export function CameraPreview(props: { videoRef: (element: HTMLVideoElement) => void; message: string; onClose: () => void }) {
@@ -40,7 +40,7 @@ export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElemen
 /** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
 export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {
   return <p class="ui-connection-status" data-state={props.state} role={props.state === "missing" ? "alert" : "status"}>
-    <span class="ui-connection-status-mark" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <Dot tone="success" /> : <CircleAlertIcon />}><Spinner /></Show></span>
+    <span class="ui-connection-status-mark ui-size-icon-sm" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <Dot tone="success" /> : <CircleAlertIcon />}><Spinner /></Show></span>
     <strong>{props.title}</strong><Show when={props.detail}><small title={props.detail}>{props.detail}</small></Show>
   </p>;
 }
@@ -93,7 +93,7 @@ export const initialsOf = (name: string) => {
  * Conduit is coloured but state. size: sm in a menu row's icon slot, md beside a line, lg where it is the subject.
  */
 export const Avatar = (props: { name: string; size?: "sm" | "md" | "lg"; label?: string; src?: string | null }) =>
-  <span class="ui-avatar" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>
+  <span class="ui-avatar ui-size-icon" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>
     <Show when={props.src} fallback={initialsOf(props.name)}><img src={props.src!} alt="" draggable={false} /></Show></span>;
 
 export function ConnectionRecovery(props: { title: string; error: string; onRetry: () => void; retryLabel?: string; embedded?: boolean }) {

@@ -34,7 +34,7 @@ export function CardQR(props: { svg: string; expired?: boolean; reveal?: boolean
   </>;
 }
 /** Under a QR: what it opens, one line. */
-export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption" title={props.title ?? props.children}>{props.children}</p>;
+export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption ui-truncate" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;
 /** Files, as Attachments. form: list -- every file on a draft, in a card, an image at a preview's size; tray -- the
  *  files a message was sent with, under it in the transcript: each framed, an image a thumbnail, the tray scrolling

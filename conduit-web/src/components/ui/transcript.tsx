@@ -115,11 +115,11 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
       onCleanup(() => resized.disconnect());
     });
   };
-  const who = () => <>{props.icon}<b>{props.from}</b><Show when={props.meta}><span class="ui-envelope-meta">{props.meta}</span></Show></>;
+  const who = () => <>{props.icon}<b>{props.from}</b><Show when={props.meta}><span class="ui-envelope-meta ui-truncate">{props.meta}</span></Show></>;
   return <section class="ui-envelope ui-disclosure" data-direction={props.direction} data-open={shown() ? "true" : "false"}>
     <header class="ui-envelope-head">
       <Show when={props.shut} fallback={who()}>
-        <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></button>
+        <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></button>
       </Show>
       <Show when={props.onBack}><button type="button" class="ui-envelope-open ui-envelope-back" onClick={() => props.onBack?.()}>{props.backLabel ?? "Back"}<Icons.ArrowUp aria-hidden="true" /></button></Show>
       <Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
@@ -140,7 +140,7 @@ export const Inbound = (props: Omit<Parameters<typeof Envelope>[0], "direction">
 export const Outbound = (props: Omit<Parameters<typeof Envelope>[0], "direction" | "appended" | "noted">) => <Envelope direction="out" {...props} />;
 /** What a turn changed, as counts in the data's colours (+added, −removed, mono); opens the changes. In a foot. */
 export const Changes = (props: { added: number; removed: number; title?: string; label?: string; onOpen?: () => void }) =>
-  <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
+  <button type="button" class="ui-changes" data-wash title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
 /**
  * A fold's body (Trace, Step). Given opens -- that it has something to open to, known without drawing it --
  * the body is drawn the first time it opens and kept from then on (Expand puts it in and takes it out of the

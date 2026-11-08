@@ -128,7 +128,7 @@ export function SliderValue(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) 
 
 /** How full something is, as a ring in the text colour: tone idle (nothing reported), warning and critical colour it. */
 export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warning" | "critical" }) {
-  return <svg class="ui-gauge" data-tone={props.tone ?? "normal"} viewBox="0 0 24 24" aria-hidden="true">
+  return <svg class="ui-gauge ui-size-icon-sm" data-tone={props.tone ?? "normal"} viewBox="0 0 24 24" aria-hidden="true">
     <circle cx="12" cy="12" r="9" pathLength="100" /><circle cx="12" cy="12" r="9" pathLength="100" style={{ "stroke-dasharray": `${props.value || 0} 100` }} />
   </svg>;
 }

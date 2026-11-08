@@ -329,3 +329,14 @@
 .ui-fold-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open]) { rotate: 90deg; }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open])[data-turn="half"] { rotate: 180deg; }
+
+/* Utilities: the recipes many pieces share, added on the element rather than written per piece. They sit early in the
+   cascade, so a piece's own later rule still wins. ui-icon is the menu's icon slot (popover.css), so sizes are ui-size-icon. */
+/* Truncate: one line, cut with an ellipsis. */
+.ui-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An icon-sized box, the row icon or the small one. */
+.ui-size-icon { width: var(--icon); height: var(--icon); }
+.ui-size-icon-sm { width: var(--icon-sm); height: var(--icon-sm); }
+/* The wash: the tint on keyboard focus, and on hover where there is one. */
+[data-wash]:focus-visible { background: var(--tint); }
+@media (hover: hover) { [data-wash]:hover { background: var(--tint); } }

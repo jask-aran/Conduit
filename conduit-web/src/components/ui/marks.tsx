@@ -49,7 +49,7 @@ export function ThreadHarnessMark(props: { id?: string; lively?: boolean; label?
   const id = () => props.id || "conduit";
   const label = () => props.label || id();
   const mark = () => MARKS[id()] ?? FALLBACK;
-  return <span class="ui-thread-harness-mark" data-lively={props.lively || undefined} data-artwork={props.lively && mark().artwork ? "true" : undefined}
+  return <span class="ui-thread-harness-mark ui-size-icon" data-lively={props.lively || undefined} data-artwork={props.lively && mark().artwork ? "true" : undefined}
     style={props.lively && mark().brand ? { "--harness-brand": mark().brand } : undefined} role="img" aria-label={`${label()} harness`} title={label()}>
     <HarnessMark id={id()} />
     <Show when={props.lively && mark().artwork}><img class="ui-harness-mark ui-harness-mark-artwork" src={mark().artwork} alt="" /></Show>

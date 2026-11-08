@@ -69,7 +69,7 @@ export function ClientCard(props: { client: NetworkClient; status: string; mark?
       <h4>{props.client.name}</h4>
       <StatusDot label={props.client.online ? "Connected" : "Offline"} tone={props.client.online ? "success" : "muted"} />
     </header>
-    <p class="ui-client-status">{[props.status, props.client.meta].filter(Boolean).join(" · ")}</p>
+    <p class="ui-client-status ui-truncate">{[props.status, props.client.meta].filter(Boolean).join(" · ")}</p>
     <Show when={props.places}><div class="ui-client-places">{props.places}</div></Show>
     <Show when={props.actions}><footer class="ui-client-actions">{props.actions}</footer></Show>
   </section>;

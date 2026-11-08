@@ -292,7 +292,7 @@ export function SettingCredential(props: {
   </>;
 }
 /** A setting's value that is read, not set; mono for ids, addresses and versions. */
-export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
+export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value ui-truncate" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
 /** A link out, as a setting's control: Docs, Open sign-in. */
 /** A setting's state that leads somewhere in Settings ("6 tools" opens Tools): text in the state's voice, a button. */
 export const SettingStateLink = (props: { onClick: () => void; children: JSX.Element }) =>
@@ -313,13 +313,13 @@ export const SettingWide = (props: { children: JSX.Element }) => <div class="ui-
 export const Glance = (props: { label: string; children: JSX.Element }) => <div class="ui-glance" aria-label={props.label} aria-live="polite">{props.children}</div>;
 export const GlanceHead = (props: { mark?: JSX.Element; title: string; facts: string[] }) => <>
   <div class="ui-glance-title">{props.mark}<span>{props.title}</span></div>
-  <For each={props.facts}>{(fact) => <div class="ui-glance-facts" title={fact}>{fact}</div>}</For>
+  <For each={props.facts}>{(fact) => <div class="ui-glance-facts ui-truncate" title={fact}>{fact}</div>}</For>
 </>;
 /** The last prompt, as the user's message is drawn, clamped to four lines. */
 export const GlancePrompt = (props: { children: JSX.Element }) => <Frost as="p" class="ui-bubble ui-glance-prompt">{props.children}</Frost>;
 /** How the turn ended: an orb (the app's), the outcome, how long and what it did. */
 export const GlanceTurn = (props: { orb?: JSX.Element; outcome: string; detail?: string }) =>
-  <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;
+  <div class="ui-glance-turn"><Show when={props.orb}><span class="ui-glance-orb ui-size-icon">{props.orb}</span></Show><span><b>{props.outcome}</b>{props.detail ? ` · ${props.detail}` : ""}</span></div>;
 /** The start of the answer, clamped; html: the app's rendered math, faded where it is cut. */
 export const GlanceAnswer = (props: { html?: string; children?: JSX.Element }) => props.html !== undefined
   ? <div class="ui-glance-answer" data-math="" innerHTML={props.html} />

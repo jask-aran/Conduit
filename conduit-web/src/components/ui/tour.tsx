@@ -31,7 +31,7 @@ export function TourCard(props: {
         <h3 class="ui-tour-title">{props.title}</h3>
         <p class="ui-tour-text">{props.children}</p>
         <Show when={props.tasks?.length}><ul class="ui-tour-tasks"><For each={props.tasks}>{(task) =>
-          <li data-state={task.state}><span class="ui-tour-mark" aria-hidden="true"><Show when={task.state === "done"}><Icons.Check /></Show></span>
+          <li data-state={task.state}><span class="ui-tour-mark ui-size-icon-sm" aria-hidden="true"><Show when={task.state === "done"}><Icons.Check /></Show></span>
             <span class="ui-tour-task">{task.label}<Show when={task.state === "done"}><span class="ui-live-note"> (done)</span></Show></span>{keys(task.keys)}</li>
         }</For></ul></Show>
         <Show when={props.also?.length}><ul class="ui-tour-tasks" data-also=""><For each={props.also}>{(item) =>

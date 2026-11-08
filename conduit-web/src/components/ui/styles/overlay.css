@@ -133,7 +133,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 @media (hover: hover) { .ui-setting-context:hover { color: var(--foreground); } }
 /* What a line holds besides a field: a value read, not set; a link out; a note or details under
    it; something at the page's width; waiting. All in the row's voice, muted, on the surface's tint. */
-.ui-setting-value { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-setting-value { min-width: 0; color: var(--muted-foreground); }
 .ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-state-link { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentcolor, transparent 60%); text-underline-offset: 0.2em; cursor: pointer; }
 .ui-setting-state-link:focus-visible { outline: none; color: var(--foreground); }
@@ -199,12 +199,12 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/var(--leading-tight) var(--font-sans); }
 .ui-glance-title > :first-child:not(span) { width: var(--icon); height: var(--icon); flex: none; }
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-1 * var(--space-sm)); }
-.ui-glance-facts { overflow: hidden; font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-glance-facts { font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-1 * var(--space-lg)); }
 /* The prompt is the user's message (Bubble), smaller and clamped to four lines. */
 .ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
-.ui-glance-orb { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; }
+.ui-glance-orb { display: inline-grid; flex: none; }
 .ui-glance-orb > * { width: 100%; height: 100%; }
 .ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }

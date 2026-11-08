@@ -66,7 +66,7 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
     return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool" data-compact={TOOL_FOLDS[folds.count() - 1]} data-frost={local.frost ? "" : undefined}>
       {mark()}
       <strong title={local.nameTitle}>{local.name}</strong>
-      <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>
+      <Show when={local.place}><span class="ui-tool-place ui-truncate" title={local.placeTitle}>{local.place}</span></Show>
       {local.modes}
       {local.views}
       <div class="ui-tool-actions">{local.actions}</div>

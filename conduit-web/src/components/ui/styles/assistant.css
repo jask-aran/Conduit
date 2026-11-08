@@ -2,7 +2,7 @@
    (ClockRow), and its day (DayStrip). Rows are Rows in the list density; only their parts are drawn here. */
 
 /* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
-.ui-level { display: grid; width: var(--icon-sm); height: var(--icon-sm); place-items: center; color: var(--foreground); }
+.ui-level { display: grid; place-items: center; color: var(--foreground); }
 .ui-level[data-level="fyi"] { color: var(--muted-foreground); }
 .ui-level[data-level="attention"] { color: var(--warn); }
 .ui-level:is([data-level="urgent"], [data-level="failed"]) { color: var(--destructive); }
@@ -70,7 +70,7 @@
 .ui-email + .ui-email { border-top: 1px solid var(--tint); }
 .ui-email-head { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }
 .ui-email-from { flex: none; font-weight: var(--weight-lift); }
-.ui-email-to { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-email-to { min-width: 0; flex: 1; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-email-head > time { margin-left: auto; flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-email-more { align-self: flex-start; border: 0; border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); letter-spacing: 0.1em; cursor: pointer; }
 @media (hover: hover) { .ui-email-more:hover { color: var(--foreground); } }

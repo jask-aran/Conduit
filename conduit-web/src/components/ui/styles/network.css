@@ -32,7 +32,7 @@
 .ui-client-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-client-head > h4, .ui-client-card h5 { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: var(--label-case); white-space: nowrap; }
 .ui-client-head > h4 { color: var(--foreground); }
-.ui-client-status { margin: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-client-status { margin: 0; color: var(--muted-foreground); }
 .ui-client-places { display: grid; margin-top: var(--space-xs); }
 .ui-client-places > h5 { margin-bottom: var(--space-2xs); }
 .ui-client-places .ui-row:where([data-density="nav"]) { margin-inline: calc(-1 * var(--row-inset)); width: auto; }
