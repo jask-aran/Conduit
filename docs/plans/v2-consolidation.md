@@ -96,3 +96,10 @@ once. Tick a family when every listed build goes through its single piece and th
   Overlay with a head bar and a ruled foot), tabs (rider Tabs, PaneTabs, ToolViews: ticks, drag/close, disabled
   views), trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's
   editor column, CodeExcerpt's bare mount), search (the editor's has replace and toggles; FindBar has a count).
+
+## Size
+
+Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,933 after (a83a22f7), with the shared
+pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
+state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
+every family, desktop and phone) and screenshots of base and current builds in the headed Chrome.
