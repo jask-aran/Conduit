@@ -112,9 +112,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-recorder-hints > .ui-keycap + * { margin-left: 0; }
 .ui-recorder-hints > button { display: inline-flex; align-items: center; gap: var(--space-xs); border: 0; background: none; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 @media (hover: hover) { .ui-recorder-hints > button:hover { color: var(--foreground); } }
-.ui-recorder-hints > button + .ui-keycap { margin-left: var(--space-md); }
 .ui-live-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
+.ui-recorder-hints > button + .ui-keycap, .ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
 .ui-setting-line > span:first-child { max-width: 100%; flex: 1 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* mono: the name is data (a model id, a tool), in the data face; its state stays in the row's. */
 .ui-setting-line > span:first-child[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
@@ -206,7 +205,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
 .ui-glance-orb { display: inline-grid; flex: none; }
 .ui-glance-orb > * { width: 100%; height: 100%; }
-.ui-glance-turn b { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
@@ -214,7 +212,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
    one strong line staying the title. */
 .ui-glance-body > .ui-answer { --answer-gap: var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-glance-body > .ui-answer :is(h1, h2, h3, h4) { color: var(--foreground); font-size: inherit; font-weight: var(--weight-lift); }
-.ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }
+.ui-glance-turn b, .ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
 
 /* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */

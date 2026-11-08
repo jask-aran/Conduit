@@ -1,7 +1,6 @@
 /* Toast: raised frost, --radius-surface, 25 units wide at most (a phone: the screen's, inside the
    overlay's inset). The text is the Row role; the glyph sits on its first line, the × at its end. */
 .ui-toaster { display: flex; width: min(100%, var(--measure-lg)); flex-direction: column-reverse; gap: var(--space-sm); }
-:is([data-density="phone"] :is(.ui-toaster, .ui-toast), :is(.ui-toaster, .ui-toast)[data-density="phone"]) { width: 100%; }
 .ui-toast-frame { border-radius: var(--radius-surface); }
 .ui-toast { display: grid; width: min(100%, var(--measure-lg)); grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm) var(--space-md); padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg); color: var(--foreground); font-size: var(--text-row); }
 /* A toast rises in from its edge and drops back to it (a phone's, at the top, comes down). */
@@ -16,10 +15,9 @@
 .ui-toast[data-kind="success"] .ui-toast-icon { color: var(--live); }
 .ui-toast[data-kind="warning"] .ui-toast-icon { color: var(--warn); }
 .ui-toast[data-kind="error"] .ui-toast-icon { color: var(--destructive); }
-.ui-toast[data-kind="info"] .ui-toast-icon { color: var(--muted-foreground); }
 /* The sentence centres on a control's height when it is one line, and wraps under its own start. */
 .ui-toast-text { min-width: 0; margin: 0; padding-block: calc((var(--control-sm) - 1.4em) / 2); line-height: var(--leading-row); overflow-wrap: anywhere; }
-.ui-toast-close { color: var(--muted-foreground); }
+.ui-toast[data-kind="info"] .ui-toast-icon, .ui-toast-close { color: var(--muted-foreground); }
 .ui-toast-close.ui-button[data-size="icon-xs"] { margin-top: calc((var(--control-sm) - var(--control-xs)) / 2); }
 
 .ui-toast-copy { min-width: 0; }
@@ -34,7 +32,7 @@
 .ui-notifications [data-sonner-toast] > * { width: 100%; transition: none; }
 .ui-notifications [data-sonner-toast]:focus-visible { box-shadow: none; }
 .ui-notifications [data-sonner-toast]:focus-visible { border-color: var(--foreground); }
-.ui-notifications .ui-toast { width: 100%; }
+:is([data-density="phone"] :is(.ui-toaster, .ui-toast), :is(.ui-toaster, .ui-toast)[data-density="phone"]), .ui-notifications .ui-toast { width: 100%; }
 @media (--conduit-phone-layout) {
   /* A phone's toasts come down from the top at the header pills' inset, the screen's width inside it. */
   .ui-notifications[data-sonner-toaster][data-y-position] { right: var(--space-md); left: var(--space-md); bottom: auto; top: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); width: auto; }

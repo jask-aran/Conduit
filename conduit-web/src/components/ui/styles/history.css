@@ -47,15 +47,13 @@
 @media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
 }
 .ui-history-row[data-kind="user"], .ui-history-row[data-kind="assistant"] { color: var(--foreground); }
-.ui-history-row[data-kind="user"] strong { color: color-mix(in oklch, var(--primary), white 18%); }
-.ui-history-row[data-kind="assistant"] strong { color: var(--live); }
 /* A step the harness keeps in its tree but leaves out of every later request:
    an answer it was interrupted writing. Struck through and dimmed, so the
    history reads as the conversation the agent actually has. */
 .ui-history-row[data-discarded] .ui-history-text { text-decoration: line-through; opacity: var(--opacity-muted); }
 .ui-history-row strong { font-weight: var(--weight-strong); }
-.ui-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }
-.ui-history-row[data-kind="assistant"] code { color: var(--live); }
+.ui-history-row[data-kind="user"] strong, .ui-history-row[data-kind="user"] code { color: color-mix(in oklch, var(--primary), white 18%); }
+.ui-history-row[data-kind="assistant"] strong, .ui-history-row[data-kind="assistant"] code { color: var(--live); }
 .ui-history-row[data-kind="tool"] { color: color-mix(in oklch, var(--muted-foreground), transparent 8%); font-family: var(--font-data); }
 .ui-history-row[data-kind="summary"] { color: var(--warn); }
 .ui-history-row[data-collapsed] .ui-history-text { font-style: italic; opacity: var(--opacity-rest); }

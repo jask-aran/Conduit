@@ -77,13 +77,12 @@
 .ui-dash-aside > .ui-group:where([data-group="dash"]) + .ui-group:where([data-group="dash"]) { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 
 /* A group: its heading (or switches) with actions at the right, then rows. */
-.ui-group:where([data-group="dash"]) { display: flex; min-width: 0; flex-direction: column; }
 .ui-group-head:where([data-group="dash"] *) { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
 .ui-group-head:where([data-group="dash"] *):empty { display: none; }
 .ui-dash-main .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
 .ui-group:where([data-group="dash"])[data-folded] .ui-group-head:where([data-group="dash"] *) { padding-bottom: 0; }
 .ui-group-actions:where([data-group="dash"] *) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
-.ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
+.ui-group:where([data-group="dash"]), .ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
 /* Switches in the heading's place keep their size on one line; the actions take the rest and fold. */
 .ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }
 .ui-group-switches > * { flex: none; white-space: nowrap; }
@@ -147,11 +146,9 @@
 .ui-change-directory { min-width: 0; flex: 1; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-change-status { width: var(--icon-sm); flex: none; color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
 .ui-change-status:is([data-status="M"], [data-status="T"]) { color: var(--change-modified); }
-.ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]) { color: var(--change-added); }
-.ui-change-status[data-status="D"] { color: var(--change-removed); }
 .ui-counts:where([data-counts="list"]) { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
-.ui-counts:where([data-counts="list"]) [data-change="removed"] { color: var(--change-removed); }
-.ui-counts:where([data-counts="list"]) [data-change="added"] { color: var(--change-added); }
+.ui-change-status[data-status="D"], .ui-counts:where([data-counts="list"]) [data-change="removed"] { color: var(--change-removed); }
+.ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]), .ui-counts:where([data-counts="list"]) [data-change="added"] { color: var(--change-added); }
 /* Compact: under the muted chats, changes keep their colour only as a hint. */
 .ui-dash[data-compact] .ui-row:where([data-density="list"])[data-change-row] > svg { opacity: var(--opacity-rest); filter: grayscale(1); }
 .ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }

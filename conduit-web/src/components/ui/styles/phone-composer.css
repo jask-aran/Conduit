@@ -11,13 +11,11 @@
    field going); a frost fades itself. */
 .ui-phone-composer { --voice-pill: calc(1.5 * var(--pill-size)); position: relative; isolation: isolate; min-width: 0; display: flex; flex-direction: column; gap: var(--space-md); }
 /* Its riders: the composer's rider stack, over the field. */
-.ui-phone-composer > .ui-composer-stack:empty { display: none; }
 /* Layers. */
 .ui-voice-captions { z-index: 1; }
 .ui-phone-field { position: relative; z-index: 2; }
 .ui-phone-row { position: relative; z-index: 3; display: flex; align-items: center; gap: var(--space-md); }
 .ui-phone-edit { z-index: 4; }
-.ui-phone-row > .ui-pill { position: relative; z-index: 1; }
 .ui-phone-row > .ui-pill[data-folded] { z-index: 0; }
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { z-index: 2; }
 /* Its parts move by the library's moves (styles/motion.css); the state table says, through each holder's MoveScope,
@@ -38,7 +36,6 @@
    so its edge, radius and icon stay crisp), and grows back the same way. */
 .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: 1 1 var(--voice-pill); min-width: var(--voice-pill); overflow: clip; }
 .ui-pill-room { flex: 0 0 0; margin-inline-start: calc(-1 * var(--space-md)); }
-.ui-pill-room:not(.ui-phone-row > *) { display: none; }
 .ui-phone-composer[data-show~="orb"] .ui-pill-room { flex-grow: 1; }
 .ui-phone-composer[data-show~="orb"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex-grow: 0; }
 /* The voice track: no surface, from the row's start to the orb pill, under the pills. A wipe: in, out of the orb pill
@@ -79,10 +76,10 @@
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill { width: var(--pill-slot); height: var(--pill-slot-height); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row { --tuck-size: var(--pill-slot); --tuck-gap: var(--pill-gap); }
 .ui-phone-composer[data-layout="surface"] .ui-phone-row > .ui-pill[data-voice][data-stretch] { flex: none; min-width: 0; margin-inline-start: auto; }
-.ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
+.ui-phone-composer > .ui-composer-stack:empty, .ui-pill-room:not(.ui-phone-row > *), .ui-phone-composer[data-layout="surface"] :is(.ui-pill-room, .ui-pill[data-voice] .ui-aura) { display: none; }
 /* Its track does not wipe: its waveform fades (the track's scope). */
 .ui-phone-composer[data-layout="surface"] .ui-voice-track { right: 0; padding-inline: var(--space-md) calc(2 * (var(--pill-slot) + var(--pill-gap)) + var(--space-md)); }
-.ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; }
+.ui-phone-row > .ui-pill, .ui-phone-composer[data-layout="surface"] .ui-voice-track > .ui-pill-wave { position: relative; z-index: 1; }
 .ui-phone-composer[data-layout="surface"][data-show~="track"] .ui-voice-track { right: 0; }
 /* Edit pills over the field: each fades itself (a fading row would be the backdrop its pills blur): their scope's. */
 .ui-phone-edit { position: relative; display: flex; flex-direction: column; justify-content: flex-end; --collapse-gap: var(--space-md); }

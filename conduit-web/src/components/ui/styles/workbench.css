@@ -1,6 +1,5 @@
 /* Workbench (workbench.tsx): one thing worked on, its title choosing it, the split filling the page's height. */
 .ui-workbench { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-lg); }
-.ui-workbench-title { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-workbench-title-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-workbench-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-note:where([data-note="workbench"]) { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); }
@@ -11,7 +10,7 @@
 .ui-workbench-main { display: flex; min-width: 0; min-height: calc(24 * var(--u-space)); flex: 999 1 var(--measure-xl); flex-direction: column; gap: var(--space-md); }
 .ui-workbench-side > .ui-chain { padding: 0; }
 .ui-workbench-side > .ui-chain > :not(.ui-chain-gap) { width: 100%; }
-.ui-group:where([data-group="workbench"]) { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-workbench-title, .ui-group:where([data-group="workbench"]) { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-group:where([data-group="workbench"]) > .ui-title { margin: 0 0 var(--space-2xs); padding-inline: var(--row-inset); }
 .ui-group:where([data-group="workbench"]) > .ui-note:where([data-note="workbench"]) { padding-inline: var(--row-inset); }
 .ui-workbench-fact { min-width: 0; min-height: 0; align-items: baseline; gap: var(--space-sm); border-radius: 0; padding: var(--space-2xs) var(--row-inset); }

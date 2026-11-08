@@ -1,14 +1,11 @@
 /* NetworkMap: the hub, and every device hung from it. A box is the one outline the map draws (a hairline, no fill:
    what groups is the machine, not a card); its clients are lines in the row's voice. */
-.ui-network { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
 .ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; padding: var(--space-sm); list-style: none; }
 .ui-network-box:has(> .ui-title) { padding-top: var(--space-md); }
 .ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.ui-network-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
 .ui-network-mark > svg { width: var(--icon); height: var(--icon); }
 .ui-network-box[data-hub] .ui-network-line > .ui-row-title { font-weight: var(--weight-strong); }
-.ui-network-line[data-offline] > .ui-row-title { color: var(--muted-foreground); }
 /* The lines: a stem down from the hub to a bus, the bus over the spokes, a drop into each. The bus sits
    --space-md below the hub; a spoke starts --space-xl below it; each spoke draws its stretch of the bus (to the next
    one across the gap), the first from its centre, the last to its centre. */
@@ -28,8 +25,6 @@
 .ui-client-cards { margin-block: var(--space-xs) var(--space-md); display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--measure-sm), 1fr)); gap: var(--space-sm); }
 .ui-client-card { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); padding: var(--space-md); font-size: var(--text-caption); }
 .ui-client-head { display: flex; align-items: center; gap: var(--space-sm); }
-.ui-client-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
-.ui-client-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-client-head > h4, .ui-client-card h5 { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-overflow: ellipsis; text-transform: var(--label-case); white-space: nowrap; }
 .ui-client-head > h4 { color: var(--foreground); }
 .ui-client-status { margin: 0; color: var(--muted-foreground); }
@@ -40,7 +35,7 @@
 
 /* ChainMap: the map's boxes stacked down one line. Every part is the column's width (a measure, never wider than the
    room); the line runs through the gaps between boxes; a gap's control sits on the line, the ground behind it. */
-.ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
+.ui-network, .ui-chain { display: flex; flex-direction: column; align-items: center; margin: 0; padding: var(--space-sm) 0 var(--space-lg); }
 .ui-chain > :not(.ui-chain-gap) { width: min(100%, var(--measure-lg)); }
 .ui-chain-box { gap: 0; padding-block: var(--space-xs); }
 .ui-chain-line { min-width: 0; flex: 1; }
@@ -52,9 +47,9 @@ button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--mut
 .ui-chain-link { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
 .ui-chain-link[data-live] { border-style: dashed; }
 /* A notice: something Conduit writes into the thread later, not part of the prompt -- an inbound mark before its name. */
-.ui-chain-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
-.ui-chain-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-chain-link[data-live] .ui-chain-line > .ui-row-title { color: var(--muted-foreground); }
+.ui-network-mark, .ui-client-mark, .ui-chain-mark { display: inline-flex; flex: none; color: var(--muted-foreground); }
+.ui-client-mark > svg, .ui-chain-mark > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-network-line[data-offline] > .ui-row-title, .ui-chain-link[data-live] .ui-chain-line > .ui-row-title { color: var(--muted-foreground); }
 .ui-chain-link[data-current] { border-color: var(--muted-foreground); background: var(--tint); }
 /* The line between two links; a break's label stands in the line, which stops either side of it. */
 .ui-chain-gap { width: 0; height: var(--space-lg); border-left: var(--hairline) solid var(--tint); }

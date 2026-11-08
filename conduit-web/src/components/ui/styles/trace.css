@@ -46,24 +46,20 @@ button.ui-step:is(:focus-visible) { background: var(--tint); }
 .ui-step-subject { min-width: 0; flex: 0 1 auto; font: var(--text-caption) var(--font-code); }
 .ui-step-subject[data-face="text"] { font: inherit; }
 .ui-step-aside { min-width: 0; flex: 0 4 auto; opacity: var(--opacity-muted); font-size: var(--text-caption); }
-.ui-step-time { opacity: var(--opacity-muted); }
 .ui-step-changes { display: inline-flex; gap: var(--space-xs); font-family: var(--font-data); }
-.ui-step-changes [data-change="added"] { color: var(--status-success); }
-.ui-step-changes [data-change="removed"] { color: var(--destructive); }
 .ui-step-diff { max-height: var(--measure-md); overflow: auto; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding-block: var(--space-xs); font: var(--text-caption)/var(--leading-code) var(--font-code); }
 .ui-step-diff-line { display: grid; grid-template-columns: var(--icon-sm) minmax(0, 1fr); padding-inline: var(--space-sm) var(--space-lg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-step-diff-line > :first-child { text-align: center; user-select: none; }
 .ui-step-diff-line[data-sign="added"] { background: color-mix(in oklch, var(--status-success) 12%, transparent); color: var(--foreground); }
-.ui-step-diff-line[data-sign="added"] > :first-child { color: var(--status-success); }
+.ui-step-changes [data-change="added"], .ui-step-diff-line[data-sign="added"] > :first-child { color: var(--status-success); }
 .ui-step-diff-line[data-sign="removed"] { background: color-mix(in oklch, var(--destructive) 10%, transparent); }
-.ui-step-diff-line[data-sign="removed"] > :first-child { color: var(--destructive); }
-.ui-step-diff-line[data-sign="gap"] { opacity: var(--opacity-muted); }
+.ui-step-time, .ui-step-diff-line[data-sign="gap"] { opacity: var(--opacity-muted); }
 .ui-step-summary { min-width: 0; }
 .ui-step-summary .chat-markdown { display: contents; color: inherit; font-size: inherit; line-height: inherit; }
 .ui-step-summary :is(.chat-markdown, .incremark) > * { display: inline; margin: 0; }
 .ui-step-meta { display: flex; flex: none; gap: var(--space-md); margin-left: auto; font-size: var(--text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ui-step-flag { color: var(--foreground); font-weight: var(--weight-strong); }
-.ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
+.ui-step-changes [data-change="removed"], .ui-step-diff-line[data-sign="removed"] > :first-child, .ui-step-item[data-state="failed"] > .ui-step .ui-step-icon { color: var(--destructive); }
 /* The chevron is there when it is wanted: on the cursor, or open. */
 .ui-step > .ui-disclosure-chevron { position: absolute; top: 50%; right: var(--space-sm); margin: calc(-0.5 * var(--icon-sm)) 0 0; opacity: 0; transition: opacity var(--duration-quick) var(--ease-change), rotate var(--duration-quick) var(--ease-change); }
 button.ui-step .ui-step-meta { min-width: var(--icon-sm); justify-content: flex-end; }

@@ -39,7 +39,6 @@
    It never shrinks past its pane: min(.., 100%), so no breakpoint is needed. */
 .ui-composer-width { width: min(var(--composer-width, var(--reading-width)), 100%); margin-inline: auto; }
 .ui-frost.ui-desktop-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
-.ui-composer-field { position: relative; }
 /* The composer pads its TextArea and bounds its height (the app pins an empty
    field's height with !important; the composer's token wins it back). */
 .ui-composer-field > textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--text-body); }
@@ -49,7 +48,7 @@
 .ui-completion > span { color: transparent; }
 .ui-completion > small { font-size: var(--text-caption); }
 .ui-composer-field > .ui-completion { padding: var(--cmp-field-pad); }
-.ui-pill-field:has(> .ui-completion) { position: relative; }
+.ui-composer-field, .ui-pill-field:has(> .ui-completion) { position: relative; }
 .ui-pill-field > .ui-completion { padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) var(--pill-field-pad); }
 .ui-toolbar { position: relative; z-index: 2; display: flex; font-size: var(--text-row); min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }

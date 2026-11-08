@@ -14,10 +14,9 @@
 
 /* The pane. Its width moves on the quick change (--duration-quick, --ease-change); data-instant skips it. */
 .ui-nav-pane { position: relative; z-index: var(--layer-nav); width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--duration-quick) var(--ease-change); }
-.ui-nav-pane[data-collapsed] { width: var(--nav-rail-width); }
 .ui-nav-pane[data-instant] { transition: none; }
 .ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: transparent; color: var(--foreground); }
-.ui-nav-pane[data-folded] .ui-nav-pane-body { width: var(--nav-rail-width); }
+.ui-nav-pane[data-collapsed], .ui-nav-pane[data-folded] .ui-nav-pane-body { width: var(--nav-rail-width); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane { transition-duration: 0.01ms; } }
 
 /* The head: centred on the top line, so its icons sit level with a pane header's and the wordmark on its baseline. */
@@ -56,11 +55,10 @@
 .ui-row-end:where([data-density="nav"] *) { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-row-end:where([data-density="nav"] *) > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
-.ui-nav-folder { position: relative; }
 .ui-nav-link { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
 .ui-nav-link::after { position: absolute; inset: 0; content: ""; }
 .ui-nav-link-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ui-nav-folder > .ui-row-end { position: relative; }
+.ui-nav-folder, .ui-nav-folder > .ui-row-end { position: relative; }
 .ui-nav-toggle { display: grid; width: 100%; height: 100%; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 .ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 @media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
@@ -128,9 +126,8 @@
 @keyframes ui-nav-rail-in { from { opacity: 0; } to { opacity: 1; } }
 .ui-nav-pane[data-folded] .ui-nav-head { flex-direction: column; align-items: center; gap: var(--space-lg); padding-inline: 0; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-button { margin-top: var(--space-xs); }
-.ui-nav-pane[data-folded] .ui-nav-brand { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-list { display: flex; flex-direction: column; align-items: center; }
-.ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
+.ui-nav-pane[data-folded] .ui-nav-brand, .ui-nav-pane[data-folded] .ui-nav-list > :not(.ui-nav-rail) { display: none; }
 .ui-nav-pane[data-folded] .ui-nav-rail { display: flex; }
 .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: ui-nav-rail-in var(--duration-quick) var(--ease-arrive) both; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg { grid-template-columns: none; grid-template-rows: repeat(var(--segments), minmax(0, 1fr)); }

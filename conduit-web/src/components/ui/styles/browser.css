@@ -35,8 +35,7 @@
 .ui-columns:where([data-group="browser"]), .ui-browser-entry > small { color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > :first-child { position: absolute; inset-inline-start: var(--space-sm); width: var(--icon); height: var(--icon); }
 .ui-browser-grid[data-view="details"] > .ui-browser-entry > span { text-align: start; }
-.ui-browser-grid[data-view="details"] .ui-browser-mark { display: none; }
 .ui-note:where([data-note="browser"]) { margin: 0; padding: var(--space-sm); color: var(--destructive); font-size: var(--text-caption); }
 .ui-browser[data-compact] .ui-browser-layout { grid-template-columns: minmax(0, 1fr); }
-.ui-browser[data-compact] :is(.ui-browser-sidebar, .ui-browser-divider) { display: none; }
+.ui-browser-grid[data-view="details"] .ui-browser-mark, .ui-browser[data-compact] :is(.ui-browser-sidebar, .ui-browser-divider) { display: none; }
 @media (--conduit-phone-layout) { .ui-browser-layout { grid-template-columns: minmax(0, 1fr); } .ui-browser-sidebar, .ui-browser-divider { display: none; } }

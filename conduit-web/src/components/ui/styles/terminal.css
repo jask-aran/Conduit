@@ -18,13 +18,11 @@
 .ui-term-lead[data-phone] { display: none; }
 .ui-term-lead [data-slot="button"] { width: var(--control-tool); min-width: var(--control-tool); height: var(--control-tool); padding: 0; }
 .ui-term-status { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
-.ui-term-status[data-tone="danger"] { color: var(--destructive); }
-.ui-term-status[data-tone="warn"] { color: var(--warn); }
 .ui-term-status-mark { display: grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-term-status-mark > i { width: var(--icon-dot); height: var(--icon-dot); border-radius: var(--radius-round); background: currentColor; }
 .ui-term-status[data-tone="success"] .ui-term-status-mark { color: var(--live); }
-.ui-term-status[data-tone="warn"] .ui-term-status-mark { color: var(--warn); }
-.ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
+.ui-term-status[data-tone="warn"], .ui-term-status[data-tone="warn"] .ui-term-status-mark { color: var(--warn); }
+.ui-term-status[data-tone="danger"], .ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
 
 /* The shortcuts inline while they fit; folded, the ⋯ menu holds them. */
 .ui-term-overflow { display: none; flex: none; align-items: center; }

@@ -46,7 +46,6 @@
 .ui-sheet-backdrop .solid-meteor-shower { contain: strict; }
 /* A split pane moved into the dock fills it in place of the tools (their state kept). */
 .ui-sheet[data-docked] { height: auto; min-height: 0; flex: 1; margin: 0; border-radius: inherit; }
-.ui-sheet[data-docked="hidden"] { display: none; }
 .ui-sheet:not([data-lead]) > div:not(.ui-pane-edge) { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; }
 /* A pane easing open or shut: what it holds keeps one width (the one it lands at, or leaves from) against the
    pane's moving edge -- a beside pane's left, pane A's right -- and the pane clips it, so nothing reflows mid-motion
@@ -68,7 +67,6 @@
 .ui-dock[data-layer-switch] { z-index: var(--layer-dock); transition: width var(--duration-fold) var(--ease-fold); }
 .ui-dock-surface { position: absolute; inset: 0; right: 0; left: auto; display: flex; width: 100%; min-width: 0; height: 100%; contain: layout paint; container-type: inline-size; flex: none; flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); background: var(--background); transition: width var(--duration-fold) var(--ease-fold); }
 .ui-dock-surface > * { max-width: 100%; }
-.ui-dock[data-expanded] .ui-pane-edge[data-dock] { display: none; }
 /* Over the panes: the dock takes no room in the row and floats above it, its edge at its surface's. */
 .ui-dock[data-overlay] { z-index: var(--layer-dock); width: 0 !important; margin-right: 0 !important; background: transparent; }
 .ui-dock[data-overlay] .ui-dock-surface { right: var(--space-md); left: auto; width: var(--workspace-shell-width); box-shadow: var(--lift-raised), 0 0 0 var(--hairline) var(--border); }
@@ -79,7 +77,7 @@
 /* In this order, as their cascade was: expanded over overlay, a layer switch over both. */
 .ui-dock[data-expanded] .ui-dock-surface { width: calc(100cqw - var(--space-md)); }
 .ui-dock[data-layer-switch] .ui-dock-surface { left: auto; width: var(--workspace-shell-width); transition: none; }
-.ui-dock-document { display: none; }
+.ui-sheet[data-docked="hidden"], .ui-dock[data-expanded] .ui-pane-edge[data-dock], .ui-dock-document { display: none; }
 .ui-dock-document > div { display: contents; }
 .ui-dock-surface[data-documented] > :not(.ui-dock-document) { display: none !important; }
 .ui-dock-surface[data-documented] > .ui-dock-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
