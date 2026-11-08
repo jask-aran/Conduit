@@ -116,7 +116,7 @@ const editorTheme = EditorView.theme({
   },
 }, { dark: true });
 
-const codeHighlightStyle = HighlightStyle.define([
+export const codeHighlightStyle = HighlightStyle.define([
   { tag: tags.content, color: "var(--code-foreground)" },
   { tag: tags.punctuation, color: "var(--code-foreground)" },
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment, tags.quote], color: "var(--code-comment)", fontStyle: "italic" },
