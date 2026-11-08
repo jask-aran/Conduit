@@ -84,6 +84,13 @@ export const foldNotices = (notices: AgentNotice[] = []): AgentNoticeRow[] => {
   }
   return [...rows.values()].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
 };
+/** The notices that only tell (a parked task waits for Retry, a connector for connecting): what Dismiss all clears. */
+export const dismissableNotices = (view = agentView()) => foldNotices(view?.attention?.needsYou?.notices).filter((row) => row.taskId == null && row.kind !== "connector");
+/** Dismiss notices (every one a row folds), then read the agent again. */
+export const dismissNotices = async (ids: string[]) => {
+  await Promise.all(ids.map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" })));
+  await refreshAgent();
+};
 /** How many things wait on the person: approvals, questions, memory to review and notices (repeats as one). */
 export const agentNeeds = (view = agentView()) => {
   const needs = view?.attention?.needsYou;

@@ -10,7 +10,7 @@ import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
-import { agentNeeds, agentView, foldNotices, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
+import { agentNeeds, agentView, dismissableNotices, dismissNotices, foldNotices, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
@@ -184,15 +184,15 @@ export function AgentPage(props: {
   const decideAsk = (id: string, choice: ApprovalChoice) => act(id, () => api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }));
   const noticeRows = createMemo(() => foldNotices(needs()?.notices));
   const dismissNotice = (row: AgentNoticeRow) => act(row.key, () => Promise.all(row.ids.map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" }))));
-  // Clear all: the notices that only tell (a parked task waits for Retry, a connector for connecting).
-  const clearable = () => noticeRows().filter((row) => row.taskId == null && row.kind !== "connector");
-  const clearAll = () => act("clear", () => Promise.all(clearable().flatMap((row) => row.ids).map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" }))));
+  // Dismiss all: the notices that only tell (a parked task waits for Retry, a connector for connecting).
+  const dismissAll = () => act("clear", () => dismissNotices(dismissableNotices().flatMap((row) => row.ids)));
   const stop = (event: MouseEvent) => event.stopPropagation();
   // How long an approval waits, as its card's meta (as the thread's card says it): "23 h left", "40 min left".
   const left = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 
-  const needsGroup = () => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first"
-    actions={clearable().length > 1 ? <GroupAction disabled={busy() !== null} onClick={() => void clearAll()}><Icons.Close />Clear all</GroupAction> : undefined}>
+  // headless: under a Ledge's or Tray's own title (Needs you apart from the panel), which carries Dismiss all.
+  const needsGroup = (headless = false) => <SplitGroup id="agent-needs" label="Needs you" count={agentNeeds() || null} order="first" headless={headless}
+    actions={dismissableNotices().length ? <GroupAction disabled={busy() !== null} onClick={() => void dismissAll()}>Dismiss all</GroupAction> : undefined}>
     <Show when={agentNeeds()} fallback={<SplitEmpty>Nothing waits on you.</SplitEmpty>}>
       <For each={needs()?.asks}>{(ask) => <>
         <Row density="list" element="button" aria-expanded={unfolded() === ask.id} onClick={() => unfold(ask.id)}
@@ -514,7 +514,7 @@ export function AgentPage(props: {
             notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined} list={<Show when={peek()} fallback={tabGroups(tab())}>{(shown) => peekView(shown())}</Show>} />
       </DashPanel>
       <Show when={props.needsMount?.()}>{(mount) => <Show when={agentNeeds()}>
-        <Portal mount={mount()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Portal>
+        <Portal mount={mount()}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup(true)} /></Portal>
       </Show>}</Show>
     </Show>}</Show>
     <Show when={!props.panel && view()} fallback={<Show when={!props.panel}><SplitEmpty>Loading…</SplitEmpty></Show>}>

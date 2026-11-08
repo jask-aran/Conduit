@@ -260,6 +260,8 @@ export function SplitGroup(props: {
   compactHeading?: JSX.Element;
   compactActions?: JSX.Element;
   collapsible?: boolean;
+  /** Under a title of its own (a Ledge's or Tray's head says what it is): its rows alone, no heading or actions. */
+  headless?: boolean;
 }) {
   const narrow = useContext(Phone);
   const key = `conduit.dashboard.open:${props.id}`;
@@ -274,7 +276,7 @@ export function SplitGroup(props: {
     : props.heading ?? <GroupHeading id={props.id} count={props.count}>{props.label}</GroupHeading>;
   const actions = () => narrow() && props.compactActions ? props.compactActions : props.actions;
   return <Group kind="dash" id={props.id} labelled={Boolean(props.label)} section={props.id.replace(/^.*-/, "").replace("threads", "chats")} order={props.order} folded={folds() && !open()} busy={props.busy}
-    heading={heading()} actions={actions()} more={props.more}>{props.children}</Group>;
+    heading={props.headless ? undefined : heading()} actions={props.headless ? undefined : actions()} more={props.more}>{props.children}</Group>;
 }
 
 export function SplitGroupMore(props: { children: JSX.Element; count?: number | string; onClick: () => void }) {

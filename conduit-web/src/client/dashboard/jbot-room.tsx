@@ -1,7 +1,7 @@
 import { createEffect, createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
-import { ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
+import { Button, ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, Ledge, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { agentNeeds, agentView, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
+import { agentNeeds, agentView, dismissableNotices, dismissNotices, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
@@ -74,6 +74,17 @@ export function JbotRoom(props: {
     if (wide()) { if (!beside()) toggle(); } else { setOver(false); setNeedsOpen(true); }
   });
   const needs = { count: () => agentNeeds(), open: needsOpen, toggle: () => { setOver(false); setNeedsOpen(!needsOpen()); } };
+  // On a desktop Needs you is a Ledge of its own, stacked above the panel's: shown with the panel (unless put away while
+  // it is open) or alone.
+  const [needsShut, setNeedsShut] = createSignal(false);
+  createEffect(() => { if (!over()) setNeedsShut(false); });
+  const needsShown = () => needsOpen() || (over() && !needsShut());
+  const shutNeeds = () => { setNeedsOpen(false); if (over()) setNeedsShut(true); };
+  // Its head: Dismiss all, for the notices that only tell.
+  const [dismissing, setDismissing] = createSignal(false);
+  const needsActions = () => <Show when={dismissableNotices().length}>
+    <Button size="sm" variant="ghost" disabled={dismissing()} onClick={() => { setDismissing(true); void dismissNotices(dismissableNotices().flatMap((row) => row.ids)).finally(() => setDismissing(false)); }}>Dismiss all</Button>
+  </Show>;
   onMount(() => {
     void refreshAgent();
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
@@ -121,7 +132,7 @@ export function JbotRoom(props: {
     <Show when={agentView()} fallback={<SplitEmpty>Loading…</SplitEmpty>}>
       <Show when={agentView()?.enabled} fallback={<SplitEmpty>This hub has no agent yet.</SplitEmpty>}>
         <ChatBeside label={`${name()}'s panel`} title={name()} open={open()} above={desktop ? above() ?? 0 : undefined} beside={props.presentation !== "narrow"} onClose={() => setOver(false)} onWide={setWide} actions={props.panelActions?.(() => setOver(false))}
-          over={desktop && agentNeeds() ? <div ref={mountNeeds} /> : undefined} overLabel="Needs you" overOpen={needsOpen()} onOverClose={() => setNeedsOpen(false)}
+          over={desktop && agentNeeds() ? <Ledge fit open={Boolean(needsShown())} onClose={shutNeeds} label="Needs you" title="Needs you" actions={needsActions()}><div ref={mountNeeds} /></Ledge> : undefined}
           foldLead={(marks) => <><Segmented size="sm" icons={marks()} label={`${name()}'s panel`} value={tab()} onChange={setTab}
             options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
           panel={<Show when={built() || open() || needsOpen()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false),
@@ -138,7 +149,7 @@ export function JbotRoom(props: {
         </ChatView>
         </ChatBeside>
         <Show when={!desktop}>
-          <Tray fit open={needsOpen()} onClose={() => setNeedsOpen(false)} label="Needs you" title={name()}><div ref={mountNeeds} /></Tray>
+          <Tray fit open={needsOpen()} onClose={() => setNeedsOpen(false)} label="Needs you" title="Needs you" actions={needsActions()}><div ref={mountNeeds} /></Tray>
         </Show>
       </Show>
     </Show>

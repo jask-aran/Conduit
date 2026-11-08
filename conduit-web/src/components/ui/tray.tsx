@@ -1,4 +1,4 @@
-import { children, createEffect, createSignal, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createContext, createEffect, createSignal, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 import * as Icons from "./icons";
 import { IconButton } from "./actions";
 import { overlayHaptics } from "./haptics";
@@ -118,45 +118,43 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
   </div>;
 }
 
+/** Ledges stacked over their container just above its composer (`above`: px over its foot): the first given on top, the
+ *  last at the foot. Each is a Ledge as ever; a fit one is as tall as what it holds, up to the room the others leave.
+ *  A press anywhere in the stack (or in `keep`) is not outside any of them. */
+const LedgeStackContext = createContext<{ stack: () => HTMLElement | undefined; keep?: () => Element | null | undefined } | null>(null);
+export function LedgeStack(props: { above: number; keep?: () => Element | null | undefined; children: JSX.Element }) {
+  const [stack, setStack] = createSignal<HTMLElement>();
+  return <LedgeStackContext.Provider value={{ stack, keep: () => props.keep?.() }}>
+    <div ref={setStack} class="ui-ledge-stack" style={{ "--ledge-above": `${props.above}px` }}>{props.children}</div>
+  </LedgeStackContext.Provider>;
+}
+
 /**
  * Ledge: a pointer's panel, faded in over what it belongs to just above its composer (`above`: px over its
  * container's foot), at the composer's width; nothing dimmed, nothing moved. One height (never most of the pane); put
  * away by its close, Esc or a press outside it (but in `keep`: the composer, which holds its control and stays usable
  * under it), as a menu's is. Shut and settled it is skipped from layout and paint, kept on its own layer so fading in
- * composites what is already drawn.
- *
- * `over`: a card of its own stacked above it (what waits on the person), only while given. It grows with what it holds
- * into the room left above the panel and scrolls past that, so the panel keeps its height and its place. Shown with
- * the panel, or alone (overOpen), just above the composer; put away the same ways (onOverClose).
+ * composites what is already drawn. In a LedgeStack it takes its place in the stack (no `above` of its own); fit: as
+ * tall as what it holds, up to the room left (a short list beside a panel that keeps the one height).
  */
-export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above: number; keep?: () => Element | null | undefined;
-  over?: JSX.Element; overLabel?: string; overOpen?: boolean; onOverClose?: () => void; children: JSX.Element }) {
-  let stack!: HTMLDivElement;
-  // Resolved once: read twice (whether there is one, and what it holds), a card given as JSX was built twice.
-  const over = children(() => props.over);
-  const overShown = () => props.open || Boolean(props.overOpen);
-  const shut = () => { if (props.open) props.onClose(); if (props.overOpen) props.onOverClose?.(); };
+export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above?: number; keep?: () => Element | null | undefined; fit?: boolean; children: JSX.Element }) {
+  let panel!: HTMLElement;
+  const inStack = useContext(LedgeStackContext);
   createEffect(() => {
-    if (!props.open && !(props.overOpen && over())) return;
-    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); shut(); } };
+    if (!props.open) return;
+    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
     const outside = (event: PointerEvent) => {
       const target = event.target as Node | null;
-      if (!target || stack.contains(target) || props.keep?.()?.contains(target)) return;
-      shut();
+      if (!target || (inStack?.stack() ?? panel).contains(target) || (props.keep ?? inStack?.keep)?.()?.contains(target)) return;
+      props.onClose();
     };
     window.addEventListener("keydown", away, true);
     window.addEventListener("pointerdown", outside, true);
     onCleanup(() => { window.removeEventListener("keydown", away, true); window.removeEventListener("pointerdown", outside, true); });
   });
-  return <div ref={stack} class="ui-ledge-stack" style={{ "--ledge-above": `${props.above}px` }}>
-    <Show when={over()}>
-      <section class="ui-ledge-over ui-frost" data-surface="frost" data-lift="raised" data-open={overShown() ? "" : undefined} aria-label={props.overLabel} inert={!overShown() ? true : undefined}>
-        <PanelBody>{over()}</PanelBody>
-      </section>
-    </Show>
-    <section class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} aria-label={props.label} inert={!props.open ? true : undefined}>
-      <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
-      <PanelBody>{props.children}</PanelBody>
-    </section>
-  </div>;
+  return <section ref={panel} class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} data-fit={props.fit ? "" : undefined} aria-label={props.label}
+    inert={!props.open ? true : undefined} style={inStack ? undefined : { "--ledge-above": `${props.above ?? 0}px` }}>
+    <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
+    <PanelBody>{props.children}</PanelBody>
+  </section>;
 }

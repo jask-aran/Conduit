@@ -79,6 +79,7 @@
 /* A group: its heading (or switches) with actions at the right, then rows. */
 .ui-group:where([data-group="dash"]) { display: flex; min-width: 0; flex-direction: column; }
 .ui-group-head:where([data-group="dash"] *) { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
+.ui-group-head:where([data-group="dash"] *):empty { display: none; }
 .ui-dash-main .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
 .ui-group:where([data-group="dash"])[data-folded] .ui-group-head:where([data-group="dash"] *) { padding-bottom: 0; }
 .ui-group-actions:where([data-group="dash"] *) { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
@@ -248,4 +249,4 @@
    scroller, no gutter cutting its full-width hairline short. */
 .ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
 /* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
-:is(.ui-dash-panel, .ui-ledge-over, .ui-tray-panel[data-fit]) .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }
+:is(.ui-dash-panel, .ui-ledge[data-fit], .ui-tray-panel[data-fit]) .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }
