@@ -72,10 +72,10 @@ function createWidthSettle(frame: () => HTMLElement | undefined, width: () => un
   });
 }
 
-export function Overlay(props: { label: string; layout?: "stack" | "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
+export function Overlay(props: { label: string; layout?: "rail"; core?: boolean; embedded?: boolean; density?: Density; class?: string; style?: JSX.CSSProperties; motion?: Motion; children: JSX.Element }) {
   const [frame, setFrame] = createSignal<HTMLElement>();
   createWidthSettle(frame, () => (props.style as Record<string, unknown> | undefined)?.["--overlay-width"]);
-  return <Frost ref={setFrame} lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout ?? "stack"}
+  return <Frost ref={setFrame} lift="raised" core={props.core} role={props.embedded ? undefined : "dialog"} aria-label={props.embedded ? undefined : props.label} class={cn("ui-overlay", props.class)} style={props.style} data-layout={props.layout}
     data-density={props.density} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 

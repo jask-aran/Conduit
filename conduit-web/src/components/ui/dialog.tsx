@@ -72,7 +72,7 @@ export function OverlayDialog(props: {
   onOpenChange: (open: boolean) => void;
   label: string;
   placement?: "top" | "center";
-  layout?: "stack" | "rail";
+  layout?: "rail";
   style?: JSX.CSSProperties;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;

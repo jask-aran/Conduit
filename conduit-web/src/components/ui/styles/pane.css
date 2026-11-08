@@ -124,13 +124,12 @@
 .ui-tool-bar[data-vertical] { min-height: 0; flex-direction: column; padding: var(--space-xs) var(--space-2xs); border: 0; border-right: var(--hairline) solid var(--border); }
 .ui-icon-button:where([data-icon-button="tool"]) { display: inline-grid; width: var(--control-tool); height: var(--control-tool); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--muted-foreground); }
 .ui-icon-button:where([data-icon-button="tool"]):is(:focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-icon-button:where([data-icon-button="tool"]):is(:hover, :focus-visible, [aria-pressed="true"], [data-expanded]) { outline: none; background: var(--tint); color: var(--foreground); } }
+@media (hover: hover) { .ui-icon-button:where([data-icon-button="tool"]):hover { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-icon-button:where([data-icon-button="tool"]):disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 .ui-lead-input:where([data-lead-input="tool"]) { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
 .ui-lead-input:where([data-lead-input="tool"]) > svg { position: absolute; left: var(--space-md); width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); pointer-events: none; }
-.ui-lead-input:where([data-lead-input="tool"]) > input { width: 100%; height: var(--control-tool); min-width: 0; border: var(--hairline) solid transparent; border-radius: var(--radius-control); outline: 0; background: var(--field, var(--tint)); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font-size: var(--text-caption); }
+.ui-lead-input:where([data-lead-input="tool"]) > input { width: 100%; height: var(--control-tool); min-width: 0; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); outline: 0; background: var(--field, var(--tint)); padding: var(--space-2xs) var(--space-md) var(--space-2xs) calc(var(--icon-sm) + var(--space-lg)); color: var(--foreground); font-size: var(--text-caption); }
 /* The field's hairline, as an input's (controls.css .ui-input): the tint at rest, the foreground's line on hover and focus. */
-.ui-lead-input:where([data-lead-input="tool"]) > input { border-color: var(--tint); }
 /* Clearable: the × at the field's end, inside its hairline; the text stops short of it. */
 .ui-lead-input[data-clearable] > input { padding-right: var(--control-sm); }
 .ui-lead-input > .ui-lead-input-clear { position: absolute; right: var(--space-2xs); }
@@ -157,14 +156,12 @@
 @media (--conduit-phone-layout) {
   .ui-pane-header:where([data-header="tool"]) { min-height: var(--control-lg); padding: var(--space-xs) var(--space-md) var(--space-xs) var(--space-lg); justify-content: space-between; border-bottom: var(--hairline) solid var(--border); }
   .ui-pane-header:where([data-header="tool"]) > strong { font-size: var(--text-row); }
-  .ui-pane-header:where([data-header="tool"]) > .ui-seg { margin-bottom: var(--space-xs); }
   .ui-tool-views > [role="toolbar"] { gap: 0; padding: var(--space-2xs) var(--space-sm); }
   .ui-tool-view { min-width: var(--space-4xl); min-height: var(--space-4xl); padding-inline: var(--space-md); font-size: var(--text-caption); }
   .ui-tool-view > svg { width: var(--icon); height: var(--icon); }
-  .ui-tool-bar { min-height: var(--control-lg); gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); }
+  .ui-tool-bar { min-height: var(--control-lg); gap: var(--space-xs); }
   .ui-icon-button:where([data-icon-button="tool"]) { width: var(--space-4xl); height: var(--space-4xl); }
-  .ui-icon-button:where([data-icon-button="tool"]) > svg, .ui-lead-input:where([data-lead-input="tool"]) > svg { width: var(--icon-sm); height: var(--icon-sm); }
-  .ui-lead-input:where([data-lead-input="tool"]) > svg { left: var(--space-md); }
+  .ui-icon-button:where([data-icon-button="tool"]) > svg { width: var(--icon-sm); height: var(--icon-sm); }
   .ui-lead-input:where([data-lead-input="tool"]) > input { height: var(--space-4xl); padding-left: var(--space-4xl); font-size: var(--text-row); }
   .ui-tool-bar[data-vertical] { gap: var(--space-xs); padding-block: var(--space-sm); }
 }

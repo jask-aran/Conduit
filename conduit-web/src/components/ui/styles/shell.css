@@ -19,18 +19,6 @@
   .ui-shell { min-width: calc(var(--conduit-min-main-pane) + var(--space-lg)); }
 }
 
-/* A tool's controls, in the dock, a split pane and anything filling a sheet. */
-.ui-dock, .ui-sheet:not([data-lead]), .ui-sheet-fill {
-  --workbench-bar-height: var(--control);
-  --workbench-control-size: var(--control-tool);
-  --workbench-gap: var(--space-2xs);
-  --workbench-padding-block: var(--space-xs);
-  --workbench-padding-inline: var(--space-sm);
-  --workbench-icon-size: var(--icon-sm);
-  --workbench-font-size: var(--text-label);
-  --workbench-divider: var(--border);
-}
-
 /* A pane: the rounded charcoal ground inset on the frame. The main pane's 8px right margin is the gutter between
    panes; a split pane's drag edge sits in it. */
 .ui-sheet { position: relative; display: flex; min-width: 0; height: calc(100dvh - var(--space-xl) - var(--title-bar-room, 0px)); margin: var(--space-md) var(--space-md) var(--space-md) 0; flex: 1 1 auto; flex-direction: column; container-type: inline-size; border-radius: var(--radius-surface); background: var(--background); color: var(--foreground); }
@@ -98,10 +86,6 @@
   .ui-sheet:not([data-lead]) { display: none; }
   .ui-sheet[data-under] { display: flex; }
   .ui-dock {
-    --workbench-bar-height: var(--control-lg);
-    --workbench-control-size: var(--control-sm);
-    --workbench-gap: var(--space-xs);
-    --workbench-padding-inline: var(--space-md);
     position: fixed;
     inset: 0;
     z-index: var(--layer-panel);

@@ -72,7 +72,5 @@
 /* Phone geometry uses the phone density unit (16px). */
 @media (--conduit-phone-layout) {
   .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) var(--space-sm); font-size: var(--text-row); }
-  .ui-history-row { min-height: var(--control-tool); }
   .ui-history-time, .ui-history-row small { font-size: var(--text-label); }
-  .ui-history-branch { --history-row-height: var(--control-tool); }
 }

@@ -87,11 +87,10 @@
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
-.ui-choice { min-height: var(--control-lg); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); cursor: pointer; }
 /* A choice follows Interaction: grey at rest; the cursor is the wash, white;
    the current choice is white at the current weight, no tick; several chosen
    (pick any) are the wash on each, and the cursor on one brightens it a step. */
-.ui-choice { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
+.ui-choice { min-height: var(--control-lg); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); cursor: pointer; }
 .ui-choice[data-highlighted] { background: var(--tint); color: var(--foreground); }
 .ui-choice[aria-selected="true"] { color: var(--foreground); }
 .ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] > .ui-row-title { font-weight: var(--weight-current); }
