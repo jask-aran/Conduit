@@ -92,11 +92,9 @@ once. Tick a family when every listed build goes through its single piece and th
 - The phone header is written once: a phone's root is [data-presentation="phone"] (layout.ts, and the gallery's
   phone frame), so the @media block keeps only what is a phone's own (safe areas, the lead group, phone-only
   controls).
-- Built from shared pieces, not copies of another (so nothing to fold into):  ConnectionChoice and ServerControl (ghost Buttons, their wash, ring
-  and pressed state are Button's), ChangeItem (a wrapper round a Row button and a sibling action), TourCard (an
-  Overlay with a head bar and a ruled foot), tabs (rider Tabs, PaneTabs, ToolViews: ticks, drag/close, disabled
-  views), trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's
-  editor column, CodeExcerpt's bare mount), search (the editor's has replace and toggles; FindBar has a count).
+- Different things, not copies (wave 4 merged the rest): PaneTabs (a pane's draggable, closable, renamable tabs),
+  trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's editor column,
+  CodeExcerpt's bare mount).
 
 ## Wave 4
 
