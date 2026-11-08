@@ -3,12 +3,9 @@
 /* Rider: frost on a composer's top edge (either composer). A row (a title, a
    body, actions) or a card (the question). Its parts below. */
 .ui-rider { --rider-gap: var(--space-lg); --rider-slot: var(--control-sm); }
-/* A rider rises out of the composer and drops back into it when it takes it; removed by hand, it fades in place. */
-.ui-rider[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
-.ui-rider[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A rider rises out of the composer and drops back into it when it takes it (frost.css); removed by hand, it fades in place. */
 /* A takeover card rises further, once the composer has gone. */
-.ui-rider[data-layout="card"] { --rise: var(--space-4xl); }
-.ui-rider[data-layout="card"][data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--duration-quick) backwards; }
+.ui-rider[data-layout="card"] { --rise: var(--space-4xl); --frost-enter-delay: var(--duration-quick); }
 .ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
 .ui-frost.ui-rider[data-layout="strip"] { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 0; }
@@ -35,8 +32,6 @@
 .ui-line-more:is(:focus-visible) { background: var(--tint); color: inherit; }
 @media (hover: hover) { .ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; } }
 .ui-line-more svg { width: var(--icon); height: var(--icon); }
-.ui-line-more svg { transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-line[data-expanded="true"] .ui-line-more svg { rotate: 180deg; }
 /* References: a file's lines, wrapping; each a quiet tinted capsule, its name strong and the rest muted, cut short. */
 .ui-references { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: var(--space-xs); }
 .ui-reference { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs) 0 var(--space-sm); font-size: var(--text-caption); }

@@ -10,3 +10,7 @@
    modifier on its own animated frame, never on a child below its fade. */
 .ui-frost:is([data-lift="raised"], .ui-frost-raised) { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 .ui-frost[data-core] { background: linear-gradient(var(--frost-fill), var(--frost-fill)), var(--frost-core-ground); }
+/* A raised piece the app shows and puts away (a card, a menu, an overlay, a rider) rises in and drops back,
+   one move for all; a piece that waits before rising (a takeover card, after the composer) sets --frost-enter-delay. */
+.ui-frost:where(.ui-card, .ui-menu, .ui-overlay, .ui-rider)[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) var(--frost-enter-delay, 0s) backwards; }
+.ui-frost:where(.ui-card, .ui-menu, .ui-overlay, .ui-rider)[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }

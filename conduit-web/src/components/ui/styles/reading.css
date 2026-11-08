@@ -11,8 +11,7 @@
 .ui-reading-part[data-sub] > .ui-swatch { display: none; }
 .ui-reading-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-reading-value { flex: none; color: var(--muted-foreground); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
-.ui-reading-chevron { width: var(--icon-xs); height: var(--icon-xs); flex: none; color: var(--muted-foreground); transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-reading-part[aria-expanded="true"] > .ui-reading-chevron { rotate: 90deg; }
+.ui-reading-chevron { width: var(--icon-xs); height: var(--icon-xs); flex: none; color: var(--muted-foreground); }
 .ui-reading-part[role="button"] { cursor: pointer; }
 .ui-reading-part[role="button"]:is(:focus-visible, :active) { background: var(--tint); outline: none; }
 @media (hover: hover) { .ui-reading-part[role="button"]:hover { background: var(--tint); } }

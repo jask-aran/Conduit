@@ -99,8 +99,7 @@
 .ui-group-heading > span { margin-left: var(--space-md); color: var(--muted-foreground); font-weight: var(--weight-rest); letter-spacing: 0; }
 .ui-group-toggle { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-inset); background: transparent;
   padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-2xs); color: inherit; font: inherit; }
-.ui-group-toggle > svg { width: var(--icon-sm); height: var(--icon-sm); transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-group-toggle[aria-expanded="true"] > svg { rotate: 90deg; }
+.ui-group-toggle > svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-group-toggle:is(:focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); }
 @media (hover: hover) { .ui-group-toggle:is(:hover, :focus-visible, [data-held]) { outline: none; background: var(--tint); color: var(--foreground); } }
 .ui-group-action { display: inline-flex; height: var(--control-xs); align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-control); background: transparent;

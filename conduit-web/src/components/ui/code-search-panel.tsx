@@ -5,7 +5,7 @@ import type { EditorView, Panel, ViewUpdate } from "@codemirror/view";
 import { CaseSensitiveIcon, ChevronUpIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
 import { createSignal, Show, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
-import { IconButton } from "./actions";
+import { CloseButton, IconButton } from "./actions";
 
 
 function nextQuery(query: SearchQuery, change: Partial<Pick<SearchQuery, "search" | "replace" | "caseSensitive" | "regexp" | "wholeWord">>) {
@@ -72,7 +72,7 @@ function WorkspaceSearchControls(props: {
         <IconButton kind="file" aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></IconButton>
         <IconButton kind="file" aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></IconButton>
       </Show>
-      <IconButton kind="file" aria-label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)}><Icons.Close /></IconButton>
+      <CloseButton kind="file" label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)} />
     </SearchActions>
   </SearchBar>;
 }

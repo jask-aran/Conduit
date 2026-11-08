@@ -1,9 +1,9 @@
 /* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: var(--measure-xs); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
-/* A popover rises in and drops back: data-entering/leaving where the app drives it, data-expanded/closed where Kobalte
-   does (it keeps a closing menu mounted until its animation ends). */
-.ui-menu:is([data-entering], [data-expanded]) { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
-.ui-menu:is([data-leaving], [data-closed]) { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A popover rises in and drops back (frost.css) where the app drives it; where Kobalte does, the same on data-expanded/closed
+   (it keeps a closing menu mounted until its animation ends). */
+.ui-menu[data-expanded] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
+.ui-menu[data-closed] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .ui-menu:is([data-entering], [data-expanded], [data-leaving], [data-closed]) { animation: none; } }
 /* Under a phone's submenu panel it dims where it stands, at once (a dim is a state, not a move), and takes no taps. */
 .ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
@@ -118,8 +118,6 @@
 
 /* Menu material and separators belong to the library, including previews. */
 .ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
-.ui-frost.ui-menu { padding: var(--frost-inset); border-radius: var(--radius-surface); }
-.ui-frost.ui-menu[data-lift="raised"] { box-shadow: var(--frost-lift-raised), var(--frost-highlight); }
 /* A long list scrolls in its own height, under the search that filters it. */
 .ui-section[data-scroll] { max-height: var(--measure-sm); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 /* A readout: a menu at its own measure, its lines caption type, tabular, the value at the end. */
@@ -133,9 +131,6 @@
 /* A long value (a tool list, an id) wraps at its end rather than pushing past the menu. */
 .ui-readout > span:last-child { min-width: 0; text-align: end; overflow-wrap: anywhere; }
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
-/* A row that opens in place turns its chevron down while open. */
-.ui-row:where([data-density="menu"]) > .ui-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-row:where([data-density="menu"])[aria-expanded="true"] > .ui-chevron { rotate: 90deg; }
 /* A chevron that is its own press: the glyph's box, the wash under the pointer. */
 button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
 button.ui-chevron > svg { width: 100%; height: 100%; }

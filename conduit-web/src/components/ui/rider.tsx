@@ -44,7 +44,7 @@ export function Line(props: { text: string; clipped?: boolean }) {
   let body!: HTMLParagraphElement;
   createEffect(() => { props.text; if (!open()) setMeasured(body.scrollHeight > body.clientHeight + 1); });
   return <li class="ui-line" data-expanded={open() ? "true" : "false"}><p ref={body} class="ui-line-body">{props.text}</p>
-    <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><Icons.ChevronDown /></button></Show></li>;
+    <Show when={props.clipped ?? measured()}><button type="button" class="ui-line-more" aria-label={open() ? "Show less" : "Show more"} aria-expanded={open()} onClick={() => setOpen(!open())}><Icons.ChevronDown class="ui-fold-chevron" data-turn="half" /></button></Show></li>;
 }
 /** An attached thing: an image's thumbnail, or a file's mark, name and size. image: its source, or the app's own image
  *  (one that loads itself); icon: a file's mark. status: queued or uploading rings its progress (0-100); error outlines

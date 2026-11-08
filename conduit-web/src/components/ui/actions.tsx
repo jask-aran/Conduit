@@ -3,6 +3,7 @@ import { splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { feel, type HapticProp } from "./haptics";
 import { callHandler } from "./shared";
+import { Button } from "./controls";
 
 /**
  * IconButton: an action drawn as its icon alone, its label its name and its tooltip. The kind is where it sits, which
@@ -60,4 +61,18 @@ export function Actions(props: JSX.HTMLAttributes<HTMLElement> & { kind?: Action
   const kind = () => local.kind ?? "card";
   return <Dynamic component={ELEMENT[kind()] ?? "div"} role={ROLE[kind()] as JSX.HTMLAttributes<HTMLElement>["role"]} aria-label={kind() === "browser" ? "Folder actions" : undefined}
     {...(rest as Record<string, unknown>)} class="ui-actions" data-actions={kind()} data-stack={local.stack ? "" : undefined} />;
+}
+
+/**
+ * CloseButton: the one × that puts a piece away (Close, Dismiss, Remove). Where it sits sets its size, as any button's:
+ * a kind, an IconButton's (pane: a panel's or pane's head; tool: a bar's; file: a file header's); else size, a quiet
+ * Button's (sm: a card's or an overlay's head; xs: a toast's, a chip's). Felt as dismiss.
+ */
+export function CloseButton(props: { onClick: (event: MouseEvent) => void; label?: string; title?: string; kind?: IconButtonKind; size?: "sm" | "xs";
+  class?: string; disabled?: boolean; tabIndex?: number; onMouseDown?: (event: MouseEvent) => void }) {
+  const label = () => props.label ?? "Close";
+  if (props.kind) return <IconButton kind={props.kind} close label={label()} title={props.title ?? label()} class={props.class} disabled={props.disabled}
+    tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}><Icons.Close /></IconButton>;
+  return <Button variant="ghost" size={props.size === "xs" ? "icon-xs" : "icon-sm"} haptic="dismiss" class={props.class} aria-label={label()} title={props.title ?? label()}
+    disabled={props.disabled} tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}><Icons.Close /></Button>;
 }

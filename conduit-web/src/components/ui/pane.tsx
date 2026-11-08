@@ -120,7 +120,7 @@ export function ToolNotice(props: { tone?: "warn"; live?: boolean; action?: { la
 export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
   const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);
   return <button type="button" {...rest} class="ui-tree-row" data-selected={local.selected ? "" : undefined} style={{ "--depth": local.depth ?? 0 }}>
-    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><Icons.ChevronRight class="ui-tree-chevron" data-open={local.open ? "" : undefined} /></Show>
+    <Show when={local.folder} fallback={<span class="ui-tree-chevron" />}><Icons.ChevronRight class="ui-tree-chevron ui-fold-chevron" data-open={local.open ? "" : undefined} /></Show>
     {local.icon}<span class="ui-tree-name">{local.name}</span>{local.end}
   </button>;
 }

@@ -11,8 +11,8 @@
 
 /* Tray: a phone's, risen from the foot over its container, a scrim over the rest. */
 .ui-tray { position: absolute; inset: 0; z-index: var(--stack-over); pointer-events: none; }
-/* The scrim is the dim every overlay lays over what is behind (--dim). */
-.ui-tray-scrim { position: absolute; inset: 0; background: var(--dim); opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
+/* The scrim is the dim every overlay lays over what is behind (overlay.css). */
+.ui-tray-scrim { position: absolute; inset: 0; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-tray[data-open] .ui-tray-scrim { opacity: 1; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
 /* Its reach: the most of its container it covers, the rest left showing (dimmed) above it. */
 .ui-tray-panel { --tray-reach: 85%; position: absolute; inset: auto 0 0; display: flex; height: min(var(--tray-reach), var(--measure-2xl)); flex-direction: column; gap: var(--space-md);

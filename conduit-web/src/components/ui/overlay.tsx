@@ -5,8 +5,9 @@ import { haptic } from "./haptics";
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
-import { cssTime, type Density, type Motion, motionOf, moveCursor } from "./shared";
-import { Actions } from "./actions";
+import { type Density, type Motion, motionOf, moveCursor } from "./shared";
+import { Actions, CloseButton } from "./actions";
+import { duration, easing, reducedMotion } from "./motion";
 import { DropdownMenu, MenuContent, MenuRow, MenuSection } from "./menus";
 
 /*
@@ -49,12 +50,11 @@ function createWidthSettle(frame: () => HTMLElement | undefined, width: () => un
     page?.style.removeProperty("--overlay-page-width");
     const to = element.getBoundingClientRect().width;
     settled = to;
-    if (!from || Math.abs(from - to) < 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const style = getComputedStyle(element);
+    if (!from || Math.abs(from - to) < 1 || reducedMotion()) return;
     if (page) page.style.setProperty("--overlay-page-width", `${page.getBoundingClientRect().width}px`);
     element.dataset.settling = "";
     running = element.animate([{ width: `${from}px` }, { width: `${to}px` }], {
-      duration: cssTime(element, "--duration-fold", 240), easing: style.getPropertyValue("--ease-settle").trim() || "ease-out" });
+      duration: duration("--duration-fold", element), easing: easing("--ease-settle", element) });
     const done = running;
     const finish = () => { if (running !== done) return; running = undefined; delete element.dataset.settling; page?.style.removeProperty("--overlay-page-width"); };
     done.onfinish = finish; done.oncancel = finish;
@@ -86,7 +86,7 @@ export function OverlayBar(props: { lead?: JSX.Element; chips?: JSX.Element; pla
     {props.chips}
     <input {...props.field} class="ui-overlay-input" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
     {props.end}
-    <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label={props.closeLabel ?? "Close"} title="Close" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onClose?.()}><Icons.Close /></Button></Show>
+    <Show when={props.onClose}><CloseButton label={props.closeLabel} title="Close" onMouseDown={(event) => event.preventDefault()} onClick={() => props.onClose?.()} /></Show>
   </div>;
 }
 
@@ -125,12 +125,17 @@ export const OverlayActions = (props: { actions: OverlayAction[] }) => <Actions 
   <For each={props.actions}>{(action) => <Button variant={action.destructive ? "destructive" : "ghost"} outline disabled={action.disabled} onClick={() => action.onClick()}>{action.label}</Button>}</For>
 </Actions>;
 
+/** The head of a rail or a page: a lead (the way back), the title, what follows it (the save status), and close. */
+function OverlayPageHead(props: { title: string; focusable?: boolean; lead?: JSX.Element; detail?: JSX.Element; onClose?: () => void }) {
+  return <div class="ui-overlay-page-head">{props.lead}<h2 class="ui-overlay-title" tabIndex={props.focusable ? -1 : undefined}>{props.title}</h2>{props.detail}
+    <Show when={props.onClose}><CloseButton onClick={() => props.onClose?.()} /></Show></div>;
+}
+
 /** A rail of sections down the side: a title, NavGroups, and a foot. onClose: when it is a screen of its own (a phone's), its close.
  *  The rest goes on the nav: a behaviour's roles and keys (Settings' tablist). */
 export function OverlayRail(props: JSX.HTMLAttributes<HTMLElement> & { title: string; foot?: JSX.Element; onClose?: () => void }) {
   const [local, rest] = splitProps(props, ["title", "foot", "onClose", "children"]);
-  return <nav {...rest} class="ui-overlay-rail"><div class="ui-overlay-page-head"><h2 class="ui-overlay-title">{local.title}</h2>
-    <Show when={local.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => local.onClose?.()}><Icons.Close /></Button></Show></div>{local.children}
+  return <nav {...rest} class="ui-overlay-rail"><OverlayPageHead title={local.title} onClose={local.onClose} />{local.children}
     <Show when={local.foot}><div class="ui-overlay-rail-foot">{local.foot}</div></Show></nav>;
 }
 
@@ -152,7 +157,7 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
     const busy = Boolean(props.busy);
     if (busy) { clearTimeout(timer); if (held() === null) since = performance.now(); setHeld(props.status ?? "Saving"); return; }
     if (held() === null) return;
-    const turn = cssTime(document.documentElement, "--duration-spin", 800);
+    const turn = duration("--duration-spin");
     const left = props.failed ? 0 : turn - (performance.now() - since);
     clearTimeout(timer);
     if (left <= 0) setHeld(null); else timer = setTimeout(() => setHeld(null), left);
@@ -161,10 +166,10 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
   const busy = () => Boolean(props.busy) || held() !== null;
   const status = () => held() ?? props.status;
   return <main class="ui-overlay-page">
-    <div class="ui-overlay-page-head"><Show when={props.onBack}><Button variant="ghost" size="icon-sm" haptic="dismiss" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show><h2 class="ui-overlay-title" tabIndex={-1}>{props.title}</h2>
-      <Show when={status()}><span class="ui-overlay-status" role="status" data-failed={props.failed && held() === null ? "" : undefined} title={props.why}><Show when={busy()}><Spinner /></Show>{status()}
-        <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>
-      <Show when={props.onClose}><Button variant="ghost" size="icon-sm" aria-label="Close" onClick={() => props.onClose?.()}><Icons.Close /></Button></Show></div>
+    <OverlayPageHead title={props.title} focusable onClose={props.onClose}
+      lead={<Show when={props.onBack}><Button variant="ghost" size="icon-sm" haptic="dismiss" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show>}
+      detail={<Show when={status()}><span class="ui-overlay-status" role="status" data-failed={props.failed && held() === null ? "" : undefined} title={props.why}><Show when={busy()}><Spinner /></Show>{status()}
+        <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>} />
     {props.children}
   </main>;
 }

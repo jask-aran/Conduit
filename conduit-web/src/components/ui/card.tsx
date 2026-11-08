@@ -5,14 +5,14 @@ import { createSignal, Show, type JSX } from "solid-js";
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";
 import { type Density, type Motion, motionOf } from "./shared";
-import { Actions } from "./actions";
+import { Actions, CloseButton } from "./actions";
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel. */
 export function Card(props: { title: JSX.Element; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
   return <Frost lift="raised" role={props.embedded ? undefined : "dialog"} aria-label={!props.embedded && typeof props.title === "string" ? props.title : undefined} class={cn("ui-card", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
     <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
-    <Show when={props.close}><Button variant="ghost" size="icon-sm" class="ui-card-close" aria-label={props.closeLabel ?? "Close"} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()}><Icons.Close /></Button></Show>
+    <Show when={props.close}><CloseButton class="ui-card-close" label={props.closeLabel} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()} /></Show>
     {props.children}
     <Show when={props.actions}><Actions>{props.actions}</Actions></Show>
   </Frost>;

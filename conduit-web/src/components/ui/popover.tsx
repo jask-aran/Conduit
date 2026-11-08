@@ -85,8 +85,8 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
     <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
-    <Show when={props.opens}><Show when={props.onOpens} fallback={<Icons.ChevronRight class="ui-chevron" />}>
-      <button type="button" class="ui-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><Icons.ChevronRight /></button>
+    <Show when={props.opens}><Show when={props.onOpens} fallback={<Icons.ChevronRight class="ui-chevron ui-fold-chevron" />}>
+      <button type="button" class="ui-chevron ui-fold-chevron" tabIndex={-1} aria-label={props.opensLabel} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { event.stopPropagation(); props.onOpens?.(); }}><Icons.ChevronRight /></button>
     </Show></Show>
     <Show when={props.away && !props.opens}><Icons.ExternalLink class="ui-chevron" data-away="" aria-hidden="true" /></Show>
     <Show when={props.end}><span class="ui-row-end" data-reveal={props.reveal ? "" : undefined}>{props.end}</span></Show>

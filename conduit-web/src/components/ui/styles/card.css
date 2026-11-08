@@ -15,9 +15,6 @@
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
 .ui-card > pre { overflow: hidden; text-overflow: ellipsis; }
 .ui-card { position: relative; }
-/* A card rises in and drops back. */
-.ui-card[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
-.ui-card[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-card[data-size="wide"] { width: min(100%, var(--measure-2xl)); }
 /* The × sits in the corner, its box the edge's half in; the title keeps clear of it. */
 .ui-card-close { position: absolute; top: calc(var(--card-edge) / 2); right: calc(var(--card-edge) / 2); }

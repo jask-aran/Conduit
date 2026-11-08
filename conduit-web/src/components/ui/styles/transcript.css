@@ -200,19 +200,15 @@
 .ui-answer-math-in { animation: ui-fade-in var(--answer-word-fade, var(--duration-gentle)) ease-out backwards; }
 .ui-answer th { font-weight: var(--weight-strong); }
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
-   unfolding is the caller's (the app's Disclosure animates it); this is its shape. */
+   body unfolds as an Expand; this is its shape. */
 .ui-disclosure { display: grid; min-width: 0; gap: var(--space-2xs); }
 .ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
 .ui-disclosure-header:not(:disabled) { cursor: pointer; }
-.ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; transition: rotate var(--duration-quick) var(--ease-change); }
-[aria-expanded="true"] > .ui-disclosure-chevron { rotate: 180deg; }
+.ui-disclosure-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-left: auto; }
 :is(.ui-disclosure-header, .ui-trace):is(:focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
 @media (hover: hover) { :is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); } }
-@media (prefers-reduced-motion: reduce) { .ui-disclosure-chevron { transition: none; } }
-/* Its body unfolds in height (gentle) and folds away quickly: it stays drawn, at no height when closed. */
-.ui-disclosure-body { min-width: 0; height: auto; overflow: clip; interpolate-size: allow-keywords; --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
-  transition: height var(--move) var(--move-ease), opacity var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
-.ui-disclosure[data-open="false"] > .ui-disclosure-body { height: 0; opacity: 0; visibility: hidden; --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
+/* Its body is an Expand: in the document only while open, sliding in and out under the header. */
+.ui-disclosure-body { min-width: 0; }
 .ui-disclosure[data-open="false"] { gap: 0; }
 
 /* Welcome: an empty chat's greeting, centred in its host above the room kept for the composer. */

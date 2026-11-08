@@ -29,7 +29,7 @@ export function HistoryRow(props: HistoryRowProps) {
     <Show when={local.connected}><span class="ui-history-tick" aria-hidden="true" /></Show>
     <Show when={local.time}><time class="ui-history-time" datetime={local.datetime}>{local.time}</time></Show>
     <span class="ui-history-text">
-      <Show when={props.run}><Icons.ChevronDown class="ui-history-chevron" data-open={props.run && props.open ? "" : undefined} aria-hidden="true" /></Show>
+      <Show when={props.run}><Icons.ChevronDown class="ui-history-chevron ui-fold-chevron" data-turn="half" data-open={props.run && props.open ? "" : undefined} aria-hidden="true" /></Show>
       {local.children}
     </span>
   </>;

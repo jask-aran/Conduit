@@ -1,6 +1,7 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
-import { createContext, onCleanup, onMount, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
+import { createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
+import { createFolds } from "./fit";
 import { PaneMark } from "./row";
 import { Button } from "./controls";
 
@@ -18,6 +19,8 @@ import { Button } from "./controls";
 export type PaneHeaderKind = "pane" | "tool" | "file" | "term";
 /** What a terminal's header folds when it is too narrow, first to last: the shortcuts into the ⋯, then the actions' labels. */
 const TERM_FOLDS = ["shortcuts", "labels"] as const;
+/** What a tool's header gives up as it narrows (data-compact), first to last. */
+const TOOL_FOLDS = ["labels", "name"] as const;
 
 /**
  * PaneHeader: a pane's top line (DESIGN The top line, Pane header), the kind its family's (under
@@ -57,22 +60,9 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
     const [local, rest] = splitProps(props, ["kind", "name", "nameTitle", "place", "placeTitle", "modes", "views", "actions", "children", "class", "lead", "pill", "after", "frost", "fit"]);
     // The header holds the view's name and its modes. When they stop fitting,
     // the modes drop their labels, then the name goes: measured, not a width.
-    const fitHeader = (element: HTMLElement) => {
-      if (!untrack(() => local.fit)) return;
-      const fit = () => {
-        element.removeAttribute("data-compact");
-        if (element.scrollWidth <= element.clientWidth) return;
-        element.setAttribute("data-compact", "labels");
-        if (element.scrollWidth > element.clientWidth) element.setAttribute("data-compact", "name");
-      };
-      // Its width changing, or what it holds: another view's name and modes.
-      const resized = new ResizeObserver(fit);
-      const changed = new MutationObserver(fit);
-      resized.observe(element);
-      changed.observe(element, { childList: true, subtree: true, characterData: true });
-      onCleanup(() => { resized.disconnect(); changed.disconnect(); });
-    };
-    return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool" data-frost={local.frost ? "" : undefined}>
+    const folds = createFolds(2, { content: true });
+    const fitHeader = (element: HTMLElement) => { if (untrack(() => local.fit)) folds.ref(element); };
+    return <header ref={fitHeader} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="tool" data-compact={TOOL_FOLDS[folds.count() - 1]} data-frost={local.frost ? "" : undefined}>
       {mark()}
       <strong title={local.nameTitle}>{local.name}</strong>
       <Show when={local.place}><span class="ui-tool-place" title={local.placeTitle}>{local.place}</span></Show>
@@ -83,30 +73,13 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   }
   if (kind === "term") {
     const [local, rest] = splitProps(props, ["kind", "children", "actions", "class", "ref"]);
-    let header!: HTMLElement;
-    onMount(() => {
-      let folds = 0;
-      const needs: number[] = [];
-      const set = (count: number) => { folds = count; if (count) header.dataset.folded = TERM_FOLDS.slice(0, count).join(" "); else delete header.dataset.folded; };
-      const over = () => {
-        // The identity's title and context truncate rather than overflow: what they cut is what is missing.
-        const parts = [...header.querySelectorAll<HTMLElement>(".ui-term-identity > *")];
-        return Math.max(header.scrollWidth - header.clientWidth, parts.reduce((cut, part) => cut + Math.max(0, part.scrollWidth - part.clientWidth), 0));
-      };
-      const fit = (fresh = false) => {
-        if (!header.clientWidth) return;
-        if (fresh) set(0);
-        while (folds && header.clientWidth >= needs[folds - 1]!) set(folds - 1);
-        for (let cut = over(); cut > 0.5 && folds < TERM_FOLDS.length; cut = over()) { needs[folds] = header.clientWidth + cut; set(folds + 1); }
-      };
-      const resize = new ResizeObserver(() => fit());
-      const content = new MutationObserver(() => fit(true));
-      resize.observe(header);
-      content.observe(header, { childList: true, subtree: true, characterData: true });
-      fit(true);
-      onCleanup(() => { resize.disconnect(); content.disconnect(); });
-    });
-    return <header ref={header} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term" data-tauri-drag-region={dragRegion()}>{mark()}{local.children}{local.actions}</header>;
+    // The identity's title and context truncate rather than overflow: what they cut is what is missing.
+    const folds = createFolds(TERM_FOLDS.length, { content: true, over: (header) => {
+      const parts = [...header.querySelectorAll<HTMLElement>(".ui-term-identity > *")];
+      return Math.max(header.scrollWidth - header.clientWidth, parts.reduce((cut, part) => cut + Math.max(0, part.scrollWidth - part.clientWidth), 0));
+    } });
+    return <header ref={folds.ref} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term"
+      data-folded={TERM_FOLDS.slice(0, folds.count()).join(" ") || undefined} data-tauri-drag-region={dragRegion()}>{mark()}{local.children}{local.actions}</header>;
   }
   const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views"]);
   return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
@@ -151,13 +124,13 @@ export interface HeaderPillCount { value: number; label: string; open?: boolean;
 export function HeaderPill(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon?: JSX.Element; opens?: boolean; count?: HeaderPillCount }) {
   const [local, rest] = splitProps(props, ["label", "icon", "opens", "count"]);
   const inner = () => <><Show when={local.icon}><span class="ui-header-pill-icon" aria-hidden="true">{local.icon}</span></Show><strong>{local.label}</strong></>;
-  const pill = () => <Show when={local.opens} fallback={<div class="ui-header-pill" data-surface="frost">{inner()}</div>}>
-    <button type="button" tabIndex={-1} {...rest} class="ui-header-pill" data-surface="frost">{inner()}</button>
+  const pill = () => <Show when={local.opens} fallback={<Frost class="ui-header-pill">{inner()}</Frost>}>
+    <Frost as="button" type="button" tabIndex={-1} {...rest} class="ui-header-pill">{inner()}</Frost>
   </Show>;
   return <Show when={local.count} fallback={pill()}>{(count) => <span class="ui-header-pills">
     {pill()}
-    <button type="button" tabIndex={-1} class="ui-header-count" data-surface="frost" aria-label={count().label} title={count().label}
-      aria-expanded={count().open} onClick={() => count().onClick()}>{count().value}</button>
+    <Frost as="button" type="button" tabIndex={-1} class="ui-header-count" aria-label={count().label} title={count().label}
+      aria-expanded={count().open} onClick={() => count().onClick()}>{count().value}</Frost>
   </span>}</Show>;
 }
 

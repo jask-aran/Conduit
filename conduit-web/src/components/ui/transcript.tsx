@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Spinner } from "./controls";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Later } from "./later";
+import { Expand } from "./expand";
 import { clockTime, fullTime } from "./time";
 import { createTailWindow } from "./tail-window";
 import { useChatDrawing } from "./chat-drawing";
@@ -102,29 +103,33 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
   const [fits, setFits] = createSignal(true);
   const folded = () => Boolean(props.fold) && !open();
   const measure = () => { if (folded()) setFits(text.scrollHeight - text.clientHeight <= 1); };
-  onMount(() => {
+  // Watched while it is drawn: a shut envelope's text is in the document only once opened (Expand).
+  const watch = (element: HTMLDivElement) => {
+    text = element;
     if (!props.fold) return;
-    const resized = new ResizeObserver(measure);
-    resized.observe(text);
-    if (text.firstElementChild) resized.observe(text.firstElementChild);
-    onCleanup(() => resized.disconnect());
-  });
+    onMount(() => {
+      const resized = new ResizeObserver(measure);
+      resized.observe(element);
+      if (element.firstElementChild) resized.observe(element.firstElementChild);
+      onCleanup(() => resized.disconnect());
+    });
+  };
   const who = () => <>{props.icon}<b>{props.from}</b><Show when={props.meta}><span class="ui-envelope-meta">{props.meta}</span></Show></>;
   return <section class="ui-envelope ui-disclosure" data-direction={props.direction} data-open={shown() ? "true" : "false"}>
     <header class="ui-envelope-head">
       <Show when={props.shut} fallback={who()}>
-        <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
+        <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></button>
       </Show>
       <Show when={props.onBack}><button type="button" class="ui-envelope-open ui-envelope-back" onClick={() => props.onBack?.()}>{props.backLabel ?? "Back"}<Icons.ArrowUp aria-hidden="true" /></button></Show>
       <Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
       <Show when={props.onOpen}><button type="button" class="ui-envelope-open" onClick={() => props.onOpen?.()}>{props.openLabel ?? "Open"}<Icons.ChevronRight aria-hidden="true" /></button></Show>
     </header>
-    <div class="ui-disclosure-body"><div class="ui-envelope-rule">
+    <Expand open={shown()} class="ui-disclosure-body"><div class="ui-envelope-rule">
       <Show when={props.noted}><ConduitAdded before text={props.noted!} /></Show>
-      <div ref={text} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
+      <div ref={watch} class="ui-envelope-text" data-folded={folded() ? "" : undefined} data-fits={fits() ? "" : undefined} style={props.fold ? { "--envelope-fold": props.fold } : undefined}>{props.children}</div>
       <Show when={props.fold && !fits()}><button type="button" class="ui-envelope-more" aria-expanded={open()} onClick={() => setOpen(!open())}>{open() ? "Show less" : "Show all"}</button></Show>
       <Show when={props.appended}><ConduitAdded text={props.appended!} /></Show>
-    </div></div>
+    </div></Expand>
   </section>;
 }
 /** A prompt the person did not write, as the agent was given it (Envelope): a run's report under its routine's mark and
@@ -137,8 +142,8 @@ export const Changes = (props: { added: number; removed: number; title?: string;
   <button type="button" class="ui-changes" title={props.title} aria-label={props.label} onClick={() => props.onOpen?.()}><span data-change="added">+{props.added}</span><span data-change="removed">−{props.removed}</span></button>;
 /**
  * A fold's body (Trace, Step). Given opens -- that it has something to open to, known without drawing it --
- * the body is drawn the first time it opens and kept from then on, so it folds closed with its motion and a long
- * trail costs nothing until it is read. Without, the children are drawn to learn whether there is anything to open.
+ * the body is drawn the first time it opens and kept from then on (Expand puts it in and takes it out of the
+ * document), so a long trail costs nothing until it is read. Without, the children are drawn to learn whether there is anything to open.
  */
 /*
  * Find reaches what a closed fold has not drawn (client/chat/transcript-find.ts). A fold given `find` (Trace, Step) is

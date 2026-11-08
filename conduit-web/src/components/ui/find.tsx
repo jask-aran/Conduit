@@ -2,7 +2,7 @@ import * as Icons from "./icons";
 import { Show } from "solid-js";
 import { Frost } from "./frost";
 import { LeadInput } from "./controls";
-import { IconButton } from "./actions";
+import { CloseButton, IconButton } from "./actions";
 
 /**
  * FindBar: a pane's find, floating over the top of what it searches (a chat's transcript, under its header): a search
@@ -36,6 +36,6 @@ export function FindBar(props: {
     <Show when={props.count}><span class="ui-find-count" aria-live="polite">{props.count}</span></Show>
     <IconButton kind="tool" label="Previous match (Shift+Enter)" onMouseDown={keep} onClick={() => props.onPrevious()}><Icons.ArrowUp /></IconButton>
     <IconButton kind="tool" label="Next match (Enter)" onMouseDown={keep} onClick={() => props.onNext()}><Icons.ArrowDown /></IconButton>
-    <IconButton kind="tool" label="Close find (Escape)" onClick={() => props.onClose()}><Icons.Close /></IconButton>
+    <CloseButton kind="tool" label="Close find (Escape)" onClick={() => props.onClose()} />
   </Frost>;
 }

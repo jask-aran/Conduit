@@ -164,8 +164,7 @@
 .ui-tree-row[data-open-file="focused"] { font-weight: var(--weight-current); }
 .ui-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tree-name + svg { width: var(--icon-xs); height: var(--icon-xs); margin-left: auto; color: var(--muted-foreground); }
-.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); transition: transform var(--duration-quick) var(--ease-change); }
-.ui-tree-chevron[data-open] { transform: rotate(90deg); }
+.ui-tree-row > .ui-tree-chevron { width: var(--icon-sm); height: var(--icon-sm); flex: none; margin-right: calc(-1 * var(--space-xs)); }
 .ui-tool-bar[data-vertical] > [role="toolbar"] { display: flex; flex-direction: column; align-items: center; gap: var(--space-2xs); margin-top: auto; }
 .ui-tool-bar > small { min-width: 0; flex: 1; overflow: hidden; padding-inline: var(--space-xs); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 /* An empty tool with a mark, a title and a line under it. */

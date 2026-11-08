@@ -58,8 +58,7 @@
 .ui-row:where([data-density="nav"])[data-quiet] { font-size: var(--text-caption); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); }
 .ui-nav-link { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--row-gap); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-align: left; }
 .ui-nav-toggle { display: grid; width: var(--control-xs); height: var(--control-xs); flex: none; margin-right: calc((var(--icon) - var(--control-xs)) / 2); place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
-.ui-nav-toggle svg { width: var(--icon); height: var(--icon); transition: rotate var(--duration-quick) var(--ease-change); }
-.ui-nav-toggle[aria-expanded="true"] svg { rotate: 90deg; }
+.ui-nav-toggle svg { width: var(--icon); height: var(--icon); }
 @media (hover: hover) { .ui-nav-toggle:hover { color: var(--foreground); } }
 
 /* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */

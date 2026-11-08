@@ -3,6 +3,7 @@ import * as Icons from "./icons";
 import { Show, type JSX } from "solid-js";
 import { CircleCheckIcon, CircleXIcon, InfoIcon } from "lucide-solid";
 import { Button } from "./controls";
+import { CloseButton } from "./actions";
 import { type Density, type Motion, motionOf } from "./shared";
 
 /*
@@ -18,7 +19,7 @@ export function Toast(props: { kind?: ToastKind; children: JSX.Element; action?:
     <span class="ui-toast-icon">{TOAST_ICONS[kind()]()}</span>
     <div class="ui-toast-copy"><p class="ui-toast-text">{props.children}</p><Show when={props.description}><p class="ui-toast-description">{props.description}</p></Show></div>
     <Show when={props.action}>{(action) => <Button variant="ghost" outline size="sm" onClick={(event) => action().onClick?.(event)}>{action().label}</Button>}</Show>
-    <Button variant="ghost" size="icon-xs" class="ui-toast-close" aria-label="Dismiss" onClick={() => props.onDismiss?.()}><Icons.Close /></Button>
+    <CloseButton size="xs" class="ui-toast-close" label="Dismiss" onClick={() => props.onDismiss?.()} />
   </Frost>;
 }
 /** Where toasts gather: newest nearest the edge, the rest stacked away from it. */

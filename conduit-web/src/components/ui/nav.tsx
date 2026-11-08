@@ -55,7 +55,7 @@ export function NavFolderRow(props: JSX.HTMLAttributes<HTMLDivElement> & { icon:
   const [local, rest] = splitProps(props, ["icon", "mark", "meta", "open", "current", "within", "link", "toggle", "children", "class"]);
   return <Row density="nav" bare {...(rest as unknown as RowProps)} class="ui-nav-folder" data-folder-open={local.open ? "" : undefined} open={local.open} current={local.current} within={local.within}>
     <button type="button" {...local.link} class="ui-nav-link"><span class="ui-row-lead">{local.icon}</span>{local.mark}<span class="ui-row-title">{local.children}</span><Show when={local.meta}><small class="ui-row-meta">{local.meta}</small></Show></button>
-    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight /></button>
+    <button type="button" tabIndex={-1} aria-expanded={local.open} {...local.toggle} class="ui-nav-toggle"><Icons.ChevronRight class="ui-fold-chevron" /></button>
   </Row>;
 }
 

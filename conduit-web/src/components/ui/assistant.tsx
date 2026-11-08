@@ -49,7 +49,7 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
         <span class="ui-room-count">{props.count} {props.count === 1 ? "message" : "messages"}</span>
         <Show when={props.last}><span class="ui-room-last">{props.last}</span></Show></span>
       <Show when={props.time}><time class="ui-room-time">{props.time}</time></Show>
-      <Icons.ChevronDown class="ui-room-fold" aria-hidden="true" />
+      <Icons.ChevronDown class="ui-room-fold ui-fold-chevron" data-turn="half" aria-hidden="true" />
     </button>
     <Expand open={open()}><div class="ui-room-body">{props.children}</div></Expand>
   </div>;

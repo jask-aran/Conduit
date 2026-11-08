@@ -19,9 +19,11 @@ function serve(dir) {
     server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`));
   });
 }
-const [a, b] = process.argv.slice(2).filter((value, index, all) => !value.startsWith("--") && !all[index - 1]?.startsWith("--ignore"));
+const [a, b] = process.argv.slice(2).filter((value, index, all) => !value.startsWith("--") && !["--ignore", "--only", "--show"].includes(all[index - 1]));
 if (!a || !b) { console.error("usage: gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]"); process.exit(2); }
 const IGNORE = (arg("--ignore", "") ?? "").split(",").filter(Boolean);
+// --only Frost,Card: just those families (desktop only, and no previews, with --desktop).
+const ONLY = (arg("--only", "") ?? "").split(",").filter(Boolean);
 const { chromium } = await loadPlaywright();
 const browser = await launchHeadless(chromium);
 const origins = [await serve(a), await serve(b)];
@@ -55,7 +57,7 @@ function compare(label, x, y) {
     if (!(k in x) || !(k in y)) { diffs++; if (shown.length < 6) shown.push(`  ${k in x ? "only in A" : "only in B"}: ${k.slice(-140)}`); continue; }
     if (x[k] === y[k]) continue;
     const xa = x[k].split("\n"), ya = new Map(y[k].split("\n").map((l) => [l.slice(0, l.indexOf(":")), l]));
-    for (const l of xa) { const p = l.slice(0, l.indexOf(":")); if (ya.get(p) !== l) { diffs++; props[p] = (props[p] ?? 0) + 1; if (flag("--keys")) shown.push(`KEY ${k}`); else if (shown.length < 12) shown.push(`  ${k.slice(-110)}\n    A ${l.slice(0, 160)}\n    B ${(ya.get(p) ?? "(none)").slice(0, 160)}`); } }
+    for (const l of xa) { const p = l.slice(0, l.indexOf(":")); if (ya.get(p) !== l) { diffs++; props[p] = (props[p] ?? 0) + 1; if (flag("--keys")) shown.push(`KEY ${k}`); else if (shown.length < Number(arg("--show", "12"))) shown.push(`  ${k.slice(-110)}\n    A ${l.slice(0, 160)}\n    B ${(ya.get(p) ?? "(none)").slice(0, 160)}`); } }
   }
   console.log(`${diffs ? "DIFF" : "same"} ${label}: ${keys.size} elements${diffs ? `, ${diffs} differences` : ""}`);
   if (diffs) console.log("  props:", JSON.stringify(props)); for (const s of shown) console.log(s);
@@ -64,7 +66,7 @@ function compare(label, x, y) {
 
 const families = await (async () => { const p = await page(origins[0], () => {}); const t = await p.$$eval(".g-rail .ui-row[data-density=nav]", (rows) => rows.map((r) => r.textContent.trim())); await p.context().close(); return t; })();
 let total = 0;
-for (const family of families) for (const density of ["desktop", "phone"]) {
+for (const family of families.filter((name) => !ONLY.length || ONLY.includes(name))) for (const density of flag("--desktop") ? ["desktop"] : ["desktop", "phone"]) {
   const setup = new Function(`localStorage.setItem("gallery:family", ${JSON.stringify(family)}); localStorage.setItem("gallery:stage-density", ${JSON.stringify(density)}); localStorage.setItem("gallery:speed", "1");`);
   const pages = await Promise.all(origins.map((o) => page(o, setup)));
   if (density === "phone") for (const p of pages) { for (const btn of await p.$$('.g-cell-toggle button:text-is("Phone")')) await btn.click(); await p.waitForTimeout(800); }

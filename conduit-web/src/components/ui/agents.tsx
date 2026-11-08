@@ -73,7 +73,7 @@ function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb:
         <span class="ui-agent-head"><span class="ui-agent-verb">{props.verb}</span><Show when={props.ids.length}><code class="ui-agent-id">{props.ids.join(", ")}</code></Show><Show when={props.count}><span class="ui-agent-title">{props.count}</span></Show><Show when={props.title}><span class="ui-agent-title">{props.title}</span></Show>
           <Show when={props.where}><span class="ui-agent-where">{props.where}</span></Show></span>
         <Show when={props.status}><span class={props.kind === "run" ? "ui-agent-run-status ui-agent-status" : "ui-agent-line ui-agent-status"}>{props.status}</span></Show>
-        <Show when={body()}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold" /></Show>
+        <Show when={body()}><Icons.ChevronDown class="ui-agent-chevron ui-agent-fold ui-fold-chevron" data-turn="half" /></Show>
       </button>
       <Show when={props.jump}>{(jump) => <Button variant="ghost" size="sm" class="ui-agent-report" onClick={() => jump().onClick()}>{jump().label}<Show when={jump().up} fallback={<Icons.ArrowDown />}><Icons.ArrowUp /></Show></Button>}</Show>
     </div>

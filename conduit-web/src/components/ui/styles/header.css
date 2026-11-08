@@ -67,7 +67,9 @@ button.ui-header-place { cursor: pointer; }
   .ui-pane-header:where([data-header="pane"]) [data-only="desktop"] { display: none; }
   /* The groups are pills (Pill): frost capsules whose buttons are capsules narrower than tall, concentric with them. */
   .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
-  .ui-header-group, .ui-header-pill, .ui-header-count { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
+  /* The name pill and its count are Frost; the groups are frost on a phone alone, so they draw its recipe here. */
+  .ui-header-pill, .ui-header-count { border-radius: var(--radius-round); }
+  .ui-header-group { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
     background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
   .ui-header-group[data-lead]:not(:empty) { display: flex; }
   .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
@@ -91,7 +93,8 @@ button.ui-header-place { cursor: pointer; }
 [data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
 [data-presentation="phone"] button.ui-header-pill:is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
 [data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
-[data-presentation="phone"] :is(.ui-header-group:not([data-lead]), .ui-header-pill) { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
+[data-presentation="phone"] .ui-header-pill { border-radius: var(--radius-round); }
+[data-presentation="phone"] .ui-header-group:not([data-lead]) { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
   background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
 [data-presentation="phone"] .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
 [data-presentation="phone"] .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }

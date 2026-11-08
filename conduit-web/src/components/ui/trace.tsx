@@ -2,6 +2,7 @@ import * as Icons from "./icons";
 import { For, Show, splitProps, type JSX } from "solid-js";
 
 import { Button, Spinner } from "./controls";
+import { Expand } from "./expand";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Failure, foldBody, registerFoldFind } from "./transcript";
 
@@ -15,7 +16,7 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
   return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
     <span class="ui-trace-line"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
-    <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron" /></Show>
+    <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></Show>
     <Show when={props.latest || props.live}><span class="ui-trace-latest">{props.latest || "\u00a0"}</span></Show>
   </button>;
 }
@@ -34,7 +35,7 @@ export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Moti
     class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-find-fold={local.find && opens() && !head.open ? "" : undefined} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>
     <TraceHeader {...head} opens={opens()} />
     {local.pinned}
-    <div class="ui-disclosure-body" aria-hidden={!head.open}>{body()}</div>
+    <Expand open={Boolean(head.open && opens())} class="ui-disclosure-body">{body()}</Expand>
   </div>;
 }
 /** The opened trail: one light line per step. nested: a group's steps on a rail of their own under its icon;
@@ -64,8 +65,8 @@ export function Step(props: { label?: string; icon?: JSX.Element; verb?: string;
   return <li ref={(element) => { if (props.find) registerFoldFind(element, () => props.find!(), () => { if (!props.open) props.onToggle?.(); }); }}
     data-find-fold={props.find && opens() && !props.open ? "" : undefined} class="ui-disclosure ui-step-item" data-open={props.open && opens() ? "true" : "false"} data-state={props.state} data-note={props.note ? "" : undefined} data-discarded={props.discarded ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={opens()} fallback={<div class="ui-step">{row()}</div>}>
-      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron" /></button>
-      <div class="ui-disclosure-body ui-step-body" aria-hidden={!props.open}>{body()}</div>
+      <button type="button" class="ui-step" aria-label={props.label} aria-expanded={Boolean(props.open)} onClick={() => props.onToggle?.()}>{row()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron" data-turn="half" /></button>
+      <Expand open={Boolean(props.open)} class="ui-disclosure-body ui-step-body">{body()}</Expand>
     </Show>
   </li>;
 }

@@ -1,7 +1,6 @@
-import { reducedMotion } from "./motion";
+import { duration, easing, reducedMotion } from "./motion";
 import { createComputed, createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid-js";
 import { haptic } from "./haptics";
-import { cssTime } from "./shared";
 
 /**
  * What opens and shuts in place under the row that owns it -- a folder's rows, a group's -- over --duration-fold, on
@@ -54,7 +53,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
     if (reducedMotion()) { showing = target = wanted ? 1 : 0; if (!wanted) setShown(false); return; }
     const slide = (node: HTMLElement, to: number, done: () => void) => {
       const height = node.getBoundingClientRect().height;
-      const timing: KeyframeAnimationOptions = { duration: cssTime(node, "--duration-fold", 240), easing: getComputedStyle(node).getPropertyValue("--ease-fold") || "ease", fill: "both" };
+      const timing: KeyframeAnimationOptions = { duration: duration("--duration-fold", node), easing: easing("--ease-fold", node), fill: "both" };
       const clip = (shows: number) => `inset(0 0 ${(1 - shows) * 100}% 0)`;
       const shift = (shows: number) => `translateY(${-(1 - shows) * height}px)`;
       target = to;

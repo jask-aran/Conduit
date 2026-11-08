@@ -50,7 +50,7 @@ export function fakeChat() {
     editingEntryId,
     edit: (message: Message) => { if (editingEntryId() === message.id) { setEditingEntryId(null); setDraft(""); return; } setEditingEntryId(message.id); setDraft(typeof message.content === "string" ? message.content : ""); },
     cancelEdit: () => { setEditingEntryId(null); setDraft(""); },
-    messages, hostUiRequests: () => [], pendingMessages: () => [], harnessCommands: () => [], tools: () => stored?.tools ?? TOOLS,
+    messages, hostUiRequests: () => [], pendingMessages: () => [], agents: () => [], harnessCommands: () => [], tools: () => stored?.tools ?? TOOLS,
     title: () => "Lorem ipsum file", status: () => "active", presentation: () => ({ kind: "ready" }),
     send: async () => {
       const text = draft().trim();

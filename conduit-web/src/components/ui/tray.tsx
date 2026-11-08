@@ -1,8 +1,10 @@
-import { createContext, createEffect, createSignal, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
-import * as Icons from "./icons";
-import { IconButton } from "./actions";
+import { createContext, createSignal, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
+import { CloseButton } from "./actions";
 import { overlayHaptics } from "./haptics";
 import { SWIPE } from "./edge-swipe";
+import { createDismiss } from "./dismiss";
+import { createFolds } from "./fit";
+import { Frost } from "./frost";
 
 /*
  * A panel over what it belongs to, in two pieces with one inside: Tray (a phone's, risen from the foot) and Ledge (a
@@ -20,25 +22,12 @@ export interface PanelHeadParts { title?: JSX.Element; lead?: JSX.Element; foldL
  *  A foldLead is measured: once the head overflows it folds, the width it needed kept, and it unfolds when the head has
  *  that again (a breakpoint from its content, never a tuned width). */
 export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?: boolean }) {
-  let head!: HTMLDivElement;
-  const [folded, setFolded] = createSignal(false);
-  onMount(() => {
-    if (!props.foldLead) return;
-    let need = 0;
-    const fit = () => {
-      if (!head.clientWidth) return;
-      if (!folded() && head.scrollWidth > head.clientWidth) { need = head.scrollWidth; setFolded(true); }
-      else if (folded() && head.clientWidth >= need) setFolded(false);
-    };
-    const sizes = new ResizeObserver(fit);
-    sizes.observe(head);
-    onCleanup(() => sizes.disconnect());
-  });
-  const lead = () => props.foldLead?.(folded) ?? props.lead;
-  return <div ref={head} class="ui-panel-head">
+  const folds = createFolds(1);
+  const lead = () => props.foldLead?.(() => folds.count() > 0) ?? props.lead;
+  return <div ref={(element) => { if (props.foldLead) folds.ref(element); }} class="ui-panel-head">
     <Show when={props.grip}><span class="ui-panel-grip" aria-hidden="true" /></Show>
     <Show when={props.lead || props.foldLead} fallback={<strong>{props.title}</strong>}><span class="ui-panel-lead">{lead()}</span></Show>
-    <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><IconButton kind="pane" close label="Close" onClick={() => props.onClose?.()}><Icons.Close /></IconButton></Show></span>
+    <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><CloseButton kind="pane" onClick={() => props.onClose?.()} /></Show></span>
   </div>;
 }
 /** What a panel holds, scrolling under its head edge to edge, its gutter kept. */
@@ -55,12 +44,7 @@ export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-pa
 export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   overlayHaptics(() => props.open);
-  createEffect(() => {
-    if (!props.open) return;
-    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
-    window.addEventListener("keydown", away, true);
-    onCleanup(() => window.removeEventListener("keydown", away, true));
-  });
+  createDismiss({ open: () => props.open, onClose: () => props.onClose() });
   // A swipe down anywhere on it carries it with the finger -- from its head, or from what it holds once that is scrolled
   // to its top (a scroll up, or sideways, stays a scroll); let go past SWIPE.commit of it (or flicked), it goes. Touch
   // events, not pointer ones: the move must be able to stop the scroll it would otherwise start.
@@ -111,10 +95,10 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
   });
   return <div class="ui-tray" data-open={props.open ? "" : undefined}>
     <div class="ui-tray-scrim" aria-hidden="true" onClick={() => props.onClose()} />
-    <section ref={panel} class="ui-tray-panel ui-frost" data-surface="frost" data-lift="raised" data-fit={props.fit ? "" : undefined} role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
+    <Frost as="section" lift="raised" ref={panel} class="ui-tray-panel" data-fit={props.fit ? "" : undefined} role="dialog" aria-label={props.label} inert={!props.open ? true : undefined}>
       <PanelHead grip title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
       <PanelBody>{props.children}</PanelBody>
-    </section>
+    </Frost>
   </div>;
 }
 
@@ -140,21 +124,10 @@ export function LedgeStack(props: { above: number; keep?: () => Element | null |
 export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above?: number; keep?: () => Element | null | undefined; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   const inStack = useContext(LedgeStackContext);
-  createEffect(() => {
-    if (!props.open) return;
-    const away = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); props.onClose(); } };
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target || (inStack?.stack() ?? panel).contains(target) || (props.keep ?? inStack?.keep)?.()?.contains(target)) return;
-      props.onClose();
-    };
-    window.addEventListener("keydown", away, true);
-    window.addEventListener("pointerdown", outside, true);
-    onCleanup(() => { window.removeEventListener("keydown", away, true); window.removeEventListener("pointerdown", outside, true); });
-  });
-  return <section ref={panel} class="ui-ledge ui-frost" data-surface="frost" data-lift="raised" data-open={props.open ? "" : undefined} data-fit={props.fit ? "" : undefined} aria-label={props.label}
+  createDismiss({ open: () => props.open, onClose: () => props.onClose(), inside: () => [inStack?.stack() ?? panel, (props.keep ?? inStack?.keep)?.()] });
+  return <Frost as="section" lift="raised" ref={panel} class="ui-ledge" data-open={props.open ? "" : undefined} data-fit={props.fit ? "" : undefined} aria-label={props.label}
     inert={!props.open ? true : undefined} style={inStack ? undefined : { "--ledge-above": `${props.above ?? 0}px` }}>
     <PanelHead title={props.title} lead={props.lead} foldLead={props.foldLead} actions={props.actions} onClose={() => props.onClose()} />
     <PanelBody>{props.children}</PanelBody>
-  </section>;
+  </Frost>;
 }

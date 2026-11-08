@@ -43,8 +43,7 @@
    that run, and the button in the header stays the blunt all-or-nothing one. */
 .ui-history-run { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .ui-history-run .ui-history-text { display: flex; align-items: center; gap: var(--space-xs); }
-.ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: var(--opacity-rest); transition: transform var(--duration-quick) var(--ease-change); }
-.ui-history-chevron[data-open] { transform: rotate(180deg); }
+.ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: var(--opacity-rest); }
 @media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
 }
 .ui-history-row[data-kind="user"], .ui-history-row[data-kind="assistant"] { color: var(--foreground); }
