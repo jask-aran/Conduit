@@ -38,8 +38,6 @@ export const ChangeLedger = (props: { children: JSX.Element }) => <div class="ui
 /** A group of changes: its heading folds it, an action at the heading's right (stage all); then its rows, or a note. */
 /** The rows of changes, scrolling. */
 export const ChangeList = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-change-list" />;
-/** A change and its action (stage, unstage), the action shown on the pointer or focus. */
-export const ChangeItem = (props: { action?: JSX.Element; children: JSX.Element }) => <div class="ui-change-item">{props.children}{props.action}</div>;
 /** When a group has nothing: centred and quiet. */
 
 /** A commit: the graph's column, the subject and its refs (HEAD's lit), the author, the short hash. A context menu's trigger takes it with `as`. */

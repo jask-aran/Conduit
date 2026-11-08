@@ -86,14 +86,6 @@ export const LayoutGlyph = (props: { weights: number[] }) =>
  *  (a Segmented), and its controls. compact: the app measured it short -- "labels" drops the modes' words, "name"
  *  the name too. The header is the tool's drag handle. */
 
-/** A phone's strip of the dock's views (it has no rail): each an icon and its name; the names go when they do not fit (iconsOnly). */
-export function ToolViews(props: { ref?: (element: HTMLDivElement) => void; iconsOnly?: boolean; children: JSX.Element }) {
-  return <div ref={props.ref} class="ui-tool-views" data-icons-only={props.iconsOnly ? "" : undefined}><div role="toolbar" aria-label="Workspace views">{props.children}</div></div>;
-}
-export function ToolView(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; label: string; selected?: boolean }) {
-  const [local, rest] = splitProps(props, ["icon", "label", "selected"]);
-  return <button type="button" role="tab" {...rest} aria-selected={Boolean(local.selected)} class="ui-tool-view">{local.icon}<span>{local.label}</span></button>;
-}
 
 /** What a tool says while it has nothing to show, or is loading: centred, quiet. */
 /** PaneHome: what an empty pane shows, centred in it -- a column (a DashHeader, then actions and Groups) holding the

@@ -3,12 +3,13 @@ import { Icons } from "@/components/ui";
 import { FileView, FileViewer, FileName, FileGit, FileDirty, FileMore, StatusBar, StatusText, StatusPicker } from "@/components/ui/file";
 import { FileSuffix } from "@/components/ui/file";
 import { FileImage, FileCard, FileBody, FileDivider, FileSwap, FileEmptySide, FileChanges, FileMedia, FileScope } from "@/components/ui/viewer";
-import { CodeSurface, CodeHost, CodeContent, SearchBar, SearchField, SearchActions, AnnotationPopup, AnnotationInput, AnnotationButton, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
+import { CodeSurface, CodeHost, CodeContent, AnnotationPopup, AnnotationInput, AnnotationButton, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody, SplitEdge } from "@/components/ui/editor";
 import { Button, Input, LeadInput } from "@/components/ui/controls";
 import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserGrid, BrowserEntry, BrowserMark, BrowserDivider, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
 import { FolderShelf, FolderTile, LineCounts } from "@/components/ui/dashboard";
 import { HarnessMark, Columns, Empty, Loading, Note, Actions, IconButton, PaneHeader, Heading } from "@/components/ui";
-import { ListIcon } from "lucide-solid";
+import { CaseSensitiveIcon, ListIcon, ReplaceIcon } from "lucide-solid";
+import { FindBar } from "@/components/ui/find";
 import type { JSX } from "solid-js";
 
 import { row, token, type Page } from "./model";
@@ -160,15 +161,11 @@ import { Icons } from "@/components/ui";
 
 export const editorPage: Page = { title: "Editor", summary: "The code surface a file's body holds (CodeMirror draws inside it): framed while editable, its find bar above, a line comment's popup over it, and a comparison's counts and turn steps in the status bar. The review's navigator (DiffShell) is the Panes family's Source control.", rail: "Blocks",
   preview: () => <div style={box(45)}><ComparisonSample /></div>,
-  usage: `import { CodeSurface, SearchBar, SearchField, SearchActions, CodeContent, CodeHost } from "@/components/ui/editor";
-import { IconButton } from "@/components/ui/file";
-import { Icons } from "@/components/ui";
+  usage: `import { CodeSurface, CodeContent, CodeHost } from "@/components/ui/editor";
+import { FindBar } from "@/components/ui/find";
 
 <CodeSurface editable>
-  <SearchBar>
-    <SearchField placeholder="Find" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} />
-    <SearchActions><IconButton label="Close find" onClick={closeFind}><Icons.Close /></IconButton></SearchActions>
-  </SearchBar>
+  <FindBar plain label="Find" query={query()} onQuery={setQuery} onNext={next} onPrevious={previous} onEscape={closeFind} onClose={closeFind} />
   <CodeContent><CodeHost ref={mountEditor} /></CodeContent>
 </CodeSurface>`,
   anatomy: { scene: () => <div style={box(45)}><ComparisonSample /></div>, parts: [
@@ -179,7 +176,7 @@ import { Icons } from "@/components/ui";
   examples: [
     row("CodeSurface · CodeHost · Read-only", "read-only, then editable: the hairline ring says you can type", () => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={false}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>, { surfaces: ["ground"], phone: true, code: "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>" }),
     row("CodeSurface · CodeHost · Editable", "read-only, then editable: the hairline ring says you can type", () => <div style={{ ...box(30), height: "calc(9 * var(--u-space))", display: "flex" }}><CodeSurface editable={true}><CodeContent><CodeHost><Code /></CodeHost></CodeContent></CodeSurface></div>, { surfaces: ["ground"], phone: true, code: "<CodeSurface editable><CodeContent><CodeHost /></CodeContent></CodeSurface>" }),
-    row("SearchBar · SearchField · SearchActions", "find and replace over the code: two fields, then previous, next and close", () => <div style={box(37.5)}><SearchBar><SearchField placeholder="Find" value="greet" /><SearchField placeholder="Replace" /><SearchActions><IconButton kind="file" label="Previous match"><Icons.ArrowUp /></IconButton><IconButton kind="file" label="Next match"><Icons.ArrowDown /></IconButton><IconButton kind="file" label="Close find"><Icons.Close /></IconButton></SearchActions></SearchBar></div>, { surfaces: ["ground"], phone: true, code: "<SearchBar><SearchField /><SearchActions /></SearchBar>" }),
+    row("FindBar · plain", "find and replace over the code: the find field, replace, the toggles, then previous, next and close", () => <div style={box(37.5)}><FindBar plain label="Find" query="greet" onQuery={() => {}} onNext={() => {}} onPrevious={() => {}} onEscape={() => {}} onClose={() => {}}><LeadInput kind="tool" lead={<ReplaceIcon />} placeholder="Replace" /><IconButton kind="tool" label="Match case" aria-pressed={false}><CaseSensitiveIcon /></IconButton></FindBar></div>, { surfaces: ["ground"], phone: true, code: "<FindBar plain><LeadInput /><IconButton /></FindBar>" }),
     row("AnnotationPopup · AnnotationInput · AnnotationButton", "a comment on the selected lines, before it goes to the chat", () => <div style={{ ...box(30), height: "calc(7 * var(--u-space))", position: "relative" }}><AnnotationPopup style={{ left: "var(--space-md)", top: "var(--space-md)" }}><AnnotationInput placeholder="Comment on lines 1–2" rows={2} /><AnnotationButton>Add</AnnotationButton></AnnotationPopup></div>, { surfaces: ["ground"], phone: true, code: "<AnnotationPopup><AnnotationInput /><AnnotationButton /></AnnotationPopup>" }),
     row("LineCounts · TurnNavigation", "a comparison's removed and added lines, and the turn it compares", () => <div style={box(37.5)}><StatusBar label="Comparison" commands={<TurnNavigation><StatusPicker icon={<Icons.ChevronDown />}>Turn 3</StatusPicker></TurnNavigation>}><LineCounts kind="bar" removed={4} added={12} /></StatusBar></div>, { surfaces: ["ground"], phone: true, code: "<LineCounts><span /><span /></LineCounts>" }),
     row("Comparison · ComparisonContent · ComparisonSource · TurnNavigation · LineCounts", "a turn's change to one file; the status bar leads with the source picker, older/newer turn and the endpoints. Static text where the app mounts CodeMirror", () => <div style={box(45)}><ComparisonSample /></div>, { surfaces: ["ground"], code: "<Comparison><PaneHeader /><ComparisonContent><CodeHost comparison /></ComparisonContent><StatusBar commands={<ComparisonSource />} /></Comparison>" }),
@@ -196,7 +193,7 @@ import { Icons } from "@/components/ui";
     token("--space-xs", "small gaps"),
     token("--space-2xs", "smallest gaps")
   ] }],
-  api: ["CodeSurface", "SearchBar", "SearchField", "SearchActions", "IconButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "Empty", "Comparison", "PaneHeader", "FileName", "FileScope", "Actions", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "LineCounts", "CodeExcerpt"],
+  api: ["CodeSurface", "FindBar", "LeadInput", "IconButton", "CodeContent", "CodeHost", "AnnotationPopup", "AnnotationInput", "AnnotationButton", "DiffShell", "SplitEdge", "DiffRail", "DiffBody", "Empty", "Comparison", "PaneHeader", "FileName", "FileScope", "Actions", "ComparisonContent", "StatusBar", "ComparisonSource", "StatusPicker", "TurnNavigation", "StatusText", "LineCounts", "CodeExcerpt"],
 };
 
 export const browserPage: Page = { title: "Browser", summary: "The file browser (the Computer page and the folder picker): a sidebar of places beside a main column of toolbar, actions and the folder's entries, as tiles or details. Composed here from its pieces with made-up entries.", rail: "Blocks",

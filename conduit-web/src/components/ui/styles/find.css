@@ -2,10 +2,12 @@
    pane's right (the pane's find, not its reading column's). The matches are CSS highlights (no DOM): every match the tint, the current one the
    foreground's wash, so the two are told apart as cursor and current are. */
 
+.ui-find-bar { display: flex; min-width: 0; align-items: center; gap: var(--space-2xs); }
+.ui-find-bar:not(.ui-frost) { overflow-x: auto; padding: var(--space-xs) var(--space-sm); scrollbar-width: none; }
 .ui-frost.ui-find-bar { position: absolute; z-index: 3; top: calc(var(--header-height) + var(--space-md)); right: var(--space-lg);
-  display: flex; width: min(var(--measure-md), calc(100% - 2 * var(--space-xl))); align-items: center; gap: var(--space-2xs);
+  width: min(var(--measure-md), calc(100% - 2 * var(--space-xl)));
   border-radius: var(--radius-surface); padding: var(--frost-inset); animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-md)); }
-.ui-find-bar > .ui-lead-input { flex: 1; }
+.ui-find-bar > .ui-lead-input { flex: 1; min-width: var(--control-lg); }
 .ui-find-count { flex: none; padding-inline: var(--space-xs); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .ui-frost.ui-find-bar { animation: none; } }
 @media (--conduit-phone-layout) { .ui-frost.ui-find-bar { width: calc(100% - 2 * var(--space-lg)); } }

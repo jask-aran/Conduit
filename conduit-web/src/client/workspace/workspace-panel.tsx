@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, ToolKept, Loading, PaneHeader } from "@/components/ui";
+import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, ToolKept, Loading, PaneHeader, Segmented } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
@@ -9,7 +9,7 @@ import { unitPx } from "@/components/ui/layout";
 import { Spinner } from "@/components/ui/controls";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
-import { PaneEdge, ToolView, ToolViews } from "@/components/ui/pane";
+import { PaneEdge } from "@/components/ui/pane";
 import { COMMAND_IDS } from "../commands/command-registry";
 import { focusFirst, isMobileLayout, restoreFocus } from "../navigation/mobile-layout";
 import type { Connectivity } from "../state/runtime";
@@ -179,7 +179,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
   const focusTabControl = (next: PanelTab) => {
-    const control = panelRoot?.querySelector<HTMLElement>(`[data-workspace-tab="${next}"]`);
+    const control = panelRoot?.querySelectorAll<HTMLElement>('[aria-label="Workspace views"] > button')[PANEL_TABS.filter((item) => item !== "jbot").indexOf(next as never)];
     // On a desktop the rail stands in for the tabs, so focus lands in the
     // view, or on the view itself while it has nothing to focus yet.
     if (control?.getClientRects().length) return control.focus({ preventScroll: true });
@@ -218,20 +218,22 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
   const tabStrip = () => (
-    <ToolViews iconsOnly={viewIconsOnly()} ref={(element) => {
+    <div data-only="phone" ref={(element) => {
       const observer = new ResizeObserver(() => {
         setViewIconsOnly(false);
-        const tabs = element.firstElementChild;
-        if (tabs && tabs.scrollWidth > element.clientWidth) setViewIconsOnly(true);
+        const views = element.firstElementChild;
+        if (views && views.scrollWidth > element.clientWidth) setViewIconsOnly(true);
       });
       observer.observe(element);
       onCleanup(() => observer.disconnect());
     }}>
-      <For each={PANEL_TABS.filter((item) => item !== "jbot")}>{(item) => {
-        const disabled = () => item === "diff" && !props.sourceControlEnabled();
-        return <ToolView data-workspace-tab={item} disabled={disabled()} icon={tabIcon(item)} label={tabLabel(item)} aria-label={disabled() ? `${tabLabel(item)}: ${props.onBrowseDirectory ? "open a Git folder" : "unavailable for Chats and managed projects"}` : tabLabel(item)} title={disabled() ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item)} selected={tab() === item} onClick={() => changePaneTab(item)} />;
-      }}</For>
-    </ToolViews>
+      <Segmented label="Workspace views" icons={viewIconsOnly()} value={tab()} onChange={changePaneTab}
+        options={PANEL_TABS.filter((item) => item !== "jbot").map((item) => {
+          const disabled = item === "diff" && !props.sourceControlEnabled();
+          return { value: item, label: tabLabel(item), icon: tabIcon(item), disabled,
+            title: disabled ? (props.onBrowseDirectory ? "Open a Git folder to use Source Control" : "Source Control is available only for Workspaces") : tabLabel(item) };
+        })} />
+    </div>
   );
   const changePaneTab = (next: PanelTab) => {
     setPaneTab(next);

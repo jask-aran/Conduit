@@ -25,13 +25,7 @@
   .ui-group:where([data-group="change"]):first-child { max-height: none; border-right: var(--hairline) solid var(--border); }
 }
 .ui-change-list { min-height: 0; overflow: auto; padding: var(--space-2xs) var(--space-sm) var(--space-sm); }
-.ui-change-item { display: flex; min-width: 0; align-items: center; border-radius: var(--radius-control); }
-.ui-change-item:is(:focus-within) { background: var(--tint); }
-@media (hover: hover) { .ui-change-item:is(:hover, :focus-within) { background: var(--tint); } }
-.ui-change-item > .ui-row:where([data-density="list"]) { min-width: 0; min-height: var(--control-sm); flex: 1; gap: var(--space-md); border-radius: 0; background: transparent; padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); }
-.ui-change-item > .ui-icon-button:where([data-icon-button="tool"]) { opacity: 0; }
-.ui-change-item:is(:focus-within) > .ui-icon-button:where([data-icon-button="tool"]) { opacity: 1; }
-@media (hover: hover) { .ui-change-item:is(:hover, :focus-within) > .ui-icon-button:where([data-icon-button="tool"]) { opacity: 1; } }
+.ui-row[data-change-row]:where(.ui-change-list *) { min-height: var(--control-sm); gap: var(--space-md); padding: var(--space-xs) var(--space-sm); font-size: var(--text-caption); }
 
 .ui-commit-list { min-height: 0; flex: 1; overflow: auto; padding: var(--space-2xs) var(--space-sm) var(--space-sm); }
 .ui-commit { display: grid; min-width: 0; min-height: var(--control-sm); grid-template-columns: minmax(var(--space-xl), auto) minmax(0, 1fr) auto auto; gap: var(--space-md); padding: var(--space-2xs) var(--space-sm); color: var(--foreground); }

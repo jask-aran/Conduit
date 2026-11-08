@@ -5,9 +5,7 @@
 }
 .ui-tour-placement[data-placement="end"] { right: var(--space-2xl); }
 .ui-tour-placement[data-placement="start"] { left: var(--space-2xl); }
-.ui-frost.ui-tour { --overlay-width: var(--measure-xl); width: 100%; }
-.ui-tour .ui-overlay-bar[data-head] { justify-content: space-between; }
-.ui-tour-body { display: grid; gap: var(--space-md); padding: var(--space-lg); }
+.ui-tour-body { display: grid; gap: var(--space-md); }
 .ui-tour-title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-strong); line-height: var(--leading-text); }
 .ui-tour-text, .ui-tour-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-reading); }
 /* Its tasks: a mark, what to do, its keys at the end; ticked white once seen, faint where it cannot be done here. */
@@ -22,8 +20,6 @@
 .ui-tour-task { min-width: 0; flex: 1; }
 .ui-tour-keys { display: inline-flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2xs); }
 .ui-tour-note, .ui-tour-tasks > li[data-state="done"], .ui-tour-tasks > li[data-state="done"] .ui-keycap { color: var(--foreground); }
-.ui-tour-foot { display: flex; flex: none; align-items: center; gap: var(--space-xs); border-top: var(--hairline) solid var(--tint); padding: var(--space-sm) var(--space-md); }
-.ui-tour-foot-end { display: inline-flex; align-items: center; gap: var(--space-xs); margin-left: auto; }
 /* The tour's dim: the leader's Spotlight, fixed, never in the way of a press (the page is still the person's to use). */
 .ui-spotlight.ui-tour-spotlight { position: fixed; z-index: var(--layer-leader); pointer-events: none; }
 .ui-spotlight.ui-tour-spotlight[data-entering] { animation: ui-fade-in var(--duration-quick) var(--ease-change) backwards; }

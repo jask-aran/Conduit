@@ -100,15 +100,10 @@ export const Chips = (props: { ref?: (element: HTMLDivElement) => void; fadeStar
 /** What a choice would send, in mono, scrolling: a link, a file's start, a command. */
 export const Preview = (props: { format?: string; children: JSX.Element }) => <pre class="ui-preview" data-format={props.format}>{props.children}</pre>;
 
-/** A card rider's top: its title or Tabs, then its close. */
+/** A card rider's top: its title or its pages (a Segmented), then its close. */
 export const RiderTop = (props: { children: JSX.Element }) => <div class="ui-rider-top">{props.children}</div>;
 /** A card rider's foot: its Hints, then its actions. */
 export const RiderFoot = (props: { children: JSX.Element }) => <div class="ui-rider-foot">{props.children}</div>;
-/** A card rider's pages (one question each, then Submit), as Tabs. */
-export const Tabs = (props: { label?: string; children: JSX.Element }) => <div class="ui-tabs" role="tablist" aria-label={props.label}>{props.children}</div>;
-/** One page's tab; done: ticked (answered). Out of the Tab order: the card's own keys turn its pages. */
-export const Tab = (props: { selected?: boolean; done?: boolean; onClick?: () => void; children: JSX.Element }) =>
-  <button type="button" role="tab" tabIndex={-1} aria-selected={Boolean(props.selected)} onClick={() => props.onClick?.()}><Show when={props.done}><Icons.Check aria-label="Answered" /></Show>{props.children}</button>;
 /** The keys along a rider's foot: [key, what it does]. */
 export const Hints = (props: { hints: [string, string][] }) =>
   <div class="ui-hints" aria-hidden="true"><For each={props.hints}>{([key, label]) => <span><Keycap>{key}</Keycap>{label}</span>}</For></div>;

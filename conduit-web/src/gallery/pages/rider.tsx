@@ -1,7 +1,7 @@
-import { RiderTop, RiderFoot, Summary as RiderSummary, ChoiceInput, ChoicesPage, Prompt as RiderPrompt, Hints as RiderHints, Tabs as RiderTabs, Tab as RiderTab } from "@/components/ui";
+import { RiderTop, RiderFoot, Summary as RiderSummary, ChoiceInput, ChoicesPage, Prompt as RiderPrompt, Hints as RiderHints } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, onMount } from "solid-js";
-import { Reference, References, Choices, RiderButton, Button, Chip, Choice, Line, TextArea, Rider, RiderTitle, Lines } from "@/components/ui";
+import { Reference, References, Choices, RiderButton, Button, Chip, Choice, Line, TextArea, Rider, RiderTitle, Lines, Segmented } from "@/components/ui";
 import { QuestionCard } from "../../client/chat/question-card";
 import { Question } from "../../client/api/contracts";
 import { Replay, Presence } from "../specs";
@@ -63,7 +63,7 @@ export const riderPage: Page = { title: "Rider", summary: "Resting frost at a co
           <ChoicesPage><RiderPrompt>Paste the API token</RiderPrompt><Choices><Choice n={1} chosen active own={<ChoiceInput type="password" placeholder="Type your answer" aria-label="Type your answer" value="secret-value" />} /></Choices></ChoicesPage>
         </Rider></div>, { source: "components/ui/rider.tsx · chat/question-card.tsx", surfaces: ["ground"], phone: true, code: "<Choice own={<ChoiceInput type=password />} />" }),
     row("Summary", "several questions: before submitting, each with its answer; one not answered yet", () => <div class="g-composer"><Rider layout="card" label="The agent has a question">
-          <RiderTop><RiderTabs><RiderTab done>Deploy</RiderTab><RiderTab>Token</RiderTab><RiderTab selected>Submit</RiderTab></RiderTabs></RiderTop>
+          <RiderTop><Segmented label="Questions" size="sm" tabIndex={-1} value="2" onChange={() => {}} options={[{ value: "0", label: "Deploy", icon: <Icons.Check aria-label="Answered" /> }, { value: "1", label: "Token" }, { value: "2", label: "Submit" }]} /></RiderTop>
           <RiderSummary rows={[{ label: "Deploy", value: "Staging" }, { label: "Token", value: "Needs an answer", empty: true }]} />
           <RiderFoot><RiderHints hints={[["Enter", "submit"]]} /><Button variant="primary" size="sm" disabled>Submit</Button></RiderFoot>
         </Rider></div>, { source: "components/ui/rider.tsx · chat/question-card.tsx", surfaces: ["ground"], phone: true, code: "<Summary rows={[{ label, value, empty }]} />" }),
@@ -98,5 +98,5 @@ export const riderPage: Page = { title: "Rider", summary: "Resting frost at a co
     token("--tint", "surface wash and lines"),
     token("--space-xs", "small gaps")
   ] }],
-  api: ["Rider", "RiderMark", "RiderTop", "RiderTitle", "Tabs", "Tab", "ChoicesPage", "Prompt", "Choices", "Choice", "ChoiceInput", "TextArea", "Preview", "Summary", "RiderFoot", "Hints", "Lines", "Line", "Actions", "Button", "Chips", "Chip", "References", "Reference", "RiderButton"],
+  api: ["Rider", "RiderMark", "RiderTop", "RiderTitle", "Segmented", "ChoicesPage", "Prompt", "Choices", "Choice", "ChoiceInput", "TextArea", "Preview", "Summary", "RiderFoot", "Hints", "Lines", "Line", "Actions", "Button", "Chips", "Chip", "References", "Reference", "RiderButton"],
 };

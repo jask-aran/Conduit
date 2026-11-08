@@ -16,7 +16,8 @@ import { WorkspaceDiffView } from "./workspace-diff-view";
 import { createWorkspaceReview, diffScopes, type DiffScope } from "./workspace-review-source";
 import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit, GitCommitDetail, GitRef, SourceControlMode, WorkspaceSettings } from "./workspace-types";
 import { Button, Segmented } from "@/components/ui/controls";
-import { ToolLine, CommitBox, ChangeLedger, ChangeList, ChangeItem, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
+import { RowGroup } from "@/components/ui/popover";
+import { ToolLine, CommitBox, ChangeLedger, ChangeList, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
 import { ChangeRow } from "@/components/ui/dashboard";
 import { ToolBar } from "@/components/ui/pane";
 import { Notice } from "@/components/ui/state";
@@ -281,11 +282,11 @@ export function SourceControlView(props: {
             actions={<IconButton label="Unstage all" disabled={!c.stagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage-all")}><Icons.Undo /></IconButton>}>
             <Show when={c.stagedFiles().length} fallback={<Empty kind="change">No staged changes</Empty>}>
               <ChangeList><For each={c.stagedFiles()}>{(file) =>
-                <ChangeItem action={<IconButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></IconButton>}>
+                <RowGroup actions={<IconButton label={`Unstage ${file.path}`} title="Unstage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("unstage", file.path)}><Icons.Undo /></IconButton>}>
                   <ChangeRow {...changeDetails(file, true)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="true"
                     onClick={(event) => props.onInspectFile(file.path, true, event.altKey)}
                     icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, true).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, true).name} />} />
-                </ChangeItem>
+                </RowGroup>
               }</For></ChangeList>
             </Show>
           </Group>
@@ -294,11 +295,11 @@ export function SourceControlView(props: {
             <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><Notice kind="tool">Untracked folders are grouped. Staging a folder includes its contents.</Notice></Show>
             <Show when={c.unstagedFiles().length} fallback={<Empty kind="change">Working tree clean</Empty>}>
               <ChangeList><For each={c.unstagedFiles()}>{(file) =>
-                <ChangeItem action={<IconButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></IconButton>}>
+                <RowGroup actions={<IconButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></IconButton>}>
                   <ChangeRow {...changeDetails(file, false)} title={`Inspect changes in ${file.path}`} data-change-path={file.path} data-staged="false"
                     onClick={(event) => props.onInspectFile(file.path, false, event.altKey)}
                     icon={file.path.endsWith("/") ? <FolderTypeIcon name={changeDetails(file, false).name} expanded={false} /> : <FileTypeIcon name={changeDetails(file, false).name} />} />
-                </ChangeItem>
+                </RowGroup>
               }</For></ChangeList>
             </Show>
           </Group>

@@ -16,19 +16,6 @@
 .ui-code-host[data-wrap="false"] .cm-content { white-space: pre; }
 .ui-code-host[data-markdown="true"] .cm-content { font-family: var(--font-sans); }
 .ui-code-host[data-markdown="true"] .cm-line { padding-inline: var(--space-lg); }
-.ui-search-bar { --find-min: calc(8.125 * var(--u-space)); --find-max: calc(17.1875 * var(--u-space)); display: flex; min-width: 0; min-height: var(--control); align-items: center; gap: var(--space-2xs); overflow-x: auto; padding: var(--space-xs) var(--space-sm); background: color-mix(in oklch, var(--background), var(--border) 20%); color-scheme: dark; scrollbar-width: none; }
-.ui-search-bar::-webkit-scrollbar { display: none; }
-.ui-search-bar .ui-search-field > .ui-input { width: clamp(var(--find-min), 24%, var(--find-max)); height: var(--control-xs); flex: 1 0 var(--find-min); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: color-mix(in oklch, var(--background), black 2%); padding: var(--space-2xs) var(--space-sm); color: var(--foreground); font: var(--text-label)/1 var(--font-data); }
-.ui-search-bar .ui-search-field > .ui-input:focus { border-color: var(--ring); }
-.ui-search-bar .ui-search-field > .ui-input::placeholder { color: var(--muted-foreground); }
-.ui-search-actions { display: flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); }
-@media (--conduit-phone-layout) {
-  .ui-search-bar { --find-min: calc(9.375 * var(--u-space)); min-height: calc(var(--control) + 2 * var(--space-md)); gap: var(--space-xs); padding: var(--space-xs) var(--space-md); }
-  .ui-search-bar .ui-search-field > .ui-input { height: var(--control-sm); flex-basis: var(--find-min); border-radius: var(--radius-control); padding-inline: var(--space-md); font-size: var(--text-row); }
-  .ui-search-actions { height: var(--control-sm); gap: var(--space-xs); }
-  .ui-search-actions .ui-icon-button:where([data-icon-button="file"]) { width: var(--control-sm); height: var(--control-sm); min-width: var(--control-sm); border-radius: var(--radius-control); }
-  .ui-search-actions svg { width: var(--icon); height: var(--icon); }
-}
 .ui-comparison { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .ui-counts:where([data-counts="bar"]) { display: flex; flex: none; gap: var(--space-sm); padding-inline: var(--space-sm); font: inherit; white-space: nowrap; }
 .ui-counts:where([data-counts="bar"]) > :first-child { color: var(--destructive); }
@@ -39,7 +26,6 @@
 .ui-comparison-content .cm-mergeViewEditor { min-width: 0; }
 .ui-comparison-content .cm-mergeViewEditor + .cm-mergeViewEditor { border-left: var(--hairline) solid var(--border); }
 
-.ui-search-field { display: contents; }
 .ui-comparison-source { display: flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); }
 .ui-diff-shell { --navigator-default: calc(17.5 * var(--u-space)); display: grid; min-width: 0; min-height: 0; flex: 1; grid-template-columns: var(--navigator-width, var(--navigator-default)) var(--space-lg) minmax(0, 1fr); }
 .ui-diff-shell > :first-child { grid-column: 1; grid-row: 1; }

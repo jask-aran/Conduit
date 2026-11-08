@@ -46,7 +46,7 @@
 /* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
 .ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
 .ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
-:is(.ui-row:where([data-density="menu"])[data-checked] > .ui-icon, .ui-row:where([data-density="nav"])[aria-current="page"] > .ui-row-lead:where([data-density="nav"] *), .ui-tabs > [aria-selected="true"]) svg.lucide { stroke-width: 3; }
+:is(.ui-row:where([data-density="menu"])[data-checked] > .ui-icon, .ui-row:where([data-density="nav"])[aria-current="page"] > .ui-row-lead:where([data-density="nav"] *)) svg.lucide { stroke-width: 3; }
 /* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
 .ui-row:where([data-density="menu"]) .ui-harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
 .ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) .ui-harness-mark { filter: none; opacity: 1; }
@@ -58,7 +58,7 @@
 /* RowGroup: the row fills; its actions are --control-sm squares after it, each with the row's cursor wash when it holds
    the cursor. Where a pointer hovers they show on the hovered row or the one the cursor is in. */
 .ui-row-group { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2xs); }
-.ui-row-group > .ui-row:where([data-density="menu"]) { min-width: 0; flex: 1; }
+.ui-row-group > .ui-row { min-width: 0; flex: 1; }
 .ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
 .ui-row-action { display: grid; width: var(--control-sm); height: var(--control-sm); flex: none; place-items: center; border-radius: var(--radius-control); color: var(--muted-foreground); cursor: pointer; }
 .ui-row-action[data-highlighted] { background: var(--tint); color: var(--foreground); }

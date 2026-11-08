@@ -78,13 +78,6 @@
 .ui-rider-top { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); }
 .ui-rider-top > .ui-title-text { min-width: 0; flex: 1; overflow: hidden; padding-left: var(--space-md); text-overflow: ellipsis; white-space: nowrap; }
 .ui-rider-top > .ui-button:last-child { margin-left: auto; }
-.ui-tabs { display: flex; min-width: 0; flex: 1; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
-.ui-tabs::-webkit-scrollbar { display: none; }
-.ui-tabs > button { display: inline-flex; height: var(--control-sm); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--cmp-slot-radius); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-lift); cursor: pointer; }
-.ui-tabs > button:focus-visible { background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-tabs > button:hover { background: var(--tint); color: var(--foreground); } }
-/* The current tab: white at the current weight, no fill (the wash is only the pointer). */
-.ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
 /* A choice follows Interaction: grey at rest; the cursor is the wash, white;

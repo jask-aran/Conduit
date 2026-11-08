@@ -25,7 +25,6 @@
 }
 /* What the bar holds sizes to itself: a sidebar's control fills its row there, which here pushed the rest off. */
 .ui-title-bar .ui-server-control { width: auto; min-height: 0; }
-.ui-title-bar .ui-server-control[data-inline] .ui-server-state { flex: none; }
 /* Quiet, as Windows' caption is: the bar's text in the label's weight and muted until pointed at; its icon buttons and
    the search field fit inside the bar's height. */
 .ui-title-bar .ui-button { height: var(--control-xs); font-weight: var(--weight-rest); color: var(--muted-foreground); }

@@ -2,7 +2,7 @@ import { Icons } from "@/components/ui";
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 
-import { ApprovalSummary, Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Summary, Tab, Tabs, TextArea } from "@/components/ui";
+import { ApprovalSummary, Button, Choice, ChoiceInput, Choices, ChoicesPage, Hints, Input, Preview, Prompt, Rider, RiderFoot, RiderTop, RiderTitle, Segmented, Summary, TextArea } from "@/components/ui";
 import type { HostUiRequest, Question, QuestionAnswer } from "../api/contracts";
 
 export type QuestionResponse = { id: string; cancelled?: boolean; answers?: QuestionAnswer[] };
@@ -133,10 +133,9 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   return <Rider ref={(element: HTMLDivElement) => { root = element; }} layout="card" motion="entering" tabIndex={-1} label={props.request.title || "The agent has a question"} onKeyDown={keydown}>
     <RiderTop>
       <Show when={pages() > 1} fallback={<RiderTitle>{current()?.header || props.request.title}</RiderTitle>}>
-        <Tabs>
-          <For each={questions()}>{(question, index) => <Tab selected={page() === index()} done={answered(draft(question))} onClick={() => go(index())}>{question.header || `Question ${index() + 1}`}</Tab>}</For>
-          <Show when={review()}><Tab selected={!current()} onClick={() => go(questions().length)}>Submit</Tab></Show>
-        </Tabs>
+        <Segmented label="Questions" size="sm" tabIndex={-1} value={String(page())} onChange={(value) => go(Number(value))}
+          options={[...questions().map((question, index) => ({ value: String(index), label: question.header || `Question ${index + 1}`, icon: answered(draft(question)) ? <Icons.Check aria-label="Answered" /> : undefined })),
+            ...(review() ? [{ value: String(questions().length), label: "Submit" }] : [])]} />
       </Show>
       <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label={props.dismissLabel === "deny" ? "Deny" : "Dismiss"} onClick={dismiss}><Icons.Close /></Button>
     </RiderTop>

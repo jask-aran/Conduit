@@ -1,12 +1,12 @@
-import * as Icons from "./icons";
-import { SearchBar, SearchActions, SearchField, searchPanelClass } from "./editor";
+import { searchPanelClass } from "./editor";
+import { FindBar } from "./find";
+import { LeadInput } from "./controls";
 import { SearchQuery, closeSearchPanel, findNext, findPrevious, getSearchQuery, replaceAll, replaceNext, setSearchQuery } from "@codemirror/search";
 import type { EditorView, Panel, ViewUpdate } from "@codemirror/view";
-import { CaseSensitiveIcon, ChevronUpIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
+import { CaseSensitiveIcon, RegexIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
 import { createSignal, Show, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
-import { CloseButton, IconButton } from "./actions";
-
+import { IconButton } from "./actions";
 
 function nextQuery(query: SearchQuery, change: Partial<Pick<SearchQuery, "search" | "replace" | "caseSensitive" | "regexp" | "wholeWord">>) {
   return new SearchQuery({
@@ -29,52 +29,26 @@ function WorkspaceSearchControls(props: {
   };
   const run = (command: (view: EditorView) => boolean) => command(props.view);
 
-  return <SearchBar onKeyDown={(event) => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    run(closeSearchPanel);
-    props.view.focus();
-  }}>
-    <SearchField
-      ref={(element) => element.setAttribute("main-field", "true")}
-      aria-label="Find"
-      placeholder="Find"
-      value={props.query().search}
-      onInput={(event) => updateQuery({ search: event.currentTarget.value })}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          run(event.shiftKey ? findPrevious : findNext);
-        }
-      }}
-    />
+  const close = () => { run(closeSearchPanel); props.view.focus(); };
+
+  return <FindBar plain label="Find" query={props.query().search} inputRef={(element) => element.setAttribute("main-field", "true")}
+    onQuery={(search) => updateQuery({ search })} onNext={() => run(findNext)} onPrevious={() => run(findPrevious)} onEscape={close} onClose={close}>
     <Show when={props.editable()}>
-      <SearchField
-        aria-label="Replace"
-        placeholder="Replace"
-        value={props.query().replace}
+      <LeadInput kind="tool" lead={<ReplaceIcon />} aria-label="Replace" placeholder="Replace" value={props.query().replace}
         onInput={(event) => updateQuery({ replace: event.currentTarget.value })}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            run(replaceNext);
-          }
-        }}
-      />
+          if (event.key === "Enter") { event.preventDefault(); run(replaceNext); }
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+        }} />
     </Show>
-    <SearchActions>
-      <IconButton kind="file" aria-label="Previous match" title="Previous match (Shift+Enter)" onClick={() => run(findPrevious)}><ChevronUpIcon /></IconButton>
-      <IconButton kind="file" aria-label="Next match" title="Next match (Enter)" onClick={() => run(findNext)}><Icons.ChevronDown /></IconButton>
-      <IconButton kind="file" aria-label="Match case" title="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></IconButton>
-      <IconButton kind="file" aria-label="Use regular expression" title="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></IconButton>
-      <IconButton kind="file" aria-label="Match whole word" title="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></IconButton>
-      <Show when={props.editable()}>
-        <IconButton kind="file" aria-label="Replace next match" title="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></IconButton>
-        <IconButton kind="file" aria-label="Replace all matches" title="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></IconButton>
-      </Show>
-      <CloseButton kind="file" label="Close search" title="Close search (Escape)" onClick={() => run(closeSearchPanel)} />
-    </SearchActions>
-  </SearchBar>;
+    <IconButton kind="tool" label="Match case" aria-pressed={props.query().caseSensitive} onClick={() => updateQuery({ caseSensitive: !props.query().caseSensitive })}><CaseSensitiveIcon /></IconButton>
+    <IconButton kind="tool" label="Use regular expression" aria-pressed={props.query().regexp} onClick={() => updateQuery({ regexp: !props.query().regexp })}><RegexIcon /></IconButton>
+    <IconButton kind="tool" label="Match whole word" aria-pressed={props.query().wholeWord} onClick={() => updateQuery({ wholeWord: !props.query().wholeWord })}><WholeWordIcon /></IconButton>
+    <Show when={props.editable()}>
+      <IconButton kind="tool" label="Replace next match" onClick={() => run(replaceNext)}><ReplaceIcon /></IconButton>
+      <IconButton kind="tool" label="Replace all matches" onClick={() => run(replaceAll)}><ReplaceAllIcon /></IconButton>
+    </Show>
+  </FindBar>;
 }
 
 export function createCodeSearchPanel(view: EditorView): Panel {

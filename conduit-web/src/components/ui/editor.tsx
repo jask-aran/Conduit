@@ -1,5 +1,4 @@
 import { splitProps, type JSX } from "solid-js";
-import { Input } from "./controls";
 
 /** The editor's column, with a header, code and status bar. */
 export function CodeSurface(props: JSX.HTMLAttributes<HTMLDivElement> & { editable?: boolean }) {
@@ -13,12 +12,6 @@ export function CodeHost(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (el
   const [local, rest] = splitProps(props, ["comparison"]);
   return <div {...rest} class="ui-code-host" data-comparison={local.comparison ? "" : undefined} />;
 }
-/** Find and replace fields followed by their controls, scrolling as one row. */
-export const SearchBar = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-search-bar" />;
-/** A find or replace input; CodeMirror's main-field attribute passes through. */
-export const SearchField = (props: JSX.InputHTMLAttributes<HTMLInputElement>) => <span class="ui-search-field"><Input {...props} /></span>;
-/** The fixed run of find and replace actions. */
-export const SearchActions = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-search-actions" />;
 /** A comment form placed at the end of a code selection. */
 export const AnnotationPopup = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-annotation" />;
 /** A comment's note, shown above its marked code. */

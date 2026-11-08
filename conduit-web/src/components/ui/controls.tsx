@@ -102,7 +102,7 @@ export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonEle
 
 /** A few choices side by side, one current; choosing one is felt as select. arrows: one Tab stop, the arrows moving the choice (a form's radio group, Settings);
  *  without it what holds the group steers its keys (the sidebar's cursor). */
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; id?: string; haptic?: HapticProp }) {
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string; disabled?: boolean }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; tabIndex?: number; id?: string; haptic?: HapticProp }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
   const move = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
@@ -115,7 +115,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
   return <Frost plain={!props.pill} id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class="ui-seg" data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
-    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.arrows && option.value !== props.value ? -1 : undefined} disabled={props.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
+    <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.tabIndex ?? (props.arrows && option.value !== props.value ? -1 : undefined)} disabled={props.disabled || option.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}
       onClick={() => { if (option.value === props.value) return; feel(props.haptic, "select"); props.onChange(option.value); }}>{option.icon}{props.icons || props.pill ? null : <span>{option.label}</span>}{option.count !== undefined && <Count value={option.count} />}</button>}</For>
   </Frost>;
 }

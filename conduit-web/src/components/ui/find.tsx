@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { Show } from "solid-js";
+import { Show, type JSX } from "solid-js";
 import { Frost } from "./frost";
 import { LeadInput } from "./controls";
 import { CloseButton, IconButton } from "./actions";
@@ -9,7 +9,8 @@ import { CloseButton, IconButton } from "./actions";
  * field (LeadInput, its × clearing the query), the count ("3 of 12", "No results"), Previous, Next and Close. Frost,
  * as floating chrome inside a pane is. It rises in as it opens; the caller mounts it while open and owns the search:
  * Enter is Next and Shift+Enter Previous, Escape clears the query and then closes (the Escape ladder), all through
- * onKeyDown's caller-side handlers.
+ * onKeyDown's caller-side handlers. children: more of the find after the field (the editor's replace and toggles);
+ * plain: drawn in its host's row (CodeMirror's panel) instead of floating frost.
  */
 export function FindBar(props: {
   query: string;
@@ -21,6 +22,8 @@ export function FindBar(props: {
   onEscape: () => void;
   onClose: () => void;
   inputRef?: (element: HTMLInputElement) => void;
+  plain?: boolean;
+  children?: JSX.Element;
 }) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing) return;
@@ -30,9 +33,10 @@ export function FindBar(props: {
   };
   // The buttons leave the caret in the field, so Enter keeps stepping after a click.
   const keep = (event: MouseEvent) => event.preventDefault();
-  return <Frost class="ui-find-bar" role="search" aria-label={props.label ?? "Find in chat"} lift="raised">
+  return <Frost class="ui-find-bar" role="search" aria-label={props.label ?? "Find in chat"} lift="raised" plain={props.plain}>
     <LeadInput kind="tool" ref={props.inputRef} value={props.query} placeholder={props.label ?? "Find in chat"} aria-label={props.label ?? "Find in chat"}
       onInput={(event) => props.onQuery(event.currentTarget.value)} onKeyDown={onKeyDown} onClear={() => props.onQuery("")} />
+    {props.children}
     <Show when={props.count}><small class="ui-count ui-find-count" aria-live="polite">{props.count}</small></Show>
     <IconButton kind="tool" label="Previous match (Shift+Enter)" onMouseDown={keep} onClick={() => props.onPrevious()}><Icons.ArrowUp /></IconButton>
     <IconButton kind="tool" label="Next match (Enter)" onMouseDown={keep} onClick={() => props.onNext()}><Icons.ArrowDown /></IconButton>

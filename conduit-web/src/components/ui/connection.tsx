@@ -3,6 +3,8 @@ import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
 import { CircleAlertIcon } from "lucide-solid";
 import { Dot, StatusDot } from "./nav";
 import { Button, Input, Spinner } from "./controls";
+import { IconButton } from "./actions";
+import { Row, type RowProps } from "./row";
 
 export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
   return <form {...props} class="ui-connection" />;
@@ -10,7 +12,7 @@ export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
 export const ConnectionChoices = (props: { children: JSX.Element }) => <ul class="ui-connection-choices">{props.children}</ul>;
 export function ConnectionChoice(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; detail?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["icon", "detail", "children"]);
-  return <li><Button {...rest} variant="ghost" class="ui-connection-choice"><span class="ui-connection-icon ui-size-icon">{local.icon}</span><span>{local.children}</span><code>{local.detail}</code></Button></li>;
+  return <li><Row {...(rest as RowProps)} element="button" density="trail" lead={local.icon} label={local.children} meta={local.detail} /></li>;
 }
 export const ConnectionGroup = (props: { children: JSX.Element }) => <p class="ui-connection-group">{props.children}</p>;
 export function CameraPreview(props: { videoRef: (element: HTMLVideoElement) => void; message: string; onClose: () => void }) {
@@ -72,13 +74,11 @@ export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
   const busy = () => local.connectivity === "connecting" || local.connectivity === "reconnecting";
   const tone = () => local.connectivity === "online" ? "success" : local.connectivity === "offline" ? "danger" : local.connectivity === "reconnecting" ? "warn" : "muted";
   const dot = () => <StatusDot label={local.detail} tone={tone()} spinning={busy()} />;
-  // The name where you are (Row · current); its state, with the dot that shows it, and latency in the data voice, as its menu's meta.
-  // inline: one line, the state after the name (a desktop rail's foot); otherwise the state under it (a phone's list).
-  return <Button {...rest} variant="ghost" class="ui-server-control" data-compact={local.compact ? "" : undefined} data-inline={local.inline ? "" : undefined}>
-    <Show when={!local.compact} fallback={dot()}>
-      <span class="ui-server-copy"><span class="ui-server-name"><strong>{local.name}</strong></span><span class="ui-server-state">{dot()}<small>{local.detail}</small></span></span>
-    </Show>
-  </Button>;
+  // The name, and its state with the dot that shows it in the data voice: after the name inline (a desktop rail's foot), under it otherwise; compact, the dot alone.
+  const state = () => <>{dot()}{local.detail}</>;
+  return <Show when={!local.compact} fallback={<IconButton {...rest} kind="rail">{dot()}</IconButton>}>
+    <Row {...(rest as RowProps)} element="button" density="trail" class="ui-server-control" label={local.name} detail={local.inline ? undefined : state()} meta={local.inline ? state() : undefined} />
+  </Show>;
 }
 
 /** A name's initials: the first letters of its first and last words, or its first two; "?" for none. */

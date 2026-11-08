@@ -98,9 +98,18 @@ once. Tick a family when every listed build goes through its single piece and th
   views), trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's
   editor column, CodeExcerpt's bare mount), search (the editor's has replace and toggles; FindBar has a count).
 
+## Wave 4
+
+The pieces that were their own builds because they differed a little from a shared one now draw through it, the
+shared piece's look winning: ConnectionChoice and ServerControl are trail Rows (the compact ServerControl a rail
+IconButton), ChangeItem is a RowGroup, TourCard is a Card, the workspace views and a question card's pages are
+Segmented (per-option disabled, a group tabIndex), the editor's search is a plain FindBar (its replace field, toggles
+and replace buttons as extra content). ToolViews, rider Tabs, ChangeItem, SearchBar, SearchField and SearchActions
+are gone.
+
 ## Size
 
-Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,813 after (61a90139), with the shared
+Library (src/components/ui .ts/.tsx/.css): 12,941 lines before (c6fd6539), 12,710 after wave 4, with the shared
 pieces the families now go through (dismiss.ts, fit.ts, CloseButton, Count, Dot, FoldLine, Row's densities, Notice,
 state.css, the utilities) included. Checked by gallery-style-diff against builds before each wave (computed styles of
 every family, desktop and phone) and, by subagents, screenshots of base and current builds of every family and the

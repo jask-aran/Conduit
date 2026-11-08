@@ -25,12 +25,12 @@
  *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, PaneEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
  *                   ToolBar, IconButton, LeadInput, Tree > TreeRow
  *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
- *                   ChangeList > ChangeItem, ChangeNav, CommitList, PatchLines
+ *                   ChangeList > RowGroup, ChangeNav, CommitList, PatchLines
  *   history         HistoryList > HistoryRow, HistoryBranch
  *   terminal        PaneHeader and its parts, TermState, TermKeys
  *   web             WebView > (ToolBar, LeadInput), WebScreen: a page in a pane (the hub's browser)
  *   file, viewer    FilesPane > FilesTree; FileView > PaneHeader, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
- *   editor          CodeSurface > CodeHost, SearchBar, AnnotationPopup, Comparison, DiffShell
+ *   editor          CodeSurface > CodeHost, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton
  *   card, toast     Card (frost or .ui-outline); Toast
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
