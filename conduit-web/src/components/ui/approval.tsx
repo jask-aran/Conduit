@@ -1,10 +1,10 @@
 import { For, Match, Show, Switch } from "solid-js";
 
 import { Button } from "./controls";
-import { Frost } from "./frost";
+import { Card } from "./card";
 import * as Icons from "./icons";
 import { ServiceIcon } from "./service-icons";
-import { type Motion, motionOf } from "./shared";
+import { type Motion } from "./shared";
 
 /*
  * An approval: an agent asking to do one thing that leaves its own space (send an email, start a chat, run a command
@@ -72,10 +72,10 @@ export function ApprovalCard(props: { title: string; service?: string | null; li
       </div>
     </Match>
     <Match when={props.state === "pending"}>
-      <Frost lift="raised" class="ui-approval" role="group" aria-label={`Approval: ${props.title}`} {...motionOf(props.motion)}>
+      <Card embedded size="compact" class="ui-approval" role="group" label={`Approval: ${props.title}`} motion={props.motion}>
         <ApprovalSummary title={props.title} service={props.service} lines={props.lines} meta={props.meta} />
         {actions()}
-      </Frost>
+      </Card>
     </Match>
     <Match when={props.state !== "pending"}>
       <p class="ui-approval-done" data-state={props.state}>

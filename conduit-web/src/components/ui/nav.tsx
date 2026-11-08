@@ -88,7 +88,6 @@ export const NavRailSection = (props: { children: JSX.Element }) => <div class="
 /** One of the rail's buttons: an icon; current as a row is; live: a dot at its corner (something works there). */
 
 /** A state the app is in about itself, above the foot's server (an update): an icon, a line, one action. ready: it waits on a person, so it reads at full strength. */
-export const NavNotice = (props: { icon?: JSX.Element; busy?: boolean; ready?: boolean; action?: { label: string; onClick: () => void; quiet?: boolean }; children: JSX.Element }) => <Notice kind="nav" {...props} />;
 
 /** A label and its links as icons (the installers). */
 export type StatusTone = "success" | "active" | "warn" | "danger" | "muted" | "unread";

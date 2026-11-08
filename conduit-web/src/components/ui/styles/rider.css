@@ -90,12 +90,10 @@
 .ui-tabs { display: flex; min-width: 0; flex: 1; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
 .ui-tabs::-webkit-scrollbar { display: none; }
 .ui-tabs > button { display: inline-flex; height: var(--control-sm); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--cmp-slot-radius); background: transparent; padding: 0 var(--space-lg); color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-lift); cursor: pointer; }
-.ui-tabs > button:is(:focus-visible) { color: var(--foreground); }
-@media (hover: hover) { .ui-tabs > button:is(:hover, :focus-visible) { color: var(--foreground); } }
+.ui-tabs > button:focus-visible { background: var(--tint); color: var(--foreground); }
+@media (hover: hover) { .ui-tabs > button:hover { background: var(--tint); color: var(--foreground); } }
 /* The current tab: white at the current weight, no fill (the wash is only the pointer). */
 .ui-tabs > button[aria-selected="true"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-tabs > button:is(:focus-visible) { background: var(--tint); }
-@media (hover: hover) { .ui-tabs > button:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-tabs svg { width: var(--icon-sm); height: var(--icon-sm); }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }

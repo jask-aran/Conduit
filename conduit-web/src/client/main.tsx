@@ -1,6 +1,6 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
-import { HarnessMark, HeaderNote, StatusDot } from "@/components/ui";
+import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import type { Narration } from "./turn-rows";
 import { defaultNarration, NARRATION_OPTIONS } from "./preferences/transcript-mode";
@@ -6326,7 +6326,7 @@ function App() {
     return <>
       <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<><Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show>
         {/* Drawn its own way in this pane only: said, so two panes of one chat are told apart. */}
-        <Show when={props.narration}>{(narration) => <HeaderNote label={NARRATION_OPTIONS.find((option) => option.value === narration())!.label} title="This pane only: the chat's own choice is unchanged" />}</Show></>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs}
+        <Show when={props.narration}>{(narration) => <Notice kind="header" hint="This pane only: the chat's own choice is unchanged">{NARRATION_OPTIONS.find((option) => option.value === narration())!.label}</Notice>}</Show></>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs}
         narration={surfaceChat.loadedId() && surfaceChat.status() !== "draft" ? { value: mode(), onChange: (value) => props.narration && props.onNarration ? props.onNarration(value) : setNarration(surfaceChat.loadedId()!, value) } : undefined} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}

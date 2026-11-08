@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
 import { CardForm, CardBody, CardRead } from "@/components/ui/card";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField } from "@/components/ui/controls";
-import { pressAhead, PillButton, Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, NavNotice, NavPane, NavRail, NavRailSection, NavSkeleton, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
+import { pressAhead, PillButton, Backdrop, Button, NavBrand, NavLead, NavFolder, NavFolderRow, Notice, NavPane, NavRail, NavRailSection, NavSkeleton, Segmented, StatusDot, Row, Group, Note, Empty, IconButton, Actions } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
@@ -79,9 +79,9 @@ function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
     return current.kind === "working" ? current.label : "";
   };
   return <Show when={state().kind !== "idle"}>
-    <NavNotice ready={state().kind === "ready"} busy={state().kind === "checking" || state().kind === "working"} icon={state().kind === "ready" ? <Icons.Download /> : <Icons.Check />}
+    <Notice kind="nav" ready={state().kind === "ready"} busy={state().kind === "checking" || state().kind === "working"} icon={state().kind === "ready" ? <Icons.Download /> : <Icons.Check />}
       action={state().kind === "ready" ? { label: androidShell ? "Install" : "Restart", onClick: () => props.onTake?.() }
-        : (() => { const current = state(); return current.kind === "working" && current.onCancel ? { label: "Cancel", onClick: current.onCancel, quiet: true } : undefined; })()}>{words()}</NavNotice>
+        : (() => { const current = state(); return current.kind === "working" && current.onCancel ? { label: "Cancel", onClick: current.onCancel, quiet: true } : undefined; })()}>{words()}</Notice>
   </Show>;
 }
 

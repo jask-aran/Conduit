@@ -10,6 +10,7 @@ import { type Density, type Motion, motionOf, moveCursor } from "./shared";
 import { Actions, CloseButton } from "./actions";
 import { duration, easing, reducedMotion } from "./motion";
 import { DropdownMenu, MenuContent, MenuRow, MenuSection } from "./menus";
+import { Row } from "./row";
 
 /*
  * Overlay: raised frost over a dimmed page -- the app's large surfaces (the
@@ -238,7 +239,7 @@ export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; pl
     if (control instanceof HTMLButtonElement && !control.matches("[aria-haspopup], [role='switch'], [role='combobox'], [role='checkbox']")
       && !(event.target as Element).closest("button, a, input, select, textarea")) event.preventDefault();
   };
-  return props.plain ? <div class="ui-setting-line" title={props.title}>{inner()}</div> : <label class="ui-setting-line" title={props.title} onClick={guard}>{inner()}</label>;
+  return <Row element={props.plain ? "div" : "label"} density="line" bare haptic={false} class="ui-setting-line" title={props.title} onClick={props.plain ? undefined : guard}>{inner()}</Row>;
 };
 /**
  * A credential: its name and how it is held (state), then its actions: the caller's own first (actions: Sign in),

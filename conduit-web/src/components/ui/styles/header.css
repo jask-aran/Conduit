@@ -30,60 +30,41 @@ button.ui-header-place { cursor: pointer; }
 /* A control drawn on one layout alone. */
 .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: none; }
 
-@media (--conduit-phone-layout) {
-  /* The pills sit at the overlay inset inside the safe area, frost over the transcript: the strip has no ground of its
-     own, so the transcript runs under them and the status bar alike. */
-  :root { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
-  .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) var(--space-xs);
-    background: none; }
-  .ui-header-title { display: none; }
-  /* The name pill sits between the groups, centred in the room they leave: its place's mark, then its title, which
-     wraps to a second line before it is cut short. */
-  .ui-header-pill { display: inline-flex; min-width: 0; height: var(--pill-size); flex: 0 1 auto; align-items: center; gap: var(--space-sm);
-    margin-inline: auto; padding: 0 var(--space-xl) 0 var(--space-lg); color: var(--foreground); font: inherit; text-align: start; }
-  .ui-header-pill ~ .ui-header-group[data-actions] { margin-left: 0; }
-  /* A pill with its count: the two centred as one, a pill's gap apart. */
-  .ui-header-pills { display: inline-flex; min-width: 0; flex: 0 1 auto; gap: var(--pill-gap); margin-inline: auto; }
-  .ui-header-pills > .ui-header-pill { margin-inline: 0; }
-  .ui-header-pills ~ .ui-header-group[data-actions] { margin-left: 0; }
-  .ui-header-count { display: inline-grid; flex: none; place-items: center; min-width: var(--pill-size); height: var(--pill-size); box-sizing: border-box;
-    padding: 0 var(--space-md); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
-  .ui-header-count:is(:active, [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
-  .ui-header-pill-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
-  .ui-header-pill-icon > * { width: 100%; height: 100%; }
-  button.ui-header-pill { cursor: pointer; }
-  /* Pressed, or its menu open: the frost takes the wash over it. */
-  button.ui-header-pill:is(:active, [data-expanded]) { background-image: linear-gradient(var(--tint), var(--tint)); }
-  .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: inline-grid; }
-  .ui-pane-header:where([data-header="pane"]) [data-only="desktop"] { display: none; }
-  /* The groups are pills (Pill): frost capsules whose buttons are capsules narrower than tall, concentric with them. */
-  .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
-  /* The name pill and its count are Frost; the groups are frost on a phone alone, so they draw its recipe here. */
-  .ui-header-pill, .ui-header-count { border-radius: var(--radius-round); }
-  .ui-header-group { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
-    background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
-  .ui-header-group[data-lead]:not(:empty) { display: flex; }
-  .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
-  .ui-header-group > .ui-button svg { width: var(--pill-icon); height: var(--pill-icon); }
-  .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }
-}
-
-/* The phone presentation in a region that asks for it on a desktop ([data-presentation="phone"]: jbot in the dock, tall
-   and narrow): its name a frost pill, its actions frost pills, the transcript running under both. The phone's lead
-   group (sidebar, new chat) is the phone's own and stays away. Desktop pointer sizes; no safe areas. */
+/* The phone presentation ([data-presentation="phone"]: a phone's root, layout.ts, or a region that asks for it on a
+   desktop, jbot in the dock): the name a frost pill between frost groups, the transcript running under them. */
 [data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); }
 [data-presentation="phone"] .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: var(--space-md) var(--space-md) var(--space-xs); background: none; }
 [data-presentation="phone"] .ui-header-title { display: none; }
+/* The name pill sits between the groups, centred in the room they leave: its place's mark, then its title. */
 [data-presentation="phone"] .ui-header-pill { display: inline-flex; min-width: 0; height: var(--pill-size); flex: 0 1 auto; align-items: center; gap: var(--space-sm);
-  margin-inline: auto; padding: 0 var(--space-xl) 0 var(--space-lg); color: var(--foreground); font: inherit; text-align: start; }
-[data-presentation="phone"] .ui-header-pill ~ .ui-header-group[data-actions] { margin-left: 0; }
+  margin-inline: auto; padding: 0 var(--space-xl) 0 var(--space-lg); border-radius: var(--radius-round); color: var(--foreground); font: inherit; text-align: start; }
+[data-presentation="phone"] :is(.ui-header-pill, .ui-header-pills) ~ .ui-header-group[data-actions] { margin-left: 0; }
+/* A pill with its count: the two centred as one, a pill's gap apart. */
+[data-presentation="phone"] .ui-header-pills { display: inline-flex; min-width: 0; flex: 0 1 auto; gap: var(--pill-gap); margin-inline: auto; }
+[data-presentation="phone"] .ui-header-pills > .ui-header-pill { margin-inline: 0; }
+[data-presentation="phone"] .ui-header-count { display: inline-grid; flex: none; place-items: center; min-width: var(--pill-size); height: var(--pill-size); box-sizing: border-box;
+  padding: 0 var(--space-md); border-radius: var(--radius-round); font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
 [data-presentation="phone"] .ui-header-pill-icon { display: grid; width: var(--icon-sm); height: var(--icon-sm); flex: none; place-items: center; color: var(--muted-foreground); }
 [data-presentation="phone"] .ui-header-pill-icon > * { width: 100%; height: 100%; }
 [data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
-[data-presentation="phone"] button.ui-header-pill:is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
+/* Pressed, or what it opens open: the frost takes the wash over it. */
+[data-presentation="phone"] :is(button.ui-header-pill, .ui-header-count):is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
+/* The groups are pills (Pill): frost capsules whose buttons are capsules narrower than tall, concentric with them. The
+   lead group (sidebar, new chat) is a phone's own: elsewhere it stays away. */
 [data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
-[data-presentation="phone"] .ui-header-pill { border-radius: var(--radius-round); }
 [data-presentation="phone"] .ui-header-group:not([data-lead]) { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
   background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
 [data-presentation="phone"] .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
 [data-presentation="phone"] .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }
+
+/* A phone's own: the safe area over the pills, the lead group, the controls drawn on a phone alone. */
+@media (--conduit-phone-layout) {
+  [data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+  [data-presentation="phone"] .ui-pane-header:where([data-header="pane"]) { padding-top: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
+  [data-presentation="phone"] .ui-header-group[data-lead] { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
+    background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
+  .ui-header-group[data-lead]:not(:empty) { display: flex; }
+  .ui-header-group > .ui-button svg { width: var(--pill-icon); height: var(--pill-icon); }
+  .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: inline-grid; }
+  .ui-pane-header:where([data-header="pane"]) [data-only="desktop"] { display: none; }
+}

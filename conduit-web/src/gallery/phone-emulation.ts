@@ -32,5 +32,7 @@ export function emulatePhone() {
   const all = () => { for (const sheet of Array.from(document.styleSheets)) { try { rewrite(sheet.cssRules); } catch { /* cross-origin */ } } };
   new MutationObserver(all).observe(document.head, { childList: true, subtree: true, characterData: true });
   document.documentElement.dataset.galleryPhone = "";
+  // layout.ts marked the root by the native query before this frame was a phone: mark it as a phone's.
+  document.documentElement.dataset.presentation = "phone";
   all();
 }

@@ -1,8 +1,8 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
-import { Notice } from "./state";
 import { createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
 import { createFolds } from "./fit";
+import "./layout";
 import { PaneMark } from "./row";
 import { Button } from "./controls";
 
@@ -14,7 +14,7 @@ import { Button } from "./controls";
 
 /** lead: the phone's leading controls (the sidebar's toggle, New chat); on a desktop the sidebar's head holds them.
  *  pill: a phone's name for the page between its groups (HeaderPill); a desktop's title says it.
- *  after: beside the title (a HeaderNote). frost: the strip itself is frost, for a tab row read
+ *  after: beside the title (a Notice kind=header). frost: the strip itself is frost, for a tab row read
  *  over the transcript scrolling under it. */
 /** Where a pane's top line is: a page's (pane), a tool's in the dock or a pane (tool), a file's (file), a terminal's (term). */
 export type PaneHeaderKind = "pane" | "tool" | "file" | "term";
@@ -28,7 +28,7 @@ const TOOL_FOLDS = ["labels", "name"] as const;
  * .ui-pane-header[data-header]):
  *
  *   pane   a page's: lead (the phone's leading controls), the title (children), pill (a phone's name for the page),
- *          after (beside the title: a HeaderNote), actions; frost: the strip itself is frost, for a tab row read over
+ *          after (beside the title: a Notice kind=header), actions; frost: the strip itself is frost, for a tab row read over
  *          the transcript scrolling under it
  *   tool   a tool's in the dock or a pane: its name, the place it shows (the dock follows places), its modes (a
  *          Segmented), views and controls; fit: it measures itself short (compact: "labels", "name"). Its drag handle.
@@ -141,6 +141,3 @@ export function HeaderButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> 
   return <Button variant="ghost" size="icon-sm" tabIndex={-1} aria-label={local.label} title={local.label} {...rest} data-only={local.only}>{local.icon}</Button>;
 }
 
-/** Beside the title: what the page is, when that needs saying, and the one thing to do about it. A capsule of frost. */
-export const HeaderNote = (props: { label: string; title?: string; action?: { label: string; name?: string; busy?: boolean; busyLabel?: string; onClick: () => void } }) =>
-  <Notice kind="header" hint={props.title} action={props.action}>{props.label}</Notice>;

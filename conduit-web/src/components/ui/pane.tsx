@@ -110,7 +110,6 @@ export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (ele
 }
 /** An icon button in a ToolBar; a menu's trigger takes it with `as`. */
 /** A line about the tool's state (stale, truncated, grouped): muted, or warn; an action at its end in words. */
-export const ToolNotice = (props: { tone?: "warn"; live?: boolean; action?: { label: string; disabled?: boolean; onClick: () => void }; children?: JSX.Element }) => <Notice kind="tool" {...props} />;
 
 /** A row of a tree: indented by depth, a chevron for a folder (open turns it; none for a file keeps its place), its
  *  mark, its name, and a mark at the end (kept visible). selected: open in the viewer; data-open-file is the app's

@@ -2,7 +2,7 @@ import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
 import { FileView, FileName, FileGit, FileDirty, FileSuffix, FileMore, StatusBar, StatusText } from "@/components/ui/file";
 import { FileImage, FileMedia, FileCard, FileBody } from "@/components/ui/viewer";
-import { ToolNotice } from "@/components/ui/pane";
+import { Notice } from "@/components/ui/state";
 import { Spinner, Empty, Actions, IconButton, PaneHeader } from "@/components/ui";
 import { Button } from "@/components/ui/controls";
 import { Rule } from "@/components/ui/popover";
@@ -614,7 +614,7 @@ export default function WorkspaceFileSlot(props: {
           <Empty>{props.empty ?? "Select a file to preview it."}</Empty>
         </>}>{(file) => <>
           <Show when={file().readOnly && !file().truncated}>
-            <ToolNotice tone="warn">Opened as text. Editing is disabled.</ToolNotice>
+            <Notice kind="tool" tone="warn">Opened as text. Editing is disabled.</Notice>
           </Show>
           <Show when={file().truncated} fallback={<FileBody editing={editing()} wrap={props.wrap}>
             <Show when={file().path}>{(path) =>

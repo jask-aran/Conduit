@@ -11,7 +11,8 @@ import * as Icons from "./icons";
  * popover.tsx's Item is a Row with a menu's own parts). The density sets its height, padding, voice and cursor
  * (styles/row.css, then nav.css, dashboard.css and popover.css); the states say where you are and what is chosen.
  *
- * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own.
+ * element: a button when it does one thing, a link when it goes somewhere, a div when it holds controls of its own, a
+ * label when its click is its control's.
  * line: a light line in a list of facts (a commit, a choice, a network's client), its title whole, its context after;
  * trail: a line in a trail or a room's list (an agent's, a room's, a run's), washed under the pointer, its fold shown
  * then; tree: a file tree's, indented by depth.
@@ -23,7 +24,7 @@ export type RowDensity = "nav" | "list" | "menu" | "line" | "trail" | "tree";
 
 export type RowProps = {
   density?: RowDensity;
-  element?: "button" | "a" | "div";
+  element?: "button" | "a" | "div" | "label";
   /** The leading mark (an icon, a glyph, a harness's mark). A list row keeps its room even without one. */
   lead?: JSX.Element;
   /** The title, when it is not the children (a list row's, passed with its other parts). */

@@ -17,9 +17,8 @@
 .ui-approval-code { max-height: var(--measure-xs); margin: 0; overflow: auto; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-inset); background: var(--tint);
   color: var(--foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* In the thread: the summary on frost, its answers under it at the left (Allow the one action waiting). */
-.ui-approval { display: grid; width: min(100%, var(--measure-lg)); gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-lg); }
-.ui-approval[data-bare] { width: auto; gap: var(--space-md); padding: 0 0 var(--space-md); border-radius: 0; }
+/* In the thread: the summary on a compact Card, its answers under it at the left (Allow the one action waiting). */
+.ui-approval[data-bare] { display: grid; gap: var(--space-md); padding: 0 0 var(--space-md); }
 .ui-approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding-left: calc(var(--icon) + var(--row-gap)); }
 /* Answered: one quiet line of what became of it. */
 .ui-approval-done { display: flex; min-width: 0; align-items: center; gap: var(--row-gap); margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }

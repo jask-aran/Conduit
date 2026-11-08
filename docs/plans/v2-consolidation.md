@@ -82,3 +82,17 @@ once. Tick a family when every listed build goes through its single piece and th
   icon-size rules moved onto them, computed styles unchanged in every family. Left: rules aimed at children the
   library does not class, partial recipes, zero-specificity :where() pieces, washes that also set colour or more
   states; the muted caption pair has no font-shorthand token to become.
+
+## Wave 3
+
+- Readout and SettingLine are Rows (Row takes element="label"; moveCursor skips [data-still]). ReportCard is
+  Card element="button" surface="outline"; ApprovalCard is Card size="compact" (Card takes element, role, label, an
+  optional title and sizes compact and row). NavNotice, ToolNotice and HeaderNote are gone: callers use Notice kind.
+- The phone header is written once: a phone's root is [data-presentation="phone"] (layout.ts, and the gallery's
+  phone frame), so the @media block keeps only what is a phone's own (safe areas, the lead group, phone-only
+  controls).
+- Still apart, as they are not the same build: ConnectionChoice and ServerControl (ghost Buttons, their wash, ring
+  and pressed state are Button's), ChangeItem (a wrapper round a Row button and a sibling action), TourCard (an
+  Overlay with a head bar and a ruled foot), tabs (rider Tabs, PaneTabs, ToolViews: ticks, drag/close, disabled
+  views), trees (FilesTree is the column, Tree the list in it), code (CodeBlock's static HTML, CodeSurface's
+  editor column, CodeExcerpt's bare mount), search (the editor's has replace and toggles; FindBar has a count).

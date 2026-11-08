@@ -1,3 +1,4 @@
+import { Card } from "./card";
 import * as Icons from "./icons";
 import { Dot } from "./nav";
 import { createSignal, For, Show, type JSX } from "solid-js";
@@ -30,10 +31,10 @@ export const LevelMark = (props: { level: string; handled?: boolean }) =>
  * one message, so it takes its place in the stream as an answer does.
  */
 export function ReportCard(props: { title: string; line?: string; time?: string; notified?: boolean; onOpen: () => void }) {
-  return <button type="button" class="ui-report-card" onClick={() => props.onOpen()}>
+  return <Card element="button" surface="outline" embedded size="row" class="ui-report-card" onClick={() => props.onOpen()}>
     <Row density="trail" lead={<Icons.FileText aria-hidden="true" />} label={<b class="ui-report-title">{props.title}</b>} detail={props.line}
       meta={<span class="ui-report-end"><Show when={props.notified}><Icons.Notification aria-label="Sent to your phone" /></Show><Show when={props.time}><time>{props.time}</time></Show></span>} fold="quarter" />
-  </button>;
+  </Card>;
 }
 
 /**

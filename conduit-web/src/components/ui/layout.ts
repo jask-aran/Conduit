@@ -13,6 +13,15 @@ export const touchOnly = () => typeof matchMedia === "function" && matchMedia(TO
 /** Phone chrome needs both a narrow viewport and a phone-like primary pointer. */
 export const PHONE_LAYOUT_QUERY = `(max-width: ${MOBILE_LAYOUT_BREAKPOINT_PX}px) and ${TOUCH_ONLY_QUERY}`;
 
+// A phone's layout is the phone presentation (header.css): the root says so, as a region asking for it does, before
+// anything is drawn.
+if (typeof window !== "undefined") {
+  const phone = matchMedia(PHONE_LAYOUT_QUERY), root = document.documentElement;
+  const mark = () => { if (phone.matches) root.dataset.presentation = "phone"; else delete root.dataset.presentation; };
+  mark();
+  phone.addEventListener("change", mark);
+}
+
 /** The desktop shell is the complement used by Conduit's supported pointer types. */
 export const NON_PHONE_LAYOUT_QUERY = `(min-width: ${MOBILE_LAYOUT_BREAKPOINT_PX + 1}px), (hover: hover), (pointer: fine), (pointer: none)`;
 

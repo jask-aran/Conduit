@@ -127,7 +127,7 @@
 /* Unfolds: as wide as its cap from the start, so a row opening in place (Details, Context) neither widens nor moves it;
    and its height grows with what opens, to the room it has (its host's, inside the safe area), before it scrolls. */
 .ui-menu[data-unfolds] { --menu-height-cap: 100dvh; width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
-.ui-readout { display: flex; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.ui-readout { min-height: 0; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* A long value (a tool list, an id) wraps at its end rather than pushing past the menu. */
 .ui-readout > span:last-child { min-width: 0; text-align: end; overflow-wrap: anywhere; }
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }

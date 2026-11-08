@@ -18,7 +18,8 @@ import type { DiffPayload, GitAction, GitActionResult, GitChangedFile, GitCommit
 import { Button, Segmented } from "@/components/ui/controls";
 import { ToolLine, CommitBox, ChangeLedger, ChangeList, ChangeItem, CommitRow, CommitList, PatchLines } from "@/components/ui/source";
 import { ChangeRow } from "@/components/ui/dashboard";
-import { ToolBar, ToolNotice } from "@/components/ui/pane";
+import { ToolBar } from "@/components/ui/pane";
+import { Notice } from "@/components/ui/state";
 import "./workspace.css";
 
 const sourceControlScopes = diffScopes.filter((scope) => scope.value === "head" || scope.value === "changes" || scope.value === "staged");
@@ -269,7 +270,7 @@ export function SourceControlView(props: {
         <IconButton label="Copy branch name" disabled={!c.diff()?.branch} onClick={() => copyText(c.diff()?.branch)}><Icons.Copy /></IconButton>
         <IconButton label="Refresh Git status" disabled={c.diffLoading()} onClick={() => void c.loadDiff(c.mode() === "patch", c.mode() === "graph")}><Icons.Refresh /></IconButton>
       </>} />
-      <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
+      <Show when={props.stale}><Notice kind="tool" tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll() }}><span>Not updating</span><span aria-hidden="true">·</span></Notice></Show>
       <Show when={c.diff()?.repository}>
         <CommitBox value={c.commitMessage()} placeholder="Message (Ctrl+Enter to commit)" count={c.stagedFiles().length}
           busy={c.gitAction() === "commit"} busyIcon={<Spinner />} icon={<Icons.Check />}
@@ -290,7 +291,7 @@ export function SourceControlView(props: {
           </Group>
           <Group kind="change" open={c.changesOpen()} title="Changes" count={c.unstagedFiles().length} onToggle={() => c.setChangesOpen((open) => !open)}
             actions={<IconButton label="Stage all" disabled={!c.unstagedFiles().length || Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage-all")}><CirclePlusIcon /></IconButton>}>
-            <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><ToolNotice>Untracked folders are grouped. Staging a folder includes its contents.</ToolNotice></Show>
+            <Show when={c.unstagedFiles().some((file) => file.status === "??" && file.path.endsWith("/"))}><Notice kind="tool">Untracked folders are grouped. Staging a folder includes its contents.</Notice></Show>
             <Show when={c.unstagedFiles().length} fallback={<Empty kind="change">Working tree clean</Empty>}>
               <ChangeList><For each={c.unstagedFiles()}>{(file) =>
                 <ChangeItem action={<IconButton label={`Stage ${file.path}`} title="Stage" disabled={Boolean(c.gitAction())} onClick={() => void c.runGitAction("stage", file.path)}><CirclePlusIcon /></IconButton>}>

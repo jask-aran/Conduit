@@ -115,7 +115,7 @@
 .ui-tool-view > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-tool-views[data-icons-only] .ui-tool-view > span { display: none; }
 .ui-tool-view:is([aria-selected="true"], :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); }
-@media (hover: hover) { .ui-tool-view:is([aria-selected="true"], :hover, :focus-visible) { outline: none; background: var(--tint); color: var(--foreground); } }
+@media (hover: hover) { .ui-tool-view:hover { background: var(--tint); color: var(--foreground); } }
 .ui-tool-view:disabled { cursor: not-allowed; opacity: var(--opacity-disabled); }
 @media (--conduit-phone-layout) {
   .ui-tool-views { display: flex; }

@@ -122,7 +122,7 @@ export function Match(props: { text: string; query: string }) {
 const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-keys" data-first={props.first ? "" : undefined}><For each={props.keys}>{(key) => <Keycap>{key}</Keycap>}</For></span>;
 
 /** A line of a readout: what it is, and its value at the end (a total, a cost, a reset time). */
-export const Readout = (props: { label: JSX.Element; value?: JSX.Element }) => <div class="ui-readout"><span>{props.label}</span><Show when={props.value}><span>{props.value}</span></Show></div>;
+export const Readout = (props: { label: JSX.Element; value?: JSX.Element }) => <Row density="line" bare class="ui-readout" data-still=""><span>{props.label}</span><Show when={props.value}><span>{props.value}</span></Show></Row>;
 
 /** A rule between groups of a menu's rows, where it has no sections. */
 export const Rule = () => <hr class="ui-rule" />;

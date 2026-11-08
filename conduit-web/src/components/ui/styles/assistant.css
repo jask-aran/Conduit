@@ -37,9 +37,6 @@
 .ui-day-now::before { position: absolute; top: 0; left: 50%; width: calc(3 * var(--stroke-thin)); height: calc(3 * var(--stroke-thin)); border-radius: var(--radius-round); background: var(--foreground); content: ""; translate: -50% -50%; }
 
 /* A report in jbot's stream: a card at the answer's place, its title and first line, when it came, and the way in. */
-.ui-report-card { display: flex; width: min(100%, var(--measure-xl)); min-width: 0; align-items: center; gap: var(--space-md); border: var(--hairline) solid var(--border); border-radius: var(--radius-surface); background: var(--card); padding: var(--space-md) var(--space-lg); color: var(--foreground); text-align: left; cursor: pointer; transition: border-color var(--duration-quick) var(--ease-change); }
-@media (hover: hover) { .ui-report-card:hover { border-color: var(--muted-foreground); } }
-.ui-report-card:focus-visible { outline: none; border-color: var(--foreground); }
 /* Its row is a Row line inside the card (the card is its box and its wash): the mark the full icon, the title in the
    row's lift, its chevron always shown. */
 .ui-report-card > .ui-row { padding: 0; }

@@ -9,10 +9,11 @@ import { Actions, CloseButton } from "./actions";
 import { ChipCopy } from "./rider";
 
 /** size wide: a card that holds content (a list, an excerpt, an editor). close: a × in its corner, for a card with no Cancel.
- *  surface: frost (a dialog, raised), or outline (a hairline on its ground, no fill: the .ui-outline every outlined box shares). */
-export function Card(props: { title: JSX.Element; surface?: "frost" | "outline"; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
-  return <Frost lift="raised" plain={props.surface === "outline"} role={props.embedded ? undefined : "dialog"} aria-label={!props.embedded && typeof props.title === "string" ? props.title : undefined} class={cn("ui-card", props.surface === "outline" && "ui-outline", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
-    <h3>{props.title}</h3><Show when={props.detail}><p>{props.detail}</p></Show>
+ *  surface: frost (a dialog, raised), or outline (a hairline on its ground, no fill: the .ui-outline every outlined box shares).
+ *  element button: the whole card is one press (onClick); role/label: a role other than dialog, and its name. */
+export function Card(props: { title?: JSX.Element; element?: "div" | "button"; onClick?: () => void; role?: "group"; label?: string; surface?: "frost" | "outline"; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split" | "compact" | "row"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
+  return <Frost as={props.element} type={props.element === "button" ? "button" : undefined} onClick={props.onClick} lift="raised" plain={props.surface === "outline"} role={props.role ?? (props.embedded ? undefined : "dialog")} aria-label={props.label ?? (!props.embedded && typeof props.title === "string" ? props.title : undefined)} class={cn("ui-card", props.surface === "outline" && "ui-outline", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
+    <Show when={props.title}><h3>{props.title}</h3></Show><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
     <Show when={props.close}><CloseButton class="ui-card-close" label={props.closeLabel} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()} /></Show>
     {props.children}

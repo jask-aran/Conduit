@@ -13,7 +13,8 @@ import { SplitEdge } from "@/components/ui/editor";
 import { api, asList } from "../api/client";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { ToolBar, ToolNotice, Tree as TreeList, TreeRow } from "@/components/ui/pane";
+import { ToolBar, Tree as TreeList, TreeRow } from "@/components/ui/pane";
+import { Notice } from "@/components/ui/state";
 
 import WorkspaceFileSlot, { preloadWorkspaceEditor, type FileSlotHandle, type FileSummary } from "./workspace-file-slot";
 import { readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace-panel-storage";
@@ -870,11 +871,11 @@ export function FilesView(props: {
           <div role="group"><Tree directory={entry.path} depth={depth() + 1} /></div>
         </Show>
       </div>}</For>
-      <Show when={c.directories()[treeProps.directory]?.oversize}><ToolNotice>Directory exceeds the 50,000-entry limit. Open a smaller directory.</ToolNotice></Show>
-      <Show when={c.directories()[treeProps.directory]?.truncated}><ToolNotice action={{ label: "Show more", disabled: c.filesLoading(), onClick: () => void c.loadDirectory(treeProps.directory, false, true) }}>
+      <Show when={c.directories()[treeProps.directory]?.oversize}><Notice kind="tool">Directory exceeds the 50,000-entry limit. Open a smaller directory.</Notice></Show>
+      <Show when={c.directories()[treeProps.directory]?.truncated}><Notice kind="tool" action={{ label: "Show more", disabled: c.filesLoading(), onClick: () => void c.loadDirectory(treeProps.directory, false, true) }}>
         <Show when={c.fileFilter().trim()}>Filter covers loaded entries only. </Show>
         <span>{c.directories()[treeProps.directory]?.entries.length} of {c.directories()[treeProps.directory]?.total ?? "more"} entries loaded.</span>
-      </ToolNotice></Show>
+      </Notice></Show>
     </>;
   };
 
@@ -918,7 +919,7 @@ export function FilesView(props: {
                 onKeyDown={c.onFileFilterKeyDown}
               />
           </ToolBar>
-          <Show when={props.stale}><ToolNotice tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll?.() }}><span>Not updating</span><span aria-hidden="true">·</span></ToolNotice></Show>
+          <Show when={props.stale}><Notice kind="tool" tone="warn" live action={{ label: "Retry", onClick: () => props.onRetryPoll?.() }}><span>Not updating</span><span aria-hidden="true">·</span></Notice></Show>
           <TreeList ref={(element) => {
             c.elements.tree = element;
             queueMicrotask(() => { element.scrollTop = peekCachedWorkspace(props.projectId)?.treeScrollTop || 0; });

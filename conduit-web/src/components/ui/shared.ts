@@ -22,13 +22,13 @@ export function cssTime(element: Element, name: string, fallback: number) {
 /**
  * The one cursor (DESIGN Interaction): the pointer moves it, as the keyboard
  * does, so only one row of a list is ever washed. A list's container passes
- * this to onPointerOver; a row is a ui-row, its cursor data-highlighted. Only a pointer that hovers
+ * this to onPointerOver; a row is a ui-row (not a data-still one: a readout), its cursor data-highlighted. Only a pointer that hovers
  * moves it: a tap is a choice, and a cursor it moved stayed on the row tapped, washed, once the list was left.
  */
 export function moveCursor(event: PointerEvent & { currentTarget: Element }) {
   if (!hovers(event)) return;
   const row = (event.target as Element).closest(".ui-row");
-  if (!row || !event.currentTarget.contains(row) || row.hasAttribute("data-disabled") || row.hasAttribute("data-highlighted")) return;
+  if (!row || !event.currentTarget.contains(row) || row.matches("[data-disabled], [data-still], [data-highlighted]")) return;
   event.currentTarget.querySelectorAll("[data-highlighted]").forEach((other) => other.removeAttribute("data-highlighted"));
   row.setAttribute("data-highlighted", "");
 }
