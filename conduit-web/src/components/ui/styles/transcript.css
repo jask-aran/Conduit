@@ -199,11 +199,9 @@
 /* Disclosure (DESIGN Transcript): everything that folds -- a header, one turning chevron, a body. Its
    body unfolds as an Expand; this is its shape. */
 .ui-disclosure { display: grid; min-width: 0; gap: var(--space-2xs); }
-.ui-disclosure-header { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); font: var(--weight-rest) var(--text-row)/var(--leading-row) var(--font-sans); text-align: left; }
-.ui-disclosure-header:not(:disabled) { cursor: pointer; }
 .ui-disclosure-chevron { flex: none; margin-left: auto; }
-:is(.ui-disclosure-header, .ui-trace):is(:focus-visible) > .ui-disclosure-chevron { color: var(--foreground); }
-@media (hover: hover) { :is(.ui-disclosure-header, .ui-trace):is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); } }
+.ui-trace:focus-visible > .ui-disclosure-chevron { color: var(--foreground); }
+@media (hover: hover) { .ui-trace:is(:hover, :focus-visible) > .ui-disclosure-chevron { color: var(--foreground); } }
 /* Its body is an Expand: in the document only while open, sliding in and out under the header. */
 .ui-disclosure-body { min-width: 0; }
 .ui-disclosure[data-open="false"] { gap: 0; }
