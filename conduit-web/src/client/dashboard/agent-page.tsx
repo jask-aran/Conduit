@@ -171,10 +171,12 @@ export function AgentPage(props: {
     const doing = () => run.phase === "Working" && run.activity ? capitalised(run.activity) : run.phase || "Working";
     const crew = () => run.agents && run.agents.total > 0 && run.agents.running ? `${run.agents.running} ${run.agents.running === 1 ? "agent" : "agents"} working` : null;
     const ended = () => run.status === "failed" ? `Failed${run.summary ? `: ${run.summary}` : ""}` : run.status === "stopped" ? "Stopped"
-      : run.woke ? `Reported to ${name()}` : run.summary || (run.level ? levelWord(run.level) : null);
+      // What it did, as a turn's line says it; with no tools to tell, what it found.
+      : run.did ? capitalised(run.did) : run.summary || (run.woke ? `Reported to ${name()}` : run.level ? levelWord(run.level) : null);
+    const told = () => !live && run.woke && run.status !== "failed" && run.status !== "stopped" ? `Reported to ${name()}` : null;
     const named = () => run.number && run.kind !== "agent" ? `${run.title || "A run"} #${run.number}` : run.title || "A run";
     const line = () => (live ? [doing(), crew()] : [ended()]).filter(Boolean).join(" · ");
-    const context = () => [line(), age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
+    const context = () => [line(), told() !== line() ? told() : null, age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
     const preview = () => setPeek({ title: named(), context: context(), text: report() ? entryText(report()!) : run.summary || "", file: report()?.file,
       open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event?: MouseEvent) => props.onOpenChat(chatId()!, event) }
         : report()?.file ? { label: "Open the file", icon: <Icons.FileText />, go: () => props.onOpenFile(report()!.file!) } : undefined });
@@ -297,7 +299,7 @@ export function AgentPage(props: {
             ? setPeek({ title: entry.title || tally([entry]), context: `${entryContext(entry)} · ${age(entry.at, now())}`, text: entryText(entry), file: entry.file,
                 open: entry.file ? { label: "Open the file", icon: <Icons.FileText />, go: () => props.onOpenFile(entry.file!) } : undefined })
             : entry.file ? props.onOpenFile(entry.file) : setReadingEntry(entry)}
-            lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.kind === "note" || entry.kind === "feedback" ? entry.headline : tally([entry])}
+            lead={entry.status === "handled" ? <Icons.Check /> : <Icons.Inbox />} label={entry.headline || tally([entry])}
             context={entryContext(entry)} meta={age(entry.at, now())} />
           <ContextMenuContent>
             <ContextMenuGroup>
@@ -393,8 +395,8 @@ export function AgentPage(props: {
       onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}>
       <Show when={schedule.running || busy() === schedule.id} fallback={<Icons.Play />}><Spinner /></Show></IconButton>;
     // Off: no clock, but it still runs by hand.
-    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} status={status()} next="Off" off actions={schedule.routine ? runNow : undefined} />;
-    return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
+    if (schedule.off) return <ClockRow wrap={Boolean(props.panel)} kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} status={status()} next="Off" off actions={schedule.routine ? runNow : undefined} />;
+    return <ClockRow wrap={Boolean(props.panel)} kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed && !schedule.running ? [FEED_SOURCE[feed.source], status()].join(" · ") : [quiet(), status()].filter(Boolean).join(" · ") || undefined} next={age(schedule.nextAt, now())}
       actions={<>
         {runNow}
@@ -403,8 +405,7 @@ export function AgentPage(props: {
       </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}
-    actions={props.panel ? <><GroupAction onClick={testReport}><Icons.Notification />Test report</GroupAction>
-      <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction></> : undefined}>
+    actions={props.panel ? <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction> : undefined}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 
@@ -443,7 +444,7 @@ export function AgentPage(props: {
   const decidedRows = () => opened().has("decided") ? decided() : decidedLately().slice(0, props.panel ? 3 : 5);
   const decidedGroup = () => <Show when={decided().length}>
     <SplitGroup id="agent-decided" order="rest" label="Decided for you" count={decidedLately().length || null}
-      more={!opened().has("decided") && decided().length > decidedRows().length ? <SplitGroupMore count={decided().length - decidedRows().length} onClick={() => setOpened(new Set([...opened(), "decided"]))}>Show all</SplitGroupMore> : undefined}>
+      more={!opened().has("decided") && decided().length > decidedRows().length ? <SplitGroupMore count={decided().length - decidedRows().length} onClick={() => setOpened(new Set([...opened(), "decided"]))}>Earlier</SplitGroupMore> : undefined}>
       <Show when={decidedRows().length} fallback={<SplitEmpty>Nothing in the last {DECIDED_DAYS} days.</SplitEmpty>}>
         <For each={decidedRows()}>{(record) => {
           const context = () => `${record.verdict.outcome === "allow" ? "Allowed" : "Refused"}${record.held.recipients?.length ? ` · ${record.held.recipients.join(", ")}` : ""}`;
@@ -557,9 +558,9 @@ export function AgentPage(props: {
             ...(props.onOpenMessages ? [{ icon: <Icons.Chat />, label: "Messages", onClick: props.onOpenMessages }] : []),
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
-            { icon: <Icons.Notification />, label: "Test report", onClick: testReport },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
-          ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
+          ]} manage={() => <><MenuRow icon={<Icons.Notification />} onSelect={testReport}>Test report</MenuRow>
+            <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow></>} />}
           notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
           // Its day across both columns: in the side column it was too narrow to read.
           band={day()}

@@ -65,8 +65,10 @@ const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
 
 /** Something that runs on a clock: its kind's icon, name, cadence and last status, then when it runs next.
  *  warn: it failed, the icon a warning. */
-export function ClockRow(props: { kind: ClockKind; title: string; cadence: string; status?: string; next?: string; warn?: string; off?: boolean; actions?: JSX.Element }) {
-  return <Row density="list" data-clock="" data-off={props.off ? "" : undefined} title={props.warn}
+export function ClockRow(props: { kind: ClockKind; title: string; cadence: string; status?: string; next?: string; warn?: string; off?: boolean;
+  /** Where there is no width for it beside the title (a panel): when it runs is a line of its own under the title, whole. */
+  wrap?: boolean; actions?: JSX.Element }) {
+  return <Row density="list" data-clock="" data-wrap={props.wrap ? "" : undefined} data-off={props.off ? "" : undefined} title={props.warn}
     lead={props.warn ? <Icons.Warning class="ui-clock-warn" /> : CLOCK_ICON[props.kind]()} label={props.title}
     context={<><code>{props.cadence}</code><Show when={props.status}>{` · ${props.status}`}</Show></>}
     meta={props.next || props.actions ? <span class="ui-clock-end"><Show when={props.next}><span>{props.next}</span></Show>{props.actions}</span> : undefined} />;

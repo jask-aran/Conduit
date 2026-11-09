@@ -11,7 +11,7 @@ import { defineDoc } from "@earendil-works/pi-durable";
  * appended, an outcome set, then closed); closed ones go after KEEP_DAYS, or beyond KEEP_ITEMS.
  *
  * An item: `{ id, kind, title, origin, number, trigger, conversationId, startedAt, phase, phases: [{ label, at }],
- * outcome: { status, woke, level, summary, inboxId, compaction, reportedAt }, endedAt, log }`. `id` is its key: a
+ * outcome: { status, woke, level, summary, did, inboxId, compaction, reportedAt }, endedAt, log }`. `id` is its key: a
  * routine's `routine:<task id>`, a run's or an agent's `run:<roster key>` (the home thread's roster). `number` counts
  * each kind's items from `counters`, so it never repeats once older items are pruned.
  */

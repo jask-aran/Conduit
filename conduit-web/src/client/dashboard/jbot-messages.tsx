@@ -8,7 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
 import { ChatMarkdown } from "../chat/lazy-markdown";
-import { TurnTrace, TraceStarting, type ContextText } from "../chat/turn-trace";
+import { capitalised, TurnTrace, TraceStarting, type ContextText } from "../chat/turn-trace";
 import { buildTurnRows, type TurnTraceData } from "../turn-rows";
 import { applyTranscriptOps, type TranscriptOp } from "../../transcript-fold.js";
 import type { Message as ChatMessage, ToolItem } from "../api/contracts";
@@ -44,6 +44,8 @@ type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; mess
  *  and opens its transcript; what it reported is the reply after it. */
 export interface LogRun { id: string; at: string; title: string; label: string; number: number | null; routine: string | null; trigger: string | null;
   startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean; conversationId?: number | null;
+  /** What it did, in the turn digest's words. */
+  did?: string | null;
   /** A background agent jbot sent from its chat (no run): its report, or (live) the agent while it works. */
   agent?: boolean; subagentId?: string | null; live?: boolean }
 const runTime = (run: LogRun) => {
@@ -304,7 +306,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     // Read where it is drawn, so what it is doing changes in place rather than making a new row.
     const activity = () => run.live ? agentView()?.attention?.working.runs.find((unit) => unit.id === run.id)?.activity ?? undefined : undefined;
     const state = () => run.live ? "running" : run.status === "failed" || run.status === "stopped" ? run.status : "finished";
-    return <AgentRow line id={run.subagentId ?? undefined} title={run.title} state={state()} activity={activity()}
+    return <AgentRow line id={run.subagentId ?? undefined} title={run.title} state={state()} activity={activity()} at={run.live ? undefined : clock(run.at) || undefined}
       time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run)} />;
   };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
@@ -323,7 +325,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             ? <TranscriptRow flow={flowAt(index())} {...motionOf(arriving(row.run.id) ? "entering" : undefined)}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
-                  summary={row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run) : undefined} />
+                  summary={row.run.did ? capitalised(row.run.did) : row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run) : undefined} />
               </AgentRows></Turn></TranscriptRow>
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>

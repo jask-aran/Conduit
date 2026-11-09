@@ -48,12 +48,14 @@ export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
 
 /** A subagent: its mark, its id when in the background (sa-3), its task, its status (mono) and time; `line`: on one
  *  line (the rider's). onOpen opens its transcript; onStop stops one the turn does not own (a background agent). */
-export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
-  const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage].filter(Boolean).join(" · ");
+export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string;
+  /** In a log of dated lines (a RunLine's `at`): the time of day it ended, which the row ends on as those do; how long it took joins how it ended. */
+  at?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
+  const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage, props.at ? props.time : undefined].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
     <Row density="trail" element="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.id ? `${props.id}, ` : ""}${props.title}`} onClick={() => props.onOpen?.()}
       lead={<Mark state={props.state} />} label={<span class="ui-agent-head"><Show when={props.id}><code class="ui-agent-id">{props.id}</code></Show><span class="ui-agent-title">{props.title}</span></span>}
-      detail={props.line ? undefined : line()} context={props.line ? line() : undefined} meta={props.time} fold={props.onOpen ? "quarter" : undefined} />
+      detail={props.line ? undefined : line()} context={props.line ? line() : undefined} meta={props.at ?? props.time} fold={props.onOpen && !props.at ? "quarter" : undefined} />
     {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column; `stopRoom` keeps
         it on a row that has none (a foreground agent beside background ones). */}
     <Show when={props.state === "running" && props.onStop} fallback={props.line && (props.onStop || props.stopRoom) ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>

@@ -1,4 +1,4 @@
-import { doingOf } from "./turn-digest.js";
+import { digestActs, digestLine, doingOf } from "./turn-digest.js";
 import { submitWithNotes } from "./context/notices.js";
 import { remoteNode } from "./place.js";
 import { connectorFacts, connectorSubject } from "./agent/connector-services.js";
@@ -149,10 +149,15 @@ const agentStep = (event) => {
   if (event.type === "message_update" && event.changes?.some((change) => change.type.startsWith("text_"))) return "answering";
   if (event.type !== "tool_execution_start") return null;
   // What it is doing in the person's terms, as a turn's live line says it (turn-digest.js): "checking Gmail".
-  const name = event.toolName, args = event.args || {};
-  return doingOf({ name, kind: toolKind(TOOL_KINDS, name), subject: subjectOf(name, args) || undefined, facts: factsOf(name, args) || undefined, input: args,
-    spawn: name === "subagent" && (!args.action || args.action === "spawn"), agent: name === "subagent" ? { id: args.id ?? null } : null });
+  return doingOf(digestStep(event));
 };
+const digestStep = (event) => {
+  const name = event.toolName, args = event.args || {};
+  return { name, kind: toolKind(TOOL_KINDS, name), subject: subjectOf(name, args) || undefined, facts: factsOf(name, args) || undefined, input: args,
+    spawn: name === "subagent" && (!args.action || args.action === "spawn"), agent: name === "subagent" ? { id: args.id ?? null } : null };
+};
+// What a run did, from the tools it started, as a settled turn's line says it: "checked Gmail and searched the web".
+const agentDid = (starts) => digestLine(digestActs(starts.map((event) => ({ step: digestStep(event), failed: false }))));
 
 const SCRIPT_TOOLS = {
   kindOf: (name) => toolKind(TOOL_KINDS, name),
@@ -518,6 +523,7 @@ export class DurableAdapter extends EventEmitter {
         compactAt: model?.contextWindow ? model.contextWindow - reserve - background : null };
     };
     runtime.subagentStep = agentStep;
+    runtime.subagentDid = agentDid;
     runtime.subagentsChanged = (conversationId, change) => {
       this.agentHeartbeats ||= new Map();
       this.agentStates ||= new Map();

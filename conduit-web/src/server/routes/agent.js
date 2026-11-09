@@ -133,7 +133,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
     return { id: item.id, title: item.title, kind: item.kind, number: item.number, label: item.label ?? null, startedAt: item.startedAt, endedAt: item.endedAt,
       status: open ? "running" : item.outcome?.status ?? null, level: item.outcome?.level ?? null, conversationId: item.conversationId ?? null,
-      inboxId: item.outcome?.inboxId ?? null, phase: item.phase, agents, activity, summary: item.outcome?.summary ?? null, woke: Boolean(item.outcome?.woke),
+      inboxId: item.outcome?.inboxId ?? null, phase: item.phase, agents, activity, summary: item.outcome?.summary ?? null, did: item.outcome?.did ?? null, woke: Boolean(item.outcome?.woke),
       compaction: item.outcome?.compaction ?? null };
   };
   const attention = async (view, state) => {
@@ -457,7 +457,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       .filter((item) => item.log !== false && (item.conversationId != null || item.outcome?.reportedAt) && (item.outcome?.reportedAt || item.endedAt))
       .map((item) => ({ id: item.id, at: item.outcome?.reportedAt || item.endedAt, title: item.title, label: item.title, number: item.number ?? null,
         routine: item.kind, trigger: item.trigger ?? null, startedAt: item.startedAt, endedAt: item.endedAt, status: item.outcome?.status ?? null,
-        summary: item.outcome?.woke ? null : item.outcome?.summary ?? null, woke: Boolean(item.outcome?.woke), conversationId: item.conversationId,
+        summary: item.outcome?.woke ? null : item.outcome?.summary ?? null, did: item.outcome?.did ?? null, woke: Boolean(item.outcome?.woke), conversationId: item.conversationId,
         ...(item.kind === "agent" ? { agent: true, subagentId: item.label ?? null } : {}) }))
       .sort((a, b) => a.at.localeCompare(b.at));
   };

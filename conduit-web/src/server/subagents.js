@@ -180,6 +180,13 @@ export function Subagents(runtime) {
       }
       const line = runtime.subagentStep?.(event);
       if (!line) return;
+      // The tools it started, kept while it is observed: what it did, said once it reports (`did`).
+      if (event.type === "tool_execution_start") {
+        runtime.subagentStarts ||= new Map();
+        const starts = runtime.subagentStarts.get(child) || [];
+        if (starts.length < 400) starts.push({ toolName: event.toolName, args: event.args });
+        runtime.subagentStarts.set(child, starts);
+      }
       runtime.subagentActivity ||= new Map();
       if (runtime.subagentActivity.get(child) !== line) void runtime.workActivity?.(child)?.catch?.(() => {});
       runtime.subagentActivity.set(child, line);
@@ -208,6 +215,7 @@ export function Subagents(runtime) {
       if (!observers.size) {
         runtime.subagentObservers.delete(child);
         runtime.subagentActivity?.delete(child);
+        runtime.subagentStarts?.delete(child);
       }
       stopped = stream.stop();
       return stopped;
@@ -470,7 +478,8 @@ export function Subagents(runtime) {
           const failed = level === "failed" || report.status === "failed";
           const summary = failed ? end?.reason || headlineOf(report.answer) : level === "none" ? "Nothing new" : headlineOf(report.answer);
           const key = workKey;
-          await noteWork(tx, key, { woke: Boolean(heard && !stopped), level, summary, reportedAt: workAt });
+          const did = runtime.subagentDid?.(runtime.subagentStarts?.get(child) || []) || null;
+          await noteWork(tx, key, { woke: Boolean(heard && !stopped), level, summary, reportedAt: workAt, ...(did ? { did } : {}) });
           if (!routineTaskId) await closeWork(tx, key, stopped ? "stopped" : failed ? "failed" : "finished", Date.now());
         }, context);
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: task.input.origin?.routineTaskId && (level === "failed" || stopped) ? { ...report, status: "failed" } : report } }), context);

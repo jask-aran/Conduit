@@ -19,6 +19,8 @@ export interface AgentRun { id: string; title: string; kind: AgentRunKind; start
   /** A unit of the work log (work-log.js): what it is doing now, its agents rolled up, what the one working is doing (the
    *  turn digest's words), and once done what it found and whether jbot was told. */
   number?: number | null; label?: string | null; phase?: string; agents?: { running: number; total: number } | null; activity?: string | null; summary?: string | null; woke?: boolean;
+  /** What it did, in the turn digest's words ("checked Gmail and searched the web"); null when it used no tools to tell. */
+  did?: string | null;
   compaction?: { done: boolean; tokens?: number | null; from?: number | null; enabled?: boolean } | null }
 export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; cadence?: string; nextAt?: string | null; lastAt?: string | null; system?: boolean; routine?: string; task?: string | null; /** A routine switched off: listed, dimmed, with no clock. */ off?: boolean;
   /** A routine with several timing rules: each as it applies now, `during` a local "HH:MM-HH:MM" window or null. */

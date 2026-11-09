@@ -189,7 +189,7 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
     onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
 }
 
-export function Transcript(props: { chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
+export function Transcript(props: { /** Nothing here is the person's to change (a subagent's thread). */ readOnly?: boolean; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
   /** One of jbot's threads: always there, so an empty one is said to be empty, never welcomed as a new chat. */
   agentThread?: boolean;
   /** What it does with text said between tool calls (turn-rows.ts `TurnLayout`): `fold` (chats, the default) into the
@@ -1172,7 +1172,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
                   bubble. Read as the text arrives: a row is built before its message has any. */}
               <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage latest={latestExchange().has(message().id)} message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
-                editable={!message().pending && !message().outbox && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
+                editable={!message().pending && !message().outbox && !props.readOnly && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 onCancelSend={props.chat.cancelOutbox ? () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } : undefined}
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
