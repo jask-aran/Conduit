@@ -31,7 +31,7 @@ import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { harnessStatusLabel } from "../harness-brand";
-import { agentView, agentNeeds, refreshAgent } from "../state/agent";
+import { agentName, agentNeeds, agentView, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
@@ -1180,7 +1180,7 @@ export function Sidebar(props: {
         <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
         {/* A phone's way to jbot, in the head by the section switch: a press draws its chat ahead of the tap, as a row's does. */}
         <Show when={agentView()?.enabled && phoneLayout()}>
-          <PillButton label={agentView()?.settings?.name || "Agent"} icon={<Icons.Agent />} haptic="select"
+          <PillButton label={agentName()} icon={<Icons.Agent />} haptic="select"
             button={{ ...pressToPreview(() => props.onPreviewJbot?.(), () => props.agent), "aria-current": props.agent ? "page" : undefined,
               onClick: () => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); } }} />
         </Show>
@@ -1227,7 +1227,7 @@ export function Sidebar(props: {
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
           {/* jbot lives on the workspace rail on a desktop (Ctrl+J); the sidebar keeps it on a phone, for now. */}
-          <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentView()?.settings?.name || "Agent"} current={props.agent} onClick={() => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); }}><AgentAvatar /></RailAction></Show>
+          <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentName()} current={props.agent} onClick={() => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); }}><AgentAvatar /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={props.onNewPane}><RailAction label="New pane" onClick={() => props.onNewPane?.()}><Icons.Split /></RailAction></Show>
           <Show when={railFolders().length}>

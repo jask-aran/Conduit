@@ -5,7 +5,6 @@ import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { liveTrace } from "./turn-rows";
-import { digestDoing } from "./chat/turn-digest";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/ui/decision-dialog";
@@ -129,7 +128,7 @@ import { createAgentUiBridge } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
-import { agentNeeds, agentView, refreshAgent, setJbotDoing, wantNeeds } from "./state/agent";
+import { agentName, agentNeeds, agentView, refreshAgent, wantNeeds } from "./state/agent";
 import { agentDashboardLaidOut, agentPageLaidOut } from "./state/arrival";
 import { pathJbotPage } from "./api/routes";
 import { ServerSwitcher } from "./navigation/server-switcher";
@@ -4037,8 +4036,8 @@ function App() {
     }
     if (view === "home") return "New tab";
     if (view === "page:dashboard") return "Conduit Dashboard";
-    if (view === "page:agent") return `${agentView()?.settings?.name || "Agent"}'s page`;
-    if (view === "page:jbot") return agentView()?.settings?.name || "Agent";
+    if (view === "page:agent") return `${agentName()}'s page`;
+    if (view === "page:jbot") return agentName();
     if (view === "page:computer") return activeServer()?.name || "Hub";
     if (view.startsWith("page:environment:")) { const state = deviceStates().get(decodeURIComponent(view.slice("page:environment:".length))); return state ? deviceLabel(state) : "Environment"; }
     if (view.startsWith("page:harness:")) { const id = decodeURIComponent(view.slice("page:harness:".length)); return harnessLabelFor(id) || id; }
@@ -4575,7 +4574,7 @@ function App() {
   });
   function generating(process: RuntimeProcess) { const activity = visibleRuntimeActivity(process); return activity !== "idle" && activity !== "failed"; }
   const runningTurns = createMemo(() => liveChats().filter(generating).map((process) => process.chatId));
-  const runningName = (id: string) => id === agentView()?.home?.chatId ? agentView()?.settings?.name || "Agent"
+  const runningName = (id: string) => id === agentView()?.home?.chatId ? agentName()
     : (agentView()?.sides || []).find((side) => side.chatId === id)?.title || viewName(`chat:${id}` as SplitView);
   const openRunning = async (id: string) => {
     if (id === agentView()?.home?.chatId) return openJbotHere();
@@ -5426,14 +5425,21 @@ function App() {
     // stream, and the open chat's own socket.
     const watching = (chatId: string) => chatId === catalogue.selectedId()
       && routeKind() === "chat" && document.visibilityState === "visible";
+    const unlisted = new Set<string>();
     const applyChangedChat = (event: Event) => {
       const changed = (event as CustomEvent<ChatSummary>).detail;
       if (!changed?.id) return;
       const read = watching(changed.id);
       // A chat made somewhere else (Float, another device): the list is read again to take it in, where it belongs.
       // A second later, so a chat this app made itself (it lists its own) costs no second read.
+      // Only a chat the list would hold (a run's or an agent's chat, a draft never is), and once for each: one the list
+      // still leaves out (untracked, archived) is not asked for again at its every change.
       const listed = () => catalogue.projects().some((project) => project.sessions.some((session) => session.id === changed.id));
-      if (!listed()) return void setTimeout(() => { if (!listed()) relist(); }, 1000);
+      if (!listed()) {
+        if (read) markChatRead(catalogue, changed);
+        if (changed.status !== "active" || unlisted.has(changed.id)) return;
+        return void setTimeout(() => { if (!listed()) { unlisted.add(changed.id); relist(); } }, 1000);
+      }
       catalogue.patchChat(changed.id, read ? { ...changed, unread: false } : changed);
       if (read) markChatRead(catalogue, changed);
     };
@@ -6062,14 +6068,6 @@ function App() {
   const renderJbot = (slot: number | "main" | "tool") => {
     const tool = slot === "tool";
     const current = tool ? jbotSession : slot === "main" ? session : paneSlot(slot).session;
-    // What jbot's home thread is doing, for Working on (state/agent.ts jbotDoing): its turn digest while it runs.
-    createEffect(() => {
-      const running = current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming();
-      if (!running) return setJbotDoing(null);
-      const trace = liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration());
-      setJbotDoing(trace ? digestDoing(trace, true) ?? "thinking" : "thinking");
-    });
-    onCleanup(() => setJbotDoing(null));
     const owns = tool ? () => Boolean(document.activeElement?.closest("[data-region='workspace-panel']"))
       : slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
     // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
@@ -6089,15 +6087,15 @@ function App() {
     }));
     const openFile = (path: string) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); };
     // A phone's pill and the composer's chip open jbot's panel (JbotPanelControl, from the room).
-    const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentView()?.settings?.name || "jbot"}
+    const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentName()}
       count={control?.needs && control.needs.count() ? { value: control.needs.count(), label: `${control.needs.count()} need you`, open: control.needs.open(), onClick: control.needs.toggle } : undefined}
-      icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentView()?.settings?.name || "jbot"}'s panel`} onClick={() => control?.toggle()} />; };
+      icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentName()}'s panel`} onClick={() => control?.toggle()} />; };
     // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
     const docked = () => !tool && !isMobileLayout() && inDock(slot as PaneKey);
     // Its actions are the pill's own buttons (a phone header's), not a pane's strip set in a pill.
     const dockActions = () => <>
       <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
-      <HeaderButton label={`Put ${agentView()?.settings?.name || "jbot"} away`} icon={<Icons.Close />} onClick={() => void putJbotAway()} />
+      <HeaderButton label={`Put ${agentName()} away`} icon={<Icons.Close />} onClick={() => void putJbotAway()} />
     </>;
     // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
@@ -6343,7 +6341,7 @@ function App() {
             </DropdownMenu>
           </Show>
           <Show when={titleBarShows("agent") && agentView()?.enabled && agentNeeds()}>{(needs) =>
-            <Button variant="ghost" size="sm" title={`${agentView()?.settings?.name || "Agent"} wants you`} onClick={() => void openAgentHere()}>{agentView()?.settings?.name || "Agent"} · {needs()}</Button>}</Show>
+            <Button variant="ghost" size="sm" title={`${agentName()} wants you`} onClick={() => void openAgentHere()}>{agentName()} · {needs()}</Button>}</Show>
           <Show when={titleBarShows("panels")}>
             <IconButton kind="pane" label="Sidebar" onClick={() => runSidebar("toggle-sidebar")}><Icons.Sidebar /></IconButton>
             <IconButton kind="pane" label="Dock" onClick={() => togglePanel()}><Icons.Workspace /></IconButton>
@@ -6468,7 +6466,7 @@ function App() {
     <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
-      jbot={agentView()?.enabled ? { name: agentView()?.settings?.name || "jbot", needs: agentNeeds(), current: jbotShownInDock(),
+      jbot={agentView()?.enabled ? { name: agentName(), needs: agentNeeds(), current: jbotShownInDock(),
         // With something waiting, jbot opens on Needs you (already open: Needs you, rather than putting jbot away).
         onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot"); } } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />

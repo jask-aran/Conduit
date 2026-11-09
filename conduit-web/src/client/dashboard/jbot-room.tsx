@@ -1,12 +1,12 @@
 import { createEffect, createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
 import { Button, ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, Ledge, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
-import { agentNeeds, agentView, dismissableNotices, dismissNotices, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
+import { agentName, agentNeeds, agentView, dismissNotices, dismissableNotices, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
-import { setLatestAway, setLatestScroller } from "../chat/latest-away";
+import { dropLatestScroller, setLatestScroller, tellLatestAway } from "../chat/latest-away";
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
 
@@ -37,7 +37,7 @@ export function JbotRoom(props: {
   presentation?: "phone" | "narrow";
 }) {
   const log = useJbotMessages(() => props.threadChanged);
-  const name = () => agentView()?.settings?.name || "Agent";
+  const name = agentName;
   let root: HTMLDivElement | undefined;
   let viewport: HTMLDivElement | undefined;
   let dock: HTMLDivElement | undefined;
@@ -115,9 +115,9 @@ export function JbotRoom(props: {
   // A phone's composer has Scroll to latest in its own row (the pill, latest-away.ts), as in a thread: the room tells it
   // when the latest is out of view and takes its press, and its own floating one stays hidden there.
   if (!desktop) {
-    createEffect(() => setLatestAway(away()));
     setLatestScroller(jumpToLatest);
-    onCleanup(() => { setLatestAway(false); setLatestScroller(null); });
+    createEffect(() => tellLatestAway(jumpToLatest, away()));
+    onCleanup(() => dropLatestScroller(jumpToLatest));
   }
   // Attached as the chat is built (it waits on jbot's view), the dock's clearing as the composer comes (it waits on the
   // home thread): each under the piece it belongs to, undone with it.

@@ -347,7 +347,7 @@ const inline = (props: Pick<RowProps, "renderer">, text: () => string) =>
 /* A context piece by the name its block has in Settings › Blocks. */
 const SECTION_LABELS: Record<string, string> = { instructions: "system prompt", cwd: "working folder", web: "web tools", codemode: "codemode tools", "agent-memory": "the agent's files", "agent-inbox": "waiting inbox" };
 const sectionLabel = (name: string) => SECTION_LABELS[name] ?? name.replace(/[-_]+/g, " ");
-const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+export const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const tokensOf = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
 /* What the model was given besides messages: its system prompt, a change to it, a compaction. Says what, and how much;
    opens to each piece's text, fetched then. */

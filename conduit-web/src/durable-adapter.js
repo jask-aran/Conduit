@@ -930,6 +930,8 @@ export class DurableAdapter extends EventEmitter {
 
   beginTurn(record, inputs, generationId = crypto.randomUUID()) {
     record.active = true;
+    record.doing = null;
+    if (record.templateId === "agent") this.runtime.agentChanged?.();
     record.activity = "working";
     record.generation = { id: generationId, closed: false, settled: false };
     record.turn = { generationId, inputs: [...(inputs || [])], prompts: [], answers: null, messageId: null, tools: new Map(), last: null };
@@ -994,6 +996,9 @@ export class DurableAdapter extends EventEmitter {
 
   /** One committed event, in Conduit's words. */
   async translate(record, event) {
+    // What a jbot thread's turn is doing now, in the turn digest's words, for Working on (routes/agent.js).
+    const doing = record.templateId === "agent" && agentStep(event);
+    if (doing && doing !== record.doing) { record.doing = doing; this.runtime.agentChanged?.(); }
     switch (event.type) {
       case "snapshot": {
         // watchEvents replaces queued events with a snapshot on overflow. Rebuild what those events would have stated.
@@ -1356,6 +1361,7 @@ export class DurableAdapter extends EventEmitter {
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome, generationId: turn.generationId }));
     record.turn = null;
     record.active = false;
+    if (record.templateId === "agent") this.runtime.agentChanged?.();
     record.stopping = false;
     record.activity = "idle";
     Object.assign(record.generation, { closed: true, settled: true });

@@ -139,6 +139,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   const attention = async (view, state) => {
     const harness = await agent.runtime.open();
     const work = listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null));
+    // The home thread's own turn, in the turn digest's words (the adapter keeps them on its live session).
+    const home = view.home?.chatId ? backends.getByChatId(view.home.chatId) : null;
     const threads = [view.home?.chatId, ...view.sides.map((side) => side.chatId)].filter(Boolean);
     const waiting = threads.flatMap((chatId) => (backends.getByChatId(chatId)?.hostUiRequests || [])
       .map((request) => ({ kind: "question", chatId, requestId: request.id, title: request.title || "A question" })));
@@ -148,6 +150,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
     return {
       working: {
+        doing: home?.active ? home.doing || "thinking" : null,
         runs: await Promise.all(work.filter((item) => !item.endedAt).reverse().map((item) => workView(harness, item))),
         recent: await Promise.all(work.filter((item) => item.endedAt).sort((a, b) => b.endedAt.localeCompare(a.endedAt)).slice(0, 10)
           .map((item) => workView(harness, item))),

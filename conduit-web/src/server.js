@@ -842,6 +842,7 @@ if (persistentAgent) {
   let agentChange = null;
   const agentChanged = () => { agentChange ??= setTimeout(() => { agentChange = null; runtimeHub.publish({ type: "agent_changed", at: new Date().toISOString() }); }, 1000); };
   onWorkChanged(agentChanged);
+  durableAdapter.runtime.agentChanged = agentChanged;
   durableAdapter.runtime.workActivity = async (conversationId) => {
     const work = await (await durableAdapter.runtime.open()).snapshot(WorkLog, persistentAgent.context).catch(() => null);
     if (Object.values(work?.items || {}).some((item) => !item.endedAt && String(item.conversationId) === String(conversationId))) agentChanged();

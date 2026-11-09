@@ -3,6 +3,7 @@ import { Portal } from "solid-js/web";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { AgentAvatar, Answer, ApprovalCard, approvalLineText, type ApprovalChoice, Empty, Expand, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
+import { capitalised } from "../chat/turn-trace";
 import { Button, Spinner, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
@@ -10,7 +11,7 @@ import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
-import { agentNeeds, agentView, dismissableNotices, dismissNotices, foldNotices, jbotDoing, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
+import { agentName, agentNeeds, agentView, dismissNotices, dismissableNotices, foldNotices, jbotDoing, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
@@ -20,9 +21,6 @@ import { Row } from "@/components/ui/row";
  * Messages opens its app room; Open thread opens the home thread underneath.
  */
 
-const RUN_KIND: Record<string, string> = {
-  manual: "Asked", schedule: "Scheduled", reflect: "Routine", checkback: "Check-back", brief: "Morning brief", "morning-brief": "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
-};
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
   { path: "USER.md", label: "About you", context: "What it knows about you" },
@@ -103,7 +101,7 @@ export function AgentPage(props: {
   });
 
   const view = agentView;
-  const name = () => view()?.settings?.name || "Agent";
+  const name = agentName;
   const working = () => view()?.attention?.working;
   const needs = () => view()?.attention?.needsYou;
   // A run is a subagent of the home thread, with a transcript of its own: its chat comes from the home thread's list.
@@ -170,8 +168,7 @@ export function AgentPage(props: {
     const report = () => inbox().find((entry) => run.inboxId ? entry.id === run.inboxId : run.conversationId != null && entry.conversationId === run.conversationId);
     // Live, what it is doing (its phase; at work, what its agent is doing, in the digest's words) and its agents rolled
     // up; done, how it ended. Never its agents one by one.
-    const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-    const doing = () => run.phase === "Working" && run.activity ? capital(run.activity) : run.phase || "Working";
+    const doing = () => run.phase === "Working" && run.activity ? capitalised(run.activity) : run.phase || "Working";
     const crew = () => run.agents && run.agents.total > 0 && run.agents.running ? `${run.agents.running} ${run.agents.running === 1 ? "agent" : "agents"} working` : null;
     const ended = () => run.status === "failed" ? `Failed${run.summary ? `: ${run.summary}` : ""}` : run.status === "stopped" ? "Stopped"
       : run.woke ? `Reported to ${name()}` : run.summary || (run.level ? levelWord(run.level) : null);
@@ -179,8 +176,12 @@ export function AgentPage(props: {
     const line = () => (live ? [doing(), crew()] : [ended()]).filter(Boolean).join(" · ");
     const context = () => [line(), age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
     const preview = () => setPeek({ title: named(), context: context(), text: report() ? entryText(report()!) : run.summary || "", file: report()?.file,
-      open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event) => props.onOpenChat(chatId()!, event) } : undefined });
-    return <Row density="list" element="button" disabled={!props.panel && !chatId()} onClick={(event: MouseEvent) => props.panel && !live ? preview() : chatId() && props.onOpenChat(chatId()!, event)}
+      open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event?: MouseEvent) => props.onOpenChat(chatId()!, event) }
+        : report()?.file ? { label: "Open the file", icon: <Icons.FileText />, go: () => props.onOpenFile(report()!.file!) } : undefined });
+    // Its chat; one with none of its own (Reflection, whose report is its inbox entry) opens the report's file.
+    const file = () => report()?.file;
+    const open = (event: MouseEvent) => chatId() ? props.onOpenChat(chatId()!, event) : file() && props.onOpenFile(file()!);
+    return <Row density="list" element="button" disabled={!(props.panel && !live) && !chatId() && !file()} onClick={(event: MouseEvent) => props.panel && !live ? preview() : open(event)}
       lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
       label={named()}
       context={line()}
@@ -321,7 +322,7 @@ export function AgentPage(props: {
   // jbot's own turn first, in the turn digest's words ("jbot · checking Gmail"), then each unit of work under way.
   const busy_ = () => (working()?.runs.length || 0) + (jbotDoing() ? 1 : 0);
   const jbotRow = () => <Row density="list" element="button" disabled={!props.onOpenThread} onClick={() => props.onOpenThread?.()}
-    lead={<StatusDot label="Working" tone="active" spinning />} label={name()} context={jbotDoing()!.charAt(0).toUpperCase() + jbotDoing()!.slice(1)} />;
+    lead={<StatusDot label="Working" tone="active" spinning />} label={name()} context={capitalised(jbotDoing()!)} />;
   const workingGroup = () => <Show when={!props.panel || busy_()}><SplitGroup id="agent-working" order="first" label="Working on" count={busy_() || null}>
     <Show when={busy_()} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
       <Show when={jbotDoing()}>{jbotRow()}</Show>

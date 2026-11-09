@@ -124,18 +124,22 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // Each refresh reads new message objects; a row that is unchanged keeps its object, so <For> keeps its element and the
   // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
   let kept = new Map<string, { sig: string; row: StreamRow }>();
+  // The open agent units, as the rows need them: what one is doing changes each second and is read where it is drawn.
+  const openAgents = createMemo(() => (agentView()?.attention?.working.runs ?? []).filter((unit) => unit.kind === "agent" && unit.startedAt)
+    .map((unit) => ({ id: unit.id, title: unit.title, startedAt: unit.startedAt!, conversationId: unit.conversationId, label: unit.label ?? null })),
+    [], { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   const rows = createMemo(() => {
     // Each run a row of its own, where it happened. A background agent jbot sent, until it reports, a row under the
     // reply of the turn that sent it (at the foot while that turn runs); once it reports, its report's row is where it
     // came back, over what jbot made of it.
     // Both from the work log (work-log.js): its open agent items from the agent view, its reported ones from the runs.
     const reported = new Set(logRuns().map((run) => run.id));
-    const working = (agentView()?.attention?.working.runs ?? []).filter((unit) => unit.kind === "agent" && unit.startedAt && !reported.has(unit.id))
+    const working = openAgents().filter((unit) => !reported.has(unit.id))
       .map((unit): LogRun => {
-        const reply = props.messages.find((message) => message.direction === "out" && message.channel === "app" && message.at >= unit.startedAt!);
+        const reply = props.messages.find((message) => message.direction === "out" && message.channel === "app" && message.at >= unit.startedAt);
         return { id: unit.id, at: reply ? `${reply.at}~` : "\uffff", title: unit.title, label: unit.title, number: null, routine: null, trigger: null,
-          startedAt: unit.startedAt ?? null, endedAt: null, status: "running", summary: null, woke: false, conversationId: unit.conversationId, agent: true, live: true,
-          subagentId: unit.label ?? null };
+          startedAt: unit.startedAt, endedAt: null, status: "running", summary: null, woke: false, conversationId: unit.conversationId, agent: true, live: true,
+          subagentId: unit.label };
       });
     const runs = [...logRuns(), ...working].sort((a, b) => a.at.localeCompare(b.at));
     let next = 0;
@@ -301,7 +305,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     const activity = () => run.live ? agentView()?.attention?.working.runs.find((unit) => unit.id === run.id)?.activity ?? undefined : undefined;
     const state = () => run.live ? "running" : run.status === "failed" || run.status === "stopped" ? run.status : "finished";
     return <AgentRow line id={run.subagentId ?? undefined} title={run.title} state={state()} activity={activity()}
-      time={span(run.startedAt ?? undefined, run.live ? null : run.endedAt ?? undefined, now())} onOpen={() => openRun(run)} />;
+      time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run)} />;
   };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}

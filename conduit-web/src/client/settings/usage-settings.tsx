@@ -1,9 +1,9 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { Button, Segmented, Series, SettingDetails, SettingLine, SettingValue, SettingWide, Group, Loading, Note } from "@/components/ui";
 import { api } from "../api/client";
-import { agentView } from "../state/agent";
+import { agentName } from "../state/agent";
 /** The persistent agent's name, as the person called it. */
-const agent = () => agentView()?.settings?.name || "jbot";
+const agent = agentName;
 
 /** A day of GET /v0/usage: Conduit's agents' spend, in API-equivalent dollars fixed when spent (usage-ledger.js). */
 type ModelSpend = { key: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };

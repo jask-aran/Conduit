@@ -20,9 +20,6 @@ export interface AgentRun { id: string; title: string; kind: AgentRunKind; start
    *  turn digest's words), and once done what it found and whether jbot was told. */
   number?: number | null; label?: string | null; phase?: string; agents?: { running: number; total: number } | null; activity?: string | null; summary?: string | null; woke?: boolean;
   compaction?: { done: boolean; tokens?: number | null; from?: number | null; enabled?: boolean } | null }
-/** What jbot's home thread is doing right now, in the turn digest's words ("checking Gmail"), or null when it is idle:
- *  set where the home thread is loaded (main.tsx), read by Working on. */
-export const [jbotDoing, setJbotDoing] = createSignal<string | null>(null);
 export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; cadence?: string; nextAt?: string | null; lastAt?: string | null; system?: boolean; routine?: string; task?: string | null; /** A routine switched off: listed, dimmed, with no clock. */ off?: boolean;
   /** A routine with several timing rules: each as it applies now, `during` a local "HH:MM-HH:MM" window or null. */
   rules?: Array<{ kind: string; everyMinutes?: number; at?: string; during: string | null }>;
@@ -54,7 +51,7 @@ export interface AgentView {
   inbox?: AgentInboxEntry[];
   rules?: Array<{ id: string; tool: string; target: string; label: string; createdAt: string }>;
   attention?: {
-    working: { runs: AgentRun[]; recent: AgentRun[]; schedules: AgentSchedule[]; watches: AgentWatch[] };
+    working: { /** What the home thread's turn is doing now, in the turn digest's words ("checking Gmail"); null when idle. */ doing?: string | null; runs: AgentRun[]; recent: AgentRun[]; schedules: AgentSchedule[]; watches: AgentWatch[] };
     needsYou: { asks: AgentAsk[]; questions: AgentQuestion[]; proposals: AgentProposal[]; notices: AgentNotice[] };
   };
 }
@@ -62,22 +59,36 @@ export interface AgentView {
 const store = createRoot(() => {
   const [view, setView] = createSignal<AgentView | null>(null);
   let asking: Promise<AgentView | null> | null = null;
-  const refresh = () => asking ??= api<AgentView>("/v0/agent")
+  let again = false;
+  let shown = "";
+  const read = () => api<AgentView>("/v0/agent")
     // Unchanged, the same object stays: a new one each poll redrew everything drawn from it.
-    .then((next) => { setJbotHome(next.home?.chatId || null); if (JSON.stringify(next) !== JSON.stringify(view())) setView(next); return view(); })
-    .catch(() => view())
-    .finally(() => { asking = null; });
+    .then((next) => { setJbotHome(next.home?.chatId || null); const text = JSON.stringify(next); if (text !== shown) { shown = text; setView(next); } })
+    .catch(() => {});
+  // One read at a time. Asked for while one is under way (after an action, a change the hub pushed), it is read once
+  // more after it: whoever waits gets the view as it is after their ask, never the answer to an earlier one.
+  const refresh = (): Promise<AgentView | null> => {
+    if (asking) { again = true; return asking; }
+    return asking = (async () => { do { again = false; await read(); } while (again); return view(); })().finally(() => { asking = null; });
+  };
   // Quiet enough to leave running: what waits on the person shows in the sidebar within a minute, and at once on return.
+  // A change the hub pushes is read only by a page in sight; one out of sight reads on its return.
   if (typeof window !== "undefined") {
-    window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60_000);
+    const seen = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.setInterval(seen, 60_000);
     window.addEventListener("focus", () => void refresh());
-    window.addEventListener("conduit:agent-changed", () => void refresh());
+    document.addEventListener("visibilitychange", seen);
+    window.addEventListener("conduit:agent-changed", seen);
   }
   return { view, refresh };
 });
 
 export const agentView = store.view;
 export const refreshAgent = store.refresh;
+/** What the agent is called where the person reads it: the name they gave it. */
+export const agentName = () => store.view()?.settings?.name || "jbot";
+/** What jbot's home thread is doing right now, as the hub says it, or null when it is idle: Working on's first row. */
+export const jbotDoing = () => store.view()?.attention?.working.doing ?? null;
 /** Needs you asked for from outside the jbot chat (the rail's jbot, its count): the jbot chat opens it once drawn. */
 const [needsWanted, setNeedsWanted] = createSignal(false);
 export const wantNeeds = () => setNeedsWanted(true);

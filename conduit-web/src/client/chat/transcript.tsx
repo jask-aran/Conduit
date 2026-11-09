@@ -1,5 +1,5 @@
 import { AgentRows, clockTime, createTranscriptFollow, Icons, onScrollRest, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
-import { setLatestAway, setLatestScroller } from "./latest-away";
+import { dropLatestScroller, setLatestScroller, tellLatestAway } from "./latest-away";
 import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
@@ -316,8 +316,6 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   /* The phone's voice composer carries its own scroll-to-latest in its row
      and hides the floating one: tell it when the latest is out of view, and
      take its press. */
-  createEffect(() => setLatestAway(latestAway()));
-  onCleanup(() => setLatestAway(false));
   const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
@@ -875,7 +873,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
       latestButtonAnchorFrame = requestAnimationFrame(syncLatestButtonAnchor);
     };
     setLatestScroller(followLatest);
-    onCleanup(() => setLatestScroller(null));
+    createEffect(() => tellLatestAway(followLatest, latestAway()));
+    onCleanup(() => dropLatestScroller(followLatest));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
     // In a page's conversation (DashConversation) the composer is under the transcript, not over it: nothing to clear.
