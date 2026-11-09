@@ -3611,7 +3611,9 @@ function App() {
   // The chat a subagent's transcript answers to: its title, and opening it.
   const subagentParent = (chatId: string | null) => {
     const parentId = chatId ? hiddenChats().get(chatId)?.chat.backend?.parentChatId : null;
-    const parent = parentId ? catalogue.projects().flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === parentId) : null;
+    // jbot's own runs answer to its home thread, which is read in the jbot chat.
+    if (parentId && parentId === agentView()?.home?.chatId) return { title: agentName(), open: () => void openJbotHere() };
+    const parent = parentId ? catalogue.projects().flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === parentId) || hiddenChats().get(parentId) : null;
     return { title: parent?.chat.title || "another chat", open: parent ? () => void openChatHere(parent.chat, parent.project) : undefined };
   };
   // Alt on the click or key that opened a chat, from a page that has no way
@@ -4078,6 +4080,8 @@ function App() {
   // The place a tab belongs to, which groups it: a chat's project, a project page's project, else the document's kind.
   const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
     : id.includes(":") ? `doc:${id.split(":")[0]}`
+    // A subagent's tab sits under the chat that started it.
+    : hiddenChats().get(id)?.chat.status === "subagent" ? `sub:${hiddenChats().get(id)!.chat.backend?.parentChatId ?? ""}`
     : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   const activeTabOf = (pane: PaneKey) => { const view = viewOf(pane); return tabbable(view) ? tabKey(view) : null; };
   // The next chat opened into these panes is added as a tab rather than replacing the active one.
@@ -4506,8 +4510,9 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
       place: tabPlace,
-      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : placeLabelOf(place); },
+      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(id).title : placeLabelOf(place); },
       title: (id) => viewName(tabView(id)),
+      icon: (id) => hiddenChats().get(id)?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
       lit: () => activeTabOf(pane),
       used: () => tabsOf(pane)?.used ?? [],
       live: (id) => !id.includes(":") && Boolean(runtime.getProcess(id)),
@@ -6224,12 +6229,14 @@ function App() {
     // A subagent's transcript is read: it says whose it is, and has no composer.
     const subagent = () => surfaceChat.status() === "subagent";
     const parent = () => subagentParent(surfaceChat.loadedId());
+    // Opened by its link, nothing has read whose it is yet.
+    createEffect(() => { const id = surfaceChat.loadedId(); if (id && subagent() && !hiddenChats().has(id)) void agentChat(id).catch(() => {}); });
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} badge={<><Show when={subagent()}><SubagentNote parent={parent().title} onOpenParent={parent().open} /></Show></>} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} parent={subagent() ? parent() : undefined} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
         transcript={<Transcript chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} agentThread={agentThread(surfaceChat.loadedId())} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration="show" approvals={approvalsFor(surfaceChat.loadedId())} />}
-        composer={<Show when={!subagent()}><Composer shortcuts={shortcutManager} chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
+        composer={<Show when={!subagent()} fallback={<SubagentNote parent={parent().title} onOpenParent={parent().open} />}><Composer shortcuts={shortcutManager} chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} onStatusChange={current.setComposerStatus} /></Show>} />
     </>;
   };
 

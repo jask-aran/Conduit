@@ -2,7 +2,7 @@ import { HeaderButton, HeaderCrumb, Icons, Notice, PaneHeader } from "@/componen
 import { row, token, type Page } from "../model";
 
 const chat = () => <div style={{ width: "100%" }}><PaneHeader actions={<HeaderButton label="Copy Tailscale chat link" icon={<Icons.Share />} />}
-  after={<Notice kind="header" action={{ label: "Track", onClick: () => {} }}>Not in Conduit</Notice>}><HeaderCrumb place="Codex" onPlace={() => {}} title="Fix the flaky upload test" /></PaneHeader></div>;
+  after={<Notice kind="capsule" action={{ label: "Track", onClick: () => {} }}>Not in Conduit</Notice>}><HeaderCrumb place="Codex" onPlace={() => {}} title="Fix the flaky upload test" /></PaneHeader></div>;
 
 export const headerPage: Page = {
   title: "Header", rail: "Blocks",
@@ -11,7 +11,7 @@ export const headerPage: Page = {
   usage: `import { Header, HeaderCrumb, HeaderButton, Icons, Notice } from "@/components/ui";
 
 <Header
-  after={<Notice kind="header" action={{ label: "Track", onClick: trackChat }}>Not in Conduit</Notice>}
+  after={<Notice kind="capsule" action={{ label: "Track", onClick: trackChat }}>Not in Conduit</Notice>}
   actions={<HeaderButton label="Copy chat link" icon={<Icons.Share />} onClick={copyLink} />}
 >
   <HeaderCrumb place="Conduit" onPlace={openProject} title="Fix the build" />
@@ -25,8 +25,9 @@ export const headerPage: Page = {
   examples: [
     row("crumb under a place", "the place is a link to it", () => <HeaderCrumb place="Japan" onPlace={() => {}} title="Planning the Kyoto leg" />, { code: "<HeaderCrumb place onPlace title>" }),
     row("crumb alone", "a place itself", () => <HeaderCrumb title="Japan" />, { code: "<HeaderCrumb title>" }),
-    row("note", "what the page is and the one thing to do about it", () => <Notice kind="header" action={{ label: "Track", onClick: () => {} }}>Not in Conduit</Notice>, { code: "<Notice kind=\"header\" action>label</Notice>" }),
-    row("note · working", "its action under way", () => <Notice kind="header" action={{ label: "Track", busy: true, busyLabel: "Tracking…", onClick: () => {} }}>Not in Conduit</Notice>),
+    row("crumb with a mark", "a subagent's, under the chat that started it", () => <HeaderCrumb place="Fix the build" onPlace={() => {}} mark={<Icons.Agent />} title="Count Markdown files" />, { code: "<HeaderCrumb place onPlace mark title>" }),
+    row("note", "what the page is and the one thing to do about it", () => <Notice kind="capsule" action={{ label: "Track", onClick: () => {} }}>Not in Conduit</Notice>, { code: "<Notice kind=\"capsule\" action>label</Notice>" }),
+    row("note · working", "its action under way", () => <Notice kind="capsule" action={{ label: "Track", busy: true, busyLabel: "Tracking…", onClick: () => {} }}>Not in Conduit</Notice>),
     row("buttons", "an icon with its label as its name", () => <div class="g-row"><HeaderButton label="Copy Tailscale chat link" icon={<Icons.Share />} /><HeaderButton label="Search chats" icon={<Icons.Search />} /></div>, { code: "<HeaderButton label icon>" }),
     row("assembled", "a chat's header: crumb, note, an action", chat, { surfaces: ["ground"] }),
   ],

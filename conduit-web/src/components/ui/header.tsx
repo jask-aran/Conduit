@@ -126,13 +126,14 @@ export function Heading(props: { kind: "browser" | "editor" | "connection"; live
 }
 
 /** A page's name under its place (in the section label's caps, a link when onPlace); no place: the page is a place. */
-export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title: string }) {
+export function HeaderCrumb(props: { place?: string; onPlace?: () => void; title: string; mark?: JSX.Element }) {
   return <nav aria-label="breadcrumb" class="ui-header-crumb">
     <Show when={props.place}>
       <Show when={props.onPlace} fallback={<span class="ui-header-place">{props.place}</span>}>
         <button type="button" class="ui-header-place" tabIndex={-1} onClick={() => props.onPlace?.()}>{props.place}</button>
       </Show>
     </Show>
+    <Show when={props.mark}><span class="ui-header-mark" aria-hidden="true">{props.mark}</span></Show>
     <strong>{props.title}</strong>
   </nav>;
 }

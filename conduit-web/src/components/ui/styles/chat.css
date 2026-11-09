@@ -23,6 +23,8 @@
 
 .ui-composer-dock { position: absolute; inset: auto 0 0; z-index: var(--stack-composer); display: flex; width: 100%; flex: none; flex-direction: column; gap: var(--space-md); margin: 0; padding: var(--space-xl) var(--space-4xl) var(--space-3xl); background: transparent; pointer-events: none; }
 .ui-composer-dock > * { pointer-events: auto; }
+/* A read-only chat says so where its composer would be. */
+.ui-composer-dock > .ui-notice { align-self: center; max-width: 100%; }
 
 /* Empty: the column is the welcome, below the header and unscrollable; the composer sits centred under it. */
 .ui-chat[data-empty] .ui-chat-scroller { position: absolute; inset: var(--header-height) 0 0; margin-top: 0; }

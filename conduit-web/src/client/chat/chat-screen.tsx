@@ -42,6 +42,8 @@ export function ChatHeader(props: {
   onOpenPlace?: (project?: Project) => void;
   /** Names the crumb when the page sits under something other than a place: a harness, for its threads. */
   placeLabel?: string;
+  /** A subagent's chat: the chat that started it stands as its place (the crumb, a row in the pill's menu), its title under the subagent mark. */
+  parent?: { title: string; open?: () => void };
   /** Beside the breadcrumb: what the page is, when that needs saying. */
   badge?: JSX.Element;
   dashboard?: boolean;
@@ -67,7 +69,9 @@ export function ChatHeader(props: {
   const profileLabel = () => props.profile?.label || props.profile?.id;
   const posture = () => props.profile?.posture || props.profile?.tools?.join(" / ");
   const sessionId = () => typeof props.live?.sessionId === "string" ? props.live.sessionId : "";
-  const crumb = () => <Show when={props.tabs} fallback={<HeaderCrumb place={props.dashboard || props.alone ? undefined : projectLabel()} onPlace={props.onOpenPlace ? () => props.onOpenPlace!(props.project) : undefined} title={props.title} />}>
+  const crumb = () => <Show when={props.tabs} fallback={<Show when={props.parent} keyed fallback={<HeaderCrumb place={props.dashboard || props.alone ? undefined : projectLabel()} onPlace={props.onOpenPlace ? () => props.onOpenPlace!(props.project) : undefined} title={props.title} />}>
+      {(parent) => <HeaderCrumb place={parent.title} onPlace={parent.open} mark={<Icons.Agent />} title={props.title} />}
+    </Show>}>
     <PaneTabRow>{props.tabs}</PaneTabRow>
   </Show>;
   const moreLabel = () => props.dashboard ? `More ${placeKind()} options` : "More chat options";
@@ -77,7 +81,7 @@ export function ChatHeader(props: {
     ["Profile", profileLabel()], ["Tools", posture()], ["Session", sessionId()]] as [string, string | null | undefined][]).filter((line): line is [string, string] => Boolean(line[1]));
   const [detailsOpen, setDetailsOpen] = createSignal(false);
   // The pill's mark for where the page sits: a workspace's glyph, a folder, or Conduit's for a chat in no folder.
-  const placeMark = () => props.alone || props.placeLabel ? undefined
+  const placeMark = () => props.parent ? <Icons.Agent /> : props.alone || props.placeLabel ? undefined
     : !props.project || props.project.slug === "chat" ? <HarnessMark id="conduit" />
     : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <Icons.Folder />;
   return <PaneHeader frost={!!props.tabs && tabFrostOn()}
@@ -93,6 +97,7 @@ export function ChatHeader(props: {
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
         <MenuContent width="md" unfolds>
           <MenuSection>
+            <Show when={props.parent?.open}><MenuRow icon={<Icons.Agent />} meta={props.parent!.title} onSelect={() => props.parent?.open?.()}>Open parent</MenuRow></Show>
             <MenuRow icon={<Icons.Share />} onSelect={props.onShare}>Share</MenuRow>
             <Show when={props.onRename}>
               <MenuRow icon={<Icons.Edit />} onSelect={() => props.onRename?.()}>{props.dashboard ? `Rename ${placeKind()}` : "Rename"}</MenuRow>

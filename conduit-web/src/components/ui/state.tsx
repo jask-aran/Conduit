@@ -46,9 +46,9 @@ export function Note(props: JSX.HTMLAttributes<HTMLElement> & { kind?: NoteKind;
     data-error={kind() !== "setting" && local.tone === "error" ? "" : undefined} />;
 }
 
-/** Where a Notice sits: a reading column (on a card ground), the sidebar's foot, a tool's strip, beside a header's title
- *  (a frost capsule). */
-export type NoticeKind = "reading" | "nav" | "tool" | "header";
+/** Where a Notice sits: a reading column (on a card ground), the sidebar's foot, a tool's strip, or a frost capsule (beside
+ *  a header's title, or where a read-only chat's composer would be). */
+export type NoticeKind = "reading" | "nav" | "tool" | "capsule";
 export type NoticeAction = { label: string; name?: string; busy?: boolean; busyLabel?: string; disabled?: boolean; quiet?: boolean; onClick: () => void };
 
 /** A line worth saying where it sits, with one action: busy, a spinner for its icon; ready, it waits on a person; live,
@@ -57,9 +57,9 @@ export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: J
   const kind = props.kind ?? "reading";
   const act = (action: NoticeAction) => kind === "nav"
     ? <Button size="sm" variant={action.quiet ? "ghost" : undefined} onClick={() => action.onClick()}>{action.label}</Button>
-    : <button type="button" tabIndex={kind === "header" ? -1 : undefined} disabled={action.busy || action.disabled} aria-label={kind === "header" ? action.name ?? action.label : undefined}
+    : <button type="button" tabIndex={kind === "capsule" ? -1 : undefined} disabled={action.busy || action.disabled} aria-label={kind === "capsule" ? action.name ?? action.label : undefined}
       onClick={() => action.onClick()}>{action.busy ? action.busyLabel ?? action.label : action.label}</button>;
-  return <Dynamic component={kind === "header" ? Frost : "div"} as={kind === "header" ? "span" : undefined} class="ui-notice" data-notice={kind} title={props.hint}
+  return <Dynamic component={kind === "capsule" ? Frost : "div"} as={kind === "capsule" ? "span" : undefined} class="ui-notice" data-notice={kind} title={props.hint}
     role={kind === "reading" ? "note" : kind === "nav" || props.live ? "status" : undefined} aria-live={props.live ? "polite" : undefined}
     data-ready={props.ready ? "" : undefined} data-tone={props.tone}>
     <Show when={props.busy} fallback={props.icon}><Spinner /></Show>

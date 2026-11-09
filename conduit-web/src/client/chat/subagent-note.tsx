@@ -1,10 +1,10 @@
 import { Notice } from "@/components/ui";
 
 /**
- * Beside the breadcrumb of a subagent's transcript: that it is a subagent's, read-only (it is written by the agent
- * that was handed the task, and answered to the chat that handed it), and its parent, the one place to go from it.
+ * Where a subagent's composer would be: that its transcript is read-only (it is written by the agent that was handed
+ * the task, and answered to the chat that handed it), whose it is, and the way to that parent.
  */
 export function SubagentNote(props: { parent: string; onOpenParent?: () => void }) {
-  return <Notice kind="header" hint={`A subagent of ${props.parent}. Its transcript is read-only.`}
-    action={props.onOpenParent ? { label: "Parent", onClick: props.onOpenParent, name: `Open ${props.parent}` } : undefined}>Subagent</Notice>;
+  return <Notice kind="capsule" hint="Only the chat that started a subagent can message it."
+    action={props.onOpenParent ? { label: "Open parent", onClick: props.onOpenParent, name: `Open ${props.parent}` } : undefined}>Read-only · a subagent of {props.parent}</Notice>;
 }
