@@ -18,7 +18,11 @@ export interface AgentSchedule { id: string; title: string; kind: "once" | "dail
   /** A routine with several timing rules: each as it applies now, `during` a local "HH:MM-HH:MM" window or null. */
   rules?: Array<{ kind: string; everyMinutes?: number; at?: string; during: string | null }>;
   /** A feed (feeds.js): what it reads from and how its last run went. */
-  feed?: { source: "executor" | "script" | "run"; lastRunAt: string | null; lastCount: number; lastError: string | null; primed: boolean } }
+  feed?: { source: "executor" | "script" | "run"; lastRunAt: string | null; lastCount: number; lastError: string | null; primed: boolean };
+  /** A routine under way: its work, or compacting the home thread after it. */
+  running?: "working" | "compacting";
+  /** How its last compaction step went: done, or not and why (the home thread's tokens, below the size it compacts from). */
+  compaction?: { at: string; done: boolean; tokens?: number | null; from?: number | null; enabled?: boolean } }
 export interface AgentWatch { id: string; kind: "watch" | "webhook"; title: string; event?: string; log?: boolean; lastFiredAt?: string | null }
 export interface AgentQuestion { kind: "question"; chatId: string; requestId: string | null; title: string }
 /** A change to its memory a run proposed, waiting for the person (memory.js). */

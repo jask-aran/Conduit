@@ -503,15 +503,19 @@ export async function listSchedules(agent) {
   const gathers = new Map(routines.filter((routine) => routine.gate === "never")
     .map((routine) => [routine.name, routine.tasks[0]?.kind]));
   const wording = new Map(routines.map((routine) => [routine.name, triggerWords(routine.trigger)]));
+  // A routine under way (its fork or run working, or compacting the home thread after), by name.
+  const running = new Map(Object.values(state.routineRuns || {}).map((run) => [run.routine?.name, run.compactionId ? "compacting" : "working"]));
+  const progress = (routine) => ({ ...(running.has(routine) ? { running: running.get(routine) } : {}),
+    ...(state.routineState?.[routine]?.compaction ? { compaction: state.routineState[routine].compaction } : {}) });
   // A routine switched off has no clock; it is listed as off (the page dims it), so turning it off never hides it.
   const off = routines.filter((routine) => routine.enabled === false && !state.schedules[`r-${routine.name}`])
-    .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null, lastAt: null, routine: routine.name, cadence: wording.get(routine.name), off: true }));
+    .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null, lastAt: null, routine: routine.name, cadence: wording.get(routine.name), off: true, ...progress(routine.name) }));
   // A routine an event starts (`trigger: { on: … }`) says so; one with no clock at all is listed all the same.
   const evented = new Set(routines.filter((routine) => (Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger]).some((rule) => rule.kind === "on"))
     .map((routine) => routine.name));
   const waiting = routines.filter((routine) => routine.enabled !== false && evented.has(routine.name) && !state.schedules[`r-${routine.name}`])
     .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null,
-      lastAt: state.routineState?.[routine.name]?.lastAt || null, routine: routine.name, cadence: wording.get(routine.name) }));
+      lastAt: state.routineState?.[routine.name]?.lastAt || null, routine: routine.name, cadence: wording.get(routine.name), ...progress(routine.name) }));
   return [...Object.values(state.schedules).map((item) => {
     const { id, title, kind, at, everyMinutes, lastAt, system, routine } = item;
     const next = item.nextAt ? Date.parse(item.nextAt) : item.kind === "rules" && item.nextAt === null ? null : nextTime(item, zone, now);
@@ -523,7 +527,7 @@ export async function listSchedules(agent) {
     return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" || evented.has(routine) ? { cadence: wording.get(routine) } : {}) } : {}),
       // Its rules as they apply now (a quiet window resolved to the hours), for the page's day strip.
       ...(kind === "rules" ? { rules: item.rules.map((rule) => ({ kind: rule.kind, ...(rule.everyMinutes ? { everyMinutes: rule.everyMinutes } : {}), ...(rule.at ? { at: rule.at } : {}), during: rule.during ?? null })) } : {}),
-      ...(feed ? { feed } : {}) };
+      ...(feed ? { feed } : {}), ...(routine ? progress(routine) : {}) };
   }), ...waiting, ...off]
     .sort((a, b) => Number(!!a.off) - Number(!!b.off) || (a.nextAt || "9999").localeCompare(b.nextAt || "9999"));
 }

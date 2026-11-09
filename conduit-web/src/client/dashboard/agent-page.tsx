@@ -3,7 +3,7 @@ import { Portal } from "solid-js/web";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { AgentAvatar, Answer, ApprovalCard, approvalLineText, type ApprovalChoice, Empty, Expand, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
-import { Button, TextArea } from "@/components/ui/controls";
+import { Button, Spinner, TextArea } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
 import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
@@ -342,6 +342,12 @@ export function AgentPage(props: {
   // On first by when they next run, then the ones switched off (dimmed, no clock).
   const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => Number(!!a.off) - Number(!!b.off) || (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
   const clocked = () => timed().filter((schedule) => !schedule.off);
+  // While a routine runs its row follows it closely (it is read every 10s otherwise), so its end shows when it ends.
+  createEffect(() => {
+    if (!timed().some((schedule) => schedule.running)) return;
+    const tick = window.setInterval(() => void refreshAgent(), 2000);
+    onCleanup(() => window.clearInterval(tick));
+  });
   const day = () => {
     const settings = view()?.settings;
     const zone = settings?.timezone;
@@ -361,14 +367,26 @@ export function AgentPage(props: {
   const clockRow = (schedule: AgentSchedule) => {
     const feed = schedule.feed;
     const quiet = () => clockKind(schedule) === "heartbeat" && quietUntil() ? `Quiet until ${quietUntil()}` : undefined;
-    const status = () => !feed ? undefined : feed.lastError ? "Last check failed" : !feed.primed ? "First check soon"
+    // A routine under way says so, and how its last compaction of the home thread went (done, or why not).
+    const thousands = (count: number) => `${Math.round(count / 1000)}k`;
+    const compaction = () => {
+      const last = schedule.compaction;
+      if (!last) return undefined;
+      if (last.done) return `Compacted ${age(last.at, now())}`.trim();
+      if (last.enabled === false) return "Compaction off";
+      return last.tokens != null && last.from ? `Not compacted: ${thousands(last.tokens)} of ${thousands(last.from)}` : "Not compacted";
+    };
+    const status = () => schedule.running === "compacting" ? "Compacting the home thread" : schedule.running ? "Running"
+      : !feed ? compaction() : feed.lastError ? "Last check failed" : !feed.primed ? "First check soon"
       : `${feed.lastCount ? `${feed.lastCount} new` : "Nothing new"} ${age(feed.lastRunAt, now())}`.trim();
-    const runNow = <IconButton kind="dash" aria-label={`Run ${schedule.title} now`} title="Run now" disabled={busy() !== null}
-      onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}><Icons.Play /></IconButton>;
+    const runNow = <IconButton kind="dash" aria-label={schedule.running ? `${schedule.title} is running` : `Run ${schedule.title} now`} title={schedule.running ? "Running" : "Run now"}
+      disabled={busy() !== null || Boolean(schedule.running)}
+      onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}>
+      <Show when={schedule.running || busy() === schedule.id} fallback={<Icons.Play />}><Spinner /></Show></IconButton>;
     // Off: no clock, but it still runs by hand.
-    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} next="Off" off actions={schedule.routine ? runNow : undefined} />;
+    if (schedule.off) return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} status={status()} next="Off" off actions={schedule.routine ? runNow : undefined} />;
     return <ClockRow kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
-      status={feed ? [FEED_SOURCE[feed.source], status()].join(" · ") : quiet()} next={age(schedule.nextAt, now())}
+      status={feed && !schedule.running ? [FEED_SOURCE[feed.source], status()].join(" · ") : [quiet(), status()].filter(Boolean).join(" · ") || undefined} next={age(schedule.nextAt, now())}
       actions={<>
         {runNow}
         {feed ? <IconButton kind="dash" aria-label="Remove feed" title="Remove feed" disabled={busy() !== null}

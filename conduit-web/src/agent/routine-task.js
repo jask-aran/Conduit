@@ -315,7 +315,14 @@ export function routineTask(runtime) {
             const home = await runtime.harness.conversation(task.input.homeId, context);
             const usage = await runtime.routineContextUsage?.(home, context, api.settings?.compaction);
             const settings = { ...runtime.agent.settings().nightlyCompaction, ...step.compact };
-            if (!shouldCompact(settings, usage)) { await advance(task, api, context, "after", index); return; }
+            if (!shouldCompact(settings, usage)) {
+              // Said on its routine's row: not compacted, and why (the thread below the size it compacts from).
+              const from = usage?.contextWindow ? Math.max(settings.minTokens, settings.minShare * usage.contextWindow) : null;
+              await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); doc.routineState ||= {};
+                (doc.routineState[record.routine.name] ||= {}).compaction = { at: new Date(api.now()).toISOString(), done: false,
+                  tokens: usage?.tokens ?? null, from: from === null ? null : Math.round(from), enabled: Boolean(settings.enabled) }; }, context);
+              await advance(task, api, context, "after", index); return;
+            }
             await api.commit(async (tx) => {
               const doc = await tx.doc(AgentDoc);
               const live = await tx.doc(LiveDoc, task.input.homeId);
@@ -344,7 +351,8 @@ export function routineTask(runtime) {
             compacted = placed?.status === "done";
           }
           if (!compacted) throw new Error("Compaction did not place a summary.");
-          await api.commit(async (tx) => { (await tx.doc(AgentDoc)).lastCompactionAt = new Date(api.now()).toISOString(); }, context);
+          await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); const at = new Date(api.now()).toISOString(); doc.lastCompactionAt = at;
+            doc.routineState ||= {}; (doc.routineState[record.routine.name] ||= {}).compaction = { at, done: true }; }, context);
         }
         await advance(task, api, context, "after", index);
       },
