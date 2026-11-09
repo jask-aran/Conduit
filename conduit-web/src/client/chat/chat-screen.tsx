@@ -3,13 +3,11 @@ import { HarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { createSignal, For, Show, type JSX } from "solid-js";
 
-import { DropdownMenu, MenuContent, MenuControl, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { PaneTabRow } from "@/components/ui/pane";
 import { Expand, HeaderButton, HeaderCrumb, HeaderPill, Readout, Rule, PaneHeader } from "@/components/ui";
 import type { Project, RuntimeIdentity, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
-import type { Narration } from "../turn-rows";
-import { NARRATION_OPTIONS } from "../preferences/transcript-mode";
 import { ContextBar, ContextBreakdown } from "./context-gauge";
 import { contextUsagePercent } from "./context-metrics";
 import { isWorkspace } from "./place-picker";
@@ -40,8 +38,6 @@ export function ChatHeader(props: {
   onShare: () => void;
   onRename?: () => void;
   onDelete?: () => void;
-  /** How the transcript draws what the agent says between tool calls (DESIGN.md, Transcript › Turns). */
-  narration?: { value: Narration; onChange: (value: Narration) => void };
   /** Opens the place the page sits under, making its crumb a link. */
   onOpenPlace?: (project?: Project) => void;
   /** Names the crumb when the page sits under something other than a place: a harness, for its threads. */
@@ -106,14 +102,6 @@ export function ChatHeader(props: {
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => props.onDelete?.()}>{props.dashboard ? (placeKind() === "workspace" ? "Unlink workspace" : "Delete project") : "Delete chat"}</MenuRow>
             </Show>
           </MenuSection>
-          <Show when={props.narration}>{(narration) => <>
-            <Rule />
-            <MenuSection title="Work between replies">
-              <MenuRadioGroup value={narration().value} onChange={(value) => narration().onChange(value as Narration)}>
-                <For each={NARRATION_OPTIONS}>{(option) => <MenuRadioItem value={option.value} title={option.description}>{option.label}</MenuRadioItem>}</For>
-              </MenuRadioGroup>
-            </MenuSection>
-          </>}</Show>
           <Show when={!props.dashboard && props.chat}>{(chat) => {
             // Each opens in place, its section growing (Expand): a submenu has nowhere to go beside a menu that fills a phone.
             const [expanded, setExpanded] = createSignal(false);

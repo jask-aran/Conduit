@@ -21,7 +21,6 @@ import { BrowserMachine } from "@/components/ui/browser";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
-import type { Narration } from "../turn-rows";
 import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../remotes/terminal-pane";
 import { deviceStates, type RuntimeStore } from "../state/runtime";
@@ -125,7 +124,7 @@ export function Sidebar(props: {
   /** Where a chat is open: its pane's letter and whether it is that pane's showing tab (PaneMark). */
   placeOf?: (id: string) => { pane: string; shown: boolean } | undefined;
   /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
-  onOpenChatBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
+  onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   /** Open an empty pane beside the one with the keyboard; absent where there are no panes (a phone). */
   onNewPane?: () => void;
   navigatingId?: string | null;
@@ -156,9 +155,6 @@ export function Sidebar(props: {
   onMoveChats: (targets: ChatTarget[], destination: Project) => Promise<string[]>;
   onMoveProjectChats: (source: Project, target: Project) => Promise<void>;
   onCopyTranscript: (chat: ChatSummary) => Promise<void>;
-  /** A chat's transcript mode (its own, else this device's default), and setting it. */
-  narrationOf: (chatId: string) => Narration;
-  onSetNarration: (chat: ChatSummary, value: Narration) => void;
   onCopyChatLinks: (targets: ChatTarget[]) => Promise<boolean>;
   onDeleteChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onDeleteChats: (targets: ChatTarget[]) => Promise<string[]>;
@@ -994,11 +990,10 @@ export function Sidebar(props: {
         onRename={() => requestRenameChat(menuProps.chat, menuProps.project)}
         onMove={(target) => void props.onMoveChat(menuProps.chat, menuProps.project, target)}
         onCopy={() => void props.onCopyTranscript(menuProps.chat)}
-        onOpenBeside={props.onOpenChatBeside ? (narration) => props.onOpenChatBeside?.(menuProps.chat, menuProps.project, narration) : undefined}
+        onOpenBeside={props.onOpenChatBeside ? () => props.onOpenChatBeside?.(menuProps.chat, menuProps.project) : undefined}
         onOpenTerminal={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}
         onStop={processFor(menuProps.chat)?.id ? () => void props.onStopProcess(menuProps.chat) : undefined}
         pin={isConduitManagedProject(menuProps.project) ? { pinned: isPinned("chat", menuProps.chat.id), onToggle: () => void togglePin("chat", menuProps.chat.id) } : undefined}
-        narration={{ value: props.narrationOf(menuProps.chat.id), onChange: (value) => props.onSetNarration(menuProps.chat, value) }}
         onDelete={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })} />}>
         <MenuSection title={`${selectedTargets().length} chats selected`}>
           <MoveTo label="Move to folder…" places={props.projects} held={(target) => selectedTargets().every((item) => item.project.id === target.id)} onMove={(target) => void moveSelectedChats(target)} />

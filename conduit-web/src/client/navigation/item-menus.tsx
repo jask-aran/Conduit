@@ -7,8 +7,6 @@ import { isWorkspace, PlaceGlyph } from "../chat/place-picker";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { isMobileLayout } from "./mobile-layout";
 import { isConduitManagedProject } from "./sidebar-preferences";
-import { NARRATION_OPTIONS } from "../preferences/transcript-mode";
-import type { Narration } from "../turn-rows";
 
 /*
  * The menus a chat and a place (a project or a workspace) open, wherever their rows are (the sidebar, the
@@ -34,21 +32,6 @@ export function MoveTo(props: { label: string; places: Project[]; current?: stri
   </MenuSub>;
 }
 
-/** How the chat's transcript draws the work between its replies (DESIGN Transcript › Turns): Narrated or Folded,
- *  the current one checked. */
-export function NarrationChoice(props: { value: Narration; onChange: (value: Narration) => void }) {
-  return <MenuSub phone={isMobileLayout()}>
-    <MenuSubTrigger icon={<Icons.Narration />}>Work between replies</MenuSubTrigger>
-    <MenuSubContent><MenuSection title="Work between replies">
-      <MenuRadioGroup value={props.value} onChange={(value) => props.onChange(value as Narration)}>
-        <For each={NARRATION_OPTIONS}>{(option) => <MenuRadioItem value={option.value} title={option.description}>{option.label}</MenuRadioItem>}</For>
-      </MenuRadioGroup>
-    </MenuSection></MenuSubContent>
-  </MenuSub>;
-}
-
-const otherNarration = (value: Narration): Narration => value === "show" ? "fold" : "show";
-
 /** Pin to the sidebar, or unpin. */
 const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
   <MenuRow icon={props.pinned ? <Icons.PinOff /> : <Icons.Pin />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
@@ -56,9 +39,8 @@ const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
 /** A chat's menu. pin: absent where a chat cannot be pinned; openBeside, stop: absent where they do not apply. */
 export function ChatMenuItems(props: {
   project: Project; places: Project[];
-  onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: (narration?: Narration) => void; onOpenTerminal: () => void;
+  onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: () => void; onOpenTerminal: () => void;
   onStop?: () => void; pin?: { pinned: boolean; onToggle: () => void }; onDelete: () => void;
-  narration?: { value: Narration; onChange: (value: Narration) => void };
 }) {
   return <>
     <MenuSection>
@@ -66,13 +48,9 @@ export function ChatMenuItems(props: {
       <MoveTo label="Move to folder…" places={props.places} current={props.project.id} onMove={props.onMove} />
       <MenuRow icon={<Icons.Copy />} onSelect={props.onCopy}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
       <Show when={props.onOpenBeside}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpenBeside?.()}>Open beside</MenuRow></Show>
-      {/* The same chat again beside, drawn the other way, in that pane only: to read one turn both ways at once. */}
-      <Show when={props.onOpenBeside && props.narration}>{(narration) => <MenuRow icon={<Icons.Narration />} onSelect={() => props.onOpenBeside?.(otherNarration(narration().value))}>
-        Open beside, {NARRATION_OPTIONS.find((option) => option.value === otherNarration(narration().value))!.label}</MenuRow>}</Show>
       <MenuRow icon={<Icons.Terminal />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
       <Show when={props.onStop}><MenuRow icon={<Icons.Stop />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
-      <Show when={props.narration}>{(narration) => <NarrationChoice value={narration().value} onChange={narration().onChange} />}</Show>
     </MenuSection>
     <MenuSection>
       <MenuRow destructive icon={<Icons.Delete />} onSelect={props.onDelete}>{commandLabel(COMMAND_IDS.deleteChat)}</MenuRow>
@@ -113,17 +91,14 @@ export type ItemActions = {
   renameChat: (chat: ChatSummary, project: Project) => void;
   moveChat: (chat: ChatSummary, from: Project, to: Project) => void;
   copyChat: (chat: ChatSummary) => void;
-  /** Beside; given a narration, the same chat again beside drawn that way (in that pane only). */
-  openBeside?: (chat: ChatSummary, project: Project, narration?: Narration) => void;
+  /** Open the chat beside the current pane. */
+  openBeside?: (chat: ChatSummary, project: Project) => void;
   openTerminal: (chat: ChatSummary, project: Project) => void;
   running: (chat: ChatSummary) => boolean;
   stop: (chat: ChatSummary) => void;
   pinned: (type: "chat" | "project", id: string) => boolean;
   togglePin: (type: "chat" | "project", id: string) => void;
   deleteChat: (chat: ChatSummary, project: Project) => void;
-  /** The chat's transcript mode, and setting it. */
-  narration: (chat: ChatSummary) => Narration;
-  setNarration: (chat: ChatSummary, value: Narration) => void;
   newChat: (project: Project) => void;
   openMaximized: (project: Project) => void;
   renamePlace: (project: Project) => void;
@@ -137,11 +112,10 @@ export const ChatMenuFor = (props: { chat: ChatSummary; project: Project; action
   onRename={() => props.actions.renameChat(props.chat, props.project)}
   onMove={(to) => props.actions.moveChat(props.chat, props.project, to)}
   onCopy={() => props.actions.copyChat(props.chat)}
-  onOpenBeside={props.actions.openBeside ? (narration) => props.actions.openBeside?.(props.chat, props.project, narration) : undefined}
+  onOpenBeside={props.actions.openBeside ? () => props.actions.openBeside?.(props.chat, props.project) : undefined}
   onOpenTerminal={() => props.actions.openTerminal(props.chat, props.project)}
   onStop={props.actions.running(props.chat) ? () => props.actions.stop(props.chat) : undefined}
   pin={isConduitManagedProject(props.project) ? { pinned: props.actions.pinned("chat", props.chat.id), onToggle: () => props.actions.togglePin("chat", props.chat.id) } : undefined}
-  narration={{ value: props.actions.narration(props.chat), onChange: (value) => props.actions.setNarration(props.chat, value) }}
   onDelete={() => props.actions.deleteChat(props.chat, props.project)} />;
 
 export const PlaceMenuFor = (props: { project: Project; actions: ItemActions }) => <PlaceMenuItems project={props.project} places={props.actions.places()}

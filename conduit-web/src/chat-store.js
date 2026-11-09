@@ -230,7 +230,6 @@ export class ChatStore {
         // newer than the watermark either way, so they come back unread.
         lastReadAt: item.lastReadAt
           || (item.unread ? null : item.lastAssistantCompletedAt || null),
-        ...(item.narration === "fold" || item.narration === "show" ? { narration: item.narration } : {}),
       };
       let hasAttachments = false;
       try {
@@ -500,7 +499,6 @@ export class ChatStore {
       "lastMessageAt",
       "lastReadAt",
       "untracked",
-      "narration",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
     // The completion clock is the read watermark's other half, so it never
