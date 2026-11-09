@@ -403,11 +403,18 @@ const TURN_PROMPTS = new Set([USER_ENTRY, "conduit.subagent-report", "conduit.ag
  * The work a message of jbot's log came from (GET /v0/agent/work): the thread's entries from `from` (the person's
  * message before it, or just after the reply before it) through `through` (its own), as ops. lean leaves out what each
  * tool was given and gave back: the trail's lines are there without them, and a step opened reads them whole.
+ * steer: the message is the person's, and its work is the turn it steered, up to it -- none (null) when no turn was
+ * running (its last model message before it asked for no tools).
  */
-export function workOps(entries, from, through, { lean = false } = {}) {
+export function workOps(entries, from, through, { lean = false, steer = false } = {}) {
+  const until = steer ? through - 1 : through;
   // From the turn's own prompt (the person's, a report or a beat), not turns before it that said nothing.
-  const start = entries.findLast((entry) => entry.id >= from && entry.id <= through && TURN_PROMPTS.has(entry.kind))?.id ?? from;
-  const ops = entriesToOps(entries.filter((entry) => entry.id >= start && entry.id <= through)).filter(Boolean);
+  const start = entries.findLast((entry) => entry.id >= from && entry.id <= until && TURN_PROMPTS.has(entry.kind))?.id ?? from;
+  if (steer) {
+    const last = entries.findLast((entry) => entry.id > start && entry.id <= until && entry.kind === "pi.assistant");
+    if (!entries.some((entry) => entry.id === start && TURN_PROMPTS.has(entry.kind)) || (last && last.model?.[0]?.stopReason !== "toolUse")) return null;
+  }
+  const ops = entriesToOps(entries.filter((entry) => entry.id >= start && entry.id <= until)).filter(Boolean);
   return lean ? ops.map((op) => op.op === "tool.open" ? { ...op, input: undefined } : op.op === "tool.close" ? { ...op, output: undefined } : op) : ops;
 }
 

@@ -361,8 +361,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.json({ messages: log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [] });
   });
 
-  // A reply's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
-  // before it in its thread; lean unless full (workOps).
+  // A message's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
+  // before it in its thread; each of the person's that steered a running turn, that turn up to it. Lean unless full
+  // (workOps).
   app.get("/v0/agent/work", async (request, response, next) => {
     try {
       const log = agent.runtime.messageLog;
@@ -371,7 +372,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const work = {};
       for (const id of ids) {
         const message = log?.messages.find((item) => item.id === id);
-        if (!message || message.direction !== "out" || message.entryId == null) continue;
+        if (!message || message.entryId == null) continue;
         const before = log.messages.findLast((item) => item.entryId != null && item.entryId < message.entryId && String(item.conversationId) === String(message.conversationId));
         const from = before ? before.entryId + (before.direction === "out" ? 1 : 0) : 0;
         const conversation = await harness.conversation(Number(message.conversationId), agent.context);
@@ -383,7 +384,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
           entries.push(...page.items);
           cursor = page.next;
         } while (cursor);
-        work[id] = workOps(entries, from, message.entryId, { lean: !request.query.full });
+        const ops = workOps(entries, from, message.entryId, { lean: !request.query.full, steer: message.direction === "in" });
+        if (ops) work[id] = ops;
       }
       response.json({ work });
     } catch (error) { next(error); }

@@ -23,7 +23,8 @@ export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
   title?: string; body: string; notify: "none" | "push" | "urgent"; delivery?: { state: string; error?: string };
   pushed?: { to: string[]; missed: string[] };
-  /** A reply's, or the person's message's, entry in its thread: a reply with one has its turn's work (GET /v0/agent/work). */
+  /** Its entry in its thread: a reply with one has the work of the turn it ended, the person's message that steered a
+   *  running turn has that turn's work up to it (GET /v0/agent/work). */
   entryId?: number; conversationId?: number | string;
   native?: { from?: Party | null; to?: Array<Party | string>; date?: string };
 }
@@ -49,9 +50,10 @@ let lastRead: LogMessage[] | null = null;
 let reading: Promise<LogMessage[]> | null = null;
 
 /*
- * A reply's work: the turn it ended, read as its thread's ops (GET /v0/agent/work) and projected as a thread's
- * transcript projects them (buildTurnRows), Folded: the one trace above its answer. Read with the log, so a reply is
- * drawn with its work at once; lean (no tools' input or output) until the trace is opened, then whole.
+ * A message's work: the turn a reply ended, or the running turn the person's message steered, up to it. Read as its
+ * thread's ops (GET /v0/agent/work) and projected as a thread's transcript projects them (buildTurnRows), Folded: the
+ * one trace above the message. Read with the log, so a message is drawn with its work at once; lean (no tools' input
+ * or output) until the trace is opened, then whole.
  */
 const works = new Map<string, TurnTraceData | null>();
 const [worksRead, setWorksRead] = createSignal(0);
@@ -64,7 +66,7 @@ function traceOf(ops: TranscriptOp[]): TurnTraceData | null {
   return trace?.type === "trace" && trace.value.segments.some((segment) => segment.kind !== "context") ? trace.value : null;
 }
 async function readWork(messages: LogMessage[], full = false) {
-  const ids = messages.filter((message) => message.direction === "out" && message.entryId != null && (full || !works.has(message.id))).map((message) => message.id);
+  const ids = messages.filter((message) => message.entryId != null && (full || !works.has(message.id))).map((message) => message.id);
   if (!ids.length) return;
   const { work } = await api<{ work: Record<string, TranscriptOp[]> }>(`/v0/agent/work?ids=${encodeURIComponent(ids.join(","))}${full ? "&full=1" : ""}`);
   for (const id of ids) works.set(id, work[id] ? traceOf(work[id]!) : null);
