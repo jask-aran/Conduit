@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { clockTime, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { clockTime, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -35,7 +35,13 @@ const sentTo = (message: LogMessage) => message.notify === "none" ? undefined
 const partyName = (party?: Party | string | null) => typeof party === "string" ? party : party?.name || party?.address || "";
 /** A row of the stream: one message of the app room, the work a reply of it ended (its turn, Folded's trace), or a run of
  *  another room's messages, folded (RoomRow). */
-type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] };
+type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] }
+  | { kind: "runs"; runs: LogRun[] };
+/** A run jbot's home thread had (GET /v0/agent/messages `runs`): that it happened is all the log says of it. */
+export interface LogRun { id: string; at: string; title: string; routine: string | null; woke: boolean }
+const RUN_ICONS: Record<string, () => any> = { heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, "morning-brief": () => <Icons.Brief />,
+  event: () => <Icons.Runtime />, feed: () => <Icons.Feed /> };
+const runIcon = (routine: string | null) => (routine && RUN_ICONS[routine] || (() => <Icons.Clock />))();
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
 const clock = (at: string) => clockTime(at) ?? "";
@@ -74,8 +80,10 @@ async function readWork(messages: LogMessage[], full = false) {
 }
 const workOf = (message: LogMessage) => { worksRead(); return works.get(message.id) ?? null; };
 
-const readMessages = () => reading ??= api<{ messages: LogMessage[] }>("/v0/agent/messages?limit=100")
-  .then(async (result) => { await readWork(result.messages).catch(() => {}); return (lastRead = result.messages); }).finally(() => { reading = null; });
+// The runs among the messages read, with them.
+const [logRuns, setLogRuns] = createSignal<LogRun[]>([]);
+const readMessages = () => reading ??= api<{ messages: LogMessage[]; runs?: LogRun[] }>("/v0/agent/messages?limit=100")
+  .then(async (result) => { await readWork(result.messages).catch(() => {}); setLogRuns(result.runs ?? []); return (lastRead = result.messages); }).finally(() => { reading = null; });
 /** Read jbot's messages ahead (and its renderer), so its chat draws at once when it opens. */
 export const prefetchJbotMessages = () => { void readMessages().catch(() => {}); void ChatMarkdown.preload(); };
 
@@ -104,7 +112,16 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
   let kept = new Map<string, { sig: string; row: StreamRow }>();
   const rows = createMemo(() => {
+    // The runs between two messages are one row, put where they happened.
+    const runs = [...logRuns()].sort((a, b) => a.at.localeCompare(b.at));
+    let next = 0;
+    const runsBefore = (list: StreamRow[], at: string | null) => {
+      const taken: LogRun[] = [];
+      while (next < runs.length && (at === null || runs[next]!.at <= at)) taken.push(runs[next++]!);
+      if (taken.length) list.push({ kind: "runs", runs: taken });
+    };
     const built = props.messages.reduce<StreamRow[]>((list, message) => {
+      runsBefore(list, message.at);
       if (message.channel === "app") {
         if (workOf(message)) list.push({ kind: "work", message });
         list.push({ kind: "message", message });
@@ -116,16 +133,17 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
       else list.push({ kind: "room", room: message.room, channel: message.channel, messages: [message] });
       return list;
     }, []);
-    const next = new Map<string, { sig: string; row: StreamRow }>();
+    runsBefore(built, null);
+    const nextKept = new Map<string, { sig: string; row: StreamRow }>();
     const stable = built.map((row) => {
-      const key = row.kind === "room" ? `r:${row.room}:${row.messages[0]!.id}` : `${row.kind === "work" ? "w" : "m"}:${row.message.id}`;
+      const key = row.kind === "room" ? `r:${row.room}:${row.messages[0]!.id}` : row.kind === "runs" ? `u:${row.runs[0]!.id}` : `${row.kind === "work" ? "w" : "m"}:${row.message.id}`;
       const sig = JSON.stringify(row);
       const before = kept.get(key);
       const chosen = before && before.sig === sig ? before.row : row;
-      next.set(key, { sig, row: chosen });
+      nextKept.set(key, { sig, row: chosen });
       return chosen;
     });
-    kept = next;
+    kept = nextKept;
     return stable;
   });
   // A room's name: its subject, from whichever of its messages carries one.
@@ -136,6 +154,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     if (index <= 0) return undefined;
     const row = rows()[index]!, above = rows()[index - 1]!;
     if (row.kind === "room" || above.kind === "room") return "turn";
+    if (row.kind === "runs" || above.kind === "runs") return "step";
     if (row.kind === "message" && row.message.direction === "in") return "turn";
     if (above.kind === "work") return "answer";
     return above.kind === "message" && above.message.direction === "in" ? "exchange" : "step";
@@ -150,6 +169,12 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
   const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} renderer={props.renderer} loadContext={loadContext}
     onOpenChange={(open) => { if (open && message) void readWork([message], true).catch(() => {}); }} /></Turn>;
+  // A row's runs, one line per kind of run: how many, and when the last was.
+  const runLines = (runs: LogRun[]) => [...runs.reduce((lines, run) => {
+    const line = lines.get(run.title);
+    lines.set(run.title, { title: run.title, routine: run.routine, count: (line?.count ?? 0) + 1, at: run.at });
+    return lines;
+  }, new Map<string, { title: string; routine: string | null; count: number; at: string }>()).values()];
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
     : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
@@ -188,7 +213,10 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
           after={<Show when={live() || props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}>
             <Show when={live()} fallback={<Turn><TraceStarting /></Turn>}>{(data) => trace(data)}</Show>
           </TranscriptRow></Show>}>
-          {(row, index) => row.kind === "work"
+          {(row, index) => row.kind === "runs"
+            ? <TranscriptRow flow={flowAt(index())}><Turn><Trail><For each={runLines(row.runs)}>{(line) =>
+                <Step icon={runIcon(line.routine)} verb={line.title} subject={line.count > 1 ? `${line.count} times` : undefined} face="text" time={clock(line.at)} />}</For></Trail></Turn></TranscriptRow>
+            : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>
             : row.kind === "room"
             ? <TranscriptRow flow={flowAt(index())} tabIndex={-1} data-dash-row="">

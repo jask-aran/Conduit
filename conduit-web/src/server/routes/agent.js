@@ -42,7 +42,7 @@ import { workOps } from "../../durable-adapter.js";
  * POST /v0/agent/tasks/:id/retry       run a task the runtime parked (restart limit) again from its checkpoint
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
- * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
+ * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
  * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
  * POST /v0/agent/voice-message      a PCM WAV recording: transcribed, logged via voice, then given to the same home thread
@@ -355,10 +355,44 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.status(202).json({ collecting: true });
   });
 
-  app.get("/v0/agent/messages", (request, response) => {
-    const log = agent.runtime.messageLog;
-    const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
-    response.json({ messages: log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [] });
+  /*
+   * The runs jbot's home thread has had (a heartbeat, a brief, an event's watch, a routine): each its quiet line or the
+   * report it woke jbot with, read from the thread once and then only what was added since, so the log can say each
+   * one happened. Reads are chained, so two at once never index an entry twice.
+   */
+  const runIndex = { conversationId: null, last: 0, runs: [], reading: Promise.resolve() };
+  const runsOf = (conversationId) => runIndex.reading = runIndex.reading.catch(() => {}).then(async () => {
+    if (runIndex.conversationId !== conversationId) Object.assign(runIndex, { conversationId, last: 0, runs: [] });
+    const harness = await agent.runtime.open();
+    const conversation = await harness.conversation(Number(conversationId), agent.context);
+    if (!conversation) return runIndex.runs;
+    let cursor;
+    do {
+      const page = await conversation.entries({ order: "ascending", minEntryId: runIndex.last + 1 }, 500, cursor, agent.context);
+      for (const entry of page.items) {
+        runIndex.last = Math.max(runIndex.last, entry.id);
+        const data = entry.data || {};
+        if (!data.run || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
+        runIndex.runs.push({ id: data.messageId || `run:${entry.id}`, at: data.run.endedAt || data.timestamp || new Date(entry.createdAt || Date.now()).toISOString(),
+          title: data.title || data.run.label || "Run", routine: data.run.routine || null, woke: entry.kind === "conduit.subagent-report", entryId: entry.id });
+      }
+      cursor = page.next;
+    } while (cursor);
+    return runIndex.runs;
+  });
+
+  app.get("/v0/agent/messages", async (request, response, next) => {
+    try {
+      const log = agent.runtime.messageLog;
+      const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
+      const messages = log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [];
+      // The runs since the first message read, and before the next page's, when an older page is read.
+      const home = (await agent.state().catch(() => null))?.home?.conversationId;
+      const since = messages[0]?.at ?? "";
+      const until = request.query.before ? messages.at(-1)?.at ?? "" : null;
+      const runs = home && messages.length ? (await runsOf(home).catch(() => [])).filter((run) => run.at >= since && (until === null || run.at <= until)) : [];
+      response.json({ messages, runs });
+    } catch (error) { next(error); }
   });
 
   // A message's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
