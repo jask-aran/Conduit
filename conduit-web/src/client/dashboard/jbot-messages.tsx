@@ -1,6 +1,8 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { clockTime, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, Step, Trail, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { clockTime, AgentRows, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { openAgentChat } from "../chat/agents";
+import { elapsed } from "../chat/tool-card";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -36,12 +38,18 @@ const partyName = (party?: Party | string | null) => typeof party === "string" ?
 /** A row of the stream: one message of the app room, the work a reply of it ended (its turn, Folded's trace), or a run of
  *  another room's messages, folded (RoomRow). */
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] }
-  | { kind: "runs"; runs: LogRun[] };
-/** A run jbot's home thread had (GET /v0/agent/messages `runs`): that it happened is all the log says of it. */
-export interface LogRun { id: string; at: string; title: string; routine: string | null; woke: boolean }
-const RUN_ICONS: Record<string, () => any> = { heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, "morning-brief": () => <Icons.Brief />,
-  event: () => <Icons.Runtime />, feed: () => <Icons.Feed /> };
-const runIcon = (routine: string | null) => (routine && RUN_ICONS[routine] || (() => <Icons.Clock />))();
+  | { kind: "run"; run: LogRun };
+/** A run jbot's home thread had (GET /v0/agent/messages `runs`): the log says it happened, as the thread's run line,
+ *  and opens its transcript; what it reported is the reply after it. */
+export interface LogRun { id: string; at: string; title: string; label: string; number: number | null; routine: string | null; trigger: string | null;
+  startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean }
+const runTime = (run: LogRun) => {
+  const start = run.startedAt ? Date.parse(run.startedAt) : NaN, end = run.endedAt ? Date.parse(run.endedAt) : NaN;
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start ? elapsed(end - start) : undefined;
+};
+/** Open a run's transcript (its chat, made the first time). */
+const openRun = (run: LogRun) => void api<{ chatId: string }>(`/v0/agent/runs/${encodeURIComponent(run.id)}/open`, { method: "POST" })
+  .then(({ chatId }) => openAgentChat(chatId)).catch(() => {});
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
 const clock = (at: string) => clockTime(at) ?? "";
@@ -112,13 +120,11 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
   let kept = new Map<string, { sig: string; row: StreamRow }>();
   const rows = createMemo(() => {
-    // The runs between two messages are one row, put where they happened.
+    // Each run a row of its own, where it happened.
     const runs = [...logRuns()].sort((a, b) => a.at.localeCompare(b.at));
     let next = 0;
     const runsBefore = (list: StreamRow[], at: string | null) => {
-      const taken: LogRun[] = [];
-      while (next < runs.length && (at === null || runs[next]!.at <= at)) taken.push(runs[next++]!);
-      if (taken.length) list.push({ kind: "runs", runs: taken });
+      while (next < runs.length && (at === null || runs[next]!.at <= at)) list.push({ kind: "run", run: runs[next++]! });
     };
     const built = props.messages.reduce<StreamRow[]>((list, message) => {
       runsBefore(list, message.at);
@@ -136,7 +142,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     runsBefore(built, null);
     const nextKept = new Map<string, { sig: string; row: StreamRow }>();
     const stable = built.map((row) => {
-      const key = row.kind === "room" ? `r:${row.room}:${row.messages[0]!.id}` : row.kind === "runs" ? `u:${row.runs[0]!.id}` : `${row.kind === "work" ? "w" : "m"}:${row.message.id}`;
+      const key = row.kind === "room" ? `r:${row.room}:${row.messages[0]!.id}` : row.kind === "run" ? `u:${row.run.id}` : `${row.kind === "work" ? "w" : "m"}:${row.message.id}`;
       const sig = JSON.stringify(row);
       const before = kept.get(key);
       const chosen = before && before.sig === sig ? before.row : row;
@@ -154,7 +160,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     if (index <= 0) return undefined;
     const row = rows()[index]!, above = rows()[index - 1]!;
     if (row.kind === "room" || above.kind === "room") return "turn";
-    if (row.kind === "runs" || above.kind === "runs") return "step";
+    if (row.kind === "run" || above.kind === "run") return "step";
     if (row.kind === "message" && row.message.direction === "in") return "turn";
     if (above.kind === "work") return "answer";
     return above.kind === "message" && above.message.direction === "in" ? "exchange" : "step";
@@ -167,14 +173,9 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const live = () => props.live ?? held()?.trace ?? null;
   const loadContext = (entryId: number) => api<ContextText>(`/v0/sessions/${encodeURIComponent(agentView()?.home?.chatId ?? "")}/context/${entryId}`);
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
-  const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} renderer={props.renderer} loadContext={loadContext}
+  // The orb is the live turn's alone, as a thread draws only its latest turn's.
+  const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} orb={!message} renderer={props.renderer} loadContext={loadContext}
     onOpenChange={(open) => { if (open && message) void readWork([message], true).catch(() => {}); }} /></Turn>;
-  // A row's runs, one line per kind of run: how many, and when the last was.
-  const runLines = (runs: LogRun[]) => [...runs.reduce((lines, run) => {
-    const line = lines.get(run.title);
-    lines.set(run.title, { title: run.title, routine: run.routine, count: (line?.count ?? 0) + 1, at: run.at });
-    return lines;
-  }, new Map<string, { title: string; routine: string | null; count: number; at: string }>()).values()];
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
     : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
@@ -213,9 +214,12 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
           after={<Show when={live() || props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}>
             <Show when={live()} fallback={<Turn><TraceStarting /></Turn>}>{(data) => trace(data)}</Show>
           </TranscriptRow></Show>}>
-          {(row, index) => row.kind === "runs"
-            ? <TranscriptRow flow={flowAt(index())}><Turn><Trail><For each={runLines(row.runs)}>{(line) =>
-                <Step icon={runIcon(line.routine)} verb={line.title} subject={line.count > 1 ? `${line.count} times` : undefined} face="text" time={clock(line.at)} />}</For></Trail></Turn></TranscriptRow>
+          {(row, index) => row.kind === "run"
+            ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>
+                <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
+                  time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
+                  summary={row.run.summary ?? undefined} onOpen={() => openRun(row.run)} />
+              </AgentRows></Turn></TranscriptRow>
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>
             : row.kind === "room"

@@ -43,6 +43,7 @@ import { workOps } from "../../durable-adapter.js";
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
+ * POST /v0/agent/runs/:id/open      a run of the log's: its transcript as a chat to open { chatId }
  * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
  * POST /v0/agent/voice-message      a PCM WAV recording: transcribed, logged via voice, then given to the same home thread
@@ -374,11 +375,25 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
         const data = entry.data || {};
         if (!data.run || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
         runIndex.runs.push({ id: data.messageId || `run:${entry.id}`, at: data.run.endedAt || data.timestamp || new Date(entry.createdAt || Date.now()).toISOString(),
-          title: data.title || data.run.label || "Run", routine: data.run.routine || null, woke: entry.kind === "conduit.subagent-report", entryId: entry.id });
+          title: data.title || data.run.label || "Run", label: data.run.label || data.title || "Run", number: data.run.number ?? null, routine: data.run.routine || null,
+          trigger: data.run.trigger || null, startedAt: data.run.startedAt || null, endedAt: data.run.endedAt || null, status: data.run.status || data.status || null,
+          summary: data.run.summary || null, woke: entry.kind === "conduit.subagent-report", entryId: entry.id,
+          conversationId: data.conversationId ?? null, subagentId: data.subagentId ?? null });
       }
       cursor = page.next;
     } while (cursor);
     return runIndex.runs;
+  });
+
+  // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }.
+  app.post("/v0/agent/runs/:id/open", async (request, response, next) => {
+    try {
+      const run = runIndex.runs.find((item) => item.id === request.params.id);
+      if (!run?.conversationId || !runIndex.conversationId) return response.status(404).json({ error: "run_not_found" });
+      const child = await agent.runtime.ensureSubagent?.(runIndex.conversationId, { conversationId: run.conversationId, id: run.subagentId, title: run.title });
+      if (!child?.id) return response.status(404).json({ error: "run_not_found" });
+      response.json({ chatId: child.id });
+    } catch (error) { next(error); }
   });
 
   app.get("/v0/agent/messages", async (request, response, next) => {
