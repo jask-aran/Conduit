@@ -1,6 +1,9 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { Button, Segmented, Series, SettingDetails, SettingLine, SettingValue, SettingWide, Group, Loading, Note } from "@/components/ui";
 import { api } from "../api/client";
+import { agentView } from "../state/agent";
+/** The persistent agent's name, as the person called it. */
+const agent = () => agentView()?.settings?.name || "jbot";
 
 /** A day of GET /v0/usage: Conduit's agents' spend, in API-equivalent dollars fixed when spent (usage-ledger.js). */
 type ModelSpend = { key: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
@@ -32,7 +35,7 @@ const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 const lifetime = (row: { survivedMinutes?: number | null; lapsedMinutes?: number | null }) =>
   `${row.survivedMinutes != null ? ` · lived ${Math.round(row.survivedMinutes)} min` : ""}${row.lapsedMinutes != null ? ` · lost by ${Math.round(row.lapsedMinutes)} min` : ""}`;
 const minutes = (ms: number | null) => ms == null ? "—" : `${Math.round(ms / 60_000)} min`;
-const ROLE = { "jbot-home": "jbot's thread", "jbot-run": "a jbot run", chat: "a chat" } as Record<string, string>;
+const roleOf = (role: string) => ({ "jbot-home": `${agent()}'s thread`, "jbot-run": `a ${agent()} run`, chat: "a chat" } as Record<string, string>)[role];
 const WHY = { provider: "provider dropped it", changed: "Conduit changed the prompt", head: "Conduit changed the instructions",
   tools: "Conduit changed a tool declaration", system: "Conduit changed a system message", history: "the history was rewritten",
   unlogged: "not logged", "before-log": "before the prefix log began" } as Record<string, string>;
@@ -147,7 +150,7 @@ export function UsageSettings() {
           <SettingDetails summary={`Each miss (${report().requests.misses.length})`}>
             <For each={report().requests.misses.slice(-20).reverse()}>{(miss) =>
               <SettingLine plain label={new Date(miss.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                state={`${ROLE[miss.role] || miss.role} · ${miss.model}${miss.gapMinutes != null ? ` · after ${Math.round(miss.gapMinutes)} min` : ""}`}>
+                state={`${roleOf(miss.role) || miss.role} · ${miss.model}${miss.gapMinutes != null ? ` · after ${Math.round(miss.gapMinutes)} min` : ""}`}>
                 <SettingValue>{WHY[miss.why] || miss.why}</SettingValue>
               </SettingLine>}
             </For>
@@ -155,9 +158,9 @@ export function UsageSettings() {
         </Show>
       </Group>
       <Show when={report().context}>{(context) =>
-        <Group title="jbot's context">
+        <Group title={`${agent()}'s context`}>
           <SettingLine plain label="Instructions" state="the system prompt, about 4 characters a token"
-            title="What jbot's home thread sent with its last request, measured from the copy kept for keep-warm.">
+            title={`What ${agent()}'s home thread sent with its last request, measured from the copy kept for keep-warm.`}>
             <SettingValue mono>{count(context().instructions)} tokens</SettingValue>
           </SettingLine>
           <SettingLine plain label="Tool definitions" state={`${context().byTool.length} tools${context().toolSets > 1 ? ` · sent ${context().toolSets} times in the thread, ${count(context().toolSetTokens)} tokens` : ""}`}
@@ -184,7 +187,7 @@ export function UsageSettings() {
         <Group title="Keep warm">
           <Show when={warm().policy}>{(policy) =>
             <SettingLine plain label="Policy" state={`${policy().model} · cache ${minutes(policy().ttlMs)} (${policy().ttlSource || "unknown"}) · from ${policy().gaps} past gaps`}
-              title="After each request on jbot's home thread, its last request is sent again at 90% of the cache's lifetime, read from cache, up to this many times: the count that would have cost least over the thread's past gaps.">
+              title={`After each request on ${agent()}'s home thread, its last request is sent again at 90% of the cache's lifetime, read from cache, up to this many times: the count that would have cost least over the thread's past gaps.`}>
               <SettingValue mono>{policy().pings ? `${policy().pings} × ${minutes(policy().intervalMs)}` : policy().reason || "off"}</SettingValue>
             </SettingLine>}
           </Show>
@@ -193,7 +196,7 @@ export function UsageSettings() {
             title="Requests on the home thread after a gap longer than the cache's lifetime: whether a ping came in between, and whether the cache was there.">
             <SettingValue mono>{count(warm().lapses)}</SettingValue>
           </SettingLine>
-          <SettingLine plain label="Cost" state={`saved ${money(warm().saved)}`} title="What the pings cost (also in jbot's spend), and what the wakes they kept warm did not pay for a full read.">
+          <SettingLine plain label="Cost" state={`saved ${money(warm().saved)}`} title={`What the pings cost (also in ${agent()}'s spend), and what the wakes they kept warm did not pay for a full read.`}>
             <SettingValue mono>{money(warm().pingCost)}</SettingValue>
           </SettingLine>
           <SettingLine plain label="Net"><SettingValue mono>{warm().net < 0 ? `−${money(-warm().net)}` : money(warm().net)}</SettingValue></SettingLine>
@@ -214,10 +217,10 @@ export function UsageSettings() {
           <SettingLine plain label="Time to decide" state={`slowest ${seconds(ms().max)}`}><SettingValue mono>{seconds(ms().median)}</SettingValue></SettingLine>}
         </Show>
         <SettingLine plain label="Cost" state={report().approvals.perDecision != null ? `${money(report().approvals.perDecision!)} a decision` : undefined}
-          title="What the approval model spent, priced as jbot's own requests are. It is also inside jbot's spend.">
+          title={`What the approval model spent, priced as ${agent()}'s own requests are. It is also inside ${agent()}'s spend.`}>
           <SettingValue mono>{money(report().approvals.judgeCost)}</SettingValue>
         </SettingLine>
-        <SettingLine plain label="Next to jbot" state={`jbot: ${money(report().approvals.jbotCost)} over ${count(report().approvals.jbotRequests)} requests`}>
+        <SettingLine plain label={`Next to ${agent()}`} state={`${agent()}: ${money(report().approvals.jbotCost)} over ${count(report().approvals.jbotRequests)} requests`}>
           <SettingValue mono>{report().approvals.share == null || !report().approvals.judged ? "—" : `+${percent(report().approvals.share)}`}</SettingValue>
         </SettingLine>
         <Show when={report().approvals.byAction.length}>

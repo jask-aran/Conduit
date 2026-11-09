@@ -6097,7 +6097,7 @@ function App() {
     // Its actions are the pill's own buttons (a phone header's), not a pane's strip set in a pill.
     const dockActions = () => <>
       <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
-      <HeaderButton label="Put jbot away" icon={<Icons.Close />} onClick={() => void putJbotAway()} />
+      <HeaderButton label={`Put ${agentView()?.settings?.name || "jbot"} away`} icon={<Icons.Close />} onClick={() => void putJbotAway()} />
     </>;
     // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}

@@ -476,7 +476,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       let number = null;
       await harness.commit(async (tx) => {
         number = (await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, trigger: "Manual", startedAt: at })).number;
-        await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: "Asked jbot to say hi" });
+        await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: `Asked ${agent.settings().name} to say hi` });
         await closeWork(tx, `test:${key}`, "finished", at);
       }, agent.context);
       await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
@@ -753,8 +753,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     } catch (error) { next(error); }
   });
   /**
-   * Start over: a new home thread, and an empty inbox and attention list. Its settings, memory files, feeds (with what
-   * they have seen), schedules and saved approval rules stay; their clocks move to the new thread. The old home thread is
+   * Start over: a new home thread, and an empty inbox, attention list and work log. Its settings, memory files, feeds
+   * (with what they have seen), schedules and saved approval rules stay; their clocks move to the new thread. The old home thread is
    * the caller's to delete (DELETE /v0/sessions/:id); its runs' chats go here.
    */
   app.post("/v0/agent/reset", async (request, response, next) => {
@@ -768,6 +768,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
         Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
         delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
       });
+      // Working on and Recent start empty, numbered from one; nothing from before is read into them again.
+      await (await agent.runtime.open()).commit(async (tx) => Object.assign(await tx.doc(WorkLog), { items: {}, counters: {}, seeded: true }), agent.context);
       const home = await agent.home();
       await seedSchedules(agent);
       let runs = 0;

@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "
 import { Button, LiveNote, SettingDetails, SettingLine, SettingValue, Group, Loading, Note } from "@/components/ui";
 import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
+import { agentView } from "../state/agent";
 
 /** One tool of a profile (GET /v0/profiles/tools): where it comes from, who calls it, and whether it asks first. */
 type ProfileTool = {
@@ -48,7 +49,7 @@ export function ToolsSettings(props: { connector?: string } = {}) {
   const direct = createMemo(() => profile()?.tools.filter((tool) => tool.reach === "model") || []);
   const scripted = createMemo(() => profile()?.tools.filter((tool) => tool.reach === "codemode") || []);
   const asking = createMemo(() => profile()?.tools.filter((tool) => tool.asks !== "never").length || 0);
-  const nameOf = (item: ProfileTools) => item.agent ? `${item.label} (jbot)` : item.label;
+  const nameOf = (item: ProfileTools) => item.agent ? `${item.label} (${agentView()?.settings?.name || "jbot"})` : item.label;
 
   // Its description is its title (Settings list: descriptions go in a title); what it asks, when it does, its state.
   const line = (tool: ProfileTool) =>

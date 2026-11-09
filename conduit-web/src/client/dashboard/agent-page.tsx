@@ -174,7 +174,7 @@ export function AgentPage(props: {
     const doing = () => run.phase === "Working" && run.activity ? capital(run.activity) : run.phase || "Working";
     const crew = () => run.agents && run.agents.total > 0 && run.agents.running ? `${run.agents.running} ${run.agents.running === 1 ? "agent" : "agents"} working` : null;
     const ended = () => run.status === "failed" ? `Failed${run.summary ? `: ${run.summary}` : ""}` : run.status === "stopped" ? "Stopped"
-      : run.woke ? "Reported to jbot" : run.summary || (run.level ? levelWord(run.level) : null);
+      : run.woke ? `Reported to ${name()}` : run.summary || (run.level ? levelWord(run.level) : null);
     const named = () => run.number && run.kind !== "agent" ? `${run.title || "A run"} #${run.number}` : run.title || "A run";
     const line = () => (live ? [doing(), crew()] : [ended()]).filter(Boolean).join(" · ");
     const context = () => [line(), age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");

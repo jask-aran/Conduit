@@ -311,7 +311,7 @@ export function routineTask(runtime) {
           }, context);
           if (record.routine.output !== "inbox") {
             const reportedAt = await api.memo("reportedAt", new Date(api.now()).toISOString(), context);
-            await api.commit(async (tx) => { await phaseWork(tx, workId(task.id), "Reporting to jbot");
+            await api.commit(async (tx) => { await phaseWork(tx, workId(task.id), `Reporting to ${runtime.agent.settings().name}`);
               await noteWork(tx, workId(task.id), { woke: true, reportedAt, summary: headlineOf(record.summary) }); }, context);
             await messageJbot(runtime, task, record, record.summary, `${record.key}:output`, context);
           }
@@ -328,7 +328,7 @@ export function routineTask(runtime) {
           await dependency(task, api, context, record, step, "after", index);
         }
         else if (step.message) {
-          await api.commit((tx) => phaseWork(tx, workId(task.id), step.label || "Telling jbot"), context);
+          await api.commit((tx) => phaseWork(tx, workId(task.id), step.label || `Telling ${runtime.agent.settings().name}`), context);
           await messageJbot(runtime, task, record, record.summary, `${record.key}:after:${index}`, context);
         }
         else {

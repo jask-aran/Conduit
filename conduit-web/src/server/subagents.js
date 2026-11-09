@@ -370,7 +370,7 @@ export function Subagents(runtime) {
             const sources = doc.routineRuns?.[task.input.origin.routineTaskId]?.outcome?.sources || [];
             const body = sources.length ? `${report.answer}\n\n## Sources\n\n${sources.map((source) => `- [${source.title}](../${source.path})`).join("\n")}` : report.answer;
             const filed = await fileEntry(tx, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
-              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: "Told jbot", body }, Date.parse(at));
+              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: `Told ${runtime.agent?.settings().name || "jbot"}`, body }, Date.parse(at));
             entry = { ...JSON.parse(JSON.stringify(filed)), body };
           }, context);
           if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry, { text: entry.body }).catch(() => {});
@@ -432,7 +432,7 @@ export function Subagents(runtime) {
           // there never quiets it.
           const quiet = await api.memo("quiet", !task.input.gate && await stopPending(runtime, parent, context), context);
           let kept = quiet;
-          if (!quiet && task.input.gate) await working("Reporting to jbot");
+          if (!quiet && task.input.gate) await working(`Reporting to ${runtime.agent?.settings().name || "jbot"}`);
           if (!quiet) {
             const submitted = await submitWithNotes(runtime, parent, { type: "input", whenBusy: task.input.gate ? "followUp" : "steer", requestId,
               content, entry: { kind: "conduit.subagent-report", data } }, context, { admit: (input) => handle.submit(input, context) });
