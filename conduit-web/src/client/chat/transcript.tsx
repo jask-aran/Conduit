@@ -438,6 +438,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     if (row?.type === "message" && row.value.run?.woke === false) return "step";
     if (fromPerson(row)) return "turn";
     if (fromPerson(above)) return "exchange";
+    // The turn header belongs to the text under it, apart from the work above: the gap an answer keeps from its work
+    // goes over the header, and the text sits close under it.
+    if (row?.type === "turn") return "answer";
+    if (above?.type === "turn" && row?.type === "message") return "attached";
     if (row?.type === "reports" && isWork(above)) return "work";
     if (row?.type === "message" && row.value.role !== "user" && row.value.interim !== true && isWork(above)) return "answer";
     return "step";

@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { createSignal, For, Index, onCleanup, type JSX } from "solid-js";
+import { createSignal, For, Index, onCleanup, Show, type JSX } from "solid-js";
 import { TraceHeader, Trail, Step, Orb, Trace, StepOutput, StepProse, StepSections, TraceError, ORBITS_TRAILED, Read } from "@/components/ui";
 
 import { orb } from "../demos";
@@ -12,6 +12,16 @@ export const Fold = (props: StepProps & { initial?: boolean }) => { const [open,
 export const FoldTrace = (props: Omit<Parameters<typeof Trace>[0], "open" | "onToggle"> & { initial?: boolean }) => { const [open, setOpen] = createSignal(props.initial ?? true); return <Trace {...props} open={open()} onToggle={() => setOpen(!open())} />; };
 export const OUTPUT = Array.from({ length: 14 }, (_, i) => `drwxr-xr-x  ${String(i + 2).padStart(2)} jask  staff  ${448 + i * 32}  Oct 16 22:${String(10 + i).padStart(2, "0")}  dir-${i}`).join("\n");
 export function TruncatedOutput() { const [full, setFull] = createSignal(false); const text = () => full() ? OUTPUT : OUTPUT.split("\n").slice(-5).join("\n"); return <StepOutput text={text()} hidden={OUTPUT.length - text().length || OUTPUT.length - OUTPUT.split("\n").slice(-5).join("\n").length} full={full()} onToggleFull={() => setFull(!full())} />; }
+
+/* A run, switched between its steps and its run header (each the other's way back). */
+function RunSwitch() {
+  const [steps, setSteps] = createSignal(true);
+  return <Show when={steps()} fallback={<Trace status="2 commands" time="3.1s" opens open={false} onToggle={() => setSteps(true)} />}>
+    <Trail fold={{ label: "Show as one line", onFold: () => setSteps(false) }}>
+      <Step icon={<Icons.Shell />} verb="Ran" subject="echo a" time="0.1s" /><Step icon={<Icons.Shell />} verb="Ran" subject="sleep 2" time="2.0s" />
+    </Trail>
+  </Show>;
+}
 
 /* Its states: every Status a trace can say, the orb it draws, and what its Latest line holds then. */
 export type TraceState = { status: string; orb: () => JSX.Element; when: string; latest: string; tone?: "failed"; live?: boolean };
@@ -119,7 +129,10 @@ export const tracePage: Page = { title: "Trace", summary: "A turn's work, over i
     <Step state="earlier" verb="2 earlier calls" /><Step icon={<Icons.FileText />} verb="Read" subject="lorem_ipsum.txt" time="12ms" /><Step icon={<Icons.Shell />} verb="Ran" subject="wc -w lorem_ipsum.txt" time="40ms" flags={["repeats"]} />
     <Step icon={<Icons.Search />} verb="Searched" subject="“lorem”" state="failed" time="8ms" /><Step state="running" verb="Editing" subject="lorem_ipsum.txt" /><Step icon={<Icons.Tool />} verb="Using" subject="format" state="planned" />
   </Trail></Fold></Trail>}</Read>, { surfaces: ["ground"], code: "<Step><Trail nested=calls><Step state>" }),
-    row("error", "a failed request in the trail; head --destructive · pre code face", () => <Read class="g-read"><Trail><TraceError time="16 Oct 2026, 22:18:04" facts={["Model: Muse Spark 1.3", "Provider: Meta", "Profile: Assistant"]} message="429 Too Many Requests: rate limit reached for this model." /></Trail></Read>, { surfaces: ["ground"], code: "<TraceError time facts message>" })
+    row("error", "a failed request in the trail; head --destructive · pre code face", () => <Read class="g-read"><Trail><TraceError time="16 Oct 2026, 22:18:04" facts={["Model: Muse Spark 1.3", "Provider: Meta", "Profile: Assistant"]} message="429 Too Many Requests: rate limit reached for this model." /></Trail></Read>, { surfaces: ["ground"], code: "<TraceError time facts message>" }),
+    row("run", "Narrated, a run of work between texts drawn one way at a time: its steps, the first ending with a fold mark; or its run header, one line of what it did and its time (Settings: Work between texts); each switches to the other, never one opening under the other", () => <Read class="g-read"><RunSwitch /></Read>, { surfaces: ["ground"], phone: true, code: "<Trail fold={{ label, onFold }}> · <Trace status time opens open={false} onToggle>" }),
+    row("turn header", "Narrated, the whole turn's work in one line, no orb and no latest line: after the turn's latest run, apart from it and close over the text under it (a final answer); pressing it switches the turn's runs", () => <Read class="g-read"><Trail><Step icon={<Icons.Shell />} verb="Ran" subject="nproc" time="0.2s" /></Trail><div style={{ "margin-top": "var(--flow-answer)" }}><Trace status="3 commands" time="17.7s" opens open={false} /></div><p style={{ "margin-top": "var(--flow-attached)" }}>40 times the number of CPUs is largest.</p></Read>, { surfaces: ["ground"], code: "<Trace status time opens open={false} onToggle>" }),
+    row("reasoning summary", "a summary that is only its heading (a provider's reasoning summary): one line, nothing more to open", () => <Read class="g-read"><Trail><Step icon={<Icons.Thinking />} summary="Preparing the /etc entry check" /><Step icon={<Icons.Shell />} verb="Ran" subject="find /etc -mindepth 1 -maxdepth 1 | wc -l" time="0.1s" /></Trail></Read>, { surfaces: ["ground"], code: "<Step summary>" })
   ],
   motion: [
     row("A turn", "Trace > TraceHeader · Trail > Step", () => <Read class="g-read g-live-turn"><LiveTurn /></Read>)
