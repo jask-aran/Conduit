@@ -167,9 +167,18 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   };
   // The turn's trace as it runs, then held until the log's next read has its reply: the reply takes its place, so the
   // trace never goes before what it ended is there.
+  // A turn can end with no reply after it (its word sent with the message tool, or nothing to say): the trace then
+  // goes a moment after the turn ends, rather than waiting on a reply that is not coming.
   const [held, setHeld] = createSignal<{ trace: TurnTraceData; last?: string } | null>(null);
-  createEffect(() => { const trace = props.live; if (trace) setHeld({ trace, last: untrack(() => props.messages.at(-1)?.id) }); });
-  createEffect(on(() => props.messages, (messages) => { const kept = held(); if (kept && !props.live && messages.at(-1)?.id !== kept.last) setHeld(null); }, { defer: true }));
+  let letGo: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(letGo));
+  createEffect(() => {
+    const trace = props.live;
+    clearTimeout(letGo);
+    if (trace) setHeld({ trace, last: untrack(() => props.messages.at(-1)?.id) });
+    else if (untrack(held)) letGo = setTimeout(() => setHeld(null), 4000);
+  });
+  createEffect(on(() => props.messages, (messages) => { const kept = held(); if (kept && !props.live && messages.at(-1)?.id !== kept.last) { clearTimeout(letGo); setHeld(null); } }, { defer: true }));
   const live = () => props.live ?? held()?.trace ?? null;
   const loadContext = (entryId: number) => api<ContextText>(`/v0/sessions/${encodeURIComponent(agentView()?.home?.chatId ?? "")}/context/${entryId}`);
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
@@ -218,7 +227,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
-                  summary={row.run.summary ?? undefined} onOpen={() => openRun(row.run)} />
+                  summary={row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={() => openRun(row.run)} />
               </AgentRows></Turn></TranscriptRow>
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>

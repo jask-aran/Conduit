@@ -530,6 +530,9 @@ export class DurableAdapter extends EventEmitter {
       this.agentHeartbeats.set(conversationId, Date.now());
       const record = [...this.records.values()].find((record) => record.conversationId === conversationId);
       if (record) this.publish(record, { type: "agents_changed" });
+      // A report that woke a thread nobody had open starts a turn there: taken up as a resumed turn is, so the turn is a
+      // process a page showing the thread joins (jbot's chat, as the report comes in) rather than one it finds later.
+      else if (change !== true && change.woke) void this.attachConversation(conversationId).catch((error) => console.warn("[conduit-runtime] could not attach", conversationId, error?.message || error));
     };
     this.sessions = new SessionRecords({
       capabilities: DURABLE_CAPABILITIES,
@@ -559,11 +562,17 @@ export class DurableAdapter extends EventEmitter {
     const harness = this.runtime.harness;
     const { submissions } = await harness.inspect(this.context);
     for (const conversationId of new Set(submissions.map((submission) => submission.conversationId))) {
-      const identity = await harness.snapshot(ConduitIds, conversationId, this.context);
-      const chatId = identity?.chatId;
-      const conversation = chatId && !this.getByChatId(chatId) ? await harness.conversation(conversationId, this.context) : null;
-      if (conversation) await this.start(conversation, { chatId, readOnly: Boolean(identity?.subagent), parentChatId: identity?.parentChatId }).catch((error) => console.warn("[conduit-runtime] could not reattach", chatId, error?.message || error));
+      await this.attachConversation(conversationId).catch((error) => console.warn("[conduit-runtime] could not reattach", conversationId, error?.message || error));
     }
+  }
+
+  /** Take up one conversation's chat, if it has one and it is not taken up already. */
+  async attachConversation(conversationId) {
+    const harness = this.runtime.harness;
+    const identity = await harness.snapshot(ConduitIds, conversationId, this.context);
+    const chatId = identity?.chatId;
+    const conversation = chatId && !this.getByChatId(chatId) ? await harness.conversation(conversationId, this.context) : null;
+    if (conversation) await this.start(conversation, { chatId, readOnly: Boolean(identity?.subagent), parentChatId: identity?.parentChatId });
   }
 
   /** Which chat a conversation belongs to, kept beside it so a restart can find its way back. */

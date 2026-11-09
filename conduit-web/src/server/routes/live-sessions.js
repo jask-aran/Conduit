@@ -77,10 +77,10 @@ export function registerLiveSessionRoutes(app, {
     try {
       const chatId = request.body?.chatId || request.body?.resumeSessionId;
       const intent = request.body?.intent || "open";
-      if (registry.metadata(chatId)?.status === "subagent"
-        && (intent !== "open" || request.body?.model || request.body?.thinkingLevel)) {
-        return response.status(409).json({ error: "subagent_read_only" });
-      }
+      // A subagent's chat only opens to be read: the model the opener carries (the pane's choice) is not a change to
+      // it, so it is left behind rather than refused.
+      const readOnly = registry.metadata(chatId)?.status === "subagent";
+      if (readOnly && intent !== "open") return response.status(409).json({ error: "subagent_read_only" });
       // A launch that keeps somebody waiting says so, with the chat and intent
       // that asked for it, so a slow open can be read from the log instead of
       // reproduced.
@@ -88,8 +88,8 @@ export function registerLiveSessionRoutes(app, {
       const { live, modelRecovery } = await launchLiveSession({
         chatId,
         requestedProject: request.body?.projectId || "",
-        model: request.body?.model || "",
-        thinkingLevel: request.body?.thinkingLevel || "",
+        model: readOnly ? "" : request.body?.model || "",
+        thinkingLevel: readOnly ? "" : request.body?.thinkingLevel || "",
         forceModel: intent === "prompt",
         // Only real use starts a process. An "open" attaches to one that is
         // already there and otherwise gets told there is none.

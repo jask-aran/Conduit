@@ -103,11 +103,11 @@ export function AgentDelegate(props: { count: number; status?: string; motion?: 
 }
 
 /** A run enters from outside the thread, with its report or its quiet summary. line: one line that opens its run,
- *  woken or not, saying neither: its report, if any, is what follows (jbot's message log). */
-export function RunLine(props: { icon: JSX.Element; label: string; number: number; id?: string; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; onOpen?: () => void; line?: boolean; children?: JSX.Element }) {
+ *  woken or not, its report left to what follows, with when it ended (`at`) where the outcome would be (jbot's message log). */
+export function RunLine(props: { icon: JSX.Element; label: string; number: number; id?: string; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; at?: string; onOpen?: () => void; line?: boolean; children?: JSX.Element }) {
   const quiet = () => !props.woke || Boolean(props.line);
   return <AgentLine kind="run" icon={props.icon} verb={`${props.label} #${props.number}`} ids={props.id ? [props.id] : []} where={[props.trigger, props.time].filter(Boolean).join(" · ")}
-    title={quiet() ? props.summary : undefined} status={[props.status, props.line ? undefined : props.woke ? props.outcome || "Woke the agent" : "Not woken"].filter(Boolean).join(" · ")}
+    title={quiet() ? props.summary : undefined} status={[props.status, props.line ? props.at : props.woke ? props.outcome || "Woke the agent" : "Not woken"].filter(Boolean).join(" · ")}
     failed={props.status?.toLowerCase() === "failed"} quiet={quiet()} onOpen={quiet() ? props.onOpen : undefined}>
     {!quiet() && (props.children || props.onOpen) ? <li class="ui-agent-said ui-agent-run-body">{props.children}
       <Show when={props.onOpen}><Button variant="ghost" size="sm" onClick={() => props.onOpen?.()}>Open run</Button></Show></li> : undefined}
