@@ -306,6 +306,9 @@ export function createTranscriptFollow(options: {
       // A fold moving (Expand marks its scroller): the reader opened or shut it, and it keeps its own place.
       if (viewport.dataset.folding) return syncLatestDistance();
       if (!following() || options.holding?.()) return;
+      // Before this frame paints (an observer runs after layout, before paint): a frame later, what grew (rows wrapping
+      // as the pane narrows, a reply arriving) was painted once where it was, a whole line low, and then snapped back.
+      if (!spring()) return scrollBottomNow();
       request();
     });
     contentSizes.observe(thread);
