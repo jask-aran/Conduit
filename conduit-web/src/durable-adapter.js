@@ -398,6 +398,19 @@ const quietRunOps = (entry) => {
     ...(data.timestamp ? { timestamp: data.timestamp } : {}) }), turnSettle({ promptId: id, outcome: "complete" })];
 };
 
+const TURN_PROMPTS = new Set([USER_ENTRY, "conduit.subagent-report", "conduit.agent-beat"]);
+/**
+ * The work a message of jbot's log came from (GET /v0/agent/work): the thread's entries from `from` (the person's
+ * message before it, or just after the reply before it) through `through` (its own), as ops. lean leaves out what each
+ * tool was given and gave back: the trail's lines are there without them, and a step opened reads them whole.
+ */
+export function workOps(entries, from, through, { lean = false } = {}) {
+  // From the turn's own prompt (the person's, a report or a beat), not turns before it that said nothing.
+  const start = entries.findLast((entry) => entry.id >= from && entry.id <= through && TURN_PROMPTS.has(entry.kind))?.id ?? from;
+  const ops = entriesToOps(entries.filter((entry) => entry.id >= start && entry.id <= through)).filter(Boolean);
+  return lean ? ops.map((op) => op.op === "tool.open" ? { ...op, input: undefined } : op.op === "tool.close" ? { ...op, output: undefined } : op) : ops;
+}
+
 export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
   // The tools offered so far, so a restatement can say which changed.

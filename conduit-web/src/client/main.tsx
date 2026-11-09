@@ -4,6 +4,7 @@ import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
+import { liveTrace } from "./turn-rows";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/ui/decision-dialog";
@@ -6087,6 +6088,7 @@ function App() {
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
+      live={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming() ? liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration()) : null}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composerReady={!agentView()?.home?.chatId || current.chat.loadedId() === agentView()?.home?.chatId}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>

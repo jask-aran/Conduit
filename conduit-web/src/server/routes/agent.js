@@ -17,6 +17,7 @@ import { addInboxEntry, deleteInboxEntry, editInboxEntries, fileEntry } from "..
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { emailView, setupEmail, patchEmail, removeEmail } from "../../agent/email-setup.js";
 import { backgroundSubagents } from "../subagents.js";
+import { workOps } from "../../durable-adapter.js";
 
 /**
  * The hub's persistent agent over HTTP (docs/plans/persistent-agent.md).
@@ -42,6 +43,7 @@ import { backgroundSubagents } from "../subagents.js";
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=)
+ * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
  * POST /v0/agent/voice-message      a PCM WAV recording: transcribed, logged via voice, then given to the same home thread
  * POST /v0/agent/inbox              add context as the signed-in person { title, headline, body?, level, kind?, for? }
@@ -357,6 +359,34 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     const log = agent.runtime.messageLog;
     const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
     response.json({ messages: log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [] });
+  });
+
+  // A reply's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
+  // before it in its thread; lean unless full (workOps).
+  app.get("/v0/agent/work", async (request, response, next) => {
+    try {
+      const log = agent.runtime.messageLog;
+      const ids = String(request.query.ids || "").split(",").filter(Boolean).slice(0, 200);
+      const harness = await agent.runtime.open();
+      const work = {};
+      for (const id of ids) {
+        const message = log?.messages.find((item) => item.id === id);
+        if (!message || message.direction !== "out" || message.entryId == null) continue;
+        const before = log.messages.findLast((item) => item.entryId != null && item.entryId < message.entryId && String(item.conversationId) === String(message.conversationId));
+        const from = before ? before.entryId + (before.direction === "out" ? 1 : 0) : 0;
+        const conversation = await harness.conversation(Number(message.conversationId), agent.context);
+        if (!conversation) continue;
+        const entries = [];
+        let cursor;
+        do {
+          const page = await conversation.entries({ order: "ascending", minEntryId: from, maxEntryId: message.entryId }, 500, cursor, agent.context);
+          entries.push(...page.items);
+          cursor = page.next;
+        } while (cursor);
+        work[id] = workOps(entries, from, message.entryId, { lean: !request.query.full });
+      }
+      response.json({ work });
+    } catch (error) { next(error); }
   });
 
   app.get("/v0/agent", async (request, response, next) => {

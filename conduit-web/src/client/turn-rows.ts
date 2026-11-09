@@ -879,3 +879,11 @@ export function buildTurnRows(
   const persisted = projectPersistedTurns(messages, tools, [], opts).rows;
   return groupReports(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted);
 }
+
+/** A running turn's trace alone, Folded, from its prompt on: what jbot's message log draws as what it is doing now. */
+export function liveTrace(messages: Message[], tools: ToolItem[], activeGeneration: ActiveGenerationView | null): TurnTraceData | null {
+  if (!activeGeneration) return null;
+  const from = messages.findLastIndex((message) => message.role === "user");
+  const trace = buildTurnRows(messages.slice(Math.max(0, from)), tools, { activeGeneration, narration: "fold" }).findLast((row) => row.type === "trace");
+  return trace?.type === "trace" ? trace.value : null;
+}

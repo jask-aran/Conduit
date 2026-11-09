@@ -7,6 +7,7 @@ import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { SplitEmpty } from "./primitives/split";
+import type { TurnTraceData } from "../turn-rows";
 
 /**
  * jbot's room: laid out as a thread is (its scroller, its composer floating over the foot), because it is one: what
@@ -25,6 +26,8 @@ export function JbotRoom(props: {
   markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
   working?: boolean;
+  /** The home thread's turn while it runs, as its Folded trace (JbotMessages live). */
+  live?: TurnTraceData | null;
   threadChanged?: unknown;
   /** On a desktop: "phone", a phone's header (its pill, its actions frost over the chat) and column; "narrow", the
    *  column alone (jbot's dock tool, under the tool's header). */
@@ -143,7 +146,7 @@ export function JbotRoom(props: {
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} />
+            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>
