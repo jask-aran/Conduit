@@ -23,8 +23,18 @@ const LEVEL_WORD = /^\s*(?:[*_`#>\s]*)(?:URGENT|ATTENTION|FYI|NOTHING)\b[*_`]*\s
 export const RunEnd = defineDoc({ checkpointWhen: () => false, kind: "conduit.agent.run-end", version: 1, scope: "conversation", initial: () => ({ end: null }) });
 
 /** A report's first line, without its level word, as the inbox and the home thread show it. */
+/** Markdown as the words it shows, for where it cannot be drawn (a headline, a notification): links as their text,
+ *  no emphasis, code or block marks. */
+export const plainText = (text) => String(text || "")
+  .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+  .replace(/`+([^`]*)`+/g, "$1")
+  .replace(/(\*\*|__)(.+?)\1/g, "$2")
+  .replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, "$1$2")
+  .replace(/(^|[^\w_])_([^_\n]+)_(?![\w_])/g, "$1$2")
+  .replace(/^[ \t]{0,3}(?:#{1,6}[ \t]+|>[ \t]?|[-*+][ \t]+|\d+\.[ \t]+)/gm, "")
+  .replace(/\*\*/g, "");
 export const headlineOf = (text, max = 160) => {
-  const first = String(text || "").replace(LEVEL_WORD, "").split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
+  const first = plainText(String(text || "").replace(LEVEL_WORD, "")).split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
   return first.length > max ? `${first.slice(0, max - 1)}…` : first;
 };
 

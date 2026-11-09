@@ -1,4 +1,4 @@
-import { inQuietHours } from "./inbox.js";
+import { headlineOf, inQuietHours, plainText } from "./inbox.js";
 import { mintAnswerToken } from "./answer-tokens.js";
 
 /**
@@ -8,7 +8,7 @@ import { mintAnswerToken } from "./answer-tokens.js";
  */
 const LEVEL_WORD = /^\s*(?:[*_`#>\s]*)(?:URGENT|ATTENTION|FYI|NOTHING)\b[*_`]*\s*[:.-]?\s*/i;
 const line = (text, max) => {
-  const flat = String(text || "").replace(LEVEL_WORD, "").replace(/\s+/g, " ").trim();
+  const flat = plainText(String(text || "").replace(LEVEL_WORD, "")).replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 };
 
@@ -38,12 +38,19 @@ export function agentNotifier({ agent, push, hubId }) {
       return null;
     }
     const devices = push.list();
+    // Plain text: a notification draws no markdown. A message's heading is its title, else its first line (its bold
+    // headline, by the house style), and the body is what follows, so neither says the other again.
+    const heading = approval || chat ? "" : line(title || headlineOf(text, 60), 60);
+    const said = line(text, 400);
+    const stem = heading.replace(/…$/, "");
+    const rest = heading && said.startsWith(stem) ? said.slice(stem.length).trim() : said;
+    const body = line(heading && rest ? rest : said, 240);
     const results = await push.send({
       v: 1,
-      title: approval ? `${name} needs your approval` : `${title && !line(text, 240).startsWith(line(title, 60).replace(/…$/, "")) ? `${name}: ${line(title, 60)}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,
-      body: line(text, 240),
+      title: approval ? `${name} needs your approval` : `${heading && rest ? `${name}: ${heading}` : name}${waiting ? ` · ${waiting} to approve` : ""}`,
+      body,
       // Who it is from, and a report's name: the app shows it as a message from them (older apps read title and body).
-      ...(approval || chat ? {} : { sender: name, ...(title && !line(text, 240).startsWith(line(title, 60).replace(/…$/, "")) ? { heading: line(title, 60) } : {}) }),
+      ...(approval || chat ? {} : { sender: name, ...(heading && rest ? { heading } : {}) }),
       // A message opens jbot's conversation (its page); an approval, the thread it waits in.
       path: path || (thread.role === "home" && !approval ? "/jbot" : `/chat/${thread.chatId}`),
       tag,
