@@ -440,10 +440,8 @@ export function buildLiveAnswerRow(
   const assistant = generation.assistantMessages.find((message) => message.id === assistantId);
   const answerIdentities = index.answerBlockIdentities.get(assistantId);
   if (!assistant || !answerIdentities) return null;
-  const answer = assistant.blocks
-    .filter((block) => block.kind === "text" && answerIdentities.has(block.identity))
-    .map((block) => block.text || "")
-    .join("\n");
+  const said = assistant.blocks.filter((block) => block.kind === "text" && answerIdentities.has(block.identity));
+  const answer = said.map((block) => block.text || "").join("\n");
   const terminalError = generation.status === "failed"
     && assistant.stopReason === "error"
     && generation.assistantMessages.at(-1) === assistant;
@@ -458,13 +456,18 @@ export function buildLiveAnswerRow(
     live: active(generation),
     streamVersion: generation.lastSeq,
     precedingUserId,
-    value: liveAnswerMessage(generation, assistant, content, terminalError),
+    value: liveAnswerMessage(generation, assistant, content, terminalError, interimText(said, textBlockClassifications(generation) as Record<string, "interim" | "answer">)),
   };
 }
 
 // A live answer as the message its row shows: the same whether the turn has a trace or not.
-function liveAnswerMessage(generation: ActiveGenerationView, assistant: ActiveGenerationView["assistantMessages"][number], content: string, terminalError: boolean) {
+/** Live text the rule already calls commentary (textBlockClassifications) is interim now, as it will be saved: its row
+ *  keeps the room it will settle with. */
+const interimText = (said: { identity: string }[], classifications: Record<string, "interim" | "answer">) =>
+  said.length > 0 && said.every((block) => classifications[block.identity] === "interim");
+function liveAnswerMessage(generation: ActiveGenerationView, assistant: ActiveGenerationView["assistantMessages"][number], content: string, terminalError: boolean, interim = false) {
   return {
+    ...(interim ? { interim: true } : {}),
     id: `live:${generation.id}:${assistant.id}`,
     role: "assistant",
     content,
@@ -607,7 +610,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
       const content = generation.continuation && count === 0 ? mergeContinuation(generation.continuationBase || "", text) : text;
       const key = answerDisplayKey(owner, count, `live:${generation.id}`, show);
       const row = (traced: boolean): TurnRow => ({ key, displayKey: key, type: "message", traced, live: running,
-        streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError) });
+        streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError, interimText(said, classifications)) });
       count += 1;
       if (!show) { answers.push(row(true)); return; }
       // Only work is a trace: text said first stands alone, an empty header over it said nothing.
