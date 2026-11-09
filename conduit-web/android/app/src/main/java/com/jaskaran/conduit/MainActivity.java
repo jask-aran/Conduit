@@ -73,6 +73,16 @@ public class MainActivity extends BridgeActivity {
         ConduitPushPlugin.handleIntent(this, getIntent());
         super.onCreate(savedInstanceState);
         /*
+         * The status bar gets the system's own see-through scrim, as the
+         * navigation bar has by default (its contrast is enforced, the
+         * status bar's is not): edge to edge, the page runs under both, and
+         * without it the clock and icons sat on whatever scrolled past.
+         */
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            getWindow().setStatusBarContrastEnforced(true);
+            getWindow().setNavigationBarContrastEnforced(true);
+        }
+        /*
          * Take the window out of legacy soft-input handling.
          *
          * Left in it, Android resizes the window for the keyboard itself, in
