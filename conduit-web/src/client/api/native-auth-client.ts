@@ -57,12 +57,21 @@ export async function clearNativeBearerToken(origin = activeOrigin()) {
   if (isInstalledClient()) await secureTokenStore.remove(tokenKey(origin));
 }
 
+/** The server a request is addressed to: its own origin when absolute, else the chosen server's. */
+function targetOrigin(input: RequestInfo | URL) {
+  try {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    return url.origin === location.origin ? activeOrigin() : url.origin;
+  } catch { return activeOrigin(); }
+}
+
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   if (isInstalledClient()) await trustSettled();
   const headers = new Headers(init.headers);
-  // The server this request went to. A 401 that lands after a switch is about
-  // that server's sign-in, not the one now chosen.
-  const origin = activeOrigin();
+  // The server this request goes to, read from its address: its token is sent, and a 401 clears that one. Read from
+  // the server chosen now, a request begun before a switch carried the new server's token to the old one, whose 401
+  // then signed the new one out.
+  const origin = targetOrigin(input);
   const token = await nativeBearerToken(origin);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(input, { ...init, headers });

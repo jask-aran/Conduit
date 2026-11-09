@@ -64,6 +64,6 @@ export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: J
     data-ready={props.ready ? "" : undefined} data-tone={props.tone}>
     <Show when={props.busy} fallback={props.icon}><Spinner /></Show>
     {kind === "reading" ? <div><strong>{props.title}</strong><Show when={props.children}><p>{props.children}</p></Show></div> : kind === "tool" ? props.children : <span>{props.children}</span>}
-    <Show when={props.action}>{(action) => act(action())}</Show>
+    <Show when={props.action} keyed>{(action) => act(action)}</Show>
   </Dynamic>;
 }
