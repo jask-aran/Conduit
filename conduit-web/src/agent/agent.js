@@ -431,7 +431,7 @@ export class PersistentAgent {
   async wake({ key, kind, title, task, log = true }) {
     if (!this.enabled()) throw Object.assign(new Error("This hub has no agent yet"), { code: "agent_not_enabled", status: 409 });
     if (!this.active()) return null;
-    if (await this.overBudget()) {
+    if (kind !== "manual" && await this.overBudget()) {
       await this.notice("budget", `Skipped ${title || kind}: today's budget of $${this.settings().budgetUsdPerDay} is spent.`);
       return null;
     }
@@ -443,14 +443,14 @@ export class PersistentAgent {
 
   /**
    * A routine now, off its clock (Run now): its tasks gather and its run fires whatever its gate says, except a gate of
-   * never (only the tasks). Its cursors move as a firing's would; `key` keeps a retried request to one run.
+   * never (only the tasks), and whatever is left of the day's budget: the person asked. Its cursors move as a firing's would;
+   * `key` keeps a retried request to one run.
    */
   async fireRoutine(name, key) {
     if (!this.active()) return { error: "agent_off", status: 409 };
     const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
     if (!routine) return { error: "routine_not_found", status: 404 };
     if (routine.error) return { error: routine.error, status: 400 };
-    if (await this.overBudget() && routine.gate !== "never") return { error: "agent_over_budget" };
     const { conversationId } = await this.home();
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(conversationId, this.context);

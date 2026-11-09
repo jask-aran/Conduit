@@ -209,7 +209,7 @@ export function routineTask(runtime) {
         const outcome = record.outcome || await api.memo("gather", await executeRoutine(agent, record.routine, {
           cursors: state.cursors?.[record.routine.name] || {}, state, now: api.now(), force: record.force, event: record.event || null,
         }), context);
-        if (outcome.run && await agent.overBudget()) throw new Error("Routine skipped: today's budget is spent.");
+        if (outcome.run && !record.force && await agent.overBudget()) throw new Error("Routine skipped: today's budget is spent.");
         await api.commit(async (tx) => {
           const doc = await tx.doc(AgentDoc);
           const current = doc.routineRuns[task.id];
