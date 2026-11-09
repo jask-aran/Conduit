@@ -128,7 +128,7 @@ test("GET /v0/agent exposes connector status and the existing attention notice c
   const app = Object.fromEntries(["get", "post", "put", "patch", "delete"].map((method) => [method, (route, handler) => routes.set(`${method} ${route}`, handler)]));
   registerAgentRoutes(app, { agent, backends: { getByChatId: () => null } });
   for (const status of ["off", "error", "needs-sign-in", "connecting", "on"]) {
-    agent.connectors.entry("executor").status = status;
+    Object.assign(agent.connectors, { bootAt: 0 }).entry("executor").status = status; // down past the settle window
     let view;
     await routes.get("get /v0/agent")({}, { json: (value) => { view = value; } }, (error) => { throw error; });
     assert.equal(view.connectors[0].status, status);
@@ -139,7 +139,7 @@ test("GET /v0/agent exposes connector status and the existing attention notice c
 
 test("a run started without Executor records a visible notice", async (t) => {
   const { runtime, harness, spawn } = await fixture(t);
-  runtime.agent.connectors.entry = () => ({ status: "off" });
+  runtime.agent.connectors.troubled = () => true;
   await spawn({ gate: true, title: "Morning brief" });
   const state = await harness.snapshot(ConduitAgentDoc, context);
   assert.equal(state.notices.at(-1).text, "Morning brief: Executor isn't connected");

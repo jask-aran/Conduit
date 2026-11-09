@@ -241,7 +241,7 @@ test("context text route checks the session and resolves tools at the selected e
   assert.deepEqual(reads, [2]);
   const update = await get("run", "4");
   assert.deepEqual(update.body.tools, { added: [], removed: [], restated: 1 });
-  assert.deepEqual(update.body.sections, [{ name: "cwd", text: "/next" }, { name: "web", text: "" }]);
+  assert.deepEqual(update.body.sections, [{ name: "cwd", text: "/next" }, { name: "web", text: "", removed: true }]);
   assert.equal((await get("run", "5")).body.summary, entries[4].model[0].content[0].text);
   entries.push(runtimeEntry(6, "pi.system", { role: "system", toolsAdded: [{ name: "fetch", description: "Fetch a page\nDetails" }] }),
     runtimeEntry(7, "pi.system", { role: "system", sections: { instructions: "Restated prompt" } }));
