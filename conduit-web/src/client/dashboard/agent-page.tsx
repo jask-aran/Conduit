@@ -21,7 +21,7 @@ import { Row } from "@/components/ui/row";
  */
 
 const RUN_KIND: Record<string, string> = {
-  manual: "Asked", schedule: "Scheduled", checkback: "Check-back", brief: "Morning brief", "morning-brief": "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
+  manual: "Asked", schedule: "Scheduled", reflect: "Routine", checkback: "Check-back", brief: "Morning brief", "morning-brief": "Morning brief", heartbeat: "Heartbeat", webhook: "Webhook", event: "Event",
 };
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
@@ -167,7 +167,7 @@ export function AgentPage(props: {
   const entryText = (entry: AgentInboxEntry) => entry.body && entry.body !== entry.headline ? entry.body : entry.headline || "";
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(String(run.conversationId));
-    const report = () => inbox().find((entry) => entry.conversationId === run.conversationId);
+    const report = () => inbox().find((entry) => run.inboxId ? entry.id === run.inboxId : run.conversationId != null && entry.conversationId === run.conversationId);
     const context = () => [RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null, age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
     const preview = () => setPeek({ title: run.title || "A run", context: context(), text: report() ? entryText(report()!) : "", file: report()?.file,
       open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event) => props.onOpenChat(chatId()!, event) } : undefined });

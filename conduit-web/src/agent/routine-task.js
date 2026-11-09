@@ -112,6 +112,13 @@ export function routineTask(runtime) {
           routineNotice(doc, record.routine.title, error, api.now());
         }
         else state.finishedAt = new Date(api.now()).toISOString();
+        // A fork's firing is no run of the roster's (which lists what Recent shows): it is logged here for Recent, with
+        // the inbox entry its report was filed as. A run-mode routine's run is the roster's already.
+        if (record.routine.mode === "fork" && record.outcome?.run) {
+          doc.routineLog = [{ id: `routine:${task.id}`, title: record.routine.title || record.routine.name, kind: record.routine.name,
+            startedAt: record.startedAt ? new Date(record.startedAt).toISOString() : null, endedAt: new Date(api.now()).toISOString(),
+            status: error ? "failed" : "finished", inboxId: record.inboxId ?? null }, ...(doc.routineLog || [])].slice(0, 20);
+        }
         delete doc.routineRuns[task.id];
       }
       return terminal(error);
@@ -288,8 +295,9 @@ export function routineTask(runtime) {
         const record = await get(task, api, context);
         if (record.routine.mode === "fork") {
           if (record.routine.output !== "jbot") await api.commit(async (tx) => {
-            await fileEntry(tx, { key: record.key, kind: record.routine.name, title: record.routine.title,
+            const filed = await fileEntry(tx, { key: record.key, kind: record.routine.name, title: record.routine.title,
               level: record.routine.level, status: "unhandled", headline: headlineOf(record.summary), body: record.summary }, Date.parse(record.slot));
+            (await tx.doc(AgentDoc)).routineRuns[task.id].inboxId = filed.id;
           }, context);
           if (record.routine.output !== "inbox") await messageJbot(runtime, task, record, record.summary, `${record.key}:output`, context);
         }

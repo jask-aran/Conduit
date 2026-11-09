@@ -129,10 +129,17 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
     return {
       working: {
-        runs: runs.filter((run) => run.origin && run.status === "running")
+        // The roster's runs, and a routine working in its own fork of the home thread (Reflection), which the roster
+        // never lists: under way from its record, done from the log its end writes.
+        runs: [...runs.filter((run) => run.origin && run.status === "running")
           .map((run) => ({ id: run.id, title: run.title, kind: run.origin.kind, startedAt: run.startedAt, conversationId: run.child })),
-        recent: runs.filter((run) => run.origin && run.status !== "running").slice(-10).reverse()
+        ...Object.values(state.routineRuns || {}).filter((record) => record.routine?.mode === "fork" && record.outcome?.run)
+          .map((record) => ({ id: `routine:${record.taskId}`, title: record.routine.title || record.routine.name, kind: record.routine.name,
+            startedAt: record.startedAt ? new Date(record.startedAt).toISOString() : null, conversationId: null }))],
+        recent: [...runs.filter((run) => run.origin && run.status !== "running")
           .map((run) => ({ id: run.id, title: run.title, kind: run.origin.kind, status: run.status, level: run.level || null, endedAt: run.endedAt, conversationId: run.child })),
+        ...(state.routineLog || []).map((item) => ({ ...item, level: null, conversationId: null }))]
+          .sort((a, b) => String(b.endedAt || "").localeCompare(String(a.endedAt || ""))).slice(0, 10),
         schedules: await listSchedules(agent),
         watches: await listWatches(agent),
       },
