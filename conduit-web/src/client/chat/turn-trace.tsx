@@ -13,6 +13,7 @@ import { extendsText } from "./streaming-markdown";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
+import { digestDoing, digestDone } from "./turn-digest";
 
 /** A context step's text, fetched when it opens (GET /v0/sessions/:id/context/:entryId). */
 export type ContextText = { kind: string; sections: { name: string; text: string }[];
@@ -258,6 +259,9 @@ const KIND_PHRASES: Record<Exclude<ToolKind, "other">, string> = {
 function actorPhrase(trace: TurnTraceData, writing: boolean): string {
   const tool = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : [])[0];
   if (!tool) return writing ? "writing" : "thinking";
+  // What it is doing in the person's terms (turn-digest.ts), the same words the settled line uses.
+  const doing = digestDoing(trace);
+  if (doing) return doing;
   if (unnamed(tool)) return "using a tool";
   const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
   const kind = stepKind(now);
@@ -580,9 +584,11 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   // With an actor (jbot's chat): live, what it is doing in its name; settled, how long it worked; a turn that did not
   // finish keeps its own word (Interrupted, Failed).
   const acting = () => Boolean(props.actor);
+  // Settled, what it did (turn-digest.ts): its line's words, the time beside them.
+  const done = createMemo(() => props.actor && !props.trace.active ? digestDone(props.trace) : "");
   const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}`
     : props.trace.status === "interrupted" ? `${props.actor} was interrupted` : props.trace.status === "failed" ? `${props.actor} failed`
-    : time() ? `${props.actor} worked for ${time()}` : `${props.actor} worked`;
+    : done() ? `${props.actor} ${done()}` : time() ? `${props.actor} worked for ${time()}` : `${props.actor} worked`;
   const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
   // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
   if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
@@ -614,8 +620,8 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
     </>}>
     <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : acting() ? actorStatus() : preview().status.verb}
-      quiet={looked()} time={looked() || (acting() && !props.trace.active && !unfinished()) ? undefined : time() || undefined}
-      work={settledRun() || (acting() && props.trace.active) ? undefined : preview().work || undefined}
+      quiet={looked()} time={looked() || (acting() && !props.trace.active && !unfinished() && !done()) ? undefined : time() || undefined}
+      work={acting() ? (unfinished() && done() ? done() : undefined) : settledRun() ? undefined : preview().work || undefined}
       latest={props.onOpen || looked() || settledRun() ? undefined : latest()} live={!props.onOpen && props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={props.onOpen ? undefined : <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={!props.onOpen && trail().length > 0} open={open()} goes={Boolean(props.onOpen)} onToggle={props.onOpen ?? (() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); })}
