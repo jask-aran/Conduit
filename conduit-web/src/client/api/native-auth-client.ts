@@ -1,6 +1,6 @@
 import { trustSettled } from "../platform/certificate-pins.ts";
 import { isInstalledClient, secureTokenStore } from "../platform/installed-client.ts";
-import { activeOrigin, LEGACY_ORIGIN_STORAGE_KEY } from "../platform/servers.ts";
+import { activeOrigin, dialOrigin, LEGACY_ORIGIN_STORAGE_KEY, pathsOf, servers, type ServerEntry } from "../platform/servers.ts";
 
 const TOKEN_PREFIX = "conduit.native.bearer-token";
 /** What a client that could hold only one server stored its token under. */
@@ -57,12 +57,19 @@ export async function clearNativeBearerToken(origin = activeOrigin()) {
   if (isInstalledClient()) await secureTokenStore.remove(tokenKey(origin));
 }
 
-/** The server a request is addressed to: its own origin when absolute, else the chosen server's. */
+/**
+ * The server a request is addressed to, by its entry's origin (the key its token is under). A server answers at more
+ * than one address (pathsOf; dialOrigin may make one https), so the address is matched against each server's; one
+ * that matches none is the chosen server's.
+ */
 function targetOrigin(input: RequestInfo | URL) {
-  try {
-    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
-    return url.origin === location.origin ? activeOrigin() : url.origin;
-  } catch { return activeOrigin(); }
+  const chosen = activeOrigin();
+  let address: string;
+  try { address = new URL(input instanceof Request ? input.url : String(input), location.href).origin; } catch { return chosen; }
+  const answers = (entry: ServerEntry) => pathsOf(entry).some((path) => path.origin === address || dialOrigin(path.origin, entry) === address);
+  const active = servers().find((entry) => entry.origin === chosen);
+  if (!active || answers(active)) return chosen;
+  return servers().find(answers)?.origin ?? chosen;
 }
 
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
