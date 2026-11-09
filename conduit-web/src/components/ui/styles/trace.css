@@ -24,14 +24,6 @@
    under its verb. */
 .ui-trace-fold { gap: var(--space-2xs); }
 .ui-trail { display: grid; gap: var(--space-2xs); margin: 0; padding: 0; color: var(--muted-foreground); font-size: var(--text-row); list-style: none; }
-/* A run's fold mark ends its first step's line, on the column's edge where a step's chevron goes; that step gives it
-   the room. */
-.ui-trail[data-folds] { position: relative; }
-.ui-trail-fold { position: absolute; top: 0; right: 0; display: grid; height: var(--control-xs); place-items: center; }
-.ui-trail-fold > button { display: grid; width: var(--control-xs); height: var(--control-xs); place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
-.ui-trail-fold > button:focus-visible { color: var(--foreground); }
-@media (hover: hover) { .ui-trail-fold > button:hover { color: var(--foreground); } }
-.ui-trail-fold + .ui-step-item { margin-right: calc(var(--control-xs) + var(--space-2xs)); }
 .ui-step-item { gap: 0; }
 /* A line's last glyph ends on the column's edge, the wash bleeding past by its padding; the chevron, on hover or open,
    takes the time's place, so the line never keeps room for something hidden. */

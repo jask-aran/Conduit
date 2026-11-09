@@ -1,13 +1,13 @@
-/* How a thread draws the work between what it says (Settings → Appearance), per device: each run as its steps, each as
-   its run header, or the turn header alone. A run or a turn switched in a thread stays so while the thread is read. */
+/* How a thread draws the work between what it says (Settings → Appearance → Reasoning & tool use), per device: each
+   run as its steps, each as one line (its run header), or the turn header alone. */
 import { createSignal } from "solid-js";
 
 export type RunForm = "steps" | "headers" | "turn";
 
 export const RUN_FORMS: readonly { value: RunForm; label: string; description: string }[] = [
   { value: "steps", label: "Steps", description: "Each run of work shows its steps; the turn header sums up the turn." },
-  { value: "headers", label: "Run headers", description: "Each run of work is one line; the turn header sums up the turn." },
-  { value: "turn", label: "Turn header", description: "The turn header alone stands for the turn's work." },
+  { value: "headers", label: "One line per run", description: "Each run of work is one line; the turn header sums up the turn." },
+  { value: "turn", label: "Turn header only", description: "The turn header alone stands for the turn's work." },
 ];
 
 const KEY = "conduit:run-form";

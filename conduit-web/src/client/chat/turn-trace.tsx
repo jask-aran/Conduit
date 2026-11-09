@@ -511,9 +511,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   orb?: boolean;
   /** A Narrated turn's work between texts (a run), no orb (Folded's alone has one). */
   narrated?: boolean;
-  /** Narrated, how the run is drawn: its steps (the trail's own lines, a fold mark by them), its run header (one line,
-   *  what it did), or not at all. onSwitch: the fold mark and the header switch it between the two. */
-  form?: "steps" | "header" | "hidden"; onSwitch?: () => void;
+  /** Narrated, how the run is drawn (Settings: Work between texts): its steps (the trail's own lines), its run header
+   *  (one line, what it did), or not at all. */
+  form?: "steps" | "header" | "hidden";
   /** The turn header: the whole turn's work as one line, no latest line under it. */
   turn?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
@@ -559,11 +559,11 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
           status={settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} time={time() || undefined}
           work={settledRun() ? undefined : preview().work || undefined} latest={props.turn || settledRun() ? undefined : latest()} live={props.trace.active && !props.turn}
           tone={unfinished() ? "failed" : undefined} pinned={props.turn ? undefined : agentsRow()}
-          opens={Boolean(props.onSwitch)} open={false} onToggle={() => props.onSwitch?.()} find={() => trail().map(trailText).join("\n")} />
+          opens={false} find={() => trail().map(trailText).join("\n")} />
       </Match>
       <Match when={true}>
         {agentsRow()}
-        <Trail fold={props.onSwitch && trail().length ? { label: "Show as one line", onFold: () => props.onSwitch!() } : undefined}><Index each={trail()}>{(item) =>
+        <Trail><Index each={trail()}>{(item) =>
           <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       </Match>
     </Switch>

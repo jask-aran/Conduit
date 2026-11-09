@@ -37,14 +37,8 @@ export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Moti
   </div>;
 }
 /** The opened trail: one light line per step. nested: a group's steps on a rail of their own under its icon;
- * calls: a code-mode script's calls, quieter, inside its step. fold: a run's steps that can be one line instead, its
- * fold mark ending the first step's line. */
-export const Trail = (props: { nested?: "group" | "calls"; fold?: { label: string; onFold: () => void }; children: JSX.Element }) =>
-  <ol class="ui-trail" data-nested={props.nested} data-folds={props.fold ? "" : undefined}>
-    <Show when={props.fold}>{(fold) => <li class="ui-trail-fold"><button type="button" aria-label={fold().label} title={fold().label} onClick={() => fold().onFold()}>
-      <Icons.FoldRun class="ui-size-icon-sm" /></button></li>}</Show>
-    {props.children}
-  </ol>;
+ * calls: a code-mode script's calls, quieter, inside its step. */
+export const Trail = (props: { nested?: "group" | "calls"; children: JSX.Element }) => <ol class="ui-trail" data-nested={props.nested}>{props.children}</ol>;
 const NOT_KEPT = "Not kept";
 export type StepState = "running" | "failed" | "stopped" | "planned" | "earlier";
 /**

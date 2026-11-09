@@ -1453,11 +1453,6 @@ export function Settings(props: {
                       <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
-                  <SettingLine label="Work between texts" title={RUN_FORMS.find((option) => option.value === runForm())?.description}>
-                    <Select id="run-form" aria-label="Work between texts" value={runForm()} onChange={(event) => saveRunForm(event.currentTarget.value as RunForm)}>
-                      <For each={RUN_FORMS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
                   <SettingLine label="Transcript width">
                     <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
                       <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -1493,6 +1488,13 @@ export function Settings(props: {
                       <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
                     </SettingLine>
                   </Show>
+              </Group>
+              <Group title="Reasoning & tool use">
+                  <SettingLine label="Work between texts" title={RUN_FORMS.find((option) => option.value === runForm())?.description}>
+                    <Select id="run-form" aria-label="Work between texts" value={runForm()} onChange={(event) => saveRunForm(event.currentTarget.value as RunForm)}>
+                      <For each={RUN_FORMS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
               </Group>
               <Group title="Collapse">
                   <SettingLine label="Code blocks">
