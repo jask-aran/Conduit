@@ -231,8 +231,9 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const loadContext = (entryId: number) => api<ContextText>(`/v0/sessions/${encodeURIComponent(agentView()?.home?.chatId ?? "")}/context/${entryId}`);
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
   // Every turn header keeps its orb, at rest once settled: the mark of jbot at work, wherever it worked.
-  const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} renderer={props.renderer} loadContext={loadContext}
-    onOpenChange={(open) => { if (open && message) void readWork([message], true).catch(() => {}); }} /></Turn>;
+  // One line, "jbot is …" or "jbot worked for …" and what it did: the work itself is the raw home thread, which it opens.
+  const openHome = () => { const chat = agentView()?.home?.chatId; if (chat) openAgentChat(chat); };
+  const trace = (data: () => TurnTraceData, _message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} renderer={props.renderer} loadContext={loadContext} onOpen={openHome} /></Turn>;
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
     : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
@@ -286,7 +287,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             <Show when={leavingTrace()}>{(gone) => <TranscriptRow flow="exchange" {...motionOf("removing")}>{trace(() => gone().trace)}</TranscriptRow>}</Show>
             <Show when={unsent()}>{(sent) => <TranscriptRow flow={props.messages.length ? "turn" : undefined}><Message at={sent().at}>{sent().text}</Message></TranscriptRow>}</Show>
             <Show when={showLive()}><TranscriptRow flow={props.messages.length || unsent() ? "exchange" : undefined}>
-              <Show when={live()} fallback={<Turn><TraceStarting label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
+              <Show when={live()} fallback={<Turn><TraceStarting line label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
             </TranscriptRow></Show>
           </>}>
           {(row, index) => row.kind === "run"

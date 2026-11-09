@@ -9,14 +9,15 @@ import { Failure, foldBody, registerFoldFind } from "./transcript";
 /**
  * quiet: a piece of work between what a turn says, not the turn's summary: its status at the line's weight.
  * A turn's head: the orb, then Status · time · work, and under it the trail's latest line (text, or the app's inline
- * Markdown). opens: a trail to open. live: the latest line's room is held while the turn runs, so the first step to
+ * Markdown). opens: a trail to open; goes: instead, the head is a way to the work elsewhere (onToggle goes there). live: the latest line's room is held while the turn runs, so the first step to
  * arrive moves nothing below.
  */
-export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; quiet?: boolean; opens?: boolean; open?: boolean; onToggle?: () => void }) {
-  return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} data-held-line={props.orb && props.live && !props.latest ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens} onClick={() => props.onToggle?.()}>
+export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; quiet?: boolean; opens?: boolean; open?: boolean; goes?: boolean; onToggle?: () => void }) {
+  return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} data-held-line={props.orb && props.live && !props.latest ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens && !props.goes} onClick={() => props.onToggle?.()}>
     <span class="ui-trace-orb">{props.orb}</span>
     <span class="ui-trace-line ui-truncate"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
     <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></Show>
+    <Show when={props.goes && !props.opens}><Icons.ChevronRight class="ui-disclosure-chevron ui-size-icon-sm" /></Show>
     <Show when={props.latest || props.live}><span class="ui-trace-latest ui-truncate">{props.latest || "\u00a0"}</span></Show>
   </button>;
 }
@@ -27,7 +28,7 @@ export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: s
  */
 /* find: what the closed trail would read, for find in chat (registerFoldFind). */
 export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; find?: () => string; children?: JSX.Element }) {
-  const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "quiet", "open", "onToggle"]);
+  const [head, local] = splitProps(props, ["orb", "status", "time", "work", "latest", "live", "tone", "quiet", "open", "goes", "onToggle"]);
   const { body, opens } = foldBody({ get opens() { return local.opens; }, get open() { return head.open; }, get children() { return local.children; } });
   return <div ref={(element) => { if (local.find) registerFoldFind(element, () => local.find!(), () => { if (!head.open) head.onToggle?.(); }); }}
     class="ui-disclosure ui-trace-fold" data-open={head.open && opens() ? "true" : "false"} data-find-fold={local.find && opens() && !head.open ? "" : undefined} data-live={head.live ? "" : undefined} {...motionOf(local.motion)} style={sinceOf(local.since)}>

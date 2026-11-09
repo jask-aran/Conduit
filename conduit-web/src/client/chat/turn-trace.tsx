@@ -529,6 +529,9 @@ const LATEST_CHARS = 240;
  *  the usual head, what it is doing now; settled it says what it looked at, and the time is the turn's, so it is not
  *  repeated; a settled piece with no work draws nothing. */
 export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
+  /** One line that goes to the work instead of opening to it (jbot's chat: to the raw home thread): no latest line, no
+   *  trail, no agents under it. */
+  onOpen?: () => void;
   /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
   orb?: boolean;
   /** A Narrated turn's work between texts (a run), no orb (Folded's alone has one). */
@@ -613,9 +616,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : acting() ? actorStatus() : preview().status.verb}
       quiet={looked()} time={looked() || (acting() && !props.trace.active && !unfinished()) ? undefined : time() || undefined}
       work={settledRun() || (acting() && props.trace.active) ? undefined : preview().work || undefined}
-      latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
-      pinned={<TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
-      opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}
+      latest={props.onOpen || looked() || settledRun() ? undefined : latest()} live={!props.onOpen && props.trace.active} tone={unfinished() ? "failed" : undefined}
+      pinned={props.onOpen ? undefined : <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
+      opens={!props.onOpen && trail().length > 0} open={open()} goes={Boolean(props.onOpen)} onToggle={props.onOpen ?? (() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); })}
       find={looked() ? undefined : () => trail().map(trailText).join("\n")}>
       {looked() && lines().length ? <Trail><Index each={lines()}>{(line) => <SourceStep line={line()} settled renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       : (() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
@@ -627,9 +630,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
    connecting and its time counting, one line of space held under it for the
    step that will fill it. The trace takes its place when its first step
    arrives, in the same spot, at the same height. */
-export function TraceStarting(props: { startedAt?: string; label?: string; since?: number; narrated?: boolean }) {
+export function TraceStarting(props: { startedAt?: string; label?: string; since?: number; narrated?: boolean; line?: boolean }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
   // Narrated has no orb: what it is doing is a line of the trail, as its work will be.
   if (props.narrated) return <Trail><Step state="running" verb={props.label || "Starting"} time={time() || undefined} motion={props.since != null ? "entering" : undefined} /></Trail>;
-  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state="connecting" />} status={props.label || "Starting"} time={time() || undefined} live />;
+  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state="connecting" />} status={props.label || "Starting"} time={time() || undefined} live={!props.line} />;
 }
