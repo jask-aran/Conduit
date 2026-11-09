@@ -26,6 +26,7 @@ export function registerRuntimeRoutes(app, {
   serverIdentity,
   onServerRenamed,
   onAccountRenamed,
+  webToolsError = () => null,
 }) {
   /*
    * Who this server is, and where else it answers.
@@ -101,6 +102,8 @@ export function registerRuntimeRoutes(app, {
       release: config.release,
       startedAt: STARTED_AT,
       activeGenerations,
+      // A capability every agent counts on that did not load (null when it did).
+      problems: webToolsError() ? { webTools: webToolsError() } : null,
     });
   });
 

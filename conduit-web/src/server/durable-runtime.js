@@ -39,6 +39,8 @@ const CODEMODE_ONLY = /codemode-only\.js$/;
 const ALWAYS = ["ask_user", "skill"];
 // Reads and searches: asking again after a restart costs a request, not a side effect.
 const WEB_REPLAY_SAFE = ["web_search", "fetch_content", "get_search_content", "source_check"];
+/** What every agent is told when the web tools did not load. */
+const WEB_DOWN = "## Web research\n\nWeb search is not available on this hub right now (its web tools did not load). Do not look for another way to search or fetch the web (Executor, Bash, curl, a browser): tell the person web search is down and answer only what you can without it, marked as unverified.";
 
 const MAX_QUESTIONS = 4;
 
@@ -451,10 +453,16 @@ export class DurableRuntime {
     };
     try {
       const tools = (await this.piExtensionFor(WEB_ACCESS)).flat();
+      const missing = WEB_REPLAY_SAFE.filter((name) => !tools.some((tool) => tool.name === name));
+      if (missing.length) throw new Error(`it loaded without ${missing.join(", ")}`);
+      this.webToolsError = null;
       return defineExtension({ name: "web", tools, sections: [section("web", async () => this.contextStore ? this.contextStore.text("web-tools") : WEB_PROMPT, { tag: false })] });
     } catch (error) {
-      console.warn("[conduit-runtime] web tools unavailable:", error?.message || error);
-      return null;
+      // Loud, not a warning in the log: Needs you and /healthz say so (webToolsError), and every agent is told, so it
+      // says search is down rather than hunting its tools for another way (it found Executor's, and gave up).
+      this.webToolsError = String(error?.message || error).slice(0, 300);
+      console.error("[conduit-runtime] web tools unavailable:", this.webToolsError);
+      return defineExtension({ name: "web", tools: [], sections: [section("web", async () => WEB_DOWN, { tag: false })] });
     }
   }
 

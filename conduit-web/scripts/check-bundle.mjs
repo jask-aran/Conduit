@@ -129,3 +129,22 @@ if (overlayFailures.length) {
 } else {
   console.log("Overlays: every dialog uses the shared Dialog or OverlayDialog from components/ui/dialog.tsx.");
 }
+
+// The agents' web tools come from pi-web-access, a Pi extension loaded through the bridge (pi-extension-bridge.js).
+// When it stops loading -- an import it needs is not installed where it looks -- every agent runs without
+// web_search, and only a warning said so: load it here, as the runtime does, so the build fails instead.
+{
+  const { loadPiExtensionTools } = await import(path.resolve("src/server/pi-extension-bridge.js"));
+  const wanted = ["web_search", "fetch_content", "get_search_content", "source_check"];
+  const { log, warn } = console;
+  let failure = null;
+  try {
+    console.log = console.warn = () => {};
+    const tools = await loadPiExtensionTools(path.resolve("node_modules/pi-web-access/index.ts"), { runtime: null });
+    const missing = wanted.filter((name) => !tools.some((tool) => tool.name === name));
+    if (missing.length) failure = `pi-web-access loaded without ${missing.join(", ")}`;
+  } catch (error) { failure = `pi-web-access does not load: ${error?.message || error}`; }
+  finally { Object.assign(console, { log, warn }); }
+  if (failure) { console.error(`Web tools: ${failure}`); process.exitCode = 1; }
+  else console.log(`Web tools: pi-web-access loads with ${wanted.join(", ")}.`);
+}

@@ -143,7 +143,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
         // Not while it may still be coming up (the hub starting, a reconnect): a minute's grace (Connectors.troubled).
         notices: [...state.notices, ...(!agent.connectors.troubled("executor") ? [] : [{
           id: "connector-executor", kind: "connector", text: "Executor isn't connected", at: null,
-        }]), ...await parkedTasks()],
+        }]), ...(agent.runtime.webToolsError ? [{
+          id: "web-tools", kind: "connector", text: "Web search isn't available", at: null,
+        }] : []), ...await parkedTasks()],
       },
     };
   };

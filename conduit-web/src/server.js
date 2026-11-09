@@ -716,6 +716,7 @@ registerRuntimeRoutes(app, {
     const person = Object.fromEntries(Object.entries(patch).filter(([field, value]) => value || field === "home"));
     if (agent?.folder && Object.keys(person).length) await writePerson(agent.folder, person);
   },
+  webToolsError: () => backends.adapters?.get("conduit-runtime")?.runtime?.webToolsError || null,
 });
 
 registerAccountRoutes(app, { dataRoot: config.dataRoot });
