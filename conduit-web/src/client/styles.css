@@ -231,10 +231,13 @@ svg.lucide { stroke-width: 2.4; }
 /* jbot's reply arriving fades in whole at the pace a thread's answer words fade in at. */
 [data-jbot-room] .ui-transcript > .ui-transcript-row[data-entering] { animation-duration: var(--duration-gentle); }
 [data-jbot-room] .ui-transcript > .ui-transcript-row {
-  /* Skipping paint clips a row to its box, so the box reaches over the gutter (its content where it was) and what hangs
-     there -- a step's or a run's mark, the orb -- is drawn. overflow-clip-margin would do it but takes no calc(). */
-  --row-reach: calc(var(--icon-xl) + 2 * var(--row-gap) + var(--mark-reach));
+  /* Skipping paint clips a row to its box, so the box reaches past the column (its content where it was) by what the
+     keyboard cursor's wash bleeds; nothing hangs in the gutter here. overflow-clip-margin would do it but takes no calc(). */
+  --row-reach: var(--space-md);
   margin-inline: calc(-1 * var(--row-reach)); padding-inline: var(--row-reach); }
+/* What reaches past the column never makes the log scroll sideways: a phone's column is the screen's width, and a
+   scroller that scrolls sideways keeps the edge swipe from opening the sidebar (edge-swipe.ts, swipeBlocked). */
+[data-jbot-room] .ui-chat-viewport { overflow-x: hidden; }
 /* The dock writes its widths (--workspace-shell-width, --workspace-panel-width, --dock-document-width) on its root at
    every frame of a resize; they are read only by the dock and its own parts. Restated here as constants, the change
    stops at the room's edge instead of restyling every element in it, every frame. */
