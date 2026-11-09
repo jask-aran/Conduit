@@ -117,7 +117,8 @@ export type TurnRow =
   // A Narrated turn's turn header: the whole turn's work in one line, after its latest run (placeTurnHeaders), and how
   // many runs it has. It holds no work of its own: the transcript reads its turn's runs, as they change, from the rows
   // above it.
-  | { key: string; type: "turn"; value: { runs: number }; precedingUserId?: string };
+  // `leaving`: the transcript's own copy of a header its turn moved on from, fading out where it was.
+  | { key: string; type: "turn"; value: { runs: number }; precedingUserId?: string; leaving?: boolean };
 
 /** A codemode script's message calls as the calls they are (a script's `notify` is a notification like a direct one),
  *  and the script without them: gone when they were all it did and it ended well. */

@@ -15,6 +15,7 @@ import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import { isAgentReport, isRun, type Narration, type TurnRow, type TurnTraceData } from "../turn-rows";
 import { runForm } from "../preferences/run-form";
+import { motionOf } from "@/components/ui/shared";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -384,10 +385,55 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     for (const row of timeline) if (row.type === "turn" && row.precedingUserId) counts.set(row.precedingUserId, row.value.runs);
     return counts;
   });
+  /*
+   * A turn header moving on: when a new run starts under the text the header sat over, the header there fades out in
+   * place (removing, --duration-quick) and only then does what came after it show (the new run, the header under it,
+   * text that arrived with them), from where the header was; until it has gone they are held. The rows drawn are the
+   * timeline's with those leaving headers put back where they were.
+   */
+  const LEAVE_MS = 150;
+  const [leaving, setLeaving] = createSignal<{ row: TurnRow; after: string; turn: string; shown: Set<string> }[]>([]);
+  let headers = new Map<string, { row: TurnRow; after?: string }>();
+  let shownKeys = new Set<string>();
+  createComputed(() => {
+    const next = new Map<string, { row: TurnRow; after?: string }>();
+    timeline.forEach((row, index) => { if (row.type === "turn" && row.precedingUserId) next.set(row.precedingUserId, { row, after: timeline[index - 1]?.key }); });
+    untrack(() => {
+      for (const [turn, was] of headers) {
+        const now = next.get(turn);
+        if (!now || now.row.key === was.row.key || !was.after || !timeline.some((row) => row.key === was.after)) continue;
+        const ghost: TurnRow = { key: `${was.row.key}:leaving`, type: "turn", value: { runs: (was.row.value as { runs: number }).runs }, precedingUserId: turn, leaving: true };
+        setLeaving((list) => [...list.filter((item) => item.turn !== turn), { row: ghost, after: was.after!, turn, shown: shownKeys }]);
+        setTimeout(() => setLeaving((list) => list.filter((item) => item.row !== ghost)), LEAVE_MS);
+      }
+    });
+    headers = next;
+    shownKeys = new Set(timeline.map((row) => row.key));
+  });
+  const rows = createMemo((): TurnRow[] => {
+    const list = leaving();
+    if (!list.length) return timeline;
+    const out = [...timeline];
+    for (const item of list) { const at = out.findIndex((row) => row.key === item.after); if (at >= 0) out.splice(at + 1, 0, item.row); }
+    return out;
+  });
+  // What arrived in a turn after its leaving header (not shown before it left), held until it has gone.
+  const held = createMemo(() => {
+    const keys = new Set<string>();
+    for (const item of leaving()) {
+      const at = rows().indexOf(item.row);
+      for (let index = at + 1; at >= 0 && index < rows().length; index += 1) {
+        const row = rows()[index]!;
+        if (!("precedingUserId" in row) || row.precedingUserId !== item.turn) break;
+        if (!item.shown.has(row.key)) keys.add(row.key);
+      }
+    }
+    return keys;
+  });
   const isWork = (row: TurnRow | undefined) => row?.type === "reports" || row?.type === "turn" || (row?.type === "trace" && row.value.segments.length > 0);
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
-    const row = timeline[index], above = timeline[index - 1];
+    const row = rows()[index], above = rows()[index - 1];
     // A quiet run arrives on its own, without starting an exchange.
     if (row?.type === "message" && row.value.run?.woke === false) return "step";
     if (fromPerson(row)) return "turn";
@@ -908,7 +954,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
         <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
         {/* Its newest rows first, the older ones above in idle time (TranscriptList); it holds its own foot. */}
         <TranscriptList ref={(element) => { thread = element; }} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}
-          each={timeline} of={props.chat.loadedId()} whole={reopensAbove} holdsFoot={false}
+          each={rows()} of={props.chat.loadedId()} whole={reopensAbove} holdsFoot={false}
           estimate={(row, width) => estimateRowHeight(row, Math.max(20, (width || 400) / 8.5))}
           before={<Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item" data-cursor-skip><LoadingEarlier /></TranscriptRow></Show>}
           after={<Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item" flow="step"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>}>
@@ -920,7 +966,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               const runs: Extract<TurnRow, { type: "trace" }>[] = [];
               let startedAt: string | undefined;
               for (let at = index() - 1; at >= 0; at -= 1) {
-                const row = timeline[at];
+                const row = rows()[at];
                 if (!row) break;
                 if (row.type === "message" && row.value.id === item.precedingUserId) { startedAt = row.value.timestamp; break; }
                 if (!("precedingUserId" in row) || row.precedingUserId !== item.precedingUserId) break;
@@ -931,7 +977,8 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 ...(startedAt ?? runs[0]?.value.startedAt ? { startedAt: startedAt ?? runs[0]?.value.startedAt } : {}),
                 ...(!active && (last?.timestamp ?? last?.value.endedAt) ? { endedAt: last?.timestamp ?? last?.value.endedAt } : {}) };
             });
-            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip data-turn-header="" flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
+            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip data-turn-header="" data-held={held().has(item.key) ? "" : undefined}
+              {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
               onSwitch={() => flip(turnSwitch(item))} renderer={markdownRenderer()} profileLabel={props.profileLabel} /></Turn></TranscriptRow>;
           }
           if (item.type === "trace") {
@@ -948,12 +995,12 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: chatId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
               return actions;
             };
-            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} form={narrated() && isRun(item) ? formOf(item) : undefined} onSwitch={narrated() && isRun(item) ? () => flip(`run:${item.key}`) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} form={narrated() && isRun(item) ? formOf(item) : undefined} onSwitch={narrated() && isRun(item) ? () => flip(`run:${item.key}`) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
-                <MessageFoot at={item.timestamp} eager={index() >= timeline.length - 1}>
+                <MessageFoot at={item.timestamp} eager={index() >= rows().length - 1}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
                   <Show when={artifact()}>{(entry) => <TurnChanges artifact={entry()} chatId={chatId()!} />}</Show>
                 </MessageFoot>
@@ -1027,7 +1074,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
             // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
-            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-message-id={message().id} data-report={message().agent?.conversationId ?? message().agent?.id ?? undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
+            return <TranscriptRow ref={row} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} data-message-id={message().id} data-report={message().agent?.conversationId ?? message().agent?.id ?? undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound shut icon={<RoutineIcon routine={message().sender?.routine} />} from={message().sender?.name || message().agent?.id || "Background agent"}
                   meta={[message().agent?.id, message().sender?.status].filter(Boolean).join(" · ")} time={clock(message().timestamp)} dateTime={message().timestamp || undefined}
@@ -1064,7 +1111,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: props.chat.loadedId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
             return actions;
           };
-          return <TranscriptRow ref={(element: HTMLDivElement) => { row = element; turnActions.set(element, rowActions); }} data-slot="message-scroller-item" data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
+          return <TranscriptRow ref={(element: HTMLDivElement) => { row = element; turnActions.set(element, rowActions); }} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} data-message-id={message().id} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
             <Show when={user()} fallback={<Turn>
               <Show when={message().content || (message().stopped && !item.traced && !failed())}>
                 <Answer copied={copied()}>

@@ -204,3 +204,7 @@
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12'%3E%3Cpath d='M0.5 11V1.5L7.5 8.5Q10.5 11.5 14 11.5' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 0 0 / 100% 100% no-repeat; }
 /* Times always shown (Transcript data-times="shown"): where messages arrive unseen, when each came is the point. */
 .ui-transcript[data-times="shown"] .ui-message-foot > time { opacity: 1; }
+
+/* A turn header its turn moved on from fades where it was, quickly, before the new run under it shows (held). */
+.ui-transcript-row[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+.ui-transcript-row[data-held] { display: none; }
