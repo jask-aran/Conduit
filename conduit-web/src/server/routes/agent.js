@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { notice } from "../../context/notices.js";
 import crypto from "node:crypto";
 import express from "express";
 import { voiceTranscriber } from "./voice.js";
@@ -44,6 +46,7 @@ import { workOps } from "../../durable-adapter.js";
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
  * DELETE /v0/agent/watches/:id     remove a watch or webhook
+ * POST /v0/agent/test-report        a report with no run behind it, asking jbot to say hi (to watch a report's turn)
  * POST /v0/agent/runs/:id/open      a run of the log's: its transcript as a chat to open { chatId }
  * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
@@ -385,6 +388,29 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       cursor = page.next;
     } while (cursor);
     return runIndex.runs;
+  });
+
+  /*
+   * A test report: what a run reports, submitted to the home thread as a run's report is and followed the same way
+   * (wakeChat), with no run behind it and no clock. jbot is asked to send the person a notification saying hi, so a
+   * report's turn can be watched end to end without waiting on a heartbeat.
+   */
+  app.post("/v0/agent/test-report", async (_request, response, next) => {
+    try {
+      if (!enabled(response)) return;
+      const { conversationId } = await agent.home();
+      const number = (await runsOf(conversationId).catch(() => [])).filter((run) => run.routine === "test").length + 1;
+      const harness = await agent.runtime.open();
+      const home = await harness.conversation(conversationId, agent.context);
+      const at = new Date().toISOString(), key = `test-report:${randomUUID()}`;
+      const report = "This is a test report from Conduit. Send the person a notification that says hi.";
+      const content = await notice(agent.runtime.contextStore, "report-run", { report, title: "Test report" });
+      await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
+        messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
+        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: at, endedAt: at } } } }, agent.context);
+      agent.runtime.wakeChat?.(conversationId);
+      response.status(202).json({ id: key });
+    } catch (error) { next(error); }
   });
 
   app.delete("/v0/agent/watches/:id", async (request, response, next) => {

@@ -374,7 +374,8 @@ export function AgentPage(props: {
       </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}
-    actions={props.panel ? <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction> : undefined}>
+    actions={props.panel ? <><GroupAction onClick={() => void act("test-report", () => api("/v0/agent/test-report", { method: "POST" }))}><Icons.Notification />Test report</GroupAction>
+      <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction></> : undefined}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
 

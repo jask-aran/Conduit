@@ -42,7 +42,7 @@ type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; mess
 /** A run jbot's home thread had (GET /v0/agent/messages `runs`): the log says it happened, as the thread's run line,
  *  and opens its transcript; what it reported is the reply after it. */
 export interface LogRun { id: string; at: string; title: string; label: string; number: number | null; routine: string | null; trigger: string | null;
-  startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean }
+  startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean; conversationId?: number | null }
 const runTime = (run: LogRun) => {
   const start = run.startedAt ? Date.parse(run.startedAt) : NaN, end = run.endedAt ? Date.parse(run.endedAt) : NaN;
   return Number.isFinite(start) && Number.isFinite(end) && end >= start ? elapsed(end - start) : undefined;
@@ -227,7 +227,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
-                  summary={row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={() => openRun(row.run)} />
+                  summary={row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run) : undefined} />
               </AgentRows></Turn></TranscriptRow>
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>

@@ -530,9 +530,6 @@ export class DurableAdapter extends EventEmitter {
       this.agentHeartbeats.set(conversationId, Date.now());
       const record = [...this.records.values()].find((record) => record.conversationId === conversationId);
       if (record) this.publish(record, { type: "agents_changed" });
-      // A report that woke a thread nobody had open starts a turn there: taken up as a resumed turn is, so the turn is a
-      // process a page showing the thread joins (jbot's chat, as the report comes in) rather than one it finds later.
-      else if (change !== true && change.woke) void this.attachConversation(conversationId).catch((error) => console.warn("[conduit-runtime] could not attach", conversationId, error?.message || error));
     };
     this.sessions = new SessionRecords({
       capabilities: DURABLE_CAPABILITIES,
