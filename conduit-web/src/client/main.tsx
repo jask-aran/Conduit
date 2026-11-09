@@ -5429,6 +5429,10 @@ function App() {
       const changed = (event as CustomEvent<ChatSummary>).detail;
       if (!changed?.id) return;
       const read = watching(changed.id);
+      // A chat made somewhere else (Float, another device): the list is read again to take it in, where it belongs.
+      // A second later, so a chat this app made itself (it lists its own) costs no second read.
+      const listed = () => catalogue.projects().some((project) => project.sessions.some((session) => session.id === changed.id));
+      if (!listed()) return void setTimeout(() => { if (!listed()) relist(); }, 1000);
       catalogue.patchChat(changed.id, read ? { ...changed, unread: false } : changed);
       if (read) markChatRead(catalogue, changed);
     };
@@ -5438,7 +5442,13 @@ function App() {
       if (document.visibilityState !== "visible" || routeKind() !== "chat") return;
       markChatRead(catalogue, catalogue.selected()?.chat);
     };
+    // One read at a time, however many ask: the list as it is now.
+    let relisting: Promise<unknown> | null = null;
+    const relist = () => { relisting ??= catalogue.refresh().catch(() => {}).finally(() => { relisting = null; }); };
     window.addEventListener("conduit:chat-changed", applyChangedChat);
+    // Back from time away (the app in the background, Float used meanwhile): the chats made meanwhile.
+    window.addEventListener("conduit:runtime-resynced", relist);
+    onCleanup(() => window.removeEventListener("conduit:runtime-resynced", relist));
     document.addEventListener("visibilitychange", readOnFocus);
     window.addEventListener("focus", readOnFocus);
     onCleanup(() => {

@@ -772,6 +772,8 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   promptChat: (...args) => liveSessionStream.promptChat(...args),
 });
 registerChatRoutes(app, {
+  // A chat made anywhere (Float, another device) is told to every client's chat list as it is made.
+  announceChat: (chat) => runtimeHub.publish({ type: "chat_changed", chat, at: new Date().toISOString() }),
   backends,
   nodeHub,
   catalogFor,

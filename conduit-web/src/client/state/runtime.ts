@@ -41,6 +41,7 @@ const takeDevices = (list: unknown) => {
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
+let heardOnce = false;
 export function createRuntimeStore() {
   const [processes, setProcesses] = createSignal(new Map<string, RuntimeProcess>());
   const [connectivity, setConnectivity] = createSignal<Connectivity>("connecting");
@@ -124,6 +125,9 @@ export function createRuntimeStore() {
         if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); replayHeldWrites(); }
         setStale(false);
       } else if (event.type === "runtime_global_snapshot") {
+        // Back after time away (not the first hearing): what changed meanwhile was not heard, so the app reads it again.
+        if (heardOnce) window.dispatchEvent(new Event("conduit:runtime-resynced"));
+        heardOnce = true;
         replaceAll((event.processes || []) as RuntimeProcess[]);
         takeDevices(event.devices);
         if (event.updates) window.dispatchEvent(new CustomEvent("conduit:updates-offered", { detail: event.updates }));

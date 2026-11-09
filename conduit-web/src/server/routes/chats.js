@@ -33,6 +33,7 @@ const discoverableFrom = (backends) => (implementation) => {
 
 export function registerChatRoutes(app, {
   nodeHub = null,
+  announceChat = null,
   backends,
   catalogFor,
   chatModelView,
@@ -189,6 +190,7 @@ export function registerChatRoutes(app, {
   }).find((profile) => profile.id === profileId && profile.management === "agent");
   const completeCreation = (request, response, chat, project, { start = false } = {}) => {
     response.status(201).json(chatView(chat));
+    announceChat?.(chatView(chat));
     if (request.body?.start !== true && !start) return;
     void launchLiveSession({
       chatId: chat.id,
