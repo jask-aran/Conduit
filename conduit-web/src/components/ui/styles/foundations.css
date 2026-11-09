@@ -116,7 +116,7 @@
 /* A word arriving in what is read (an answer streaming, captions) comes in by its colour, not its opacity. */
 @keyframes ui-word-in { from { color: transparent; } }
 @media (prefers-reduced-motion: reduce) {
-  :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
+  :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold, .ui-transcript-row):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
   .ui-fold-chevron, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-under, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
 /*

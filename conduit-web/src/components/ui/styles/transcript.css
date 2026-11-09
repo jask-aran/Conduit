@@ -207,4 +207,6 @@
 
 /* A turn header its turn moved on from fades where it was, quickly, before the new run under it shows (held). */
 .ui-transcript-row[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A provisional row back where it now belongs (a turn header under the run that moved it on). */
+.ui-transcript-row[data-entering] { animation: ui-fade-in var(--duration-quick) var(--ease-arrive) backwards; }
 .ui-transcript-row[data-held] { display: none; }

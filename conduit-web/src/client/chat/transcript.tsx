@@ -380,28 +380,55 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     return counts;
   });
   /*
-   * A turn header moving on: when a new run starts under the text the header sat over, the header there fades out in
-   * place (removing, --duration-quick) and only then does what came after it show (the new run, the header under it,
-   * text that arrived with them), from where the header was; until it has gone they are held. The rows drawn are the
-   * timeline's with those leaving headers put back where they were.
+   * Provisional rows making way (DESIGN.md, Turns: they never fade between their own states, only out and in as they
+   * make way). A turn header moving on: when a new run starts under the text the header sat over, the header there
+   * fades out in place (removing, --duration-quick) and only then does what came after it show (the new run, the
+   * header under it, text that arrived with them), from where the header was; until it has gone they are held. The
+   * turn's starting row ("Waiting for model") does the same when the turn's first rows take its place. The rows drawn
+   * are the timeline's with those leaving rows put back where they were. A header new in a turn fades in (entering).
    */
   const LEAVE_MS = 150;
   const [leaving, setLeaving] = createSignal<{ row: TurnRow; after: string; turn: string; shown: Set<string> }[]>([]);
   let headers = new Map<string, { row: TurnRow; after?: string }>();
   let shownKeys = new Set<string>();
+  // The keys drawn before this timeline, and whether there was one: a header new since then fades in; on opening a
+  // chat, nothing does.
+  let priorKeys = new Set<string>();
+  let drawnOnce = false;
+  let drawnChat: string | null | undefined;
+  let pendings = new Map<string, { row: TurnRow; after?: string }>();
+  const leave = (ghost: TurnRow, after: string, turn: string) => {
+    setLeaving((list) => [...list.filter((item) => item.row.key !== ghost.key), { row: ghost, after, turn, shown: shownKeys }]);
+    setTimeout(() => setLeaving((list) => list.filter((item) => item.row !== ghost)), LEAVE_MS);
+  };
   createComputed(() => {
     const next = new Map<string, { row: TurnRow; after?: string }>();
-    timeline.forEach((row, index) => { if (row.type === "turn" && row.precedingUserId) next.set(row.precedingUserId, { row, after: timeline[index - 1]?.key }); });
+    const nextPending = new Map<string, { row: TurnRow; after?: string }>();
+    timeline.forEach((row, index) => {
+      if (row.type === "turn" && row.precedingUserId) next.set(row.precedingUserId, { row, after: timeline[index - 1]?.key });
+      if (row.type === "pending") nextPending.set(row.key, { row, after: timeline[index - 1]?.key });
+    });
     untrack(() => {
       for (const [turn, was] of headers) {
         const now = next.get(turn);
         if (!now || now.row.key === was.row.key || !was.after || !timeline.some((row) => row.key === was.after)) continue;
-        const ghost: TurnRow = { key: `${was.row.key}:leaving`, type: "turn", value: { runs: (was.row.value as { runs: number }).runs }, precedingUserId: turn, leaving: true };
-        setLeaving((list) => [...list.filter((item) => item.turn !== turn), { row: ghost, after: was.after!, turn, shown: shownKeys }]);
-        setTimeout(() => setLeaving((list) => list.filter((item) => item.row !== ghost)), LEAVE_MS);
+        leave({ key: `${was.row.key}:leaving`, type: "turn", value: { runs: (was.row.value as { runs: number }).runs }, precedingUserId: turn, leaving: true }, was.after, turn);
+      }
+      // The starting row gone because the turn's rows came: it fades out where it was, and they wait for it.
+      for (const [key, was] of pendings) {
+        if (nextPending.has(key) || !was.after || !timeline.some((row) => row.key === was.after) || was.row.type !== "pending") continue;
+        const turn = was.row.precedingUserId;
+        if (!turn || !timeline.some((row) => "precedingUserId" in row && row.precedingUserId === turn && !shownKeys.has(row.key))) continue;
+        leave({ ...was.row, key: `${key}:leaving`, leaving: true }, was.after, turn);
       }
     });
     headers = next;
+    pendings = nextPending;
+    // Another chat's rows are not this one's: switched to, it is opened, nothing in it new.
+    const chat = untrack(() => props.chat.loadedId());
+    if (chat !== drawnChat) { drawnChat = chat; shownKeys = new Set(); }
+    drawnOnce = shownKeys.size > 0;
+    priorKeys = shownKeys;
     shownKeys = new Set(timeline.map((row) => row.key));
   });
   const rows = createMemo((): TurnRow[] => {
@@ -978,8 +1005,10 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
                 ...(startedAt ?? runs[0]?.value.startedAt ? { startedAt: startedAt ?? runs[0]?.value.startedAt } : {}),
                 ...(!active && (last?.timestamp ?? last?.value.endedAt) ? { endedAt: last?.timestamp ?? last?.value.endedAt } : {}) };
             });
+            // Only in a turn running now: a header that came with opening or switching to a chat is already there.
+            const enters = untrack(() => drawnOnce && !priorKeys.has(item.key) && props.chat.streaming());
             return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip data-turn-header="" data-held={held().has(item.key) ? "" : undefined}
-              {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
+              {...motionOf(item.leaving ? "removing" : enters ? "entering" : undefined)} flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
               opens={runForm() === "turn"} initialOpen={itemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`)} onOpenChange={(open) => setItemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`, open)}
               loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(props.chat.loadedId() ?? "")}/context/${entryId}`)}
               toolOpen={(id) => itemExpanded(props.chat.loadedId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(props.chat.loadedId(), `tool:${id}`, open)}
@@ -1039,7 +1068,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
+            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");

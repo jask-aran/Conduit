@@ -109,7 +109,7 @@ export type TurnRow =
   // turn's foot, so this row has none.
   | { key: string; type: "trace"; value: TurnTraceData; precedingUserId?: string; answerless?: boolean; unstated?: boolean; timestamp?: string; orb?: TurnOrbState; continues?: boolean; afterAnswer?: boolean; goesOn?: boolean }
   // Where the answer will be, from the start of a live turn until its text does.
-  | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string }
+  | { key: string; type: "pending"; value: null; precedingUserId?: string; startedAt?: string; leaving?: boolean }
   // What the turn sent the person outside the thread (a `message` tool: a notification), as it was sent.
   | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string }
   // Background agents' reports that reached the thread together, one row (AgentReport): consecutive report messages.
