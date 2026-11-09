@@ -119,6 +119,7 @@ import { createClientBundle } from "./server/client-bundle.js";
 
 const config = loadConfig();
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
+void turnCheckpoints.sweep().catch((error) => console.warn("Could not clear old turn checkpoints", error.message));
 const projects = new ProjectStore(config);
 await projects.initialize();
 for (const project of await projects.list()) {

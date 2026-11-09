@@ -182,7 +182,6 @@ export function createLiveSessionStream({
       if (at) checkpoint = await turnCheckpoints?.capture({
         chatId: prepared.context.chat.id,
         projectId: prepared.context.project.id,
-        projectKind: prepared.context.project.kind,
         workingRoot: at,
         // A regenerate or an edit starts from where the turn it replaces did.
         sourceCheckpointId,
