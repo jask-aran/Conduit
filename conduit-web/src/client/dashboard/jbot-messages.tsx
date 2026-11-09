@@ -314,7 +314,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             </TranscriptRow></Show>
           </>}>
           {(row, index) => row.kind === "run" && row.run.agent
-            ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>{agentRow(row.run)}</AgentRows></Turn></TranscriptRow>
+            ? <TranscriptRow flow={flowAt(index())} data-agent=""><Turn><AgentRows>{agentRow(row.run)}</AgentRows></Turn></TranscriptRow>
             : row.kind === "run"
             ? <TranscriptRow flow={flowAt(index())} {...motionOf(arriving(row.run.id) ? "entering" : undefined)}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}

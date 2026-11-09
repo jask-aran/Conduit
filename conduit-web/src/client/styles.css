@@ -220,6 +220,10 @@ svg.lucide { stroke-width: 2.4; }
    trace's lines beside it. */
 [data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); }
 [data-jbot-room] .ui-trace[data-orb] > .ui-trace-orb { right: auto; left: 0; }
+/* A background agent's row in jbot's chat stands alone (no rows beside it to line a column up with): how it is doing
+   sits by its time at the right, as on the composer's rider, not in a column at the middle. */
+.ui-transcript-row[data-agent] .ui-agent-row[data-line] .ui-row-title { flex: 1 1 auto; }
+.ui-transcript-row[data-agent] .ui-agent-row[data-line] .ui-row-context { flex: 0 1 auto; max-width: 50%; margin-left: auto; text-align: right; }
 /* jbot's reply arriving fades in whole at the pace a thread's answer words fade in at. */
 [data-jbot-room] .ui-transcript > .ui-transcript-row[data-entering] { animation-duration: var(--duration-gentle); }
 [data-jbot-room] .ui-transcript > .ui-transcript-row {
