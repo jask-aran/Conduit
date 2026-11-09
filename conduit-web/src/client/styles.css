@@ -217,8 +217,8 @@ svg.lucide { stroke-width: 2.4; }
    as an empty box of the placeholder size -- a new row at the foot, or an old one first skipped as rows come in. */
 [data-jbot-room] .ui-transcript > .ui-transcript-row[data-drawn] { content-visibility: auto; }
 /* In jbot's chat the orb is not hung in the gutter: its left edge is the transcript's (and the composer's), the
-   trace's lines beside it. */
-[data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); }
+   trace's lines beside it. Only where there is an orb: a phone draws none (trace.css), so its line starts at the edge. */
+@media (--conduit-wide-layout) { [data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); } }
 /* One left edge at every width: nothing hangs in the gutter (an agent's mark) and no turn steps in for an orb, so the
    orb, the marks and the messages start where the composer does however the pane is sized. */
 [data-jbot-room] .ui-transcript { --mark-hang: 0px; }
