@@ -1,4 +1,5 @@
 /// <reference types="vite-plugin-pwa/client" />
+import { NOT_SPOKEN } from "../transcript-fold.js";
 import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
@@ -6108,8 +6109,10 @@ function App() {
       live={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming() ? liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration()) : null}
       sent={(() => {
         if (current.chat.loadedId() !== agentView()?.home?.chatId) return null;
-        // The person's own last message there (not a run's report, a beat or a steer Conduit wrote).
-        const mine = current.chat.messages().findLast((message) => message.role === "user" && message.origin !== "harness" && !message.run && !message.id.startsWith("beat:"));
+        // The person's own last message there (not a run's report, a beat, a steer or an approval's answer Conduit wrote:
+        // the log never has those, so one would stay drawn as theirs).
+        const mine = current.chat.messages().findLast((message) => message.role === "user" && message.origin !== "harness" && !message.run && !message.id.startsWith("beat:")
+          && !NOT_SPOKEN.test(message.content || ""));
         return mine?.content ? { text: mine.content, at: mine.timestamp || new Date().toISOString() } : null;
       })()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}

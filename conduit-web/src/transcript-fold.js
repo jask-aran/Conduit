@@ -23,6 +23,10 @@ const messageText = (message) => {
 };
 
 /** What the user actually typed, with the attachment envelope taken back off. */
+/** Prompts Conduit writes into a thread in the person's name that are not the person speaking (an approval's answer,
+ *  a stop, a beat, a compaction's summary): never drawn or logged as their message. */
+export const NOT_SPOKEN = /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i;
+
 export function displayUserText(message) {
   const raw = messageText(message);
   return parseAttachmentEnvelope(raw).message || raw;

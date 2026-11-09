@@ -1,5 +1,7 @@
 import type { Message, ToolItem, ToolKind } from "./client/api/contracts";
 
+export const NOT_SPOKEN: RegExp;
+
 export interface ProtocolMessage {
   id?: string;
   role?: string;

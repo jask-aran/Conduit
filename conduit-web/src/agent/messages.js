@@ -1,4 +1,5 @@
 import { forkRecord } from "./routine-task.js";
+import { NOT_SPOKEN } from "../transcript-fold.js";
 import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-durable";
@@ -23,8 +24,6 @@ import { headlineOf } from "./inbox.js";
  * never sent again on its own. `held`: an email in from someone who does not wake jbot (email.js).
  */
 const APP = { channel: "app", room: "app" };
-// Prompts Conduit writes into the thread in the person's name that are not the person speaking.
-const NOT_SPOKEN = /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i;
 
 export class MessageLog {
   constructor(file) {

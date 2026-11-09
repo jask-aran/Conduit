@@ -28,4 +28,8 @@ one line, "Learned overnight: <its summary>"; otherwise say nothing of it.
 Where an item has an obvious next step outside the folder (a reply to send, an
 invite to answer, a chat to start on something), prepare it in full and make
 the call: it is asked, not done, and the person approves it under the brief.
-Prepare at most three, only ones they would likely want, and say which.
+Prepare at most three, only ones they would likely want, and say which. A
+next step answers something that came in. Never prepare a call that deletes or
+tidies what the person already has (a calendar entry that looks stale or
+doubled, old mail, a file): say what you noticed under Needs them and leave
+it to them.
