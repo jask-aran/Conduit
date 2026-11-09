@@ -436,6 +436,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     // goes over the header, and the text sits close under it.
     if (row?.type === "turn") return "answer";
     if (above?.type === "turn" && row?.type === "message") return "attached";
+    // Commentary sits close to the runs either side of it: one stretch of work, talked through.
+    const commentary = (item: TurnRow | undefined) => item?.type === "message" && item.value.role === "assistant" && item.value.interim === true;
+    if ((commentary(row) && isWork(above)) || (row?.type === "trace" && commentary(above))) return "attached";
     if (row?.type === "reports" && isWork(above)) return "work";
     if (row?.type === "message" && row.value.role !== "user" && row.value.interim !== true && isWork(above)) return "answer";
     return "step";
