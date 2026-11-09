@@ -36,14 +36,14 @@ export function CardQR(props: { svg: string; expired?: boolean; reveal?: boolean
 /** Under a QR: what it opens, one line. */
 export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption ui-truncate" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;
-/** Files, as Attachments. form: list (a draft's, in a card) or tray (a sent message's, under it, scrolling past its
- *  cap). label: what the group is, for a screen reader. */
+/** Files, as Attachments. form: list (a draft's, in a card) or tray (a sent message's, under it at the person's side,
+ *  a picture drawn as the picture, scrolling past its cap). label: what the group is, for a screen reader. */
 export const Attachments = (props: { form?: "list" | "tray"; label?: string; children: JSX.Element }) =>
   <ul class="ui-attachments" data-form={props.form ?? "list"} aria-label={props.label}>{props.children}</ul>;
 /** One file: its image or an icon, its name and a detail (its size and type, or why it failed). onRemove: a remove
  *  button at its end. */
 export function Attachment(props: { name: string; detail: string; image?: JSX.Element; icon: JSX.Element; failed?: boolean; onRemove?: () => void }) {
-  return <li class="ui-attachment" data-error={props.failed ? "" : undefined}>
+  return <li class="ui-attachment" data-image={props.image ? "" : undefined} title={props.image ? props.name : undefined} data-error={props.failed ? "" : undefined}>
     <span class="ui-attachment-media" data-image={props.image ? "" : undefined}>{props.image ?? props.icon}</span>
     <ChipCopy name={props.name} detail={props.detail} />
     <Show when={props.onRemove}><CloseButton label={`Remove ${props.name}`} onClick={() => props.onRemove?.()} /></Show>

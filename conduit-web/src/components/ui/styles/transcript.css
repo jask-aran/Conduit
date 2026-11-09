@@ -112,14 +112,14 @@
 .ui-stop-line > svg { width: var(--icon-xs); height: var(--icon-xs); fill: currentColor; stroke-width: 0; }
 .ui-message-foot[data-end] { justify-content: flex-end; }
 /* A message's time and actions show on hover or focus, under the keyboard's cursor and on the latest exchange (a
-   trial, 2026-11-01); on touch, once tapped ([data-revealed]). Status and Changes are facts, never hidden. Opacity only. */
+   trial, 2026-11-01); on touch, once tapped ([data-revealed]); a turn's Changes with them. Status is a fact, never hidden. Opacity only. */
 @media (hover: hover) {
-  .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
-  .ui-transcript-row:is(:hover, :focus-within, [data-latest], [data-focus-shown]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; }
+  .ui-message-foot > :is(time, .ui-button, .ui-copy, .ui-changes) { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
+  .ui-transcript-row:is(:hover, :focus-within, [data-latest], [data-focus-shown]) .ui-message-foot > :is(time, .ui-button, .ui-copy, .ui-changes) { opacity: 1; }
 }
 @media (hover: none) {
-  .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
-  .ui-transcript-row:is([data-latest], [data-revealed]) .ui-message-foot > :is(time, .ui-button, .ui-copy) { opacity: 1; pointer-events: auto; }
+  .ui-message-foot > :is(time, .ui-button, .ui-copy, .ui-changes) { opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-change); }
+  .ui-transcript-row:is([data-latest], [data-revealed]) .ui-message-foot > :is(time, .ui-button, .ui-copy, .ui-changes) { opacity: 1; pointer-events: auto; }
 }
 /* Its buttons are the smallest icon buttons, whatever size they were asked for. */
 .ui-message-foot .ui-button[data-size^="icon"] { width: var(--control-xs); height: var(--control-xs); border-radius: var(--radius-round); padding: 0; }
