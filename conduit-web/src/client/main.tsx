@@ -6107,7 +6107,6 @@ function App() {
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
-      agents={current.chat.loadedId() === agentView()?.home?.chatId ? current.chat.agents?.() : undefined}
       live={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming() ? liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration()) : null}
       sent={(() => {
         if (current.chat.loadedId() !== agentView()?.home?.chatId) return null;

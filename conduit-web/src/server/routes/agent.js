@@ -131,7 +131,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (children.length) agents = { running: children.filter((child) => child.status === "running").length, total: children.length };
       activity = agent.runtime.subagentActivity?.get(item.conversationId) || null;
     }
-    return { id: item.id, title: item.title, kind: item.kind, number: item.number, startedAt: item.startedAt, endedAt: item.endedAt,
+    return { id: item.id, title: item.title, kind: item.kind, number: item.number, label: item.label ?? null, startedAt: item.startedAt, endedAt: item.endedAt,
       status: open ? "running" : item.outcome?.status ?? null, level: item.outcome?.level ?? null, conversationId: item.conversationId ?? null,
       inboxId: item.outcome?.inboxId ?? null, phase: item.phase, agents, activity, summary: item.outcome?.summary ?? null, woke: Boolean(item.outcome?.woke),
       compaction: item.outcome?.compaction ?? null };
@@ -469,19 +469,19 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (!enabled(response)) return;
       const { conversationId } = await agent.home();
       const harness = await agent.runtime.open();
-      const number = listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null)).filter((item) => item.kind === "test").length + 1;
       const home = await harness.conversation(conversationId, agent.context);
       const at = new Date().toISOString(), key = `test-report:${randomUUID()}`;
       const report = "This is a test report from Conduit. Send the person a notification that says hi.";
       const content = await notice(agent.runtime.contextStore, "report-run", { report, title: "Test report" });
-      await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
-        messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
-        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
+      let number = null;
       await harness.commit(async (tx) => {
-        await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, number, trigger: "Manual", startedAt: at });
+        number = (await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, trigger: "Manual", startedAt: at })).number;
         await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: "Asked jbot to say hi" });
         await closeWork(tx, `test:${key}`, "finished", at);
       }, agent.context);
+      await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
+        messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
+        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
       agent.runtime.wakeChat?.(conversationId);
       response.status(202).json({ id: key });
     } catch (error) { next(error); }

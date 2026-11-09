@@ -76,6 +76,7 @@ import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
 import { registerAgentRoutes } from "./server/routes/agent.js";
+import { onWorkChanged, WorkLog } from "./agent/work-log.js";
 import { registerDiagnosticsRoutes } from "./server/routes/diagnostics.js";
 import { PersistentAgent } from "./agent/agent.js";
 import { createChatHost } from "./agent/chat-host.js";
@@ -836,6 +837,15 @@ if (persistentAgent) {
   void mirrorHomeThread(persistentAgent, messageLog).then((unsubscribe) => lifetime.own("jbot message log", { stop: unsubscribe }, (owned) => owned.stop()))
     .catch((error) => console.error("[agent] message log mirror did not start", error));
   registerAgentRoutes(app, { agent: persistentAgent, backends, hubId: serverIdentity.id, voiceRuntime });
+  // Working on moves as jbot's work does: the hub says the agent view changed (at most each second) when its work log
+  // is written (agent/work-log.js), and when a run under way there says what it is doing now (subagents.js).
+  let agentChange = null;
+  const agentChanged = () => { agentChange ??= setTimeout(() => { agentChange = null; runtimeHub.publish({ type: "agent_changed", at: new Date().toISOString() }); }, 1000); };
+  onWorkChanged(agentChanged);
+  durableAdapter.runtime.workActivity = async (conversationId) => {
+    const work = await (await durableAdapter.runtime.open()).snapshot(WorkLog, persistentAgent.context).catch(() => null);
+    if (Object.values(work?.items || {}).some((item) => !item.endedAt && String(item.conversationId) === String(conversationId))) agentChanged();
+  };
   const stopEvents = startEvents(persistentAgent, { nodeHub, runtimeHub, backends, registry, chatLogs, onWorkspaceChange });
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
   lifetime.own("jbot inbox files", persistentAgent, (owned) => owned.stopFollowing());

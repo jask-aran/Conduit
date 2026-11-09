@@ -46,10 +46,13 @@ export function splitFrontMatter(text) {
 export function routineProblem(routine) {
   if (!object(routine)) return "A routine is required.";
   const fields = ["name", "title", "trigger", "tasks", "gate", "output", "model", "effort",
-    "level", "quiet", "enabled", "log", "context", "body", "mode", "before", "after"];
+    "level", "quiet", "enabled", "log", "context", "body", "mode", "before", "after", "working"];
   const unknownField = Object.keys(routine).find((key) => !fields.includes(key));
   if (unknownField) return `Unknown routine field ${unknownField}.`;
   if (typeof routine.name !== "string" || !namePattern.test(routine.name)) return "Invalid routine name.";
+  // What a block is shown doing in Working on (work-log.js): a few words, in place of the default for its kind.
+  const labelled = (value) => value === undefined || (typeof value === "string" && value.trim().length > 0 && value.length <= 60);
+  if (!labelled(routine.working)) return "Working is a few words (at most 60 characters).";
   if (typeof routine.title !== "string" || !routine.title.trim()) return "A title is required.";
   const triggers = Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger];
   if (!triggers.length) return "A valid trigger is required.";
@@ -83,8 +86,10 @@ export function routineProblem(routine) {
   for (const field of ["before", "after"]) {
     const steps = routine[field] === undefined ? [] : routine[field];
     if (!Array.isArray(steps)) return `${field} must be a list.`;
-    for (const step of steps) {
-      if (!object(step)) return `Invalid ${field} step.`;
+    for (const given of steps) {
+      if (!object(given)) return `Invalid ${field} step.`;
+      if (!labelled(given.label)) return `A ${field} step's label is a few words (at most 60 characters).`;
+      const { label: _label, ...step } = given;
       if (field === "before") {
         if (!keysOnly(step, ["routine", "ifMissedSince"]) || (typeof step.routine !== "string" || !namePattern.test(step.routine))
           || step.ifMissedSince !== "last") return "Before requires { routine: name, ifMissedSince: last }.";
@@ -110,7 +115,8 @@ export function routineProblem(routine) {
     if (!["inbox", "email", "held-mail", "calendar", "chats", "notes", "executor", "script"].includes(task.kind)) return "Invalid task kind.";
     const field = task.kind === "executor" ? "code" : task.kind === "script" ? "command" : null;
     const extra = TASK_FIELDS[task.kind] || [];
-    const unknown = Object.keys(task).find((key) => !["id", "kind", ...(field ? [field] : []), ...extra].includes(key));
+    if (!labelled(task.label)) return `Task ${task.id}: label is a few words (at most 60 characters).`;
+    const unknown = Object.keys(task).find((key) => !["id", "kind", "label", ...(field ? [field] : []), ...extra].includes(key));
     if (unknown) return `Unknown field ${unknown} on task ${task.id}.`;
     if (task.kind === "inbox" && task.all !== undefined && typeof task.all !== "boolean") return `Task ${task.id}: all is true or false.`;
     if (task.kind === "inbox") {
@@ -167,7 +173,7 @@ export function parseRoutine(text, name) {
   if (!/^---\r?\n/.test(text)) throw new Error("Front matter is required.");
   const { data, body } = splitFrontMatter(text);
   const fields = ["title", "trigger", "tasks", "gate", "output", "model", "effort", "level", "quiet", "enabled", "log",
-    "context", "mode", "before", "after"];
+    "context", "mode", "before", "after", "working"];
   const unknownKey = Object.keys(data).find((key) => !fields.includes(key));
   if (unknownKey) throw new Error(`Unknown field ${unknownKey} in the front matter.`);
   const parseTrigger = (input) => {
@@ -186,7 +192,8 @@ export function parseRoutine(text, name) {
     model: data.model === undefined ? null : data.model, effort: data.effort === undefined ? null : data.effort,
     level: data.level === undefined ? "fyi" : data.level, quiet: data.quiet === undefined ? true : data.quiet,
     enabled: data.enabled === undefined ? true : data.enabled, log: data.log === undefined ? true : data.log,
-    context: data.context === undefined ? [] : data.context, body: body.replace(/^\r?\n/, "").replace(/\n$/, "") };
+    context: data.context === undefined ? [] : data.context, ...(data.working !== undefined ? { working: data.working } : {}),
+    body: body.replace(/^\r?\n/, "").replace(/\n$/, "") };
   const problem = routineProblem(routine);
   if (problem) throw new Error(problem);
   return routine;
@@ -203,7 +210,7 @@ export function serializeRoutine(routine) {
     trigger: Array.isArray(trigger) ? trigger.map(writeTrigger) : writeTrigger(trigger),
     ...(tasks.length ? { tasks } : {}), gate, output, ...(model !== null ? { model } : {}),
     ...(effort !== null ? { effort } : {}), ...(level !== "fyi" ? { level } : {}),
-    ...(!enabled ? { enabled } : {}), ...(routine.log === false ? { log: false } : {}), ...(routine.quiet === false ? { quiet: false } : {}), ...(context.length ? { context } : {}) };
+    ...(!enabled ? { enabled } : {}), ...(routine.working ? { working: routine.working } : {}), ...(routine.log === false ? { log: false } : {}), ...(routine.quiet === false ? { quiet: false } : {}), ...(context.length ? { context } : {}) };
   const doc = new YAML.Document(data);
   if (Array.isArray(trigger)) {
     for (const rule of doc.get("trigger", true).items) rule.flow = true;

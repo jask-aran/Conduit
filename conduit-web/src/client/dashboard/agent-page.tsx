@@ -356,12 +356,6 @@ export function AgentPage(props: {
   // On first by when they next run, then the ones switched off (dimmed, no clock).
   const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => Number(!!a.off) - Number(!!b.off) || (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
   const clocked = () => timed().filter((schedule) => !schedule.off);
-  // While a routine runs its row follows it closely (it is read every 10s otherwise), so its end shows when it ends.
-  createEffect(() => {
-    if (!timed().some((schedule) => schedule.running)) return;
-    const tick = window.setInterval(() => void refreshAgent(), 2000);
-    onCleanup(() => window.clearInterval(tick));
-  });
   const day = () => {
     const settings = view()?.settings;
     const zone = settings?.timezone;

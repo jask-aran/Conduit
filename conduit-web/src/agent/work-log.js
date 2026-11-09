@@ -12,27 +12,46 @@ import { defineDoc } from "@earendil-works/pi-durable";
  *
  * An item: `{ id, kind, title, origin, number, trigger, conversationId, startedAt, phase, phases: [{ label, at }],
  * outcome: { status, woke, level, summary, inboxId, compaction, reportedAt }, endedAt, log }`. `id` is its key: a
- * routine's `routine:<task id>`, a run's or an agent's `run:<roster key>` (the home thread's roster).
+ * routine's `routine:<task id>`, a run's or an agent's `run:<roster key>` (the home thread's roster). `number` counts
+ * each kind's items from `counters`, so it never repeats once older items are pruned.
  */
 export const WorkLog = defineDoc({
   checkpointWhen: () => false, kind: "conduit.agent.work", version: 1, scope: "session",
-  initial: () => ({ items: {}, seeded: false }),
+  initial: () => ({ items: {}, seeded: false, counters: {} }),
 });
 
 const KEEP_DAYS = 60;
 const KEEP_ITEMS = 2000;
 const iso = (at) => new Date(at ?? Date.now()).toISOString();
 
+// Told after a write (server.js publishes the agent view as changed); a write a replay repeats tells again, harmlessly.
+let listener = null;
+export const onWorkChanged = (fn) => { listener = fn; };
+const changed = () => { try { listener?.(); } catch { /* telling never fails a write */ } };
+
+/**
+ * Each kind's counter, from the highest number its items carry when it has none: once, for the log as it was before
+ * counters (items imported from before the log keep theirs; those numbered after them since come next).
+ */
+export function settleNumbers(doc) {
+  if (doc.counters) return;
+  doc.counters = {};
+  const items = Object.values(doc.items).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  for (const item of items.filter((entry) => entry.id.startsWith("seed:"))) doc.counters[item.kind] = Math.max(doc.counters[item.kind] || 0, item.number || 0);
+  for (const item of items.filter((entry) => !entry.id.startsWith("seed:"))) item.number = doc.counters[item.kind] = (doc.counters[item.kind] || 0) + 1;
+}
+
 /** Open an item (idempotent by id): what it is and how it started. Returns it. */
-export async function openWork(tx, { id, kind, title, origin = null, trigger = null, number = null, conversationId = null, startedAt, phase = null, log = true, label = null }) {
+export async function openWork(tx, { id, kind, title, origin = null, trigger = null, conversationId = null, startedAt, phase = null, log = true, label = null }) {
   const doc = await tx.doc(WorkLog);
   if (doc.items[id]) return doc.items[id];
   const at = iso(startedAt);
-  // Numbered by kind when nothing numbered it (a routine's fork): Reflection #3.
-  const count = number ?? (Object.values(doc.items).filter((item) => item.kind === kind).length + 1);
+  settleNumbers(doc);
+  const count = doc.counters[kind] = (doc.counters[kind] || 0) + 1;
   doc.items[id] = { id, kind, title, origin, trigger, number: count, conversationId, startedAt: at, phase: phase || "Starting",
     phases: [{ label: phase || "Starting", at }], outcome: null, endedAt: null, ...(log ? {} : { log: false }), ...(label ? { label } : {}) };
   prune(doc);
+  changed();
   return doc.items[id];
 }
 
@@ -42,6 +61,7 @@ export async function phaseWork(tx, id, label, at) {
   if (!item || item.endedAt || item.phase === label) return;
   item.phase = label;
   item.phases.push({ label, at: iso(at) });
+  changed();
 }
 
 /** Set what an item found or did (merged into what it had): its report, the inbox entry, a compaction. */
@@ -50,6 +70,7 @@ export async function noteWork(tx, id, outcome, extra = {}) {
   if (!item) return;
   item.outcome = { ...(item.outcome || {}), ...outcome };
   Object.assign(item, extra);
+  changed();
 }
 
 /** Close an item: how it ended (finished, failed, stopped), with its last words. */
@@ -61,6 +82,7 @@ export async function closeWork(tx, id, status, at, outcome = {}) {
   const label = status === "failed" ? "Failed" : status === "stopped" ? "Stopped" : "Done";
   item.phase = label;
   item.phases.push({ label, at: item.endedAt });
+  changed();
 }
 
 function prune(doc) {

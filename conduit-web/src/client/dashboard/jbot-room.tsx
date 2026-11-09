@@ -9,7 +9,6 @@ import { isMobileLayout } from "../navigation/mobile-layout";
 import { setLatestAway, setLatestScroller } from "../chat/latest-away";
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
-import type { AgentSummary } from "../api/contracts";
 
 /**
  * jbot's room: laid out as a thread is (its scroller, its composer floating over the foot), because it is one: what
@@ -32,8 +31,6 @@ export function JbotRoom(props: {
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread (JbotMessages sent). */
   sent?: { text: string; at: string } | null;
-  /** The home thread's agents (JbotMessages agents). */
-  agents?: AgentSummary[];
   threadChanged?: unknown;
   /** On a desktop: "phone", a phone's header (its pill, its actions frost over the chat) and column; "narrow", the
    *  column alone (jbot's dock tool, under the tool's header). */
@@ -159,7 +156,7 @@ export function JbotRoom(props: {
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} agents={props.agents} />
+            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>

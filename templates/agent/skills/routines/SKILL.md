@@ -145,6 +145,12 @@ What the run should do with what was gathered, and what to tell jbot.
   urgent), `enabled`, `context` (soul, user, memory, diary: the files its run sees),
   `log` (default true; `false` keeps its runs out of the person's message log, for
   frequent routines whose runs rarely matter).
+- Optional words for Working on, which shows each routine's progress: `working`
+  (what its run or fork is shown doing, e.g. `Writing the brief`; default
+  `Working`), and `label` on any task or `after` step (e.g.
+  `{ id: email, kind: email, label: Reading new mail }`). At most 60 characters;
+  without one, the default for its kind (Collecting emails, Compacting the home
+  thread).
 
 Task cursors commit only after the run or fork succeeds. A failed `after`
 step does not undo this commit: replaying the notes would repeat completed

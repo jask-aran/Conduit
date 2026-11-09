@@ -144,6 +144,9 @@ export function createRuntimeStore() {
         upsert(event.process as RuntimeProcess);
       } else if (event.type === "runtime_process_removed") {
         remove(event.id as string | undefined, event.chatId as string | undefined);
+      } else if (event.type === "agent_changed") {
+        // jbot's work moved on (a unit started, changed phase, ended): the agent view is read again (state/agent.ts).
+        window.dispatchEvent(new Event("conduit:agent-changed"));
       } else if (event.type === "chat_changed" && event.chat) {
         window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
       } else if (event.type === "updates_offered" && event.updates) {

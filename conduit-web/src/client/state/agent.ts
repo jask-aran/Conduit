@@ -18,7 +18,7 @@ export type AgentRunKind = "manual" | "schedule" | "checkback" | "brief" | "hear
 export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string | null; level?: string | null; conversationId: number | null; inboxId?: string | null;
   /** A unit of the work log (work-log.js): what it is doing now, its agents rolled up, what the one working is doing (the
    *  turn digest's words), and once done what it found and whether jbot was told. */
-  number?: number | null; phase?: string; agents?: { running: number; total: number } | null; activity?: string | null; summary?: string | null; woke?: boolean;
+  number?: number | null; label?: string | null; phase?: string; agents?: { running: number; total: number } | null; activity?: string | null; summary?: string | null; woke?: boolean;
   compaction?: { done: boolean; tokens?: number | null; from?: number | null; enabled?: boolean } | null }
 /** What jbot's home thread is doing right now, in the turn digest's words ("checking Gmail"), or null when it is idle:
  *  set where the home thread is loaded (main.tsx), read by Working on. */
@@ -71,6 +71,7 @@ const store = createRoot(() => {
   if (typeof window !== "undefined") {
     window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60_000);
     window.addEventListener("focus", () => void refresh());
+    window.addEventListener("conduit:agent-changed", () => void refresh());
   }
   return { view, refresh };
 });

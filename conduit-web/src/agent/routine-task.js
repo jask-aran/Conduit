@@ -203,8 +203,8 @@ export function routineTask(runtime) {
       gather: async (task, api, context) => {
         const record = await get(task, api, context);
         const agent = runtime.agent;
-        const kinds = (record.routine.tasks || []).map((item) => item.kind).filter((kind) => kind !== "notes");
-        if (kinds.length && !record.outcome) await api.commit((tx) => phaseWork(tx, workId(task.id), GATHER_WORDS[kinds[0]] || "Gathering"), context);
+        const first = (record.routine.tasks || []).find((item) => item.label || item.kind !== "notes");
+        if (first && !record.outcome) await api.commit((tx) => phaseWork(tx, workId(task.id), first.label || GATHER_WORDS[first.kind] || "Gathering"), context);
         const state = await api.snapshot(AgentDoc, context);
         const outcome = record.outcome || await api.memo("gather", await executeRoutine(agent, record.routine, {
           cursors: state.cursors?.[record.routine.name] || {}, state, now: api.now(), force: record.force, event: record.event || null,
@@ -249,7 +249,7 @@ export function routineTask(runtime) {
               identity.branches = [];
               Object.assign(current, { conversationId: fork.id, reportPath: outcome.reportPath });
               await noteWork(tx, workId(task.id), {}, { conversationId: fork.id, ran: true });
-              await phaseWork(tx, workId(task.id), "Working");
+              await phaseWork(tx, workId(task.id), routine.working || "Working");
             }
           } else if (!current.run) {
             current.run = await runtime.agent.spawnRun(tx, task.input.homeId, { key: record.key, kind: routine.name,
@@ -257,7 +257,7 @@ export function routineTask(runtime) {
               raw: true, routineTaskId: task.id, model: routine.model, thinkingLevel: routine.effort, log: routine.log !== false });
             await noteWork(tx, workId(task.id), {}, { conversationId: current.run.child, ran: true,
               ...(current.run.run?.trigger ? { trigger: current.run.run.trigger } : {}) });
-            await phaseWork(tx, workId(task.id), "Working");
+            await phaseWork(tx, workId(task.id), routine.working || "Working");
           }
           ready = true;
           return next("run");
@@ -324,11 +324,11 @@ export function routineTask(runtime) {
         const step = record.routine.after?.[index];
         if (!step) { await finish(task, api, context); return; }
         if (step.routine) {
-          await api.commit((tx) => phaseWork(tx, workId(task.id), `Running ${step.routine}`), context);
+          await api.commit((tx) => phaseWork(tx, workId(task.id), step.label || `Running ${step.routine}`), context);
           await dependency(task, api, context, record, step, "after", index);
         }
         else if (step.message) {
-          await api.commit((tx) => phaseWork(tx, workId(task.id), "Telling jbot"), context);
+          await api.commit((tx) => phaseWork(tx, workId(task.id), step.label || "Telling jbot"), context);
           await messageJbot(runtime, task, record, record.summary, `${record.key}:after:${index}`, context);
         }
         else {
@@ -341,7 +341,7 @@ export function routineTask(runtime) {
               if (api.now() - startedAt >= ROUTINE_WAIT_MS) throw new Error("Compaction exceeded the 30-minute idle wait limit.");
               await api.sleepUntil(api.now() + 5000, { phase: "after", index }, context); return;
             }
-            await api.commit((tx) => phaseWork(tx, workId(task.id), "Compacting the home thread"), context);
+            await api.commit((tx) => phaseWork(tx, workId(task.id), step.label || "Compacting the home thread"), context);
             const home = await runtime.harness.conversation(task.input.homeId, context);
             const usage = await runtime.routineContextUsage?.(home, context, api.settings?.compaction);
             const settings = { ...runtime.agent.settings().nightlyCompaction, ...step.compact };
