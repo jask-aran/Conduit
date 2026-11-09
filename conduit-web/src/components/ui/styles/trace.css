@@ -29,7 +29,6 @@
 .ui-trail[data-folds] { position: relative; }
 .ui-trail-fold { position: absolute; top: 0; right: 0; display: grid; height: var(--control-xs); place-items: center; }
 .ui-trail-fold > button { display: grid; width: var(--control-xs); height: var(--control-xs); place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
-.ui-trail-fold > button > svg { rotate: 180deg; }
 .ui-trail-fold > button:focus-visible { color: var(--foreground); }
 @media (hover: hover) { .ui-trail-fold > button:hover { color: var(--foreground); } }
 .ui-trail-fold + .ui-step-item { margin-right: calc(var(--control-xs) + var(--space-2xs)); }

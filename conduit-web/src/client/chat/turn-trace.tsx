@@ -391,7 +391,10 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       const summary = inline(props, () => summaryOf(segment().text));
       const thought = createMemo(() => segment().kind === "thinking");
-      return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens open={fold.open()} onToggle={fold.toggle} find={() => segment().text}>
+      // A reasoning summary that is only its heading has nothing more to open to.
+      const bare = (text: string) => text.replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
+      const more = createMemo(() => bare(segment().text) !== bare(summaryOf(segment().text)));
+      return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens={more()} open={fold.open()} onToggle={fold.toggle} find={() => segment().text}>
         <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>

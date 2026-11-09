@@ -42,7 +42,7 @@ export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Moti
 export const Trail = (props: { nested?: "group" | "calls"; fold?: { label: string; onFold: () => void }; children: JSX.Element }) =>
   <ol class="ui-trail" data-nested={props.nested} data-folds={props.fold ? "" : undefined}>
     <Show when={props.fold}>{(fold) => <li class="ui-trail-fold"><button type="button" aria-label={fold().label} title={fold().label} onClick={() => fold().onFold()}>
-      <Icons.ChevronDown class="ui-size-icon-sm" /></button></li>}</Show>
+      <Icons.FoldRun class="ui-size-icon-sm" /></button></li>}</Show>
     {props.children}
   </ol>;
 const NOT_KEPT = "Not kept";

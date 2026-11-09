@@ -99,7 +99,8 @@ import {
   UploadIcon,
   WrapTextIcon,
   WrenchIcon,
-  XIcon
+  XIcon,
+  ChevronsDownUpIcon
 } from "lucide-solid";
 
 /* The shared icon vocabulary, one glyph per concept (Icons.Settings): every icon two or more files use. Named exports,
@@ -229,6 +230,8 @@ export const NewFolder = FolderPlusIcon;
 export const WorkspaceIdentity = PaletteIcon;
 /** Collapse the file navigation. */
 export const CollapseFiles = PanelLeftCloseIcon;
+/** Fold a run's steps into one line. */
+export const FoldRun = ChevronsDownUpIcon;
 /** Expand the file navigation. */
 export const ExpandFiles = PanelLeftOpenIcon;
 /** Attach files to a message. */

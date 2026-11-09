@@ -1,0 +1,100 @@
+{
+  "recorded": "2026-11-09, openai/gpt-6-luna, thinking xhigh, Assistant profile",
+  "behaviours": "a run of three steps, commentary, a run of two steps, commentary, a run of one step, the final answer",
+  "prompt": "Using the shell, each command as its own separate tool call: run `echo a`, then `echo b`, then `echo c`, without saying anything between them. Then say one sentence about what's next. Then run `sleep 2` and then `echo d` as two separate calls, again silent between them. Then one sentence. Then run `echo e`. Then answer in two lines.",
+  "steps": [
+    {
+      "afterMs": 0,
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "echo a"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 6784,
+      "toolMs": 24,
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "echo b"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 6128,
+      "toolMs": 23,
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "echo c"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 3585,
+      "toolMs": 22,
+      "texts": [
+        {
+          "text": "Next, I’ll pause for two seconds, then print d.",
+          "phase": "commentary"
+        }
+      ],
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "sleep 2"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 9386,
+      "toolMs": 2027,
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "echo d"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 2507,
+      "toolMs": 25,
+      "texts": [
+        {
+          "text": "Next, I’ll print e.",
+          "phase": "commentary"
+        }
+      ],
+      "calls": [
+        {
+          "name": "bash",
+          "arguments": {
+            "command": "echo e"
+          }
+        }
+      ]
+    },
+    {
+      "afterMs": 6397,
+      "toolMs": 30,
+      "texts": [
+        {
+          "text": "Done.\nAll commands ran in order.",
+          "phase": "final_answer"
+        }
+      ]
+    }
+  ]
+}

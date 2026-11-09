@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 import { getCurrentSystemMessage, getCurrentSystemPrompt } from "@earendil-works/pi-ai/utils/transcript";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } from "../test-stream-replays.js";
@@ -19,9 +20,11 @@ const THOUGHT = "Working through the request step by step, checking what each pa
 const stretch = (text, chars) => { let out = text; while (out.length < chars) out += text; return out.slice(0, Math.max(chars, 1)); };
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+const replayTiming = new WeakMap();
 const help = `| Keyword | Turn |
 | --- | --- |
 | help | Show this table |
+| replay, replay <name> | List recordings or replay one; add fast to skip recorded waits |
 | (thinking level) | The pace: off 20, minimal 40, low 60, medium 120, high 250, extra high 1000, max 4000 tok/s |
 | think, think 900 | Thinking before each step (about that many tokens) |
 | narrate | Commentary before each tool call |
@@ -95,6 +98,28 @@ export function scriptedStep(context) {
     return fauxAssistantMessage(`${id} reported: ${prompt.split(/\n-{3}\n/)[0].replace(/\s+/g, " ").replace(/[.!]?$/, ".")}`);
   }
   if (isNotice) return fauxAssistantMessage("Notice received.");
+  const recording = prompt.match(/\breplay\b(?:\s+fast\b)?(?:\s+([^\s]+))?/i);
+  if (recording) {
+    const directory = new URL("../test-stream-recordings/", import.meta.url);
+    const names = fs.readdirSync(directory).filter((name) => name.endsWith(".json")).sort();
+    const name = names.find((name) => name.slice(0, -5) === recording[1]);
+    if (!name) return fauxAssistantMessage(names.map((name) => {
+      const data = JSON.parse(fs.readFileSync(new URL(name, directory), "utf8"));
+      return `${name.slice(0, -5)}: ${data.behaviours}`;
+    }).join("\n") || "No recordings available.");
+    const data = JSON.parse(fs.readFileSync(new URL(name, directory), "utf8"));
+    const index = later.filter((message) => message.role === "assistant").length;
+    const step = data.steps[index];
+    if (!step) return fauxAssistantMessage("The recording is complete.");
+    const blocks = [
+      ...(step.thinking === undefined ? [] : [fauxThinking(step.thinking)]),
+      ...(step.texts || []).map(({ text, phase }) => ({ ...fauxText(text), textSignature: JSON.stringify({ v: 1, phase }) })),
+      ...(step.calls || []).map(({ name, arguments: args }) => fauxToolCall(name, args, { id: `scripted-${randomUUID()}` })),
+    ];
+    const message = fauxAssistantMessage(blocks, { stopReason: step.calls?.length ? "toolUse" : "stop" });
+    if (!/\bfast\b/i.test(prompt)) replayTiming.set(message, step);
+    return message;
+  }
   const run = prompt.match(/^run (heartbeat|brief|check-back)(?: (quiet|urgent))?$/);
   if (run) return fauxAssistantMessage(`Conduit is starting a ${run[1]} run.`);
   const cwd = systemMessage?.sections?.cwd?.match(/<cwd>\s*([\s\S]*?)\s*<\/cwd>/)?.[1];
@@ -167,7 +192,20 @@ export function scriptedProvider() {
     const speed = { ...(SHAPES[model.id] || SHAPES.steady), tokensPerSecond: SPEEDS[options?.reasoning] || SPEEDS.off };
     const request = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions,
       tokensPerSecond: speed.tokensPerSecond, tokenSize: { min: 4, max: 4 } });
-    request.setResponses([scriptedStep]);
+    let response;
+    request.setResponses([async (context) => {
+      response = scriptedStep(context);
+      const timing = replayTiming.get(response);
+      if (timing) {
+        // Faux streams four-character tokens, including serialized tool arguments.
+        const tokens = response.content.reduce((sum, block) => sum + Math.ceil((block.type === "text" ? block.text
+          : block.type === "thinking" ? block.thinking : JSON.stringify(block.arguments)).length / 4), 0);
+        const wait = Math.min(10_000, Math.max(0, timing.afterMs - (timing.toolMs || 0) - tokens / speed.tokensPerSecond * 1000));
+        try { await delay(wait, undefined, { signal: options?.signal }); }
+        catch (error) { if (error.name !== "AbortError") throw error; }
+      }
+      return response;
+    }]);
     const source = request.stream(model, context, options);
     const output = createAssistantMessageEventStream();
     (async () => {
@@ -177,6 +215,11 @@ export function scriptedProvider() {
       const flush = () => { for (const item of held) output.push(item); held = []; due = Date.now() + speed.gapsMs[++gap % speed.gapsMs.length]; };
       for await (const event of source) {
         for (const key of ["partial", "message", "error"]) if (event[key]) event[key] = { ...event[key], usage: zeroUsage };
+        // Faux keeps signatures on the final message, but drops them from streamed partials.
+        if (event.partial && response) event.partial.content = event.partial.content.map((block, index) => {
+          const signature = response.content[index]?.textSignature;
+          return block.type === "text" && signature ? { ...block, textSignature: signature } : block;
+        });
         if (!speed.gapsMs) { output.push(event); continue; }
         held.push(event);
         if (!/_delta$/.test(event.type) || Date.now() >= due) flush();
