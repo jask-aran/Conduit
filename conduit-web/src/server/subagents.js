@@ -6,6 +6,7 @@ import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { fileEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 import { inboxFile, writeInboxFile } from "../agent/inbox-files.js";
+import { closeWork, noteWork, openWork } from "../agent/work-log.js";
 
 const SubagentRoster = defineDoc({
   checkpointWhen: () => false, kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -339,6 +340,8 @@ export function Subagents(runtime) {
         const waiting = task.input.gate && !task.input.origin?.test ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || await api.memo("heard", level !== "none" && (asked || waiting > 0 || level === "urgent"), context);
+        // When it reported, for its item in the work log: before jbot's turn on it, which it sits above.
+        const workAt = await api.memo("workAt", new Date().toISOString(), context);
         // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
         // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
         if (task.input.gate && !task.input.origin?.test && level !== "none" && kind !== "heartbeat" && (!heard || output === "both")) {
@@ -454,6 +457,16 @@ export function Subagents(runtime) {
           }
           // The person's devices hear of it only if jbot decides they should (`message` with notify); approvals push on their own.
         }
+        // Its item in the work log: what it found and whether jbot was told; closed here unless a routine's (the routine
+        // closes its own once its steps after the run are done).
+        await api.commit(async (tx) => {
+          const routineTaskId = task.input.origin?.routineTaskId;
+          const failed = level === "failed" || report.status === "failed";
+          const summary = failed ? end?.reason || headlineOf(report.answer) : level === "none" ? "Nothing new" : headlineOf(report.answer);
+          const key = routineTaskId ? `routine:${routineTaskId}` : `run:${id}`;
+          await noteWork(tx, key, { woke: Boolean(heard && !stopped), level, summary, reportedAt: workAt });
+          if (!routineTaskId) await closeWork(tx, key, stopped ? "stopped" : failed ? "failed" : "finished", Date.now());
+        }, context);
         await api.commit(() => ({ status: "terminal", outcome: { status: "completed", result: task.input.origin?.routineTaskId && (level === "failed" || stopped) ? { ...report, status: "failed" } : report } }), context);
       } catch (error) {
         let changed = false;
@@ -464,6 +477,7 @@ export function Subagents(runtime) {
             item.status = "failed";
             if (!task.input.gate || !item.endedAt) item.endedAt = new Date().toISOString();
           }
+          if (!task.input.origin?.routineTaskId) await closeWork(tx, `run:${id}`, "failed", Date.now(), { summary: error?.message || "Failed" });
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: "failed" });
         throw error;
@@ -617,6 +631,10 @@ export function Subagents(runtime) {
           if (childSettings) await configure(tx, child.id, childSettings);
           roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
+          // One jbot sends from its home thread is a unit of its work (work-log.js); a chat's own agents are not.
+          if (String((await tx.doc(AgentDoc)).home?.conversationId) === String(api.conversationId)) {
+            await openWork(tx, { id: `run:${id}`, kind: "agent", title, origin: { kind: "jbot" }, conversationId: child.id, phase: "Working", label });
+          }
         }
         // The model names an agent by its label; the roster holds it by its key.
         else id = (findSubagent(Object.values(roster.children), id)?.key) || id;
@@ -693,6 +711,11 @@ export function Subagents(runtime) {
     roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
       status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
       ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
+    // A run of jbot's home thread is a unit of its work (work-log.js); a routine's is its routine's item (routine-task.js).
+    if (origin && !origin.routineTaskId && String((await tx.doc(AgentDoc)).home?.conversationId) === String(conversationId)) {
+      await openWork(tx, { id: `run:${id}`, kind: origin.kind, title, origin: { kind: origin.kind }, number: run?.number ?? null, trigger: run?.trigger ?? null,
+        conversationId: child.id, phase: "Working", log: origin.log !== false });
+    }
     return JSON.parse(JSON.stringify(roster.children[id]));
   };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });

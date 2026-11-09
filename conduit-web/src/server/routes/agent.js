@@ -19,6 +19,7 @@ import { addInboxEntry, deleteInboxEntry, editInboxEntries, fileEntry } from "..
 import { AgentDoc } from "../../agent/agent-doc.js";
 import { emailView, setupEmail, patchEmail, removeEmail } from "../../agent/email-setup.js";
 import { backgroundSubagents } from "../subagents.js";
+import { closeWork, listWork, noteWork, openWork, WorkLog } from "../../agent/work-log.js";
 import { workOps } from "../../durable-adapter.js";
 
 /**
@@ -117,9 +118,27 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       text: `${TASK_WORDS[task.record.kind] || "A task"} stopped after restarting ${task.record.restarts ?? "too many"} times`,
     }));
   };
+  /*
+   * Working on and Recent: the work log's items (work-log.js), never the agents a unit uses. An open one says what it
+   * is doing (its phase), how many of its agents are working, and what the one working now is doing (the turn
+   * digest's words, subagents.js); a closed one how it ended.
+   */
+  const workView = async (harness, item) => {
+    const open = !item.endedAt;
+    let agents = null, activity = null;
+    if (open && item.conversationId != null) {
+      const children = await backgroundSubagents(harness, item.conversationId, agent.context).catch(() => []);
+      if (children.length) agents = { running: children.filter((child) => child.status === "running").length, total: children.length };
+      activity = agent.runtime.subagentActivity?.get(item.conversationId) || null;
+    }
+    return { id: item.id, title: item.title, kind: item.kind, number: item.number, startedAt: item.startedAt, endedAt: item.endedAt,
+      status: open ? "running" : item.outcome?.status ?? null, level: item.outcome?.level ?? null, conversationId: item.conversationId ?? null,
+      inboxId: item.outcome?.inboxId ?? null, phase: item.phase, agents, activity, summary: item.outcome?.summary ?? null, woke: Boolean(item.outcome?.woke),
+      compaction: item.outcome?.compaction ?? null };
+  };
   const attention = async (view, state) => {
     const harness = await agent.runtime.open();
-    const runs = view.home?.conversationId ? await backgroundSubagents(harness, view.home.conversationId, agent.context) : [];
+    const work = listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null));
     const threads = [view.home?.chatId, ...view.sides.map((side) => side.chatId)].filter(Boolean);
     const waiting = threads.flatMap((chatId) => (backends.getByChatId(chatId)?.hostUiRequests || [])
       .map((request) => ({ kind: "question", chatId, requestId: request.id, title: request.title || "A question" })));
@@ -129,17 +148,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
     return {
       working: {
-        // The roster's runs, and a routine working in its own fork of the home thread (Reflection), which the roster
-        // never lists: under way from its record, done from the log its end writes.
-        runs: [...runs.filter((run) => run.origin && run.status === "running")
-          .map((run) => ({ id: run.id, title: run.title, kind: run.origin.kind, startedAt: run.startedAt, conversationId: run.child })),
-        ...Object.values(state.routineRuns || {}).filter((record) => record.routine?.mode === "fork" && record.outcome?.run)
-          .map((record) => ({ id: `routine:${record.taskId}`, title: record.routine.title || record.routine.name, kind: record.routine.name,
-            startedAt: record.startedAt ? new Date(record.startedAt).toISOString() : null, conversationId: null }))],
-        recent: [...runs.filter((run) => run.origin && run.status !== "running")
-          .map((run) => ({ id: run.id, title: run.title, kind: run.origin.kind, status: run.status, level: run.level || null, endedAt: run.endedAt, conversationId: run.child })),
-        ...(state.routineLog || []).map((item) => ({ ...item, level: null, conversationId: null }))]
-          .sort((a, b) => String(b.endedAt || "").localeCompare(String(a.endedAt || ""))).slice(0, 10),
+        runs: await Promise.all(work.filter((item) => !item.endedAt).reverse().map((item) => workView(harness, item))),
+        recent: await Promise.all(work.filter((item) => item.endedAt).sort((a, b) => b.endedAt.localeCompare(a.endedAt)).slice(0, 10)
+          .map((item) => workView(harness, item))),
         schedules: await listSchedules(agent),
         watches: await listWatches(agent),
       },
@@ -375,9 +386,14 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
    * report it woke jbot with, read from the thread once and then only what was added since, so the log can say each
    * one happened. Reads are chained, so two at once never index an entry twice.
    */
-  const runIndex = { conversationId: null, last: 0, runs: [], reading: Promise.resolve() };
-  const runsOf = (conversationId) => runIndex.reading = runIndex.reading.catch(() => {}).then(async () => {
-    if (runIndex.conversationId !== conversationId) Object.assign(runIndex, { conversationId, last: 0, runs: [] });
+  /*
+   * The jbot chat's run rows: the work log's items that reported or ended, as rows of the log where they came back.
+   * Before the log there was only the home thread's report entries: read once (`seedWork`) into closed items, so the
+   * log carries what came before it; the entries are never read again.
+   */
+  const runIndex = { conversationId: null, last: 0, runs: [] };
+  const entriesRuns = async (conversationId) => {
+    Object.assign(runIndex, { conversationId, last: 0, runs: [] });
     const harness = await agent.runtime.open();
     const conversation = await harness.conversation(Number(conversationId), agent.context);
     if (!conversation) return runIndex.runs;
@@ -409,7 +425,39 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       cursor = page.next;
     } while (cursor);
     return runIndex.runs;
-  });
+  };
+  let seeding = null;
+  const seedWork = (conversationId) => seeding ??= (async () => {
+    const harness = await agent.runtime.open();
+    if ((await harness.snapshot(WorkLog, agent.context).catch(() => null))?.seeded) return;
+    const runs = await entriesRuns(conversationId).catch(() => []);
+    await harness.commit(async (tx) => {
+      const doc = await tx.doc(WorkLog);
+      if (doc.seeded) return;
+      const live = new Set(Object.values(doc.items).map((item) => String(item.conversationId)));
+      for (const run of runs) {
+        if (run.conversationId != null && live.has(String(run.conversationId))) continue;
+        const id = `seed:${run.id}`;
+        doc.items[id] = { id, kind: run.agent ? "agent" : run.routine || "run", title: run.agent ? run.title : run.label || run.title, origin: null, trigger: run.trigger,
+          number: run.number, conversationId: run.conversationId ?? null, startedAt: run.startedAt || run.at, phase: "Done", phases: [],
+          outcome: { status: run.status || "finished", woke: run.woke, summary: run.summary, reportedAt: run.at }, endedAt: run.endedAt || run.at,
+          ...(run.subagentId ? { label: run.subagentId } : {}) };
+      }
+      doc.seeded = true;
+    }, agent.context);
+  })().finally(() => { seeding = null; });
+  const logRuns = async (conversationId) => {
+    await seedWork(conversationId).catch(() => {});
+    const harness = await agent.runtime.open();
+    return listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null))
+      // What ran (a run, a fork, an agent) or was told to jbot; a routine that only gathered is not a row here.
+      .filter((item) => item.log !== false && (item.conversationId != null || item.outcome?.reportedAt) && (item.outcome?.reportedAt || item.endedAt))
+      .map((item) => ({ id: item.id, at: item.outcome?.reportedAt || item.endedAt, title: item.title, label: item.title, number: item.number ?? null,
+        routine: item.kind, trigger: item.trigger ?? null, startedAt: item.startedAt, endedAt: item.endedAt, status: item.outcome?.status ?? null,
+        summary: item.outcome?.woke ? null : item.outcome?.summary ?? null, woke: Boolean(item.outcome?.woke), conversationId: item.conversationId,
+        ...(item.kind === "agent" ? { agent: true, subagentId: item.label ?? null } : {}) }))
+      .sort((a, b) => a.at.localeCompare(b.at));
+  };
 
   /*
    * A test report: what a run reports, submitted to the home thread as a run's report is and followed the same way
@@ -420,8 +468,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     try {
       if (!enabled(response)) return;
       const { conversationId } = await agent.home();
-      const number = (await runsOf(conversationId).catch(() => [])).filter((run) => run.routine === "test").length + 1;
       const harness = await agent.runtime.open();
+      const number = listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null)).filter((item) => item.kind === "test").length + 1;
       const home = await harness.conversation(conversationId, agent.context);
       const at = new Date().toISOString(), key = `test-report:${randomUUID()}`;
       const report = "This is a test report from Conduit. Send the person a notification that says hi.";
@@ -429,6 +477,11 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
         messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
         run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
+      await harness.commit(async (tx) => {
+        await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, number, trigger: "Manual", startedAt: at });
+        await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: "Asked jbot to say hi" });
+        await closeWork(tx, `test:${key}`, "finished", at);
+      }, agent.context);
       agent.runtime.wakeChat?.(conversationId);
       response.status(202).json({ id: key });
     } catch (error) { next(error); }
@@ -444,9 +497,11 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }.
   app.post("/v0/agent/runs/:id/open", async (request, response, next) => {
     try {
-      const run = runIndex.runs.find((item) => item.id === request.params.id);
-      if (!run?.conversationId || !runIndex.conversationId) return response.status(404).json({ error: "run_not_found" });
-      const child = await agent.runtime.ensureSubagent?.(runIndex.conversationId, { conversationId: run.conversationId, id: run.subagentId, title: run.title });
+      const harness = await agent.runtime.open();
+      const run = (await harness.snapshot(WorkLog, agent.context).catch(() => null))?.items?.[request.params.id];
+      const home = (await agent.state().catch(() => null))?.home?.conversationId;
+      if (run?.conversationId == null || !home) return response.status(404).json({ error: "run_not_found" });
+      const child = await agent.runtime.ensureSubagent?.(home, { conversationId: run.conversationId, id: run.label ?? null, title: run.title });
       if (!child?.id) return response.status(404).json({ error: "run_not_found" });
       response.json({ chatId: child.id });
     } catch (error) { next(error); }
@@ -461,7 +516,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const home = (await agent.state().catch(() => null))?.home?.conversationId;
       const since = messages[0]?.at ?? "";
       const until = request.query.before ? messages.at(-1)?.at ?? "" : null;
-      const runs = home && messages.length ? (await runsOf(home).catch(() => [])).filter((run) => run.at >= since && (until === null || run.at <= until)) : [];
+      const runs = home && messages.length ? (await logRuns(home)).filter((run) => run.at >= since && (until === null || run.at <= until)) : [];
       response.json({ messages, runs });
     } catch (error) { next(error); }
   });

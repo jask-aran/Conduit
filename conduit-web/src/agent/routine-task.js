@@ -8,6 +8,7 @@ import { fileItems } from "./feeds.js";
 import { finalText } from "./messages.js";
 import { completeRoutine, executeRoutine } from "./routines.js";
 import { readRoutine, validateRoutineGraph } from "./routine-files.js";
+import { closeWork, GATHER_WORDS, noteWork, openWork, phaseWork } from "./work-log.js";
 
 export const ROUTINE_WAIT_MS = 30 * 60_000;
 export const ROUTINE_DEPTH = 16;
@@ -70,9 +71,15 @@ export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outc
   });
   doc.routineRuns[taskId] = { taskId, routine, slot, key, force, ...(event ? { event } : {}), chain: [...chain, routine.name],
     previousAt: previous.lastAt || null, startedAt: Date.now(), ...(outcome ? { outcome } : {}) };
+  // Its item in the work log (work-log.js), which every step below moves on.
+  await openWork(tx, { id: workId(taskId), kind: routine.name, title: routine.title || routine.name,
+    origin: { kind: force ? "manual" : event ? "event" : chain.length ? "routine" : "clock" }, log: routine.log !== false });
   doc.routineState[routine.name] = { ...previous, key, taskId, lastAt: slot, lastError: null };
   return taskId;
 }
+
+/** A routine firing's item in the work log, by its task. */
+export const workId = (taskId) => `routine:${taskId}`;
 
 async function beforeDeadline(api, startedAt, pending) {
   let disarm;
@@ -105,6 +112,7 @@ export function routineTask(runtime) {
     await api.commit(async (tx) => {
       const doc = await tx.doc(AgentDoc);
       const record = doc.routineRuns?.[task.id];
+      await closeWork(tx, workId(task.id), error ? "failed" : "finished", api.now(), error ? { summary: error } : {});
       if (record) {
         const state = doc.routineState[record.routine.name];
         if (error) {
@@ -112,13 +120,6 @@ export function routineTask(runtime) {
           routineNotice(doc, record.routine.title, error, api.now());
         }
         else state.finishedAt = new Date(api.now()).toISOString();
-        // A fork's firing is no run of the roster's (which lists what Recent shows): it is logged here for Recent, with
-        // the inbox entry its report was filed as. A run-mode routine's run is the roster's already.
-        if (record.routine.mode === "fork" && record.outcome?.run) {
-          doc.routineLog = [{ id: `routine:${task.id}`, title: record.routine.title || record.routine.name, kind: record.routine.name,
-            startedAt: record.startedAt ? new Date(record.startedAt).toISOString() : null, endedAt: new Date(api.now()).toISOString(),
-            status: error ? "failed" : "finished", inboxId: record.inboxId ?? null }, ...(doc.routineLog || [])].slice(0, 20);
-        }
         delete doc.routineRuns[task.id];
       }
       return terminal(error);
@@ -202,6 +203,8 @@ export function routineTask(runtime) {
       gather: async (task, api, context) => {
         const record = await get(task, api, context);
         const agent = runtime.agent;
+        const kinds = (record.routine.tasks || []).map((item) => item.kind).filter((kind) => kind !== "notes");
+        if (kinds.length && !record.outcome) await api.commit((tx) => phaseWork(tx, workId(task.id), GATHER_WORDS[kinds[0]] || "Gathering"), context);
         const state = await api.snapshot(AgentDoc, context);
         const outcome = record.outcome || await api.memo("gather", await executeRoutine(agent, record.routine, {
           cursors: state.cursors?.[record.routine.name] || {}, state, now: api.now(), force: record.force, event: record.event || null,
@@ -214,6 +217,7 @@ export function routineTask(runtime) {
           for (const task of outcome.tasks || []) if (task.error === "Executor isn't connected") routineNotice(doc, record.routine.title, `${task.id}: ${task.error}`, api.now());
           current.startedAt = api.now();
           if (!outcome.run) {
+            await noteWork(tx, workId(task.id), { summary: outcome.items?.length ? `${outcome.items.length} new` : "Nothing to report" });
             completeRoutine(doc, record.routine, outcome, new Date(api.now()).toISOString());
             if (record.routine.output !== "jbot" && outcome.items.length) await fileItems(tx,
               { key: record.key, title: record.routine.title, feedId: `r-${record.routine.name}`, level: record.routine.level }, outcome.items, record.slot);
@@ -244,11 +248,16 @@ export function routineTask(runtime) {
               identity.messages = {};
               identity.branches = [];
               Object.assign(current, { conversationId: fork.id, reportPath: outcome.reportPath });
+              await noteWork(tx, workId(task.id), {}, { conversationId: fork.id, ran: true });
+              await phaseWork(tx, workId(task.id), "Working");
             }
           } else if (!current.run) {
             current.run = await runtime.agent.spawnRun(tx, task.input.homeId, { key: record.key, kind: routine.name,
               title: routine.title, task: outcome.message, instructions: outcome.instructions, output: routine.output,
               raw: true, routineTaskId: task.id, model: routine.model, thinkingLevel: routine.effort, log: routine.log !== false });
+            await noteWork(tx, workId(task.id), {}, { conversationId: current.run.child, ran: true,
+              ...(current.run.run?.trigger ? { trigger: current.run.run.trigger } : {}) });
+            await phaseWork(tx, workId(task.id), "Working");
           }
           ready = true;
           return next("run");
@@ -295,11 +304,17 @@ export function routineTask(runtime) {
         const record = await get(task, api, context);
         if (record.routine.mode === "fork") {
           if (record.routine.output !== "jbot") await api.commit(async (tx) => {
+            await phaseWork(tx, workId(task.id), "Filing the report");
             const filed = await fileEntry(tx, { key: record.key, kind: record.routine.name, title: record.routine.title,
               level: record.routine.level, status: "unhandled", headline: headlineOf(record.summary), body: record.summary }, Date.parse(record.slot));
-            (await tx.doc(AgentDoc)).routineRuns[task.id].inboxId = filed.id;
+            await noteWork(tx, workId(task.id), { inboxId: filed.id, summary: headlineOf(record.summary) });
           }, context);
-          if (record.routine.output !== "inbox") await messageJbot(runtime, task, record, record.summary, `${record.key}:output`, context);
+          if (record.routine.output !== "inbox") {
+            const reportedAt = await api.memo("reportedAt", new Date(api.now()).toISOString(), context);
+            await api.commit(async (tx) => { await phaseWork(tx, workId(task.id), "Reporting to jbot");
+              await noteWork(tx, workId(task.id), { woke: true, reportedAt, summary: headlineOf(record.summary) }); }, context);
+            await messageJbot(runtime, task, record, record.summary, `${record.key}:output`, context);
+          }
         }
         await api.commit(() => next("after", { index: 0 }), context);
       },
@@ -308,8 +323,14 @@ export function routineTask(runtime) {
         const index = task.state.checkpoint.index || 0;
         const step = record.routine.after?.[index];
         if (!step) { await finish(task, api, context); return; }
-        if (step.routine) await dependency(task, api, context, record, step, "after", index);
-        else if (step.message) await messageJbot(runtime, task, record, record.summary, `${record.key}:after:${index}`, context);
+        if (step.routine) {
+          await api.commit((tx) => phaseWork(tx, workId(task.id), `Running ${step.routine}`), context);
+          await dependency(task, api, context, record, step, "after", index);
+        }
+        else if (step.message) {
+          await api.commit((tx) => phaseWork(tx, workId(task.id), "Telling jbot"), context);
+          await messageJbot(runtime, task, record, record.summary, `${record.key}:after:${index}`, context);
+        }
         else {
           const startedAt = record.stepStartedAt ?? api.now();
           if (!record.stepStartedAt) await api.commit(async (tx) => { (await tx.doc(AgentDoc)).routineRuns[task.id].stepStartedAt = startedAt; }, context);
@@ -320,6 +341,7 @@ export function routineTask(runtime) {
               if (api.now() - startedAt >= ROUTINE_WAIT_MS) throw new Error("Compaction exceeded the 30-minute idle wait limit.");
               await api.sleepUntil(api.now() + 5000, { phase: "after", index }, context); return;
             }
+            await api.commit((tx) => phaseWork(tx, workId(task.id), "Compacting the home thread"), context);
             const home = await runtime.harness.conversation(task.input.homeId, context);
             const usage = await runtime.routineContextUsage?.(home, context, api.settings?.compaction);
             const settings = { ...runtime.agent.settings().nightlyCompaction, ...step.compact };
@@ -327,8 +349,10 @@ export function routineTask(runtime) {
               // Said on its routine's row: not compacted, and why (the thread below the size it compacts from).
               const from = usage?.contextWindow ? Math.max(settings.minTokens, settings.minShare * usage.contextWindow) : null;
               await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); doc.routineState ||= {};
-                (doc.routineState[record.routine.name] ||= {}).compaction = { at: new Date(api.now()).toISOString(), done: false,
-                  tokens: usage?.tokens ?? null, from: from === null ? null : Math.round(from), enabled: Boolean(settings.enabled) }; }, context);
+                const compaction = { at: new Date(api.now()).toISOString(), done: false,
+                  tokens: usage?.tokens ?? null, from: from === null ? null : Math.round(from), enabled: Boolean(settings.enabled) };
+                (doc.routineState[record.routine.name] ||= {}).compaction = compaction;
+                await noteWork(tx, workId(task.id), { compaction }); }, context);
               await advance(task, api, context, "after", index); return;
             }
             await api.commit(async (tx) => {
@@ -360,7 +384,8 @@ export function routineTask(runtime) {
           }
           if (!compacted) throw new Error("Compaction did not place a summary.");
           await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); const at = new Date(api.now()).toISOString(); doc.lastCompactionAt = at;
-            doc.routineState ||= {}; (doc.routineState[record.routine.name] ||= {}).compaction = { at, done: true }; }, context);
+            doc.routineState ||= {}; (doc.routineState[record.routine.name] ||= {}).compaction = { at, done: true };
+            await noteWork(tx, workId(task.id), { compaction: { at, done: true } }); }, context);
         }
         await advance(task, api, context, "after", index);
       },

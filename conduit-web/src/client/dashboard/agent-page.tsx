@@ -10,7 +10,7 @@ import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
 import type { AgentSummary, ChatSummary } from "../api/contracts";
-import { agentNeeds, agentView, dismissableNotices, dismissNotices, foldNotices, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
+import { agentNeeds, agentView, dismissableNotices, dismissNotices, foldNotices, jbotDoing, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
@@ -168,13 +168,22 @@ export function AgentPage(props: {
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(String(run.conversationId));
     const report = () => inbox().find((entry) => run.inboxId ? entry.id === run.inboxId : run.conversationId != null && entry.conversationId === run.conversationId);
-    const context = () => [RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null, age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
-    const preview = () => setPeek({ title: run.title || "A run", context: context(), text: report() ? entryText(report()!) : "", file: report()?.file,
+    // Live, what it is doing (its phase; at work, what its agent is doing, in the digest's words) and its agents rolled
+    // up; done, how it ended. Never its agents one by one.
+    const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+    const doing = () => run.phase === "Working" && run.activity ? capital(run.activity) : run.phase || "Working";
+    const crew = () => run.agents && run.agents.total > 0 && run.agents.running ? `${run.agents.running} ${run.agents.running === 1 ? "agent" : "agents"} working` : null;
+    const ended = () => run.status === "failed" ? `Failed${run.summary ? `: ${run.summary}` : ""}` : run.status === "stopped" ? "Stopped"
+      : run.woke ? "Reported to jbot" : run.summary || (run.level ? levelWord(run.level) : null);
+    const named = () => run.number && run.kind !== "agent" ? `${run.title || "A run"} #${run.number}` : run.title || "A run";
+    const line = () => (live ? [doing(), crew()] : [ended()]).filter(Boolean).join(" · ");
+    const context = () => [line(), age(live ? run.startedAt : run.endedAt, now())].filter(Boolean).join(" · ");
+    const preview = () => setPeek({ title: named(), context: context(), text: report() ? entryText(report()!) : run.summary || "", file: report()?.file,
       open: chatId() ? { label: "Open its chat", icon: <Icons.Chat />, go: (event) => props.onOpenChat(chatId()!, event) } : undefined });
     return <Row density="list" element="button" disabled={!props.panel && !chatId()} onClick={(event: MouseEvent) => props.panel && !live ? preview() : chatId() && props.onOpenChat(chatId()!, event)}
       lead={live ? <StatusDot label="Running" tone="active" spinning /> : run.status === "failed" || run.level ? <LevelMark level={run.status === "failed" ? "failed" : run.level!} /> : <Icons.Agent />}
-      label={run.title || "A run"}
-      context={[RUN_KIND[run.kind] || run.kind, !live && run.status === "failed" ? "Failed" : !live && run.level ? levelWord(run.level) : null].filter(Boolean).join(" · ")}
+      label={named()}
+      context={line()}
       meta={age(live ? run.startedAt : run.endedAt, now())} />;
   };
 
@@ -309,8 +318,13 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  const workingGroup = () => <Show when={!props.panel || working()?.runs.length}><SplitGroup id="agent-working" order="first" label="Working on" count={working()?.runs.length || null}>
-    <Show when={working()?.runs.length} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
+  // jbot's own turn first, in the turn digest's words ("jbot · checking Gmail"), then each unit of work under way.
+  const busy_ = () => (working()?.runs.length || 0) + (jbotDoing() ? 1 : 0);
+  const jbotRow = () => <Row density="list" element="button" disabled={!props.onOpenThread} onClick={() => props.onOpenThread?.()}
+    lead={<StatusDot label="Working" tone="active" spinning />} label={name()} context={jbotDoing()!.charAt(0).toUpperCase() + jbotDoing()!.slice(1)} />;
+  const workingGroup = () => <Show when={!props.panel || busy_()}><SplitGroup id="agent-working" order="first" label="Working on" count={busy_() || null}>
+    <Show when={busy_()} fallback={<SplitEmpty>Nothing running.</SplitEmpty>}>
+      <Show when={jbotDoing()}>{jbotRow()}</Show>
       <For each={working()?.runs}>{(run) => runRow(run, true)}</For>
     </Show>
   </SplitGroup></Show>;

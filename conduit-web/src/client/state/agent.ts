@@ -15,7 +15,14 @@ export type AgentWorkKind = "brief" | "heartbeat" | "other";
 export type AgentRunKind = "manual" | "schedule" | "checkback" | "brief" | "heartbeat" | "webhook" | "event" | string;
 /** A run of the roster's, or a routine's firing in its own fork (Reflection: no conversation of its own to open; its
  *  report is the inbox entry `inboxId`). */
-export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string; level?: string | null; conversationId: number | null; inboxId?: string | null }
+export interface AgentRun { id: string; title: string; kind: AgentRunKind; startedAt?: string; endedAt?: string; status?: string | null; level?: string | null; conversationId: number | null; inboxId?: string | null;
+  /** A unit of the work log (work-log.js): what it is doing now, its agents rolled up, what the one working is doing (the
+   *  turn digest's words), and once done what it found and whether jbot was told. */
+  number?: number | null; phase?: string; agents?: { running: number; total: number } | null; activity?: string | null; summary?: string | null; woke?: boolean;
+  compaction?: { done: boolean; tokens?: number | null; from?: number | null; enabled?: boolean } | null }
+/** What jbot's home thread is doing right now, in the turn digest's words ("checking Gmail"), or null when it is idle:
+ *  set where the home thread is loaded (main.tsx), read by Working on. */
+export const [jbotDoing, setJbotDoing] = createSignal<string | null>(null);
 export interface AgentSchedule { id: string; title: string; kind: "once" | "daily" | "every" | string; at?: string; everyMinutes?: number; cadence?: string; nextAt?: string | null; lastAt?: string | null; system?: boolean; routine?: string; task?: string | null; /** A routine switched off: listed, dimmed, with no clock. */ off?: boolean;
   /** A routine with several timing rules: each as it applies now, `during` a local "HH:MM-HH:MM" window or null. */
   rules?: Array<{ kind: string; everyMinutes?: number; at?: string; during: string | null }>;

@@ -5,6 +5,7 @@ import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { liveTrace } from "./turn-rows";
+import { digestDoing } from "./chat/turn-digest";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/ui/decision-dialog";
@@ -128,7 +129,7 @@ import { createAgentUiBridge } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
-import { agentNeeds, agentView, refreshAgent, wantNeeds } from "./state/agent";
+import { agentNeeds, agentView, refreshAgent, setJbotDoing, wantNeeds } from "./state/agent";
 import { agentDashboardLaidOut, agentPageLaidOut } from "./state/arrival";
 import { pathJbotPage } from "./api/routes";
 import { ServerSwitcher } from "./navigation/server-switcher";
@@ -6061,6 +6062,14 @@ function App() {
   const renderJbot = (slot: number | "main" | "tool") => {
     const tool = slot === "tool";
     const current = tool ? jbotSession : slot === "main" ? session : paneSlot(slot).session;
+    // What jbot's home thread is doing, for Working on (state/agent.ts jbotDoing): its turn digest while it runs.
+    createEffect(() => {
+      const running = current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming();
+      if (!running) return setJbotDoing(null);
+      const trace = liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration());
+      setJbotDoing(trace ? digestDoing(trace, true) ?? "thinking" : "thinking");
+    });
+    onCleanup(() => setJbotDoing(null));
     const owns = tool ? () => Boolean(document.activeElement?.closest("[data-region='workspace-panel']"))
       : slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
     // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
