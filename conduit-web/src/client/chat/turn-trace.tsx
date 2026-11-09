@@ -155,6 +155,23 @@ function lastSentence(text: string): string {
 function summaryOf(text: string): string {
   return lastHeading(text) ?? lastSentence(text);
 }
+/* A headed summary's sections: each heading with the paragraph under it (text before the first heading goes with
+   it). Null without headings, or for text too long to be a summary (raw reasoning): that is one step, as summaryOf. */
+const SUMMARY_LIMIT = 8000;
+function sectionsOf(text: string): { heading: string; body: string }[] | null {
+  if (text.length > SUMMARY_LIMIT || !text.includes("**")) return null;
+  const sections: { heading: string; body: string }[] = [];
+  let before = "";
+  for (const line of text.split("\n")) {
+    const heading = HEADING_LINE.exec(line);
+    if (heading) sections.push({ heading: heading[1]!.trim(), body: "" });
+    else if (sections.length) sections.at(-1)!.body += `${line}\n`;
+    else before += `${line}\n`;
+  }
+  if (!sections.length) return null;
+  if (before.trim()) sections[0]!.body = `${before}${sections[0]!.body}`;
+  return sections.map((section) => ({ heading: section.heading, body: section.body.trim() }));
+}
 
 /* What each kind of tool reads as, counted. The adapter says which kind a tool
    is; the browser only counts them. */
@@ -387,6 +404,17 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   const motion = () => props.arriving ? "entering" as const : undefined;
   return <Switch>
     <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
+    <Match when={props.item.type === "text" && props.item.segment.kind === "thinking" && sectionsOf(props.item.segment.text) && props.item}>{(item) => {
+      // A headed reasoning summary: each heading a line of its own, opening to the paragraph under it, if any.
+      const segment = () => (item() as Extract<TrailItem, { type: "text" }>).segment;
+      const sections = createMemo(() => sectionsOf(segment().text) ?? []);
+      return <Index each={sections()}>{(section, index) => {
+        const fold = useFold(() => `${segment().id}:${index}`, props);
+        return <Step icon={<Icons.Thinking />} summary={inline(props, () => section().heading)} discarded={segment().discarded} motion={motion()} opens={Boolean(section().body)} open={fold.open()} onToggle={fold.toggle} find={() => `${section().heading}\n${section().body}`}>
+          <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{section().body}</ChatMarkdown></Suspense></StepProse>
+        </Step>;
+      }}</Index>;
+    }}</Match>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
       const summary = inline(props, () => summaryOf(segment().text));
