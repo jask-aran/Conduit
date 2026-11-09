@@ -122,6 +122,8 @@ export function AgentPage(props: {
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(null); }
   };
+  // A report with no run behind it, asking jbot to say hi: a report's turn to watch end to end.
+  const testReport = () => void act("test-report", () => api("/v0/agent/test-report", { method: "POST" }));
   const newThread = () => act("thread", async () => {
     const chat = await api<ChatSummary>("/v0/agent/threads", { method: "POST", body: JSON.stringify({}) });
     props.onOpenChat(chat.id);
@@ -374,7 +376,7 @@ export function AgentPage(props: {
       </>} />;
   };
   const timedGroup = () => <SplitGroup id="agent-timed" order="first" label="Timed" count={clocked().length || null}
-    actions={props.panel ? <><GroupAction onClick={() => void act("test-report", () => api("/v0/agent/test-report", { method: "POST" }))}><Icons.Notification />Test report</GroupAction>
+    actions={props.panel ? <><GroupAction onClick={testReport}><Icons.Notification />Test report</GroupAction>
       <GroupAction onClick={() => setAsking(true)}><Icons.Play />Run a task</GroupAction></> : undefined}>
     <For each={timed()}>{clockRow}</For>
   </SplitGroup>;
@@ -528,6 +530,7 @@ export function AgentPage(props: {
             ...(props.onOpenMessages ? [{ icon: <Icons.Chat />, label: "Messages", onClick: props.onOpenMessages }] : []),
             ...(props.onOpenThread ? [{ icon: <Icons.Chat />, label: "Open thread", onClick: () => props.onOpenThread?.() }] : []),
             { icon: <Icons.Play />, label: "Run a task", onClick: () => setAsking(true) },
+            { icon: <Icons.Notification />, label: "Test report", onClick: testReport },
             { icon: <Icons.NewChat />, label: "New thread", onClick: () => void newThread() },
           ]} manage={() => <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow>} />}
           notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
