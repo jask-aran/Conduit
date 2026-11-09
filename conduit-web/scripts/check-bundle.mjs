@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 
 const dist = path.resolve("dist");
@@ -134,7 +135,7 @@ if (overlayFailures.length) {
 // When it stops loading -- an import it needs is not installed where it looks -- every agent runs without
 // web_search, and only a warning said so: load it here, as the runtime does, so the build fails instead.
 {
-  const { loadPiExtensionTools } = await import(path.resolve("src/server/pi-extension-bridge.js"));
+  const { loadPiExtensionTools } = await import(pathToFileURL(path.resolve("src/server/pi-extension-bridge.js")).href);
   const wanted = ["web_search", "fetch_content", "get_search_content", "source_check"];
   const { log, warn } = console;
   let failure = null;
