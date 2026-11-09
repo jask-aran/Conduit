@@ -514,8 +514,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   /** Narrated, how the run is drawn (Settings: Work between texts): its steps (the trail's own lines), its run header
    *  (one line, what it did), or not at all. */
   form?: "steps" | "header" | "hidden";
-  /** The turn header: the whole turn's work as one line, no latest line under it. */
-  turn?: boolean }) {
+  /** The turn header: the whole turn's work as one line, no latest line under it. opens: it opens to the turn's steps
+   *  (Turn header only, where no run is drawn). */
+  turn?: boolean; opens?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -559,7 +560,11 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
           status={settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} time={time() || undefined}
           work={settledRun() ? undefined : preview().work || undefined} latest={props.turn || settledRun() ? undefined : latest()} live={props.trace.active && !props.turn}
           tone={unfinished() ? "failed" : undefined} pinned={props.turn ? undefined : agentsRow()}
-          opens={false} find={() => trail().map(trailText).join("\n")} />
+          opens={Boolean(props.opens) && trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}
+          find={() => trail().map(trailText).join("\n")}>
+          <Trail><Index each={trail()}>{(item) =>
+            <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+        </Trace>
       </Match>
       <Match when={true}>
         {agentsRow()}

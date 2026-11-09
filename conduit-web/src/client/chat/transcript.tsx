@@ -977,6 +977,9 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
             });
             return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip data-turn-header="" data-held={held().has(item.key) ? "" : undefined}
               {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
+              opens={runForm() === "turn"} initialOpen={itemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`)} onOpenChange={(open) => setItemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`, open)}
+              loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(props.chat.loadedId() ?? "")}/context/${entryId}`)}
+              toolOpen={(id) => itemExpanded(props.chat.loadedId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(props.chat.loadedId(), `tool:${id}`, open)}
               renderer={markdownRenderer()} profileLabel={props.profileLabel} /></Turn></TranscriptRow>;
           }
           if (item.type === "trace") {
