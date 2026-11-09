@@ -26,6 +26,8 @@ export function createTailWindow<T>(options: {
   scroller?: () => HTMLElement | null | undefined;
   /** How many older ones at a time, in idle time after the paint. */
   step?: number;
+  /** Run once older items are in, before the foot is held (laid out then): what puts the foot on a whole pixel. */
+  settle?: () => void;
 }) {
   const tail = options.tail ?? 3;
   const step = options.step ?? 8;
@@ -70,6 +72,7 @@ export function createTailWindow<T>(options: {
       const scroller = options.scroller?.();
       const fromFoot = scroller ? scroller.scrollHeight - scroller.scrollTop : 0;
       setOffset((at) => Math.max(0, at - step));
+      options.settle?.();
       if (scroller) scroller.scrollTop = scroller.scrollHeight - fromFoot;
     });
   }));

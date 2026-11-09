@@ -290,7 +290,8 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   let list: HTMLDivElement | undefined;
   createEffect(on(rows, () => requestAnimationFrame(() => {
     const fresh = [...list?.querySelectorAll<HTMLElement>(":scope > .ui-transcript-row:not([data-drawn])") ?? []];
-    const heights = fresh.map((row) => row.offsetHeight);
+    // Its height as laid out, fractions kept: a whole-pixel stand-in moved what is under it by a pixel as it was skipped.
+    const heights = fresh.map((row) => row.getBoundingClientRect().height);
     fresh.forEach((row, index) => { if (!heights[index]) return; row.style.containIntrinsicSize = `auto ${heights[index]}px`; row.dataset.drawn = ""; });
   })));
   // An agent row: how the agent is doing, from the home thread's agents (live), else what its report said.

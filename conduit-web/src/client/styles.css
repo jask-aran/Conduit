@@ -219,6 +219,10 @@ svg.lucide { stroke-width: 2.4; }
 /* In jbot's chat the orb is not hung in the gutter: its left edge is the transcript's (and the composer's), the
    trace's lines beside it. */
 [data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); }
+/* One left edge at every width: nothing hangs in the gutter (an agent's mark) and no turn steps in for an orb, so the
+   orb, the marks and the messages start where the composer does however the pane is sized. */
+[data-jbot-room] .ui-transcript { --mark-hang: 0px; }
+[data-jbot-room] .ui-turn { --turn-step: 0px; }
 [data-jbot-room] .ui-trace[data-orb] > .ui-trace-orb { right: auto; left: 0; }
 /* A background agent's row in jbot's chat stands alone (no rows beside it to line a column up with): how it is doing
    sits by its time at the right, as on the composer's rider, not in a column at the middle. */

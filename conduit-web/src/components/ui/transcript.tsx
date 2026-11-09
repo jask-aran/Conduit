@@ -196,7 +196,26 @@ export function TranscriptList<T>(props: Omit<JSX.HTMLAttributes<HTMLDivElement>
   const [local, rest] = splitProps(props, ["each", "of", "estimate", "whole", "holdsFoot", "before", "after", "ref", "children"]);
   let list: HTMLDivElement | undefined;
   const viewport = () => list?.closest<HTMLElement>(".ui-chat-viewport") ?? list?.parentElement ?? undefined;
-  const tail = createTailWindow({
+  // Its foot a whole pixel down what scrolls it: a sliver above its first row takes up the fraction. A scroller's offset
+  // is whole pixels, so holding the foot as rows of fractional heights go in above (the tail filling in, a reply
+  // arriving) put what is in view a pixel off at each step; with the foot on a whole pixel it stays exactly put. Set as
+  // the tail's older rows go in, before it holds the foot, and as anything else changes the list's size.
+  let sliver = 0;
+  const settle = () => {
+    const host = viewport();
+    if (!list || !host) return;
+    const foot = list.getBoundingClientRect().bottom - host.getBoundingClientRect().top + host.scrollTop - sliver;
+    const next = Math.round((Math.ceil(foot - 0.01) - foot) * 100) / 100;
+    if (Math.abs(next - sliver) < 0.01) return;
+    sliver = next;
+    list.style.paddingTop = sliver ? `${sliver}px` : "";
+  };
+  onMount(() => {
+    const sizes = new ResizeObserver(settle);
+    if (list) sizes.observe(list);
+    onCleanup(() => sizes.disconnect());
+  });
+  const tail = createTailWindow({ settle,
     items: () => local.each, key: () => local.of, whole: () => local.whole?.() ?? false,
     room: () => viewport()?.clientHeight ?? 0,
     estimate: local.estimate && ((item: T) => local.estimate!(item, list?.clientWidth || viewport()?.clientWidth || 0)),
