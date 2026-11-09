@@ -35,7 +35,9 @@ export function placeOf(project) {
  *   installed here; on a device, what it runs (a harness adapter starts it
  *   there) and whatever runs on the hub acting through the device (the
  *   Conduit durable agent).
- * - `checkpoints`: turn snapshots, for Chat review. On a device only a Git
+ * - `checkpoints`: turn snapshots, for Chat review. Never for the shared Chats
+ *   folder (a chat in no folder): every such chat and the agent write there,
+ *   so a turn's changes there are nobody's in particular. On a device only a Git
  *   workspace with the shell grant: Git names the changed files, where a
  *   plain folder's snapshot reads all of it, over the link, before each turn.
  * - `deleteFiles`: Conduit may delete the folder (never on a device).
@@ -47,7 +49,7 @@ export async function capabilitiesOf(project, { hub = null, backends, serverName
   const local = new Set(backends.local || backends.adapters.keys());
   if (at.local) {
     return { device: { id: at.nodeId, name: serverName, local: true, online: true },
-      harnesses: [...local], checkpoints: true, deleteFiles: true, git: true };
+      harnesses: [...local], checkpoints: project.kind !== "unstructured", deleteFiles: true, git: true };
   }
   const node = await hub?.get(at.nodeId);
   const live = hub?.live.get(at.nodeId);

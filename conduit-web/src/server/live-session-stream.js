@@ -184,9 +184,7 @@ export function createLiveSessionStream({
         projectId: prepared.context.project.id,
         projectKind: prepared.context.project.kind,
         workingRoot: at,
-        // The transcript as it stands, so the checkpoint anchors on the entry
-        // the turn about to start will hang under. Without it nothing ties a
-        // checkpoint to its own turn, and they all reach for the newest one.
+        // A regenerate or an edit starts from where the turn it replaces did.
         sourceCheckpointId,
       });
     } catch (error) {
@@ -327,19 +325,6 @@ export function createLiveSessionStream({
       const prepared = await promptForChat(record, command, String(command.message || ""));
       if (prepared.attachments.length && !adapter.getCapabilities().attachments) {
         throw Object.assign(new Error("This agent does not support attachments"), { code: "attachments_unsupported", status: 400 });
-      }
-      if (command.type === "steer") {
-        try {
-          const at = await checkpointWorkspace(prepared.context.project);
-          if (at) await turnCheckpoints?.capture({
-            chatId: prepared.context.chat.id,
-            projectId: prepared.context.project.id,
-            projectKind: prepared.context.project.kind,
-            workingRoot: at,
-              });
-        } catch (error) {
-          console.warn("Could not capture steering checkpoint", error.message);
-        }
       }
       const queuedMessageId = offeredMessageId(command.messageId);
       const accepted = await adapter.queue(record.id, command.type, prepared.prompt,

@@ -9,8 +9,8 @@ const MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024;
 const MAX_CHECKPOINTS_PER_CHAT = 50;
 // Parsed checkpoints kept between listings, by their files' sizes.
 const PARSED_BYTES = 256 * 1024 * 1024;
-const ANCHOR_TAIL_BYTES = 64 * 1024;
-const MAX_ANCHOR_HOPS = 8;
+// A turn keeps two files: where it started and, once it settles, where it ended.
+const MAX_FILES_PER_CHAT = MAX_CHECKPOINTS_PER_CHAT * 2;
 
 const keyFor = (value) => crypto.createHash("sha256").update(String(value)).digest("hex").slice(0, 32);
 
@@ -33,7 +33,6 @@ async function openWorkspace(workingRoot) {
 // A workspace-relative path the store may read: `/`-separated, no `.`/`..`, never `.conduit` or `.git` at the top.
 const safeRelative = (relativePath) => typeof relativePath === "string" && relativePath && !relativePath.includes("\0")
   && relativePath.split("/").every((part) => part && part !== "." && part !== "..");
-const FILE = Symbol("checkpoint file");
 
 /**
  * Identifies the state a checkpoint captured. Two adjacent checkpoints with the
@@ -97,14 +96,44 @@ export class TurnCheckpointStore {
     this.parsed = new Map();
   }
 
-  async capture({ chatId, projectId, projectKind, workingRoot, sessionFile = null, sourceCheckpointId = null }) {
+  /** One chat's writes, one after another. */
+  async #queued(chatId, work) {
     const chatKey = keyFor(chatId);
     const previous = this.queues.get(chatKey) || Promise.resolve();
-    const task = previous.then(() => this.#capture({ chatId, projectId, projectKind, workingRoot, sessionFile, sourceCheckpointId, chatKey }));
+    const task = previous.then(() => work(chatKey));
     const queued = task.catch(() => {});
     this.queues.set(chatKey, queued);
     try { return await task; }
     finally { if (this.queues.get(chatKey) === queued) this.queues.delete(chatKey); }
+  }
+
+  /** Where a turn starts: the workspace as it is just before the prompt goes out. */
+  async capture({ chatId, projectId, projectKind, workingRoot, sourceCheckpointId = null }) {
+    return this.#queued(chatId, (chatKey) => this.#capture({ chatId, projectId, projectKind, workingRoot, sourceCheckpointId, chatKey }));
+  }
+
+  /**
+   * Where a turn ended: the workspace as the turn settles, kept beside its start (`closes` names it), so the turn's
+   * changes are what it left and not whatever is written there before the next turn starts. The turn is the start
+   * `turnId` was assigned to, else the last one still open. `unchanged` (the turn ran no tools) ends it unread.
+   */
+  async close({ chatId, workingRoot, turnId = null, unchanged = false }) {
+    return this.#queued(chatId, async (chatKey) => {
+      const workspace = await openWorkspace(workingRoot);
+      const stored = await this.#checkpoints(chatId);
+      const closed = new Set(stored.map((checkpoint) => checkpoint.closes).filter(Boolean));
+      const open = stored.filter((checkpoint) => checkpoint.open === true && !closed.has(checkpoint.id) && checkpoint.workingRoot === workspace.identity);
+      const start = (turnId && open.find((checkpoint) => checkpoint.turnId === turnId)) || open.at(-1);
+      if (!start) return null;
+      const state = unchanged ? null : await this.#snapshot(workspace, start.repository);
+      const digest = state ? digestOf({ repository: start.repository, ...state }) : digestOf(start);
+      const same = digest === digestOf(start);
+      const createdAt = new Date().toISOString();
+      const id = crypto.randomUUID();
+      await this.#write(path.join(this.root, chatKey, `${createdAt.replaceAll(":", "-")}-${id}.json`), { version: 1, id, chatId, workingRoot: start.workingRoot,
+        repository: start.repository, closes: start.id, same, createdAt, sequence: start.sequence, head: same ? start.head ?? null : state.head, digest, entries: same ? {} : state.entries });
+      return { id, closes: start.id, same };
+    });
   }
 
   async assignTurn(checkpoint, turnId, messageId = null) {
@@ -120,57 +149,40 @@ export class TurnCheckpointStore {
     const root = (await openWorkspace(workingRoot)).identity;
     const stored = (await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
-    const { checkpoints, mappings } = await this.#activeCheckpoints(null, stored);
+    const { checkpoints, mappings } = await this.#activeCheckpoints(stored);
     return checkpoints.find((checkpoint) => mappings.get(checkpoint.id)?.messageId === messageId)?.id ?? null;
   }
 
-  async timeline(chatId, workingRoot, sessionFile = null) {
+  async timeline(chatId, workingRoot) {
     const workspace = await openWorkspace(workingRoot);
     const root = workspace.identity;
     const stored = (await this.#checkpoints(chatId))
       .filter((checkpoint) => checkpoint.version === 1 && checkpoint.workingRoot === root);
-    const { checkpoints, mappings } = await this.#activeCheckpoints(sessionFile, stored);
+    const { checkpoints, mappings, endOf } = await this.#activeCheckpoints(stored);
     const numbered = checkpoints.map((checkpoint) => ({ checkpoint, sequence: mappings.get(checkpoint.id).sequence }));
     const timeline = [];
     for (const [index, item] of numbered.entries()) {
       const { checkpoint, sequence } = item;
-      const target = numbered[index + 1] || null;
-      const summary = await this.#closedSummary(workspace, checkpoint, target?.checkpoint || null);
+      // A turn that settled is compared with where it ended; one from before turns were closed, or still running,
+      // with the next turn's start, or the workspace as it is.
+      const end = endOf(checkpoint);
+      const next = numbered[index + 1] || null;
+      const summary = end === checkpoint ? null : await this.#closedSummary(workspace, checkpoint, end || next?.checkpoint || null);
       timeline.push({
         id: checkpoint.id,
         createdAt: checkpoint.createdAt,
         messageId: mappings.get(checkpoint.id).messageId,
         sequence,
-        targetSequence: target?.sequence ?? null,
+        targetSequence: end ? sequence : next?.sequence ?? null,
         summary,
       });
     }
     return timeline.toReversed();
   }
 
-  /**
-   * Drops checkpoints that record the same state as the one after them. Their
-   * turn changed nothing, so every remaining comparison keeps exactly the
-   * content it had; only the empty boundary disappears. Sequence numbers are
-   * stored, not positional, so pruning leaves gaps rather than renumbering.
-   */
-  async #prune(checkpoints) {
-    const kept = [];
-    const removed = [];
-    for (const [index, checkpoint] of checkpoints.entries()) {
-      const next = checkpoints[index + 1];
-      if (next && digestOf(checkpoint) === digestOf(next)) removed.push(checkpoint);
-      else kept.push(checkpoint);
-    }
-    await Promise.all(removed.map((checkpoint) => checkpoint[FILE]
-      ? fs.unlink(checkpoint[FILE]).catch((error) => { if (error.code !== "ENOENT") throw error; })
-      : Promise.resolve()));
-    return kept;
-  }
-
-  async review(chatId, workingRoot, baseline = "chat", checkpointId = null, sessionFile = null) {
+  async review(chatId, workingRoot, baseline = "chat", checkpointId = null) {
     const workspace = await openWorkspace(workingRoot);
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId, sessionFile);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId);
     if (!checkpoint || workspace.identity !== checkpoint.workingRoot) return null;
     const { git } = workspace;
     const targetPaths = targetCheckpoint
@@ -184,6 +196,7 @@ export class TurnCheckpointStore {
       const changed = await git(["diff", checkpoint.head, ...(target ? [target] : []), "--name-only", "-z", "--no-renames", "--no-ext-diff"]);
       for (const relativePath of changed.stdout.split("\0").filter(Boolean)) paths.add(relativePath);
     }
+    await workspace.ready();
     // Each path's comparison (a Git read or two) and stat are its own: a few at once, kept in the paths' order.
     const compared = await mapLimit([...paths].sort(), 8, async (relativePath) => {
       const comparison = await this.#compare(workspace, checkpoint, relativePath, baseline === "turn" ? "turn" : "session", targetCheckpoint);
@@ -197,28 +210,20 @@ export class TurnCheckpointStore {
     return { id: checkpoint.id, createdAt: checkpoint.createdAt, files };
   }
 
-  async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat", sessionFile = null) {
+  async compare(chatId, workingRoot, relativePath, checkpointId, baseline = "chat") {
     const workspace = await openWorkspace(workingRoot);
-    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId, sessionFile);
+    const { checkpoint, targetCheckpoint } = await this.#comparisonRange(chatId, workspace.identity, baseline, checkpointId);
     if (!checkpoint || workspace.identity !== checkpoint.workingRoot) return null;
     if (!safeRelative(relativePath)) throw new Error("Invalid checkpoint path");
     return this.#compare(workspace, checkpoint, relativePath, baseline === "turn" ? "turn" : "session", targetCheckpoint);
   }
 
-  async #capture({ chatId, projectId, projectKind, workingRoot, sessionFile, sourceCheckpointId, chatKey }) {
-    const workspace = await openWorkspace(workingRoot);
-    const root = workspace.identity;
+  /** What a workspace holds now: a repository's `HEAD` and the files Git says differ from it, else every file. */
+  async #snapshot(workspace, repository) {
     const { git, host } = workspace;
-    const source = sourceCheckpointId
-      ? (await this.#checkpoints(chatId)).find((checkpoint) => checkpoint.id === sourceCheckpointId && checkpoint.workingRoot === root)
-      : null;
-    const repository = source ? source.repository : projectKind === "workspace";
     let head = null;
     let paths;
-    if (source) {
-      head = source.head ?? null;
-      paths = [];
-    } else if (repository) {
+    if (repository) {
       // The repository's own root, asked as Git's prefix from here: empty at the top, on any device's paths.
       const [{ stdout: prefix }, { stdout: status }, revision] = await Promise.all([
         git(["rev-parse", "--show-prefix"]),
@@ -231,7 +236,7 @@ export class TurnCheckpointStore {
     } else {
       paths = await this.#workspacePaths(workspace);
     }
-    const entries = source ? structuredClone(source.entries) : {};
+    const entries = {};
     let byteLength = 0;
     if (paths.length) await workspace.ready();
     // Awaited before the turn starts, so each file's stat and read are asked at once (a device's are a round trip
@@ -263,6 +268,20 @@ export class TurnCheckpointStore {
       // A device's stat carries no mode; the digest then reads it as 0 on both sides.
       entries[relativePath] = { kind: "file", mode: (stat.mode ?? 0) & 0o777, content: content.toString("base64") };
     });
+    return { head, entries };
+  }
+
+  async #capture({ chatId, projectId, projectKind, workingRoot, sourceCheckpointId, chatKey }) {
+    const workspace = await openWorkspace(workingRoot);
+    const root = workspace.identity;
+    const { git, host } = workspace;
+    const source = sourceCheckpointId
+      ? (await this.#checkpoints(chatId)).find((checkpoint) => checkpoint.id === sourceCheckpointId && checkpoint.workingRoot === root)
+      : null;
+    const repository = source ? source.repository : projectKind === "workspace";
+    const { head, entries } = source
+      ? { head: source.head ?? null, entries: structuredClone(source.entries) }
+      : await this.#snapshot(workspace, repository);
     const createdAt = new Date().toISOString();
     const id = crypto.randomUUID();
     const directory = path.join(this.root, chatKey);
@@ -277,15 +296,12 @@ export class TurnCheckpointStore {
       if (held) return held.sequence ?? null;
       return fs.readFile(previousFile, "utf8").then((text) => JSON.parse(text).sequence ?? null, () => null);
     };
-    // The transcript entry this turn will hang under: the user message Pi is
-    // about to write becomes its child, which is what ties a checkpoint to the
-    // exchange that produced it.
-    const [previous, anchorEntryId] = await Promise.all([previousSequence(), this.#anchor(sessionFile)]);
+    const previous = await previousSequence();
     const digest = digestOf({ repository, head, entries });
     const sequence = (previous ?? existing.length) + 1;
-    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, createdAt, sequence, anchorEntryId, sessionFile: sessionFile ? path.resolve(sessionFile) : null, sourceCheckpointId: source?.id ?? null, head, digest, entries });
+    await this.#write(file, { version: 1, id, chatId, projectId, workingRoot: root, repository, turnId: null, open: true, createdAt, sequence, sourceCheckpointId: source?.id ?? null, head, digest, entries });
     const names = (await fs.readdir(directory)).filter((name) => name.endsWith(".json")).sort();
-    await Promise.all(names.slice(0, -MAX_CHECKPOINTS_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
+    await Promise.all(names.slice(0, -MAX_FILES_PER_CHAT).map((name) => fs.unlink(path.join(directory, name))));
     return { id, file, turnId: null };
   }
 
@@ -387,168 +403,48 @@ export class TurnCheckpointStore {
     return added || removed ? { added, removed, preferredPath } : null;
   }
 
-  async #userMessageIds(sessionFile, checkpoints) {
-    const result = new Map();
-    if (typeof sessionFile !== "string" || !sessionFile) {
-      let sequence = 0;
-      for (const checkpoint of checkpoints) {
-        sequence += 1;
-        result.set(checkpoint.id, {
-          messageId: typeof checkpoint.messageId === "string" && checkpoint.messageId ? checkpoint.messageId : null,
-          sequence,
-        });
-      }
-      return result;
-    }
-    const entries = new Map();
-    const entryFiles = new Map();
-    let currentFile = path.resolve(sessionFile);
-    let leafId = null;
-    for (let hop = 0; currentFile && hop < MAX_ANCHOR_HOPS; hop += 1) {
-      let parentFile = null;
-      const lines = await fs.readFile(currentFile, "utf8").then((value) => value.split("\n"), () => []);
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        let entry;
-        try { entry = JSON.parse(line); } catch { continue; }
-        if (entry?.type === "session") {
-          parentFile = typeof entry.parentSession === "string" && entry.parentSession ? path.resolve(entry.parentSession) : null;
-          continue;
-        }
-        if (typeof entry?.id === "string" && entry.id) {
-          entries.set(entry.id, entry);
-          entryFiles.set(entry.id, currentFile);
-          if (hop === 0) leafId = entry.id;
-        }
-      }
-      currentFile = parentFile;
-    }
-    const lineage = [];
-    const visited = new Set();
-    for (let id = leafId; id && !visited.has(id);) {
-      visited.add(id);
-      const entry = entries.get(id);
-      if (!entry) break;
-      lineage.push(entry);
-      id = typeof entry.parentId === "string" ? entry.parentId : null;
-    }
-    lineage.reverse();
-    const positions = new Map(lineage.map((entry, index) => [entry.id, index]));
-    const userNumbers = new Map(lineage
-      .filter((entry) => entry.type === "message" && entry.message?.role === "user")
-      .map((entry, index) => [entry.id, index + 1]));
-    // A checkpoint is taken just before a prompt goes out, so the turn it
-    // describes is the first one that follows it -- and a turn already spoken
-    // for belongs to the checkpoint that claimed it, so the walk only ever
-    // moves forward. Without that, checkpoints that carry no anchor all reach
-    // the same way down the lineage and land on the newest turn together, and
-    // every turn but the last loses the changes it made.
-    let claimed = 0;
-    for (const [index, checkpoint] of checkpoints.entries()) {
-      if (typeof checkpoint.messageId === "string" && positions.has(checkpoint.messageId)) {
-        result.set(checkpoint.id, { messageId: checkpoint.messageId, sequence: userNumbers.get(checkpoint.messageId) });
-        claimed = positions.get(checkpoint.messageId) + 1;
-        continue;
-      }
-      // An anchor the lineage does not contain was recorded on a branch the
-      // session has since left: a fork keeps what came before its point and
-      // abandons the rest, and a checkpoint captured just after one anchors on
-      // the leaf of the branch it forked from. Searching from where the last
-      // turn was claimed instead of dropping the checkpoint is what lets a
-      // regenerated turn carry its changes; the session-file guard below is
-      // what stops a checkpoint from the abandoned branch claiming a turn that
-      // is not its.
-      const anchored = checkpoint.anchorEntryId == null ? -1 : (positions.get(checkpoint.anchorEntryId) ?? -1);
-      const nextAnchor = checkpoints[index + 1]?.anchorEntryId;
-      const end = typeof nextAnchor === "string" ? positions.get(nextAnchor) : undefined;
-      const candidates = lineage.slice(Math.max(anchored + 1, claimed), end === undefined ? undefined : end + 1);
-      const user = candidates.find((entry) => entry.type === "message" && entry.message?.role === "user");
-      if (!user) continue;
-      if (anchored === -1) {
-        const checkpointSession = typeof checkpoint.sessionFile === "string" ? path.resolve(checkpoint.sessionFile) : null;
-        const userSession = entryFiles.get(user.id);
-        const elapsed = Date.parse(user.timestamp) - Date.parse(checkpoint.createdAt);
-        if (checkpointSession ? checkpointSession !== userSession : !Number.isFinite(elapsed) || elapsed < 0 || elapsed > 60_000) continue;
-      }
-      result.set(checkpoint.id, { messageId: user.id, sequence: userNumbers.get(user.id) });
-      claimed = positions.get(user.id) + 1;
-    }
-    return result;
-  }
-
-  async #activeCheckpoints(sessionFile, checkpoints) {
+  /**
+   * The chat's turns as it stands: each start checkpoint on the branch the chat is on (a regenerate names the one it
+   * replaces from), the latest one a message has, numbered in order; `endOf` gives where a settled turn ended (the
+   * start itself when it changed nothing).
+   */
+  async #activeCheckpoints(stored) {
+    const closers = new Map(stored.filter((checkpoint) => checkpoint.closes).map((checkpoint) => [checkpoint.closes, checkpoint]));
+    const endOf = (checkpoint) => { const end = closers.get(checkpoint.id); return end ? (end.same ? checkpoint : end) : null; };
     const branch = [];
-    for (const checkpoint of checkpoints) {
+    for (const checkpoint of stored) {
+      if (checkpoint.closes) continue;
       if (typeof checkpoint.sourceCheckpointId === "string") {
         const sourceIndex = branch.findIndex((candidate) => candidate.id === checkpoint.sourceCheckpointId);
         if (sourceIndex >= 0) branch.splice(sourceIndex + 1);
       }
       branch.push(checkpoint);
     }
-    const mappings = await this.#userMessageIds(sessionFile, branch);
+    const mappings = new Map(branch.map((checkpoint, index) => [checkpoint.id,
+      { messageId: typeof checkpoint.messageId === "string" && checkpoint.messageId ? checkpoint.messageId : null, sequence: index + 1 }]));
     const latestByMessage = new Map();
-    for (const checkpoint of branch) {
-      const mapping = mappings.get(checkpoint.id);
-      if (mapping) latestByMessage.set(mapping.messageId || checkpoint.id, checkpoint.id);
-    }
-    const active = branch.filter((checkpoint) => {
-      const mapping = mappings.get(checkpoint.id);
-      return mapping && latestByMessage.get(mapping.messageId || checkpoint.id) === checkpoint.id;
-    });
+    for (const checkpoint of branch) latestByMessage.set(mappings.get(checkpoint.id).messageId || checkpoint.id, checkpoint.id);
+    const active = branch.filter((checkpoint) => latestByMessage.get(mappings.get(checkpoint.id).messageId || checkpoint.id) === checkpoint.id);
     return {
+      // A turn never closed that starts where the next one does changed nothing.
       checkpoints: active.filter((checkpoint, index) => {
         const next = active[index + 1];
-        return !next || digestOf(checkpoint) !== digestOf(next);
+        return closers.has(checkpoint.id) || !next || digestOf(checkpoint) !== digestOf(next);
       }),
       mappings,
+      endOf,
     };
   }
 
-  async #comparisonRange(chatId, root, baseline, checkpointId, sessionFile) {
+  async #comparisonRange(chatId, root, baseline, checkpointId) {
     const stored = (await this.#checkpoints(chatId)).filter((checkpoint) => checkpoint.version === 1 && typeof checkpoint.repository === "boolean" && checkpoint.workingRoot === root);
-    const { checkpoints } = await this.#activeCheckpoints(sessionFile, stored);
+    const { checkpoints, endOf } = await this.#activeCheckpoints(stored);
     const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
     if (index < 0) return { checkpoint: null, targetCheckpoint: null };
-    if (baseline === "chat") return {
-      checkpoint: checkpoints[0],
-      targetCheckpoint: checkpointId ? checkpoints[index + 1] || null : null,
-    };
-    return {
-      checkpoint: checkpoints[index],
-      targetCheckpoint: checkpointId ? checkpoints[index + 1] || null : null,
-    };
-  }
-
-  /**
-   * Reads the last transcript entry from a Pi session file. A freshly forked
-   * session holds only its header, so the walk follows `parentSession` until an
-   * entry turns up. Only the tail of each file is read: transcripts grow, and
-   * the last entry is all this needs.
-   */
-  async #anchor(sessionFile, hop = 0) {
-    if (typeof sessionFile !== "string" || !sessionFile || hop >= MAX_ANCHOR_HOPS) return null;
-    let handle;
-    try { handle = await fs.open(sessionFile, "r"); }
-    catch { return null; }
-    let parentSession = null;
-    try {
-      const { size } = await handle.stat();
-      const length = Math.min(size, ANCHOR_TAIL_BYTES);
-      const buffer = Buffer.alloc(length);
-      await handle.read(buffer, 0, length, size - length);
-      const lines = buffer.toString("utf8").split("\n");
-      if (length < size) lines.shift();
-      for (const line of lines.reverse()) {
-        if (!line.trim()) continue;
-        let entry;
-        try { entry = JSON.parse(line); }
-        catch { continue; }
-        if (entry?.type === "session") { parentSession = typeof entry.parentSession === "string" ? entry.parentSession : null; continue; }
-        if (typeof entry?.id === "string" && entry.id) return entry.id;
-      }
-    } catch { return null; }
-    finally { await handle.close().catch(() => {}); }
-    return parentSession ? this.#anchor(parentSession, hop + 1) : null;
+    const end = endOf(checkpoints[index]) || (checkpointId ? checkpoints[index + 1] || null : null);
+    // The chat's changes run from its first turn to the workspace as it is, or to the end of the turn asked for.
+    if (baseline === "chat") return { checkpoint: checkpoints[0], targetCheckpoint: checkpointId ? end : null };
+    return { checkpoint: checkpoints[index], targetCheckpoint: end };
   }
 
   async #checkpoints(chatId) {
@@ -563,7 +459,6 @@ export class TurnCheckpointStore {
         const held = this.parsed.get(file);
         if (held?.stamp === stamp) return { file, held };
         const checkpoint = JSON.parse(await fs.readFile(file, "utf8"));
-        checkpoint[FILE] = file;
         return { file, held: { stamp, size: stat.size, checkpoint } };
       }
       catch (error) { if (error.code !== "ENOENT") throw error; return null; }
@@ -578,7 +473,7 @@ export class TurnCheckpointStore {
       this.parsed.set(item.file, item.held);
       let bytes = 0;
       for (const held of this.parsed.values()) bytes += held.size || 0;
-      while (this.parsed.size > 1 && (this.parsed.size > MAX_CHECKPOINTS_PER_CHAT * 2 || bytes > PARSED_BYTES)) {
+      while (this.parsed.size > 1 && (this.parsed.size > MAX_FILES_PER_CHAT * 2 || bytes > PARSED_BYTES)) {
         const [oldest, held] = this.parsed.entries().next().value;
         bytes -= held.size || 0;
         this.parsed.delete(oldest);

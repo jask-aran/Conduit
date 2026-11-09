@@ -641,6 +641,18 @@ app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
 registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist, throttleFile: path.join(config.dataRoot, "auth", "login-throttle.json") });
 
 let shuttingDown = false;
+// Where a project's turn checkpoints are taken, or null where it has none (place.js).
+const checkpointWorkspace = async (project) => ((await backends.capabilities(project))?.checkpoints ? projectWorkspace(project, nodeHub) : null);
+/** End the turn's checkpoint as it settles, before the chat is told it settled (the client reads its changes then). */
+async function closeTurnCheckpoint(record, turnId) {
+  const unchanged = !record.ranTools;
+  record.ranTools = false;
+  try {
+    const context = await findChatContext(record.chatId);
+    const at = context ? await checkpointWorkspace(context.project) : null;
+    if (at) await turnCheckpoints.close({ chatId: record.chatId, workingRoot: at, turnId, unchanged });
+  } catch (error) { console.warn("Could not close turn checkpoint", error.message); }
+}
 function checkpointNativeAdapter(adapter, record, completed = true) {
   const completedAt = new Date().toISOString();
   // A cancelled or failed turn is activity, so it moves the sort key -- but it
@@ -668,7 +680,7 @@ async function applyBackendName(adapter, record, name) {
 for (const adapter of backends.instances()) {
   adapter.on?.("settled", ({ record, completed }) => {
     // An ephemeral record -- a probe -- has no chat to checkpoint.
-    if (!record.ephemeral) checkpointNativeAdapter(adapter, record, completed !== false);
+    if (!record.ephemeral) void closeTurnCheckpoint(record, record.generation?.id || null).then(() => checkpointNativeAdapter(adapter, record, completed !== false));
   });
   adapter.on?.("changed", ({ record, reason, name }) => {
     publishProcessChange(adapter.view(record), record, reason);
@@ -1048,7 +1060,7 @@ const liveSessionStream = createLiveSessionStream({
   registry,
   config,
   turnCheckpoints,
-  checkpointWorkspace: async (project) => ((await backends.capabilities(project))?.checkpoints ? projectWorkspace(project, nodeHub) : null),
+  checkpointWorkspace,
   findChatContext,
   chatModelView,
   chatLogs,

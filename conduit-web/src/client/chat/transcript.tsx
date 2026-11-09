@@ -103,7 +103,9 @@ function UserMessage(props: { latest?: boolean; message: Message; text: string; 
 
 /** A turn's changes, opening them in Agent changes. */
 function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
-  const range = () => `Turn ${props.artifact.sequence} → ${props.artifact.targetSequence === null ? "Working copy" : `Turn ${props.artifact.targetSequence}`}`;
+  // A settled turn's changes are its own; an open one's run to the working copy (an older chat's, to the next turn).
+  const range = () => props.artifact.targetSequence === props.artifact.sequence ? `Turn ${props.artifact.sequence}`
+    : `Turn ${props.artifact.sequence} → ${props.artifact.targetSequence === null ? "Working copy" : `Turn ${props.artifact.targetSequence}`}`;
   return <Changes added={props.artifact.summary!.added} removed={props.artifact.summary!.removed} title={range()}
     label={`Open ${range()} in Agent changes: ${props.artifact.summary!.added} additions and ${props.artifact.summary!.removed} removals`}
     onOpen={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })} />;

@@ -196,6 +196,8 @@ export class SessionRecords {
     if (event?.type === "tool_activity" && (event.phase === "start" || event.phase === "end") && !event.at) {
       event = { ...event, at: record.updatedAt };
     }
+    // A turn that ran no tools changed nothing in its workspace (server.js closes its checkpoint unread).
+    if ((event?.type === "transcript_op" && event.op === "tool.open") || (event?.type === "tool_activity" && event.phase === "start")) record.ranTools = true;
     // Numbered before it is buffered or sent, so the replay a reconnecting
     // browser reads carries the same sequence the live stream did.
     const log = this.logFor(record);
