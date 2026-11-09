@@ -13,7 +13,8 @@ import { parseReviewComments } from "./review-comments";
 import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
 import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
-import { isAgentReport, type Narration, type TurnRow } from "../turn-rows";
+import { isAgentReport, isRun, type Narration, type TurnRow, type TurnTraceData } from "../turn-rows";
+import { runForm } from "../preferences/run-form";
 import type { MarkdownRendererId } from "./markdown-settings";
 import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
@@ -256,6 +257,20 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
     expandedItems.set(chatId, items);
     while (expandedItems.size > 10) expandedItems.delete(expandedItems.keys().next().value!);
   };
+  // A run or a turn switched from the form Settings gives it (runForm): kept with what was opened, read reactively.
+  const [switches, setSwitches] = createSignal(0);
+  const switched = (key: string) => { switches(); return itemExpanded(props.chat.loadedId(), key); };
+  const flip = (key: string) => { const chatId = props.chat.loadedId(); setItemExpanded(chatId, key, !itemExpanded(chatId, key)); setSwitches((count) => count + 1); };
+  const turnSwitch = (row: { precedingUserId?: string; key: string }) => `turn:${row.precedingUserId ?? row.key}`;
+  /* How a run is drawn: Steps and Run headers each as that, unless its turn (from the turn header) or it (from its
+     fold mark or header) was switched; Turn header not at all, unless its turn was switched, then as run headers. */
+  const formOf = (row: TurnRow): "steps" | "header" | "hidden" => {
+    const base = runForm(), turn = switched(turnSwitch(row)), run = switched(`run:${row.key}`);
+    if (base === "turn") return turn ? (run ? "steps" : "header") : "hidden";
+    const steps = ((base === "steps") !== turn) !== run;
+    // A turn's one run, as a line, would say what its turn header says: the turn header stands for it.
+    return steps ? "steps" : "precedingUserId" in row && row.precedingUserId && runsIn().get(row.precedingUserId) === 1 ? "hidden" : "header";
+  };
   const [artifactSummaries, setArtifactSummaries] = createSignal(new Map<string, TurnArtifactSummary>());
   createEffect(() => {
     if (!props.chat.streaming()) return;
@@ -363,7 +378,13 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
   const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && row.value.run?.woke !== false && !isAgentReport(row.value);
   // Work is a trace that did something, or reports that landed: lines of work in rows of their own keep the trail's
   // gap (`work`), and the answer under work stands clear of it (`answer`, twice a step).
-  const isWork = (row: TurnRow | undefined) => row?.type === "reports" || (row?.type === "trace" && row.value.segments.length > 0);
+  // How many runs each turn has, from its turn header (read off the turn rows alone, so a streamed word reads none).
+  const runsIn = createMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of timeline) if (row.type === "turn" && row.precedingUserId) counts.set(row.precedingUserId, row.value.runs);
+    return counts;
+  });
+  const isWork = (row: TurnRow | undefined) => row?.type === "reports" || row?.type === "turn" || (row?.type === "trace" && row.value.segments.length > 0);
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
     const row = timeline[index], above = timeline[index - 1];
@@ -893,6 +914,26 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
           after={<Show when={unplacedAsks().length}><TranscriptRow data-slot="message-scroller-item" flow="step"><Turn><For each={unplacedAsks()}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn></TranscriptRow></Show>}>
         {(item, index) => {
           const flow = () => flowAt(index());
+          if (item.type === "turn") {
+            // The turn's runs above it, read as they change: its work, timed from the person's message.
+            const work = createMemo((): TurnTraceData => {
+              const runs: Extract<TurnRow, { type: "trace" }>[] = [];
+              let startedAt: string | undefined;
+              for (let at = index() - 1; at >= 0; at -= 1) {
+                const row = timeline[at];
+                if (!row) break;
+                if (row.type === "message" && row.value.id === item.precedingUserId) { startedAt = row.value.timestamp; break; }
+                if (!("precedingUserId" in row) || row.precedingUserId !== item.precedingUserId) break;
+                if (isRun(row)) runs.unshift(row);
+              }
+              const last = runs.at(-1), active = runs.some((run) => run.value.active);
+              return { active, status: last?.value.status ?? "complete", segments: runs.flatMap((run) => run.value.segments),
+                ...(startedAt ?? runs[0]?.value.startedAt ? { startedAt: startedAt ?? runs[0]?.value.startedAt } : {}),
+                ...(!active && (last?.timestamp ?? last?.value.endedAt) ? { endedAt: last?.timestamp ?? last?.value.endedAt } : {}) };
+            });
+            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip data-turn-header="" flow={flow()}><Turn><TurnTrace since={arrivalOf(lastArrivedId)} trace={work()} narrated turn form="header"
+              onSwitch={() => flip(turnSwitch(item))} renderer={markdownRenderer()} profileLabel={props.profileLabel} /></Turn></TranscriptRow>;
+          }
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
             const chatId = () => props.chat.loadedId();
@@ -907,7 +948,7 @@ export function Transcript(props: { chat: TranscriptSource; supports: (capabilit
               if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: chatId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
               return actions;
             };
-            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} form={narrated() && isRun(item) ? formOf(item) : undefined} onSwitch={narrated() && isRun(item) ? () => flip(`run:${item.key}`) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}

@@ -17,6 +17,7 @@ import {
   buildLiveToolItem,
   buildLiveToolSegment,
   groupReports,
+  placeTurnHeaders,
   projectLiveTurn,
   projectPersistedTurns,
 } from "../turn-rows";
@@ -70,6 +71,7 @@ function stableProjection(previous: TurnRow[], projected: TurnRow[]): TurnRow[] 
         ? prior : row;
     }
     if (row.type === "pending") return prior;
+    if (row.type === "turn" && prior.type === "turn") return prior.value.runs === row.value.runs ? prior : row;
     if (row.type === "reports" && prior.type === "reports") {
       return prior.value.length === row.value.length && prior.value.every((message, index) => message === row.value[index]) ? prior : row;
     }
@@ -262,9 +264,10 @@ export function createTimelineStore(
     }
     // A turn that ended without saying how is stated by the server, so every
     // finished turn arrives here with its outcome.
-    const projected = stableProjection(previousProjectedRows, groupReports(inputGeneration
+    const grouped = groupReports(inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools, layout)
-      : persistedRows));
+      : persistedRows);
+    const projected = stableProjection(previousProjectedRows, layout.narration === "show" ? placeTurnHeaders(grouped) : grouped);
     setRows(reconcile(owned(projected), { key: "key" }));
     previousProjectedRows = projected;
     previousMessages = inputMessages;

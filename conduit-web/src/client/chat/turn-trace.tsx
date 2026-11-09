@@ -478,8 +478,13 @@ const LATEST_CHARS = 240;
 export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number; gathering?: boolean;
   /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
   orb?: boolean;
-  /** A Narrated turn's work between texts: its trail's own lines, no header and no orb (Folded's alone has one). */
-  narrated?: boolean }) {
+  /** A Narrated turn's work between texts (a run), no orb (Folded's alone has one). */
+  narrated?: boolean;
+  /** Narrated, how the run is drawn: its steps (the trail's own lines, a fold mark by them), its run header (one line,
+   *  what it did), or not at all. onSwitch: the fold mark and the header switch it between the two. */
+  form?: "steps" | "header" | "hidden"; onSwitch?: () => void;
+  /** The turn header: the whole turn's work as one line, no latest line under it. */
+  turn?: boolean }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -511,6 +516,27 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
   // A trace that is only context (a thread's opening system prompt, above its first message) is its lines alone.
   const onlyContext = () => props.trace.segments.length > 0 && props.trace.segments.every((segment) => segment.kind === "context");
+  const form = () => props.form ?? "steps";
+  const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
+  // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
+  if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
+      <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>}>
+    <Switch>
+      <Match when={form() === "hidden"}>{props.turn ? null : agentsRow()}</Match>
+      <Match when={form() === "header"}>
+        <Trace motion={props.since != null ? "entering" : undefined} since={props.since}
+          status={settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} time={time() || undefined}
+          work={settledRun() ? undefined : preview().work || undefined} latest={props.turn || settledRun() ? undefined : latest()} live={props.trace.active && !props.turn}
+          tone={unfinished() ? "failed" : undefined} pinned={props.turn ? undefined : agentsRow()}
+          opens={Boolean(props.onSwitch)} open={false} onToggle={() => props.onSwitch?.()} find={() => trail().map(trailText).join("\n")} />
+      </Match>
+      <Match when={true}>
+        {agentsRow()}
+        <Trail fold={props.onSwitch && trail().length ? { label: "Show as one line", onFold: () => props.onSwitch!() } : undefined}><Index each={trail()}>{(item) =>
+          <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+      </Match>
+    </Switch>
+  </Show>;
   return <Show when={!single() && !onlyContext()} fallback={<>
       <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />
       <Trail><Index each={trail()}>{(item) =>

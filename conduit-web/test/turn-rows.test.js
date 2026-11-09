@@ -21,7 +21,7 @@ for (const narration of ["fold", "show"]) {
     assert.deepEqual(contextSegments(rows).map((segment) => segment.kind),
       narration === "fold" ? ["context", "thinking", "narration", "context", "thinking"] : ["context", "thinking", "context", "thinking"]);
     assert.deepEqual(contextSegments(rows).filter((segment) => segment.kind === "context").map((segment) => segment.message), [first, middle]);
-    if (narration === "show") assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message", "trace", "message"]);
+    if (narration === "show") assert.deepEqual(rows.map((row) => row.type), ["message", "trace", "message", "trace", "turn", "message"]);
   });
 
   test(`keeps context-only turns and preamble context (${narration})`, () => {

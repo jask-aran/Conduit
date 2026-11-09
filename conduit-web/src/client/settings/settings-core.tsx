@@ -28,6 +28,7 @@ import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
 import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { RUN_FORMS, runForm, saveRunForm, type RunForm } from "../preferences/run-form";
 import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
 import { MOTION_SCALE_OPTIONS, motionScale, saveMotionScale, type MotionScale } from "../preferences/motion-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
@@ -1450,6 +1451,11 @@ export function Settings(props: {
                   <SettingLine label="Transcript font">
                     <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
                       <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Work between texts" title={RUN_FORMS.find((option) => option.value === runForm())?.description}>
+                    <Select id="run-form" aria-label="Work between texts" value={runForm()} onChange={(event) => saveRunForm(event.currentTarget.value as RunForm)}>
+                      <For each={RUN_FORMS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
                   <SettingLine label="Transcript width">

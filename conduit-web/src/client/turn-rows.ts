@@ -113,7 +113,11 @@ export type TurnRow =
   // What the turn sent the person outside the thread (a `message` tool: a notification), as it was sent.
   | { key: string; type: "sent"; value: ToolItem; precedingUserId?: string }
   // Background agents' reports that reached the thread together, one row (AgentReport): consecutive report messages.
-  | { key: string; type: "reports"; value: Message[] };
+  | { key: string; type: "reports"; value: Message[] }
+  // A Narrated turn's turn header: the whole turn's work in one line, after its latest run (placeTurnHeaders), and how
+  // many runs it has. It holds no work of its own: the transcript reads its turn's runs, as they change, from the rows
+  // above it.
+  | { key: string; type: "turn"; value: { runs: number }; precedingUserId?: string };
 
 /** A codemode script's message calls as the calls they are (a script's `notify` is a notification like a direct one),
  *  and the script without them: gone when they were all it did and it ended well. */
@@ -877,7 +881,8 @@ export function buildTurnRows(
   } & TurnLayout = {},
 ): TurnRow[] {
   const persisted = projectPersistedTurns(messages, tools, [], opts).rows;
-  return groupReports(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted);
+  const rows = groupReports(opts.activeGeneration ? projectLiveTurn(persisted, messages, opts.activeGeneration, tools, opts) : persisted);
+  return opts.narration === "show" ? placeTurnHeaders(rows) : rows;
 }
 
 /** A running turn's trace alone, Folded, from its prompt on: what jbot's message log draws as what it is doing now. */
@@ -886,4 +891,29 @@ export function liveTrace(messages: Message[], tools: ToolItem[], activeGenerati
   const from = messages.findLastIndex((message) => message.role === "user");
   const trace = buildTurnRows(messages.slice(Math.max(0, from)), tools, { activeGeneration, narration: "fold" }).findLast((row) => row.type === "trace");
   return trace?.type === "trace" ? trace.value : null;
+}
+
+/** A run: a trace row of a Narrated turn that did some work it can show (not only its context changing, nor reasoning
+ *  the provider kept), before its last answer. */
+export const isRun = (row: TurnRow): row is Extract<TurnRow, { type: "trace" }> =>
+  row.type === "trace" && !row.afterAnswer && row.value.segments.some((segment) => segment.kind === "tool" || segment.kind === "error"
+    || ((segment.kind === "thinking" || segment.kind === "narration") && !("hidden" in segment && segment.hidden) && segment.text.trim() !== ""));
+
+/**
+ * Each Narrated turn's turn header, placed right after its latest run: under the run's lines as they come, over the
+ * text that follows, and on to under the next run if one starts (it is keyed by the run it follows, so it arrives
+ * anew there). Over a final answer, it stays.
+ */
+export function placeTurnHeaders(rows: TurnRow[]): TurnRow[] {
+  const latest = new Map<string, number>(), runs = new Map<string, number>();
+  rows.forEach((row, index) => { if (isRun(row) && row.precedingUserId) { latest.set(row.precedingUserId, index); runs.set(row.precedingUserId, (runs.get(row.precedingUserId) ?? 0) + 1); } });
+  if (!latest.size) return rows;
+  const placed: TurnRow[] = [];
+  const after = new Map([...latest].map(([turn, index]) => [index, turn]));
+  rows.forEach((row, index) => {
+    placed.push(row);
+    const turn = after.get(index);
+    if (turn) placed.push({ key: `turn:${row.key}`, type: "turn", value: { runs: runs.get(turn)! }, precedingUserId: turn });
+  });
+  return placed;
 }
