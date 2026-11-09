@@ -260,21 +260,30 @@ public class ConduitFloatPlugin extends Plugin {
 
     /*
      * The rest of turning Float on, one step at a time, each introduced by a short dialog that says what to tap and
-     * can be skipped: an app installed from an APK first needs App info > ⋮ > Allow restricted settings (Android 13+),
-     * then Float screen context in Accessibility. Skipping leaves Float on, without instant screenshots.
+     * can be skipped: Float screen context in Accessibility, and, when that comes back still off on Android 13+, App
+     * info > ⋮ > Allow restricted settings (an app installed from an APK is restricted until then; Samsung offers the
+     * item only once the service has been tried), then Accessibility again. Whether the app is restricted is hidden
+     * from it, and a flag kept for it lies after a reinstall (Android restores the app's preferences, not the
+     * permission), so screen context being on is the only thing read. Skipping leaves Float on, without instant
+     * screenshots.
      */
+    private boolean triedRestricted;
+
     private void screenContextStep(PluginCall call) {
         if (ConduitContext.screenReaderOn(getContext())) { afterScreenContext(call); return; }
         permissionFlow = true;
-        if (restrictedSettingsBlocked()) {
-            step(call, "Tap ⋮ at the top right, then Allow restricted settings.",
-                new Intent[] { new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName())) },
-                "restrictedReturned", null, () -> afterScreenContext(call));
-        } else accessibilityStep(call);
+        triedRestricted = false;
+        accessibilityStep(call);
+    }
+
+    private void restrictedStep(PluginCall call) {
+        triedRestricted = true;
+        step(call, "Tap ⋮ at the top right, then Allow restricted settings.",
+            new Intent[] { new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName())) },
+            "restrictedReturned", null, () -> afterScreenContext(call));
     }
 
     @ActivityCallback private void restrictedReturned(PluginCall call, ActivityResult result) {
-        preferences(getContext()).edit().putBoolean("restrictedHandled", true).apply();
         guide().hide();
         if (call == null) { permissionFlow = false; return; }
         accessibilityStep(call);
@@ -289,6 +298,8 @@ public class ConduitFloatPlugin extends Plugin {
     @ActivityCallback private void accessibilityReturned(PluginCall call, ActivityResult result) {
         guide().hide();
         if (call == null) { permissionFlow = false; return; }
+        // Still off: most likely restricted (its switch greyed, "Restricted setting"), so App info once, then back here.
+        if (!ConduitContext.screenReaderOn(getContext()) && Build.VERSION.SDK_INT >= 33 && !triedRestricted) { restrictedStep(call); return; }
         afterScreenContext(call);
     }
 
@@ -317,17 +328,6 @@ public class ConduitFloatPlugin extends Plugin {
 
     private String appLabel() { return getContext().getApplicationInfo().loadLabel(getContext().getPackageManager()).toString(); }
 
-
-    /**
-     * Android 13+ restricts Accessibility for an app not installed from a store (a file, adb, Conduit's own updater:
-     * Conduit is never in a store) until App info's Allow restricted settings. The op itself is hidden from apps, so
-     * the step shows until the person has been through App info for it (remembered once they come back).
-     */
-    static boolean restrictedSettingsBlocked(Context context) {
-        return Build.VERSION.SDK_INT >= 33 && !preferences(context).getBoolean("restrictedHandled", false);
-    }
-
-    private boolean restrictedSettingsBlocked() { return restrictedSettingsBlocked(getContext()); }
 
     /** Settings' Set up: every step Float is still missing, in order, each skippable (Float is already on). */
     @PluginMethod public void setUp(PluginCall call) {
