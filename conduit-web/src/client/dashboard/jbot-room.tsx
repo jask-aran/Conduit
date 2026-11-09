@@ -6,6 +6,7 @@ import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
+import { setLatestAway, setLatestScroller } from "../chat/latest-away";
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
 import type { AgentSummary } from "../api/contracts";
@@ -114,6 +115,13 @@ export function JbotRoom(props: {
     if (bottom !== above()) setAbove(bottom);
   };
   const jumpToLatest = () => follow.followLatest();
+  // A phone's composer has Scroll to latest in its own row (the pill, latest-away.ts), as in a thread: the room tells it
+  // when the latest is out of view and takes its press, and its own floating one stays hidden there.
+  if (!desktop) {
+    createEffect(() => setLatestAway(away()));
+    setLatestScroller(jumpToLatest);
+    onCleanup(() => { setLatestAway(false); setLatestScroller(null); });
+  }
   // Attached as the chat is built (it waits on jbot's view), the dock's clearing as the composer comes (it waits on the
   // home thread): each under the piece it belongs to, undone with it.
   const attachFollow = (column: HTMLDivElement) => {
@@ -150,7 +158,7 @@ export function JbotRoom(props: {
         <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
-              hidden={!away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
+              hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
             <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} agents={props.agents} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
