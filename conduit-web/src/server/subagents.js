@@ -278,17 +278,19 @@ export function Subagents(runtime) {
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
         const said = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
         // How it ended by tool, if it did (nothing_to_report, run_failed: inbox.js), read before its report is decided.
-        const end = task.input.gate ? await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context) : null;
+        // Any subagent can end by them, not only jbot's runs: one asked for in a thread that gives up says why.
+        const end = await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context);
         // A run of jbot's whose final text is empty has not reported, whatever it did on the way: it failed, so its
         // routine's window is not counted as done and is gathered again next time. Unless it ended by saying it had
         // nothing to report: that is its report, and the routine's window is done.
         const quiet = end?.outcome === "quiet";
+        const gaveUp = end?.outcome === "failed";
         const empty = !said.trim() && Boolean(task.input.gate) && !quiet;
-        const answer = said.trim() ? said : quiet ? "Nothing to report." : empty && settled.status === "done" ? "The run ended without a report (its final text was empty)."
+        const answer = said.trim() ? said : quiet ? "Nothing to report." : gaveUp ? `It could not do this${end.reason ? `: ${end.reason}` : "."}` : empty && settled.status === "done" ? "The run ended without a report (its final text was empty)."
           : settled.status === "done" ? "(The subagent finished without a reply.)" : `The subagent did not finish (${settled.status}).`;
         // Persist the answer before submitting it, so a replay cannot pick up a later answer.
         const report = await api.memo("report", { answer: capOutput(answer, limits().outputChars),
-          status: settled.status === "done" && !limited && !empty
+          status: settled.status === "done" && !limited && !empty && !gaveUp
             && (!task.input.origin?.routineTaskId || answerEntry?.model?.[0]?.stopReason === "stop") ? "finished" : "failed" }, context);
         const endedAt = task.input.gate ? await api.memo("endedAt", new Date().toISOString(), context) : null;
         let stopped = false;
@@ -647,6 +649,9 @@ export function Subagents(runtime) {
         return textResult(`Stopped subagent ${item.id}: ${item.title}`);
       }
       if (action === "wait") {
+        // Ended already: its report is in this thread, or on its way, and the reporter waits on the turn that takes
+        // it -- the turn asking, when the report woke it, which would then wait on itself.
+        if (item.endedAt && item.status !== "running") return textResult(`Subagent ${item.id} has already ${item.status === "finished" ? "finished" : item.status}; its report comes to this thread.`);
         const settled = await api.waitForTask(item.reporter, context);
         return textResult(capOutput(settled.state.outcome.result?.answer || `Subagent ${item.id}: ${item.status}`, limits().outputChars));
       }
