@@ -213,7 +213,10 @@ svg.lucide { stroke-width: 2.4; }
 /* The jbot chat (dashboard/jbot-room.tsx): its messages are all drawn (no transcript-visibility windowing), so the
    rows the viewport does not reach are skipped from layout and paint, their last size kept; a resize of the dock or a
    pane beside it then lays out what is on screen, not every message ever said. */
-[data-jbot-room] .ui-transcript > .ui-transcript-row { content-visibility: auto; contain-intrinsic-size: auto var(--measure-2xs);
+/* Only a row drawn once (data-drawn, JbotMessages): one never drawn has no size kept, so skipped it shows for a frame
+   as an empty box of the placeholder size -- a new row at the foot, or an old one first skipped as rows come in. */
+[data-jbot-room] .ui-transcript > .ui-transcript-row[data-drawn] { content-visibility: auto; }
+[data-jbot-room] .ui-transcript > .ui-transcript-row {
   /* Skipping paint clips a row to its box, so the box reaches over the gutter (its content where it was) and what hangs
      there -- a step's or a run's mark, the orb -- is drawn. overflow-clip-margin would do it but takes no calc(). */
   --row-reach: calc(var(--icon-xl) + 2 * var(--row-gap) + var(--mark-reach));

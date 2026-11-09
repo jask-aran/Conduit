@@ -249,12 +249,34 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   return { verb: kind === "other" ? `Using ${toolName(now.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
 }
 
+/* What someone (the actor: jbot in its chat) is doing, as the end of "jbot is …": live only. Several tools at once
+   are told by the first, the one it started first. */
+const KIND_PHRASES: Record<Exclude<ToolKind, "other">, string> = {
+  command: "running a command", read: "reading", edit: "editing files", search: "searching the web", fetch: "reading a page",
+  script: "using its tools", agent: "waiting on an agent", message: "sending you a message",
+};
+function actorPhrase(trace: TurnTraceData, writing: boolean): string {
+  const tool = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : [])[0];
+  if (!tool) return writing ? "writing" : "thinking";
+  if (unnamed(tool)) return "using a tool";
+  const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
+  const kind = stepKind(now);
+  // An adapter's own verb ("Using skill"): lower-cased, a bare noun given its article.
+  if (now.facts?.verb) { const verb = now.facts.verb[0]; const bare = /^Using (\w+)$/.exec(verb); return bare ? `using a ${bare[1]}` : verb.charAt(0).toLowerCase() + verb.slice(1); }
+  return kind === "other" ? NAME_PHRASES[now.name ?? ""] ?? `using ${(toolName(now.name) || "a tool").replace(/_/g, " ")}` : KIND_PHRASES[kind];
+}
+/* A tool by its name, for the moment before it is classified (its kind arrives with its facts). */
+const NAME_PHRASES: Record<string, string> = {
+  bash: "running a command", web_search: "searching the web", fetch_content: "reading a page",
+  get_search_content: "reading what it found", source_check: "checking a source",
+};
+
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
    end, since the file is the part worth reading. */
 function toolLine(tool: ToolItem): string {
   if (tool.facts?.subject) return stepText(tool);
   const subject = tool.subject || "";
-  if (tool.kind === "search") return `\u201c${subject}\u201d`;
+  if (tool.kind === "search") return subject ? `\u201c${subject}\u201d` : "";
   return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
 }
 
@@ -516,7 +538,10 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   form?: "steps" | "header" | "hidden";
   /** The turn header: the whole turn's work as one line, no latest line under it. opens: it opens to the turn's steps
    *  (Turn header only, where no run is drawn). */
-  turn?: boolean; opens?: boolean }) {
+  turn?: boolean; opens?: boolean;
+  /** Who is working, for a line that says so: live "jbot is searching the web" (no running counts), settled
+   *  "Worked for 15.7s" and what it did (jbot's chat). */
+  actor?: string }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
@@ -549,6 +574,10 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   // A trace that is only context (a thread's opening system prompt, above its first message) is its lines alone.
   const onlyContext = () => props.trace.segments.length > 0 && props.trace.segments.every((segment) => segment.kind === "context");
   const form = () => props.form ?? "steps";
+  // With an actor (jbot's chat): live, what it is doing in its name; settled, how long it worked; a turn that did not
+  // finish keeps its own word (Interrupted, Failed).
+  const acting = () => Boolean(props.actor) && !unfinished();
+  const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}` : time() ? `Worked for ${time()}` : "Worked";
   const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
   // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
   if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
@@ -579,8 +608,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
         <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
     </>}>
     <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
-      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : preview().status.verb} quiet={looked()} time={looked() ? undefined : time() || undefined}
-      work={settledRun() ? undefined : preview().work || undefined}
+      status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : acting() ? actorStatus() : preview().status.verb}
+      quiet={looked()} time={looked() || (acting() && !props.trace.active) ? undefined : time() || undefined}
+      work={settledRun() || (acting() && props.trace.active) ? undefined : preview().work || undefined}
       latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
       opens={trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}

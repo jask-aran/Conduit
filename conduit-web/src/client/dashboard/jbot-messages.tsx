@@ -112,6 +112,8 @@ export function useJbotMessages(changed: () => unknown) {
 export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean;
   /** The home thread's turn while it runs (its Folded trace): what jbot is doing now. */
   live?: TurnTraceData | null;
+  /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
+  sent?: { text: string; at: string } | null;
   /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
@@ -169,21 +171,50 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // trace never goes before what it ended is there.
   // A turn can end with no reply after it (its word sent with the message tool, or nothing to say): the trace then
   // goes a moment after the turn ends, rather than waiting on a reply that is not coming.
+  // Only a turn still running is live: the chat's last trace before the new turn has begun (the last turn's, "Done")
+  // and the turn once it has ended are not. Its last live trace is held, as it last read, until the reply is in the
+  // log -- read in the same pass that draws the reply, so the two never show together -- or a moment after it ended
+  // with none.
+  const fresh = () => props.live?.active ? props.live : null;
   const [held, setHeld] = createSignal<{ trace: TurnTraceData; last?: string } | null>(null);
+  const [gone, setGone] = createSignal(false);
   let letGo: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(letGo));
   createEffect(() => {
-    const trace = props.live;
+    const trace = fresh();
     clearTimeout(letGo);
-    if (trace) setHeld({ trace, last: untrack(() => props.messages.at(-1)?.id) });
-    else if (untrack(held)) letGo = setTimeout(() => setHeld(null), 4000);
+    if (trace) { setGone(false); setHeld({ trace, last: untrack(() => props.messages.at(-1)?.id) }); }
+    else if (untrack(held)) letGo = setTimeout(() => setGone(true), 4000);
   });
-  createEffect(on(() => props.messages, (messages) => { const kept = held(); if (kept && !props.live && messages.at(-1)?.id !== kept.last) { clearTimeout(letGo); setHeld(null); } }, { defer: true }));
-  const live = () => props.live ?? held()?.trace ?? null;
+  const live = () => {
+    const now = fresh();
+    if (now) return now;
+    const kept = held();
+    return kept && !gone() && props.messages.at(-1)?.id === kept.last ? kept.trace : null;
+  };
+  // The live row through a blink: the chat's state can drop out of running for a frame as the hub takes the turn up,
+  // which took the row out and put it back, the log sliding under it. While the person's message is still the last
+  // word (no reply yet), it stays a moment longer than its reason does.
+  const wanted = () => Boolean(live() || props.working || unsent());
+  const [lingering, setLingering] = createSignal(false);
+  createEffect(on(wanted, (now, before) => {
+    if (!before || now) return setLingering(false);
+    setLingering(true);
+    const timer = setTimeout(() => setLingering(false), 400);
+    onCleanup(() => clearTimeout(timer));
+  }));
+  const showLive = () => wanted() || (lingering() && (Boolean(unsent()) || props.messages.at(-1)?.direction === "in"));
+  // The person's message, until the log has it: the same words, in from them, since a minute before it was sent.
+  const unsent = createMemo(() => {
+    const sent = props.sent;
+    if (!sent?.text.trim()) return null;
+    const since = Date.parse(sent.at) - 60_000;
+    return props.messages.some((message) => message.direction === "in" && message.body.trim() === sent.text.trim() && Date.parse(message.at) >= since) ? null : sent;
+  });
   const loadContext = (entryId: number) => api<ContextText>(`/v0/sessions/${encodeURIComponent(agentView()?.home?.chatId ?? "")}/context/${entryId}`);
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
-  // The orb is the live turn's alone, as a thread draws only its latest turn's.
-  const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} orb={!message} renderer={props.renderer} loadContext={loadContext}
+  // Every turn header keeps its orb, at rest once settled: the mark of jbot at work, wherever it worked.
+  const trace = (data: () => TurnTraceData, message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} renderer={props.renderer} loadContext={loadContext}
     onOpenChange={(open) => { if (open && message) void readWork([message], true).catch(() => {}); }} /></Turn>;
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
@@ -217,12 +248,23 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
+  // Each row is drawn once in full before it may be skipped off screen (styles.css, data-drawn), with the height it was
+  // drawn at as its stand-in: skipped before the browser has kept a size of its own, it is still its own height.
+  let list: HTMLDivElement | undefined;
+  createEffect(on(rows, () => requestAnimationFrame(() => {
+    const fresh = [...list?.querySelectorAll<HTMLElement>(":scope > .ui-transcript-row:not([data-drawn])") ?? []];
+    const heights = fresh.map((row) => row.offsetHeight);
+    fresh.forEach((row, index) => { if (!heights[index]) return; row.style.containIntrinsicSize = `auto ${heights[index]}px`; row.dataset.drawn = ""; });
+  })));
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
-        <TranscriptList data-times="shown" each={rows()} of="jbot"
-          after={<Show when={live() || props.working}><TranscriptRow flow={props.messages.length ? "exchange" : undefined}>
-            <Show when={live()} fallback={<Turn><TraceStarting /></Turn>}>{(data) => trace(data)}</Show>
-          </TranscriptRow></Show>}>
+        <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
+          after={<>
+            <Show when={unsent()}>{(sent) => <TranscriptRow flow={props.messages.length ? "turn" : undefined}><Message at={sent().at}>{sent().text}</Message></TranscriptRow>}</Show>
+            <Show when={showLive()}><TranscriptRow flow={props.messages.length || unsent() ? "exchange" : undefined}>
+              <Show when={live()} fallback={<Turn><TraceStarting label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
+            </TranscriptRow></Show>
+          </>}>
           {(row, index) => row.kind === "run"
             ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}

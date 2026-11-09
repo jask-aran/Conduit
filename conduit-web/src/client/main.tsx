@@ -6089,6 +6089,12 @@ function App() {
       markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       live={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming() ? liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration()) : null}
+      sent={(() => {
+        if (current.chat.loadedId() !== agentView()?.home?.chatId) return null;
+        // The person's own last message there (not a run's report, a beat or a steer Conduit wrote).
+        const mine = current.chat.messages().findLast((message) => message.role === "user" && message.origin !== "harness" && !message.run && !message.id.startsWith("beat:"));
+        return mine?.content ? { text: mine.content, at: mine.timestamp || new Date().toISOString() } : null;
+      })()}
       threadChanged={current.chat.loadedId() === agentView()?.home?.chatId ? `${current.chat.messages().length}:${current.chat.streaming()}` : null}
       composerReady={!agentView()?.home?.chatId || current.chat.loadedId() === agentView()?.home?.chatId}
       composer={<Show when={current.chat.loadedId() && current.chat.loadedId() === agentView()?.home?.chatId}>
