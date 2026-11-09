@@ -7,8 +7,9 @@ export const COMPOSER_KINDS: { value: ComposerKind; label: string }[] = [
   { value: "web", label: "Web" }, { value: "native", label: "Native while typing" },
 ];
 const KEY = "conduit.composer";
+/** Native while typing unless the person chose the web one (it only takes over where the Android plugin is there). */
 export function composerKind(): ComposerKind {
-  try { return localStorage.getItem(KEY) === "native" ? "native" : "web"; } catch { return "web"; }
+  try { return localStorage.getItem(KEY) === "web" ? "web" : "native"; } catch { return "native"; }
 }
 export function saveComposerKind(kind: ComposerKind): ComposerKind {
   try { localStorage.setItem(KEY, kind); } catch { /* this page only */ }
