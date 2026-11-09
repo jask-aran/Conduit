@@ -16,7 +16,7 @@ const line = (text, max) => {
 export const pushAllowed = (agent, level) => level === "urgent" || !agent || !inQuietHours(agent.settings());
 
 /** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
-export function agentNotifier({ agent, push, hubId }) {
+export function agentNotifier({ agent, push, hubId, hubName = () => null }) {
   // Resolves to the devices it reached and missed, by label (`{ to, missed }`), or null when nothing was sent.
   return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0, path = null }) => (async () => {
     // The agent's threads, and any chat whose profile reaches the person's accounts (an approval it is waiting on).
@@ -55,6 +55,8 @@ export function agentNotifier({ agent, push, hubId }) {
       path: path || (thread.role === "home" && !approval ? "/jbot" : `/chat/${thread.chatId}`),
       tag,
       hub: hubId(),
+      // Which hub (a network) it came from: one phone can hear from several (conduit-dev, conduit-local).
+      ...(hubName() ? { hubName: hubName() } : {}),
       ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });

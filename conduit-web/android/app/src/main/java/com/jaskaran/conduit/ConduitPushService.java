@@ -87,6 +87,9 @@ public class ConduitPushService extends PushService {
                 .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.conduit_frame)).setContentTitle((String) title).setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE).setContentIntent(pending);
+            // The hub it came from (a network), in the header beside the app's name: one phone hears from several.
+            String hubName = payload.optString("hubName", "");
+            if (!hubName.isEmpty()) notification.setSubText(hubName);
             // From someone (jbot): a message from them, their picture beside it (agent_avatar: its mark, not the app icon
             // Android already badges it with), a report's name over its text.
             String sender = payload.optString("sender", "");

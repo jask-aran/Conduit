@@ -819,7 +819,7 @@ if (persistentAgent) {
   persistentAgent.chatHost = createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore,
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
-  durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id });
+  durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id, hubName: () => serverIdentity.name });
   // The approval model's model (agent/policy.js approverOf): Settings › Helper models › Review, else Naming's.
   durableAdapter.runtime.reviewModel = () => { const preference = preferences.get(); return preference.reviewModel || preference.sessionNameModel || null; };
   // What jbot and the person say to each other, apart from its thread (agent/messages.js); it outlives a reset.

@@ -7,7 +7,9 @@ self.addEventListener("push", (event) => {
   try { data = event.data ? event.data.json() : {}; } catch { return; }
   if (data.v !== 1 || typeof data.title !== "string") return;
   const path = typeof data.path === "string" && data.path.startsWith("/") && !data.path.startsWith("//") ? data.path : "/";
-  event.waitUntil(self.registration.showNotification(data.title, {
+  // Which hub it came from: a browser shows no sub-text, so the title carries it.
+  const title = typeof data.hubName === "string" && data.hubName ? `${data.title} · ${data.hubName}` : data.title;
+  event.waitUntil(self.registration.showNotification(title, {
     body: typeof data.body === "string" ? data.body : "",
     tag: `${data.hub || "conduit"}:${data.tag || "agent"}`,
     renotify: true,
