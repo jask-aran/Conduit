@@ -1,3 +1,4 @@
+import { doingOf } from "./turn-digest.js";
 import { submitWithNotes } from "./context/notices.js";
 import { remoteNode } from "./place.js";
 import { connectorFacts, connectorSubject } from "./agent/connector-services.js";
@@ -147,9 +148,10 @@ const agentFields = (name, input, details = {}) => name === "subagent" ? {
 const agentStep = (event) => {
   if (event.type === "message_update" && event.changes?.some((change) => change.type.startsWith("text_"))) return "answering";
   if (event.type !== "tool_execution_start") return null;
-  const verb = { read: "reading", command: "running", search: "searching", edit: "writing", fetch: "fetching", script: "running" }[toolKind(TOOL_KINDS, event.toolName)] || "working";
-  const subject = subjectOf(event.toolName, event.args);
-  return `${verb}${subject ? ` ${subject}` : ""}`;
+  // What it is doing in the person's terms, as a turn's live line says it (turn-digest.js): "checking Gmail".
+  const name = event.toolName, args = event.args || {};
+  return doingOf({ name, kind: toolKind(TOOL_KINDS, name), subject: subjectOf(name, args) || undefined, facts: factsOf(name, args) || undefined, input: args,
+    spawn: name === "subagent" && (!args.action || args.action === "spawn"), agent: name === "subagent" ? { id: args.id ?? null } : null });
 };
 
 const SCRIPT_TOOLS = {

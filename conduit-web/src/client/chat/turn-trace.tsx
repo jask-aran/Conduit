@@ -210,11 +210,6 @@ function workOf(tools: ToolItem[]): string {
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
 
-/* What a running tool of each kind is doing. */
-const KIND_VERBS: Record<Exclude<ToolKind, "other">, string> = {
-  command: "Running", read: "Reading", edit: "Editing", search: "Searching", fetch: "Fetching", script: "Scripting tools", agent: "Delegating", message: "Notifying",
-};
-
 /* One verb for what it is doing, or how it ended -- always there, so a clean
    finish says Done rather than being told apart by what it lacks. Live, a
    running tool is its kind's verb, several at once are counted, between tools
@@ -243,37 +238,17 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   const tool = running[0];
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
-  // What it is doing now: a script by the call it is on, a step the adapter put in words by its own verb.
+  // What it is doing now, in the person's terms (turn-digest.js): "Searching the web", "Checking Gmail"; a script by
+  // the call it is on. The orb is the step's kind's.
   const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
-  const kind = stepKind(now);
-  if (now.facts?.verb) return { verb: now.facts.verb[0], ...KIND_ORBS[kind] };
-  return { verb: kind === "other" ? `Using ${toolName(now.name) || "a tool"}` : KIND_VERBS[kind], ...KIND_ORBS[kind] };
+  return { verb: capitalised(digestDoing(trace) ?? "working"), ...KIND_ORBS[stepKind(now)] };
 }
 
-/* What someone (the actor: jbot in its chat) is doing, as the end of "jbot is …": live only. Several tools at once
-   are told by the first, the one it started first. */
-const KIND_PHRASES: Record<Exclude<ToolKind, "other">, string> = {
-  command: "running a command", read: "reading", edit: "editing files", search: "searching the web", fetch: "reading a page",
-  script: "using its tools", agent: "waiting on an agent", message: "sending you a message",
-};
+/* What someone (the actor: jbot in its chat) is doing, as the end of "jbot is …": live only. */
 function actorPhrase(trace: TurnTraceData, writing: boolean): string {
-  const tool = trace.segments.flatMap((segment) => segment.kind === "tool" && !segment.tool.done ? [segment.tool] : [])[0];
-  if (!tool) return writing ? "writing" : "thinking";
-  // What it is doing in the person's terms (turn-digest.ts), the same words the settled line uses.
-  const doing = digestDoing(trace);
-  if (doing) return doing;
-  if (unnamed(tool)) return "using a tool";
-  const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
-  const kind = stepKind(now);
-  // An adapter's own verb ("Using skill"): lower-cased, a bare noun given its article.
-  if (now.facts?.verb) { const verb = now.facts.verb[0]; const bare = /^Using (\w+)$/.exec(verb); return bare ? `using a ${bare[1]}` : verb.charAt(0).toLowerCase() + verb.slice(1); }
-  return kind === "other" ? NAME_PHRASES[now.name ?? ""] ?? `using ${(toolName(now.name) || "a tool").replace(/_/g, " ")}` : KIND_PHRASES[kind];
+  // What it is doing in the person's terms (turn-digest.js), the same words its settled line uses.
+  return digestDoing(trace, true) ?? (writing ? "writing" : "thinking");
 }
-/* A tool by its name, for the moment before it is classified (its kind arrives with its facts). */
-const NAME_PHRASES: Record<string, string> = {
-  bash: "running a command", web_search: "searching the web", fetch_content: "reading a page",
-  get_search_content: "reading what it found", source_check: "checking a source",
-};
 
 /* A tool's line: what it acted on, a search's in quotes, a long path from its
    end, since the file is the part worth reading. */
@@ -585,7 +560,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   // finish keeps its own word (Interrupted, Failed).
   const acting = () => Boolean(props.actor);
   // Settled, what it did (turn-digest.ts): its line's words, the time beside them.
-  const done = createMemo(() => props.actor && !props.trace.active ? digestDone(props.trace) : "");
+  const done = createMemo(() => props.actor && !props.trace.active ? digestDone(props.trace, true) : "");
   const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}`
     : props.trace.status === "interrupted" ? `${props.actor} was interrupted` : props.trace.status === "failed" ? `${props.actor} failed`
     : done() ? `${props.actor} ${done()}` : time() ? `${props.actor} worked for ${time()}` : `${props.actor} worked`;
@@ -636,9 +611,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
    connecting and its time counting, one line of space held under it for the
    step that will fill it. The trace takes its place when its first step
    arrives, in the same spot, at the same height. */
-export function TraceStarting(props: { startedAt?: string; label?: string; since?: number; narrated?: boolean; line?: boolean }) {
+export function TraceStarting(props: { startedAt?: string; label?: string; since?: number; narrated?: boolean; line?: boolean; thinking?: boolean }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
   // Narrated has no orb: what it is doing is a line of the trail, as its work will be.
   if (props.narrated) return <Trail><Step state="running" verb={props.label || "Starting"} time={time() || undefined} motion={props.since != null ? "entering" : undefined} /></Trail>;
-  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state="connecting" />} status={props.label || "Starting"} time={time() || undefined} live={!props.line} />;
+  return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={props.thinking ? "working" : "connecting"} />} status={props.label || "Starting"} time={time() || undefined} live={!props.line} />;
 }

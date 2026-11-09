@@ -310,7 +310,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             <Show when={leavingTrace()}>{(gone) => <TranscriptRow flow="exchange" {...motionOf("removing")}>{trace(() => gone().trace)}</TranscriptRow>}</Show>
             <Show when={unsent()}>{(sent) => <TranscriptRow flow={props.messages.length ? "turn" : undefined}><Message at={sent().at}>{sent().text}</Message></TranscriptRow>}</Show>
             <Show when={showLive()}><TranscriptRow flow={props.messages.length || unsent() ? "exchange" : undefined}>
-              <Show when={live()} fallback={<Turn><TraceStarting line label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
+              <Show when={live()} fallback={<Turn><TraceStarting line thinking label={`${props.name} is thinking`} /></Turn>}>{(data) => trace(data)}</Show>
             </TranscriptRow></Show>
           </>}>
           {(row, index) => row.kind === "run" && row.run.agent
