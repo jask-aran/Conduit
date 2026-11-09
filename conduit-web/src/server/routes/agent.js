@@ -140,7 +140,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
         questions: waiting,
         asks: view.asks.filter((ask) => ask.status === "pending"),
         proposals: await listProposals(agent),
-        notices: [...state.notices, ...(agent.connectors.entry("executor").status === "on" ? [] : [{
+        // Not while it may still be coming up (the hub starting, a reconnect): a minute's grace (Connectors.troubled).
+        notices: [...state.notices, ...(!agent.connectors.troubled("executor") ? [] : [{
           id: "connector-executor", kind: "connector", text: "Executor isn't connected", at: null,
         }]), ...await parkedTasks()],
       },

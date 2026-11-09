@@ -14,9 +14,13 @@ export const CONNECTORS = [{ id: "executor", label: "Executor", url: "https://mc
   gates: true,
   resourceMetadata: "https://mcp.executor.sh/.well-known/oauth-protected-resource/mcp?elicitation_mode=model" }];
 
+/** How long a connection may be coming up (the hub starting, a reconnect) before it is a problem to show or report. */
+const SETTLE_MS = 60_000;
+
 export class Connectors {
   constructor(agent) {
     this.agent = agent;
+    this.bootAt = Date.now();
     this.entries = new Map(CONNECTORS.map((info) => [info.id, { info, status: "off", tools: [], instructions: null }]));
     this.pending = new Map();
   }
@@ -64,8 +68,13 @@ export class Connectors {
   describe(id) { return this.entry(id).tools.map((tool) => ({ name: tool.label, description: tool.description, readOnly: tool.connectorReadOnly })); }
   instructions(id) { const entry = this.entry(id); return entry.status === "on" ? entry.instructions : null; }
   tools() { return [...this.entries.values()].flatMap((entry) => entry.tools); }
-  /** Wait for one still coming up (the hub starting, a reconnect) before anything says it is not connected. */
-  async ready(id, timeoutMs = 15_000) {
+  /** How long one has been down: since the hub started, or since it was last on. */
+  downFor(id) { const entry = this.entry(id); return entry.status === "on" ? 0 : Date.now() - Math.max(this.bootAt, entry.downSince || 0); }
+  /** Down past the settle window: only then does anything say so (Needs you). */
+  troubled(id) { return this.entry(id).status !== "on" && this.downFor(id) >= SETTLE_MS; }
+  /** Wait for one still coming up (the hub starting, a reconnect) before anything says it is not connected: what is
+   *  left of its settle window, and at least 15 s. */
+  async ready(id, timeoutMs = Math.max(15_000, SETTLE_MS - this.downFor(id))) {
     let timer;
     try {
       await Promise.race([(async () => {
@@ -78,6 +87,7 @@ export class Connectors {
   }
   async connect(entry) {
     if (entry.connecting) return entry.connecting;
+    if (entry.status === "on") entry.downSince = Date.now();
     entry.authorized = true; entry.status = "connecting"; delete entry.error;
     entry.connecting = (async () => {
       let client;
@@ -107,8 +117,8 @@ export class Connectors {
             } };
         });
         if (!entry.authorized) { await client.close(); return; }
-        const old = entry.client; entry.client = client; entry.tools = tools; entry.instructions = client.instructions ?? null; entry.status = "on";
-        client.onClose(() => { if (entry.client === client && entry.authorized) { entry.status = "error"; entry.error = "Connector connection closed"; } });
+        const old = entry.client; entry.client = client; entry.tools = tools; entry.instructions = client.instructions ?? null; entry.status = "on"; delete entry.downSince;
+        client.onClose(() => { if (entry.client === client && entry.authorized) { entry.status = "error"; entry.error = "Connector connection closed"; entry.downSince = Date.now(); } });
         await this.agent.runtime.refreshConnectors?.();
         if (old) await old.close().catch(() => {});
       } catch (error) {

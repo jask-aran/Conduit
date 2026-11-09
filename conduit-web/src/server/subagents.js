@@ -663,7 +663,8 @@ export function Subagents(runtime) {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
-    if (gate && runtime.agent?.connectors.entry("executor").status !== "on") {
+    // Said once it has been down past the settle window, not while it may still be coming up (Connectors.troubled).
+    if (gate && runtime.agent?.connectors.troubled("executor")) {
       const doc = await tx.doc(AgentDoc);
       doc.notices.push({ id: `n-${doc.next++}`, kind: "connector", text: `${title}: Executor isn't connected`, at: new Date().toISOString() });
       doc.notices.splice(0, Math.max(0, doc.notices.length - 20));
