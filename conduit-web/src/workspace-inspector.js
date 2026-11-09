@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -259,8 +260,11 @@ export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024,
         terminalError = error;
         terminateProcess(child);
       };
-      const append = (current, chunk) => {
-        const next = current + chunk.toString("utf8");
+      // Decoded as a stream: a character split across two chunks is one character, not two broken ones.
+      const decoders = new Map();
+      const append = (current, chunk, stream) => {
+        if (!decoders.has(stream)) decoders.set(stream, new StringDecoder("utf8"));
+        const next = current + decoders.get(stream).write(chunk);
         if (Buffer.byteLength(next) > maxBuffer) {
           fail(inspectorError("workspace_git_output_limit", "Git inspection exceeded its output limit"));
           return current;
@@ -269,8 +273,8 @@ export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024,
       };
       const onAbort = () => fail(abortError());
       const timer = setTimeout(() => fail(inspectorError("workspace_git_timeout", "Git inspection timed out")), timeoutMs);
-      child.stdout.on("data", (chunk) => { stdout = append(stdout, chunk); });
-      child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk); });
+      child.stdout.on("data", (chunk) => { stdout = append(stdout, chunk, "stdout"); });
+      child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk, "stderr"); });
       child.on("error", (error) => finish(terminalError || error));
       child.on("exit", () => {
         // A terminated command's stdio can remain open briefly (or be held by a

@@ -9,6 +9,11 @@ const MAX_TURNS_PER_CHAT = 50;
 // A turn keeps two records: where it started and, once it settles, where it ended.
 const MAX_FILES_PER_CHAT = MAX_TURNS_PER_CHAT * 2;
 const SNAPSHOT_TIMEOUT_MS = 120_000;
+// What one snapshot may add to a store: a folder past these (a home directory, a disk) is not checkpointed, and is not
+// asked again for a while (the listing alone can take the whole Git timeout, before a turn starts).
+const MAX_PENDING_FILES = 20_000;
+const MAX_PENDING_BYTES = 512 * 1024 * 1024;
+const REFUSED_FOR_MS = 10 * 60_000;
 // A device's shadow store sits inside the repository's own Git directory (only Git workspaces are checkpointed there).
 const DEVICE_STORE = ".git/conduit-turns";
 
@@ -39,6 +44,7 @@ export class TurnCheckpointStore {
     // Two trees' summary never changes.
     this.summaries = new Map();
     this.ready = new Map();
+    this.refused = new Map();
   }
 
   /**
@@ -55,7 +61,7 @@ export class TurnCheckpointStore {
     await host.checkRoot();
     const git = (args, options = {}) => host.git(["--git-dir", gitDir, "--work-tree", ".", "-c", "advice.addEmbeddedRepo=false", ...args],
       { maxBuffer: 16 * 1024 * 1024, ...options });
-    const workspace = { host, identity, git, storeKey, local };
+    const workspace = { host, identity, git, gitDir, storeKey, local };
     if (!this.ready.has(storeKey)) {
       const made = git(["rev-parse", "--is-bare-repository"]).catch(() => host.git(["init", "-q", "--bare", gitDir]));
       this.ready.set(storeKey, made);
@@ -78,10 +84,43 @@ export class TurnCheckpointStore {
   /** The workspace as it is now, as a tree in its store. A file Git cannot read is left out, not the snapshot. */
   #snapshot(workspace) {
     return this.#queued(workspace.storeKey, async () => {
+      const tooLarge = () => Object.assign(new Error("The workspace is too large to checkpoint"), { code: "checkpoint_too_large" });
+      if (this.refused.get(workspace.storeKey) > Date.now()) throw tooLarge();
       // `.conduit` is Conduit's own; a device takes the pathspec through its shell, so only the hub excludes it.
-      await workspace.git(["add", "-A", "--ignore-errors", "--", ".", ...(workspace.local ? [":(exclude).conduit"] : [])], { timeoutMs: SNAPSHOT_TIMEOUT_MS }).catch(() => {});
+      // Nor is a store ever snapshotted into itself (a workspace that holds the data root).
+      const own = workspace.local ? path.relative(workspace.identity, this.root).split(path.sep).join("/") : "";
+      const scope = ["--", ".", ...(workspace.local ? [":(exclude).conduit"] : []), ...(own && safeRelative(own) ? [`:(exclude)${own}`] : [])];
+      try {
+        const pending = (await workspace.git(["ls-files", "-z", "--others", "--modified", "--exclude-standard", ...scope], { maxBuffer: 4 * 1024 * 1024 }))
+          .stdout.split("\0").filter(Boolean);
+        if (pending.length > MAX_PENDING_FILES) throw tooLarge();
+        if (workspace.local) {
+          const sizes = await mapLimit(pending, 32, (relativePath) => workspace.host.lstat(relativePath).then((stat) => stat?.size || 0, () => 0));
+          if (sizes.reduce((sum, size) => sum + size, 0) > MAX_PENDING_BYTES) throw tooLarge();
+        }
+        if (pending.length) await this.#add(workspace, scope);
+      } catch (error) {
+        if (["checkpoint_too_large", "workspace_git_output_limit", "workspace_git_timeout"].includes(error.code)) {
+          this.refused.set(workspace.storeKey, Date.now() + REFUSED_FOR_MS);
+          throw tooLarge();
+        }
+        throw error;
+      }
       return (await workspace.git(["write-tree"])).stdout.trim();
     });
+  }
+
+  async #add(workspace, scope, retry = true) {
+    try { await workspace.git(["add", "-A", "--ignore-errors", ...scope], { timeoutMs: SNAPSHOT_TIMEOUT_MS }); }
+    catch (error) {
+      // A store's index is written by this queue alone, so a lock found there was left by an add that was killed.
+      if (retry && workspace.local && /index\.lock/.test(`${error.stderr || ""}${error.message}`)) {
+        await fs.rm(path.join(workspace.gitDir, "index.lock"), { force: true });
+        return this.#add(workspace, scope, false);
+      }
+      // Otherwise files it could not read: the rest are in the index.
+      if (error.code === "workspace_git_timeout") throw error;
+    }
   }
 
   /** Where a turn starts: the workspace as it is just before the prompt goes out (a regenerate's, where its source did). */
@@ -151,7 +190,8 @@ export class TurnCheckpointStore {
       // turn's start, or the workspace as it is.
       const end = endOf(checkpoint);
       const next = numbered[index + 1] || null;
-      const target = end?.tree ?? next?.checkpoint.tree ?? await (working ??= this.#snapshot(workspace));
+      // A workspace that cannot be read now (too large) leaves its open turn without a count, not the chat without a timeline.
+      const target = end?.tree ?? next?.checkpoint.tree ?? await (working ??= this.#snapshot(workspace).catch(() => checkpoint.tree));
       timeline.push({
         id: checkpoint.id,
         createdAt: checkpoint.createdAt,
@@ -188,9 +228,11 @@ export class TurnCheckpointStore {
       const size = await workspace.git(["cat-file", "-s", `${tree}:${relativePath}`]).then(({ stdout }) => Number(stdout), () => null);
       if (size === null) return { text: "", held: false };
       if (size > MAX_FILE_BYTES) return { large: true };
-      return { text: (await workspace.git(["cat-file", "blob", `${tree}:${relativePath}`], { maxBuffer: MAX_FILE_BYTES * 4 })).stdout, held: true };
+      // Not a file there (a folder, a repository inside this one): nothing to show as text.
+      return workspace.git(["cat-file", "blob", `${tree}:${relativePath}`], { maxBuffer: MAX_FILE_BYTES * 4 }).then(({ stdout }) => ({ text: stdout, held: true }), () => ({ other: true }));
     };
     const [original, modified] = await Promise.all([blob(checkpoint.tree), blob(target)]);
+    if (original.other || modified.other) return unavailable(relativePath, scope, "unsupported", "Checkpoint comparison is available for regular files only.");
     if (original.large || modified.large) return unavailable(relativePath, scope, "size", "This file exceeds the 1 MiB checkpoint comparison limit.");
     if (original.held === modified.held && original.text === modified.text) return unavailable(relativePath, scope, "unchanged", "This file did not change from the selected checkpoint.");
     // Git's output is read as text: bytes that are not UTF-8 arrive as replacement characters.

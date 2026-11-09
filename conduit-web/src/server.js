@@ -681,7 +681,11 @@ async function applyBackendName(adapter, record, name) {
 for (const adapter of backends.instances()) {
   adapter.on?.("settled", ({ record, completed }) => {
     // An ephemeral record -- a probe -- has no chat to checkpoint.
-    if (!record.ephemeral) void closeTurnCheckpoint(record, record.generation?.id || null).then(() => checkpointNativeAdapter(adapter, record, completed !== false));
+    if (record.ephemeral) return;
+    // The chat is told once its checkpoint is closed, or after a moment: a first snapshot of a large folder goes on behind.
+    const closed = closeTurnCheckpoint(record, record.generation?.id || null);
+    void Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 3_000).unref())])
+      .then(() => checkpointNativeAdapter(adapter, record, completed !== false));
   });
   adapter.on?.("changed", ({ record, reason, name }) => {
     publishProcessChange(adapter.view(record), record, reason);
