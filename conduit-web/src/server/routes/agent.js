@@ -407,7 +407,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const content = await notice(agent.runtime.contextStore, "report-run", { report, title: "Test report" });
       await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
         messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
-        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: at, endedAt: at } } } }, agent.context);
+        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
       agent.runtime.wakeChat?.(conversationId);
       response.status(202).json({ id: key });
     } catch (error) { next(error); }
