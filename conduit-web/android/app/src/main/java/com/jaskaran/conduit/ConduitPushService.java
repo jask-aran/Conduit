@@ -11,7 +11,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
-import android.graphics.BitmapFactory;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.Person;
 import androidx.core.graphics.drawable.IconCompat;
@@ -88,11 +87,11 @@ public class ConduitPushService extends PushService {
                 .setColor(androidx.core.content.ContextCompat.getColor(this, R.color.conduit_frame)).setContentTitle((String) title).setContentText(body)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE).setContentIntent(pending);
-            // From someone (jbot): a message from them, their picture beside it (for now the app icon, agent_avatar), a
-            // report's name over its text.
+            // From someone (jbot): a message from them, their picture beside it (agent_avatar: its mark, not the app icon
+            // Android already badges it with), a report's name over its text.
             String sender = payload.optString("sender", "");
             if (!sender.isEmpty()) {
-                IconCompat avatar = IconCompat.createWithBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.agent_avatar));
+                IconCompat avatar = IconCompat.createWithBitmap(avatarBitmap());
                 Person from = new Person.Builder().setName(sender).setIcon(avatar).build();
                 String heading = payload.optString("heading", "");
                 notification.setStyle(new NotificationCompat.MessagingStyle(new Person.Builder().setName("You").build())
@@ -120,5 +119,14 @@ public class ConduitPushService extends PushService {
         } catch (JSONException e) {
             Log.d("ConduitPush", "Invalid notification payload", e);
         }
+    }
+
+    /** jbot's picture (agent_avatar, a vector) as the bitmap a notification's person takes. */
+    private android.graphics.Bitmap avatarBitmap() {
+        android.graphics.drawable.Drawable drawable = androidx.core.content.ContextCompat.getDrawable(this, R.drawable.agent_avatar);
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(192, 192, android.graphics.Bitmap.Config.ARGB_8888);
+        drawable.setBounds(0, 0, 192, 192);
+        drawable.draw(new android.graphics.Canvas(bitmap));
+        return bitmap;
     }
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- jbot's picture on its notifications: its mark in the app (the bot glyph, Icons.Agent), white on Conduit's black.
+     Not the app icon: Android badges each notification with that already. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp" android:height="96dp" android:viewportWidth="40" android:viewportHeight="40">
+    <path android:fillColor="@color/conduit_frame" android:pathData="M0,0h40v40h-40z" />
+    <group android:translateX="8" android:translateY="8">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M12,8V4H8 M6,8h12a2,2 0,0 1,2 2v8a2,2 0,0 1,-2 2h-12a2,2 0,0 1,-2 -2v-8a2,2 0,0 1,2 -2z M2,14h2 M20,14h2 M15,13v2 M9,13v2" />
+    </group>
+</vector>
