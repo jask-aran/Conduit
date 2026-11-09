@@ -5,6 +5,9 @@
 .ui-trace-orb { position: absolute; top: 50%; right: calc(100% + var(--row-gap) + var(--mark-hang, 0px)); display: grid; width: var(--icon-xl); height: var(--icon-xl); translate: 0 -50%; }
 .ui-trace-orb:empty { display: none; }
 .ui-trace-line { min-width: 0; grid-area: 1 / 1; }
+/* Live with nothing under it yet (starting): the line held for the latest keeps the height, and the one line it has
+   sits centred against the orb rather than over an empty one. */
+.ui-trace[data-held-line] > .ui-trace-line { translate: 0 calc(50% + var(--space-2xs) / 2); }
 .ui-trace-line > b { color: var(--foreground); font-weight: var(--weight-strong); }
 /* A header whose line and latest come wrapped (the app's) lays them out as if they were not. */
 .ui-trace-time { font-variant-numeric: tabular-nums; }

@@ -1,7 +1,8 @@
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
+import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
 import { clockTime, AgentRows, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { openAgentChat } from "../chat/agents";
+import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
@@ -204,6 +205,22 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     onCleanup(() => clearTimeout(timer));
   }));
   const showLive = () => wanted() || (lingering() && (Boolean(unsent()) || props.messages.at(-1)?.direction === "in"));
+  // The live row making way: a turn with no work to show ends with its reply where the live row was, so the row fades
+  // out there first (removing, --duration-quick) and the reply waits for it (held), as a thread's provisional rows
+  // do. A turn with work keeps the row: it becomes the reply's header in place.
+  const [leavingTrace, setLeavingTrace] = createSignal<{ trace: TurnTraceData; reply?: string } | null>(null);
+  let lastLive: TurnTraceData | null = null;
+  createComputed(on(live, (now) => {
+    if (now) { lastLive = now; return; }
+    if (!lastLive) return;
+    const reply = untrack(() => props.messages.at(-1));
+    const worked = reply && untrack(() => Boolean(workOf(reply)));
+    const ghost = { trace: lastLive, reply: reply?.direction === "out" ? reply.id : undefined };
+    lastLive = null;
+    if (worked) return;
+    setLeavingTrace(ghost);
+    setTimeout(() => setLeavingTrace((current) => current === ghost ? null : current), 150);
+  }));
   // The person's message, until the log has it: the same words, in from them, since a minute before it was sent.
   const unsent = createMemo(() => {
     const sent = props.sent;
@@ -248,6 +265,12 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
   const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
+  // What jbot says while the chat is open fades in whole, as it arrives (a thread's answer fades in word by word); what
+  // was there when it opened, and the person's own words (already drawn as sent), do not.
+  const seen = new Set<string>();
+  let primed = false;
+  createEffect(on(rows, (list) => { for (const row of list) if (row.kind === "message" || row.kind === "run") seen.add(row.kind === "run" ? row.run.id : row.message.id); if (list.length) primed = true; }));
+  const arriving = (id: string) => untrack(() => primed && !seen.has(id));
   // Each row is drawn once in full before it may be skipped off screen (styles.css, data-drawn), with the height it was
   // drawn at as its stand-in: skipped before the browser has kept a size of its own, it is still its own height.
   let list: HTMLDivElement | undefined;
@@ -260,13 +283,14 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
         <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
           after={<>
+            <Show when={leavingTrace()}>{(gone) => <TranscriptRow flow="exchange" {...motionOf("removing")}>{trace(() => gone().trace)}</TranscriptRow>}</Show>
             <Show when={unsent()}>{(sent) => <TranscriptRow flow={props.messages.length ? "turn" : undefined}><Message at={sent().at}>{sent().text}</Message></TranscriptRow>}</Show>
             <Show when={showLive()}><TranscriptRow flow={props.messages.length || unsent() ? "exchange" : undefined}>
               <Show when={live()} fallback={<Turn><TraceStarting label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
             </TranscriptRow></Show>
           </>}>
           {(row, index) => row.kind === "run"
-            ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>
+            ? <TranscriptRow flow={flowAt(index())} {...motionOf(arriving(row.run.id) ? "entering" : undefined)}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
                   summary={row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run) : undefined} />
@@ -280,7 +304,9 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
                 <For each={row.messages}>{(message) => row.channel === "email" ? email(message) : one(message)}</For>
               </RoomRow>
             </TranscriptRow>
-            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1} data-dash-row="">
+            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1} data-dash-row=""
+              data-held={leavingTrace()?.reply === message.id ? "" : undefined}
+              {...motionOf(message.direction === "out" && arriving(message.id) ? "entering" : undefined)}>
               <Switch>
                 <Match when={message.direction === "in"}>
                   <Message at={message.at}>{message.body}</Message>

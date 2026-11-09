@@ -24,6 +24,10 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
   let target = showing;
   // One toggle can write the open state twice (the click, then the preference coming back): only a real change moves.
   let was = props.open;
+  // While the rows move, their scroller is marked folding (data-folding, a count): a transcript's follow then does not
+  // chase the size they change, which would move the view as a second motion beside this one.
+  let folding: HTMLElement | undefined;
+  const unfold = () => { if (!folding) return; const left = Number(folding.dataset.folding || 1) - 1; if (left > 0) folding.dataset.folding = String(left); else delete folding.dataset.folding; folding = undefined; };
   const settle = () => {
     // A move cut short leaves the rows where it reached, for the next to go on from.
     const progress = motions[0]?.effect?.getComputedTiming().progress;
@@ -31,6 +35,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
     for (const motion of motions) motion.cancel();
     motions = [];
     still?.remove(); still = undefined;
+    unfold();
   };
   // A computation runs before the document is updated: the rows are still there to copy.
   createComputed(on(() => props.open, (open) => {
@@ -51,6 +56,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       const shift = (shows: number) => `translateY(${-(1 - shows) * height}px)`;
       target = to;
       const edge = scrollerOf(node);
+      if (edge && !folding) { folding = edge; edge.dataset.folding = String(Number(edge.dataset.folding || 0) + 1); }
       // Shutting: how far the scroll will come back when the rows go, and so how far everything drops on the way there.
       const back = to === 0 && edge && edge.dataset.fits === undefined && showing > 0
         ? Math.max(0, edge.scrollTop - Math.max(0, edge.scrollHeight - height - edge.clientHeight)) : 0;
@@ -76,7 +82,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
         if (open - shut > 0.5) motions.push(edge.animate([{ height: at(showing) }, { height: at(to) }], timing));
       }
       // Ending, every move is let go in the same task as the rows are dropped, so the page is laid out once, as it ends.
-      motions[0]!.onfinish = () => { for (const motion of motions) motion.cancel(); motions = []; showing = to; still?.remove(); still = undefined; done(); };
+      motions[0]!.onfinish = () => { for (const motion of motions) motion.cancel(); motions = []; showing = to; still?.remove(); still = undefined; done(); requestAnimationFrame(() => { if (!motions.length) unfold(); }); };
     };
     if (wanted) {
       // Once the rows are laid out, before paint: a frame later, they showed whole for a frame first.

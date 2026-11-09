@@ -303,6 +303,8 @@ export function createTranscriptFollow(options: {
     // feedback loop, and a panel reflow keeps its own anchor.
     const contentSizes = new ResizeObserver(() => {
       laidOut = true;
+      // A fold moving (Expand marks its scroller): the reader opened or shut it, and it keeps its own place.
+      if (viewport.dataset.folding) return syncLatestDistance();
       if (!following() || options.holding?.()) return;
       request();
     });

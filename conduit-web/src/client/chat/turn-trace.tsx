@@ -576,8 +576,10 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const form = () => props.form ?? "steps";
   // With an actor (jbot's chat): live, what it is doing in its name; settled, how long it worked; a turn that did not
   // finish keeps its own word (Interrupted, Failed).
-  const acting = () => Boolean(props.actor) && !unfinished();
-  const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}` : time() ? `Worked for ${time()}` : "Worked";
+  const acting = () => Boolean(props.actor);
+  const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}`
+    : props.trace.status === "interrupted" ? `${props.actor} was interrupted` : props.trace.status === "failed" ? `${props.actor} failed`
+    : time() ? `${props.actor} worked for ${time()}` : `${props.actor} worked`;
   const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
   // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
   if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
@@ -609,7 +611,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
     </>}>
     <Show when={!looked() || props.trace.segments.some((segment) => segment.kind === "tool" || segment.kind === "error")}><Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={looked() ? (sources() ? `Looked at ${sources()}` : "Worked") : settledRun() ? capital(preview().work) || "Thought" : acting() ? actorStatus() : preview().status.verb}
-      quiet={looked()} time={looked() || (acting() && !props.trace.active) ? undefined : time() || undefined}
+      quiet={looked()} time={looked() || (acting() && !props.trace.active && !unfinished()) ? undefined : time() || undefined}
       work={settledRun() || (acting() && props.trace.active) ? undefined : preview().work || undefined}
       latest={looked() || settledRun() ? undefined : latest()} live={props.trace.active} tone={unfinished() ? "failed" : undefined}
       pinned={<TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />}
