@@ -5,7 +5,7 @@ import path from "node:path";
 import { safeRedirectTarget } from "../../auth-middleware.js";
 import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
-import { listWatches, webhook } from "../../agent/events.js";
+import { listWatches, removeWatch, webhook } from "../../agent/events.js";
 import { acceptProposal, forgetLine, listProposals, memoryEntries, rejectProposal } from "../../agent/memory.js";
 import { listRoutines, readRoutine } from "../../agent/routine-files.js";
 import { executeRoutine } from "../../agent/routines.js";
@@ -43,6 +43,7 @@ import { workOps } from "../../durable-adapter.js";
  * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
  * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
+ * DELETE /v0/agent/watches/:id     remove a watch or webhook
  * POST /v0/agent/runs/:id/open      a run of the log's: its transcript as a chat to open { chatId }
  * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
  * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
@@ -373,7 +374,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       for (const entry of page.items) {
         runIndex.last = Math.max(runIndex.last, entry.id);
         const data = entry.data || {};
-        if (!data.run || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
+        // A run its routine, watch or webhook keeps out of the log (log: false) is left out.
+        if (!data.run || data.run.log === false || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
         runIndex.runs.push({ id: data.messageId || `run:${entry.id}`, at: data.run.endedAt || data.timestamp || new Date(entry.createdAt || Date.now()).toISOString(),
           title: data.title || data.run.label || "Run", label: data.run.label || data.title || "Run", number: data.run.number ?? null, routine: data.run.routine || null,
           trigger: data.run.trigger || null, startedAt: data.run.startedAt || null, endedAt: data.run.endedAt || null, status: data.run.status || data.status || null,
@@ -383,6 +385,13 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       cursor = page.next;
     } while (cursor);
     return runIndex.runs;
+  });
+
+  app.delete("/v0/agent/watches/:id", async (request, response, next) => {
+    try {
+      if (!await removeWatch(agent, String(request.params.id))) return response.status(404).json({ error: "watch_not_found" });
+      response.json({ ok: true });
+    } catch (error) { next(error); }
   });
 
   // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }.

@@ -241,7 +241,7 @@ export function routineTask(runtime) {
           } else if (!current.run) {
             current.run = await runtime.agent.spawnRun(tx, task.input.homeId, { key: record.key, kind: routine.name,
               title: routine.title, task: outcome.message, instructions: outcome.instructions, output: routine.output,
-              raw: true, routineTaskId: task.id, model: routine.model, thinkingLevel: routine.effort });
+              raw: true, routineTaskId: task.id, model: routine.model, thinkingLevel: routine.effort, log: routine.log !== false });
           }
           ready = true;
           return next("run");

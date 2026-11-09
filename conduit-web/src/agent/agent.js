@@ -425,9 +425,10 @@ export class PersistentAgent {
    * Wake the agent: a background run of the home thread with `task` as its
    * whole brief. `key` makes it idempotent (a schedule's slot, an event's id);
    * `kind` says what woke it (brief, heartbeat, checkback, event, webhook,
-   * manual). A run that would go over today's budget is skipped and noticed.
+   * manual). A run that would go over today's budget is skipped and noticed. `log: false` keeps it out of jbot's
+   * message log (the run says so: run.log), as its routine, watch or webhook asks.
    */
-  async wake({ key, kind, title, task }) {
+  async wake({ key, kind, title, task, log = true }) {
     if (!this.enabled()) throw Object.assign(new Error("This hub has no agent yet"), { code: "agent_not_enabled", status: 409 });
     if (!this.active()) return null;
     if (await this.overBudget()) {
@@ -437,7 +438,7 @@ export class PersistentAgent {
     const { conversationId } = await this.home();
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(conversationId, this.context);
-    return conversation.commit((tx) => this.active() ? this.spawnRun(tx, conversationId, { key, kind, title, task }) : null, this.context);
+    return conversation.commit((tx) => this.active() ? this.spawnRun(tx, conversationId, { key, kind, title, task, log }) : null, this.context);
   }
 
   /**
@@ -493,13 +494,13 @@ export class PersistentAgent {
    * system prompt is RUN.md (routines.js), a routine's with its `<routine>` block; `raw` takes `task` as the whole
    * first message (a routine composes its own). `output`: where its report goes (jbot, inbox, both).
    */
-  async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null, routineTaskId = null }) {
+  async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null, routineTaskId = null, log = true }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
     const work = this.settings().work[kind === "brief" || kind === "morning-brief" ? "brief" : kind === "heartbeat" ? "heartbeat" : "other"];
     const chosen = model ? { model, thinkingLevel } : work ? { model: work.model, thinkingLevel: thinkingLevel || work.thinkingLevel } : {};
     return this.runtime.spawnBackground(tx, conversationId, { key, title: title || kind,
       task: raw ? task : await runBrief(kind, task, this.settings().timezone, this.runtime.contextStore), instructions: instructions ?? await runInstructions(this),
-      origin: { kind, key, ...(output ? { output } : {}), ...(routineTaskId ? { routineTaskId } : {}) }, gate: true, ...chosen });
+      origin: { kind, key, ...(output ? { output } : {}), ...(routineTaskId ? { routineTaskId } : {}), ...(log ? {} : { log: false }) }, gate: true, ...chosen });
   }
 
   /** The agent as the API shows it. */

@@ -142,7 +142,9 @@ What the run should do with what was gathered, and what to tell jbot.
   `inbox/<date>-<id>-<title>.md` with the files its tasks gathered listed
   under it; what jbot is told ends with that path.
 - Optional: `model` (provider/model), `effort`, `level` (fyi, attention,
-  urgent), `enabled`, `context` (soul, user, memory, diary: the files its run sees).
+  urgent), `enabled`, `context` (soul, user, memory, diary: the files its run sees),
+  `log` (default true; `false` keeps its runs out of the person's message log, for
+  frequent routines whose runs rarely matter).
 
 Task cursors commit only after the run or fork succeeds. A failed `after`
 step does not undo this commit: replaying the notes would repeat completed

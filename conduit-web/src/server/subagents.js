@@ -39,7 +39,8 @@ const nextRun = (roster, origin, trigger = null) => {
   if (!origin?.kind) return null;
   const kind = origin.kind;
   const number = nextNumber(roster, `run:${kind}`);
-  return { routine: kind, label: runLabel(kind), number, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null) };
+  return { routine: kind, label: runLabel(kind), number, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null),
+    ...(origin.log === false ? { log: false } : {}) };
 };
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });

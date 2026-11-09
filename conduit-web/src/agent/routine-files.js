@@ -46,7 +46,7 @@ export function splitFrontMatter(text) {
 export function routineProblem(routine) {
   if (!object(routine)) return "A routine is required.";
   const fields = ["name", "title", "trigger", "tasks", "gate", "output", "model", "effort",
-    "level", "quiet", "enabled", "context", "body", "mode", "before", "after"];
+    "level", "quiet", "enabled", "log", "context", "body", "mode", "before", "after"];
   const unknownField = Object.keys(routine).find((key) => !fields.includes(key));
   if (unknownField) return `Unknown routine field ${unknownField}.`;
   if (typeof routine.name !== "string" || !namePattern.test(routine.name)) return "Invalid routine name.";
@@ -154,6 +154,7 @@ export function routineProblem(routine) {
   if (!["fyi", "attention", "urgent"].includes(routine.level)) return "Invalid level.";
   if (typeof routine.quiet !== "boolean") return "Quiet must be true or false.";
   if (typeof routine.enabled !== "boolean") return "Enabled must be true or false.";
+  if (routine.log !== undefined && typeof routine.log !== "boolean") return "Log must be true or false.";
   if (!Array.isArray(routine.context)
     || routine.context.some((item) => !["soul", "user", "memory", "diary"].includes(item))) return "Invalid context.";
   if (typeof routine.body !== "string" || (routine.gate !== "never" && !routine.body.trim())) {
@@ -165,7 +166,7 @@ export function routineProblem(routine) {
 export function parseRoutine(text, name) {
   if (!/^---\r?\n/.test(text)) throw new Error("Front matter is required.");
   const { data, body } = splitFrontMatter(text);
-  const fields = ["title", "trigger", "tasks", "gate", "output", "model", "effort", "level", "quiet", "enabled",
+  const fields = ["title", "trigger", "tasks", "gate", "output", "model", "effort", "level", "quiet", "enabled", "log",
     "context", "mode", "before", "after"];
   const unknownKey = Object.keys(data).find((key) => !fields.includes(key));
   if (unknownKey) throw new Error(`Unknown field ${unknownKey} in the front matter.`);
@@ -184,7 +185,7 @@ export function parseRoutine(text, name) {
     tasks: data.tasks === undefined ? [] : data.tasks, gate: data.gate, output: data.output,
     model: data.model === undefined ? null : data.model, effort: data.effort === undefined ? null : data.effort,
     level: data.level === undefined ? "fyi" : data.level, quiet: data.quiet === undefined ? true : data.quiet,
-    enabled: data.enabled === undefined ? true : data.enabled,
+    enabled: data.enabled === undefined ? true : data.enabled, log: data.log === undefined ? true : data.log,
     context: data.context === undefined ? [] : data.context, body: body.replace(/^\r?\n/, "").replace(/\n$/, "") };
   const problem = routineProblem(routine);
   if (problem) throw new Error(problem);
@@ -202,7 +203,7 @@ export function serializeRoutine(routine) {
     trigger: Array.isArray(trigger) ? trigger.map(writeTrigger) : writeTrigger(trigger),
     ...(tasks.length ? { tasks } : {}), gate, output, ...(model !== null ? { model } : {}),
     ...(effort !== null ? { effort } : {}), ...(level !== "fyi" ? { level } : {}),
-    ...(!enabled ? { enabled } : {}), ...(routine.quiet === false ? { quiet: false } : {}), ...(context.length ? { context } : {}) };
+    ...(!enabled ? { enabled } : {}), ...(routine.log === false ? { log: false } : {}), ...(routine.quiet === false ? { quiet: false } : {}), ...(context.length ? { context } : {}) };
   const doc = new YAML.Document(data);
   if (Array.isArray(trigger)) {
     for (const rule of doc.get("trigger", true).items) rule.flow = true;

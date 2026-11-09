@@ -382,7 +382,9 @@ export function AgentPage(props: {
     <SplitGroup id="agent-watches" order="rest" label="Watching" count={working()?.watches.length}>
       <For each={working()?.watches}>{(watch) =>
         <Row density="list" lead={watch.kind === "webhook" ? <Icons.ExternalLink /> : <Icons.Focus />} label={watch.title}
-          context={watch.kind === "webhook" ? "Webhook" : watch.event?.replace(/_/g, " ")} meta={age(watch.lastFiredAt, now())} />}
+          context={[watch.kind === "webhook" ? "Webhook" : watch.event?.replace(/_/g, " "), watch.log === false ? "not in the log" : null].filter(Boolean).join(" · ")}
+          meta={<>{age(watch.lastFiredAt, now())}<IconButton kind="dash" aria-label="Remove" title="Remove" disabled={busy() !== null}
+            onClick={() => act(watch.id, () => api(`/v0/agent/watches/${encodeURIComponent(watch.id)}`, { method: "DELETE" }))}><Icons.Close /></IconButton></>} />}
       </For>
     </SplitGroup>
   </Show>;

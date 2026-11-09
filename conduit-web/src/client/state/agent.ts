@@ -19,7 +19,7 @@ export interface AgentSchedule { id: string; title: string; kind: "once" | "dail
   rules?: Array<{ kind: string; everyMinutes?: number; at?: string; during: string | null }>;
   /** A feed (feeds.js): what it reads from and how its last run went. */
   feed?: { source: "executor" | "script" | "run"; lastRunAt: string | null; lastCount: number; lastError: string | null; primed: boolean } }
-export interface AgentWatch { id: string; kind: "watch" | "webhook"; title: string; event?: string; lastFiredAt?: string | null }
+export interface AgentWatch { id: string; kind: "watch" | "webhook"; title: string; event?: string; log?: boolean; lastFiredAt?: string | null }
 export interface AgentQuestion { kind: "question"; chatId: string; requestId: string | null; title: string }
 /** A change to its memory a run proposed, waiting for the person (memory.js). */
 export interface AgentProposal { id: string; file: string; op: "add" | "remove" | string; text: string; by?: string; chatId?: string | null; at: string }

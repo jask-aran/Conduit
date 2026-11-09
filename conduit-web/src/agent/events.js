@@ -22,6 +22,7 @@ export function EventTools(runtime) {
       task: Type.Optional(Type.String()),
       title: Type.Optional(Type.String()),
       once: Type.Optional(Type.Boolean()),
+      log: Type.Optional(Type.Boolean({ description: "false keeps its runs out of the person's message log (default true). For frequent watches whose runs rarely matter." })),
       id: Type.Optional(Type.String()),
     }),
     replay: "safe",
@@ -51,13 +52,13 @@ export function EventTools(runtime) {
         const createdAt = new Date().toISOString();
         if (args.action === "add") {
           const watch = { id: nextId(doc, "w"), event: args.event, target: args.target ?? null, task: args.task,
-            title: args.title || "", once: Boolean(args.once), createdAt, lastFiredAt: null, callId: api.callId };
+            title: args.title || "", once: Boolean(args.once), ...(args.log === false ? { log: false } : {}), createdAt, lastFiredAt: null, callId: api.callId };
           doc.watches[watch.id] = watch;
           receipt.text = `${watch.id}: added`;
           return receipt.text;
         }
         const token = randomBytes(32).toString("base64url");
-        const hook = { id: nextId(doc, "h"), task: args.task, title: args.title || "", createdAt, lastFiredAt: null, callId: api.callId };
+        const hook = { id: nextId(doc, "h"), task: args.task, title: args.title || "", ...(args.log === false ? { log: false } : {}), createdAt, lastFiredAt: null, callId: api.callId };
         doc.hooks[token] = hook;
         receipt.text = `${hook.id}: /v0/agent/hooks/${token}`;
         return receipt.text;
@@ -107,7 +108,7 @@ export function startEvents(agent, { nodeHub, backends, registry, chatLogs, onWo
         });
         if (!claimed) continue;
         const run = await agent.wake({ key: `event:${watch.id}:${eventId}`, kind: "event", title: claimed.title || description,
-          task: await notice(agent.runtime?.contextStore, "wake-event", { task: claimed.task, event: description }) });
+          task: await notice(agent.runtime?.contextStore, "wake-event", { task: claimed.task, event: description }), log: claimed.log !== false });
         if (run && claimed.once) await agent.update((doc) => { delete doc.watches[watch.id]; });
       } catch (error) { console.warn("[agent] watch event:", error); }
     }
@@ -179,7 +180,7 @@ export async function webhook(agent, token, body) {
   const data = (JSON.stringify(body, null, 2) ?? "null").slice(0, 8000);
   const fence = "`".repeat(Math.max(3, ...Array.from(data.matchAll(/`+/g), (match) => match[0].length + 1)));
   const run = await agent.wake({ key: `hook:${hook.id}:${randomUUID()}`, kind: "webhook", title: hook.title || "Webhook",
-    task: `${await notice(agent.runtime?.contextStore, "wake-webhook", { task: hook.task })}\n${fence}\n${data}\n${fence}` });
+    task: `${await notice(agent.runtime?.contextStore, "wake-webhook", { task: hook.task })}\n${fence}\n${data}\n${fence}`, log: hook.log !== false });
   await agent.update((doc) => { if (doc.hooks[token]) doc.hooks[token].lastFiredAt = new Date().toISOString(); });
   return run || { skipped: true };
 }
@@ -188,7 +189,18 @@ export async function listWatches(agent) {
   if (!agent?.enabled()) return [];
   const doc = await agent.state();
   return [
-    ...Object.values(doc.watches).map(({ id, event, target, title, once, lastFiredAt }) => ({ id, kind: "watch", event, target, title, once, lastFiredAt })),
-    ...Object.values(doc.hooks).map(({ id, title, lastFiredAt }) => ({ id, kind: "webhook", title, lastFiredAt })),
+    ...Object.values(doc.watches).map(({ id, event, target, title, once, log, lastFiredAt }) => ({ id, kind: "watch", event, target, title, once, log: log !== false, lastFiredAt })),
+    ...Object.values(doc.hooks).map(({ id, title, log, lastFiredAt }) => ({ id, kind: "webhook", title, log: log !== false, lastFiredAt })),
   ];
+}
+
+/** Remove a watch or webhook by id (the dashboard's Watching group). */
+export async function removeWatch(agent, id) {
+  return agent.update((doc) => {
+    const token = Object.keys(doc.hooks).find((key) => doc.hooks[key].id === id);
+    if (!doc.watches[id] && !token) return false;
+    delete doc.watches[id];
+    if (token) delete doc.hooks[token];
+    return true;
+  });
 }
