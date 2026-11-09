@@ -1,7 +1,7 @@
 import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { clockTime, AgentRows, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
-import { openAgentChat } from "../chat/agents";
+import { clockTime, AgentRow, AgentRows, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { openAgentChat, span, useNow } from "../chat/agents";
 import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
 import { Dialog } from "@/components/ui/dialog";
@@ -11,7 +11,7 @@ import { ChatMarkdown } from "../chat/lazy-markdown";
 import { TurnTrace, TraceStarting, type ContextText } from "../chat/turn-trace";
 import { buildTurnRows, type TurnTraceData } from "../turn-rows";
 import { applyTranscriptOps, type TranscriptOp } from "../../transcript-fold.js";
-import type { Message as ChatMessage, ToolItem } from "../api/contracts";
+import type { AgentSummary, Message as ChatMessage, ToolItem } from "../api/contracts";
 import { agentView } from "../state/agent";
 import type { MarkdownRendererId } from "../chat/markdown-settings";
 
@@ -43,7 +43,9 @@ type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; mess
 /** A run jbot's home thread had (GET /v0/agent/messages `runs`): the log says it happened, as the thread's run line,
  *  and opens its transcript; what it reported is the reply after it. */
 export interface LogRun { id: string; at: string; title: string; label: string; number: number | null; routine: string | null; trigger: string | null;
-  startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean; conversationId?: number | null }
+  startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean; conversationId?: number | null;
+  /** A background agent jbot sent from its chat (no run): its report, or (live) the agent while it works. */
+  agent?: boolean; subagentId?: string | null; live?: boolean }
 const runTime = (run: LogRun) => {
   const start = run.startedAt ? Date.parse(run.startedAt) : NaN, end = run.endedAt ? Date.parse(run.endedAt) : NaN;
   return Number.isFinite(start) && Number.isFinite(end) && end >= start ? elapsed(end - start) : undefined;
@@ -115,6 +117,8 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
   sent?: { text: string; at: string } | null;
+  /** The home thread's agents (its rider's): a background one jbot sent is a row of the log while it works. */
+  agents?: AgentSummary[];
   /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
@@ -123,8 +127,17 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
   let kept = new Map<string, { sig: string; row: StreamRow }>();
   const rows = createMemo(() => {
-    // Each run a row of its own, where it happened.
-    const runs = [...logRuns()].sort((a, b) => a.at.localeCompare(b.at));
+    // Each run a row of its own, where it happened. A background agent jbot sent, until it reports, a row under the
+    // reply of the turn that sent it (at the foot while that turn runs); once it reports, its report's row is where it
+    // came back, over what jbot made of it.
+    const reported = new Set(logRuns().filter((run) => run.agent).map((run) => String(run.conversationId)));
+    const working = (props.agents ?? []).filter((agent) => agent.mode === "background" && !agent.run && agent.status === "running" && agent.startedAt && !reported.has(String(agent.conversationId)))
+      .map((agent): LogRun => {
+        const reply = props.messages.find((message) => message.direction === "out" && message.channel === "app" && message.at >= agent.startedAt!);
+        return { id: `agent:${agent.conversationId}`, at: reply ? `${reply.at}~` : "\uffff", title: agent.title, label: agent.id || agent.title, number: null, routine: null, trigger: null,
+          startedAt: null, endedAt: null, status: null, summary: null, woke: false, conversationId: agent.conversationId, agent: true, live: true };
+      });
+    const runs = [...logRuns(), ...working].sort((a, b) => a.at.localeCompare(b.at));
     let next = 0;
     const runsBefore = (list: StreamRow[], at: string | null) => {
       while (next < runs.length && (at === null || runs[next]!.at <= at)) list.push({ kind: "run", run: runs[next++]! });
@@ -280,6 +293,16 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
     const heights = fresh.map((row) => row.offsetHeight);
     fresh.forEach((row, index) => { if (!heights[index]) return; row.style.containIntrinsicSize = `auto ${heights[index]}px`; row.dataset.drawn = ""; });
   })));
+  // An agent row: how the agent is doing, from the home thread's agents (live), else what its report said.
+  const agentOf = (run: LogRun) => props.agents?.find((agent) => String(agent.conversationId) === String(run.conversationId));
+  const now = useNow(() => Boolean(props.agents?.some((agent) => agent.status === "running")));
+  const agentRow = (run: LogRun) => {
+    const listed = () => agentOf(run);
+    const state = () => listed()?.status ?? (run.status === "failed" || run.status === "stopped" ? run.status : "finished");
+    const open = () => { const chat = listed()?.chatId; if (chat) openAgentChat(chat); else if (!run.live) openRun(run); };
+    return <AgentRow line id={run.subagentId ?? listed()?.id ?? undefined} title={listed()?.title ?? run.title} state={state()} activity={listed()?.activity ?? undefined}
+      time={span(listed()?.startedAt, state() === "running" ? null : listed()?.endedAt, now())} onOpen={open} />;
+  };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
         <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
@@ -290,7 +313,9 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
               <Show when={live()} fallback={<Turn><TraceStarting line label={`${props.name} is starting`} /></Turn>}>{(data) => trace(data)}</Show>
             </TranscriptRow></Show>
           </>}>
-          {(row, index) => row.kind === "run"
+          {(row, index) => row.kind === "run" && row.run.agent
+            ? <TranscriptRow flow={flowAt(index())}><Turn><AgentRows>{agentRow(row.run)}</AgentRows></Turn></TranscriptRow>
+            : row.kind === "run"
             ? <TranscriptRow flow={flowAt(index())} {...motionOf(arriving(row.run.id) ? "entering" : undefined)}><Turn><AgentRows>
                 <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}

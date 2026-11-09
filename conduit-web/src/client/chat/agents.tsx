@@ -15,7 +15,7 @@ export const OPEN_AGENT_EVENT = "conduit:open-agent";
 export const openAgentChat = (chatId: string) => window.dispatchEvent(new CustomEvent(OPEN_AGENT_EVENT, { detail: { chatId } }));
 
 /** A clock that ticks each second while something runs. */
-function useNow(running: () => boolean) {
+export function useNow(running: () => boolean) {
   const [now, setNow] = createSignal(Date.now());
   createEffect(() => {
     if (!running()) return;
@@ -27,7 +27,7 @@ function useNow(running: () => boolean) {
 }
 const pad = (value: number) => String(value).padStart(2, "0");
 /** Whole seconds while it runs (tenths would flicker), the measured time once it has ended. */
-function span(from: string | null | undefined, to: string | null | undefined, now: number): string | undefined {
+export function span(from: string | null | undefined, to: string | null | undefined, now: number): string | undefined {
   const start = from ? Date.parse(from) : NaN;
   const end = to ? Date.parse(to) : now;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return undefined;

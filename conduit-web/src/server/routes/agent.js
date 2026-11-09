@@ -380,6 +380,17 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       for (const entry of page.items) {
         runIndex.last = Math.max(runIndex.last, entry.id);
         const data = entry.data || {};
+        // A background agent jbot sent from its chat (no run): its report, a row of its own where it came back.
+        if (entry.kind === "conduit.subagent-report" && !data.run && data.conversationId != null) {
+          const id = String(data.messageId || `run:${entry.id}`).replace(/:again$/, "");
+          if (runIndex.runs.some((run) => run.id === id)) continue;
+          // Its entry keeps no time of its own: the report's message, as the model was given it, does.
+          const given = entry.model?.find((message) => Number.isFinite(message.timestamp))?.timestamp;
+          runIndex.runs.push({ id, at: data.timestamp || (given ? new Date(given).toISOString() : new Date(entry.createdAt || Date.now()).toISOString()), title: data.title || "Agent", label: data.subagentId || data.title || "Agent",
+            number: null, routine: null, trigger: null, startedAt: null, endedAt: null, status: data.status || null, summary: null, woke: true, entryId: entry.id,
+            conversationId: data.conversationId, subagentId: data.subagentId ?? null, agent: true });
+          continue;
+        }
         // A run its routine, watch or webhook keeps out of the log (log: false) is left out.
         if (!data.run || data.run.log === false || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
         runIndex.runs.push({ id: data.messageId || `run:${entry.id}`, at: data.run.endedAt || data.timestamp || new Date(entry.createdAt || Date.now()).toISOString(),
