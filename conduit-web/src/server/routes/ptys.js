@@ -52,11 +52,8 @@ export function registerPtyRoutes(app, { projects, terminals, nodeHub = null }) 
   });
 
   app.post("/v0/ptys", async (request, response, next) => {
-    try {
-      const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""), request.body?.cwd, nodeHub);
-      response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), title: request.body?.title, cols: request.body?.cols, rows: request.body?.rows }));
-    }
-    catch (error) { next(error); }
+    const { project, cwd } = await terminalContext(projects, String(request.body?.projectId || ""), request.body?.cwd, nodeHub);
+    response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), title: request.body?.title, cols: request.body?.cols, rows: request.body?.rows }));
   });
 
   // A grant to attach to a device's terminal on the device itself, the shortest way (nodes/node-direct.js).

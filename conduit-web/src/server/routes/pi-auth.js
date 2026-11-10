@@ -23,33 +23,25 @@ export function registerPiAuthRoutes(app, { piAuth }) {
   });
 
   app.get("/v0/pi-auth/attempt", (request, response, next) => {
-    try {
-      noStore(response);
-      response.json({ attempt: piAuth.activeFor(piAuthOwner(request)) });
-    } catch (error) { next(error); }
+    noStore(response);
+    response.json({ attempt: piAuth.activeFor(piAuthOwner(request)) });
   });
 
   app.post("/v0/pi-auth/oauth", (request, response, next) => {
-    try {
-      const attempt = piAuth.start(piAuthOwner(request), String(request.body?.providerId || ""));
-      noStore(response);
-      response.status(202).json({ attempt });
-    } catch (error) { next(error); }
+    const attempt = piAuth.start(piAuthOwner(request), String(request.body?.providerId || ""));
+    noStore(response);
+    response.status(202).json({ attempt });
   });
 
   app.post("/v0/pi-auth/attempt/respond", (request, response, next) => {
-    try {
-      const attempt = piAuth.respond(piAuthOwner(request), request.body?.value);
-      noStore(response);
-      response.json({ attempt });
-    } catch (error) { next(error); }
+    const attempt = piAuth.respond(piAuthOwner(request), request.body?.value);
+    noStore(response);
+    response.json({ attempt });
   });
 
   app.post("/v0/pi-auth/attempt/cancel", (request, response, next) => {
-    try {
-      noStore(response);
-      response.json({ cancelled: piAuth.cancel(piAuthOwner(request)) });
-    } catch (error) { next(error); }
+    noStore(response);
+    response.json({ cancelled: piAuth.cancel(piAuthOwner(request)) });
   });
 
   app.put("/v0/pi-auth/api-key", async (request, response) => {

@@ -9,10 +9,9 @@ import { originOfRequest } from "../../server-identity.js";
 import { chatView } from "../../chat-store.js";
 import { listWatches, removeWatch, webhook } from "../../agent/events.js";
 import { acceptProposal, forgetLine, listProposals, memoryEntries, rejectProposal } from "../../agent/memory.js";
-import { listRoutines, readRoutine } from "../../agent/routine-files.js";
-import { executeRoutine } from "../../agent/routines.js";
+import { readRoutine } from "../../agent/routine-files.js";
 import { cancelSchedule, clockAdder, listSchedules, seedSchedules } from "../../agent/schedule.js";
-import { applyOutcome, feedItem, feedProblem, runSource, sourceProblem } from "../../agent/feeds.js";
+import { applyOutcome, feedItem, feedProblem, runSource } from "../../agent/feeds.js";
 import { decide } from "../../agent/asks.js";
 import { readPolicy, savePolicy, readApprovals } from "../../agent/approval-policy.js";
 import { addInboxEntry, deleteInboxEntry, editInboxEntries, fileEntry } from "../../agent/inbox.js";
@@ -35,16 +34,11 @@ import { workOps } from "../../durable-adapter.js";
  * POST /v0/agent/threads             a side thread { title? }
  * POST /v0/agent/wake                a run now { task, title? }
  * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
- * POST /v0/agent/feeds/test          run a source once { source }: { items, error? }; saves nothing
- * POST /v0/agent/feeds/:id/forget    forget items it has seen { ids? | latest? } (all without): its next check reports them as new
  * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
  * DELETE /v0/agent/feeds/:id         remove a feed
  * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a routine's tasks gather and its run fires
  *                                    whatever its gate (not a gate of never), even in quiet hours; a feed checks; the rest wake a run
- * GET  /v0/agent/routines            its routine files (routines/*.md) with their cursors and last firing
  * POST /v0/agent/tasks/:id/retry       run a task the runtime parked (restart limit) again from its checkpoint
- * POST /v0/agent/routines/:name/test    its tasks once and the run's prompt and first message; moves nothing
- * POST /v0/agent/routines/:name/forget  forget what a task has seen { task, latest? } (all without): reported as new next time
  * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
  * DELETE /v0/agent/watches/:id     remove a watch or webhook
  * POST /v0/agent/test-report        a report with no run behind it, asking jbot to say hi (to watch a report's turn)
@@ -594,27 +588,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }, agent.context);
     response.status(201).json({ id });
   });
-  app.post("/v0/agent/feeds/test", async (request, response) => {
-    if (!enabled(response)) return;
-    const problem = sourceProblem(request.body?.source);
-    if (problem) return response.status(400).json({ error: "invalid_source", message: problem });
-    response.json(await runSource(agent, request.body.source));
-  });
-  app.post("/v0/agent/feeds/:id/forget", async (request, response) => {
-    if (!enabled(response)) return;
-    const ids = Array.isArray(request.body?.ids) ? new Set(request.body.ids.map(String)) : null;
-    const forgot = await agent.update((doc) => {
-      const feed = doc.schedules[request.params.id]?.feed;
-      if (!feed) return null;
-      const before = feed.seen.length;
-      // `latest`: the newest n (seen is kept newest first), to have a feed report its last few again.
-      const latest = Number.isInteger(request.body?.latest) && request.body.latest > 0 ? request.body.latest : null;
-      feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : latest ? feed.seen.slice(latest) : [];
-      return before - feed.seen.length;
-    });
-    if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
-    response.json({ forgot });
-  });
   app.patch("/v0/agent/feeds/:id", async (request, response, next) => {
     if (!enabled(response)) return;
     const { title, everyMinutes, source, level } = request.body || {};
@@ -669,22 +642,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     });
     response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
   });
-  app.get("/v0/agent/routines", async (_request, response) => {
-    if (!enabled(response)) return;
-    const state = await agent.state();
-    response.json({ routines: (await listRoutines(agent.folder)).map((routine) => ({ ...routine,
-      cursors: state.cursors?.[routine.name] || {}, last: state.routineState?.[routine.name] || null,
-      schedule: state.schedules[`r-${routine.name}`] ? { nextAt: state.schedules[`r-${routine.name}`].nextAt } : null })) });
-  });
-  app.post("/v0/agent/routines/:name/test", async (request, response) => {
-    if (!enabled(response)) return;
-    const routine = await readRoutine(agent.folder, request.params.name).catch((error) => ({ error: error.message }));
-    if (!routine) return response.status(404).json({ error: "routine_not_found" });
-    if (routine.error) return response.status(400).json({ error: routine.error });
-    const state = await agent.state();
-    const outcome = await executeRoutine(agent, routine, { cursors: state.cursors?.[routine.name] || {}, state, force: true });
-    response.json({ tasks: outcome.tasks, fresh: outcome.fresh, run: outcome.run, instructions: outcome.instructions || null, message: outcome.message || null });
-  });
   // A task the runtime parked after too many restarts (pi-durable's restart limit) runs again from its checkpoint.
   app.post("/v0/agent/tasks/:id/retry", async (request, response) => {
     if (!enabled(response)) return;
@@ -693,19 +650,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     const harness = await agent.runtime.open();
     await harness.retryTask(id, agent.context);
     response.json({ retried: id });
-  });
-  app.post("/v0/agent/routines/:name/forget", async (request, response) => {
-    if (!enabled(response)) return;
-    const { task, latest } = request.body || {};
-    if (typeof task !== "string") return response.status(400).json({ error: "task is required" });
-    const forgot = await agent.update((doc) => {
-      const cursor = doc.cursors?.[request.params.name]?.[task];
-      if (!cursor?.seen) return null;
-      const before = cursor.seen.length;
-      cursor.seen = Number.isInteger(latest) && latest > 0 ? cursor.seen.slice(latest) : [];
-      return before - cursor.seen.length;
-    });
-    response.status(forgot === null ? 404 : 200).json(forgot === null ? { error: "cursor_not_found" } : { forgot });
   });
   /**
    * Start over: a new home thread, and an empty inbox, attention list and work log. Its settings, memory files, feeds

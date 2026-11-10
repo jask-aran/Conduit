@@ -12,7 +12,7 @@ const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options
 /*
  * Agents drive Conduit's UI (roadmap #11): what each open tab of Conduit shows, as it tells us (client agent-ui.ts),
  * and commands sent to one tab over its runtime stream, answered over HTTP. The `conduit_ui` tool (UiTool) is how
- * agents use it, one of the conduit MCP server's (conduit-mcp.js); GET /v0/ui and POST /v0/ui/commands are the same for a CLI.
+ * agents use it, one of the conduit MCP server's (conduit-mcp.js).
  *
  * A tab is `connection/tab`: tabs of one browser share a stream (its connection), each with its own id. With none
  * named, an agent's command goes to its chat's origin (the tab the person last wrote to it from), else a tab showing

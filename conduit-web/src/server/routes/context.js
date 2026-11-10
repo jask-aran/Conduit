@@ -14,5 +14,4 @@ export function registerContextRoutes(app, { contextStore }) {
   app.post("/v0/context/blocks/:id/reset", route(async (req, res) => res.json(await contextStore.reset(req.params.id)), true));
   app.put("/v0/context/documents/:id", route(async (req, res) => res.json(await contextStore.saveDocument(req.params.id, req.body)), true));
   app.post("/v0/context/documents/:id/reset", route(async (req, res) => res.json(await contextStore.resetDocument(req.params.id)), true));
-  app.get("/v0/context/documents/:id/preview", route(async (req, res) => res.json(await contextStore.preview(req.params.id))));
 }

@@ -619,7 +619,6 @@ export function registerProjectRoutes(app, {
       await registry.removeProject(project.id);
       await projects.remove(project.id, { skipWorkingTree, deleteWorkspaceFiles });
       response.status(204).end();
-    } catch (error) { next(error); }
-    finally { finishDeletion?.(); }
+    } finally { finishDeletion?.(); }
   });
 }
