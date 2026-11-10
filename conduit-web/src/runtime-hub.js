@@ -6,6 +6,8 @@ import { isRuntimeEvent } from "./runtime-stream-api.js";
  * Subscribers are SSE/WS response streams; a browser disconnect does not stop a live session.
  */
 
+const RESTART_PREPARED_MS = 5 * 60_000;
+
 export class RuntimeHub {
   constructor({ listViews, listDevices } = {}) {
     this.listViews = listViews || (() => []);
@@ -24,7 +26,7 @@ export class RuntimeHub {
       processes: this.listViews(),
       devices: this.listDevices(),
       ...(this.updates ? { updates: this.updates } : {}),
-      ...(this.restart ? { restartPrepared: true, restartAttempt: this.restart.attempt, restartTarget: this.restart.target } : {}),
+      ...(this.preparedRestart() ? { restartPrepared: true, restartAttempt: this.restart.attempt, restartTarget: this.restart.target } : {}),
       at: new Date().toISOString(),
     };
   }
@@ -96,16 +98,26 @@ export class RuntimeHub {
    * and native clients never hold it.
    */
   prepareRestart({ attempt, target } = {}) {
-    if (!attempt || this.restart?.attempt === attempt) return this.restartStatus();
+    if (!attempt || this.preparedRestart()?.attempt === attempt) return this.restartStatus();
     const eligible = new Set(this.connections().filter((peer) => peer.kind === "browser" && peer.registration).map((peer) => peer.registration));
-    this.restart = { attempt, target: target || "", eligible, ready: new Set() };
+    this.restart = { attempt, target: target || "", eligible, ready: new Set(), at: Date.now() };
     this.publish({ type: "pwa_restart_prepared", attempt, target: target || "", at: new Date().toISOString() });
     return this.restartStatus();
   }
 
+  /**
+   * The restart being prepared, while it still can be coming. The restart itself is what ends one (this process
+   * goes); a launcher that prepared and then gave up left it standing, and every tab that connected afterwards was
+   * told to ready itself for a restart that never came. The launcher waits seconds, so minutes later it is not coming.
+   */
+  preparedRestart() {
+    if (this.restart && Date.now() - this.restart.at > RESTART_PREPARED_MS) this.restart = null;
+    return this.restart;
+  }
+
   /** Counts only for the attempt and target it names, from a registration waited on. */
   acknowledgeRestart({ attempt, target, registration } = {}) {
-    const restart = this.restart;
+    const restart = this.preparedRestart();
     if (!restart || attempt !== restart.attempt || (target || "") !== restart.target || !restart.eligible.has(registration)) return false;
     restart.ready.add(registration);
     return true;
@@ -113,7 +125,7 @@ export class RuntimeHub {
 
   /** Who is still holding the restart: waited-on registrations that are connected and not ready. */
   restartStatus() {
-    const restart = this.restart;
+    const restart = this.preparedRestart();
     if (!restart) return null;
     const connected = new Set(this.connections().map((peer) => peer.registration).filter(Boolean));
     const waiting = [...restart.eligible].filter((registration) => connected.has(registration) && !restart.ready.has(registration));
