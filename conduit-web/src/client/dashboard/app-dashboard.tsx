@@ -1,7 +1,6 @@
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuSection } from "@/components/ui/menus";
@@ -16,7 +15,6 @@ import type { Pty } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { awayDevice, type RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
-import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { FolderShelf, FolderTile, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { Segmented } from "@/components/ui/controls";

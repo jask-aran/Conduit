@@ -1,6 +1,6 @@
 /// <reference types="vite-plugin-pwa/client" />
 import { NOT_SPOKEN } from "../transcript-fold.js";
-import { duration, easing, reducedMotion } from "@/components/ui/motion";
+import { duration, easing, reducedMotion, whenMotionEnds } from "@/components/ui/motion";
 import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
@@ -65,7 +65,6 @@ import { installFocusShown } from "./preferences/focus-shown";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { listAudioInputDevices, onMicrophoneOpened, rememberMicrophones } from "./chat/voice-audio";
-import { installedClientKind } from "./platform/installed-client";
 import { Transcript } from "./chat/transcript";
 import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
 import { landTranscriptCursor } from "./chat/transcript-cursor";
@@ -161,6 +160,11 @@ import "./styles.css";
 import "@/components/ui/styles";
 
 const DESKTOP_UPDATE_ROUTE_KEY = "conduit:desktop-update-route";
+const FIRST_DESKTOP_UPDATE_CHECK_MS = 10_000;
+const UPDATE_SETTLED_HOLD_MS = 8_000;
+const INTERFACE_RELOAD_WAIT_MS = 8_000;
+const UPDATE_STEP_TIMEOUT_MS = 30_000;
+const UPDATE_CHECK_TIMEOUT_MS = 150_000;
 if (desktopShell) {
   const route = localStorage.getItem(DESKTOP_UPDATE_ROUTE_KEY);
   if (route?.startsWith("/") && !route.startsWith("//")) history.replaceState({}, "", route);
@@ -223,6 +227,10 @@ const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel
 // probe answers as Conduit, so the button never points at nothing.
 const ConnectDialog = lazy(() => import("./navigation/pair-dialog").then((module) => ({ default: module.ConnectDialog })));
 const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
+// The least an address check and a look on the network last, so one that ends at once still reads as a look.
+const ADDRESS_CHECK_MIN_MS = 700;
+const NETWORK_LOOK_MIN_MS = 1200;
+const ADDRESS_CHECK_DEBOUNCE_MS = 600;
 
 /**
  * Address, then password. The two steps are separate because the first one is
@@ -272,7 +280,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     setError("");
     setVerifiedOrigin(null);
     setCheck({ state: "checking", title: `Looking for ${hostOf(origin)}…` });
-    const pause = new Promise((resolve) => setTimeout(resolve, 700));
+    const pause = new Promise((resolve) => setTimeout(resolve, ADDRESS_CHECK_MIN_MS));
     const health = await (recordOnly
       ? fetch(buildHttpUrl("/healthz", origin), { mode: "no-cors", cache: "no-store" }).then(() => ({ ok: true }) as { ok?: boolean; name?: string; release?: string })
       : fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ ok?: boolean; name?: string; release?: string }> : null)
@@ -291,7 +299,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     setCheck(null);
     setVerifiedOrigin(null);
     setError("");
-    if (/[.:]|localhost/.test(value.trim()) && !(!recordOnly && parsePairingLink(value))) checkTimer = setTimeout(() => void checkAddress(), 600);
+    if (/[.:]|localhost/.test(value.trim()) && !(!recordOnly && parsePairingLink(value))) checkTimer = setTimeout(() => void checkAddress(), ADDRESS_CHECK_DEBOUNCE_MS);
   };
   // A browser's last step: remember the server, then open it beside this one.
   const openFound = (origin: string) => {
@@ -400,7 +408,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
     setSearching(true);
     // The look lasts at least a beat, so one that ends at once still reads as a look rather than a flicker.
-    const beat = new Promise((resolve) => setTimeout(resolve, 1200));
+    const beat = new Promise((resolve) => setTimeout(resolve, NETWORK_LOOK_MIN_MS));
     // Rows arrive as servers resolve and keep their place: a server seen
     // again at another address updates its row rather than moving it.
     void discoverServers({
@@ -612,6 +620,15 @@ function NativeRoot() {
 type PaneKey = "main" | number;
 /** A pane beside pane A: its chat session, its host element, and a page's unsent chat. */
 type PaneSlot = { index: number; session: SideChat; host: () => HTMLElement | undefined; setHost: (element: HTMLElement | undefined) => void; draft: { id: string; projectId: string } | null };
+
+// The first open is shown by then even if its panes never report laid out and still.
+const ARRIVAL_FALLBACK_MS = 2500;
+// Pane openings animate only once the first load has had this long.
+const PANES_SETTLE_MS = 1500;
+const DRAFT_DROP_FALLBACK_MS = 200;
+const ENTER_RETRY_MS = 100;
+const VIEWER_FOCUS_RETRY_MS = 60;
+const UNLISTED_CHAT_RELIST_MS = 1000;
 
 function App() {
   const { confirm: confirmDialog } = createDecisionScope(() => location.href);
@@ -860,16 +877,16 @@ function App() {
       initialComputerRoute ? ComputerDashboard.preload() : null,
     ]).catch(() => undefined);
     const root = document.documentElement;
-    let settle: ReturnType<typeof setTimeout> | undefined;
+    let settle: (() => void) | undefined;
     const arrive = () => {
       if (root.dataset.arrival !== "waiting") return;
       root.dataset.arrival = "arriving";
       setRevealing(true);
       settleFocus();
-      settle = setTimeout(() => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); }, 400);
+      settle = whenMotionEnds(null, "opacity", "--duration-gentle", () => { delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); });
     };
     root.dataset.arrival = "waiting";
-    const fallback = setTimeout(arrive, 2500);
+    const fallback = setTimeout(arrive, ARRIVAL_FALLBACK_MS);
     // Two frames: the lazy parts render as their chunks resolve, and the page
     // lays out once before it is shown.
     // Every pane is part of it: the reveal waits for the chats beside pane A
@@ -903,7 +920,7 @@ function App() {
         : waitForStill();
       if (routeBootstrap() !== "loading" && panesLoaded()) void layoutReady.then(settled).then(arrive);
     });
-    onCleanup(() => { clearTimeout(fallback); clearTimeout(settle); delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); });
+    onCleanup(() => { clearTimeout(fallback); settle?.(); delete root.dataset.arrival; dismissLaunchMark(); setArrived(true); attachRowMenus(); });
   }
   let dragDepth = 0;
   let workspaceSuggestionsRequest: Promise<void> | null = null;
@@ -961,7 +978,7 @@ function App() {
     // Long enough to be read by somebody who pressed the button and then looked
     // away: a check can sit silent for several seconds while the worker is
     // asked, and a four-second answer landed while the menu was still open.
-    settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === kind ? { kind: "idle" } : state), 8_000);
+    settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === kind ? { kind: "idle" } : state), UPDATE_SETTLED_HOLD_MS);
   };
   const sayUpToDate = () => saySettled("current");
   /*
@@ -1001,7 +1018,7 @@ function App() {
     try {
       await applyStagedInterface();
       // The reload takes the page; still here after a while, it did not happen.
-      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await new Promise((resolve) => setTimeout(resolve, INTERFACE_RELOAD_WAIT_MS));
       setUpdateState({ kind: "idle" });
       toast.error("The new interface did not open. Try Check for updates again.");
     } catch (error) {
@@ -1025,7 +1042,7 @@ function App() {
     let step = "updating the interface";
     let timer = 0;
     let stalled = (): Promise<never> => new Promise(() => {});
-    const touch = () => { if (quiet) return; clearTimeout(timer); timer = window.setTimeout(giveUp, 30_000); };
+    const touch = () => { if (quiet) return; clearTimeout(timer); timer = window.setTimeout(giveUp, UPDATE_STEP_TIMEOUT_MS); };
     let giveUp = () => {};
     let cancelled = false;
     if (!quiet) stalled = () => new Promise<never>((_, reject) => { giveUp = () => reject(new Error(`The update check stopped while ${step}.`)); touch(); });
@@ -1098,7 +1115,7 @@ function App() {
       // reload, so there is no install to narrate.
       // An unreachable server can leave the worker's fetch hanging; give up
       // rather than spin forever (a new build gets its two minutes to install).
-      const updated = await Promise.race([forcePwaUpdate(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Could not check for updates. Try again when the server is reachable.")), 150_000))]);
+      const updated = await Promise.race([forcePwaUpdate(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Could not check for updates. Try again when the server is reachable.")), UPDATE_CHECK_TIMEOUT_MS))]);
       if (!updated) sayUpToDate();
     } catch (error) {
       setPwaUpdating(false);
@@ -1435,7 +1452,7 @@ function App() {
       if (Math.abs(dx) + Math.abs(dy) >= 4) wrap.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
         { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
     }
-    setTimeout(() => { if (root.dataset.routeMotion === "arriving") delete root.dataset.routeMotion; }, 450);
+    whenMotionEnds(null, "transform", "--duration-travel", () => { if (root.dataset.routeMotion === "arriving") delete root.dataset.routeMotion; });
   };
   onMount(() => {
     window.addEventListener("resize", noteEmptyComposer);
@@ -1538,7 +1555,7 @@ function App() {
     // opening in its place is drawn: its row going re-renders that folder, ~7ms that were part of the open.
     const drop = () => catalogue.setProjects((current) => current.map((project) => project.sessions.some((session) => session.id === id)
       ? { ...project, sessions: project.sessions.filter((session) => session.id !== id) } : project));
-    if ("requestIdleCallback" in window) requestIdleCallback(drop, { timeout: 1000 }); else setTimeout(drop, 200);
+    if ("requestIdleCallback" in window) requestIdleCallback(drop, { timeout: 1000 }); else setTimeout(drop, DRAFT_DROP_FALLBACK_MS);
     void discardDraft(id).catch(showError);
   };
 
@@ -2347,7 +2364,7 @@ function App() {
    * a composer is enabled, a swap's settle after its animation) remembers the intent it began under and gives way when
    * a newer one exists, so it never pulls focus back from where the person went since (Codex review).
    */
-  let focusIntent = 0;
+  const focusIntent = createLatest();
   // What the person last used: a press or a key. Focus in the sidebar after a press is a chat being opened (and
   // focus passing through its row), not the keyboard moving there.
   let lastInput: "pointer" | "key" = "key";
@@ -2374,7 +2391,7 @@ function App() {
       : null,
   );
   const focusWorkspacePanel = () => {
-    focusIntent++;
+    focusIntent.drop();
     if (!workspacePanelScope()) return;
     if (isMobileLayout()) setMobileSidebarOpen(false);
     // The dock showing a docked pane: that pane is what it holds, so it takes the keyboard.
@@ -2412,20 +2429,20 @@ function App() {
   // focuses its own.
   // Entering is not itself a new intent (a route settling calls it too): its retries belong to the intent it began
   // under, and a deliberate move made since (focusMainPane, a go-to, a press) ends them.
-  const enterMainPane = (attempt = 0, from: Element | null = null, intent = focusIntent) => {
+  const enterMainPane = (attempt = 0, from: Element | null = null, intent = focusIntent.join()) => {
     if (attempt === 0) clearTimeout(enterRetry);
-    if (intent !== focusIntent) return;
+    if (!intent()) return;
     if (routeKind() === "terminal") return;
     const pane = document.querySelector<HTMLElement>(".chat-main");
     const active = document.activeElement;
     if (attempt > 0 && active !== from && active !== document.body) return;
     if (hasComposer()) return focusComposer();
     if (active !== pane) pane?.focus({ preventScroll: true });
-    if (document.querySelector("textarea[data-composer-input]") && attempt < 20) enterRetry = setTimeout(() => enterMainPane(attempt + 1, pane, intent), 100);
+    if (document.querySelector("textarea[data-composer-input]") && attempt < 20) enterRetry = setTimeout(() => enterMainPane(attempt + 1, pane, intent), ENTER_RETRY_MS);
   };
   const focusMainPane = () => {
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    focusIntent++;
+    focusIntent.drop();
     if (splitShown() && cyclePaneFocus()) return;
     // The main pane has the keyboard now, even where its composer is entered by a retry (Codex review).
     setKeyboardPane("main");
@@ -2449,7 +2466,7 @@ function App() {
   // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
   // Ctrl+B stays the toggle.
   const goToSidebar = () => {
-    focusIntent++;
+    focusIntent.drop();
     const collapsed = document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") === "collapsed";
     if (!isMobileLayout() && collapsed) runSidebar("toggle-sidebar");
     focusSidebar();
@@ -3423,7 +3440,7 @@ function App() {
       const editor = column?.querySelector<HTMLElement>(".cm-content");
       (editor ?? column ?? surface)?.focus({ preventScroll: true });
       // A viewer's first load (its chunks) or a large file draws late: up to 6s, never taking focus back.
-      if (!editor && tries++ < 100) setTimeout(land, 60);
+      if (!editor && tries++ < 100) setTimeout(land, VIEWER_FOCUS_RETRY_MS);
     };
     requestAnimationFrame(land);
   }
@@ -3996,8 +4013,8 @@ function App() {
     const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
     const place = keep === null ? -1 : panesShown().indexOf(keep);
-    const intent = ++focusIntent;
-    const settleFocus = () => { if (intent !== focusIntent) return; const target = panesShown()[place]; if (place >= 0 && target !== undefined) focusAnyPane(target); };
+    const intent = focusIntent.next();
+    const settleFocus = () => { if (!intent()) return; const target = panesShown()[place]; if (place >= 0 && target !== undefined) focusAnyPane(target); };
     const [leftPane, rightPane] = pane === "main" || (partner !== "main" && shownSlots().indexOf(partner) > shownSlots().indexOf(pane as number)) ? [pane, partner] : [partner, pane];
     const left = paneElement(leftPane);
     const right = paneElement(rightPane);
@@ -4729,6 +4746,7 @@ function App() {
       const side = pane.session;
       const owns = () => slotHasKeyboard(slot);
       const page = () => slotPage(slot);
+      // conventions-ok: a hidden file input the attach control opens; the library has no file-picker piece
       const attachInput = () => <input ref={side.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) side.attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />;
       // A pane about to ease open (the one slot just added) holds its document until it has its room.
       const [held, setHeld] = createSignal(!docked && untrack(() => animatePanes() && !shownAsSeen.includes(slot) && shownSlots().length === shownAsSeen.length + 1));
@@ -5018,7 +5036,7 @@ function App() {
    * Back, a swap, or with reduced motion.
    */
   let panesSettled = false;
-  window.setTimeout(() => { panesSettled = true; }, 1500);
+  window.setTimeout(() => { panesSettled = true; }, PANES_SETTLE_MS);
   // The slots shown as the arrival effect below last saw them, and the documents held meanwhile (renderSlot): a pane
   // easing open is unseen until it lands, and mounting a chat inside the click that opened it -- its components, then its
   // first layout and render -- held the panes still ~45 ms before they moved.
@@ -5386,7 +5404,7 @@ function App() {
     if (!updateShell) return;
     // Stage a signed update while the window remains usable. The button and
     // tray command can still ask for an immediate check at any time.
-    const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), 10_000);
+    const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), FIRST_DESKTOP_UPDATE_CHECK_MS);
     // The hub pushes the installer it offers (runtime stream): a new one is downloaded as soon as it is there. The
     // hourly check is only for a hub that does not push (a release's, whose updates come from GitHub).
     const laterChecks = window.setInterval(() => void prepareDesktopUpdate(true), 60 * 60_000);
@@ -5472,7 +5490,7 @@ function App() {
       if (!listed()) {
         if (read) markChatRead(catalogue, changed);
         if (changed.status !== "active" || unlisted.has(changed.id)) return;
-        return void setTimeout(() => { if (!listed()) { unlisted.add(changed.id); relist(); } }, 1000);
+        return void setTimeout(() => { if (!listed()) { unlisted.add(changed.id); relist(); } }, UNLISTED_CHAT_RELIST_MS);
       }
       catalogue.patchChat(changed.id, read ? { ...changed, unread: false } : changed);
       if (read) markChatRead(catalogue, changed);
@@ -5808,7 +5826,7 @@ function App() {
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
     // A press is the person's own choice of where to be: deferred focus work started before it gives way (focusIntent).
-    const notePress = () => { focusIntent++; lastInput = "pointer"; };
+    const notePress = () => { focusIntent.drop(); lastInput = "pointer"; };
     const noteKey = () => { lastInput = "key"; };
     window.addEventListener("keydown", noteKey, true);
     window.addEventListener("pointerdown", notePress, true);
@@ -6275,6 +6293,7 @@ function App() {
   return <>
     <NotificationToaster />
     <DecisionDialogs />
+    {/* conventions-ok: a hidden file input the attach control opens; the library has no file-picker piece */}
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
     <Dialog open={Boolean(workspaceIdentityProject())} onOpenChange={(open) => { if (!open) closeWorkspaceIdentity(); }} close size="wide" title="Workspace identity" description="Choose a short mark or a Lucide icon, then choose a preset or custom color.">
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
@@ -6524,14 +6543,15 @@ const mount = document.getElementById("root")!;
 // page (the old file names are gone) or is still down. Shown without its
 // styles it was a broken page (the workspace rail stuck out beside a phone
 // layout), so wait for the server and reload into the build it now serves.
+const CHUNK_RELOAD_RETRY_MS = 1000;
 let reloadingForChunk = false;
 window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
   if (reloadingForChunk) return;
   reloadingForChunk = true;
   const tryReload = () => void fetch("/healthz", { cache: "no-store" })
-    .then((response) => { if (response.ok) location.reload(); else setTimeout(tryReload, 1000); })
-    .catch(() => setTimeout(tryReload, 1000));
+    .then((response) => { if (response.ok) location.reload(); else setTimeout(tryReload, CHUNK_RELOAD_RETRY_MS); })
+    .catch(() => setTimeout(tryReload, CHUNK_RELOAD_RETRY_MS));
   tryReload();
 });
 

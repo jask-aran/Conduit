@@ -2,6 +2,7 @@ import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack }
 import { deriveFineActivity } from "../../activity.js";
 import { api, asList, chatPath, isUnreachableError } from "../api/client";
 import { createAgentSession } from "./agent-session";
+import { createLatest } from "./latest";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
@@ -252,7 +253,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let currentGeneration: string | null = null;
   let stopRequest: { generationId: string | null; sent?: boolean } | null = null;
   let selectionToken = 0;
-  let navigationToken = 0;
+  const navigationToken = createLatest();
   let liveOpening: LiveOpening | null = null;
   const caches = chatCaches(options.runtime);
   const transcriptPrefetches = caches.prefetches;
@@ -455,7 +456,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   const reset = (draftProfileId?: string) => batch(() => {
-    navigationToken += 1;
+    navigationToken.drop();
     enteredOffline = null;
     logId = null;
     logSeq = 0;
@@ -1112,9 +1113,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     navigationOptions: { history?: "push" | "replace" | "none"; onCommit?: () => void; onShown?: () => void } = {},
   ) => {
     // What this page read of it, else the copy kept on the device (a cold start has nothing in memory).
-    const navigation = ++navigationToken;
+    const navigation = navigationToken.next();
     const known = transcriptCache.get(chat.id)?.detail ?? await readDeviceTranscript(chat.id) ?? undefined;
-    if (navigation !== navigationToken) return;
+    if (!navigation()) return;
     const entering = enterChat(chat, project, {
       detail: known,
       history: navigationOptions.history || "replace",
@@ -1147,6 +1148,7 @@ export function createActiveChat(options: ActiveChatOptions) {
    */
   let deviceCopy: { chatId: string; detail: TranscriptDetail } | null = null;
   let deviceCopyTimer: ReturnType<typeof setTimeout> | undefined;
+  const DEVICE_COPY_DELAY_MS = 2_000;
   const writeDeviceCopy = () => {
     clearTimeout(deviceCopyTimer);
     deviceCopyTimer = undefined;
@@ -1164,7 +1166,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       const base = transcriptCache.get(chatId)?.detail;
       deviceCopy = { chatId, detail: { ...base, id: chatId, projectId: projectId(), title: title(), status: status(),
         messages: list, tools: toolList } as TranscriptDetail };
-      deviceCopyTimer ??= setTimeout(writeDeviceCopy, 2_000);
+      deviceCopyTimer ??= setTimeout(writeDeviceCopy, DEVICE_COPY_DELAY_MS);
     });
   });
   // The open chat's waiting messages are its own to send; the app's background sending leaves them alone.
@@ -1180,16 +1182,16 @@ export function createActiveChat(options: ActiveChatOptions) {
   ) => {
     if (hubUnreachable()) return enterOffline(chat, project, navigationOptions);
     if (chatIsLive(chat)) return performLiveSelect(chat, project, navigationOptions);
-    const navigation = ++navigationToken;
+    const navigation = navigationToken.next();
     const cached = cachedTranscript(chat);
     let detail: TranscriptDetail;
     try { detail = cached || await loadTranscript(chat); }
     catch (error) {
-      if (navigation !== navigationToken || !isUnreachableError(error)) throw error;
+      if (!navigation() || !isUnreachableError(error)) throw error;
       return enterOffline(chat, project, navigationOptions);
     }
     if (chatIsLive(chat)) transcriptPrefetches.delete(chat.id);
-    if (navigation !== navigationToken) return;
+    if (!navigation()) return;
     await enterChat(chat, project, {
       detail,
       history: navigationOptions.history || "replace",

@@ -1,7 +1,7 @@
 import { Frost } from "./frost";
 import { Steps } from "./steps";
 import * as Icons from "./icons";
-import { createSignal, Show, type JSX } from "solid-js";
+import { Show, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./controls";

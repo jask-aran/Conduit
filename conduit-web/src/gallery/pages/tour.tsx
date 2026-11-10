@@ -21,7 +21,7 @@ export const tourPage: Page = {
   usage: `import { Spotlight, TourCard } from "@/components/ui";
 
 <>
-  <Spotlight class="ui-tour-spotlight" lit={regionBox()} />
+  <Spotlight tour lit={regionBox()} />
   <TourCard label="Keyboard tour" step={1} steps={8} title="Three regions"
     tasks={[{ label: "Go to the sidebar", keys: ["Ctrl Shift 1"], state: "done" }]}
     onBack={back} onSkip={skip} onEnd={end}>Press each go-to chord.</TourCard>

@@ -5,7 +5,6 @@ import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons, Note } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { Button as DialogButton, Input as DialogInput, Field as DialogField, Segmented, Spinner } from "@/components/ui/controls";
-import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { FolderOpenIcon } from "lucide-solid";
@@ -24,7 +23,6 @@ import { api } from "../api/client";
 import type { Template, DashboardChat, Project, ProjectDashboardPayload, PtysPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
-import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions } from "../dashboard/primitives/split";
 import type { Pty } from "../api/contracts";
 import { awayDevice, type RuntimeStore } from "../state/runtime";
@@ -32,6 +30,9 @@ import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/ch
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import { Row } from "@/components/ui/row";
+
+/** How often a clone under way is asked how it is going. */
+const CLONE_POLL_MS = 500;
 
 type WorkspaceView = "files" | "diff" | "terminal";
 const dashboardCache = new Map<string, { expiresAt: number; promise: Promise<ProjectDashboardPayload> }>();
@@ -260,7 +261,7 @@ export function ProjectDashboard(props: {
         if (!disposed) await props.onRefresh();
         return;
       }
-      if (!disposed) timer = setTimeout(() => { void refresh(); }, 500);
+      if (!disposed) timer = setTimeout(() => { void refresh(); }, CLONE_POLL_MS);
     };
     void refresh();
     onCleanup(() => {

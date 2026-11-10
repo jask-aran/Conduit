@@ -34,14 +34,16 @@ const files = walk(path.join(root, "src"));
 const inDir = (file, dir) => rel(file).startsWith(dir + "/");
 const lineOf = (text, index) => text.slice(0, index).split("\n").length;
 const allowed = (lines, line) => /conventions-ok/.test(lines[line - 1] || "") || /conventions-ok/.test(lines[line - 2] || "");
-// Blank out comments, keeping offsets, so commented-out code and prose don't count.
-const stripComments = (text, css) => text.replace(css ? /\/\*[\s\S]*?\*\//g : /\/\*[\s\S]*?\*\/|(?<![:"'`\\])\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
+// Blank out comments, keeping offsets, so commented-out code and prose don't count. A /* straight after a word or a
+// quote is in a string (accept="image/*"), not a comment.
+const stripComments = (text, css) => text.replace(css ? /\/\*[\s\S]*?\*\//g : /(?<![\w"'`])\/\*[\s\S]*?\*\/|(?<![:"'`\\])\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
 
 const problems = [];
 const report = (file, text, index, rule, fix) => {
   const line = lineOf(text, index);
   const entry = `${rel(file)}:${line}  ${rule}: ${fix}`;
-  if (!allowed(text.split("\n"), line) && !problems.includes(entry)) problems.push(entry);
+  // The text given here has its comments blanked, so the exemption is read from the file as written.
+  if (!allowed(fs.readFileSync(file, "utf8").split("\n"), line) && !problems.includes(entry)) problems.push(entry);
 };
 const each = (file, text, regex, fn) => { for (const m of text.matchAll(regex)) fn(m); };
 

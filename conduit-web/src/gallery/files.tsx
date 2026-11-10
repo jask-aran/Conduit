@@ -4,7 +4,7 @@ import { FileView, FileViewer, FileName, FileGit, FileDirty, FileMore, StatusBar
 import { FileSuffix } from "@/components/ui/file";
 import { FileImage, FileCard, FileBody, FileSwap, FileEmptySide, FileChanges, FileMedia, FileScope } from "@/components/ui/viewer";
 import { CodeSurface, CodeHost, CodeContent, AnnotationPopup, AnnotationInput, AnnotationButton, TurnNavigation, Comparison, ComparisonContent, ComparisonSource, DiffShell, DiffRail, DiffBody } from "@/components/ui/editor";
-import { Button, Input, LeadInput } from "@/components/ui/controls";
+import { Button, LeadInput } from "@/components/ui/controls";
 import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserPlace, BrowserMain, BrowserToolbar, BrowserAddress, BrowserCount, BrowserSummary, BrowserSpacer, BrowserGrid, BrowserEntry, BrowserMark, BrowserMachine, BrowserShelf } from "@/components/ui/browser";
 import { ResizeEdge } from "@/components/ui/pane";
 import { FolderShelf, FolderTile, LineCounts } from "@/components/ui/dashboard";

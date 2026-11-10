@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, Fact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, Fact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Row } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";

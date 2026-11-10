@@ -17,6 +17,8 @@ try {
 } catch { /* nothing kept, or not readable: the sweep fills it */ }
 const [revision, setRevision] = createSignal(0);
 let keep = 0;
+/** How long the seen values hold still before they are written to storage. */
+const STORE_DEBOUNCE_MS = 500;
 
 /** Every setting seen so far, with its value. */
 export const seenSettings = () => { revision(); return [...bySection.values()].flat(); };
@@ -60,5 +62,5 @@ export function rememberSettings(section: string, seen: SeenSetting[]) {
   bySection.set(section, seen);
   setRevision((count) => count + 1);
   clearTimeout(keep);
-  keep = window.setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(bySection))); } catch { /* full or blocked: kept for this launch */ } }, 500);
+  keep = window.setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(Object.fromEntries(bySection))); } catch { /* full or blocked: kept for this launch */ } }, STORE_DEBOUNCE_MS);
 }

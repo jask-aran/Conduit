@@ -11,8 +11,6 @@ import { Count } from "./controls";
 /* Dashboard: a place's page. A head (mark, title, quick actions, status line); under it the composer and chats list
    left, what is live and what changed right, each scrolling on its own; oneColumn stacks head, notice, composer, first,
    list, rest. Sections are Groups of the sidebar's Rows at a page. Behaviour (one column, cursor, folding) is the app's. */
-type Order = "first" | "list" | "rest";
-
 export function Dashboard(props: {
   label: string;
   /** What the page is (Dashboard, Project, Workspace, Harness), for the leader. */

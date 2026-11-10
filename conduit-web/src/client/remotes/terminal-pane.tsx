@@ -13,6 +13,7 @@ import { Rule } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/controls";
 import { api, readShared } from "../api/client";
 import type { Connectivity } from "../state/runtime";
+import { createLatest } from "../state/latest";
 import { onPathChange } from "../platform/servers";
 import { terminalSocketUrl } from "../api/transport";
 import { directTerminalFailed, directTerminalSocket } from "./direct-terminal";
@@ -96,7 +97,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   // Set when the server answers that this terminal no longer exists, which is
   // the one close the reconnect loop must not keep chasing.
   let terminalGone = false;
-  let connectionGeneration = 0;
+  const connectionGeneration = createLatest();
   let mounted = false;
   let wasInactive = false;
   let activeProjectId = "";
@@ -272,7 +273,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   };
 
   const resetProject = () => {
-    connectionGeneration += 1;
+    connectionGeneration.drop();
     reconnectAttempts = 0;
     closeConnection();
     disposeRenderer();
@@ -352,7 +353,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     record: Pty,
     { freshRenderer = false, retrying = false, takeover = false, initialInput, viaHub = false }: { freshRenderer?: boolean; retrying?: boolean; takeover?: boolean; initialInput?: string; viaHub?: boolean } = {},
   ) => {
-    const generation = ++connectionGeneration;
+    const isCurrent = connectionGeneration.next();
     closeConnection();
     setError("");
     terminalGone = false;
@@ -360,7 +361,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setConnectionState("connecting");
     const activeTerminal = await ensureRenderer({ fresh: freshRenderer });
     activeTerminal.fit();
-    if (generation !== connectionGeneration || activeProjectId !== record.projectId || props.active === false) {
+    if (!isCurrent() || activeProjectId !== record.projectId || props.active === false) {
       if (props.active === false) disposeRenderer();
       return;
     }
@@ -369,7 +370,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const initialRows = activeTerminal.rows();
     const startedAt = performance.now();
     const direct = viaHub ? null : await directTerminalSocket(record, { cols: initialCols, rows: initialRows, takeover });
-    if (generation !== connectionGeneration) {
+    if (!isCurrent()) {
       direct?.socket.close();
       return;
     }
@@ -380,8 +381,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       // No address for the socket (an installed client's ticket timed out): tried again as a dropped connection is,
       // where it used to leave the pane on "connecting" with nothing set to retry.
       try { url = new URL(await terminalSocketUrl(record.id)); }
-      catch { if (generation === connectionGeneration && !scheduleReconnect(record, 0)) setConnectionState("offline"); return; }
-      if (generation !== connectionGeneration) return;
+      catch { if (isCurrent() && !scheduleReconnect(record, 0)) setConnectionState("offline"); return; }
+      if (!isCurrent()) return;
       url.searchParams.set("cols", String(initialCols));
       url.searchParams.set("rows", String(initialRows));
       if (takeover) url.searchParams.set("takeover", "1");
@@ -398,7 +399,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     let receivedControl = false;
 
     const failoverToHub = () => {
-      if (!direct || generation !== connectionGeneration || intentionallyClosed || connectionState() === "conflict" || connectionState() === "stopped") return false;
+      if (!direct || !isCurrent() || intentionallyClosed || connectionState() === "conflict" || connectionState() === "stopped") return false;
       directTerminalFailed(record.id, direct.grant);
       if (receivedControl) return false;
       void connect(record, { retrying: true, takeover, initialInput: pendingInitialInput, viaHub: true });
@@ -406,7 +407,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     };
 
     const sendResize = () => {
-      if (generation !== connectionGeneration || !writable() || connection.readyState !== WebSocket.OPEN) return;
+      if (!isCurrent() || !writable() || connection.readyState !== WebSocket.OPEN) return;
       const cols = activeTerminal.cols();
       const rows = activeTerminal.rows();
       if (cols === lastSentCols && rows === lastSentRows) return;
@@ -417,7 +418,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     syncGeometry = sendResize;
 
     connection.onmessage = (event) => {
-      if (generation !== connectionGeneration) return;
+      if (!isCurrent()) return;
       if (typeof event.data === "string") {
         try {
           const message = JSON.parse(event.data);
@@ -503,7 +504,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     };
 
     connection.onopen = () => {
-      if (generation !== connectionGeneration || props.active === false) {
+      if (!isCurrent() || props.active === false) {
         intentionallyClosed = true;
         return connection.close();
       }
@@ -514,7 +515,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       // During the brief connecting phase the terminal is not user-focusable,
       // but generated protocol replies still need to reach tmux.
       const acceptsTerminalData = writable() || connectionState() === "connecting";
-      if (acceptsTerminalData && data && generation === connectionGeneration && connection.readyState === WebSocket.OPEN) {
+      if (acceptsTerminalData && data && isCurrent() && connection.readyState === WebSocket.OPEN) {
         connection.send(encoder.encode(applyMobileModifiers(data)));
       }
     });
@@ -522,13 +523,13 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
 
     connection.onerror = () => {
       if (failoverToHub()) return;
-      if (generation === connectionGeneration && connectionState() !== "stopped" && connectionState() !== "conflict") {
+      if (isCurrent() && connectionState() !== "stopped" && connectionState() !== "conflict") {
         setConnectionState("reconnecting");
         setError("Terminal connection failed.");
       }
     };
     connection.onclose = (event) => {
-      if (generation !== connectionGeneration || intentionallyClosed) return;
+      if (!isCurrent() || intentionallyClosed) return;
       setWritable(false);
       setTerminalFocused(false);
       const isOwnershipConflict = event.code === PTY_IN_USE_CLOSE_CODE || event.code === PTY_TAKEN_OVER_CLOSE_CODE;
@@ -579,7 +580,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       } else if (current && (!selected || ["conflict", "offline", "detached", "reconnecting"].includes(connectionState()))) {
         discardSelectedTerminal(selected ? "The terminal ended in another Conduit client." : "The terminal is no longer available.");
       } else if (selected?.status === "exited" && connectionState() !== "stopped") {
-        connectionGeneration += 1;
+        connectionGeneration.drop();
         reconnectAttempts = 0;
         closeConnection();
         disposeRenderer();
@@ -748,7 +749,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
 
   const discardSelectedTerminal = (message: string) => {
     if (!pty()) return;
-    connectionGeneration += 1;
+    connectionGeneration.drop();
     reconnectAttempts = 0;
     closeConnection();
     disposeRenderer();
@@ -767,7 +768,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setSessionBusy(id);
     setError("");
     if (current) {
-      connectionGeneration += 1;
+      connectionGeneration.drop();
       closeConnection();
     }
     try {
@@ -807,7 +808,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
 
   const detachSession = (record: Pty) => {
     if (pty()?.id !== record.id) return;
-    connectionGeneration += 1;
+    connectionGeneration.drop();
     reconnectAttempts = 0;
     closeConnection();
     disposeRenderer();
@@ -858,7 +859,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     // brings the on-start commands back with it. On-start is /terminal's
     // alone; a workspace pane's replacement is an ordinary shell.
     const recovering = terminalGone && props.autoStart === true;
-    connectionGeneration += 1;
+    connectionGeneration.drop();
     closeConnection();
     disposeRenderer();
     setPty(null);
@@ -1022,7 +1023,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       // The tmux session is durable; the browser attachment is not. Releasing
       // both WebSocket and renderer means an invisible pane consumes no live
       // terminal stream and immediately releases its per-terminal lease.
-      connectionGeneration += 1;
+      connectionGeneration.drop();
       reconnectAttempts = 0;
       wasInactive = true;
       closeConnection();
@@ -1049,7 +1050,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     (navigator as KeyboardLockNavigator).keyboard?.unlock?.();
     host?.removeEventListener("wheel", zoomTerminal, { capture: true });
     if (ptyChangeListener) window.removeEventListener("conduit:ptys-changed", ptyChangeListener);
-    connectionGeneration += 1;
+    connectionGeneration.drop();
     closeConnection();
     disposeRenderer();
   });

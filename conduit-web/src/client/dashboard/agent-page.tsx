@@ -9,11 +9,14 @@ import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
 import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
-import type { AgentsPayload, AgentSummary, ChatSummary } from "../api/contracts";
+import type { AgentsPayload, ChatSummary } from "../api/contracts";
 import { agentName, agentNeeds, agentView, dismissNotices, dismissableNotices, foldNotices, jbotDoing, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
+
+/** How long Forget stays armed for its second press. */
+const FORGET_ARMED_MS = 3000;
 
 /**
  * The agent's dashboard: what needs the person, its work and schedule, its inbox, threads and memory.
@@ -468,7 +471,7 @@ export function AgentPage(props: {
   const entryKey = (entry: MemoryEntry) => `${entry.file}:${entry.date || ""}:${entry.line}`;
   const forget = (entry: MemoryEntry) => {
     const key = entryKey(entry);
-    if (arming() !== key) { setArming(key); setTimeout(() => { if (arming() === key) setArming(null); }, 3000); return; }
+    if (arming() !== key) { setArming(key); setTimeout(() => { if (arming() === key) setArming(null); }, FORGET_ARMED_MS); return; }
     setArming(null);
     void act(key, () => api("/v0/agent/memory/forget", { method: "POST", body: JSON.stringify({ file: entry.file, date: entry.date, line: entry.line }) })).finally(loadRemembered);
   };

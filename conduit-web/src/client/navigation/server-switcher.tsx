@@ -21,6 +21,8 @@ export const shortOrigin = (origin: string) => origin.replace(/^https?:\/\//, ""
 
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
+/** How long after the menu closes a focus landing on its trigger is given back to what had it before. */
+const FOCUS_GIVE_BACK_MS = 1000;
 
 /**
  * How long this server takes to answer, or null when it did not.
@@ -100,7 +102,7 @@ export function ServerSwitcher(props: {
     if (!open) {
       giveBack = focusBefore;
       focusBefore = null;
-      setTimeout(() => { giveBack = undefined; }, 1000);
+      setTimeout(() => { giveBack = undefined; }, FOCUS_GIVE_BACK_MS);
       return;
     }
     giveBack = undefined;
@@ -252,7 +254,7 @@ export function ServerSwitcher(props: {
       <MenuSection title="Account">
         {/* Who is signed in: the account's picture (its name's initials) and name; it is set in Settings › Account. */}
         <MenuRow icon={<Avatar name={accountName()} src={accountPicture()} />} onSelect={() => props.onOpenSettings("account")}>{accountName() || "Add your name"}</MenuRow>
-        <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer(), 0)}>Connect a device or server</MenuRow>
+        <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer())}>Connect a device or server</MenuRow>
         <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>
         <MenuRow destructive icon={<Icons.LogOut />} onSelect={props.onLogout}>{servers().length > 1 ? `Sign out of ${serverName()}` : "Sign out"}</MenuRow>
       </MenuSection>

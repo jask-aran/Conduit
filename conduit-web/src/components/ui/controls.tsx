@@ -3,7 +3,7 @@ import { IconButton } from "./actions";
 import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
 
-import { feel, haptic, type Haptic, type HapticProp } from "./haptics";
+import { feel, type Haptic, type HapticProp } from "./haptics";
 import { cn } from "@/lib/utils";
 import { callHandler } from "./shared";
 

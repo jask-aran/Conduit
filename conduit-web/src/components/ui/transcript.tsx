@@ -3,7 +3,7 @@ import * as Icons from "./icons";
 import { children, createEffect, createRenderEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
-import { ShowMore, Spinner } from "./controls";
+import { ShowMore } from "./controls";
 import { Loading } from "./state";
 import { type Motion, motionOf, sinceOf } from "./shared";
 import { Later } from "./later";

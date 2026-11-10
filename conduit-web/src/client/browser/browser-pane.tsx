@@ -4,7 +4,13 @@ import type { AgentPointerState } from "@/components/ui/web";
 import * as Icons from "@/components/ui/icons";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
+import { createLatest } from "../state/latest";
 import { BrowserProxyView, proxyBack, proxyForward, proxyReload } from "./browser-proxy-view";
+
+/** How long the agent's pointer stays still before it rests. */
+const POINTER_REST_MS = 2500;
+/** How long a resize settles before the viewport is sent. */
+const VIEWPORT_SETTLE_MS = 400;
 
 /*
  * A Browser pane (`browser:<id>`, roadmap #7): the hub's browser, shared with Conduit's agents (server/browser-host.js,
@@ -58,7 +64,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     const phase = (event.phase || "move") as AgentPointerState["phase"];
     setPointer({ x: left + event.x * scale, y: event.y * scale, phase, label: phase === "move" ? undefined : event.label || LABELS[phase], key: ++pointerKey });
     clearTimeout(resting);
-    resting = setTimeout(() => setPointer((current) => current && { ...current, resting: true, label: undefined }), 2500);
+    resting = setTimeout(() => setPointer((current) => current && { ...current, resting: true, label: undefined }), POINTER_REST_MS);
   };
   let closed = false;
   let retry = 0;
@@ -68,7 +74,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let picture: PictureSettings = { settings: { codec: "h264" }, video: true };
   let jpegOnly = false;
   let decoder: VideoDecoder | null = null;
-  let connecting = 0;
+  const connecting = createLatest();
   // Direct pages (Services › Browser, experimental): the hub's browser only; the page fetched through the hub's proxy and
   // shown as itself, the bar driving it, with no stream while it is on.
   const [direct, setDirect] = createSignal(false);
@@ -126,11 +132,11 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   };
   const connect = async () => {
     if (closed || direct()) return;
-    const attempt = ++connecting;
+    const isCurrent = connecting.next();
     try {
       const selected = await selectCodec();
       const url = await webSocketUrl(`/v0/browsers/${encodeURIComponent(props.id)}/stream?maxFps=${status()?.fps || 24}&codec=${selected.codec}`);
-      if (closed || connecting !== attempt) return;
+      if (closed || !isCurrent()) return;
       const next = new WebSocket(url);
       next.binaryType = "arraybuffer";
       socket = next;
@@ -230,7 +236,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     } catch (error) {
       setState({ text: error instanceof Error ? error.message : String(error), tone: "error" });
       // Said, and tried again as a dropped stream is: only a close used to retry, so this was where it stopped.
-      window.setTimeout(() => { if (!closed && connecting === attempt) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
+      window.setTimeout(() => { if (!closed && isCurrent()) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
     }
   };
 
@@ -307,7 +313,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     const observer = new ResizeObserver(([entry]) => {
       measured = { width: entry!.contentRect.width, height: entry!.contentRect.height };
       clearTimeout(sizing);
-      sizing = window.setTimeout(size, 400);
+      sizing = window.setTimeout(size, VIEWPORT_SETTLE_MS);
     });
     if (screen) observer.observe(screen);
     createEffect(() => { if (status()?.available) size(); });

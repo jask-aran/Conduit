@@ -5,7 +5,7 @@ import { Browser, BrowserLayout, BrowserSidebar, BrowserPlaces, BrowserMain, Bro
 import { FolderShelf, FolderTile } from "@/components/ui/dashboard";
 import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
 import { harnessStatusLabel } from "../harness-brand";
-import { Button, Input, LeadInput } from "@/components/ui/controls";
+import { Button, LeadInput } from "@/components/ui/controls";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
 import { Select } from "@/components/ui/menus";

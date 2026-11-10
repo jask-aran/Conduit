@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { Button as DialogButton } from "@/components/ui/controls";
 import { Attachments, Attachment } from "@/components/ui/card";
-import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 
 
 import { Button as LibraryButton, Chip, Chips, Rider, Actions } from "@/components/ui";

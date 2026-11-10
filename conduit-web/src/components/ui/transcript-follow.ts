@@ -13,6 +13,9 @@ import {
   type TailFollowState,
 } from "./tail-follow";
 
+/** How long a scroll gesture is quiet before the tail is handed back. */
+const REJOIN_QUIET_MS = 120;
+
 /*
  * A transcript's follow (DESIGN Transcript): held at its latest while the reader is there, left where they scrolled
  * otherwise; the one engine every chat's transcript runs on.
@@ -89,7 +92,7 @@ export function createTranscriptFollow(options: {
       if (!spring() || !following()) return;
       setOwner("app", true);
       requestSpring();
-    }, 120);
+    }, REJOIN_QUIET_MS);
   };
 
   const cancelGlide = () => { if (latestGlide != null) cancelAnimationFrame(latestGlide); latestGlide = null; };

@@ -8,6 +8,9 @@ import { httpUrl } from "../api/transport.js";
 import { desktopShell, type CompanionStatus } from "./installed-client.ts";
 import type { NodesPayload } from "../api/contracts.ts";
 
+/** How often the node is asked until a change shows. */
+const NODE_POLL_MS = 700;
+
 type ListedNode = NodesPayload["devices"][number]["nodes"][number];
 
 const nodes = async () => (await api<NodesPayload>("/v0/nodes")).devices.flatMap((device) => device.nodes);
@@ -44,7 +47,7 @@ async function until(nodeId: string, ready: (node: ListedNode) => boolean, failu
   while (Date.now() < end) {
     const node = (await nodes().catch(() => [])).find((item) => item.id === nodeId);
     if (node?.online && ready(node)) return;
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    await new Promise((resolve) => setTimeout(resolve, NODE_POLL_MS));
   }
   throw new Error(failure);
 }

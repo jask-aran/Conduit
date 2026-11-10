@@ -2,6 +2,7 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { haptic } from "./haptics";
 import * as Icons from "./icons";
+import { whenMotionEnds } from "./motion";
 import { PillButton } from "./pill";
 
 /**
@@ -12,6 +13,7 @@ import { PillButton } from "./pill";
  */
 export function Viewfinder(props: { onCapture: (file: File) => void; onFull: () => void; onClose: () => void }) {
   let video!: HTMLVideoElement;
+  let root!: HTMLDivElement;
   let stream: MediaStream | null = null;
   const [facing, setFacing] = createSignal<"environment" | "user">("environment");
   const [live, setLive] = createSignal(false);
@@ -42,7 +44,7 @@ export function Viewfinder(props: { onCapture: (file: File) => void; onFull: () 
     if (leaving()) return;
     setLeaving(true);
     stop();
-    window.setTimeout(() => { then?.(); props.onClose(); }, 160);
+    whenMotionEnds(root, "opacity", "--duration-quick", () => { then?.(); props.onClose(); });
   };
   const capture = () => {
     if (!live() || leaving() || !video.videoWidth) return;
@@ -64,7 +66,7 @@ export function Viewfinder(props: { onCapture: (file: File) => void; onFull: () 
   const flip = () => { setFacing(facing() === "environment" ? "user" : "environment"); void start(); };
 
   return <Portal>
-    <div class="ui-viewfinder" role="dialog" aria-label="Camera" data-leaving={leaving() ? "" : undefined} data-facing={facing()}
+    <div ref={root} class="ui-viewfinder" role="dialog" aria-label="Camera" data-leaving={leaving() ? "" : undefined} data-facing={facing()}
       onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); leave(); } }}>
       <video ref={video} playsinline muted aria-hidden="true" data-live={live() ? "" : undefined} />
       <span class="ui-viewfinder-flash" data-on={flash() ? "" : undefined} aria-hidden="true" />

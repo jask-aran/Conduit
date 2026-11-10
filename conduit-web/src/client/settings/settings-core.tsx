@@ -65,7 +65,7 @@ import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
 import settingsIndex from "virtual:settings-index";
 import { markSwept, readSettings, rememberSettings, seenSettings, sweptAt } from "./settings-values";
-import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/components/ui/controls";
+import { Button, Input, Spinner, Segmented, Slider, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { Dialog, OverlayDialog } from "@/components/ui/dialog";
@@ -206,6 +206,20 @@ const gpuRendering = (() => {
 })();
 const SIDEBAR_CHAT_STEPS = [5, 10, 15, 20, 30, 50, 75, 100];
 const RUNTIME_STEPS = { live: [1, 2, 4, 6, 8, 12, 16, 24, 32], generating: [1, 2, 3, 4, 5, 6, 7, 8] } as const;
+/** How long Settings is open before search's index is built in an idle moment. */
+const SEARCH_INDEX_DELAY_MS = 600;
+/** The pause in typing after which search shows the first matching section. */
+const SECTION_SWITCH_PAUSE_MS = 90;
+/** How long an opened result's line stays marked found. */
+const FOUND_MARK_MS = 1600;
+/** The gap between looks for an opened result's line while its section renders. */
+const LOOKUP_RETRY_MS = 50;
+/** How long the page in view holds still before its values are read for search. */
+const READ_SETTLE_MS = 400;
+/** How long Settings is open and idle before the sweep of the other sections starts. */
+const SWEEP_START_MS = 300;
+/** The wait for an idle moment where requestIdleCallback is missing. */
+const IDLE_FALLBACK_MS = 50;
 const runtimeDraftOf = (settings: RuntimeSettings): RuntimeDraft => ({
   live: String(settings.maxLiveProcesses),
   generating: String(settings.maxGeneratingProcesses),
@@ -323,7 +337,7 @@ export function Settings(props: {
   // ...or, sooner, in an idle moment once Settings is open, so the first key finds it made.
   createEffect(() => {
     if (!props.open || props.harvest || searchable()) return;
-    const timer = window.setTimeout(() => setSearchable(true), 600);
+    const timer = window.setTimeout(() => setSearchable(true), SEARCH_INDEX_DELAY_MS);
     onCleanup(() => clearTimeout(timer));
   });
   const entries = createMemo(() => {
@@ -405,7 +419,7 @@ export function Settings(props: {
     if (!matches().size || matches().has(section())) return;
     // Drawing a section costs a frame or more: it waits for a pause in the typing, so no key is held up by it.
     const next = [...matches().keys()][0]!;
-    const timer = window.setTimeout(() => { moved = next; setSection(next); }, 90);
+    const timer = window.setTimeout(() => { moved = next; setSection(next); }, SECTION_SWITCH_PAUSE_MS);
     onCleanup(() => clearTimeout(timer));
   });
   // ...and its page shows only what matched: the lines by name, a group whole when its title matched, the page whole
@@ -452,16 +466,16 @@ export function Settings(props: {
     onCleanup(() => { watcher.disconnect(); cancelAnimationFrame(frame); for (const element of body.querySelectorAll("[data-filtered-out], [data-filter-first]")) { element.removeAttribute("data-filtered-out"); element.removeAttribute("data-filter-first"); } });
   });
   // Each opened result's lookup is its own: a newer one, another section or closing Settings ends an older one's retries.
-  let lookup = 0;
+  const lookup = createLatest();
   const openResult = (result: { section: Section; label: string; group: string | null }) => {
     openSection(result.section);
     // A section: into its page. A setting: its line, in view and marked, with focus on its control.
     if (result.group === null && result.label === label(result.section)) { requestAnimationFrame(focusPage); return; }
     // The section renders on the next frames (some after their data): look for the line a few times.
     let tries = 0;
-    const mine = ++lookup;
+    const mine = lookup.next();
     const find = () => {
-      if (mine !== lookup || !props.open || section() !== result.section) return;
+      if (!mine() || !props.open || section() !== result.section) return;
       const dialog = document.querySelector('[role="dialog"][aria-label="Settings"] main');
       const line = [...(dialog?.querySelectorAll<HTMLElement>(".ui-setting-line, .ui-switch, .ui-nav-label, .ui-group-title, .ui-title, summary, .ui-chain-line") ?? [])]
         .find((element) => element.textContent?.trim().startsWith(result.label));
@@ -470,8 +484,8 @@ export function Settings(props: {
         target.scrollIntoView({ block: "center" });
         target.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, button:not([disabled]), [tabindex="0"], [contenteditable="true"]')?.focus({ preventScroll: true });
         target.dataset.found = "";
-        setTimeout(() => { delete target.dataset.found; }, 1600);
-      } else if (++tries < 20) setTimeout(find, 50);
+        setTimeout(() => { delete target.dataset.found; }, FOUND_MARK_MS);
+      } else if (++tries < 20) setTimeout(find, LOOKUP_RETRY_MS);
     };
     requestAnimationFrame(find);
   };
@@ -624,7 +638,7 @@ export function Settings(props: {
   let voiceInputSelect!: HTMLSelectElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
-  let voiceLoadRequest = 0;
+  const voiceLoadRequest = createLatest();
   let voiceSettingsGeneration = 0;
   let voiceSaveInFlight = 0;
   let authProvidersLoaded = false;
@@ -982,7 +996,6 @@ export function Settings(props: {
    * Web search points there for what it runs on.
    */
   const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
-    const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
     const configured = () => provider.auth.configured;
     const signedIn = () => provider.auth.kind === "oauth";
     const state = () => provider.auth.kind ? (signedIn() ? "signed in" : "key stored") : ACCOUNT_SOURCES[provider.auth.source || "none"];
@@ -1050,19 +1063,19 @@ export function Settings(props: {
   };
 
   const loadVoiceSettings = async ({ quiet = false, preserveLocalSelection = false } = {}) => {
-    const request = ++voiceLoadRequest;
+    const request = voiceLoadRequest.next();
     const generation = voiceSettingsGeneration;
     if (!quiet) setVoiceStatus("loading");
     setVoiceError("");
     try {
       const loaded = await api<VoiceServerSettings>("/v0/voice/settings");
-      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0 || voiceAutosave.busy()) return;
+      if (!request() || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0 || voiceAutosave.busy()) return;
       const previous = voiceServerSettings();
       setVoiceServerSettings(preserveLocalSelection && previous ? preserveVoiceServerDraft(loaded, previous, voiceServerEdited()) : loaded);
       if (!preserveLocalSelection) setVoiceServerEdited(false);
       setVoiceStatus("ready");
     } catch (error) {
-      if (request !== voiceLoadRequest || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0) return;
+      if (!request() || generation !== voiceSettingsGeneration || voiceSaveInFlight > 0) return;
       setVoiceError((error as Error).message);
       setVoiceStatus("error");
     }
@@ -2009,13 +2022,13 @@ export function Settings(props: {
     let over = false;
     let timer = 0;
     const read = () => { const body = dialogEl()?.querySelector(".ui-overlay-page-body"); if (body && !over) rememberSettings(shown, readSettings(body, shown)); };
-    const watcher = new MutationObserver(() => { clearTimeout(timer); timer = window.setTimeout(read, 400); });
+    const watcher = new MutationObserver(() => { clearTimeout(timer); timer = window.setTimeout(read, READ_SETTLE_MS); });
     const attach = () => {
       if (over) return;
       const body = dialogEl()?.querySelector(".ui-overlay-page-body");
       if (!body) { requestAnimationFrame(attach); return; }
       watcher.observe(body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-checked"] });
-      timer = window.setTimeout(read, 400);
+      timer = window.setTimeout(read, READ_SETTLE_MS);
     };
     attach();
     onCleanup(() => { over = true; watcher.disconnect(); clearTimeout(timer); });
@@ -2026,7 +2039,7 @@ export function Settings(props: {
   const [sweeping, setSweeping] = createSignal(false);
   createEffect(() => {
     if (props.harvest || !props.open || sweeping() || Date.now() - sweptAt < 5 * 60_000) return;
-    const timer = window.setTimeout(() => setSweeping(true), 300);
+    const timer = window.setTimeout(() => setSweeping(true), SWEEP_START_MS);
     onCleanup(() => clearTimeout(timer));
   });
   createEffect(() => { if (!props.open) setSweeping(false); });
@@ -2039,7 +2052,7 @@ export function Settings(props: {
       for (const id of SWEPT) {
         if (over) return;
         // Each section is drawn in a moment the page is idle, so the sweep never lands on a key or a frame in use.
-        await new Promise<void>((resolve) => { if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: 600 }); else setTimeout(resolve, 50); });
+        await new Promise<void>((resolve) => { if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: 600 }); else setTimeout(resolve, IDLE_FALLBACK_MS); });
         if (over) return;
         setSection(id);
         // Its lines come with its data: wait until their number holds still, a second and a half at most.

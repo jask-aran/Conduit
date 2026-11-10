@@ -9,6 +9,9 @@ import { LiveNote, SettingLine, SettingLink, SettingValue } from "@/components/u
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 
+/** How often the browsers are read again while a pairing code is out. */
+const PAIRING_POLL_MS = 2000;
+
 /**
  * The person's own browsers on the network (Settings › Devices): each environment that can offer one, the browsers
  * paired there, and pairing another -- the hub gives a one-time code, entered in the browse extension of the browser
@@ -36,7 +39,7 @@ export function PersonBrowsersSettings(props: {
       setEnvironments(next);
       // A code is out: watch for the browser that redeems it.
       window.clearTimeout(timer);
-      if (!disposed && next.some((item) => item.pairing)) timer = window.setTimeout(() => void read(), 2000);
+      if (!disposed && next.some((item) => item.pairing)) timer = window.setTimeout(() => void read(), PAIRING_POLL_MS);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The browsers could not be read."); }
   };
   onMount(() => void read());

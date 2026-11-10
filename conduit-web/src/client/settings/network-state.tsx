@@ -13,7 +13,7 @@ import { SettingLine, SettingValue } from "@/components/ui/overlay";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { harnessLabelFor } from "../harness-brand";
-import type { Device, Environment, SharedRoot } from "../platform/devices.ts";
+import type { Device, Environment } from "../platform/devices.ts";
 
 /** The hub's list of devices (GET /v0/nodes), as device-api.js declares it: an environment is the code's node. */
 export type { SharedRoot } from "../platform/devices.ts";

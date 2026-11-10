@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { ArrowUpIcon, CameraIcon, FolderIcon, MicIcon, MonitorIcon, PaperclipIcon, PlusIcon, SettingsIcon, Trash2Icon } from "lucide-solid";
 
-import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Expand, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Keycap, Menu, Overlay, OverlayBar, PillButton, PillField, Section, Toolbar, Row } from "@/components/ui";
+import { Card, Rider, ServerControl, Reading, ReadingStats, ReadingStat, HeaderPill, Aura, Slider, Segmented, Preview, Bubble, Button, Frost, Item, Menu, Overlay, OverlayBar, PillButton, PillField, Section, Toolbar, Row } from "@/components/ui";
 import { px, style, bg, fg, edge, rounding, tall, icon } from "./specs";
 
 import { Glyph, HarnessMark, IDENTITY_COLOURS, Icons, MARKS, ThreadHarnessMark } from "@/components/ui";

@@ -7,6 +7,7 @@ import { minMainPaneWidth } from "../layout-geometry";
 import { unitPx } from "@/components/ui/layout";
 
 import { Spinner } from "@/components/ui/controls";
+import { whenMotionEnds } from "@/components/ui/motion";
 import { HeaderButton } from "@/components/ui/header";
 import { Backdrop } from "@/components/ui/overlay";
 import { ResizeEdge, type EdgeDrag } from "@/components/ui/pane";
@@ -372,14 +373,14 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   // Switching between beside and over the panes changes only the dock's layer:
   // it holds its size and place on top while its room in the row eases away
   // (or back), and the panes slide under it, as they do into a closed pane's.
-  let switchTimer: ReturnType<typeof setTimeout> | undefined;
+  let stopSwitchWait = () => {};
   createEffect(on(() => Boolean(props.overlay?.()), () => {
     if (!panelRoot) return;
     panelRoot.dataset.layerSwitch = "true";
-    clearTimeout(switchTimer);
-    switchTimer = setTimeout(() => { if (panelRoot) delete panelRoot.dataset.layerSwitch; }, 280);
+    stopSwitchWait();
+    stopSwitchWait = whenMotionEnds(panelRoot, "width", "--duration-fold", () => { if (panelRoot) delete panelRoot.dataset.layerSwitch; });
   }, { defer: true }));
-  onCleanup(() => clearTimeout(switchTimer));
+  onCleanup(() => stopSwitchWait());
   createEffect(on(() => props.widthRequest?.(), (request) => { if (request) queueMicrotask(() => commitWidth(request.width)); }, { defer: true }));
   // Every atomic width commit has to announce itself. The transcript learns its
   // own width only from geometry motion, so a commit that skips the event
@@ -396,6 +397,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (!props.open()) return value;
     const targetSize = value + shellGap();
     if (Math.abs(targetSize - startSize) > 0.5) {
+      // conventions-ok: mints the motion's id, which panelMotion carries to the transcript
       const id = ++panelMotionId;
       panelMotion({ phase: "begin", id, source: "workspace", size: startSize, targetSize, duration: 0 });
       panelMotion({ phase: "end", id, source: "workspace", size: targetSize });
@@ -443,6 +445,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (isMobileLayout()) return;
     const startWidth = width();
     let pendingWidth = startWidth;
+    // conventions-ok: mints the motion's id, which panelMotion carries to the transcript
     const id = ++panelMotionId;
     // Open/close uses CSS width transition; resize must not, or the shell lags
     // the pointer and the gutter/transcript fight the ease.

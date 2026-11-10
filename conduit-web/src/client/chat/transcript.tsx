@@ -22,8 +22,6 @@ import { copyWithFeedback } from "./markdown-actions";
 import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle } from "./code-block";
 import { highlightCodeBlocks } from "./code-highlight";
 import {
-  selectedCodeBlockCollapse,
-  selectedCodeBlockCollapseLines,
   isCodeBlockCollapseMode,
   isCodeBlockCollapseLines,
   useUserMessageCollapse,
@@ -587,7 +585,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   const setViewportScrollTop = follow.setScrollTop;
   const viewportMaxScrollTop = follow.maxScrollTop;
   const syncLatestDistance = follow.syncLatestDistance;
-  const scrollBottomNow = follow.scrollBottomNow;
   // A turn that has just ended is still the live tail for a moment: its foot and last rows arrive as it settles, and
   // the spring takes the view down to them. Snapped -- as a chat opened finished is -- they landed in one frame (48px).
   let liveTailUntil = 0;

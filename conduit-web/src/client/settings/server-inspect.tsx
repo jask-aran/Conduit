@@ -13,6 +13,9 @@ import {
   type ServerEntry, type ServerPath,
 } from "../platform/servers.ts";
 
+/** How long a route's /healthz has to answer before it counts as not answering. */
+const HEALTH_TIMEOUT_MS = 4000;
+
 /**
  * What this client can learn of every server it knows, without signing in: each route asked how long it takes and
  * what it runs. `/healthz` needs no session; a browser can only ask its own origin (cross-origin access is granted to
@@ -25,7 +28,7 @@ export function createServerHealth() {
   const canProbe = (origin: string) => isInstalledClient() || origin === location.origin;
   const ask = async (origin: string, entry: ServerEntry): Promise<Health> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
     const started = performance.now();
     try {
       const response = await fetch(buildHttpUrl("/healthz", dialOrigin(origin, entry)), { cache: "no-store", signal: controller.signal });

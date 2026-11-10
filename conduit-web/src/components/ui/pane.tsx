@@ -1,7 +1,6 @@
 import { dragRegion } from "./window";
 import { Dot } from "./nav";
 import { Frost } from "./frost";
-import { Notice } from "./state";
 import * as Icons from "./icons";
 import { CloseButton } from "./actions";
 import { Row, type RowProps } from "./row";

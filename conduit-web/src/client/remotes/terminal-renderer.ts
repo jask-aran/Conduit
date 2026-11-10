@@ -1,6 +1,5 @@
 import terminalFontUrl from "../assets/MesloLGSNerdFontMono-Regular.ttf";
 import { terminalFontFamily } from "../preferences/terminal-font";
-import { isMobileLayout } from "../navigation/mobile-layout";
 import { selectedUiScale } from "../preferences/ui-scale";
 import "./terminal-pane.css";
 

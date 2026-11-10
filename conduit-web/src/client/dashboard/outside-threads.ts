@@ -1,5 +1,5 @@
 import { api } from "../api/client";
-import type { HarnessesPayload, HarnessSummary, HarnessThread, HarnessThreadDiscovery } from "../api/contracts";
+import type { HarnessesPayload, HarnessThread, HarnessThreadDiscovery } from "../api/contracts";
 
 // Threads the machine's harnesses ran that no Conduit chat owns: in one folder
 // for a workspace's Not in Conduit, across the machine for the Conduit

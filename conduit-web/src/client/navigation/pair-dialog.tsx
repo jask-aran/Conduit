@@ -5,7 +5,7 @@ import { createEffect, createSignal, on, onCleanup, Show, type JSX } from "solid
 
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
-import { activeServer, pathsOf, serverPathLabel, type ServerPath } from "../platform/servers.ts";
+import { activeServer, pathsOf, type ServerPath } from "../platform/servers.ts";
 import { shortOrigin } from "./server-switcher";
 import { pairingFragment } from "../platform/pairing";
 import { Columns, Group } from "@/components/ui/group";

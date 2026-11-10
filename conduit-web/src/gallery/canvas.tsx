@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { render } from "solid-js/web";
 import "../client/styles.css";
 import "./gallery.css";

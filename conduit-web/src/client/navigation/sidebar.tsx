@@ -1,6 +1,6 @@
 import { reducedMotion, whenMotionEnds } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
-import { AgentAvatar, HarnessMark, PaneMark, ThreadHarnessMark } from "@/components/ui";
+import { AgentAvatar, PaneMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
 import { Section as DialogSection, Item as DialogItem } from "@/components/ui/popover";
@@ -29,11 +29,8 @@ import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator"
 import { dispatchPanelGeometryMotion } from "../panel-motion";
 import { compareChatsBySort, sortChats, useChatSort } from "../preferences/chat-sort";
 import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
-import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
-import { harnessStatusLabel } from "../harness-brand";
-import { agentName, agentNeeds, agentView, refreshAgent } from "../state/agent";
+import { agentName, agentView, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
-import type { Device } from "../platform/devices.ts";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
@@ -41,6 +38,12 @@ type WorkspaceMode = "linked" | "created" | "cloned";
 type SidebarArea = "conduit" | "computer";
 /** The machine choice that makes a folder of this computer available first (the desktop app only). */
 const THIS_COMPUTER = "this-computer";
+/** The gap between one shown chat's prefetch and the next, on a phone's drawer. */
+const WARM_STEP_MS = 120;
+/** How long the drawer's list holds still before it counts as rested and warms what came into view. */
+const SCROLL_REST_MS = 150;
+/** How long a new workspace's path holds still before the hub is asked to preview it. */
+const PREVIEW_DEBOUNCE_MS = 180;
 type ProjectInput = { mode: string; name?: string; path?: string; nodeId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
 export type ChatTarget = { chat: ChatSummary; project: Project };
@@ -225,6 +228,7 @@ export function Sidebar(props: {
   // stays inert while opening until it has landed (then takes touches and focus), and live while shutting until off screen.
   const [drawerSettled, setDrawerSettled] = createSignal(false);
   let stopDrawerWait = () => {};
+  let stopFocusBackWait = () => {};
   const settleDrawer = () => {
     const open = props.mobileOpen;
     if (drawerSettled() === open) return;
@@ -252,7 +256,7 @@ export function Sidebar(props: {
       if (!chat || !props.mobileOpen) return;
       warmed.add(chat.id);
       props.onPrefetchChat(chat);
-      warmTimer = window.setTimeout(next, 120);
+      warmTimer = window.setTimeout(next, WARM_STEP_MS);
     };
     next();
   };
@@ -298,6 +302,7 @@ export function Sidebar(props: {
       requestAnimationFrame(() => setInstant(false));
       return;
     }
+    // conventions-ok: mints the motion's id, which dispatchPanelGeometryMotion carries to the transcript
     const id = ++sidebarMotionId;
     sidebarEdgeMotionId = id;
     // Keep the v0.4.7 sidebar contract: the real shell follows its CSS width
@@ -340,6 +345,7 @@ export function Sidebar(props: {
   onCleanup(() => {
     cancelSidebarEdgeMotion();
     stopDrawerWait();
+    stopFocusBackWait();
   });
   onMount(() => {
     const syncPreferences = (event: Event) => {
@@ -523,6 +529,7 @@ export function Sidebar(props: {
     const open = props.mobileOpen;
     if (open !== mobileWasOpen) {
       stopDrawerWait();
+      stopFocusBackWait();
       // The drawer has landed when its body has (the pane itself only steps off screen once shut); the wait's own
       // timer catches reduced motion and an interrupted slide.
       stopDrawerWait = whenMotionEnds(sidebarRoot?.firstElementChild, "transform", "--duration-gentle", settleDrawer);
@@ -543,7 +550,7 @@ export function Sidebar(props: {
       // back -- a pick from the drawer swaps the page, so the control it was opened from is gone and the fallback decides.
       // On a phone once the page has slid back: a focus is a style and layout read, ~3ms of the frame the slide starts on.
       const back = () => restoreFocus(previous, phoneLayout() ? ['button[aria-label="Toggle Sidebar"]'] : ["textarea[data-composer-input]", 'button[aria-label="Toggle Sidebar"]']);
-      if (phoneLayout()) window.setTimeout(back, 450); else queueMicrotask(back);
+      if (phoneLayout()) stopFocusBackWait = whenMotionEnds(sidebarRoot?.firstElementChild, "transform", "--duration-gentle", back); else queueMicrotask(back);
     }
     mobileWasOpen = open;
   });
@@ -828,7 +835,7 @@ export function Sidebar(props: {
       }).catch((error) => {
         if (!controller.signal.aborted) setPreviewError((error as Error).message);
       });
-    }, 180);
+    }, PREVIEW_DEBOUNCE_MS);
     onCleanup(() => { window.clearTimeout(timer); controller.abort(); });
   });
 
@@ -1167,7 +1174,7 @@ export function Sidebar(props: {
         sidebarList = element;
         // Scrolled, it warms what has come into view once the list rests (a phone's; warmShown checks).
         let rest = 0;
-        element.addEventListener("scroll", () => { window.clearTimeout(rest); rest = window.setTimeout(warmShown, 150); }, { passive: true });
+        element.addEventListener("scroll", () => { window.clearTimeout(rest); rest = window.setTimeout(warmShown, SCROLL_REST_MS); }, { passive: true });
       }} data-region="sidebar"
       data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}

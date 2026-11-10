@@ -202,7 +202,7 @@ export function KeyboardTour(props: { shortcuts: ShortcutManager; env: TourEnv }
   };
 
   return <Show when={active() && step()}>{(def) => <>
-    <Show when={lit()}>{(region) => <Spotlight class="ui-tour-spotlight" lit={region().rect} motion="entering" />}</Show>
+    <Show when={lit()}>{(region) => <Spotlight tour lit={region().rect} motion="entering" />}</Show>
     <TourCard label="Keyboard tour" step={(current()?.step ?? 0) + 1} steps={TOUR_STEPS.length} title={def().title}
       tasks={tasks()} also={def().also?.(props.shortcuts)} note={note()} done={settled()} placement={placement()} motion="entering"
       nextLabel={last() ? "Finish" : "Next"}

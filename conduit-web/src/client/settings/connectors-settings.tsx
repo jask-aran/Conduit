@@ -19,11 +19,13 @@ export const IntegrationsSettings = () => <><ConnectorsGroup /><McpAccess /></>;
  * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
  * the entry, never shown.
  */
+/** How long a copied entry's confirmation (or a refusal) stays before the line returns to rest. */
+const COPIED_HOLD_MS = 2000;
 function McpAccess() {
   const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
   const [copied, setCopied] = createSignal("");
   onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/access").then(setAccess).catch(() => {}));
-  const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
+  const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), COPIED_HOLD_MS); })
     .catch(() => setCopied("Copying was not allowed here"));
   return <Show when={access()}>{(found) => <Group title="Conduit's tools in other harnesses">
     <SettingLine plain label="conduit" mono title="Conduit's MCP server: another harness can arrange your tabs and edit the hub's shared inbox. It needs a signed-in session or the hub's token.">

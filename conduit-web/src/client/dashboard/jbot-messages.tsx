@@ -1,6 +1,6 @@
 import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { clockTime, AgentRow, AgentRows, Answer, Button, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { clockTime, AgentRow, AgentRows, Answer, Button, EmailItem, Empty, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { openAgentChat, openRun, span, useNow } from "../chat/agents";
 import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
@@ -14,6 +14,11 @@ import { buildTurnRows, type TurnTraceData } from "../turn-rows";
 import { applyTranscriptOps, type TranscriptOp } from "../../transcript-fold.js";
 import type { Message as ChatMessage, ToolItem } from "../api/contracts";
 import { agentView } from "../state/agent";
+
+/** How long a turn's last trace stays after it ends with no reply. */
+const TRACE_HOLD_MS = 4000;
+/** How long the live row outlasts its reason, through a blink out of running. */
+const LIVE_ROW_LINGER_MS = 400;
 
 /**
  * jbot's messages on its page (docs/plans/persistent-agent.md › Talking to the person): the message log's app room,
@@ -198,7 +203,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     const trace = fresh();
     clearTimeout(letGo);
     if (trace) { setGone(false); setHeld({ trace, last: untrack(() => props.messages.at(-1)?.id) }); }
-    else if (untrack(held)) letGo = setTimeout(() => setGone(true), 4000);
+    else if (untrack(held)) letGo = setTimeout(() => setGone(true), TRACE_HOLD_MS);
   });
   const live = () => {
     const now = fresh();
@@ -214,7 +219,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
   createEffect(on(wanted, (now, before) => {
     if (!before || now) return setLingering(false);
     setLingering(true);
-    const timer = setTimeout(() => setLingering(false), 400);
+    const timer = setTimeout(() => setLingering(false), LIVE_ROW_LINGER_MS);
     onCleanup(() => clearTimeout(timer));
   }));
   const showLive = () => wanted() || (lingering() && (Boolean(unsent()) || props.messages.at(-1)?.direction === "in"));
@@ -303,7 +308,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     return <AgentRow line id={run.subagentId ?? undefined} title={run.title} state={state()} activity={activity()} at={run.live ? undefined : clock(run.at) || undefined}
       time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run.id)} />;
   };
-  const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
+  const transcript = () => <Show when={props.messages.length || props.working} fallback={<Empty kind="dash">Nothing said yet. Say something to {props.name}.</Empty>}>
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
         <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
           after={<>

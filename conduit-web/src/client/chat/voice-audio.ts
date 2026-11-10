@@ -2,6 +2,8 @@ import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./voice-
 import type { VoiceDictationSettings } from "./voice-dictation-types";
 import { installedClientKind } from "../platform/installed-client.ts";
 
+const AUDIO_INPUT_TEST_SAMPLE_MS = 50;
+
 export interface AudioInputDevice {
   deviceId: string;
   label: string;
@@ -368,7 +370,7 @@ export function startAudioInputTest(deviceId = "", options: AudioInputTestOption
           maxRms = Math.max(maxRms, level.rms);
           maxPeak = Math.max(maxPeak, level.peak);
           if (stopRequested || performance.now() - started >= maxDurationMs) return resolve();
-          timer = window.setTimeout(sample, 50);
+          timer = window.setTimeout(sample, AUDIO_INPUT_TEST_SAMPLE_MS);
         };
         sample();
       });

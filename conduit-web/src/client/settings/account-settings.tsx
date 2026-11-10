@@ -34,6 +34,7 @@ export function AccountSettings() {
   const saveZone = (timezone: string) => act(async () => { await api("/v0/agent", { method: "PATCH", body: JSON.stringify({ timezone }) }); await refreshAgent(); });
   return <><Group title="Account">
     <SettingLine plain label="Picture" state={accountPicture() ? undefined : "your name's initials"} title="Shown in the server switcher's menu, on every device signed in to this hub.">
+      {/* conventions-ok: a hidden file chooser the Choose button opens; components/ui has no piece for one */}
       <input ref={chooser} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void choose(file); }} />
       <Show when={accountPicture()}><Button size="sm" variant="ghost" haptic="destructive" disabled={busy()} onClick={() => void act(removeAccountPicture)}>Remove</Button></Show>
       <Button size="sm" variant="secondary" disabled={busy()} onClick={() => chooser.click()}>{accountPicture() ? "Change" : "Choose…"}</Button>

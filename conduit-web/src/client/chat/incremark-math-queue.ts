@@ -18,9 +18,12 @@ type MathRenderQueueOptions = {
   cancelFrame?: (handle: number) => void;
 };
 
+/** A frame, where there is no requestAnimationFrame. */
+const FRAME_MS = 16;
+
 function defaultRequestFrame(callback: FrameRequestCallback) {
   if (typeof requestAnimationFrame === "function") return requestAnimationFrame(callback);
-  return window.setTimeout(() => callback(performance.now()), 16);
+  return window.setTimeout(() => callback(performance.now()), FRAME_MS);
 }
 
 function defaultCancelFrame(handle: number) {

@@ -25,6 +25,8 @@ import "./workspace.css";
 // In the unit (layout-geometry): the width at which Files lays its tree beside the file, and the tree's own widths.
 const WIDE_FILES_MIN_UNITS = 56.25, WIDE_FILES_EXPANDED_UNITS = 40.625;
 const DEFAULT_TREE_UNITS = 12, MIN_TREE_UNITS = 10, MAX_TREE_UNITS = 25;
+/** How long after the last letter typed in the tree its typeahead starts over. */
+const TYPEAHEAD_RESET_MS = 500;
 
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
   return Boolean(left
@@ -243,7 +245,7 @@ export function createFiles(options: {
       link.href = url;
       link.download = path.split("/").at(-1) || "download";
       link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      window.setTimeout(() => URL.revokeObjectURL(url));
     } catch (cause) {
       reportError((cause as Error).message);
     }
@@ -713,7 +715,7 @@ export function FilesView(props: {
     } else if (event.key.length === 1 && event.key !== " " && !event.altKey && !event.ctrlKey && !event.metaKey) {
       treeTypeahead += event.key.toLowerCase();
       window.clearTimeout(treeTypeaheadTimer);
-      treeTypeaheadTimer = window.setTimeout(() => { treeTypeahead = ""; }, 500);
+      treeTypeaheadTimer = window.setTimeout(() => { treeTypeahead = ""; }, TYPEAHEAD_RESET_MS);
       const ordered = [...items.slice(index + 1), ...items.slice(0, index + 1)];
       const match = ordered.find((item) => item.dataset.name?.startsWith(treeTypeahead));
       if (match) focus(items.indexOf(match));
@@ -921,6 +923,7 @@ export function FilesView(props: {
                 </MenuContent>
               </DropdownMenu>
             </Show>
+            {/* conventions-ok: a hidden file chooser the upload menu opens; components/ui has no piece for one */}
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>
         </FilesTree>

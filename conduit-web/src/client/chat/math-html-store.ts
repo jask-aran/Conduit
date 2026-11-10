@@ -1,5 +1,8 @@
 import katex from "katex";
 
+/** How long index changes gather before the index is written. */
+const INDEX_WRITE_DELAY_MS = 500;
+
 /**
  * Finished formulas' KaTeX HTML, kept across reloads.
  *
@@ -66,7 +69,7 @@ function saveIndexSoon(store: Storage) {
   indexWrite = setTimeout(() => {
     indexWrite = null;
     try { store.setItem(INDEX, JSON.stringify(index || [])); } catch { /* not cached */ }
-  }, 500);
+  }, INDEX_WRITE_DELAY_MS);
 }
 
 export function readStoredMath(key: string): string | undefined {

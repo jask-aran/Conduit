@@ -4,6 +4,11 @@ import { connectionId } from "./state/runtime";
 // Types only: the declaration's words are the hub's to say, and stay out of the client's bundle.
 import type { UI_ACTIONS } from "../ui-api.js";
 
+/** How long the view's changes settle before they are told (a pane opening is several changes). */
+const VIEW_SETTLE_MS = 300;
+/** How long a command's view settles before it is told with the answer. */
+const COMMAND_SETTLE_MS = 250;
+
 /*
  * What this tab shows, told to the server, and what an agent asks of it, done here (roadmap #11; the server side is
  * server/ui-control.js, the agent's `ui` tool). A tab says its panes -- each pane's document and title, which has the
@@ -41,7 +46,7 @@ export function createAgentUiBridge(deps: {
   createEffect(() => {
     deps.connection(); deps.route(); JSON.stringify(deps.panes());
     clearTimeout(timer);
-    timer = window.setTimeout(() => void report(), 300);
+    timer = window.setTimeout(() => void report(), VIEW_SETTLE_MS);
   });
   const presence = () => void report();
   window.addEventListener("focus", presence);
@@ -57,7 +62,7 @@ export function createAgentUiBridge(deps: {
     const handler = Object.hasOwn(deps.actions, detail.command?.action) ? deps.actions[detail.command.action] : null;
     if (!handler) return void answer({ ok: false, error: `Not something this client does: ${String(detail.command?.action)}` });
     void Promise.resolve().then(() => handler(detail.command))
-      .then(async (result) => { await new Promise((resolve) => window.setTimeout(resolve, 250)); await report(true); await answer({ ok: true, result }); })
+      .then(async (result) => { await new Promise((resolve) => window.setTimeout(resolve, COMMAND_SETTLE_MS)); await report(true); await answer({ ok: true, result }); })
       .catch((error) => answer({ ok: false, error: error instanceof Error ? error.message : String(error) }));
   };
   window.addEventListener("conduit:ui-command", onCommand);

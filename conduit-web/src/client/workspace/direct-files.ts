@@ -21,6 +21,8 @@ const grants = new Map<string, Promise<Grant | null>>();
 const notOnNode = new Set<string>();
 const renewing = new Set<string>();
 const RENEW_MS = 3 * 60_000;
+/** How long a grant the node could not give (away, not answering reads) is kept before it is asked for again. */
+const NO_GRANT_MS = 30_000;
 async function grantFor(projectId: string): Promise<Grant | null> {
   if (notOnNode.has(projectId)) return null;
   const held = await grants.get(projectId);
@@ -50,7 +52,7 @@ function ask(projectId: string): Promise<Grant | null> {
   const asked: Promise<Grant | null> = api<Grant>(`/v0/projects/${encodeURIComponent(projectId)}/direct?origin=${encodeURIComponent(location.origin)}`).catch((error: { error?: string }) => {
     // Not on a node at all is for good; the node being away or not answering reads is asked again in a while.
     if (error?.error === "direct_not_on_node") notOnNode.add(projectId);
-    else setTimeout(() => { if (grants.get(projectId) === asked) grants.delete(projectId); }, 30_000);
+    else setTimeout(() => { if (grants.get(projectId) === asked) grants.delete(projectId); }, NO_GRANT_MS);
     return null;
   });
   return asked;

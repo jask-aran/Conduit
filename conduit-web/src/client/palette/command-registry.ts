@@ -19,7 +19,6 @@ import {
 } from "../commands/command-registry.ts";
 import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort.ts";
 import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
-import { installedClientKind } from "../platform/installed-client.ts";
 
 export interface PaletteContext {
   nativeApp: boolean;

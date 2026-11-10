@@ -49,7 +49,7 @@ export function watchStrayFrost() {
     void api("/v0/client-reports/stray-frost", { method: "POST", body: JSON.stringify(body) }).catch(() => undefined);
   };
   // In idle time: reading boxes lays the page out, which mid-move cost a frame.
-  const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 0);
+  const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run);
   setInterval(() => idle(() => {
     const row = document.querySelector(".ui-phone-row");
     if (!row || document.hidden) return;

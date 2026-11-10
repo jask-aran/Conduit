@@ -106,6 +106,7 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   };
 
   // The registry is searched as you type, a moment after the last key.
+  const SEARCH_DEBOUNCE_MS = 300;
   let timer: number | undefined;
   const asked = createLatest();
   const search = (value: string) => {
@@ -121,7 +122,7 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
         if (current()) { setFound(results); setSearchError(""); }
       } catch (failure) { if (current()) setSearchError(failed(failure)); }
       finally { if (current()) setSearching(false); }
-    }, 300);
+    }, SEARCH_DEBOUNCE_MS);
   };
   onCleanup(() => clearTimeout(timer));
 

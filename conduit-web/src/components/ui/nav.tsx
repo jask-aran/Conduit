@@ -1,13 +1,13 @@
 import { dragRegion } from "./window";
 import * as Icons from "./icons";
-import { createEffect, For, on, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, on, Show, splitProps, type JSX } from "solid-js";
 
-import { Button, Spinner } from "./controls";
+import { Spinner } from "./controls";
 import { haptic } from "./haptics";
 import { Expand } from "./expand";
 import { cn } from "@/lib/utils";
 import { Row, type RowProps } from "./row";
-import { Loading, Notice } from "./state";
+import { Loading } from "./state";
 
 /* Nav: the sidebar's pieces, on the frame (DESIGN Interaction, List row). The cursor is the wash and white; where you
    are (and its folder) is white with no fill. The keys are the caller's (navigation/sidebar-cursor.ts); while they move

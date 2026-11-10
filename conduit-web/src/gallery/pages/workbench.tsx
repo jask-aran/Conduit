@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { Button, Icons, StatusText, Switch, Workbench, WorkbenchFact, WorkbenchPick, WorkbenchSplit, WorkbenchTitle, Row, Group, Note, Actions, IconButton, Heading } from "@/components/ui";
+import { Button, Icons, StatusText, Switch, Workbench, WorkbenchFact, WorkbenchPick, WorkbenchSplit, WorkbenchTitle, Row, Group, Actions, IconButton, Heading } from "@/components/ui";
 import { Select } from "@/components/ui/menus";
 import { TextEditor } from "@/components/ui/text-editor";
 import { row, token, type Page } from "../model";

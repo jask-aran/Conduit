@@ -471,6 +471,7 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   return <Show when={target()} fallback={label()}>
     {(resolved) => <Show when={!props.context.inline} fallback={label()}>
       <Show when={resolved().external} fallback={<a href={resolved().href} data-citation={host() ? "true" : undefined} title={host() ? resolved().href : (reference()?.title || node()?.title || undefined)}>{content()}</a>}>
+        {/* conventions-ok: an external link in rendered markdown, drawn as the answer's link */}
         <button
           type="button"
           class={ANSWER_MARKDOWN.link}
@@ -960,6 +961,7 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
       const children = <Index each={node()?.children || []}>{(item) => <AstNode node={item} context={props.context} />}</Index>;
       return node()?.ordered ? <ol start={node()?.start || undefined}>{children}</ol> : <ul>{children}</ul>;
     }
+    // conventions-ok: a task-list item's checkbox, drawn by the markdown renderer
     case "listItem": return <li>{node()?.checked !== null && <input type="checkbox" checked={Boolean(node()?.checked)} disabled />}{<Nodes nodes={() => node()?.children || []} context={props.context} />}</li>;
     case "blockquote": return <blockquote><Nodes nodes={() => node()?.children || []} context={props.context} /></blockquote>;
     case "code": return <CodeNode node={node} handoff={props.context.fenceHandoff} />;

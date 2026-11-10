@@ -6,6 +6,8 @@ import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from 
 import { dictationSocketUrl } from "../api/transport";
 import { createLatest } from "../state/latest";
 
+const CAPTURE_DRAIN_TIMEOUT_MS = 250;
+
 export type VoiceDictationState = "idle" | "starting" | "listening" | "finishing" | "waiting" | "transcribing" | "completed" | "failed";
 
 export interface VoiceInputWarning {
@@ -519,7 +521,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
         drainingCapture = true;
         return new Promise<void>((resolve) => {
           captureDrainResolver = resolve;
-          captureDrainTimer = window.setTimeout(resolveCaptureDrain, 250);
+          captureDrainTimer = window.setTimeout(resolveCaptureDrain, CAPTURE_DRAIN_TIMEOUT_MS);
           try { processor?.port.postMessage({ type: "flush" }); }
           catch { resolveCaptureDrain(); }
         }).finally(() => {

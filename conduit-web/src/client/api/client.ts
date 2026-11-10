@@ -4,6 +4,9 @@ import { isInstalledClient } from "../platform/installed-client.ts";
 import { createSignal } from "solid-js";
 import { activeOrigin, whenPathMoves } from "../platform/servers.ts";
 
+/** How long a read ahead is kept for a page to take. */
+const READ_AHEAD_MS = 5_000;
+
 export interface ApiRequestMetadata {
   method: string;
   path: string;
@@ -88,7 +91,7 @@ export function readAhead(urls: string[], cache?: RequestCache) {
     const read = readOf(url, cache ? { cache } : {});
     read.catch(() => {});
     ahead.set(key, read);
-    setTimeout(() => { if (ahead.get(key) === read) ahead.delete(key); }, 5_000);
+    setTimeout(() => { if (ahead.get(key) === read) ahead.delete(key); }, READ_AHEAD_MS);
   }
 }
 

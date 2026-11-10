@@ -9,6 +9,9 @@ import { dropLatestScroller, setLatestScroller, tellLatestAway } from "../chat/l
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
 
+/** How long after the jbot chat opens its panel is built, past the dock's slide. */
+const PANEL_BUILD_DELAY_MS = 1500;
+
 /**
  * jbot's room: laid out as a thread is (its scroller, its composer floating over the foot), because it is one: what
  * the person says is the home thread's own message, one for one. Only jbot's side reads differently, as the
@@ -56,7 +59,7 @@ export function JbotRoom(props: {
   // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
   const [built, setBuilt] = createSignal(false);
   onMount(() => {
-    const handle = window.setTimeout(() => setBuilt(true), 1500);
+    const handle = window.setTimeout(() => setBuilt(true), PANEL_BUILD_DELAY_MS);
     onCleanup(() => window.clearTimeout(handle));
   });
   const toggle = () => {

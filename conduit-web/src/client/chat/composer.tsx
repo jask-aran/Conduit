@@ -51,6 +51,11 @@ import { COMPOSER_FOLDS, type ComposerFold } from "./composer-folds";
 import { keptParts, watchFit } from "@/components/ui/fit";
 import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
+
+/** How long a take sent on stop hides the draft at most, waiting for its transcript. */
+const TAKE_SEND_GIVE_UP_MS = 20_000;
+/** How long a press on the camera is held to pick photos instead. */
+const CAMERA_HOLD_MS = 450;
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
 const EDIT_ACTIONS = [
@@ -512,7 +517,7 @@ export function Composer(props: {
     take.sendWhenDone = true;
     setSendingTake(take);
     // Never left hiding the draft if the transcript does not come back.
-    setTimeout(() => { if (sendingTake() === take) setSendingTake(null); }, 20_000);
+    setTimeout(() => { if (sendingTake() === take) setSendingTake(null); }, TAKE_SEND_GIVE_UP_MS);
     stopTake();
   };
 
@@ -578,7 +583,7 @@ export function Composer(props: {
   };
   const cameraPointerDown = (event: PointerEvent) => {
     event.preventDefault();
-    cameraHold = setTimeout(() => { cameraHold = null; haptic("hold"); void pickPhotosHeld(); }, 450);
+    cameraHold = setTimeout(() => { cameraHold = null; haptic("hold"); void pickPhotosHeld(); }, CAMERA_HOLD_MS);
   };
   const cameraPointerCancel = () => { if (cameraHold) clearTimeout(cameraHold); cameraHold = null; };
   const cameraPointerUp = () => {
@@ -1016,7 +1021,9 @@ export function Composer(props: {
     edit={<For each={EDIT_ACTIONS}>{(action) => <PillButton haptic="select" label={action.label} icon={action.icon()} button={{ tabIndex: editing() ? 0 : -1, onPointerDown: (event) => event.preventDefault(), onClick: () => editActions[action.key]() }} />}</For>}>
     <MobileComposerOptions composer={props} onOpenChange={setOptionsOpen} />
     <Show when={props.attachmentsSupported !== false}>
+      {/* conventions-ok: hidden file pickers; the library has no file input */}
       <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
+      {/* conventions-ok: as above */}
       <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(event) => { const files = Array.from(event.currentTarget.files || []); event.currentTarget.value = ""; addPhotos(files); }} />
       <Show when={viewfinder()}><Viewfinder onCapture={(file) => addPhotos([file])} onFull={() => cameraInput.click()} onClose={() => setViewfinder(false)} /></Show>
       <PillButton label="Take a photo" icon={<Icons.Camera />} button={{ "data-haptic": "press", title: "Take a photo (hold to choose photos)", disabled: !props.serverOnline || !interactive(), onPointerDown: cameraPointerDown, onPointerUp: cameraPointerUp, onPointerLeave: cameraPointerCancel, onPointerCancel: cameraPointerCancel, onContextMenu: (event) => event.preventDefault() }} />

@@ -22,6 +22,9 @@
 
 import { createEffect, createSignal, onCleanup } from "solid-js";
 
+/** How long the update check waits for the server; with it gone the fetch can hang for minutes. */
+const UPDATE_CHECK_TIMEOUT_MS = 15_000;
+
 let registeredServiceWorker: ServiceWorkerRegistration | null = null;
 let updateRequest: Promise<boolean> | null = null;
 let resetRequest: Promise<void> | null = null;
@@ -373,7 +376,7 @@ async function performPwaUpdate(reloadPage: () => void) {
     return true;
   }
   // Bounded: with the server gone this fetch can hang for minutes.
-  await Promise.race([registration.update(), new Promise((_, reject) => setTimeout(() => reject(new Error("Could not reach the server to check for updates.")), 15_000))]);
+  await Promise.race([registration.update(), new Promise((_, reject) => setTimeout(() => reject(new Error("Could not reach the server to check for updates.")), UPDATE_CHECK_TIMEOUT_MS))]);
   // Nothing new was fetched: up to date. A new build precaches the whole
   // client before it waits, which over a phone connection takes well past a
   // few seconds -- so a build that is installing gets the time it needs, and

@@ -451,7 +451,7 @@ export default function WorkspaceFileSlot(props: {
       link.href = url;
       link.download = file.split("/").at(-1) || "download";
       link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      window.setTimeout(() => URL.revokeObjectURL(url));
     } catch (cause) {
       props.onError((cause as Error).message);
     }

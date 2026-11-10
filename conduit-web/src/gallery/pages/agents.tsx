@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Inbound, Orb, RoutineIcon, RunLine, Trace, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Orb, RoutineIcon, RunLine, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";

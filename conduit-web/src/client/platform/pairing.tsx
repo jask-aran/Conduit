@@ -5,6 +5,9 @@ import { buildHttpUrl, normalizeServerOrigin } from "../api/transport";
 import { publishTrustedIdentities } from "./certificate-pins";
 import { dialOrigin, scopeOf, trustedIdentities, type ServerEntry } from "./servers";
 
+/** How often the QR scanner looks at the camera. */
+const QR_LOOK_MS = 200;
+
 /**
  * `conduit-server pair` and "Pair a device" show a QR of a one-time sign-in
  * link, `<server>/v0/auth/handoff?code=…`. A browser that opens it is signed
@@ -134,7 +137,7 @@ export function QrScanner(props: { onLink: (link: PairingLink) => void; onClose:
             setMessage("That QR code is not a Conduit pairing code");
           }
         }
-        timer = window.setTimeout(look, 200);
+        timer = window.setTimeout(look, QR_LOOK_MS);
       };
       stage = "QR scanner";
       look();

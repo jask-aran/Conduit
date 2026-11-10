@@ -5,6 +5,9 @@ import { httpUrl } from "../api/transport.js";
 import { installedClientKind } from "./installed-client.ts";
 import { activeServer, servers, switchToServer } from "./servers.ts";
 
+/** How long the distributor has to answer with an endpoint before the saved list is read. */
+const ENDPOINT_TIMEOUT_MS = 30_000;
+
 /**
  * Notifications from the hub on this device (docs/plans/persistent-agent.md, "Reaching you"). One protocol, Web Push,
  * two ways in: the Android app through a UnifiedPush distributor (Google's push service built in, or ntfy and the like
@@ -149,7 +152,7 @@ export function createPushControl() {
     const arrived = new Promise<Endpoint | null>((resolve) => {
       // Settled before addListener hands back its handle, the handle is removed as it arrives.
       let listener: Listener | null = null, settled = false;
-      const timer = setTimeout(() => { settled = true; void listener?.remove(); resolve(null); }, 30_000);
+      const timer = setTimeout(() => { settled = true; void listener?.remove(); resolve(null); }, ENDPOINT_TIMEOUT_MS);
       void push.addListener("endpoint", (endpoint: Endpoint) => {
         if (endpoint.instance !== instance) return;
         settled = true; clearTimeout(timer); void listener?.remove(); resolve(endpoint);

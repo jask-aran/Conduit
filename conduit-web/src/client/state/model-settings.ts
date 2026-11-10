@@ -3,6 +3,7 @@ import { toast } from "@/components/ui/notifications";
 import { api, apiWhenServed, asList } from "../api/client";
 import type { ModelOption, ModelState } from "../api/contracts";
 import { preferredThinkingLevel } from "./thinking-levels";
+import { createLatest } from "./latest";
 
 type ErrorHandler = (error: unknown) => void;
 type ThinkingLevelRecoveryHandler = (details: { from: string; to: string }) => void;
@@ -37,7 +38,7 @@ export function createModelSettings(
   let activeProjectId = "";
   let activeChatId = "";
   const [activeProfile, setActiveProfile] = createSignal("");
-  let requestSequence = 0;
+  const chatRequest = createLatest();
   let initialCatalogRefresh = true;
   const pendingThinkingLevels = new Map<string, string>();
   const notifiedRecoveryChats = new Set<string>();
@@ -109,10 +110,10 @@ export function createModelSettings(
   const reloadChat = async (chatId = activeChatId) => {
     if (!chatId) return;
     activeChatId = chatId;
-    const requestId = ++requestSequence;
+    const latest = chatRequest.next();
     try {
       const catalog = await apiWhenServed<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`);
-      if (activeChatId !== chatId || requestId !== requestSequence) return;
+      if (activeChatId !== chatId || !latest()) return;
       const nextModels = asList<ModelOption>(catalog.models);
       const selected = nextModels.find((item) => item.spec === catalog.model);
       const levels = asList<string>(selected?.thinkingLevels);
@@ -137,7 +138,7 @@ export function createModelSettings(
         ? "Authenticate this harness to use models."
         : "");
     } catch (error) {
-      if (activeChatId === chatId && requestId === requestSequence) onError(error);
+      if (activeChatId === chatId && latest()) onError(error);
     }
   };
 

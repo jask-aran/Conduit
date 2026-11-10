@@ -18,6 +18,8 @@ type LanNames = {
 const until = (certificate?: Certificate) => certificate
   ? `until ${new Date(certificate.validTo).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "";
 const PATH = "/v0/network/lan-names";
+/** How often a name being issued is read again. */
+const FOLLOW_INTERVAL_MS = 2000;
 
 /**
  * The network's own settings, kept by the server it is on (plan: Distributed Conduit). LAN names: an https name on
@@ -43,7 +45,7 @@ export function NetworkSettings() {
     const status = await api<LanNames>(PATH).catch(() => null);
     setShown(status);
     // Followed while it is issuing: a minute or two, most of it waiting for public DNS.
-    if (!disposed && status?.state === "issuing") timer = setTimeout(() => void load(), 2000);
+    if (!disposed && status?.state === "issuing") timer = setTimeout(() => void load(), FOLLOW_INTERVAL_MS);
   };
   onMount(() => void load());
   onCleanup(() => { disposed = true; clearTimeout(timer); });

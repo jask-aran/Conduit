@@ -1,7 +1,10 @@
 import { createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 
+/** Where there is no requestIdleCallback, how long idle waits. */
+const IDLE_FALLBACK_MS = 50;
+
 /** Run once the page is idle (a frame's spare time), within `timeout` ms. */
-export const idle = (run: () => void, timeout = 400) => typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout }) : window.setTimeout(run, 50);
+export const idle = (run: () => void, timeout = 400) => typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout }) : window.setTimeout(run, IDLE_FALLBACK_MS);
 export const cancelIdle = (handle: number) => typeof cancelIdleCallback === "function" ? cancelIdleCallback(handle) : clearTimeout(handle);
 
 /**

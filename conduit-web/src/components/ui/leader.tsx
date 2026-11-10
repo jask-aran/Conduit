@@ -28,9 +28,10 @@ export function Leader(props: { label?: string; placement?: "foot"; "data-shortc
   </div>;
 }
 
-/** The dim over the page with one region left lit, cut out with its own corners; no region lights nothing. */
-export function Spotlight(props: { lit?: { top: string; left: string; width: string; height: string; radius?: string }; fixed?: boolean; motion?: Motion; class?: string; children?: JSX.Element }) {
-  return <div class={cn("ui-spotlight", props.class)} data-fixed={props.fixed ? "" : undefined} {...motionOf(props.motion)} aria-hidden="true">
+/** The dim over the page with one region left lit, cut out with its own corners; no region lights nothing. tour: the
+ *  keyboard tour's, fixed and letting clicks through to the page (styles/tour.css). */
+export function Spotlight(props: { lit?: { top: string; left: string; width: string; height: string; radius?: string }; fixed?: boolean; tour?: boolean; motion?: Motion; class?: string; children?: JSX.Element }) {
+  return <div class={cn("ui-spotlight", props.tour && "ui-tour-spotlight", props.class)} data-fixed={props.fixed ? "" : undefined} {...motionOf(props.motion)} aria-hidden="true">
     <div class="ui-spotlight-lit" data-whole={props.lit ? undefined : ""} style={props.lit ? { top: props.lit.top, left: props.lit.left, width: props.lit.width, height: props.lit.height, "border-radius": props.lit.radius } : {}} />
     {props.children}
   </div>;

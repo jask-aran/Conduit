@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport";
 import type { LiveRecord, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
+import { createLatest } from "./latest";
 import { frameIntervalMs } from "../frame-interval";
 import { clientId } from "../agent-ui";
 import { liveCommandIs, type LIVE_COMMANDS } from "../../live-session-api.js";
@@ -72,7 +73,7 @@ export function createAgentSession(deps: {
   // Abandoning it does not stop the launch -- the server finishes warming the
   // process and the runtime stream reports it -- it only frees the connection.
   let launchRequest: AbortController | null = null;
-  let launchToken = 0;
+  const launchToken = createLatest();
   /**
    * The chat a launch request is in flight for, and nothing else.
    *
@@ -89,7 +90,7 @@ export function createAgentSession(deps: {
   let pending: { chatId: string; attempt: Promise<LiveRecord | null> } | null = null;
   /** Bumped whenever the session is pointed somewhere else; stale work checks it. */
   let epoch = 0;
-  let connectToken = 0;
+  const connectToken = createLatest();
 
   const cancelReconnect = () => {
     reconnectToken += 1;
@@ -134,15 +135,15 @@ export function createAgentSession(deps: {
 
   const connect = async (record: LiveRecord, chatId: string, era: number) => {
     if (era !== epoch || deps.chatId() !== chatId) return;
-    const token = ++connectToken;
+    const token = connectToken.next();
     cancelReconnect();
     let url: string;
     try { url = await webSocketUrl(record.streamUrl || `/v0/live-sessions/${record.id}/stream`); }
     catch (error) {
-      if (era !== epoch || deps.chatId() !== chatId || token !== connectToken) return;
+      if (era !== epoch || deps.chatId() !== chatId || !token()) return;
       throw error;
     }
-    if (era !== epoch || deps.chatId() !== chatId || token !== connectToken) return;
+    if (era !== epoch || deps.chatId() !== chatId || !token()) return;
     const previous = socket;
     const next = new WebSocket(url);
     socket = next;
@@ -206,7 +207,7 @@ export function createAgentSession(deps: {
   const launchRecord = (chatId: string, ownerProjectId: string, request: AgentRequest) => {
     launchRequest?.abort();
     const abortable = launchRequest = new AbortController();
-    const token = ++launchToken;
+    const token = launchToken.next();
     setLaunching(chatId);
     return api<LiveRecord>("/v0/live-sessions", {
       method: "POST",
@@ -218,7 +219,7 @@ export function createAgentSession(deps: {
         thinkingLevel: request.thinkingOverride ?? deps.thinkingLevel(),
         intent: request.intent || "open",
       }),
-    }).finally(() => { if (launchToken === token) setLaunching(null); });
+    }).finally(() => { if (token()) setLaunching(null); });
   };
 
   const ensure = async (request: AgentRequest = {}): Promise<LiveRecord | null> => {
@@ -314,7 +315,7 @@ export function createAgentSession(deps: {
 
   /** Drop the stream without giving up on the process behind it. */
   const detach = () => {
-    connectToken += 1;
+    connectToken.drop();
     cancelReconnect();
     socket?.close();
     socket = null;
@@ -338,11 +339,11 @@ export function createAgentSession(deps: {
   /** Point the session at a different chat: everything in flight is abandoned. */
   const reset = () => {
     epoch += 1;
-    connectToken += 1;
+    connectToken.drop();
     cancelReconnect();
     launchRequest?.abort();
     launchRequest = null;
-    launchToken += 1;
+    launchToken.drop();
     setLaunching(null);
     pending = null;
     pendingRecord = null;
