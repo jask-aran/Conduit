@@ -4,13 +4,12 @@ import { Select } from "@/components/ui/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
-import { FileView, StatusText } from "@/components/ui/file";
-import { FileBody } from "@/components/ui/viewer";
+import { Workbench, WorkbenchFact, WorkbenchPair, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { StatusText } from "@/components/ui/file";
 import { Group } from "@/components/ui/group";
 import { Loading, Note } from "@/components/ui/state";
 import { Actions, IconButton } from "@/components/ui/actions";
-import { Heading, PaneHeader } from "@/components/ui/header";
+import { Heading } from "@/components/ui/header";
 // The editor brings CodeMirror: loaded when a page that shows one opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import type { ModelOption } from "../api/contracts";
@@ -22,12 +21,12 @@ import { Row } from "@/components/ui/row";
  * into documents, one document per role -- a profile, jbot, a routine's run, a subagent, chat naming. Prompts shows a
  * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
  */
+export type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string; templateText?: string };
 export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "installed" | "jbot" | "custom" | "conduit";
   skill?: boolean; templateUpdate?: boolean; description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
 export type RoleKind = "profile" | "agent" | "run" | "subagent" | "service";
 export type DocumentView = { id: string; label: string; role: { kind: RoleKind; id: string; label: string };
   blocks: string[]; skills: string[]; live: string[]; first: string[]; notices?: string[]; modified: boolean; subagents?: { model: string; thinkingLevel: string } | null };
-type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string; templateText?: string };
 /** A slot: fixed (filled into a system prompt when a thread starts; a change reaches the thread as an update notice)
  *  or current (never in a system prompt; it travels on notices). */
 export type ContextVar = { name: string; description: string; value?: string; scope?: "fixed" | "current" };
@@ -38,7 +37,7 @@ const ROLE_STARTS: Record<RoleKind, string> = {
   profile: "starts each of its chats", agent: "starts its home and side threads", run: "starts each run of it",
   subagent: "starts each subagent a chat hands a task", service: "starts each request",
 };
-const ROLE_ICON: Record<RoleKind, () => ReturnType<typeof Icons.Profile>> = {
+export const ROLE_ICON: Record<RoleKind, () => ReturnType<typeof Icons.Profile>> = {
   profile: () => <Icons.Profile />, agent: () => <Icons.Agent />, run: () => <Icons.Clock />, subagent: () => <Icons.Agent />, service: () => <Icons.Settings />,
 };
 const SOURCE: Record<BlockSummary["source"], string> = { shipped: "shipped", installed: "installed skill", jbot: "jbot's file", custom: "yours", conduit: "filled in by Conduit" };
@@ -72,7 +71,7 @@ function createBlockDetails(context: ContextData) {
  *  blocks in the order the model reads them, then what Conduit adds, then a run's first message -- beside the chosen
  *  block in an editor pane filling the height, the block's actions in the pane's bar and what is known of it in its
  *  foot. */
-export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void; models?: () => ModelOption[]; onManageModels?: () => void }) {
+export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void; onOpenSkill: (id: string) => void; models?: () => ModelOption[]; onManageModels?: () => void }) {
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal("");
   const [chosen, setChosen] = createSignal("");
@@ -154,30 +153,46 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     const list = [...doc.skills]; change(list); void save(doc.blocks, list);
   };
   const skillChoices = () => (props.context.data()?.blocks ?? []).filter((block) => block.skill && !current()?.skills.includes(block.id));
-  const Skills = () => <FileView>
-    <PaneHeader kind="file"><Heading kind="editor" live>Skills</Heading>
-    <Actions kind="editor">
-      <Select look="icon" icon={<Icons.Add />} search="Search skills" title="Add a skill" aria-label="Add a skill" value="" disabled={busy()}
-        onChange={(event) => { const id = event.currentTarget.value; if (id) editSkills((list) => list.splice(skillAt() + 1, 0, id)); setChosenSkill(id); }}>
-        <option value="">Add a skill</option>
-        <For each={skillChoices()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
-      </Select>
-      <IconButton kind="file" label="Move up" disabled={busy() || skillAt() <= 0} onClick={() => editSkills((list) => {
-        const at = skillAt(); const [id] = list.splice(at, 1); list.splice(at - 1, 0, id!);
-      })}><Icons.ArrowUp /></IconButton>
-      <IconButton kind="file" label="Move down" disabled={busy() || skillAt() < 0 || skillAt() >= (current()?.skills.length ?? 0) - 1} onClick={() => editSkills((list) => {
-        const at = skillAt(); const [id] = list.splice(at, 1); list.splice(at + 1, 0, id!);
-      })}><Icons.ArrowDown /></IconButton>
-      <IconButton kind="file" label="Remove from this document" disabled={busy() || skillAt() < 0} onClick={() => editSkills((list) => list.splice(skillAt(), 1))}><Icons.Close /></IconButton>
-    </Actions></PaneHeader>
-    <FileBody><ChainMap label="Skills this role can load">
-      <For each={current()?.skills}>{(id, index) => <>
-        <Show when={index() > 0}><ChainGap /></Show>
-        <ChainLink index={index() + 1} name={props.context.block(id)?.label ?? id} current={chosenSkill() === id} onSelect={() => setChosenSkill(id)} />
-        <Row density="nav" element="button" end={<Icons.ChevronRight />} title="Open skill in Blocks" onClick={() => props.onEditBlock(id)}>Open in Blocks</Row>
-      </>}</For>
-    </ChainMap></FileBody>
-  </FileView>;
+  // The document's skills: the list, and beside it the chosen one's text, read only (Settings › Skills edits it).
+  const [skillDetail, setSkillDetail] = createSignal<BlockDetail | null>(null);
+  createEffect(() => { if (!current()?.skills.includes(chosenSkill())) setChosenSkill(current()?.skills[0] ?? ""); });
+  createEffect(() => {
+    const id = chosenSkill();
+    props.context.data();
+    if (!id) return setSkillDetail(null);
+    void details(id).then((loaded) => { if (chosenSkill() === id) setSkillDetail(loaded); }, (cause) => setFailure(String(cause?.message || cause)));
+  });
+  const SkillPicker = () => <Select look="icon" icon={<Icons.Add />} search="Search skills" title="Add a skill" aria-label="Add a skill" value="" disabled={busy()}
+    onChange={(event) => { const id = event.currentTarget.value; if (id) { editSkills((list) => list.splice(skillAt() + 1, 0, id)); setChosenSkill(id); } }}>
+    <option value="">Add a skill</option>
+    <For each={skillChoices()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
+  </Select>;
+  const moveSkill = (by: number) => editSkills((list) => { const at = skillAt(); const [id] = list.splice(at, 1); list.splice(at + by, 0, id!); });
+  const Skills = () => <Show when={current()?.skills.length} fallback={<Note kind="workbench">This document lists no skills. <SkillPicker /></Note>}>
+    <WorkbenchPair
+      list={<ChainMap label="Skills this role can load">
+        <For each={current()?.skills}>{(id, index) => <>
+          <Show when={index() > 0}><ChainGap /></Show>
+          <ChainLink index={index() + 1} name={props.context.block(id)?.label ?? id} size={props.context.block(id) ? tokens(props.context.block(id)!.chars) : undefined} meta={props.context.block(id) ? undefined : "missing"} current={chosenSkill() === id} onSelect={() => setChosenSkill(id)} />
+        </>}</For>
+      </ChainMap>}
+      pane={<Show when={skillDetail()} fallback={<Loading>Loading…</Loading>}>{(skill) =>
+        <TextEditor fill readOnly label={`${skill().label} text`} value={skill().content ?? ""}
+          head={<>
+            <Heading kind="editor">{skill().label}</Heading>
+            <Actions kind="editor">
+              <IconButton kind="file" label={`Edit ${skill().label} in Skills`} onClick={() => props.onOpenSkill(skill().id)}><Icons.Edit /></IconButton>
+              <IconButton kind="file" label="Move up" disabled={busy() || skillAt() <= 0} onClick={() => moveSkill(-1)}><Icons.ArrowUp /></IconButton>
+              <IconButton kind="file" label="Move down" disabled={busy() || skillAt() < 0 || skillAt() >= (current()?.skills.length ?? 0) - 1} onClick={() => moveSkill(1)}><Icons.ArrowDown /></IconButton>
+              <SkillPicker />
+              <IconButton kind="file" label="Remove from this document" disabled={busy() || skillAt() < 0} onClick={() => editSkills((list) => list.splice(skillAt(), 1))}><Icons.Close /></IconButton>
+            </Actions>
+          </>}
+          status={<>
+            <StatusText>{tokens(skill().chars)}</StatusText>
+            <StatusText>{`loaded with the skill tool · in ${skill().usedBy.length} ${skill().usedBy.length === 1 ? "document" : "documents"}`}</StatusText>
+          </>} />}</Show>} />
+  </Show>;
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
     return <ChainLink index={index} live={block()?.kind === "live"} notice={block()?.kind === "notice"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : block()!.kind === "notice" && block()!.modified ? "changed" : undefined : SOURCE[block()!.source]) : "missing"}
       size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); setEditing(true); }} />; };
@@ -240,9 +255,10 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const [liveView, setLiveView] = createSignal<"template" | "now">("template");
   // A phone's: the text is a screen of its own, opened from the facts.
   const [editing, setEditing] = createSignal(false);
-  const blocks = () => props.context.data()?.blocks ?? [];
-  const current = createMemo(() => props.context.block(props.blockId) ?? blocks()[0]);
-  createEffect(() => { if (!props.context.block(props.blockId) && blocks()[0]) props.onBlock(blocks()[0]!.id); });
+  // Skills are not blocks: they are listed, edited and managed in Settings › Skills.
+  const blocks = () => (props.context.data()?.blocks ?? []).filter((block) => !block.skill);
+  const current = createMemo(() => blocks().find((block) => block.id === props.blockId) ?? blocks()[0]);
+  createEffect(() => { if (!blocks().some((block) => block.id === props.blockId) && blocks()[0]) props.onBlock(blocks()[0]!.id); });
   createEffect(() => {
     const block = current();
     if (!block) return;
@@ -276,7 +292,6 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const groups = (): { title: string; items: BlockSummary[] }[] => [
     { title: "yours", items: blocks().filter((block) => block.source === "custom") },
     { title: "shipped", items: blocks().filter((block) => block.source === "shipped" && block.kind === "text") },
-    { title: "installed skills", items: blocks().filter((block) => block.source === "installed") },
     { title: "jbot's file", items: blocks().filter((block) => block.source === "jbot") },
     { title: "filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
     { title: "notice", items: blocks().filter((block) => block.kind === "notice") },

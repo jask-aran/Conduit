@@ -337,7 +337,7 @@ export function Settings(props: {
       ...authProviders().filter((provider) => provider.auth.configured).map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account" })),
       ...(searchSettings()?.providers ?? []).filter((provider) => provider.ready).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label })),
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
-      ...(context.data()?.blocks ?? []).map((block) => ({ section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" })),
+      ...(context.data()?.blocks ?? []).map((block) => block.skill ? { section: "skills" as Section, group: "Skills", label: block.label, words: "skill" } : { section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" }),
     ];
     // What each is set to, as its page last showed it; a setting only the page knows (a row written from data) joins too.
     const values = new Map(seenSettings().map((seen) => [`${seen.section}\0${seen.label}`, seen]));
@@ -507,6 +507,8 @@ export function Settings(props: {
   const context = createContextData();
   const [contextDocument, setContextDocument] = createSignal("");
   const [contextBlock, setContextBlock] = createSignal("");
+  // The skill opened in Settings › Skills (its id as the hub lists it; a document names it skill-<id>).
+  const [openSkill, setOpenSkill] = createSignal("");
   createEffect(() => { if (props.open && (section() === "prompts" || section() === "blocks")) void context.load(); });
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
@@ -1421,7 +1423,7 @@ export function Settings(props: {
   };
   // The sections' pages, drawn by the dialog and, out of sight, by the sweep that reads their values.
   const pages = () => <>
-          <Show when={section() === "prompts"}><PromptsSettings context={context} documentId={contextDocument()} onDocument={setContextDocument} onEditBlock={(id) => { setContextBlock(id); openSection("blocks"); }} models={namingModels} onManageModels={props.onOpenModelSelector} /></Show>
+          <Show when={section() === "prompts"}><PromptsSettings context={context} documentId={contextDocument()} onDocument={setContextDocument} onEditBlock={(id) => { setContextBlock(id); openSection("blocks"); }} onOpenSkill={(id) => { setOpenSkill(id.replace(/^skill-/, "")); openSection("skills"); }} models={namingModels} onManageModels={props.onOpenModelSelector} /></Show>
           <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "ui"}>
             <>
@@ -1545,7 +1547,7 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
           <Show when={section() === "tools"}><ToolsSettings /></Show>
-          <Show when={section() === "skills"}><SkillsSettings /></Show>
+          <Show when={section() === "skills"}><SkillsSettings context={context} skillId={openSkill()} onSkill={setOpenSkill} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
@@ -2040,7 +2042,7 @@ export function Settings(props: {
     label="Settings"
     placement="center"
     layout="rail"
-    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
+    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) || (section() === "skills" && openSkill()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
     onEscapeKeyDown={dismissEscape}
     onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
   >

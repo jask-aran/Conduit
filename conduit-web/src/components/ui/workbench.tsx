@@ -34,6 +34,11 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element; op
     </section>
   </div>;
 };
+/** The main pane as two columns: a short list and the pane of whichever of it is chosen (a document's skills and
+ *  the chosen skill's text). On a phone the list sits over the pane. */
+export const WorkbenchPair = (props: { list: JSX.Element; pane: JSX.Element }) => <div class="ui-workbench-pair">
+  <div class="ui-workbench-pair-list">{props.list}</div>{props.pane}
+</div>;
 /** A titled group in the side column (Used in, Slots). */
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
 export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) =>
