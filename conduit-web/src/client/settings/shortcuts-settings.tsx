@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import {
-  createEffect, createMemo, createSignal, For, onCleanup, Show,
+  createEffect, createMemo, createSignal, For, onCleanup, onMount, Show,
 } from "solid-js";
 
 import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingRecorder, SettingValue, Group, Note } from "@/components/ui";
@@ -86,6 +86,13 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
   });
   // Most commands have no keys; "Assigned only" shows the ones that do.
   const [assignedOnly, setAssignedOnly] = createSignal(false);
+  // A hundred rows in one go holds the page for several frames: the first group is drawn with the page, the rest one
+  // a frame, so the section opens at once and fills in under it.
+  const [drawn, setDrawn] = createSignal(1);
+  onMount(() => {
+    let frame = requestAnimationFrame(function more() { if (drawn() < groups().length) { setDrawn(drawn() + 1); frame = requestAnimationFrame(more); } });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   const groups = createMemo(() => {
     revision();
     const grouped = new Map<string, ShortcutCommandDefinition[]>();
@@ -273,7 +280,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     </Group>
 
     <Show when={groups().length} fallback={<Note tone="quiet">{query().trim() ? `No shortcuts match “${query()}”.` : "No shortcuts assigned."}</Note>}>
-      <For each={groups()}>{([group, items]) => <Group title={GROUP_LABELS[group] || contextLabel(group)}>
+      <For each={groups().slice(0, drawn())}>{([group, items]) => <Group title={GROUP_LABELS[group] || contextLabel(group)}>
         <For each={items}>{(command) => {
           const bindings = () => {
             revision();

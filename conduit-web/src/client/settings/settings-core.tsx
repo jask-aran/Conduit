@@ -309,10 +309,19 @@ export function Settings(props: {
   // before their sections were ever opened.
   let searched = false;
   createEffect(() => { if (!query().trim() || searched) return; searched = true; void loadPiAuth(); void loadSearchSettings(); if (!context.data()) void context.load(); });
-  const results = createMemo(() => {
-    const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (!words.length) return [];
-    type Entry = { section: Section; group: string | null; label: string; words?: string; value?: string };
+  type Entry = { section: Section; group: string | null; label: string; words?: string; value?: string };
+  // Everything search can find, each with its text lowered once: built when searching starts and again only when what
+  // it is made of changes (a value read, an account added), never per keystroke.
+  const [searchable, setSearchable] = createSignal(false);
+  createEffect(() => { if (query().trim()) setSearchable(true); });
+  // ...or, sooner, in an idle moment once Settings is open, so the first key finds it made.
+  createEffect(() => {
+    if (!props.open || props.harvest || searchable()) return;
+    const timer = window.setTimeout(() => setSearchable(true), 600);
+    onCleanup(() => clearTimeout(timer));
+  });
+  const entries = createMemo(() => {
+    if (!searchable()) return [];
     // A section answers to its name and to the words the command palette knows it by.
     const sections: Entry[] = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null, label: label(item.id as Section),
       words: SETTINGS_SECTIONS.find((known) => known.id === item.id)?.keywords.join(" ") })));
@@ -331,22 +340,29 @@ export function Settings(props: {
     const values = new Map(seenSettings().map((seen) => [`${seen.section}\0${seen.label}`, seen]));
     const named = [...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live];
     const have = new Set(named.map((entry) => `${entry.section}\0${entry.label}`));
-    const entries: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: (entry as Entry).value ?? values.get(`${entry.section}\0${entry.label}`)?.value })),
+    const all: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: (entry as Entry).value ?? values.get(`${entry.section}\0${entry.label}`)?.value })),
       ...[...values.values()].filter((seen) => !have.has(`${seen.section}\0${seen.label}`)).map((seen) => ({ ...seen, section: seen.section as Section }))].filter((entry) => known.has(entry.section))];
-    const scored = entries.map((entry) => {
-      const name = entry.label.toLowerCase();
-      const where = `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase();
-      const said = (entry.words ?? "").toLowerCase();
-      const set = (entry.value ?? "").toLowerCase();
-      if (!words.every((word) => name.includes(word) || where.includes(word) || set.includes(word) || said.includes(word))) return null;
+    const once = new Set<string>();
+    return all.filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (once.has(key)) return false; once.add(key); return true; }).map((entry) => ({
+      entry, whole: entry.group === null && entry.label === label(entry.section),
+      name: entry.label.toLowerCase(), where: `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase(), set: (entry.value ?? "").toLowerCase(), said: (entry.words ?? "").toLowerCase(),
+    }));
+  });
+  const results = createMemo(() => {
+    const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const scored: Array<Entry & { score: number }> = [];
+    for (const { entry, whole, name, where, set, said } of entries()) {
       // By name first (from its start, then anywhere), then by where it is, then by what it is set to, then by what else it says.
-      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : words.every((word) => name.includes(word) || where.includes(word)) ? 2
-        : words.every((word) => name.includes(word) || where.includes(word) || set.includes(word)) ? 2.5 : 3)
-        + (entry.group === null && entry.label === label(entry.section) ? -0.5 : 0);
-      return { ...entry, score };
-    }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-    const seen = new Set<string>();
-    return scored.sort((a, b) => a.score - b.score).filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; });
+      let score = name.startsWith(words[0]!) ? 0 : 1;
+      for (const word of words) {
+        const at = name.includes(word) ? 1 : where.includes(word) ? 2 : set.includes(word) ? 2.5 : said.includes(word) ? 3 : -1;
+        if (at < 0) { score = -1; break; }
+        if (at > score) score = at;
+      }
+      if (score >= 0) scored.push({ ...entry, score: score - (whole ? 0.5 : 0) });
+    }
+    return scored.sort((a, b) => a.score - b.score);
   });
   // What matched, under the section it is in, in the rail's order: a wide Settings filters its tabs and the open
   // page to these; a phone, whose rail is a screen of its own, lists them under their sections.
@@ -374,8 +390,10 @@ export function Settings(props: {
     }
     before ??= untrack(section);
     if (!matches().size || matches().has(section())) return;
-    moved = [...matches().keys()][0]!;
-    setSection(moved);
+    // Drawing a section costs a frame or more: it waits for a pause in the typing, so no key is held up by it.
+    const next = [...matches().keys()][0]!;
+    const timer = window.setTimeout(() => { moved = next; setSection(next); }, 90);
+    onCleanup(() => clearTimeout(timer));
   });
   // ...and its page shows only what matched: the lines by name, a group whole when its title matched, the page whole
   // when the section's own name did. Lines arrive after their data, so the page is filtered again as it changes.
@@ -409,7 +427,7 @@ export function Settings(props: {
     if (!body) return;
     filterPage(body, found);
     // Nothing anywhere matched: the page shows nothing, as the rail says.
-    if (searching && !found) {
+    if (searching && !matches().size) {
       for (const child of body.children) child.setAttribute("data-filtered-out", "");
       onCleanup(() => { for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out"); });
     }
@@ -1979,6 +1997,9 @@ export function Settings(props: {
     void (async () => {
       for (const id of SWEPT) {
         if (over) return;
+        // Each section is drawn in a moment the page is idle, so the sweep never lands on a key or a frame in use.
+        await new Promise<void>((resolve) => { if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: 600 }); else setTimeout(resolve, 50); });
+        if (over) return;
         setSection(id);
         // Its lines come with its data: wait until their number holds still, a second and a half at most.
         let last = -1;
@@ -2026,10 +2047,11 @@ export function Settings(props: {
           </Group>}</For>
         </Show>
         {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
-        <For each={!query().trim() ? sectionGroups : narrow() ? [] : sectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => matches().has(item.id as Section)) })).filter((group) => group.sections.length)}>{(group) => <Group kind="nav" title={group.label}>
-          <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            lead={<item.icon />} meta={query().trim() ? String(matches().get(item.id as Section)?.length ?? "") : undefined} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
-        </Group>}</For>
+        {/* The rows stay as they are while the search changes: one that does not match is taken out, never the list redrawn. */}
+        <Show when={!(query().trim() && narrow())}><For each={sectionGroups}>{(group) => <Show when={!query().trim() || group.sections.some((item) => matches().has(item.id as Section))}><Group kind="nav" title={group.label}>
+          <For each={group.sections}>{(item) => <Show when={!query().trim() || matches().has(item.id as Section)}> <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
+            lead={<item.icon />} meta={query().trim() ? String(matches().get(item.id as Section)?.length ?? "") : undefined} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row></Show>}</For>
+        </Group></Show>}</For></Show>
       </OverlayRail>
     </Show>
     <Show when={!showingIndex()}>
