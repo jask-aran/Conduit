@@ -40,7 +40,7 @@ export function readSettings(body: Element, section: string): SeenSetting[] {
     const control = line.querySelector(".ui-setting-control");
     const values = [
       // A menu's trigger says its choice (a select, the model selector).
-      ...[...(control?.querySelectorAll("button[aria-haspopup]") ?? [])].map((part) => part.textContent || ""),
+      ...[...(control?.querySelectorAll("button[aria-haspopup]") ?? [])].map((part) => [...part.childNodes].map((piece) => piece.textContent || "").join(" ")),
       ...[...(control?.querySelectorAll('.ui-seg [aria-checked="true"]') ?? [])].map((part) => part.textContent || ""),
       ...[...(control?.querySelectorAll('[role="switch"]') ?? [])].map((part) => part.getAttribute("aria-checked") === "true" ? "On" : "Off"),
       ...[...(control?.querySelectorAll(".ui-setting-value, .ui-keycap") ?? [])].map((part) => part.textContent || ""),

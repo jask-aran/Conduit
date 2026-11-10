@@ -241,3 +241,4 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-control:has(> .ui-setting-value:only-child) { min-width: 0; }
 /* A page filtered by Settings search: what did not match is not drawn, and the first group shown has no rule over it. */
 .ui-overlay-page-body [data-filtered-out] { display: none; }
+.ui-overlay-page-body .ui-group[data-filter-first] { margin-top: 0; border-top: 0; padding-top: 0; }

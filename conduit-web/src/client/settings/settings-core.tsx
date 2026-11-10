@@ -1,5 +1,6 @@
 import { Icons } from "@/components/ui";
-import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
@@ -319,7 +320,8 @@ export function Settings(props: {
     // What only the running app knows: each command with a shortcut, each account and search provider in use (the rest
     // are behind Add an account), each document and block.
     const live: Entry[] = [
-      ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" ") })),
+      ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" "),
+        value: props.shortcuts.effectiveBindings(command.id).map((binding) => formatShortcutBinding(binding, props.shortcuts.environment)).join(" · ") })),
       ...authProviders().filter((provider) => provider.auth.configured).map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account" })),
       ...(searchSettings()?.providers ?? []).filter((provider) => provider.ready).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label })),
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
@@ -329,7 +331,7 @@ export function Settings(props: {
     const values = new Map(seenSettings().map((seen) => [`${seen.section}\0${seen.label}`, seen]));
     const named = [...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live];
     const have = new Set(named.map((entry) => `${entry.section}\0${entry.label}`));
-    const entries: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: values.get(`${entry.section}\0${entry.label}`)?.value })),
+    const entries: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: (entry as Entry).value ?? values.get(`${entry.section}\0${entry.label}`)?.value })),
       ...[...values.values()].filter((seen) => !have.has(`${seen.section}\0${seen.label}`)).map((seen) => ({ ...seen, section: seen.section as Section }))].filter((entry) => known.has(entry.section))];
     const scored = entries.map((entry) => {
       const name = entry.label.toLowerCase();
@@ -359,15 +361,26 @@ export function Settings(props: {
     return found;
   });
   const flat = createMemo(() => [...matches().values()].flat());
-  // A wide Settings, searching: the open section is one that matched, the first if the one open did not.
+  // A wide Settings, searching: the open section is one that matched, the first if the one open did not. A search
+  // cleared without a tab chosen from it goes back to the section it began on.
+  let before: Section | null = null;
+  let moved: Section | null = null;
   createEffect(() => {
-    if (narrow() || !query().trim() || !matches().size || matches().has(section())) return;
-    setSection([...matches().keys()][0]!);
+    if (narrow()) return;
+    if (!query().trim()) {
+      if (before && moved === untrack(section)) setSection(before);
+      before = moved = null;
+      return;
+    }
+    before ??= untrack(section);
+    if (!matches().size || matches().has(section())) return;
+    moved = [...matches().keys()][0]!;
+    setSection(moved);
   });
   // ...and its page shows only what matched: the lines by name, a group whole when its title matched, the page whole
   // when the section's own name did. Lines arrive after their data, so the page is filtered again as it changes.
   const filterPage = (body: Element, found: ReturnType<typeof results> | null) => {
-    for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out");
+    for (const element of body.querySelectorAll("[data-filtered-out], [data-filter-first]")) { element.removeAttribute("data-filtered-out"); element.removeAttribute("data-filter-first"); }
     if (!found || found.some((result) => result.group === null && result.label === label(result.section))) return;
     const groups = [...body.querySelectorAll<HTMLElement>('.ui-group[data-group="setting"]')];
     if (!groups.length) return;
@@ -386,6 +399,8 @@ export function Settings(props: {
     if (!shown) return;
     for (const child of body.children) if (!groups.some((group) => child === group || child.contains(group))) out.push(child);
     for (const element of out) element.setAttribute("data-filtered-out", "");
+    // The first group left has nothing above it now: no rule over it.
+    groups.find((group) => !out.includes(group))?.setAttribute("data-filter-first", "");
   };
   createEffect(() => {
     const searching = !narrow() && Boolean(query().trim());
@@ -402,7 +417,7 @@ export function Settings(props: {
     let frame = 0;
     const watcher = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => filterPage(body, found)); });
     watcher.observe(body, { childList: true, subtree: true });
-    onCleanup(() => { watcher.disconnect(); cancelAnimationFrame(frame); for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out"); });
+    onCleanup(() => { watcher.disconnect(); cancelAnimationFrame(frame); for (const element of body.querySelectorAll("[data-filtered-out], [data-filter-first]")) { element.removeAttribute("data-filtered-out"); element.removeAttribute("data-filter-first"); } });
   });
   // Each opened result's lookup is its own: a newer one, another section or closing Settings ends an older one's retries.
   let lookup = 0;
@@ -1952,7 +1967,7 @@ export function Settings(props: {
   const [sweeping, setSweeping] = createSignal(false);
   createEffect(() => {
     if (props.harvest || !props.open || sweeping() || Date.now() - sweptAt < 5 * 60_000) return;
-    const timer = window.setTimeout(() => setSweeping(true), 1200);
+    const timer = window.setTimeout(() => setSweeping(true), 300);
     onCleanup(() => clearTimeout(timer));
   });
   createEffect(() => { if (!props.open) setSweeping(false); });
