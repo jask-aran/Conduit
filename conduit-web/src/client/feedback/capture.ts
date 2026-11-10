@@ -49,6 +49,21 @@ export async function captureScreen(): Promise<Capture> {
   return { blob, width: canvas.width, height: canvas.height, surface: String(track.getSettings().displaySurface ?? "unknown") };
 }
 
+type Area = { left: number; top: number; width: number; height: number };
+/** Each area of the page (CSS px) cut from a capture, when the capture is the page alone (it has the page's shape); else none. */
+export async function cropAreas(capture: Capture, areas: Area[]): Promise<(Blob | null)[]> {
+  if (Math.abs(capture.width / capture.height - innerWidth / innerHeight) >= 0.01) return [];
+  const scale = capture.width / innerWidth;
+  const image = await createImageBitmap(capture.blob);
+  return Promise.all(areas.map((area) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(area.width * scale));
+    canvas.height = Math.max(1, Math.round(area.height * scale));
+    canvas.getContext("2d")!.drawImage(image, Math.round(area.left * scale), Math.round(area.top * scale), canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  }));
+}
+
 export function endCapture() {
   stream?.getTracks().forEach((track) => track.stop());
   stream = null;

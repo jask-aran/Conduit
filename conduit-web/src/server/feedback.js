@@ -13,12 +13,13 @@ import express from "express";
  * connections, the client's panes and the tail of each chat it shows -- so the item carries the state the comment is
  * about, not the state at Send.
  *
- * The item: Send writes <data>/feedback/<id>/item.json and screenshot.png, built in a folder beside it and renamed
+ * The item: Send writes <data>/feedback/<id>/item.json, screenshot.png and a selection-<n>.png for each selection, built in a folder beside it and renamed
  * into place, so a reader never sees half of one. `node scripts/conduit-feedback.mjs wait` hands the next item to
  * an agent session; `done <id>` marks it handled.
  *
  *   POST   /v0/feedback/marks                  { client }            -> { id }
  *   PUT    /v0/feedback/marks/:id/screenshot   image/png
+ *   PUT    /v0/feedback/marks/:id/areas/:n     image/png: selection n's own area, cut from the screenshot
  *   POST   /v0/feedback/marks/:id/send         { comments, screenshot, client } -> { id, path }
  *   DELETE /v0/feedback/marks/:id              a mark nothing was sent to
  */
@@ -72,7 +73,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
       const log = chatLogs.peek(chatId);
       return { chatId, log: log ? { ...log.state(), tail: log.entries.slice(-CHAT_TAIL).map(brief) } : null };
     });
-    marks.set(id, { time: now.getTime(), screenshot: null, snapshot: {
+    marks.set(id, { time: now.getTime(), screenshot: null, areas: new Map(), snapshot: {
       markedAt: now.toISOString(),
       server: { name: serverName, release: config.release, startedAt: new Date(Date.now() - process.uptime() * 1000).toISOString() },
       client: tab,
@@ -86,7 +87,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
   }
 
   /** One comment as the item states it: where the code is first, then what was on the page. */
-  function comment(entry, scale) {
+  function comment(entry, scale, areas) {
     const where = (described) => ({
       component: described.component ?? null, source: described.source ?? null, styles: described.styles ?? [],
       ...(described.orComponent ? { orComponent: described.orComponent } : {}), ...(described.maybeDrawnBy ? { maybeDrawnBy: described.maybeDrawnBy } : {}),
@@ -96,6 +97,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const rect = entry.rect ?? null;
     return {
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
+      ...(areas.has(entry.n) ? { picture: { file: `selection-${entry.n}.png`, area: entry.area ?? null, dragged: Boolean(entry.dragged) } } : {}),
       ...(rect && scale ? { screenshotRect: Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * scale)])) } : {}),
       ...(entry.kind === "group" ? { members: (entry.members ?? []).slice(0, 40).map(where) } : where(entry)),
     };
@@ -120,13 +122,13 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
         "Each entry of `comments` is one thing the person asked for, about one selection of the live interface.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search conduit-web/src/client for `label` or an attribute in `attributes`.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
-        "screenshot.png shows the page at Send with each selection outlined and numbered as `n`.",
+        "screenshot.png shows the page at Send with each selection outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from it: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else the piece with a margin. Look at it first.",
         "`hub` is what the hub knew when the item was started (`markedAt`), not at Send: its last log lines and events, the live processes, and the tail of each chat the client had open.",
         `When the item is dealt with: node scripts/conduit-feedback.mjs done ${id}`,
       ],
       markedAt: kept.snapshot.markedAt,
       sentAt,
-      comments: body.comments.slice(0, 50).map((entry) => comment(entry, scale)),
+      comments: body.comments.slice(0, 50).map((entry) => comment(entry, scale, shot ? kept.areas : new Map())),
       screenshot: shot ? { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) }
         : { file: null, missing: String(body.screenshot?.missing ?? "not sent") },
       client: { id: client.id ?? null, kind: client.kind ?? null, build: client.build ?? null, shell: client.shell ?? null, url: client.url ?? null, viewport, interfaceSize: client.interfaceSize ?? null, userAgent: short(client.userAgent ?? "", 300) },
@@ -136,6 +138,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const final = path.join(folder, id);
     await fs.mkdir(staging, { recursive: true, mode: 0o700 });
     if (shot) await fs.writeFile(path.join(staging, "screenshot.png"), kept.screenshot);
+    if (shot) for (const [n, bytes] of kept.areas) await fs.writeFile(path.join(staging, `selection-${n}.png`), bytes);
     await fs.writeFile(path.join(staging, "item.json"), `${JSON.stringify(item, null, 2)}\n`);
     await fs.rename(staging, final);
     marks.delete(id);
@@ -143,15 +146,19 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     return { id, path: path.join(final, "item.json") };
   }
 
+  /** A picture for a mark: the whole screenshot, or selection `n`'s area of it. */
+  function picture(id, bytes, n) {
+    const kept = marks.get(id);
+    if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
+    // A PNG, by its signature.
+    if (!Buffer.isBuffer(bytes) || bytes.length < 8 || bytes.readUInt32BE(0) !== 0x89504e47) throw Object.assign(new Error("A screenshot is a PNG"), { status: 415, code: "feedback_screenshot_invalid" });
+    if (n === undefined) kept.screenshot = bytes;
+    else if (Number.isInteger(n) && n >= 1 && n <= 50) kept.areas.set(n, bytes);
+    else throw Object.assign(new Error("No such selection"), { status: 400, code: "feedback_area_invalid" });
+  }
+
   return {
-    mark, send,
-    screenshot(id, bytes) {
-      const kept = marks.get(id);
-      if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
-      // A PNG, by its signature.
-      if (!Buffer.isBuffer(bytes) || bytes.length < 8 || bytes.readUInt32BE(0) !== 0x89504e47) throw Object.assign(new Error("A screenshot is a PNG"), { status: 415, code: "feedback_screenshot_invalid" });
-      kept.screenshot = bytes;
-    },
+    mark, send, picture,
     drop: (id) => marks.delete(id),
     close() { for (const undo of restore) undo(); chatLogs.tap = null; runtimeHub.tap = null; },
   };
@@ -160,7 +167,9 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
 /** Before the app's own JSON parser: an item's selections carry markup, so its body may be larger than a setting's. */
 export function registerFeedbackRoutes(app, feedback) {
   app.post("/v0/feedback/marks", async (request, response) => response.status(201).json(await feedback.mark(request.body)));
-  app.put("/v0/feedback/marks/:id/screenshot", express.raw({ type: "image/png", limit: "32mb" }), (request, response) => { feedback.screenshot(request.params.id, request.body); response.status(204).end(); });
+  const png = express.raw({ type: "image/png", limit: "32mb" });
+  app.put("/v0/feedback/marks/:id/screenshot", png, (request, response) => { feedback.picture(request.params.id, request.body); response.status(204).end(); });
+  app.put("/v0/feedback/marks/:id/areas/:n", png, (request, response) => { feedback.picture(request.params.id, request.body, Number(request.params.n)); response.status(204).end(); });
   app.post("/v0/feedback/marks/:id/send", async (request, response) => response.status(201).json(await feedback.send(request.params.id, request.body)));
   app.delete("/v0/feedback/marks/:id", (request, response) => { feedback.drop(request.params.id); response.status(204).end(); });
 }

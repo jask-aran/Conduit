@@ -7,7 +7,7 @@ import { api } from "../api/client";
 import { clientBuild, shellVersion } from "../platform/build-info";
 import { installedClientKind } from "../platform/installed-client";
 import { selectedUiScale } from "../preferences/ui-scale";
-import { captureScreen, endCapture, type Capture } from "./capture";
+import { captureScreen, cropAreas, endCapture, type Capture } from "./capture";
 import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pieces";
 
 /*
@@ -19,10 +19,13 @@ import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pi
  * Select: a press chooses the piece under the pointer; a drag gathers every piece inside it as one group; Shift and a
  * press adds a piece to the open selection or takes it out; Up and Down widen to the piece around and back.
  */
-type Selection = { id: number; elements: Element[]; comment: string };
+/** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
+type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox };
 type Mode = "select" | "use";
 /** A press that moves further than this (px) is a drag. */
 const DRAG_SLOP = 5;
+/** A selection's own picture shows this much (px) around it. */
+const CROP_MARGIN = 24;
 /** The note sits this far (px) from what it marks, and from the window's edge. */
 const NOTE_GAP = 10;
 
@@ -38,6 +41,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
   const [marquee, setMarquee] = createSignal<FeedbackBox | null>(null);
+  // What the drag would lock onto if let go now, shown as it is dragged.
+  const aimed = createMemo(() => { const drag = marquee(); return drag ? piecesWithin(drag) : []; });
   const [screenshot, setScreenshot] = createSignal(true);
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
@@ -73,9 +78,11 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   };
 
   const openNote = (id: number | null) => { setOpenId(id); if (id !== null) queueMicrotask(() => noteField?.focus({ preventScroll: true })); };
-  const add = (elements: Element[]) => {
+  const add = (elements: Element[], drag?: FeedbackBox) => {
     const id = nextId++;
-    setSelections(selections.length, { id, elements, comment: "" });
+    const around = boxOf(elements);
+    const reach = drag && { left: around.left - drag.left, top: around.top - drag.top, width: drag.width - around.width, height: drag.height - around.height };
+    setSelections(selections.length, { id, elements, comment: "", reach });
     openNote(id);
   };
   const remove = (id: number) => { setSelections((all) => all.filter((selection) => selection.id !== id)); if (openId() === id) setOpenId(null); };
@@ -109,14 +116,14 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     if (!press || !select()) return;
     const drag = marquee();
     const shift = press.shift;
+    const gathered = aimed();
     press = null;
     setMarquee(null);
     if (!drag) return choose(shift);
-    const gathered = piecesWithin(drag);
     const current = open();
     if (!gathered.length) return;
     if (shift && current) setSelections((candidate) => candidate.id === current.id, "elements", (elements) => [...new Set([...elements, ...gathered])]);
-    else add(gathered);
+    else add(gathered, drag);
     void event;
   };
   // Nothing under the layer is pressed, and nothing that listens for a press outside itself (a menu, a dialog) hears one.
@@ -210,7 +217,11 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       const comments = selections.map((selection, index) => {
         const members = selection.elements.map(describe);
         const around = boxOf(selection.elements);
-        return { n: index + 1, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: nameOf(selection.elements),
+        // The area its own picture shows: what was dragged round, or the piece with a margin; never less than the pieces.
+        const reach = selection.reach ?? { left: CROP_MARGIN, top: CROP_MARGIN, width: 2 * CROP_MARGIN, height: 2 * CROP_MARGIN };
+        const left = Math.max(0, Math.min(around.left, around.left - reach.left)), top = Math.max(0, Math.min(around.top, around.top - reach.top));
+        const right = Math.min(innerWidth, Math.max(around.left + around.width, around.left - reach.left + around.width + reach.width)), bottom = Math.min(innerHeight, Math.max(around.top + around.height, around.top - reach.top + around.height + reach.height));
+        return { n: index + 1, dragged: Boolean(selection.reach), area: { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) }, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: nameOf(selection.elements),
           rect: { left: Math.round(around.left), top: Math.round(around.top), width: Math.round(around.width), height: Math.round(around.height) },
           ...(members.length > 1 ? { members } : members[0]) };
       });
@@ -219,7 +230,11 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
         setCapturing(true);
         try { capture = await captureScreen(); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
         setCapturing(false);
-        if (capture) await api(`/v0/feedback/marks/${mark.id}/screenshot`, { method: "PUT", headers: { "content-type": "image/png" }, body: capture.blob });
+        if (capture) {
+          const png = { method: "PUT", headers: { "content-type": "image/png" } };
+          await api(`/v0/feedback/marks/${mark.id}/screenshot`, { ...png, body: capture.blob });
+          for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.area))).entries()) if (blob) await api(`/v0/feedback/marks/${mark.id}/areas/${index + 1}`, { ...png, body: blob });
+        }
       }
       const result = await api<{ id: string; path: string }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
         comments,
@@ -248,7 +263,11 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
         <Show when={selection.elements.length > 1}><For each={selection.elements}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
       </>}</For>
       <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() ? box(open()!.elements) : null)}><FeedbackMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
-      <Show when={marquee()}>{(drag) => <FeedbackMark kind="marquee" box={drag()} />}</Show>
+      <Show when={marquee()}>{(drag) => <>
+        <FeedbackMark kind="marquee" box={drag()} />
+        <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
+        <Show when={aimed().length}><FeedbackMark kind="cursor" box={box(aimed())} name={nameOf(aimed())} /></Show>
+      </>}</Show>
       <Show when={!capturing() && open()} keyed>{(selection) =>
         <FeedbackNote ref={(element) => { noteField = element; }} style={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }}
           tag={String(selections.indexOf(selection) + 1)} name={nameOf(selection.elements)} source={selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined}

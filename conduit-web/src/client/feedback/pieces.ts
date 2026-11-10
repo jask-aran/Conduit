@@ -30,22 +30,56 @@ export function pieceRoot(element: Element | null): Element | null {
 /** What is under a point, the tool's own layer aside. */
 export const under = (x: number, y: number) => document.elementsFromPoint(x, y).find((element) => !element.closest(OWN)) ?? null;
 
-/** Every piece root wholly inside a box, the outermost only: what a drag gathers. */
-export function piecesWithin(box: { left: number; top: number; width: number; height: number }): Element[] {
-  const right = box.left + box.width, bottom = box.top + box.height;
-  const inside: Element[] = [];
-  const visit = (element: Element) => {
-    if (element.matches(OWN)) return;
-    const rect = element.getBoundingClientRect();
-    // Nothing of it is in the box: nor is anything inside it worth the walk, unless it overflows (cheap to allow).
-    if (rect.width && rect.height && rect.left >= box.left && rect.top >= box.top && rect.right <= right && rect.bottom <= bottom && pieceOf(element)) {
-      if (element.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false) inside.push(element);
-      return;
+type Box = { left: number; top: number; width: number; height: number };
+type Edges = { left: number; top: number; right: number; bottom: number };
+/** A drag takes a piece when this much of what shows of it is inside the box, so a drag need not be exact. */
+const MOSTLY = 0.6;
+const meet = (a: Edges, b: Edges): Edges => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
+const area = (edges: Edges) => Math.max(0, edges.right - edges.left) * Math.max(0, edges.bottom - edges.top);
+const shown = (element: Element) => element.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false;
+
+/**
+ * What a drag locks onto. The outermost pieces mostly inside the box, as far as they show (what a scroller clips or
+ * another layer covers is not there); when those are all the pieces of the piece around them, that one piece; and
+ * when the box holds no piece (a drag inside one), the smallest piece that holds the box.
+ */
+export function piecesWithin(box: Box): Element[] {
+  const drag: Edges = { left: box.left, top: box.top, right: box.left + box.width, bottom: box.top + box.height };
+  if (!area(drag)) return [];
+  const view: Edges = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  // The outermost pieces under a root that `take` accepts, given what shows of each; nothing wholly outside `within` is walked.
+  const walk = (root: Element, clip: Edges, within: Edges, take: (showing: Edges) => boolean, found: Element[]) => {
+    for (const element of root.children) {
+      if (element.matches(OWN) || !shown(element)) continue;
+      const bounds = element.getBoundingClientRect();
+      const sized = bounds.width > 0 && bounds.height > 0;
+      const showing = sized ? meet(bounds, clip) : clip;
+      if (sized && pieceOf(element) && area(showing) && take(showing)) { found.push(element); continue; }
+      // A sized box outside it holds nothing in it; one with no size may hold positioned children.
+      if (sized && !area(meet(showing, within))) continue;
+      walk(element, sized && getComputedStyle(element).overflow !== "visible" ? showing : clip, within, take, found);
     }
-    for (const child of element.children) visit(child);
+    return found;
   };
-  visit(document.body);
-  return inside;
+  const uncovered = (element: Element, showing: Edges) => {
+    const inside = meet(showing, drag);
+    const top = under((inside.left + inside.right) / 2, (inside.top + inside.bottom) / 2);
+    return !top || element.contains(top) || top.contains(element);
+  };
+  const gathered = walk(document.body, view, drag, (showing) => area(meet(showing, drag)) >= MOSTLY * area(showing), []).filter((element) => uncovered(element, meet(element.getBoundingClientRect(), view)));
+  if (!gathered.length) {
+    // A drag inside a piece: outward from the piece at its middle to the first that holds most of the box.
+    let holder = pieceRoot(under((drag.left + drag.right) / 2, (drag.top + drag.bottom) / 2));
+    while (holder && area(meet(holder.getBoundingClientRect(), drag)) < 0.9 * area(drag)) holder = pieceRoot(holder.parentElement) ?? null;
+    return holder ? [holder] : [];
+  }
+  if (gathered.length < 2) return gathered;
+  // Every piece of the piece around them: the drag means that piece.
+  let around = pieceRoot(gathered[0]!.parentElement);
+  while (around && !gathered.every((element) => around!.contains(element))) around = pieceRoot(around.parentElement);
+  if (!around) return gathered;
+  const all = walk(around, view, view, () => true, []);
+  return all.length === gathered.length && all.every((element) => gathered.includes(element)) ? [around] : gathered;
 }
 
 const short = (text: string, length: number) => text.length > length ? `${text.slice(0, length - 1)}…` : text;
