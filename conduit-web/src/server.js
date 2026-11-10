@@ -137,7 +137,7 @@ await terminals.load();
 // here -- so it neither publishes its network addresses nor advertises on one.
 const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
 const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
-const stopPruningRoutes = serverIdentity.followObserved();
+serverIdentity.followObserved();
 // The hub's own device and node (decision 24), known before anything reads a project.
 const hub = hubIds(serverIdentity.id);
 projects.hubNodeId = hub.nodeId;
