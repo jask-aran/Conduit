@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 
 /**
- * What Conduit's own title bar shows (Settings › Desktop, under Title bar): each item can be hidden, while what to
+ * What Conduit's own title bar shows (Settings › Appearance, under Title bar): each item can be hidden, while what to
  * keep is decided in use. Saved on this device; every item shows until hidden.
  */
 export const TITLE_BAR_ITEMS = [

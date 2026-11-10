@@ -5,7 +5,7 @@ import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
-import { DesktopSettingsTile } from "./desktop-settings";
+import { TitleBarSettings } from "./title-bar-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { ServerSettings } from "./server-settings";
 import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
@@ -1444,6 +1444,7 @@ export function Settings(props: {
                 <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
                 <Show when={gpuRendering() === false}><Note>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</Note></Show>
               </Group>
+              <TitleBarSettings />
               <Show when={touchOnly()}>
                 <Group title="Touch" scope="This device">
                     <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android.">
@@ -1650,7 +1651,6 @@ export function Settings(props: {
           </Show>
           <Show when={section() === "device"}>
             <DevicesSettingsTile part="device" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} />
-            <DesktopSettingsTile />
             <Show when={installedClientKind === "android"}>
               <Group title="Float">
                     <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send.">

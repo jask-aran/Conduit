@@ -13,6 +13,7 @@ import { desktopShell, type CompanionStatus, type DesktopShellSettings } from ".
 import { pairingWith, pairThisComputer, keepThisComputerConnected } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
 import { PersonBrowsersSettings } from "./person-browsers-settings.tsx";
+import { DesktopAppLines } from "./desktop-settings";
 import { MachineReadout } from "./machine-readout.tsx";
 import { createNetwork, DeviceHarnesses, mountedOn, together, type Device, type Node, type Shown, type ShownDevice } from "./network-state.tsx";
 import { createPushControl } from "../platform/push.ts";
@@ -105,23 +106,36 @@ export function DevicesSettingsTile(props: {
   </>;
 
   /**
-   * This device, as one view: its clients and what this app lets the hub do (its own switches, set only here) beside
-   * the workspaces its clients mount and what can be done here, then bringing another environment of it in.
+   * This device: what the app or tab it is seen from does here (its own switches, set only here) beside what the app
+   * lets the hub do with this computer's folders; then its environments, each with a terminal and the workspaces it
+   * mounts. Mounting a folder is done in the app, not here.
    */
   const here = (device: ShownDevice) => {
-    const nodes = () => device.clients.flatMap((shown) => shown.node ? [shown.node] : []);
     const paired = () => companion?.pairing() ?? null;
     const grants = () => paired()?.newFolders ?? { write: true, shell: false };
     return <>
       <Columns>
-        <Group kind="column" title="Clients">
-          <For each={together(device.clients)}>{(shown) => <SettingLine label={shown.part.name} state={shown.part.meta}>
-            <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
-          </SettingLine>}</For>
-          <Show when={companion && paired()}>
-            {/* Paired is connected: the workspaces mounted from here work whenever this app runs (in the tray too).
-                Sharing is the other thing: letting the hub go through this computer's folders and mount any of them. */}
-            <SettingLine label={`Share folders with ${server()}`} title={`${server()} can mount any of this computer's folders as a workspace, with the grants below. Workspaces already mounted from here keep working either way.`}>
+        <Show when={notifications.way || desktopShell}>
+          <Group kind="column" title={desktopShell || notifications.way === "android" ? "This app" : "This browser"}>
+            <Show when={notifications.way}>
+              <SettingLine label="Notifications" title={notifications.way === "android"
+                ? "The agent's reports and approvals reach this phone, even with the app closed."
+                : "The agent's reports and approvals reach this browser, even with the page closed."}>
+                <Show when={notifications.on()}>
+                  <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.test()}>Send a test</Button>
+                </Show>
+                <Switch id="device-notifications" label="Notifications" disabled={notifications.busy()} checked={notifications.on()}
+                  onChange={(on) => void (on ? notifications.enable(device.name) : notifications.disable())} />
+              </SettingLine>
+            </Show>
+            <DesktopAppLines />
+          </Group>
+        </Show>
+        <Show when={companion && paired()}>
+          {/* Paired is connected: the workspaces mounted from here work whenever this app runs (in the tray too).
+              Sharing is the other thing: letting the hub go through this computer's folders and mount any of them. */}
+          <Group kind="column" title="Folders the hub may use">
+            <SettingLine label="Share this computer's folders" title={`${server()} can mount any of this computer's folders as a workspace, with the grants below. Workspaces already mounted from here keep working either way.`}>
               <Switch id="device-browse" label={`Share this computer's folders with ${server()}`} disabled={companion!.busy()} checked={Boolean(paired()?.browse)} onChange={(on) => void companion!.browse(on)} />
             </SettingLine>
             <SettingLine label="New folders can be edited" title="Folders mounted from here, or by browsing this computer.">
@@ -130,60 +144,86 @@ export function DevicesSettingsTile(props: {
             <SettingLine label="New folders run commands" title="Commands start in the folder but run as you, with everything you can reach.">
               <Switch id="device-share-shell" label="New folders run commands" disabled={companion!.busy()} checked={grants().shell} onChange={(on) => void companion!.grant({ ...grants(), shell: on })} />
             </SettingLine>
-          </Show>
-          <Show when={notifications.way}>
-            <SettingLine label="Notifications" title={notifications.way === "android"
-              ? "The agent's reports and approvals reach this phone, even with the app closed."
-              : "The agent's reports and approvals reach this browser, even with the page closed."}>
-              <Switch id="device-notifications" label="Notifications" disabled={notifications.busy()} checked={notifications.on()}
-                onChange={(on) => void (on ? notifications.enable(device.name) : notifications.disable())} />
-            </SettingLine>
-          </Show>
-        </Group>
-        <Group kind="column" title="Workspaces">
-          <Show when={nodes().some((node) => mounted(node).length || unmounted(node).length)} fallback={<Note>None mounted</Note>}>
-            <For each={nodes()}>{(node) => places(node, nodes().length > 1)}</For>
-          </Show>
-        </Group>
+          </Group>
+        </Show>
       </Columns>
-      {/* What can be done here, under both: a terminal on each client that has one, mounting a folder of this app's. */}
-      <Actions kind="setting">
-        <Show when={notifications.on()}>
-          <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.test()}><Icons.Notification /> Send a test</Button>
-        </Show>
-        <For each={notifications.problem()?.distributors ?? []}>{(distributor) =>
-          <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.choose(distributor.id, device.name)}>Use {distributor.label}</Button>}</For>
-        <For each={nodes().filter((node) => node.online && (node.local || node.terminal))}>{(node) =>
-          <Button variant="ghost" size="sm" onClick={() => props.onOpenTerminal(node)}><Icons.Terminal /> {nodes().length > 1 ? `Terminal on ${node.name}` : "Terminal"}</Button>}</For>
-        <Show when={companion}>
-          <Show when={paired()} fallback={<Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.pair()}><Icons.Add /> Add this computer</Button>}>{(pairing) => <>
-            <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.share(pairing().mainUrl)}><Icons.NewFolder /> Mount a folder…</Button>
-            <Button variant="ghost" size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(pairing().mainUrl, pairing().nodeId)}>Unpair</Button>
-          </>}</Show>
-        </Show>
-      </Actions>
-      {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
-      <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
+      {/* A phone with several ways to be notified, and none chosen. */}
+      <Show when={notifications.problem()?.distributors?.length}>
+        <Actions kind="setting">
+          <For each={notifications.problem()!.distributors}>{(distributor) =>
+            <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.choose(distributor.id, device.name)}>Use {distributor.label}</Button>}</For>
+        </Actions>
+      </Show>
     </>;
   };
+  /** What an environment's line says: what it mounts while it is connected (its own app left out: the title says it), else since when it is away. */
+  const says = (shown: Shown) => {
+    if (!shown.node?.online) return status(shown);
+    const meta = shown.part.meta ?? "";
+    return (shown.app && meta.startsWith(`${shown.app} · `) ? meta.slice(shown.app.length + 3) : meta) || "No workspaces";
+  };
+  /** This device's environments side by side: each one's line (a terminal there), then the workspaces it mounts; under them what else is open on the device, and bringing another environment in. */
+  const environments = (device: ShownDevice) => {
+    const own = () => device.clients.filter((shown) => shown.node);
+    const rest = () => together(device.clients.filter((shown) => !shown.node && !shown.mine));
+    return <Group title="Environments">
+      <Show when={own().length} fallback={<Note>None on this device</Note>}>
+        <Columns>
+          <For each={own()}>{(shown) => <Group kind="column">
+            <SettingLine label={shown.node!.name} state={says(shown)}>
+              <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
+              <Show when={shown.node!.online && (shown.node!.local || shown.node!.terminal)}>
+                <Button variant="ghost" outline size="sm" aria-label={`Terminal on ${shown.node!.name}`} onClick={() => props.onOpenTerminal(shown.node!)}><Icons.Terminal /> Terminal</Button>
+              </Show>
+            </SettingLine>
+            <For each={mounted(shown.node!)}>{(project) =>
+              <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
+          </Group>}</For>
+        </Columns>
+      </Show>
+      <For each={rest()}>{(shown) => <SettingLine label={shown.part.name} state={shown.part.meta}>
+        <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
+      </SettingLine>}</For>
+      {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
+      <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
+    </Group>;
+  };
+  /** This app's own pairing with the server, last: taking it off the network, or bringing it on. */
+  const pairing = () => <Show when={companion}>
+    <Group title="Pairing">
+      <Show when={companion!.pairing()} fallback={
+        <SettingLine label={`Not paired with ${server()}`}>
+          <Button variant="ghost" outline size="sm" disabled={companion!.busy()} onClick={() => void companion!.pair()}><Icons.Add /> Add this computer</Button>
+        </SettingLine>}>{(paired) =>
+        <SettingLine label={`Paired with ${server()}`} state="unpairing takes its workspaces off the network">
+          <Button variant="destructive" outline size="sm" disabled={companion!.busy()} onClick={() => void companion!.unpair(paired().mainUrl, paired().nodeId)}>Unpair this computer</Button>
+        </SettingLine>}</Show>
+      <Show when={companion!.error()}><Note tone="error">{companion!.error()}</Note></Show>
+    </Group>
+  </Show>;
 
   return <>
     <Show when={props.part === "network" && devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: together(device.clients).map((shown) => shown.part) }))} /></Show>
 
-    <Show when={props.part === "device" && active() && thisDevice()}>{(device) => <Group>
-      {/* Its name, large: what the network calls this device, renamed here only. */}
-      <SettingTitle label="This device's name" value={device().name} editable={device().paired} onChange={(name) => rename(device(), name)} />
-      {here(device())}
-      <Show when={companion?.error()}><Note tone="error">{companion!.error()}</Note></Show>
-      <Show when={notifications.problem()}>{(problem) => <Note tone={problem().distributors ? "quiet" : "error"}>{problem().text}</Note>}</Show>
-    </Group>}</Show>
+    <Show when={props.part === "device" && active() && thisDevice()}>{(device) => <>
+      <Group>
+        {/* Its name, large: what the network calls this device, renamed here only; beside it, what it is seen from. */}
+        <SettingTitle label="This device's name" value={device().name} detail={device().clients.find((shown) => shown.mine)?.app}
+          editable={device().paired} onChange={(name) => rename(device(), name)} />
+        {here(device())}
+        <Show when={notifications.problem()}>{(problem) => <Note tone={problem().distributors ? "quiet" : "error"}>{problem().text}</Note>}</Show>
+      </Group>
+      {environments(device())}
+    </>}</Show>
 
     {/* The network's own settings, the server in use's: another is switched to first. */}
     <Show when={props.part === "network" && active()}><NetworkSettings /></Show>
 
-    {/* Each environment's own browser, paired for agents to work in. */}
-    <Show when={active()}><PersonBrowsersSettings device={props.part === "device" ? thisDevice()?.name ?? "" : undefined} /></Show>
+    {/* Each environment's own browser, paired for agents to work in. On This device only in the desktop app: a tab
+        has no device of its own to pair for (the hub places it by its address), and a phone has no environment. */}
+    <Show when={active() && (props.part === "network" || desktopShell)}><PersonBrowsersSettings device={props.part === "device" ? thisDevice()?.name ?? "" : undefined} /></Show>
+    <Show when={props.part === "device" && active()}>{pairing()}</Show>
 
     <Show when={props.part === "network" && others().length}>
       <Group title="Devices">
@@ -261,8 +301,6 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
     finally { setBusy(false); refresh(); }
   };
   const pair = () => act(async () => { await pairThisComputer(status()); setSettings(await shell.settings()); });
-  const grants = () => pairing()?.newFolders ?? { write: true, shell: false };
-  const share = (mainUrl: string) => act(() => shell.companion.share(mainUrl, grants().write, grants().shell));
   const grant = (next: { write: boolean; shell: boolean }) => act(async () => { const at = pairing()?.mainUrl; if (at) await shell.companion.newFolders(at, next.write, next.shell); });
   const browse = (on: boolean) => act(async () => { const at = pairing()?.mainUrl; if (at) await shell.companion.browse(at, on); });
   const unpair = (mainUrl: string, nodeId: string | null) => act(async () => {
@@ -272,7 +310,7 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
     await keepThisComputerConnected();
     setSettings(await shell.settings());
   });
-  return { read, settings, pairing, busy, error, pair, share, grant, browse, unpair };
+  return { read, settings, pairing, busy, error, pair, grant, browse, unpair };
 }
 
 /**

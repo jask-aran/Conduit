@@ -66,7 +66,8 @@ export function Group(props: {
       <header class="ui-group-head"><GroupToggle open={Boolean(props.open)} count={props.count} onClick={() => props.onToggle?.()}>{props.title}</GroupToggle>{props.actions}</header>
       <Expand open={Boolean(props.open)}>{props.children}</Expand>
     </section>;
-    default: return <section class="ui-group" data-group={kind} aria-label={name()}><div class="ui-nav-label">{props.title}<Show when={props.scope}><span class="ui-nav-away">{props.scope}</span></Show></div>{props.children}</section>;
+    // A column with no title of its own (an environment, named by its first line) draws no label.
+    default: return <section class="ui-group" data-group={kind} aria-label={name()}><Show when={kind !== "column" || props.title}><div class="ui-nav-label">{props.title}<Show when={props.scope}><span class="ui-nav-away">{props.scope}</span></Show></div></Show>{props.children}</section>;
   }
 }
 

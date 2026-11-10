@@ -56,27 +56,28 @@ export function PersonBrowsersSettings(props: {
   };
 
   return <Group title={props.device === undefined ? "Your browsers" : "Your browser"}>
-    <Note>Agents can work in your signed-in browser on a device. Each thread asks first.</Note>
+    <Note>Agents can work in your signed-in browser on a device, through the OpenCode Browse extension installed in it. Each thread asks first.</Note>
     <Show when={environments()} fallback={<Show when={!error()}><Note>Loading…</Note></Show>}>{(list) =>
       <Show when={list().length} fallback={<Note>{props.device === undefined ? "No device on this network can offer a browser yet" : "This device cannot offer a browser yet"}: it needs a folder shared with commands.</Note>}>
         <For each={list()}>{(environment) => <>
           <For each={environment.browsers}>{(browser) =>
-            <SettingLine label={browser.name} state={environment.name}>
+            <SettingLine label={browser.name} state={`OpenCode Browse · ${environment.name}`}>
               <StatusDot label={browser.connected ? "Connected" : "Not running"} tone={browser.connected ? "success" : "muted"} />
               <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Unpair ${browser.name}`} onClick={() => void unpair(environment, browser.id)}>Unpair</Button>
             </SettingLine>}</For>
           <Show when={environment.pairing} fallback={
-            <SettingLine label={environment.browsers.length ? "Connect another browser" : "Connect a browser"} state={environment.name}
-              title={`Pairs a Chrome, Edge, Brave or other Chromium browser on ${environment.name} with Conduit.`}>
+            <SettingLine label={environment.browsers.length ? "Pair another browser" : "Pair a browser"} state={environment.name}
+              title={`Pairs a Chrome, Edge, Brave or other Chromium browser on ${environment.name} with Conduit: install OpenCode Browse in it, then enter the code there.`}>
               <Show when={environment.available} fallback={<StatusDot label={environment.error || "Not available"} tone="muted" />}>
-                <Button variant="ghost" size="sm" disabled={busy() || !environment.online} onClick={() => void pair(environment)}><Icons.Add /> Connect</Button>
+                <SettingLink href={environment.extensionUrl}>Get the extension</SettingLink>
+                <Button variant="ghost" outline size="sm" disabled={busy() || !environment.online} onClick={() => void pair(environment)}>Pairing code</Button>
               </Show>
             </SettingLine>}>{(pairing) => <>
             <SettingLine label={<SettingValue mono>{pairing().code}</SettingValue>} state={environment.name}>
               <SettingLink href={environment.extensionUrl}>Get the extension</SettingLink>
               <Button variant="ghost" size="sm" onClick={() => void copy(pairing().code)}><Icons.Copy /> Copy code</Button>
             </SettingLine>
-            <Note>In the browser on {environment.name}: add the browse extension, open its Options, choose “Pair with a code” and enter this code. It works once, until {new Date(pairing().expiresAt).toLocaleTimeString(undefined, { timeStyle: "short" })}.</Note>
+            <Note>In the browser on {environment.name}: add the OpenCode Browse extension, open its Options, choose “Pair with a code” and enter this code. It works once, until {new Date(pairing().expiresAt).toLocaleTimeString(undefined, { timeStyle: "short" })}.</Note>
             <Show when={copied() === pairing().code}><LiveNote>Copied</LiveNote></Show>
           </>}</Show>
         </>}</For>

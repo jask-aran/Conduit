@@ -190,12 +190,16 @@ export function SettingRecorder(props: { keys?: string[]; label?: string; ref?: 
 /** Said to a screen reader, not shown: what an action did (a shortcut saved, cleared). */
 export const LiveNote = (props: { children: JSX.Element }) => <p class="ui-live-note" aria-live="polite">{props.children}</p>;
 
-/** A group's subject named large under its label (This device's name); editable, a field that reads as a title. */
-export const SettingTitle = (props: { value: string; label: string; editable?: boolean; onChange?: (value: string) => void }) => props.editable
-  ? <input class="ui-setting-title" aria-label={props.label} value={props.value} spellcheck={false}
-      onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.currentTarget.value = props.value; event.currentTarget.blur(); } }}
-      onChange={(event) => props.onChange?.(event.currentTarget.value)} />
-  : <h3 class="ui-setting-title">{props.value}</h3>;
+/** A group's subject named large under its label (This device's name); editable, a field that reads as a title.
+ *  detail: what is said quietly beside it, on its line (the app or tab the device is seen from). */
+export const SettingTitle = (props: { value: string; label: string; detail?: string; editable?: boolean; onChange?: (value: string) => void }) => <div class="ui-setting-head">
+  {props.editable
+    ? <input class="ui-setting-title" aria-label={props.label} value={props.value} spellcheck={false}
+        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { event.currentTarget.value = props.value; event.currentTarget.blur(); } }}
+        onChange={(event) => props.onChange?.(event.currentTarget.value)} />
+    : <h3 class="ui-setting-title">{props.value}</h3>}
+  <Show when={props.detail}><small>{props.detail}</small></Show>
+</div>;
 
 export type SettingContextItem = { label: string; kind: "block" | "document"; onOpen: () => void };
 /** context: a mark after the name opening a menu of the blocks and documents the setting changes (Settings › Blocks and

@@ -1,67 +1,44 @@
-import { createSignal, For, onMount, Show } from "solid-js";
-import { TITLE_BAR_ITEMS, setTitleBarShows, titleBarShows } from "./title-bar-items";
-import { Segmented, Switch } from "@/components/ui/controls";
+import { createSignal, onMount, Show } from "solid-js";
+import { Switch } from "@/components/ui/controls";
 import { SettingLine } from "@/components/ui/overlay";
-import { desktopShell, type DesktopShellSettings, type DesktopTitleBar } from "../platform/installed-client.ts";
-import { Group } from "@/components/ui/group";
-import { Loading, Note } from "@/components/ui/state";
+import { desktopShell, type DesktopShellSettings } from "../platform/installed-client.ts";
+import { Note } from "@/components/ui/state";
 
-/**
- * The window behaviour the shell owns, shown where every other preference is.
- * It renders nothing anywhere else, so the Appearance section does not have to
- * know which client it is drawing for.
- *
- * What the shell returns is what is displayed, never what was asked for: a
- * launch-at-login the OS refused must not read as one that took.
- */
-export function DesktopSettingsTile() {
-  if (!desktopShell) return null;
-  const shell = desktopShell;
+/** The shell's settings as it reports them: what it returns is what is displayed, never what was asked for (a
+ *  launch-at-login the OS refused must not read as one that took). */
+export function createShellSettings() {
+  const shell = desktopShell!;
   const [settings, setSettings] = createSignal<DesktopShellSettings | null>(null);
   const [error, setError] = createSignal("");
-
   onMount(() => { void shell.settings().then(setSettings).catch(() => setError("The desktop shell did not answer.")); });
-
   const update = (change: Partial<DesktopShellSettings>) => {
     const current = settings();
     if (!current) return;
     setError("");
-    void shell.saveSettings({ ...current, ...change })
-      .then(setSettings)
-      .catch((cause: Error) => setError(cause.message || "Windows refused the change."));
+    void shell.saveSettings({ ...current, ...change }).then(setSettings).catch((cause: Error) => setError(cause.message || "Windows refused the change."));
   };
+  return { settings, error, update };
+}
 
-  const row = (id: string, label: string, value: boolean, disabled: boolean, change: (on: boolean) => Partial<DesktopShellSettings>) =>
-    <SettingLine label={label}>
-      <Switch id={id} label={label} disabled={disabled} checked={value} onChange={(on) => update(change(on))} />
-    </SettingLine>;
-
-  return <Group title="Desktop">
-    <Show when={settings()} fallback={<Loading>Reading the shell's settings…</Loading>}>
-      {(current) => <>
-        {row("desktop-tray", "Keep running in tray", current().keepRunningInTray, false,
-          (on) => ({ keepRunningInTray: on }))}
-        {row("desktop-autostart", "Launch at sign-in", current().launchAtLogin, false,
-          (on) => ({ launchAtLogin: on, startHidden: on ? current().startHidden : false }))}
-        {/* Starting hidden is only a question for a launch nobody asked for. */}
-        {row("desktop-start-hidden", "Start hidden", current().startHidden, !current().launchAtLogin,
-          (on) => ({ startHidden: on }))}
-        {/* Windows' caption, none (the sidebar's head, the pane headers and the tool rail drag the window, and the rail
-            holds its buttons), or Conduit's own bar. */}
-        <SettingLine label="Title bar">
-          <Segmented label="Title bar" size="sm" value={current().titleBar ?? "conduit"}
-            options={[{ value: "native", label: "Windows" }, { value: "none", label: "None" }, { value: "conduit", label: "Conduit" }] satisfies { value: DesktopTitleBar; label: string }[]}
-            onChange={(titleBar) => update({ titleBar: titleBar as DesktopTitleBar })} />
-        </SettingLine>
-        {/* Conduit's bar: each of its items can go, while what to keep is decided in use. */}
-        <Show when={(current().titleBar ?? "conduit") === "conduit"}>
-          <For each={TITLE_BAR_ITEMS}>{(item) =>
-            <SettingLine label={item.label} title={item.about}>
-              <Switch label={`Show ${item.label} in the title bar`} checked={titleBarShows(item.id)} onChange={(shown) => setTitleBarShows(item.id, shown)} />
-            </SettingLine>}</For>
-        </Show>
-        <Show when={error()}><Note tone="error">{error()}</Note></Show>
-      </>}
-    </Show>
-  </Group>;
+/**
+ * How the desktop app runs, as lines of the group that draws them (Settings › This device, This app). It renders
+ * nothing anywhere else, so the page does not have to know which client it is drawing for.
+ */
+export function DesktopAppLines() {
+  if (!desktopShell) return null;
+  const { settings, error, update } = createShellSettings();
+  return <Show when={settings()}>{(current) => <>
+    <SettingLine label="Keep running in tray">
+      <Switch id="desktop-tray" label="Keep running in tray" checked={current().keepRunningInTray} onChange={(on) => update({ keepRunningInTray: on })} />
+    </SettingLine>
+    <SettingLine label="Launch at sign-in">
+      <Switch id="desktop-autostart" label="Launch at sign-in" checked={current().launchAtLogin}
+        onChange={(on) => update({ launchAtLogin: on, startHidden: on ? current().startHidden : false })} />
+    </SettingLine>
+    {/* Starting hidden is only a question for a launch nobody asked for. */}
+    <SettingLine label="Start hidden">
+      <Switch id="desktop-start-hidden" label="Start hidden" disabled={!current().launchAtLogin} checked={current().startHidden} onChange={(on) => update({ startHidden: on })} />
+    </SettingLine>
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
+  </>}</Show>;
 }

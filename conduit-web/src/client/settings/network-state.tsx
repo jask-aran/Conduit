@@ -22,7 +22,8 @@ export type Node = Environment;
 type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
 export type { Device };
 /** One client as a page shows it: on the map, and as its card. */
-export type Shown = { part: NetworkClient; node?: Node; mine: boolean };
+/** app: the app or browser this page is seen from, when it is this client ("Conduit Dev · this app"). */
+export type Shown = { part: NetworkClient; node?: Node; mine: boolean; app?: string };
 export type ShownDevice = { id: string; name: string; paired: boolean; clients: Shown[] };
 
 /** Clients told apart by nothing but their number are one line: two tabs of Chrome on Windows, "Windows · 2 tabs". */
@@ -140,10 +141,11 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
     const here = (mine && own ? [own] : []).concat(client.nodes || []).map((node) => byNode.get(node)).find(Boolean) ?? unpaired();
     if (here) {
       here.mine ||= mine;
+      if (mine) here.app = [name, said].join(" · ");
       Object.assign(here.part, { headed: form, online: true, meta: [name, mine ? said : "", here.node?.online ? here.part.meta : "not connected"].filter(Boolean).join(" · ") });
       continue;
     }
-    const shown: Shown = { mine, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
+    const shown: Shown = { mine, app: mine ? [name, said].join(" · ") : undefined, part: { id: client.id, name, headed: form, online: true, meta: said || undefined } };
     if (machine) machine.clients.push(shown);
     else if (client.machine && client.machine !== "hub") list.push({ id: `machine:${client.machine}`, name: client.machine, paired: false, clients: [shown] });
     else if (form === "browser" && !mine) browsers.clients.push(shown);

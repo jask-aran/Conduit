@@ -85,7 +85,10 @@
 .ui-overlay[data-settling] > .ui-overlay-page { width: var(--overlay-page-width, auto); flex: none; }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
 .ui-group:where([data-group="setting"]) { display: flex; flex-direction: column; gap: var(--hairline); }
-.ui-setting-title { box-sizing: border-box; width: 100%; margin: 0 0 var(--space-sm); padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
+/* A setting title's line: the title at its own width, what is said beside it quiet on the same baseline. */
+.ui-setting-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-sm); margin: 0 0 var(--space-sm); }
+.ui-setting-head > small { color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-setting-title { box-sizing: border-box; width: auto; max-width: 100%; min-width: 0; margin: 0; field-sizing: content; padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
 input.ui-setting-title { outline: none; }
 input.ui-setting-title:focus-visible { border-color: var(--ring); background: var(--tint); }
 @media (hover: hover) { input.ui-setting-title:hover { background: var(--tint); } }
@@ -240,8 +243,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
    a ghost button at the line's end, which has no box at rest, is set out by its own padding until its words (or its
    icon) end there too. Its wash, when it shows, reaches past the edge into the line's own room.
    (A ghost button's weight is the surface's: --weight-action, foundations.css.) */
-.ui-setting-control > .ui-button:where([data-variant="ghost"]):last-child { margin-inline-end: calc(-1 * var(--space-lg)); }
-.ui-setting-control > .ui-button:where([data-variant="ghost"][data-size^="icon"]):last-child { margin-inline-end: calc(-1 * var(--space-sm)); }
+.ui-setting-control > .ui-button:where([data-variant="ghost"]:not([data-outline])):last-child { margin-inline-end: calc(-1 * var(--space-lg)); }
+.ui-setting-control > .ui-button:where([data-variant="ghost"][data-size^="icon"]:not([data-outline])):last-child { margin-inline-end: calc(-1 * var(--space-sm)); }
 /* A step's number, before its name: data, muted, a fixed width so the names line up. */
 .ui-setting-step { display: inline-block; min-width: var(--space-2xl); flex: none; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 /* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
