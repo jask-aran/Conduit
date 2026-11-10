@@ -7,6 +7,7 @@ export type BooleanCapability = {
 }[keyof ChatCapabilities];
 
 /** What a chat's backend can do, how a turn ends and what a tool did, as the hub declares them (chat-backend-contract.d.ts). */
+import type { UiPreferences } from "../preferences/ui-preferences";
 import type { ChatCapabilities, ToolKind, TurnOutcome } from "../../chat-backend-contract.js";
 export type { ChatCapabilities };
 
@@ -886,15 +887,18 @@ export interface DownloadsPayload {
   apkVersion: string | null;
 }
 
-/** GET and PATCH /v0/preferences: the account preferences the client reads back. */
-export interface PreferencesPayload {
-  accountName?: string;
-  accountHome?: string;
-  defaultTemplateId?: string;
-  terminalShortcuts?: unknown;
-  sidebarPins?: unknown;
+/**
+ * GET and PATCH /v0/preferences: the UI preferences (preferences-api.js) and the account's own kept beside them
+ * (preferences-store.js DEFAULTS). GET adds where the shortcuts file is and what in it could not be read.
+ */
+export type PreferencesPayload = UiPreferences & {
+  accountName: string;
+  accountHome: string;
+  defaultTemplateId: string;
+  terminalShortcuts: unknown[];
+  knownServers: Array<{ origin?: unknown; name?: unknown }>;
   keybindings?: { path: string; errors: string[] };
-}
+};
 
 export interface PiAuthProvider {
   id: string;

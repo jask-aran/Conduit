@@ -5610,7 +5610,7 @@ function App() {
     };
     const serverIdentityRequest = apiWhenServed<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server")
       .catch(() => null);
-    void readShared<UiPreferences & { knownServers?: Array<{ origin?: unknown; name?: unknown }> }>("/v0/preferences").then(async (serverPreferences) => {
+    void readShared<PreferencesPayload>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
       // Every server keeps the directory, and every client that reaches one
       // both reads it and tops it up. Two addresses for the same machine share

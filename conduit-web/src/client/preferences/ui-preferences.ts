@@ -43,7 +43,7 @@ export function publishUiPreference<K extends UiPreferenceKey>(key: K, value: Ui
  */
 let unsaved: Partial<UiPreferences> = {};
 export const uiPreferenceSaves = createRoot(() => createAutosave<Partial<UiPreferences>>({
-  save: (patch) => api<UiPreferences>("/v0/preferences", { method: "PATCH", body: JSON.stringify(patch) }).then(() => patch),
+  save: (patch) => api<unknown>("/v0/preferences", { method: "PATCH", body: JSON.stringify(patch) }).then(() => patch),
   onSaved: (patch) => { for (const key of Object.keys(patch) as UiPreferenceKey[]) if (unsaved[key] === patch[key]) delete unsaved[key]; },
 }));
 export function queueUiPreferenceSave<K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) {
