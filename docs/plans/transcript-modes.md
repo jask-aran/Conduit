@@ -1,13 +1,7 @@
-# Transcript modes: Folded and Narrated
+# Transcript: which text is interim
 
-Status: planned 2026-10-30. Spec: DESIGN.md, Transcript › Turns.
-
-Every chat can be shown two ways, at any time:
-
-- **Folded**: the turn's working-out (reasoning, tool calls, text said between them) goes into its trace; the answer
-  stands alone. Chats today.
-- **Narrated**: text said between tool calls stands in the transcript, a trace per run of tool calls between texts;
-  reasoning still folds. jbot today.
+Every thread is Narrated (d011423c, 2fd8f0d5); the Folded/Narrated choice this plan proposed is retired. What stays
+true is the rule and what the streams were measured to say.
 
 ## The rule
 
@@ -34,26 +28,13 @@ Conduit learns these per model from its own turns rather than a hand-kept list: 
 others) records per model, on the hub, how often a message carries interim text, its length, whether it was
 labelled, and how much reasoning came with it. The probe matrix seeds the first values.
 
-## What the person sees
+## Notes
 
-- A **mode switch** per chat (the chat's menu), a default per profile (Settings › Profiles), jbot Narrated.
-- A **recommendation** from the traits, said where the mode is chosen, never enforced: Folded where interim text can be
-  kept out of the answer (labelled, or a short one-sentence window); Narrated where the model narrates in readable
-  text; Folded where its interim text is long or not meant for a person.
-- **Reasoning** of any size stays in the trace: one line with how long it thought, its body opened on request and
-  capped with "show all". An untyped stream's `<think>` tags are split out by the adapter, should one appear.
-
-## Steps
-
-1. One projection: `turn-rows.ts` walks a turn's segments once, with `narration: "fold" | "show"`; Folded and
-   Narrated render exactly as chats and jbot do now (screenshot both before and after).
-2. The mode as a chat setting and profile default; the switch in the chat's menu.
-3. Stream traits recorded per model (durable adapter first), and the recommendation from them.
-4. DeepSeek over OpenCode: over OpenRouter through pi-ai (2026-10-30) DeepSeek V4.1 Flash classifies cleanly: a
+- DeepSeek over OpenCode: over OpenRouter through pi-ai (2026-10-30) DeepSeek V4.1 Flash classifies cleanly: a
    one-sentence narration in text before each tool call (0.06-0.27 s window), reasoning on its own channel (28 chars to
    4.8k on a bug hunt), the answer after the last tool. So the mess seen is the OpenCode side (its endpoint or the
    OpenCode harness's part mapping, opencode-adapter.js), to reproduce there when needed.
-5. Optional, upstream: pi-ai sets `phase` on a text block when the item opens, so labelled streams fold without a
+- Optional, upstream: pi-ai sets `phase` on a text block when the item opens, so labelled streams fold without a
    flash.
 
 Requests never ask for a model's whole catalogue output: the durable runtime caps `maxTokens` at 64k (OpenRouter

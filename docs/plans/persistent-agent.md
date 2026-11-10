@@ -1,7 +1,6 @@
 # Persistent agent
 
-Status: first slice built 2026-10-27; vision set 2026-10-29 and verbs and structures 2026-10-30 (below), which supersede decisions 6 and 8 where
-they differ. Target v0.8.9.
+Status: first slice built 2026-10-27; vision set 2026-10-29 and verbs and structures 2026-10-30 (below).
 
 The persistent agent is the Conduit durable agent (pi-durable) running as one
 always-on agent per hub: it keeps working between conversations, wakes itself,
@@ -420,18 +419,10 @@ closing that needs a network namespace. To work elsewhere it uses a device and f
 5. **Your chats:** it can read and search them, start chats in any workspace and
    harness, and steer existing ones. Steering is an outward action: it asks
    first, then its message is marked as the agent's. It never posts as you.
-6. **Triggers:** schedule and heartbeat (morning brief, periodic checklist,
-   one-off check-backs), Conduit events (a chat finishes or fails, a device
-   comes or goes, a workspace changes), outside sources (email, calendar), and
-   webhooks.
 7. **Approvals for its own runs:** reading, drafting and work in its folder run
    freely; sending, deleting, paying, steering a chat and running on another
    device ask. A background run never approves itself, and once a run has read
    private data its outward actions ask.
-8. **Memory:** Markdown files in its folder (about you, facts, a dated diary),
-   editable in Work. Every line it writes records which thread or run wrote it;
-   background runs propose memory rather than writing it; lines you wrote
-   outrank its own.
 9. **Identity:** a name and persona file in its folder, set by you, with a
    default name changeable in Settings.
 10. **Reaching you:** phone push as soon as possible, then text or WhatsApp.
@@ -476,40 +467,6 @@ but its turns read differently. Taken from Duet, Grok Bot, Muse and Open Duet
   thread its cards sit under the agent's reply to the report. Allowed, the
   thread runs the hub's copy of the call with `approved` (an ask id), once,
   whoever made it. Built 2026-10-27.
-
-## First slice
-
-Backend loop end to end, minimal UI:
-
-- the agent record per hub, its folder, identity file;
-- home thread and side threads as pi-durable conversations;
-- memory files with per-line sources, and proposals from background runs;
-- the hub scheduler: morning brief, heartbeat against its checklist, one-off
-  check-backs, each in its own conversation reporting to the home thread;
-- Conduit events as triggers;
-- the approval rule above, including taint;
-- the attention list (working on, needs you) over the API.
-
-Built (2026-10-27): the slice above, then push. The hub sends standard Web Push
-(RFC 8291/8292, no third party of its own) to every device that turned on
-Notifications in Settings › Devices: the Android app through UnifiedPush, with
-Google's push service built in as its distributor (no Firebase project, no other
-app; ntfy where there is no Play services), a browser through its own push
-service and the service worker. What reaches a device: a report the interruption setting lets through,
-and an approval waiting on the person. A morning brief is asked for, so it
-reaches the person whatever the setting unless it says NOTHING.
-
-Built (2026-10-27): its page, `/agent` (a pane document `page:agent`), under the
-Conduit Dashboard in Chat's sidebar with how many things wait on the person. On
-the dashboards' layout: the composer talks to it in its home thread; its threads;
-Needs you (questions, memory to keep or discard, notices, dismissed with
-`DELETE /v0/agent/notices/:id`), Working on, Schedules, Watching and Recent runs,
-each opening its transcript; Run a task and New thread. Renaming it retitles the
-home thread.
-
-Next: settings on the page (dial, budget, brief, heartbeat), memory itself
-(its files, not only proposals), what a push shows and offers (Allow/Don't on an
-approval), then connectors, then outside sources.
 
 ## Open
 

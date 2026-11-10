@@ -1,7 +1,7 @@
 # Approval model
 
-Status: decided 2026-11-03, not built. A pi-durable extension published to npm (working name `pi-durable-approver`);
-Conduit is its first host. It replaces most of the ask logic in `conduit-web/src/agent/policy.js`.
+Status: decided 2026-11-03, built as `packages/pi-durable-approver`, a pi-durable extension; Conduit is its first host
+(`conduit-web/src/agent/policy.js`).
 
 ## The decision
 

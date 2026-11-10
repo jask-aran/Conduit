@@ -1,4 +1,4 @@
-// node docs/handbook/render.mjs docs/handbook/jbot-handbook.html (from the repo root): page.html → page.pdf, page-N.png (2x), and a fit line per page.
+// node docs/handbook/render.mjs docs/handbook/subagents-handbook.html (from the repo root): page.html → page.pdf, page-N.png (2x), and a fit line per page.
 import { loadPlaywright, launchHeadless } from "/home/jask/Conduit/conduit-web/scripts/probes/lib.mjs";
 import path from "node:path";
 const html = path.resolve(process.argv[2]);

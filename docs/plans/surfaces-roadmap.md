@@ -3,23 +3,6 @@
 Status: directions and review decisions from 2026-11-02, after studying a comparable self-hosted agent workspace.
 Not all decided; shape into issues before building. Newest last.
 
-## Empty pane primitive
-
-Conduit's primitive is panes holding documents, but there is no empty pane: a pane with no document in it.
-Today one only appears when broken (opening an old URL to a chat that no longer exists: a bug to look into).
-An `EmptyPane` would show a greeting, the hub and version, and quick starts (new chat, open workspace, recent),
-and a pane's + would offer documents to open in it: chat, terminal, browser, …
-
-## Browser document — ASAP
-
-A browser document beside chats and terminals. Main use: agents driving it.
-
-## Agents drive Conduit's UI
-
-Big next target: Conduit's UI and backend drivable by the agents it runs, through an MCP server or a CLI inside
-code mode. An agent can know what the user is seeing, open and close panes, open a browser, and work next to
-the chat.
-
 ## A new-chat screen, not the dashboard
 
 DESIGN.md says "the Conduit dashboard is the new-chat screen". Thinking of moving away from that: the
@@ -86,21 +69,7 @@ A per-device System info (CPU, memory, disk, network, top processes): one per hu
 
 ## Task list (2026-11-02)
 
-Ticked as done. The empty pane is on the `empty-pane` branch (`.claude/worktrees/empty-pane`), previewed on
-:4320 with its own data root.
-
-### The `empty-pane` branch
-
-- [x] 1. Approve `PaneHome` as a v2 extension: only the container that centres Home and styles the headings and
-  status line inside it. Approved 2026-11-03; in DESIGN.md's Pane row.
-- [x] 2. Terminals as documents: a tab with a × (a new header), or keep their header and only gain a ×. Kept the
-  header (it holds the shell, shortcuts and sessions) and gave it a document's ×: v2's `TermIdentity` takes `onClose`,
-  a × after the terminal's name drawn as a lit tab's, closing the document as any is (`closeDocument`: the pane
-  stays, empty; the shell runs on). Gallery: Panes › TermIdentity · onClose. The slide-over dock keeps its own
-  behaviour: its Terminal tool and a terminal moved into it show the dock's controls (Move to a pane, Close) and no
-  second ×, and any document closed in the dock closes its docked pane rather than leaving an empty one there.
-- [x] 3. Merge the branch into `main` and restart :4310 (`--force` while the stuck "Slow Spawn Narration" test chat
-  still waits).
+Ticked as done.
 
 ### Bugs and loose ends
 

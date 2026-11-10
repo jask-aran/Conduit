@@ -233,7 +233,5 @@ What each kind of piece does; how it looks is its gallery family.
 
 # References
 
-- `docs/design/palette-sketch/` -- chat search, the command palette and their states.
 - `docs/design/orb-catalogue/` -- every thinking-orb frame and which state uses it.
-- `docs/design/dashboard-layout/`, `docs/design/conduit-home-dashboard/` -- the dashboard sketches.
 - docs/plans/persistent-agent.md -- what every thread is given (blocks, documents, roles, slots, notices).
