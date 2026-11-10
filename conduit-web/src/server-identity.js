@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { PRIVATE_HOST } from "./network-hosts.js";
+import { writePrivateFile } from "./private-file.js";
 
 /*
  * Who this server is, and where it answers.
@@ -296,10 +297,9 @@ export class ServerIdentity {
       ...(this.lan ? {} : { lan: false }),
       observed: [...this.observed].map(([origin, seenAt]) => ({ origin, seenAt })),
     }, null, 2);
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     // The private half is in here, so the file is the owner's alone. It is not
     // a login and cannot be used to sign in, but a copy of it would let
     // something else answer "yes, I am that server".
-    await fs.writeFile(this.filePath, `${payload}\n`, { mode: 0o600 });
+    await writePrivateFile(this.filePath, `${payload}\n`);
   }
 }

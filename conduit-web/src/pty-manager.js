@@ -11,6 +11,7 @@ import nodePty from "node-pty";
 import { placeProcesses } from "./nodes/place-processes.js";
 import { TMUX_CONFIG } from "./tmux-config.js";
 import { removeUnresponsiveSocket, terminalSocketName } from "../../scripts/terminal-lifecycle.mjs";
+import { writePrivateFile } from "./private-file.js";
 
 const execFileAsync = promisify(execFileCallback);
 
@@ -636,18 +637,7 @@ export class PtyManager extends EventEmitter {
       }
     }
     const payload = JSON.stringify({ version: 2, sessions: [...this.records.values()] }, null, 2) + "\n";
-    const write = async () => {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const tempPath = `${this.filePath}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
-      try {
-        await fs.writeFile(tempPath, payload, { encoding: "utf8", mode: 0o600 });
-        await fs.chmod(tempPath, 0o600);
-        await fs.rename(tempPath, this.filePath);
-        await fs.chmod(this.filePath, 0o600);
-      } finally {
-        await fs.rm(tempPath, { force: true }).catch(() => {});
-      }
-    };
+    const write = () => writePrivateFile(this.filePath, payload);
     this.persistQueue = this.persistQueue.then(write, write);
     return this.persistQueue;
   }

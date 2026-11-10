@@ -1,8 +1,7 @@
 import { PRIVATE_HOST } from "./network-hosts.js";
-import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import { installedClientOrigin } from "./native-auth.js";
+import { writePrivateFile } from "./private-file.js";
 
 const COOKIE_NAME = "conduit_session";
 const COOKIE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -110,11 +109,7 @@ export function createLoginThrottle({ file = null, now = () => Date.now() } = {}
   const save = () => {
     if (!file) return;
     const text = JSON.stringify({ keys: Object.fromEntries(keys), recent, globalUntil });
-    writing = writing.then(async () => {
-      await fs.promises.mkdir(path.dirname(file), { recursive: true });
-      await fs.promises.writeFile(`${file}.tmp`, text, { mode: 0o600 });
-      await fs.promises.rename(`${file}.tmp`, file);
-    }).catch(() => {});
+    writing = writing.then(() => writePrivateFile(file, text)).catch(() => {});
   };
   const prune = (at) => {
     recent = recent.filter((time) => at - time < GLOBAL_WINDOW_MS);

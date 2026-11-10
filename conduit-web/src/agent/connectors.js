@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { Type } from "@earendil-works/pi-ai";
 import { McpClient, StreamableHttpTransport, toLlmContent } from "@earendil-works/pi-mcp";
 import { McpOAuthProvider, adaptOAuthProvider, authorizeMcp } from "@earendil-works/pi-mcp/oauth";
+import { writePrivateJson } from "../private-file.js";
 /** A request to a connector may be a whole program (Executor's execute reading many messages): minutes, not seconds. */
 const CALL_MS = 120_000;
 
@@ -36,11 +37,7 @@ export class Connectors {
     catch (error) { if (error.code === "ENOENT") return undefined; throw error; }
   }
   async write(entry, state) {
-    const file = this.file(entry);
-    await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-    const temp = `${file}.${randomUUID()}.tmp`;
-    try { await fs.writeFile(temp, JSON.stringify(state), { mode: 0o600, flag: "wx" }); await fs.rename(temp, file); }
-    finally { await fs.unlink(temp).catch(() => {}); }
+    await writePrivateJson(this.file(entry), state, { compact: true });
   }
   provider(entry, redirectUrl, store, onRedirect = () => {}) {
     return new McpOAuthProvider({ serverUrl: entry.info.url, redirectUrl, store, onRedirect,

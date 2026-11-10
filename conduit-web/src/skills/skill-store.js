@@ -9,6 +9,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writePrivateJson } from "../private-file.js";
 
 const REGISTRY = "https://skills.sh";
 const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -51,10 +52,7 @@ export class SkillStore {
   }
 
   async save() {
-    await fs.mkdir(this.root, { recursive: true });
-    const temp = `${this.stateFile}.${process.pid}.tmp`;
-    await fs.writeFile(temp, `${JSON.stringify(this.state, null, 2)}\n`);
-    await fs.rename(temp, this.stateFile);
+    await writePrivateJson(this.stateFile, this.state);
   }
 
   enabled(id) { return !this.state.disabled.includes(id); }

@@ -5,6 +5,7 @@ import { block, promptVars, routineContext } from "../agent/routines.js";
 import { render as renderMemory } from "../agent/memory.js";
 import { renderWaitingInbox } from "../agent/inbox.js";
 import { readPolicy, renderRules } from "../agent/approval-policy.js";
+import { writePrivateFile, writePrivateJson } from "../private-file.js";
 
 const safeId = /^[a-z][a-z0-9-]{0,63}$/;
 const fail = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
@@ -94,13 +95,7 @@ export class ContextStore {
     try { return JSON.parse(await fs.readFile(path.join(this.root, name), "utf8")); }
     catch (error) { if (error.code === "ENOENT") return {}; throw error; }
   }
-  async writeJson(name, value) {
-    await fs.mkdir(this.root, { recursive: true });
-    const file = path.join(this.root, name);
-    const temp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-    await fs.writeFile(temp, `${JSON.stringify(value, null, 2)}\n`);
-    await fs.rename(temp, file);
-  }
+  writeJson(name, value) { return writePrivateJson(path.join(this.root, name), value); }
   async catalog() {
     const blocks = new Map();
     const add = (id, label, source, extra = {}) => {
@@ -265,12 +260,7 @@ export class ContextStore {
         });
         if (template !== null) await acceptSeedTemplate(folder, relative, template);
       } else if (item.source !== "custom" && content === await this.defaultContent(item)) await fs.rm(path.join(this.root, `${id}.md`), { force: true });
-      else {
-        await fs.mkdir(this.root, { recursive: true });
-        const target = path.join(this.root, `${id}.md`);
-        const temp = `${target}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
-        await fs.writeFile(temp, content); await fs.rename(temp, target);
-      }
+      else await writePrivateFile(path.join(this.root, `${id}.md`), content);
     }
     if (label !== undefined) { const labels = await this.json("blocks.json"); labels[id] = label.trim(); await this.writeJson("blocks.json", labels); }
     return this.get(id);

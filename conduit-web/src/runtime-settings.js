@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import path from "node:path";
+import { writePrivateJson } from "./private-file.js";
 
 const DEFAULTS = {
   maxLiveProcesses: 12,
@@ -50,10 +50,7 @@ export class RuntimeSettingsStore {
     this.settings = normalizeRuntimeSettings({ ...this.settings, ...patch }, this.settings);
     // One write at a time, each of the state as it then is (two at once shared the temporary file).
     const write = (this.writing || Promise.resolve()).then(async () => {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const temp = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temp, `${JSON.stringify(this.settings, null, 2)}\n`, "utf8");
-      await fs.rename(temp, this.filePath);
+      await writePrivateJson(this.filePath, this.settings);
     });
     this.writing = write.catch(() => {});
     await write;

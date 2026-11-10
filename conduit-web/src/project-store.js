@@ -7,6 +7,7 @@ import { sessionDirectoryFor } from "./session-store.js";
 import { assertAllowedPath, assertSafeWorkspaceRoot, isPathInside, resolveExistingDirectory, resolveNewWorkspaceDirectory } from "./workspace-paths.js";
 import { ensureConduitRoot } from "./owned-paths.js";
 import { terminate } from "./server/effect-process.js";
+import { writePrivateJson } from "./private-file.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const ORIGINS = new Set(["managed", "linked", "created", "cloned", "node"]);
@@ -30,28 +31,7 @@ async function readJson(file, fallback = null) {
   }
 }
 
-export async function writeJsonAtomically(file, value) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const serialized = `${JSON.stringify(value, null, 2)}\n`;
-  const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.part`);
-  let handle;
-  try {
-    handle = await fs.open(temporary, "wx", 0o600);
-    await handle.writeFile(serialized, "utf8");
-    await handle.sync();
-    await handle.close();
-    handle = null;
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await handle?.close().catch(() => {});
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
-}
-
-async function writeJson(file, value) {
-  await writeJsonAtomically(file, value);
-}
+const writeJson = writePrivateJson;
 
 function cloneError(code, message) {
   return Object.assign(new Error(message), { code });

@@ -4,7 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { ProjectStore, runCommand, writeJsonAtomically } from "../src/project-store.js";
+import { writePrivateJson } from "../src/private-file.js";
+import { ProjectStore, runCommand } from "../src/project-store.js";
 import { sessionDirectoryFor } from "../src/session-store.js";
 
 async function waitForReady(store, id) {
@@ -20,9 +21,9 @@ test("atomic catalogue replacement preserves the prior catalogue when serializat
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-atomic-catalogue-"));
   const catalogFile = path.join(root, "data", "conduit.json");
   const previous = { version: 2, projects: [{ id: "project_chat", slug: "chat" }] };
-  await writeJsonAtomically(catalogFile, previous);
+  await writePrivateJson(catalogFile, previous);
 
-  await assert.rejects(writeJsonAtomically(catalogFile, { version: 2, invalid: BigInt(1) }), TypeError);
+  await assert.rejects(writePrivateJson(catalogFile, { version: 2, invalid: BigInt(1) }), TypeError);
 
   assert.deepEqual(JSON.parse(await fs.readFile(catalogFile, "utf8")), previous);
   assert.deepEqual(await fs.readdir(path.dirname(catalogFile)), ["conduit.json"]);

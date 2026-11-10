@@ -7,6 +7,7 @@ import { harnessIdForImplementation, piBackendFor, templateBackend, withPiCompat
 import { conduitPiSessionFile } from "./backend-session.js";
 import { placeOf } from "./place.js";
 import { mapLimit } from "./server/effect-concurrency.js";
+import { writePrivateFile } from "./private-file.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
 const COMPLETED_ATTACHMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}--.+$/i;
@@ -608,12 +609,7 @@ export class ChatStore {
       else chat.backend ||= templateBackend({ id: chat.templateId || "assistant", version: chat.templateVersion });
     }
     const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
-    const write = async () => {
-      await fs.mkdir(path.dirname(this.file), { recursive: true });
-      const temporary = `${this.file}.tmp`;
-      await fs.writeFile(temporary, value, "utf8");
-      await fs.rename(temporary, this.file);
-    };
+    const write = () => writePrivateFile(this.file, value);
     // A failed write fails its own flush, not every one after it: the next
     // flush writes the whole registry again, so it repairs what this one lost.
     this.writeQueue = this.writeQueue.then(write, write);

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceHost } from "./workspace-inspector.js";
 import { mapLimit } from "./server/effect-concurrency.js";
+import { writePrivateJson } from "./private-file.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_TURNS_PER_CHAT = 50;
@@ -351,9 +352,5 @@ export class TurnCheckpointStore {
     return read.filter((checkpoint) => checkpoint?.version === 2 && typeof checkpoint.tree === "string" && (!root || checkpoint.workingRoot === root));
   }
 
-  async #write(file, value) {
-    const temporary = `${file}.${crypto.randomUUID()}.tmp`;
-    await fs.writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600 });
-    await fs.rename(temporary, file);
-  }
+  #write(file, value) { return writePrivateJson(file, value, { compact: true }); }
 }

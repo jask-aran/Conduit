@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { turnTime } from "../harnesses/transcript-ops.js";
+import { writePrivateJson } from "../private-file.js";
 
 const CHARS_PER_TOKEN = 4;
 const TURNS_KEPT = 500;
@@ -75,13 +76,7 @@ export class TurnTimings {
     held.delete(promptId);
     held.set(promptId, timing);
     while (held.size > TURNS_KEPT) held.delete(held.keys().next().value);
-    const write = async () => {
-      await fs.mkdir(this.root, { recursive: true });
-      const file = this.fileFor(chatId);
-      const temporary = `${file}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, JSON.stringify({ version: 1, chatId, turns: Object.fromEntries(held) }));
-      await fs.rename(temporary, file);
-    };
+    const write = () => writePrivateJson(this.fileFor(chatId), { version: 1, chatId, turns: Object.fromEntries(held) }, { compact: true });
     const previous = this.writes.get(chatId) || Promise.resolve();
     const next = previous.then(write, write).catch((error) => console.error("Could not keep turn timings", error));
     this.writes.set(chatId, next);

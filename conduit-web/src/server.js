@@ -15,6 +15,7 @@ import express from "express";
 import compression from "compression";
 import { WebSocketServer } from "ws";
 import { loadConfig, resolveTemplate } from "./config.js";
+import { holdPrivately } from "./private-file.js";
 import { TerminalPasteStore } from "./terminal-paste-store.js";
 import { PiModelCatalog, resolveThinkingLevel } from "./pi-model-catalog.js";
 import { scriptedProvider } from "./server/scripted-model.js";
@@ -119,6 +120,7 @@ import { ServerLifetime } from "./server/server-lifetime.js";
 import { createClientBundle } from "./server/client-bundle.js";
 
 const config = loadConfig();
+await holdPrivately(config.dataRoot);
 const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn-checkpoints"));
 void turnCheckpoints.sweep().catch((error) => console.warn("Could not clear old turn checkpoints", error.message));
 const projects = new ProjectStore(config);

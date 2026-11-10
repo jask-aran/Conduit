@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writePrivateJson } from "./private-file.js";
 
 /**
  * Composer drafts and parked prompts. Drafts are written constantly and evict
@@ -112,10 +113,7 @@ export class DraftStore {
   // rename() calls onto the same path.
   async #persist() {
     const write = this.writing.then(async () => {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const temporary = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, `${JSON.stringify(this.document, null, 2)}\n`, "utf8");
-      await fs.rename(temporary, this.filePath);
+      await writePrivateJson(this.filePath, this.document);
     });
     this.writing = write.catch(() => {});
     await write;

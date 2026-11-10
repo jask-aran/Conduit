@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import net from "node:net";
-import path from "node:path";
+import { writePrivateJson } from "../private-file.js";
 
 export const TOKEN_PERMISSIONS = [
   { key: "workers_scripts", type: "edit", label: "Workers Scripts Edit", scope: "account" },
@@ -61,12 +61,7 @@ export function publicHubUrl(value) {
 
 // Replace the file atomically with mode 0600, including older files with broader permissions.
 async function saveConfig(channel, config) {
-  await fs.mkdir(path.dirname(channel.file), { recursive: true });
-  const temporary = `${channel.file}.${crypto.randomUUID()}.tmp`;
-  try {
-    await fs.writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-    await fs.rename(temporary, channel.file);
-  } finally { await fs.unlink(temporary).catch(() => {}); }
+  await writePrivateJson(channel.file, config);
   await channel.reload();
 }
 

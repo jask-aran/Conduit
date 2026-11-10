@@ -4,6 +4,7 @@ import { watch } from "node:fs";
 import path from "node:path";
 import { formatKeybindings, parseKeybindings } from "./keybindings.js";
 import { readUiPreferences, UI_PREFERENCE_KEYS } from "./preferences-api.js";
+import { writePrivateFile, writePrivateJson } from "./private-file.js";
 
 const DEFAULTS = {
   defaultTemplateId: "assistant",
@@ -256,19 +257,14 @@ export class PreferencesStore {
     // One write at a time, each of the state as it then is: two saves at once shared the temporary file, and the
     // second rename found it gone.
     const write = (this.writing || Promise.resolve()).then(async () => {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
       if (keybindings && (this.preferences.shortcutOverrides || await exists(this.keybindingsFile))) {
-        const temp = `${this.keybindingsFile}.${process.pid}.tmp`;
         // Remembered, so the watcher knows its own save: read back, a stroke's key is rebuilt from its code and would
         // differ from what the client recorded, replacing it and telling every client of a change that is not one.
         this.keybindingsWritten = formatKeybindings(this.preferences.shortcutOverrides || {});
-        await fs.writeFile(temp, this.keybindingsWritten, "utf8");
-        await fs.rename(temp, this.keybindingsFile);
+        await writePrivateFile(this.keybindingsFile, this.keybindingsWritten);
         this.keybindingErrors = [];
       }
-      const temp = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temp, `${JSON.stringify({ ...this.preferences, shortcutOverrides: undefined }, null, 2)}\n`, "utf8");
-      await fs.rename(temp, this.filePath);
+      await writePrivateJson(this.filePath, { ...this.preferences, shortcutOverrides: undefined });
     });
     this.writing = write.catch(() => {});
     await write;

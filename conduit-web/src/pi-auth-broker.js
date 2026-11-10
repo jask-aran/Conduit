@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { writePrivateJson } from "./private-file.js";
 
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const COMPLETED_ATTEMPT_TTL_MS = 60 * 1000;
@@ -27,17 +28,7 @@ async function readAuthFile(file) {
   }
 }
 
-async function writeAuthFile(file, data) {
-  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  try {
-    await fs.writeFile(temporary, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
-    await fs.chmod(temporary, 0o600);
-    await fs.rename(temporary, file);
-  } finally {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-  }
-}
+const writeAuthFile = (file, data) => writePrivateJson(file, data);
 
 function attemptId() {
   return crypto.randomBytes(18).toString("base64url");

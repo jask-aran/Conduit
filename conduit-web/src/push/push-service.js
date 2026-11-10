@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { encrypt, generateVapidKeys, vapidAuthorization } from "./web-push.js";
+import { writePrivateJson } from "../private-file.js";
 
 function invalid(code) {
   return Object.assign(new Error(code), { status: 400, code });
@@ -27,15 +28,7 @@ export class PushService {
     return result;
   }
 
-  async save() {
-    const temp = `${this.file}.${crypto.randomUUID()}.tmp`;
-    try {
-      await fs.writeFile(temp, JSON.stringify(this.state), { mode: 0o600, flag: "wx" });
-      await fs.rename(temp, this.file);
-    } finally {
-      await fs.unlink(temp).catch((error) => { if (error.code !== "ENOENT") throw error; });
-    }
-  }
+  save() { return writePrivateJson(this.file, this.state, { compact: true }); }
 
   load() {
     return this.serialize(async () => {

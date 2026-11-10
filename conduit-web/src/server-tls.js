@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writePrivateJson } from "./private-file.js";
 
 /*
  * A certificate for the connection, so the connection can be the proof.
@@ -296,9 +297,8 @@ export class ServerLeaf {
 
   async write() {
     const { certificate, privateKey, hosts, notAfter, attestedBy } = this.material;
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     // The private half of a key that proves this machine's identity on the
     // wire. Same footing as `identity.json`, and for the same reason.
-    await fs.writeFile(this.filePath, `${JSON.stringify({ certificate, privateKey, hosts, notAfter, attestedBy }, null, 2)}\n`, { mode: 0o600 });
+    await writePrivateJson(this.filePath, { certificate, privateKey, hosts, notAfter, attestedBy });
   }
 }

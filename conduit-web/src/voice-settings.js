@@ -1,6 +1,6 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writePrivateJson } from "./private-file.js";
 import {
   VOICE_EXECUTION_CATALOG,
   artifactForProfile,
@@ -104,15 +104,7 @@ async function readJson(filePath) {
   }
 }
 
-async function writeJson(filePath, value) {
-  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
-  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  try {
-    await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    await fs.chmod(temporary, 0o600);
-    await fs.rename(temporary, filePath);
-  } finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
-}
+const writeJson = writePrivateJson;
 
 function credentialRecord(value) {
   if (!isObject(value)) return null;

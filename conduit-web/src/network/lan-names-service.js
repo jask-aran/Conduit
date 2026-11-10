@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { issueCertificate } from "./acme.js";
 import { cloudflareToken, cloudflareCli } from "./cloudflare.js";
+import { writePrivateFile, writePrivateJson } from "../private-file.js";
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const FILES = ["nodes-cert.pem", "nodes-key.pem", "lan-cert.pem", "lan-key.pem"];
@@ -32,17 +33,10 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
   let cfPending = null;
   const safeMessage = (value, token = config?.token) => String(value).split(token || "\0").join("[redacted]");
 
-  async function atomic(file, content, mode = 0o600) {
-    const temp = `${file}.${crypto.randomUUID()}.tmp`;
-    try {
-      await fs.writeFile(temp, content, { mode, flag: "wx" });
-      await fs.rename(temp, file);
-    } finally { await fs.rm(temp, { force: true }); }
-  }
   async function save(settings = config) {
     await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
     await fs.chmod(configDir, 0o700);
-    await atomic(configFile, `${JSON.stringify(settings, null, 2)}\n`);
+    await writePrivateJson(configFile, settings);
   }
   async function certificates() {
     const found = await Promise.all([["hub", "lan"], ["nodes", "nodes"]].map(async ([kind, prefix]) => {
@@ -133,7 +127,7 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
           await save();
           for (const [suffix, content] of [["cert", result.certificate], ["key", result.privateKey]]) {
             const file = `${prefix}-${suffix}.pem`;
-            await atomic(path.join(tlsDir, file), content);
+            await writePrivateFile(path.join(tlsDir, file), content);
             config.files = [...new Set([...(config.files || []), file])];
             await save();
           }

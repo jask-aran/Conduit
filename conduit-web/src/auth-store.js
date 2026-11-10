@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { writePrivateFile } from "./private-file.js";
 
 // OWASP's current scrypt cost (2^17, r 8, p 1; issue #53). A hash keeps the cost it was made with: an older one still
 // verifies, and is made at this cost when the password is next set.
@@ -345,12 +346,8 @@ export class AuthStore {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     if (await diskRevision(this.filePath) !== expectedRevision) throw conflictError();
     if (this.afterRevisionCheck) await this.afterRevisionCheck();
-    const nonce = crypto.randomBytes(6).toString("hex");
-    const temporary = `${this.filePath}.${process.pid}.${nonce}.tmp`;
     const content = `${JSON.stringify(data, null, 2)}\n`;
-    await fs.writeFile(temporary, content, "utf8");
-    await fs.chmod(temporary, 0o600);
-    await fs.rename(temporary, this.filePath);
+    await writePrivateFile(this.filePath, content);
     this.revision = revisionFor(content);
     this.signature = await fileSignature(this.filePath);
     this.lastReadMs = Date.now();

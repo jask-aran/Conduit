@@ -10,6 +10,7 @@ import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION, servedCall } from
 import { capabilitiesOf, helloCapabilities, keptCapabilities, NODE_TARGETS } from "../device-api.js";
 import { channelKey, DIRECT_PTY_TTL_MS, DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
+import { writePrivateJson } from "../private-file.js";
 
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
 
@@ -111,9 +112,7 @@ export class NodeHub extends EventEmitter {
    */
   save() {
     this.saving = (this.saving || Promise.resolve()).then(async () => {
-      const temporary = `${this.file}.${process.pid}.tmp`;
-      await fs.writeFile(temporary, `${JSON.stringify({ version: 2, devices: this.devices, hubDevice: this.hubDevice, nodes: this.records }, null, 2)}\n`, { mode: 0o600 });
-      await fs.rename(temporary, this.file);
+      await writePrivateJson(this.file, { version: 2, devices: this.devices, hubDevice: this.hubDevice, nodes: this.records });
     });
     const done = this.saving;
     this.saving = done.catch((error) => console.error("Could not save paired devices", error));
