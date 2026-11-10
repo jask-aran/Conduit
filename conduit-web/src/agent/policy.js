@@ -446,7 +446,6 @@ async function threadFor(runtime, api) {
  * Helper models: Review, else the naming model), what it cannot allow asked of the person as before (an ask, a push,
  * Allow resumes it). No review model, or any failure of it: the person is asked, as without the approver.
  */
-const readOutside = new Map();
 const OUTSIDE_MS = 15 * 60_000;
 const approvers = new WeakMap();
 function approverOf(runtime) {
@@ -481,7 +480,7 @@ function approverOf(runtime) {
     // log's (person-words.js), never a prompt the hub generated; the turn's trigger must be theirs (personStarted).
     untrusted: async (api, context) => {
       if ((await runtime.agent.threadOf(api.conversationId))?.role === "run") return true;
-      const read = readOutside.get(String(api.conversationId)) || 0;
+      const read = (await runtime.agent.state()).readOutside?.[api.conversationId] || 0;
       if (Date.now() - read >= OUTSIDE_MS) return false;
       const asked = (await personWords(runtime.agent, api.conversationId, { messages: 1 })).messages[0];
       const theirs = asked && Date.now() - Date.parse(asked.at) < OUTSIDE_MS
@@ -526,9 +525,20 @@ function guard(runtime, tools, confine) {
       // What a connector read is outside content (mail, events, files): for a while, an outward action from this
       // conversation is the person's to approve (Rule of Two, untrustedTurn).
       // A script's reads cannot be told from its writes, so a script counts as reading.
-      if (tool.name.startsWith("mcp__") && !result?.isError && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute")) readOutside.set(String(api.conversationId), Date.now());
-      if (privateRead(tool.name, args) && !result?.isError) {
-        await api.commit(async (tx) => { (await tx.doc(AgentDoc)).tainted[api.conversationId] = true; }, context);
+      // Both marks are kept in the agent's document, so a turn resumed after a restart still reads as having read them.
+      const outside = tool.name.startsWith("mcp__") && !result?.isError && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute");
+      const secret = privateRead(tool.name, args) && !result?.isError;
+      if (outside || secret) {
+        await api.commit(async (tx) => {
+          const doc = await tx.doc(AgentDoc);
+          const now = Date.now();
+          if (outside) {
+            const read = doc.readOutside ||= {};
+            for (const [id, at] of Object.entries(read)) if (now - at >= OUTSIDE_MS) delete read[id];
+            read[api.conversationId] = now;
+          }
+          if (secret) doc.tainted[api.conversationId] = true;
+        }, context);
       }
       return result;
     } })));

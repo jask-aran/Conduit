@@ -13,22 +13,21 @@ import { defineDoc } from "@earendil-works/pi-durable";
  *   routine's `notes` task shows them so they are not proposed again (routines.js).
  * - `routineRuns`: task id → active routine lifecycle, including its guarded fork (routine-task.js).
  * - `routineState`: name → last firing, successful run, full completion and failure.
- * - `lastCompactionAt`: last successful routine compaction.
  * - `spend`: `YYYY-MM-DD` (the agent's time zone) → USD its runs spent (subagents.js reporter).
  * - `notices`: what the attention list says beside the work itself, newest last, at most 20 (agent.js).
  * - `tainted`: conversation id → true once it read private data (policy.js).
+ * - `readOutside`: conversation id → when it last read a connector (outside content), kept while it counts (policy.js).
  * - `rules`: id → saved outward approval (policy.js).
  * - `approvalPolicy`: the person's standing approval policy, or null for the starter (approval-policy.js).
  * - `inbox`: id → what a run reported, waiting for the heartbeat or the person (inbox.js): the index only, each
- *   entry's text a document of its own (InboxText) and then its file (inbox-files.js); `heartbeatSeenAt` the
- *   newest entry a beat has looked at, `heartbeatSweptAt` its last pass over HEARTBEAT.md (schedule.js).
+ *   entry's text a document of its own (InboxText) and then its file (inbox-files.js).
  * - `next`: the counter every part numbers its ids from (`sc-3`, `w-4`, `p-5`).
  */
 export const AgentDoc = defineDoc({
   checkpointWhen: () => false, kind: "conduit.agent",
   version: 1,
   scope: "session",
-  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, rules: {}, approvalPolicy: null, asks: {}, inbox: {}, next: 1 }),
+  initial: () => ({ home: null, schedules: {}, watches: {}, hooks: {}, proposals: {}, spend: {}, notices: [], tainted: {}, readOutside: {}, rules: {}, approvalPolicy: null, asks: {}, inbox: {}, next: 1 }),
 });
 
 /** A new id for one part of the agent's document: `${prefix}-${n}`. Call inside the commit that stores it. */

@@ -39,10 +39,21 @@ export class PushService {
         this.state = { vapid: generateVapidKeys(), subscriptions: [] };
         await this.save();
       }
+      // A file from before answer tokens has no key yet: it gets one, kept beside the VAPID keys.
+      if (!this.state.answerKey) {
+        this.state.answerKey = crypto.randomBytes(32).toString("base64url");
+        await this.save();
+      }
     });
   }
 
   publicKey() { return this.state.vapid.publicKey; }
+
+  /**
+   * The token an approval's notification answers it with (POST /v0/push/answer/:token): derived from the ask's id and
+   * the hub's answer key, so it still works after a restart. The ask's own status makes an answer single-use.
+   */
+  answerToken(askId) { return crypto.createHmac("sha256", this.state.answerKey).update(`answer:${askId}`).digest("base64url"); }
 
   list() {
     return this.state.subscriptions.map(({ id, kind, label, endpoint, createdAt, lastOkAt, lastError }) =>

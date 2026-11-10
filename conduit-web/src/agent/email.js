@@ -168,7 +168,12 @@ export class EmailChannel {
     const folder = this.agent.folder;
     const read = await readMail(raw, { folder });
     const { mail, messageId, at, dir, attachments } = read;
-    if (this.log.has(`email:${messageId}`)) return;
+    // Kept but not yet taken by jbot's thread (the hub stopped in between): delivered now, as the poll found it again.
+    if (this.log.has(`email:${messageId}`)) {
+      const kept = this.log.messages.find((message) => message.id === `email:${messageId}`);
+      if (kept?.delivery?.state === "pending") await this.deliver(kept);
+      return;
+    }
     const references = String(mail.references || "").split(/\s+/).filter(Boolean);
     const earlier = [...references, mail.inReplyTo].filter(Boolean);
     const room = this.log.messages.find((message) => message.channel === "email" && earlier.includes(message.native?.messageId))?.room || roomOf(references[0] || messageId);
@@ -199,7 +204,7 @@ export class EmailChannel {
     const wakes = this.wakes(mail.from?.address);
     const message = this.log.append({ id: `email:${messageId}`, at, channel: "email", room, direction: "in", sender: person ? "person" : "other",
       title: bare(mail.subject) || "(no subject)", body: body || "(no text)", prompt, native, conversationId: home.conversationId,
-      ...(wakes ? {} : { delivery: { state: "held", at } }) });
+      delivery: { state: wakes ? "pending" : "held", at } });
     // Not from someone who wakes jbot: it stays in the mail room, held, where the person sees it (Messages). It is mail to
     // jbot, not context for the heartbeat, so it never reaches the context inbox; a routine on `trigger: { on:
     // held-mail }` is woken, and its held-mail task reads it.
@@ -208,8 +213,15 @@ export class EmailChannel {
         .catch((error) => console.warn("A held-mail routine could not start", error.message));
       return;
     }
-    try { await this.agent.chatHost.say(home.chat.id, prompt); }
-    catch (error) { this.log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } })); }
+    await this.deliver(message);
+  }
+
+  /** An email in to jbot's home thread: pending until the thread takes it, then sent, or failed when it will not. */
+  async deliver(message) {
+    try {
+      await this.agent.chatHost.say((await this.agent.home()).chat.id, message.prompt);
+      this.log.update(message.id, () => ({ delivery: { state: "sent", at: new Date().toISOString() } }));
+    } catch (error) { this.log.update(message.id, () => ({ delivery: { state: "failed", at: new Date().toISOString(), error: error?.message || String(error) } })); }
   }
 
   /** Whether jbot may write to a room without asking: a room of the person's own, never one with anyone else in it. */

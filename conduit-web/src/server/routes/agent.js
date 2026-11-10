@@ -600,6 +600,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (problem) return { problem };
       item.title = String(next.title).slice(0, 80);
       item.everyMinutes = next.everyMinutes;
+      // A new source is a new feed: what the old one saw says nothing of it, and its first tick only learns what is there.
+      if (JSON.stringify(next.source) !== JSON.stringify(item.feed.source)) Object.assign(item.feed, { seen: [], primed: false });
       item.feed.source = next.source;
       if (["fyi", "attention", "urgent"].includes(level)) item.feed.level = level;
       item.feed.lastError = null;
@@ -665,7 +667,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       const tainted = { ...doc.tainted };
       delete tainted[previous?.conversationId];
       Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
-      delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
     });
     // Working on and Recent start empty, numbered from one; nothing from before is read into them again.
     await (await agent.runtime.open()).commit(async (tx) => Object.assign(await tx.doc(WorkLog), { items: {}, counters: {}, seeded: true }), agent.context);

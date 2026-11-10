@@ -113,14 +113,15 @@ export class PersistentAgent {
    */
   /*
    * A subagent's anchor only holds its run open, so one the runtime parked after too many unclean exits (pi-durable's
-   * restart limit) is safe to start again, and while it is parked its run's reports cannot be delivered. On load, every
-   * parked anchor runs again; other parked work waits for the person (the agent page's Needs you).
+   * restart limit) is safe to start again, and while it is parked its run's reports cannot be delivered. A schedule's
+   * clock is the same: parked, it still reads as live (schedule.js keeps it) and never fires again. On load, every
+   * parked anchor and clock runs again; other parked work waits for the person (the agent page's Needs you).
    */
   async recoverAnchors() {
     const harness = await this.runtime.open();
     const { tasks } = await harness.inspect(this.context);
     for (const task of tasks) {
-      if (task.record.kind === "conduit.subagent-anchor" && task.state.kind === "blocked" && task.state.reason === "restart_limit") {
+      if (["conduit.subagent-anchor", "conduit.agent-clock"].includes(task.record.kind) && task.state.kind === "blocked" && task.state.reason === "restart_limit") {
         await harness.retryTask(task.record.id, this.context).catch(() => {});
       }
     }

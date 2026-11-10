@@ -1,5 +1,4 @@
 import { headlineOf, inQuietHours, plainText } from "./inbox.js";
-import { mintAnswerToken } from "./answer-tokens.js";
 
 /**
  * What of the agent reaches the person's devices (docs/plans/persistent-agent.md, "Reaching you"): a run's report
@@ -57,7 +56,7 @@ export function agentNotifier({ agent, push, hubId, hubName = () => null }) {
       hub: hubId(),
       // Which hub (a network) it came from: one phone can hear from several (conduit-dev, conduit-local).
       ...(hubName() ? { hubName: hubName() } : {}),
-      ...(approval ? { answer: { token: mintAnswerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
+      ...(approval ? { answer: { token: push.answerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",
     }, { urgency: urgent || approval ? "high" : "normal", topic: tag, ttl: approval ? 86400 : 43200 });
     const label = (id) => devices.find((device) => device.id === id)?.label || "a device";

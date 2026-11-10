@@ -1,4 +1,4 @@
-import { answerToken, spendAnswerToken } from "../../agent/answer-tokens.js";
+import { timingSafeEqual } from "node:crypto";
 import { decide } from "../../agent/asks.js";
 
 /**
@@ -14,12 +14,13 @@ export function registerPushRoutes(app, { push, hubId, agent }) {
     try {
       const { choice } = request.body || {};
       if (choice !== "allow" && choice !== "always" && choice !== "deny") return response.status(400).end();
-      const entry = answerToken(request.params.token);
-      if (!entry || !agent) return response.status(404).end();
-      // A choice the ask cannot take (Always with no rule) leaves the token, so its other answers still work.
-      try { await decide(agent, entry.askId, choice); }
-      catch (error) { if (error.status !== 400) spendAnswerToken(request.params.token); throw error; }
-      spendAnswerToken(request.params.token);
+      if (!agent) return response.status(404).end();
+      // The token is the ask's (push.answerToken); deciding it once is what makes it single-use (decide answers 409 after).
+      const token = Buffer.from(String(request.params.token));
+      const matches = (id) => { const mine = Buffer.from(push.answerToken(id)); return mine.length === token.length && timingSafeEqual(mine, token); };
+      const askId = Object.keys((await agent.state()).asks || {}).find(matches);
+      if (!askId) return response.status(404).end();
+      await decide(agent, askId, choice);
       return response.status(204).end();
     } catch (error) { if ([400, 404, 409].includes(error.status)) return response.status(error.status).end(); next(error); }
   });

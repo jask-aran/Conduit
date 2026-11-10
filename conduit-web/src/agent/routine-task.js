@@ -80,6 +80,16 @@ export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outc
 
 /** A routine firing's item in the work log, by its task. */
 const workId = (taskId) => `routine:${taskId}`;
+/**
+ * The child a before/after step waits on is this routine's to abort only when this routine started it (its key is
+ * this one's step key): a step that joined a run already going leaves that run to whoever started it.
+ */
+const startedChild = (state, record) => {
+  const key = state?.routineRuns?.[record?.childId]?.key || "";
+  return key.startsWith(`${record.key}:`) && /^(before|after):\d+$/.test(key.slice(record.key.length + 1));
+};
+/** A run stopped by the person (or a reset) ends the routine as stopped, not as failing. */
+const STOPPED = "Routine run was stopped.";
 
 async function beforeDeadline(api, startedAt, pending) {
   let disarm;
@@ -109,27 +119,29 @@ function routineNotice(doc, title, error, now) {
 export function routineTask(runtime) {
   const get = async (task, api, context) => (await api.snapshot(AgentDoc, context))?.routineRuns?.[task.id];
   const finish = async (task, api, context, error) => {
+    const stopped = error === STOPPED;
     await api.commit(async (tx) => {
       const doc = await tx.doc(AgentDoc);
       const record = doc.routineRuns?.[task.id];
-      await closeWork(tx, workId(task.id), error ? "failed" : "finished", api.now(), error ? { summary: error } : {});
+      await closeWork(tx, workId(task.id), stopped ? "stopped" : error ? "failed" : "finished", api.now(), error && !stopped ? { summary: error } : {});
       if (record) {
         const state = doc.routineState[record.routine.name];
-        if (error) {
+        if (error && !stopped) {
           state.lastError = error;
           routineNotice(doc, record.routine.title, error, api.now());
         }
-        else state.finishedAt = new Date(api.now()).toISOString();
+        else if (!error) state.finishedAt = new Date(api.now()).toISOString();
         delete doc.routineRuns[task.id];
       }
       return terminal(error);
     }, context);
   };
   const stop = async (task, api, context) => {
-    const record = await get(task, api, context);
+    const state = await api.snapshot(AgentDoc, context);
+    const record = state?.routineRuns?.[task.id];
     if (record?.conversationId) await (await runtime.harness.conversation(record.conversationId, context))?.abort(context);
     if (record?.run?.anchor) await runtime.harness.abortTask(record.run.anchor, context);
-    if (record?.childId) await runtime.harness.abortTask(record.childId, context);
+    if (record?.childId && startedChild(state, record)) await runtime.harness.abortTask(record.childId, context);
     if (record?.compactionId) await runtime.harness.abortTask(record.compactionId, context);
     if (record?.conversationId) {
       const ledger = await api.snapshot(UsageDoc, record.conversationId, context);
@@ -195,8 +207,9 @@ export function routineTask(runtime) {
         catch (failure) {
           if (api.signal.aborted || context.abortSignal?.aborted) throw failure;
           error = failure?.message || String(failure);
-          const current = await get(task, api, context);
-          if (current?.childId) await runtime.harness.abortTask(current.childId, context);
+          const state = await api.snapshot(AgentDoc, context);
+          const current = state?.routineRuns?.[task.id];
+          if (current?.childId && startedChild(state, current)) await runtime.harness.abortTask(current.childId, context);
         }
         await advance(task, api, context, "before", index, error);
       },
@@ -286,6 +299,7 @@ export function routineTask(runtime) {
           const done = await beforeDeadline(api, record.startedAt, api.waitForTask(record.run.reporter, context));
           if (!done) throw new Error("Routine run exceeded the 30-minute limit.");
           const report = done.state.outcome?.result;
+          if (done.state.outcome?.status === "aborted") throw new Error(STOPPED);
           if (done.state.outcome?.status !== "completed" || report?.status !== "finished") throw new Error("Routine run did not finish successfully.");
           summary = report.answer;
         }
@@ -383,7 +397,7 @@ export function routineTask(runtime) {
             compacted = placed?.status === "done";
           }
           if (!compacted) throw new Error("Compaction did not place a summary.");
-          await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); const at = new Date(api.now()).toISOString(); doc.lastCompactionAt = at;
+          await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); const at = new Date(api.now()).toISOString();
             doc.routineState ||= {}; (doc.routineState[record.routine.name] ||= {}).compaction = { at, done: true };
             await noteWork(tx, workId(task.id), { compaction: { at, done: true } }); }, context);
         }

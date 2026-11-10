@@ -117,9 +117,11 @@ function capped(items) {
 
 /** Pending notes are identified by their call provenance, never by their timestamps. */
 async function notesTask(agent, task, cursor, state) {
-  const consumed = new Set(cursor.calls || []);
-  const notes = (await folderText(agent, NOTES_FILE)).split(/\r?\n/).map((line) => NOTE_LINE.exec(line)).filter(Boolean)
-    .filter((match) => !consumed.has(match[4]))
+  const lines = (await folderText(agent, NOTES_FILE)).split(/\r?\n/).map((line) => NOTE_LINE.exec(line)).filter(Boolean);
+  // Only the calls still in the file are kept: a note cleared from it needs no cursor.
+  const present = new Set(lines.map((match) => match[4]));
+  const consumed = new Set((cursor.calls || []).filter((call) => present.has(call)));
+  const notes = lines.filter((match) => !consumed.has(match[4]))
     .map((match) => ({ call: match[4], text: `- ${match[1]} | ${match[2]} | ${match[3]}` }));
   const { shown, more } = capped(notes);
   const declined = (state.declined || []).slice(-DECLINED_SHOWN).reverse()

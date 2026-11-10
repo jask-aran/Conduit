@@ -22,7 +22,8 @@ import { headlineOf } from "./inbox.js";
  * sent to never depends on settings or a room changed after it was written; carried, it is sent or failed. One still
  * pending when the log loads was being carried when the hub stopped: it may or may not have gone, so it is uncertain,
  * never sent again on its own. A message in is sent (it reached jbot's thread) or, when the thread would not take it,
- * failed; or `held`, an email in from someone who does not wake jbot (email.js), which stays held: the person sees it in
+ * failed; an email in is pending until its thread takes it, and stays pending across a restart, so the next poll
+ * delivers it again (email.js); or `held`, an email in from someone who does not wake jbot (email.js), which stays held: the person sees it in
  * its mail room and the held-mail routine reads it there (mail-task.js).
  */
 const APP = { channel: "app", room: "app" };
@@ -42,7 +43,7 @@ export class MessageLog {
     this.messages = text.split("\n").filter(Boolean).map((line) => JSON.parse(line));
     this.ids = new Set(this.messages.map((message) => message.id));
     // Pending across a restart: the send was cut off at an unknown point, so whether it arrived is not known.
-    const cut = this.messages.filter((message) => message.delivery?.state === "pending");
+    const cut = this.messages.filter((message) => message.delivery?.state === "pending" && message.direction !== "in");
     for (const message of cut) message.delivery = { ...message.delivery, state: "uncertain", at: new Date().toISOString(), since: message.delivery.at };
     if (cut.length) this.persist();
     return this;
@@ -81,9 +82,10 @@ export class MessageLog {
       try { destination = channel ? channel.destination?.(message) || null : null; }
       catch (error) { unsent = error; }
     }
-    // Its delivery starts here and only `held` is the caller's to say; a delivery passed for anything else is not kept.
+    // Its delivery starts here and only `held`, or `pending` for a message in, is the caller's to say; a delivery passed
+    // for anything else is not kept.
     const { delivery: given, ...rest } = message;
-    const delivery = away ? { state: "pending", at: message.at } : given?.state === "held" ? given : { state: "sent", at: message.at };
+    const delivery = away ? { state: "pending", at: message.at } : given?.state === "held" || (given?.state === "pending" && message.direction === "in") ? given : { state: "sent", at: message.at };
     const written = { ...APP, notify: "none", ...(destination ? { destination } : {}), ...rest, delivery };
     this.messages.push(written);
     this.ids.add(written.id);
