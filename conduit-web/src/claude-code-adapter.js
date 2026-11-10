@@ -1046,6 +1046,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     if (!record.active) return;
     const reported = result.is_error || (result.subtype && result.subtype !== "success") ? "failed" : result.subtype ? "complete" : null;
     const ended = outcomeOf(reported, record.stopping);
+    // Whether the person asked for a stop, however the turn then ended: what is queued behind it goes by this.
+    const halted = record.stopping;
     const stopped = ended === "interrupted";
     const failed = ended === "failed";
     const last = record.stepOrder.at(-1);
@@ -1068,10 +1070,11 @@ export class ClaudeCodeAdapter extends EventEmitter {
     endTurn(record, outcome);
     this.publish(record, turnEnded(record, outcome));
     this.emit("settled", { record, completed: !stopped && !failed });
-    // A stop takes the steers with it; a turn that ended by itself leaves them to open the next.
-    if (stopped && record.steering.length) { record.steering = []; this.publishQueue(record); }
+    // A stop takes the steers with it; a turn that ended by itself leaves them to open the next. A turn that finished
+    // as the stop arrived is complete, but the person still said stop: nothing queued runs on after it.
+    if ((halted || stopped) && record.steering.length) { record.steering = []; this.publishQueue(record); }
     void this.publishUsage(record, result);
-    if (!stopped && !record.steering.length && record.followUp.length) void this.flushFollowUp(record);
+    if (!halted && !stopped && !record.steering.length && record.followUp.length) void this.flushFollowUp(record);
   }
 
   failPrompt(record, cause) {
