@@ -1099,11 +1099,12 @@ and stylesheet), and a piece whose root has no class of its own says its name wi
 | --- | --- | --- |
 | `POST /v0/feedback/marks` | `{ client }` (the tab, `connection/tab`) | 201, `{ id }`; the hub keeps what it knows now |
 | `PUT /v0/feedback/marks/:id/screenshot` | a PNG, `image/png`, up to 32 MB | 204 |
+| `PUT /v0/feedback/marks/:id/areas/:n` | selection `n`'s own picture: a PNG, `image/png`, up to 32 MB | 204 |
 | `POST /v0/feedback/marks/:id/send` | `{ comments, screenshot, client }`, up to 4 MB | 201, `{ id, path }` |
 | `DELETE /v0/feedback/marks/:id` | None | 204 |
 
 A mark is kept in memory (twelve at most, six hours); sending to one that has gone returns 404
-`feedback_mark_gone`. Send writes `<data>/feedback/<id>/item.json` and `screenshot.png`, built in a dot-named
+`feedback_mark_gone`. Send writes `<data>/feedback/<id>/item.json`, `screenshot.png` and a `selection-<n>.png` for each selection (the area dragged round, or the piece with a margin, cut from the screenshot), built in a dot-named
 folder and renamed into place. The item's `read` field says how to read it. `src/server/feedback.js` keeps the
 last 200 log lines and the last 200 events (every record a chat log numbers, every runtime event) for the mark.
 An agent session takes items with `node scripts/conduit-feedback.mjs wait` (repository root; it blocks, takes the
