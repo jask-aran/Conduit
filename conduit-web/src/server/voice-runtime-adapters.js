@@ -1,10 +1,5 @@
-import { localVoiceBackend } from "./voice-backends/index.js";
-import {
-  artifactForProfile,
-  backendPathForProfile,
-  resolveVoiceExecutionProfile,
-  runtimeForProfile,
-} from "./voice-execution-catalog.js";
+import backend from "./voice-backends/transcribe-cpp.js";
+import { artifactForProfile, resolveVoiceExecutionProfile } from "./voice-execution-catalog.js";
 
 function runtimeAdapterError(code, message, status = 409) {
   return Object.assign(new Error(message), { code, status });
@@ -53,7 +48,6 @@ function createBatchPort({ profile, artifact, modelManager }) {
       signal,
       operationId,
       profileId: profile.id,
-      runtimeId: profile.runtimeId,
       sequence,
       startSample,
       endSample,
@@ -82,7 +76,7 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
   const open = async (input = {}) => {
     if (opened && stream) throw runtimeAdapterError("voice_stream_busy", "The selected StreamPort already has an active session");
     if (typeof openNative !== "function" && typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
-    const options = localVoiceBackend(profile.runtimeId).streamOptions(profile, input);
+    const options = backend.streamOptions(profile, input);
     stream = await (openNative ? openNative(options) : modelManager.stream(artifact.legacyModelId, options));
     if (!stream || typeof stream.feed !== "function" || typeof stream.finalize !== "function") {
       stream = null;
@@ -123,15 +117,6 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
       await close();
       return { cancelled: true, reason };
     },
-    // Legacy native opening remains available to callers that still expose the
-    // native session shape. Dictation uses openSession below.
-    openNative: async (options = {}) => {
-      if (typeof openNative !== "function") {
-        if (typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
-        return modelManager.stream(artifact.legacyModelId, localVoiceBackend(profile.runtimeId).streamOptions(profile, options));
-      }
-      return openNative(localVoiceBackend(profile.runtimeId).streamOptions(profile, options));
-    },
   };
   api.openSession = async (options = {}) => {
     await api.open(options);
@@ -162,19 +147,9 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
 export function createVoiceRuntimeAdapters({ profile, catalog, modelManager, openStream } = {}) {
   const resolvedProfile = resolveVoiceExecutionProfile(profile, catalog);
   const artifact = artifactForProfile(resolvedProfile, catalog);
-  const backendPath = backendPathForProfile(resolvedProfile, catalog);
-  const runtimeDefinition = runtimeForProfile(resolvedProfile, catalog);
-  if (backendPath.ports.batch !== true) throw runtimeAdapterError("voice_batch_port_unavailable", `Backend path ${backendPath.id} has no BatchPort`);
   const batch = createBatchPort({ profile: resolvedProfile, artifact, modelManager });
-  const stream = backendPath.ports.stream
+  const stream = artifact.execution === "live"
     ? createStreamPort({ profile: resolvedProfile, modelManager, artifact, openNative: openStream })
     : null;
-  return {
-    profile: resolvedProfile,
-    artifact,
-    backendPath,
-    runtime: runtimeDefinition,
-    batch,
-    stream,
-  };
+  return { profile: resolvedProfile, artifact, batch, stream };
 }

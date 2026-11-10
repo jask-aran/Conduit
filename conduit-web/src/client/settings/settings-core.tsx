@@ -204,25 +204,21 @@ const CLOUDFLARE_NEEDED = "Needs a Cloudflare Workers AI key and account ID: add
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
   artifactId: profile.artifactId,
-  runtimeId: profile.runtimeId,
   execution: profile.execution,
   segmentation: profile.segmentation,
 });
 const voiceArtifactsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => catalogue.artifacts.filter((artifact) => artifact.modelId === modelId);
-const voiceProfilesForBackend = (catalogue: VoiceExecutionCatalogueView, artifactId: string, runtimeId: string) => catalogue.profiles.filter((profile) => profile.artifactId === artifactId && profile.runtimeId === runtimeId);
+const voiceProfilesForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string) => catalogue.profiles.filter((profile) => profile.artifactId === artifactId);
 const selectionMatchesProfile = (selection: VoiceLocalSelection, profile: VoiceExecutionProfile) => selection.modelId === profile.modelId
   && selection.artifactId === profile.artifactId
-  && selection.runtimeId === profile.runtimeId
   && selection.execution === profile.execution
   && selection.segmentation === profile.segmentation;
 const selectionArtifactMatchesProfile = (selection: VoiceLocalSelection, profile: VoiceExecutionProfile) => selection.artifactId === profile.artifactId
-  && selection.runtimeId === profile.runtimeId
   && selection.execution === profile.execution
   && selection.segmentation === profile.segmentation;
 const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right: VoiceLocalSelection | null | undefined) => Boolean(left && right
   && left.modelId === right.modelId
   && left.artifactId === right.artifactId
-  && left.runtimeId === right.runtimeId
   && left.execution === right.execution
   && left.segmentation === right.segmentation);
 // The runtime fields as typed, checked against the ranges the server keeps
@@ -1056,19 +1052,14 @@ export function Settings(props: {
   });
   const selectedVoiceInstallModelId = createMemo(() => selectedVoiceArtifact()?.legacyModelId || voiceServerSettings()?.localModelId || "");
   const selectedLocalVoiceModel = createMemo(() => voiceServerSettings()?.local?.models.find((model) => model.id === selectedVoiceInstallModelId()));
-  const selectedVoiceBackendPath = createMemo(() => {
-    const catalogue = voiceCatalogue();
-    const selection = selectedVoiceSelection();
-    return catalogue && selection ? catalogue.backendPaths.find((backendPath) => backendPath.artifactId === selection.artifactId && backendPath.runtimeId === selection.runtimeId) || null : null;
-  });
-  const selectedVoiceBackendStatus = createMemo(() => {
-    const backendPath = selectedVoiceBackendPath();
-    return backendPath ? voiceServerSettings()?.local?.backendPaths?.find((candidate) => candidate.backendPathId === backendPath.id) || null : null;
+  const selectedVoiceArtifactStatus = createMemo(() => {
+    const artifact = selectedVoiceArtifact();
+    return artifact ? voiceServerSettings()?.local?.artifactStatuses?.find((candidate) => candidate.artifactId === artifact.id) || null : null;
   });
   const selectedVoiceProfiles = createMemo(() => {
     const catalogue = voiceCatalogue();
-    const backendPath = selectedVoiceBackendPath();
-    return catalogue && backendPath ? catalogue.profiles.filter((profile) => profile.backendPathId === backendPath.id) : [];
+    const artifact = selectedVoiceArtifact();
+    return catalogue && artifact ? voiceProfilesForArtifact(catalogue, artifact.id) : [];
   });
   const selectedVoiceAdapter = createMemo(() => {
     const settings = voiceServerSettings();
@@ -1090,15 +1081,10 @@ export function Settings(props: {
     }));
     setVoiceLicenseAccepted(false);
   };
-  const profileForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string, current: VoiceLocalSelection | null, runtimeId = current?.runtimeId) => {
+  const profileForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string, current: VoiceLocalSelection | null) => {
     const artifact = catalogue.artifacts.find((candidate) => candidate.id === artifactId);
     if (!artifact) return null;
-    const backendPath = catalogue.backendPaths
-      .filter((candidate) => candidate.artifactId === artifact.id)
-      .find((candidate) => candidate.runtimeId === runtimeId)
-      || catalogue.backendPaths.find((candidate) => candidate.artifactId === artifact.id);
-    if (!backendPath) return null;
-    const profiles = voiceProfilesForBackend(catalogue, artifact.id, backendPath.runtimeId);
+    const profiles = voiceProfilesForArtifact(catalogue, artifact.id);
     return profiles.find((candidate) => candidate.execution === current?.execution && candidate.segmentation === current?.segmentation)
       || profiles.find((candidate) => candidate.execution === current?.execution)
       || profiles.find((candidate) => candidate.execution === "stop")
@@ -1112,18 +1098,6 @@ export function Settings(props: {
     const artifact = voiceArtifactsForModel(catalogue, modelId).find((candidate) => candidate.id === current?.artifactId)
       || voiceArtifactsForModel(catalogue, modelId)[0];
     const profile = artifact && profileForArtifact(catalogue, artifact.id, current);
-    if (profile) selectLocalProfile(profile);
-  };
-  const selectLocalRuntime = (runtimeId: string) => {
-    const catalogue = voiceCatalogue();
-    const current = selectedVoiceSelection();
-    if (!catalogue || !current) return;
-    const currentArtifact = catalogue.artifacts.find((candidate) => candidate.id === current.artifactId);
-    const compatibleArtifacts = voiceArtifactsForModel(catalogue, current.modelId).filter((candidate) => catalogue.backendPaths.some((path) => path.artifactId === candidate.id && path.runtimeId === runtimeId));
-    const artifact = compatibleArtifacts.find((candidate) => candidate.legacyModelId === currentArtifact?.legacyModelId)
-      || compatibleArtifacts.find((candidate) => candidate.precision === currentArtifact?.precision)
-      || compatibleArtifacts[0];
-    const profile = artifact && profileForArtifact(catalogue, artifact.id, current, runtimeId);
     if (profile) selectLocalProfile(profile);
   };
   const selectLocalVariant = (artifactId: string) => {
@@ -1627,9 +1601,8 @@ export function Settings(props: {
                     selection={selectedVoiceSelection()}
                     selectedModel={selectedVoiceCatalogueModel()}
                     selectedArtifact={selectedVoiceArtifact()}
-                    selectedBackendPath={selectedVoiceBackendPath()}
-                    backendStatus={selectedVoiceBackendStatus()}
-                    backendStatuses={voiceServerSettings()!.local?.backendPaths || []}
+                    artifactStatus={selectedVoiceArtifactStatus()}
+                    artifactStatuses={voiceServerSettings()!.local?.artifactStatuses || []}
                     selectedLocalModel={selectedLocalVoiceModel() || null}
                     profiles={selectedVoiceProfiles()}
                     busy={voiceBusy()}
@@ -1637,7 +1610,6 @@ export function Settings(props: {
                     installProgress={voiceServerSettings()!.local?.progress || null}
                     licenseAccepted={voiceLicenseAccepted()}
                     onFamilyChange={selectLocalFamily}
-                    onRuntimeChange={selectLocalRuntime}
                     onVariantChange={selectLocalVariant}
                     onTimingChange={selectLocalTiming}
                     onLicenseChange={setVoiceLicenseAccepted}

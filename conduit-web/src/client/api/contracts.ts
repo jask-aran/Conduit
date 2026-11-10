@@ -726,18 +726,14 @@ export type VoiceSegmentation = "none" | "heuristic";
 export interface VoiceLocalSelection {
   modelId: string;
   artifactId: string;
-  runtimeId: string;
   execution: VoiceExecution;
   segmentation: VoiceSegmentation;
 }
 
 export interface VoiceExecutionProfile {
-  schemaVersion: 1;
   id: string;
   modelId: string;
   artifactId: string;
-  runtimeId: string;
-  backendPathId: string;
   execution: VoiceExecution;
   segmentation: VoiceSegmentation;
   output: { tentative: boolean; stableSegments: boolean; sampleTimestamps: boolean };
@@ -750,8 +746,8 @@ export interface VoiceExecutionProfile {
   fallback: { profileId: string; allowed: "before_output" | "after_tentative" | "after_stable_checkpoint"; replay: "from_zero" | "from_committed_sample" } | null;
 }
 
-export interface VoiceBackendPathStatus {
-  backendPathId: string;
+export interface VoiceArtifactStatus {
+  artifactId: string;
   installable: boolean;
   operational: boolean;
   blockedReason: string | null;
@@ -781,22 +777,16 @@ export interface VoiceLocalModel {
 }
 
 export interface VoiceExecutionCatalogueView {
-  version: string;
-  schemaVersion: 1;
   models: { id: string; label: string; languages: string; description: string; artifactIds: string[] }[];
-  artifacts: { id: string; modelId: string; legacyModelId: string; runtimeId: string; format: string; precision: string; approximateBytes: number; minimumFreeBytes: number; modelFile: string | null; runtimeVersion: string | null; license: { id: string; attribution: string } }[];
-  runtimes: { id: string; label?: string; adapterKind: string; version: string; compiledComputeBackends: string[] }[];
-  backendPaths: { id: string; artifactId: string; runtimeId: string; ports: { batch: boolean; stream: boolean } }[];
+  artifacts: { id: string; modelId: string; legacyModelId: string; format: string; precision: string; approximateBytes: number; minimumFreeBytes: number; modelFile: string | null; runtimeVersion: string | null; license: { id: string; attribution: string } }[];
   profiles: VoiceExecutionProfile[];
   defaultProfileId: string;
 }
 
 export interface VoiceServerSettings {
-  voiceConfigVersion: 2;
   mode: "off" | "local" | "remote";
   localModelId: string;
   localSelection: VoiceLocalSelection;
-  localSelectionOrigin: "default" | "explicit" | "migrated_explicit";
   resolvedProfileId: string;
   provider: string;
   adapter: string;
@@ -808,7 +798,7 @@ export interface VoiceServerSettings {
   auth: { type: "none" | "bearer" | "header"; headerName: string; configured: boolean; source: "stored" | null; removable: boolean };
   local: {
     catalogue?: VoiceExecutionCatalogueView;
-    backendPaths?: VoiceBackendPathStatus[];
+    artifactStatuses?: VoiceArtifactStatus[];
     installingModelId: string | null;
     activeModelId: string | null;
     progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;

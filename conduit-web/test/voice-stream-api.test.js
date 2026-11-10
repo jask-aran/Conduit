@@ -328,8 +328,6 @@ test("Moonshine Streaming Tiny stream adapter coalesces PCM, exposes revisions, 
       computeBackend: "cpu",
       modelId: "moonshine-streaming-tiny",
       artifactId: "moonshine-streaming-tiny-q8-gguf",
-      runtimeId: "transcribe-cpp",
-      backendPathId: "moonshine-streaming-tiny-q8-gguf.transcribe-cpp",
       resolvedProfileId: "moonshine-streaming-tiny-q8-gguf.live",
       execution: "live",
       segmentation: "none",
@@ -383,8 +381,6 @@ test("Moonshine Streaming Tiny stream adapter coalesces PCM, exposes revisions, 
     assert.equal(completed.inferenceMode, "streaming");
     assert.equal(completed.modelId, "moonshine-streaming-tiny");
     assert.equal(completed.artifactId, "moonshine-streaming-tiny-q8-gguf");
-    assert.equal(completed.runtimeId, "transcribe-cpp");
-    assert.equal(completed.backendPathId, "moonshine-streaming-tiny-q8-gguf.transcribe-cpp");
     assert.equal(completed.resolvedProfileId, "moonshine-streaming-tiny-q8-gguf.live");
     assert.equal(completed.execution, "live");
     assert.equal(completed.segmentation, "none");
@@ -585,8 +581,6 @@ test("Moonshine Streaming Tiny stream startup failure falls back before consumin
         profileId: null,
         adapter: "transcribe_cpp_stream_v1",
         model: "moonshine-streaming-tiny-q8",
-        runtimeId: null,
-        backendPathId: null,
       },
       fallbackProfile: null,
       completingProfile: null,
@@ -672,8 +666,6 @@ test("Moonshine Streaming Tiny live queue overflow falls back from sample zero w
         profileId: null,
         adapter: "transcribe_cpp_stream_v1",
         model: "moonshine-streaming-tiny-q8",
-        runtimeId: null,
-        backendPathId: null,
       },
       fallbackProfile: null,
       completingProfile: null,
@@ -797,8 +789,6 @@ test("Moonshine Streaming Tiny live failure after a stable checkpoint replays an
       backend: "transcribe_cpp",
       computeBackend: "cpu",
       resolvedProfileId: "moonshine-streaming-tiny-q8-live",
-      runtimeId: "transcribe-cpp",
-      backendPathId: "transcribe-cpp-native",
       fallback: { profileId: "moonshine-streaming-tiny-q8-stop" },
       capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", streaming: { family: "moonshine" } },
       streaming: { family: "moonshine" },
@@ -1016,8 +1006,6 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
       allowPrivate: true,
       modelId: "moonshine-streaming-tiny",
       artifactId: "moonshine-streaming-tiny-q8",
-      runtimeId: "transcribe-cpp",
-      backendPathId: "moonshine-streaming-tiny-q8.transcribe-cpp",
       resolvedProfileId: "moonshine-streaming-tiny-q8.live",
       execution: "live",
       segmentation: "none",
@@ -1093,8 +1081,6 @@ test("successful dictation stores the server PCM with transcript diagnostics", a
     assert.equal(metadata.adapter, "openai_audio_sse_v1");
     assert.equal(metadata.modelId, "moonshine-streaming-tiny");
     assert.equal(metadata.artifactId, "moonshine-streaming-tiny-q8");
-    assert.equal(metadata.runtimeId, "transcribe-cpp");
-    assert.equal(metadata.backendPathId, "moonshine-streaming-tiny-q8.transcribe-cpp");
     assert.equal(metadata.resolvedProfileId, "moonshine-streaming-tiny-q8.live");
     assert.equal(metadata.execution, "live");
     assert.equal(metadata.segmentation, "none");

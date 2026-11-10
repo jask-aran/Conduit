@@ -121,10 +121,7 @@ test("voice settings API stores endpoint authentication without returning the se
   try {
     const initial = await (await server.request("/v0/voice/settings")).json();
     assert.equal(initial.mode, "off");
-    assert.equal(initial.voiceConfigVersion, 2);
-    assert.equal(initial.localSelectionOrigin, "default");
     assert.equal(initial.local.catalogue.profiles.length, VOICE_EXECUTION_CATALOG.profiles.length);
-    assert.equal(initial.local.backendPaths.length, VOICE_EXECUTION_CATALOG.backendPaths.length);
     assert.equal(initial.local.models.every((model) => !model.installed), true);
     assert.deepEqual(initial.providers.slice(0, 3).map((provider) => provider.id), ["openai", "deepgram", "groq"]);
 
@@ -162,7 +159,6 @@ test("voice settings API accepts a valid absent-artifact execution tuple", async
     const selection = {
       modelId: profile.modelId,
       artifactId: profile.artifactId,
-      runtimeId: profile.runtimeId,
       execution: profile.execution,
       segmentation: profile.segmentation,
     };
@@ -179,6 +175,6 @@ test("voice settings API accepts a valid absent-artifact execution tuple", async
     assert.deepEqual(saved.localSelection, selection);
     assert.equal(saved.localModelId, initial.local.catalogue.artifacts.find((artifact) => artifact.id === profile.artifactId).legacyModelId);
     assert.equal(saved.resolvedProfileId, profile.id);
-    assert.equal(saved.local.backendPaths.find((path) => path.backendPathId === profile.backendPathId).artifactState, "absent");
+    assert.equal(saved.local.artifactStatuses.find((status) => status.artifactId === profile.artifactId).artifactState, "absent");
   } finally { await server.stop(); }
 });

@@ -2,21 +2,19 @@ import { For, Show } from "solid-js";
 import { Button, Progress, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { SettingLine, SettingWide } from "@/components/ui/overlay";
-import type { VoiceBackendPathStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
+import type { VoiceArtifactStatus, VoiceExecutionProfile, VoiceExecutionCatalogueView, VoiceLocalModel, VoiceLocalSelection } from "../api/contracts";
 import { Note } from "@/components/ui/state";
 
 type CatalogueModel = VoiceExecutionCatalogueView["models"][number];
 type CatalogueArtifact = VoiceExecutionCatalogueView["artifacts"][number];
-type CatalogueBackendPath = VoiceExecutionCatalogueView["backendPaths"][number];
 
 export interface VoiceLocalCatalogueProps {
   catalogue: VoiceExecutionCatalogueView;
   selection: VoiceLocalSelection | null;
   selectedModel: CatalogueModel | null;
   selectedArtifact: CatalogueArtifact | null;
-  selectedBackendPath: CatalogueBackendPath | null;
-  backendStatus: VoiceBackendPathStatus | null;
-  backendStatuses: VoiceBackendPathStatus[];
+  artifactStatus: VoiceArtifactStatus | null;
+  artifactStatuses: VoiceArtifactStatus[];
   selectedLocalModel: VoiceLocalModel | null;
   profiles: VoiceExecutionProfile[];
   busy: boolean;
@@ -24,7 +22,6 @@ export interface VoiceLocalCatalogueProps {
   installProgress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;
   licenseAccepted: boolean;
   onFamilyChange: (modelId: string) => void;
-  onRuntimeChange: (runtimeId: string) => void;
   onVariantChange: (artifactId: string) => void;
   onTimingChange: (profileId: string) => void;
   onLicenseChange: (accepted: boolean) => void;
@@ -41,13 +38,8 @@ const executionDescription = (execution: VoiceExecutionProfile["execution"]) => 
     : "Nothing appears until you stop.";
 const segmentationLabel = (segmentation: VoiceExecutionProfile["segmentation"]) => segmentation === "heuristic" ? "Silence detection" : "None";
 const precisionLabel = (precision: string) => precision === "fp32" ? "FP32" : precision.toUpperCase();
-const artifactStateLabel = (state: VoiceBackendPathStatus["artifactState"] | null | undefined) => state === "installed" ? "installed" : state === "installing" ? "installing" : state === "failed" ? "failed" : state === "absent" ? "not installed" : "state not reported";
+const artifactStateLabel = (state: VoiceArtifactStatus["artifactState"] | null | undefined) => state === "installed" ? "installed" : state === "installing" ? "installing" : state === "failed" ? "failed" : state === "absent" ? "not installed" : "state not reported";
 const artifactsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => catalogue.artifacts.filter((artifact) => artifact.modelId === modelId);
-const backendPathsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => {
-  const artifactIds = new Set(artifactsForModel(catalogue, modelId).map((artifact) => artifact.id));
-  return catalogue.backendPaths.filter((backendPath) => artifactIds.has(backendPath.artifactId));
-};
-const artifactForBackendPath = (catalogue: VoiceExecutionCatalogueView, backendPath: CatalogueBackendPath) => catalogue.artifacts.find((artifact) => artifact.id === backendPath.artifactId);
 const formatLabel = (format: string) => format.toUpperCase();
 const profileLabel = (profile: VoiceExecutionProfile) => profile.execution === "eager"
   ? `${executionLabel(profile.execution)} · ${segmentationLabel(profile.segmentation)}`
@@ -57,24 +49,11 @@ const profileDescription = (profile: VoiceExecutionProfile) => profile.execution
   : executionDescription(profile.execution);
 
 export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
-  const runtimeLabel = (runtimeId: string) => props.catalogue.runtimes.find((runtime) => runtime.id === runtimeId)?.label || runtimeId;
   const disabled = () => props.busy || Boolean(props.installingModelId);
-  const familyBackendPaths = () => props.selectedModel ? backendPathsForModel(props.catalogue, props.selectedModel.id) : [];
-  const runtimeChoices = () => {
-    const seen = new Set<string>();
-    return familyBackendPaths().filter((backendPath) => {
-      if (seen.has(backendPath.runtimeId)) return false;
-      seen.add(backendPath.runtimeId);
-      return true;
-    });
-  };
-  const pathsForRuntime = () => familyBackendPaths().filter((backendPath) => backendPath.runtimeId === props.selection?.runtimeId);
-  const variantChoices = () => pathsForRuntime()
-    .map((backendPath) => artifactForBackendPath(props.catalogue, backendPath))
-    .filter((artifact): artifact is CatalogueArtifact => Boolean(artifact));
-  const statusForPath = (backendPath: CatalogueBackendPath | null) => backendPath ? props.backendStatuses.find((status) => status.backendPathId === backendPath.id) || null : null;
+  const variantChoices = () => props.selectedModel ? artifactsForModel(props.catalogue, props.selectedModel.id) : [];
+  const statusForArtifact = (artifact: CatalogueArtifact) => props.artifactStatuses.find((status) => status.artifactId === artifact.id) || null;
   const statusFacts = () => {
-    const status = props.backendStatus;
+    const status = props.artifactStatus;
     if (!status) return "Status not reported";
     return [
       artifactStateLabel(status.artifactState),
@@ -84,26 +63,17 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
       status.loadedRuntimeVersion || null,
     ].filter(Boolean).join(" · ");
   };
-  const runtimeOptionLabel = (runtimeId: string) => {
-    const paths = familyBackendPaths().filter((backendPath) => backendPath.runtimeId === runtimeId);
-    const formats = [...new Set(paths.map((path) => artifactForBackendPath(props.catalogue, path)?.format).filter((format): format is string => Boolean(format)))].map(formatLabel).join(" / ");
-    const runtime = props.catalogue.runtimes.find((candidate) => candidate.id === runtimeId);
-    const ports = paths.some((path) => path.ports.stream) ? "BatchPort + StreamPort" : "BatchPort";
-    return `${runtimeLabel(runtimeId)} · ${formats || "format not reported"} · ${ports} · ${runtime?.compiledComputeBackends.join(" / ") || "compute not reported"}`;
-  };
   const variantOptionLabel = (artifact: CatalogueArtifact) => {
-    const path = familyBackendPaths().find((candidate) => candidate.artifactId === artifact.id && candidate.runtimeId === props.selection?.runtimeId) || null;
-    return `${precisionLabel(artifact.precision)} · ${formatLabel(artifact.format)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${artifactStateLabel(statusForPath(path)?.artifactState)}`;
+    return `${precisionLabel(artifact.precision)} · ${formatLabel(artifact.format)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${artifactStateLabel(statusForArtifact(artifact)?.artifactState)}`;
   };
   const selectedProfile = () => props.profiles.find((profile) => profile.execution === props.selection?.execution && profile.segmentation === props.selection?.segmentation) || null;
   // Rows in the Transcription tile, like the cloud ones: the choices, then
-  // the model files with the one action they need. The long runtime and
-  // variant facts are each option's title, not its label.
-  const runtimeShortLabel = (runtimeId: string) => runtimeLabel(runtimeId);
+  // the model files with the one action they need. The long variant facts
+  // are each option's title, not its label.
   const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
   const filesState = () => props.installingModelId
     ? props.installProgress?.phase === "runtime" ? "Downloading the voice runtime…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
-    : artifactStateLabel(props.backendStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
+    : artifactStateLabel(props.artifactStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
   return <>
     <SettingLine label="Model">
       <Select id="voice-local-family" disabled={disabled()} title={props.selectedModel?.description} value={props.selection?.modelId || ""} onChange={(event) => props.onFamilyChange(event.currentTarget.value)}>
@@ -111,11 +81,6 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
       </Select>
     </SettingLine>
     <Show when={props.selection}>{(selection) => <>
-      <SettingLine label="Runtime">
-        <Select id="voice-local-runtime" disabled={disabled()} value={selection().runtimeId} onChange={(event) => props.onRuntimeChange(event.currentTarget.value)}>
-          <For each={runtimeChoices()}>{(backendPath) => <option value={backendPath.runtimeId} title={runtimeOptionLabel(backendPath.runtimeId)}>{runtimeShortLabel(backendPath.runtimeId)}</option>}</For>
-        </Select>
-      </SettingLine>
       <SettingLine label="Variant">
         <Select id="voice-local-variant" disabled={disabled()} value={selection().artifactId} onChange={(event) => props.onVariantChange(event.currentTarget.value)}>
           <For each={variantChoices()}>{(artifact) => <option value={artifact.id} title={variantOptionLabel(artifact)}>{variantShortLabel(artifact)}</option>}</For>

@@ -1799,8 +1799,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       native: null,
       modelId: null,
       artifactId: null,
-      runtimeId: null,
-      backendPathId: null,
       resolvedProfileId: null,
       execution: null,
       segmentation: null,
@@ -2490,8 +2488,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         native: config.native && typeof config.native === "object" ? config.native : null,
         modelId: typeof config.modelId === "string" ? config.modelId : null,
         artifactId: typeof config.artifactId === "string" ? config.artifactId : null,
-        runtimeId: typeof config.runtimeId === "string" ? config.runtimeId : null,
-        backendPathId: typeof config.backendPathId === "string" ? config.backendPathId : null,
         resolvedProfileId: typeof config.resolvedProfileId === "string" ? config.resolvedProfileId : null,
         execution: typeof config.execution === "string" ? config.execution : null,
         segmentation: typeof config.segmentation === "string" ? config.segmentation : null,
@@ -2523,8 +2519,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         native: runtimeMetadata.native,
         modelId: runtimeMetadata.modelId,
         artifactId: runtimeMetadata.artifactId,
-        runtimeId: runtimeMetadata.runtimeId,
-        backendPathId: runtimeMetadata.backendPathId,
         resolvedProfileId: runtimeMetadata.resolvedProfileId,
         execution: runtimeMetadata.execution,
         segmentation: runtimeMetadata.segmentation,
@@ -2546,8 +2540,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           native: runtimeMetadata.native,
           modelId: runtimeMetadata.modelId,
           artifactId: runtimeMetadata.artifactId,
-          runtimeId: runtimeMetadata.runtimeId,
-          backendPathId: runtimeMetadata.backendPathId,
           resolvedProfileId: runtimeMetadata.resolvedProfileId,
           execution: runtimeMetadata.execution,
           segmentation: runtimeMetadata.segmentation,
@@ -2569,8 +2561,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             profileId: runtimeMetadata.resolvedProfileId,
             adapter: runtimeMetadata.adapter,
             model: runtimeMetadata.model,
-            runtimeId: runtimeMetadata.runtimeId,
-            backendPathId: runtimeMetadata.backendPathId,
           };
           const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
           if (typeof config.transcribe !== "function") throw error;
@@ -2626,8 +2616,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             profileId: runtimeMetadata.resolvedProfileId,
             adapter: runtimeMetadata.adapter,
             model: runtimeMetadata.model,
-            runtimeId: runtimeMetadata.runtimeId,
-            backendPathId: runtimeMetadata.backendPathId,
           };
           const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
           const fallbackEmit = (fallbackEvent) => {

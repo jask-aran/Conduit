@@ -286,31 +286,29 @@ suffix through BatchPort and preserves the stable prefix. The paths do not run
 in parallel. File-upload providers buffer one bounded utterance in memory and
 transcribe it after Stop.
 
-Local backends register in `src/server/voice-backends/index.js`. Each backend
-owns its models, pinned manifest, package preparation, load operation, stream
-options, and the existing transcribe/stream/dispose runtime contract. Add a backend as one new
-file and one registration line; the catalogue, model manager, runtime, and
-settings read the registry.
+Local voice has one runtime, transcribe.cpp
+(`src/server/voice-backends/transcribe-cpp.js`). It owns its models, pinned
+manifest, package preparation, load operation, stream options, and the
+transcribe/stream/dispose runtime contract; the catalogue, model manager,
+runtime, and settings import it directly.
 Installing a model is separate from selecting the active model. The selected
 model is persisted with **Save Voice settings**, and installation never occurs
 without explicit license acceptance.
 
-Local selection is stored as `voiceConfigVersion: 2` with a canonical tuple:
-`modelId`, `artifactId`, stable `runtimeId`, `execution`, and `segmentation`.
-The tuple resolves to one immutable execution profile and backend path. The
-runtime version is reported separately, so a routine runtime update does not
-invalidate the selection. Legacy `localModelId` values migrate through an
-explicit map and remain available to the older client for compatibility. Removed
-local models reset to the default Moonshine profile without changing mode,
-provider, or remote credentials. A
+Local selection is stored as a tuple: `modelId`, `artifactId`, `execution`,
+and `segmentation`, alongside the managed model's `localModelId`. The tuple
+resolves to one immutable execution profile. The runtime version is reported
+separately, so a routine runtime update does not invalidate the selection. A
+selection or model the catalogue no longer has resets to the default Moonshine
+profile without changing mode, provider, or remote credentials. A
 valid selection can be saved before its artifact is installed; capture then
 returns the specific missing-artifact error and the selection remains intact.
 The settings response includes the static profile catalogue and a separate
-backend-path status list with artifact state, runtime state, requested and
+per-artifact status list with artifact state, runtime state, requested and
 actual compute backend, loaded runtime version, and the last error code.
 
 The current local selection resolves to `moonshine-streaming-tiny` /
-`moonshine-streaming-tiny-q8-gguf` / `transcribe-cpp` and supports persistent
+`moonshine-streaming-tiny-q8-gguf` and supports persistent
 `live` StreamPort and `stop` BatchPort profiles. Each
 dictation freezes this resolved tuple at open; a settings change affects the
 next dictation only. One runtime lease covers the session and releases once on

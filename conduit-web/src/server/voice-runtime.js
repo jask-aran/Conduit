@@ -2,13 +2,8 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL, openaiAdapterFor } from "../voice-settings.js";
 import { openOpenaiRealtimeStream } from "./dictation-stream.js";
-import {
-  VOICE_EXECUTION_CATALOG,
-  artifactForProfile,
-  migrateLocalSelection,
-  resolveVoiceExecutionProfile,
-  runtimeForProfile,
-} from "./voice-execution-catalog.js";
+import backend from "./voice-backends/transcribe-cpp.js";
+import { VOICE_EXECUTION_CATALOG, artifactForProfile, resolveVoiceExecutionProfile, selectionForLocalModel } from "./voice-execution-catalog.js";
 import { createVoiceRuntimeAdapters } from "./voice-runtime-adapters.js";
 
 function runtimeError(code, message, status = 400) {
@@ -49,14 +44,6 @@ function requestHeaders(config) {
   if (config.auth.type === "bearer") return { Authorization: `Bearer ${config.auth.secret}` };
   if (config.auth.type === "header") return { [config.auth.headerName]: config.auth.secret };
   return {};
-}
-
-function modelPrecision(modelId) {
-  const value = String(modelId || "");
-  if (value.endsWith("-fp32")) return "fp32";
-  if (value.endsWith("-int8")) return "int8";
-  if (value.endsWith("-q8")) return "q8";
-  return null;
 }
 
 function pinnedLookup(addresses) {
@@ -105,10 +92,9 @@ export class VoiceRuntime {
         ? resolveVoiceExecutionProfile(config.localSelection, this.catalog)
         : config.resolvedProfileId
           ? resolveVoiceExecutionProfile({ profileId: config.resolvedProfileId }, this.catalog)
-          : resolveVoiceExecutionProfile(migrateLocalSelection(config.localModelId, this.catalog).selection, this.catalog);
+          : resolveVoiceExecutionProfile(selectionForLocalModel(config.localModelId, this.catalog), this.catalog);
       const artifact = artifactForProfile(profile, this.catalog);
-      const runtimeDefinition = runtimeForProfile(profile, this.catalog);
-      const local = await this.modelManager.ensureRunning(artifact.legacyModelId, { runtimeId: runtimeDefinition.id });
+      const local = await this.modelManager.ensureRunning(artifact.legacyModelId);
       const adapters = createVoiceRuntimeAdapters({
         profile,
         catalog: this.catalog,
@@ -139,19 +125,17 @@ export class VoiceRuntime {
         model: artifact.legacyModelId,
         modelId: profile.modelId,
         artifactId: profile.artifactId,
-        runtimeId: profile.runtimeId,
-        backendPathId: profile.backendPathId,
         resolvedProfileId: profile.id,
         profile,
         execution: profile.execution,
         segmentation: profile.segmentation,
         fallback: profile.fallback ? { ...profile.fallback } : null,
-        precision: artifact.precision || modelPrecision(artifact.legacyModelId),
-        backend: local.backend || runtimeDefinition.id,
+        precision: artifact.precision || null,
+        backend: local.backend || backend.id,
         computeBackend: local.computeBackend || null,
-        requestedComputeBackend: local.requestedComputeBackend || runtimeDefinition.requestedComputeBackend || null,
+        requestedComputeBackend: local.requestedComputeBackend || backend.runtime.requestedComputeBackend || null,
         actualComputeBackend: local.actualComputeBackend || local.computeBackend || null,
-        loadedRuntimeVersion: local.runtimeVersion || local.native?.version || runtimeDefinition.version,
+        loadedRuntimeVersion: local.runtimeVersion || local.native?.version || backend.runtime.version,
         capabilities: local.capabilities || { inferenceMode: profile.execution === "live" ? "streaming" : "batch", partials: profile.execution === "live" },
         streaming: actualStreaming ? local.capabilities?.streaming || null : null,
         native: local.native || null,
@@ -205,7 +189,7 @@ export class VoiceRuntime {
 
   async test() {
     const config = await this.resolve();
-    if (config.mode === "local") return this.modelManager.test(config.localModelId, { runtimeId: config.localSelection?.runtimeId || null });
+    if (config.mode === "local") return this.modelManager.test(config.localModelId);
     const testEndpoint = config.provider === "openai"
       ? `https://api.openai.com/v1/models/${encodeURIComponent(config.model)}`
       : config.provider === "groq"
