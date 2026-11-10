@@ -234,7 +234,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       return `${conflict.commandLabel || conflict.action} already uses this shortcut in ${contextLabel(conflict.context || "")}.`;
     }
     if (conflict.kind === "context-reuse") {
-      return `${conflict.commandLabel || conflict.action} uses this shortcut in a separate context. This reuse is allowed.`;
+      return `${conflict.commandLabel || conflict.action} uses this shortcut in a separate context.`;
     }
     return `${conflict.owner} may use this shortcut for ${conflict.action} before Conduit receives it.`;
   };
@@ -251,7 +251,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
   return <>
     <Group title="Keyboard" scope="This device">
       <SettingLine plain label="Keys for"><SettingValue>{shortcutEnvironmentLabel(props.manager.environment)}</SettingValue></SettingLine>
-      <Show when={keyboardTourAvailable()}><SettingLine plain label="Keyboard tour" state="learn the keys by pressing them">
+      <Show when={keyboardTourAvailable()}><SettingLine plain label="Keyboard tour">
         <Button variant="ghost" size="sm" onClick={startKeyboardTour}><Icons.Keyboard /> Take the keyboard tour</Button></SettingLine></Show>
     </Group>
     <Group title="Shortcuts" scope="Every device">
@@ -265,7 +265,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       <SettingLine label="Find"><Input type="search" aria-label="Search shortcuts" placeholder="Commands, contexts or keys" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></SettingLine>
       <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>
       <Show when={file()}>{(held) => <>
-        <SettingLine plain mono label="File" state="on the hub, editable by hand or by an agent" title={held().path}><SettingValue mono>{held().path}</SettingValue></SettingLine>
+        <SettingLine plain mono label="File" state="on the hub" title={held().path}><SettingValue mono>{held().path}</SettingValue></SettingLine>
         <For each={held().errors}>{(error) => <Note tone="error">Not applied: {error}</Note>}</For>
       </>}</Show>
       {/* Inside the group: between groups it would part their hairline. */}

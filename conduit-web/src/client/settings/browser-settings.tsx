@@ -55,23 +55,23 @@ export function BrowserSettings() {
       <SettingLine plain label="Status" title={browser().url || undefined}>
         <SettingValue>{!browser().available ? "Not available" : browser().running ? `Running${host(browser().url) ? ` · ${host(browser().url)}` : ""}` : "Starts when it is first opened"}</SettingValue>
       </SettingLine>
-      <SettingLine plain label="Runs on" title="A browser on one of your devices, reachable from the others, comes later.">
+      <SettingLine plain label="Runs on">
         <SettingValue>This hub</SettingValue>
       </SettingLine>
-      <SettingLine plain label="Engine" title="Vercel's agent-browser driving Chrome. Agents use agent-browser's own tools on the same page.">
+      <SettingLine plain label="Engine">
         <SettingValue mono>{browser().engine}{browser().version ? ` · agent-browser ${browser().version}` : ""}</SettingValue>
       </SettingLine>
     </Group>
     <Group title="Stream">
-      <SettingLine plain label="Frame rate" title="How often a Browser pane is sent the page; applied to open panes at once.">
+      <SettingLine plain label="Frame rate" title="Applies to open panes at once.">
         <Segmented label="Frame rate" size="sm" value={String(browser().settings.fps)} disabled={!!busy()}
           options={browser().choices.fps.map((fps) => ({ value: String(fps), label: `${fps} fps` }))} onChange={(value) => void put({ fps: Number(value) })} />
       </SettingLine>
-      <SettingLine plain label="Picture" title="The picture codec. Changing it reconnects open panes without restarting the browser.">
+      <SettingLine plain label="Picture" title="Changing it reconnects open panes.">
         <Picture browser={browser()} />
       </SettingLine>
       <Show when={!browser().video}><Note>The hub needs ffmpeg for H.264 and H.265.</Note></Show>
-      <SettingLine plain label="Quality" state={busy() === "quality" ? "restarting…" : undefined} title="The picture's JPEG quality. Changing it restarts the browser, back on the page it showed.">
+      <SettingLine plain label="Quality" state={busy() === "quality" ? "restarting…" : undefined} title="Changing it restarts the browser on the same page.">
         <Segmented label="Quality" size="sm" value={String(browser().settings.quality)} disabled={!!busy()}
           options={browser().choices.quality.map((quality) => ({ value: String(quality), label: QUALITY_LABELS[quality] || String(quality) }))} onChange={(value) => void put({ quality: Number(value) })} />
       </SettingLine>
@@ -80,21 +80,16 @@ export function BrowserSettings() {
       <SettingLine plain label="Direct pages" title="Browser panes show the page itself, fetched through the hub, instead of the shared browser's picture.">
         <Switch label="Direct pages" checked={browser().settings.direct === true} disabled={!!busy()} onChange={(direct) => void put({ direct })} />
       </SettingLine>
-      <Note>Partly broken by design: a page is fetched by the hub and shown in Conduit, so it is crisp and scrolls natively, but
-        it is not the browser your agents use, and many sites will not work. Links built by a page's scripts leave the proxy,
-        other sites' content loads from your own network, sites with bot checks refuse it, every proxied site shares cookies
-        with the others (they are ports of one host), it needs Conduit opened over plain http, and live connections
-        (WebSockets) do not pass. Conduit refuses anything a proxied page sends it.</Note>
+      <Note>Many sites will not work: it is not the browser your agents use, sites with bot checks refuse it, proxied sites share cookies, live connections do not pass, and it needs Conduit opened over plain http.</Note>
     </Group>
     <Group title="Data">
-      <SettingLine plain label="Signed-in sites" state={browser().profile ? "kept across restarts" : "kept while it runs"} title="The browser keeps its own profile on the hub: cookies, storage and history.">
+      <SettingLine plain label="Signed-in sites" state={browser().profile ? "kept across restarts" : "kept while it runs"}>
         <Button variant="ghost" size="sm" disabled={!!busy() || !browser().available} onClick={() => void act("restart")}>{busy() === "restart" ? <Spinner /> : null}Restart</Button>
         <Button variant="destructive" outline size="sm" disabled={!!busy() || !browser().available} onClick={() => void clear()}>{busy() === "clear" ? <Spinner /> : null}Clear data</Button>
       </SettingLine>
       <Show when={error()}><Note tone="error">{error()}</Note></Show>
       <SettingDetails summary="What the browser is">
-        <Note>One Chrome on the hub, shared: you see and drive it in a Browser pane, and Conduit's agents work the same page through
-          agent-browser's tools (other harnesses through its MCP server, Settings › AI › Tools). Sites see the hub, signed in as whatever it signs in as.</Note>
+        <Note>One Chrome on the hub, shared: you drive it in a Browser pane and Conduit's agents work the same page. Sites see the hub, signed in as whatever it signs in as.</Note>
       </SettingDetails>
     </Group>
   </>}</Show>;

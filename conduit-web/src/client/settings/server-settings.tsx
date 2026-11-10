@@ -43,7 +43,7 @@ export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Eleme
         <Button variant="ghost" size="sm" onClick={() => switchToServer(entry()!.origin, isInstalledClient())}>Switch to {entry()!.name}</Button>
       </Show>
     </SettingLine>
-    <Show when={!readable()}><Note tone="quiet">A browser can only ask the server it is on. Switch to {entry()?.name} to see its network.</Note></Show>
+    <Show when={!readable()}><Note tone="quiet">Switch to {entry()?.name} to see its network.</Note></Show>
     <Show when={hubNode()}>{(node) => <Note>{server()} runs on {hubDevice()!.name} · {node().name}</Note>}</Show>
 
     {/* What the server holds, read at a glance: figures as the gauge's tiles. */}

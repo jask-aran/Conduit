@@ -102,14 +102,14 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
 
   const Page = () => <Show when={agentView()} fallback={<Note>Loading…</Note>}>
     <Show when={settings()} fallback={<Group title="Agent">
-      <Note>This hub has no agent. One agent per hub works for you in the background, with its own threads and memory.</Note>
+      <Note>This hub has no agent. An agent works for you in the background, with its own threads and memory.</Note>
       <SettingLine label="Give this hub an agent"><Button size="sm" disabled={enabling()} onClick={() => void enable()}>Turn on</Button></SettingLine>
     </Group>}>{(current) => <>
       <Group title="Agent">
         <SettingLine label="On" title={`Off: no routine, heartbeat, brief, mail check or webhook runs. Its threads and memory stay, and it still answers when you write to it.`}>
           <Switch label="On" checked={current().on !== false} onChange={(on) => set({ on })} />
         </SettingLine>
-        <SettingLine label="Name" title="What it is called, here and in its notifications. Its home thread takes the name too." state={nameError() || undefined} context={[
+        <SettingLine label="Name" title="Also names its home thread and its notifications." state={nameError() || undefined} context={[
           { label: `${current().name}'s prompt`, kind: "document", onOpen: () => options.onOpenDocument?.("agent") },
           { label: "Run rules", kind: "block", onOpen: () => options.onOpenBlock?.("run-rules") },
         ]}>
@@ -128,17 +128,17 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
       <Group title="Approvals">
         <Note>When {current().name} or one of its runs does something beyond reading and its own folder, the approval model weighs it against these rules, then allows it, refuses it or asks you.</Note>
         <ApprovalRules name={current().name} onOpenBlock={options.onOpenBlock} onOpenDocument={options.onOpenDocument} />
-        <SettingLine label="Connected tools decide what is held" title="A connected tool that holds its own actions for approval (Executor does) decides what is held: its reads run at once, and what it holds goes to the approval model. Off: Conduit's list of reads decides before each call, and anything else goes to the approval model." context={[{ label: "Your approval rules", kind: "block", onOpen: () => options.onOpenBlock?.("live-approval-rules") }]}>
+        <SettingLine label="Connected tools decide what is held" title="On: a connected tool that holds its own actions (Executor does) decides which need approval. Off: Conduit decides before each call." context={[{ label: "Your approval rules", kind: "block", onOpen: () => options.onOpenBlock?.("live-approval-rules") }]}>
           <Switch label="Connected tools decide what is held" checked={current().toolsDecide !== false} onChange={(toolsDecide) => set({ toolsDecide })} />
         </SettingLine>
-        <SettingLine label="Remind me" title="Every approval is pushed to your devices, a background run's too. One still waiting is pushed once more after this long.">
+        <SettingLine label="Remind me" title="An approval still waiting is pushed to your devices again after this long.">
           <Select id="agent-remind" value={String(current().remindMinutes ?? 10)} onChange={(event) => set({ remindMinutes: Number(event.currentTarget.value) })}>
             <For each={[[0, "Never"], [5, "After 5 minutes"], [10, "After 10 minutes"], [30, "After 30 minutes"], [60, "After an hour"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
           </Select>
         </SettingLine>
       </Group>
       <Group title="Routine">
-        <SettingLine label="Email" title="Every 30 minutes, new mail from each Gmail account connected in Executor goes into its context inbox, for the heartbeat to weigh. Run it now from its row under Timed.">
+        <SettingLine label="Email" title="Every 30 minutes, new mail from your Gmail accounts connected in Executor goes to its inbox for the heartbeat.">
           <Switch label="Email" checked={current().email?.enabled === true} onChange={(enabled) => set({ email: { enabled } })} />
         </SettingLine>
         <SettingLine label="Morning brief" title="A short brief in its home thread each morning: what happened, what is coming, what waits on you." context={[
@@ -153,14 +153,14 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
           </SettingLine>
           <Work kind="brief" label="Brief" title="Reads your mail, calendar and chats and prepares first steps: worth a capable model." />
         </Show>
-        <SettingLine label="Heartbeat" title="It looks at its inbox on this clock and calls a model only when something new came in. It speaks up only when something is worth it." context={[
+        <SettingLine label="Heartbeat" title="Checks its inbox on a clock, and calls a model only when something new came in." context={[
           { label: "Heartbeat instructions", kind: "block", onOpen: () => options.onOpenBlock?.("routine-heartbeat") },
           { label: "Heartbeat", kind: "document", onOpen: () => options.onOpenDocument?.("run:heartbeat") },
         ]}>
           <Switch label="Heartbeat" checked={current().heartbeat.enabled} onChange={(enabled) => set({ heartbeat: { ...current().heartbeat, enabled } })} />
         </SettingLine>
         <Show when={current().heartbeat.enabled}>
-          <SettingLine label="Every" title="How often it looks at its inbox (routines/heartbeat.md).">
+          <SettingLine label="Every">
             <Select id="agent-heartbeat" value={String(current().heartbeat.everyMinutes)} onChange={(event) => set({ heartbeat: { ...current().heartbeat, everyMinutes: Number(event.currentTarget.value) } })}>
               <For each={HEARTBEATS.includes(current().heartbeat.everyMinutes) ? HEARTBEATS : [current().heartbeat.everyMinutes, ...HEARTBEATS]}>{(minutes) => <option value={String(minutes)}>{every(minutes)}</option>}</For>
             </Select>
@@ -220,10 +220,10 @@ function ApprovalRules(props: { name: string; onOpenBlock?: (id: string) => void
       <SettingWide><TextEditor label={props.label} value={draft()[props.key]} markdown={false} bar={false} status={false} fit
         onChange={(value) => setDraft({ ...draft(), [props.key]: value })} /></SettingWide></>;
   return <Show when={policy()} fallback={<Show when={error()}><Note tone="error">{error()}</Note></Show>}>
-    <RuleList key="may" label="It may" title="What the approval model may allow without asking you, one rule a line, in your own words." />
-    <RuleList key="always" label="Always yours" title="What always comes to you, whatever else allows it: one class a line." />
-    <RuleList key="limits" label="Never" title="Things it must not do at all (&quot;don't email Sam&quot;). Kept as rules, so a long thread cannot lose them." />
-    <SettingLine label={starter() ? "Starter rules, not saved yet" : "Rules"} title="The approval model reads these with your own messages, never with what the agent read." context={[
+    <RuleList key="may" label="It may" title="What it may do without asking you." />
+    <RuleList key="always" label="Always yours" title="What always comes to you, whatever else allows it." />
+    <RuleList key="limits" label="Never" title="Things it must not do at all (&quot;don't email Sam&quot;)." />
+    <SettingLine label={starter() ? "Starter rules, not saved yet" : "Rules"} context={[
       { label: "Your approval rules", kind: "block", onOpen: () => props.onOpenBlock?.("live-approval-rules") },
       { label: "Approval model", kind: "document", onOpen: () => props.onOpenDocument?.("service:approval") },
       { label: `${props.name}'s prompt`, kind: "document", onOpen: () => props.onOpenDocument?.("agent") },

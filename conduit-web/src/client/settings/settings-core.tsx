@@ -62,6 +62,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/c
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { Dialog, OverlayDialog } from "@/components/ui/dialog";
+import { catchLoopback, loopbackPort } from "../platform/loopback";
 import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
@@ -137,10 +138,10 @@ const SEARCH_SOURCE_LABELS: Record<NonNullable<SearchProvider["source"]>, string
   stored: "key stored", environment: "key from the server", "sign-in": "ChatGPT sign-in", keyless: "no key needed",
 };
 const SEARCH_TOOLS: Array<{ key: SearchTool; label: string; title: string }> = [
-  { key: "webSearch", label: "Search the web", title: "web_search: searches with the providers below and keeps the results for paging." },
-  { key: "fetchContent", label: "Read pages", title: "fetch_content: reads a page, PDF, video or repository by its address." },
-  { key: "sourceCheck", label: "Check sources", title: "source_check: gathers sources for a claim with passage-level citations." },
-  { key: "getSearchContent", label: "Page stored results", title: "get_search_content: pages through a search's or a fetch's full stored results." },
+  { key: "webSearch", label: "Search the web", title: "Searches with the providers below and keeps the results for paging." },
+  { key: "fetchContent", label: "Read pages", title: "Reads a page, PDF, video or repository by its address." },
+  { key: "sourceCheck", label: "Check sources", title: "Gathers sources for a claim with passage-level citations." },
+  { key: "getSearchContent", label: "Page stored results", title: "Pages through a search's or a fetch's full stored results." },
 ];
 const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string }> = [
   { key: "github", label: "GitHub repositories", title: "Clones a repository to read its files, instead of scraping its pages." },
@@ -685,7 +686,7 @@ export function Settings(props: {
       await Promise.all(unknown.map(async (session) => {
         const chat = await api<{ title?: string; status?: string }>(`/v0/chats/${encodeURIComponent(session.chatId)}`).catch(() => null);
         // An empty draft is a new chat started ahead, so the next one opens at once.
-        chatTitles.set(session.chatId, chat?.title || (chat?.status === "draft" ? "New chat, started ahead" : "Untitled chat"));
+        chatTitles.set(session.chatId, chat?.title || (chat?.status === "draft" ? "New chat" : "Untitled chat"));
       }));
       if (unknown.length) setTitlesSeen((count) => count + 1);
     } catch { /* the counts above still say how many */ }
@@ -752,6 +753,19 @@ export function Settings(props: {
     finally { setChatGptBusy(false); }
   };
   createEffect(() => { if (props.open && section() === "models") void loadChatGptStatus(); });
+  // An installed app catches the sign-in's last page itself (it ends on this device's localhost) and hands its
+  // address to the hub, so nothing is copied; a browser tab cannot listen, and keeps the paste.
+  const authTarget = createMemo(() => { const attempt = authAttempt(); return attempt?.active && attempt.owned && attempt.authUrl ? loopbackPort(attempt.authUrl) : null; });
+  const [catching, setCatching] = createSignal(false);
+  createEffect(() => {
+    const port = authTarget();
+    const held = port === null ? null : catchLoopback(port);
+    setCatching(Boolean(held));
+    if (!held) return;
+    let over = false;
+    void held.url.then((url) => { if (over) return; setCatching(false); if (url) void answerAuthPrompt(url); });
+    onCleanup(() => { over = true; held.stop(); });
+  });
   createEffect(() => {
     if (!props.open || section() !== "models" || !authAttempt()?.active) return;
     const timer = window.setInterval(() => {
@@ -1141,7 +1155,7 @@ export function Settings(props: {
       if (audioInputSession !== session) return;
       setAudioInputTest(result);
       await loadAudioInputs();
-      if (!result.signalDetected) setAudioInputError("No microphone signal detected. Check Chrome site settings and the selected input.");
+      if (!result.signalDetected) setAudioInputError("No microphone signal detected. Check the browser's site settings and the selected input.");
     } catch (error) {
       if (audioInputSession === session) {
         const message = formatMicrophoneError(error);
@@ -1322,12 +1336,12 @@ export function Settings(props: {
               </Group>
               <Show when={touchOnly()}>
                 <Group title="Touch" scope="This device">
-                    <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android. This choice applies to this device.">
+                    <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android.">
                       <Select id="composer-kind" aria-label="Composer" value={composerChoice()} onChange={(event) => setComposerChoice(saveComposerKind(event.currentTarget.value === "native" ? "native" : "web"))}>
                         <For each={COMPOSER_KINDS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                       </Select>
                     </SettingLine>
-                    <SettingLine label="Haptics" title="How strongly this device answers a touch. Off is silent; each choice plays a press as you pick it.">
+                    <SettingLine label="Haptics" title="Each choice plays a press as you pick it.">
                       <Select id="haptic-strength" aria-label="Haptics" value={hapticChoice()} onChange={(event) => setHapticChoice(saveHapticStrength(event.currentTarget.value as HapticStrength))}>
                         <For each={HAPTIC_STRENGTHS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                       </Select>
@@ -1497,11 +1511,11 @@ export function Settings(props: {
                           <SettingLine label="Side key screenshot" title="Holding the side key takes a screenshot of what is on screen as Float opens.">
                             <Switch label="Side key screenshot" checked={floatStatus()!.sideKeyScreenshot} disabled={floatBusy()} onChange={(sideKeyScreenshot) => void changeSideKey({ sideKeyScreenshot })} />
                           </SettingLine>
-                          <SettingLine label="Side key dictates" title="Holding the side key starts dictating at once; hold it again to send. (Android does not tell apps when the key is let go.)">
+                          <SettingLine label="Side key dictates" title="Holding the side key starts dictating at once; hold it again to send.">
                             <Switch label="Side key dictates" checked={floatStatus()!.sideKeyDictates} disabled={floatBusy()} onChange={(sideKeyDictates) => void changeSideKey({ sideKeyDictates })} />
                           </SettingLine>
                           <Show when={floatStatus()!.sideKeyDictates}>
-                            <SettingLine label="Side key talks to" title="Where a side-key dictation goes.">
+                            <SettingLine label="Side key talks to">
                               <Segmented label="Side key talks to" value={floatStatus()!.sideKeyTarget} disabled={floatBusy()} onChange={(sideKeyTarget: FloatHoldTarget) => void changeSideKey({ sideKeyTarget })} options={[
                                 { value: "jbot", label: "jbot" }, { value: "chat", label: "New chat" },
                               ]} />
@@ -1516,7 +1530,7 @@ export function Settings(props: {
                         <Switch label="Hold to talk" checked={floatStatus()!.holdToTalk} disabled={floatBusy()} onChange={(holdToTalk) => void changeFloatHold({ holdToTalk })} />
                       </SettingLine>
                       <Show when={floatStatus()!.holdToTalk}>
-                        <SettingLine label="Hold talks to" title="Where a hold on Float sends what you say.">
+                        <SettingLine label="Hold talks to">
                           <Segmented label="Hold talks to" value={floatStatus()!.holdTarget} disabled={floatBusy()} onChange={(holdTarget: FloatHoldTarget) => void changeFloatHold({ holdTarget })} options={[
                             { value: "jbot", label: "jbot" },
                             { value: "chat", label: "New chat" },
@@ -1684,7 +1698,7 @@ export function Settings(props: {
             <Show when={searchStatus() === "ready" && searchSettings()} fallback={<Show when={searchStatus() === "error"} fallback={<Loading>Loading search settings…</Loading>}><Note tone="error"><span>{searchError() || "Search settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadSearchSettings()}>Retry</Button></Note></Show>}>
               {(settings) => <>
                 <Group title="Search">
-                  <SettingLine label="Search with" title="Automatic is pi-web-access's own order: on a ChatGPT model, OpenAI on that sign-in first; otherwise Exa, then every other provider that can search."
+                  <SettingLine label="Search with" title="Automatic: on a ChatGPT model, OpenAI on that sign-in first; otherwise Exa, then every other provider that can search."
                     state={<>{routeState()}</>}>
                     <Select id="search-route" value={settings().route.first} onChange={(event) => editSearch({ route: { first: event.currentTarget.value } })}>
                       <option value="auto">Automatic</option>
@@ -1697,7 +1711,7 @@ export function Settings(props: {
                     </SettingLine>
                     <Show when={settings().route.fallback}>
                       <SettingLine label="Skip off-topic results" title={settings().cloudflare
-                        ? "Each answer is checked against the query by Cloudflare's Clef classifier on your Cloudflare account (the query, answer and snippets are sent to it); one about something else goes on to the next provider."
+                        ? "An answer about something else goes on to the next provider. The query, answer and snippets are sent to your Cloudflare account to check."
                         : CLOUDFLARE_NEEDED}>
                         <Switch label="Skip off-topic results" disabled={!settings().cloudflare && !settings().route.offTopic} checked={settings().route.offTopic} onChange={(offTopic) => editSearch({ route: { offTopic } })} />
                       </SettingLine>
@@ -1727,7 +1741,7 @@ export function Settings(props: {
                     </SettingLine>
                   }</For>
                   <SettingLine label="Read values off pages" title={settings().cloudflare
-                    ? "fetch_content's extract mode: a price, a date or a limit as a typed value, with the line it came from, or said not to be there. Read by Cloudflare's Clairic model on your Cloudflare account; the page text is sent to Cloudflare."
+                    ? "Reads a price, a date or a limit off a page, with the line it came from. The page text is sent to your Cloudflare account."
                     : CLOUDFLARE_NEEDED}>
                     <Switch label="Read values off pages" disabled={!settings().cloudflare && !settings().fetching.extract} checked={settings().fetching.extract} onChange={(extract) => editSearch({ fetching: { extract } })} />
                   </SettingLine>
@@ -1742,11 +1756,11 @@ export function Settings(props: {
                       onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
                   <SettingLine plain label="Cloudflare Workers AI" state={settings().cloudflare ? "connected" : "not set"}
-                    title="Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account.">
+                    title="Skips off-topic results and reads values off pages.">
                     <Button variant="ghost" size="sm" onClick={() => openSection("models")}>Set in Models</Button>
                   </SettingLine>
                   <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
-                    <SettingLine label="Add a provider" title="A search provider's API key, kept in pi-web-access's web-search.json on this server.">
+                    <SettingLine label="Add a provider" title="A search provider's API key, kept on the hub.">
                       <Select id="search-add-provider" aria-label="Add a provider" search="Search providers" value="" onChange={(event) => setAddingSearch(event.currentTarget.value)}>
                         <option value="">Choose a provider</option>
                         <For each={settings().providers.filter((provider) => !provider.ready && provider.id !== addingSearch())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
@@ -1769,7 +1783,7 @@ export function Settings(props: {
             </Group>
             {/* Helper models: the small jobs beside a chat, each saying what it falls back to. Only naming has its own today. */}
             <Group title="Helper models">
-              <SettingLine plain label="Naming" state={<>{sessionNameModel() ? "Its own model; inherits nothing" : "Inherits nothing: new chats stay untitled until one is chosen"}</>}
+              <SettingLine plain label="Naming" state={<>{sessionNameModel() ? "Its own model" : "None: new chats stay untitled"}</>}
                 title="Titles each new chat from its first message, with the model chosen here.">
                 <ModelSelector
                 models={namingModels()}
@@ -1781,12 +1795,12 @@ export function Settings(props: {
                 onManageModels={props.onOpenModelSelector}
               />
               </SettingLine>
-              <SettingLine plain label="Summary" state={<>Inherits the chat's model and effort</>}
-                title="When a chat's context fills, its older part is summarized (compaction) by the model and effort the chat itself uses. It has no model of its own.">
+              <SettingLine plain label="Summary"
+                title="When a chat's context fills, the chat's own model summarizes its older part.">
                 <SettingValue>Chat's own model</SettingValue>
               </SettingLine>
               <SettingLine label="Review" state={<>{reviewModel() ? "Its own model" : sessionNameModel() ? "Inherits Naming's model" : "None: every held action asks you"}</>}
-                title="The approval model: judges what the agent's tools hold for approval (an Executor send, a change) against your rules (Settings › Agent › Approvals), and asks you only for what it cannot allow. Without one, everything held asks you.">
+                title="Judges what the agent's tools hold for approval against your rules (Agent › Approvals), and asks you only for what it cannot allow.">
                 <Select id="review-model" aria-label="Review model" value={reviewModel()} disabled={generalLoading()}
                   onChange={(event) => { setReviewModel(event.currentTarget.value); reviewAutosave.edit({ reviewModel: event.currentTarget.value }, "now"); }}>
                   <option value="">Same as Naming</option>
@@ -1796,7 +1810,6 @@ export function Settings(props: {
             </Group>
             <Group title="ChatGPT Web">
               <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
-                title={chatGptStatus() ? `Transport: curl_cffi ${chatGptStatus()!.curlCffiVersion}, ${chatGptStatus()!.impersonate}. Stored cookie names: ${chatGptStatus()!.cookieNames.join(", ") || "none"}.` : undefined}
                 busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
                 onSave={(cookie) => saveChatGptCookie(cookie)} onRemove={() => void removeChatGptCookie()} />
               <SettingDetails summary="Where to find them">
@@ -1806,7 +1819,7 @@ export function Settings(props: {
                   <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
                   <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
                 </ol>
-                <Note>Conduit stores it on this server and never returns its values. Treat it like a password: do not paste it into a chat, issue, or log.</Note>
+                <Note>Treat it like a password: do not paste it into a chat, issue, or log.</Note>
               </SettingDetails>
               <Show when={chatGptError()}><Note tone="error">{chatGptError()}</Note></Show>
             </Group>
@@ -1822,12 +1835,14 @@ export function Settings(props: {
                   </>}</Show>
                   <Show when={!current().deviceCode && current().authUrl}>
                     <SettingStep step={1} label="Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingStep>
-                    <Show when={current().prompt && current().prompt!.type !== "select"}>
+                    <Show when={catching()} fallback={<Show when={current().prompt && current().prompt!.type !== "select"}>
                       <Note tone="quiet">If the last page does not load, copy its address and paste it here.</Note>
+                    </Show>}>
+                      <SettingStep step={2} label="Come back here"><Spinner /></SettingStep>
                     </Show>
                   </Show>
                   <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
-                  <Show when={current().prompt && current().prompt!.type !== "select"}>
+                  <Show when={!catching() && current().prompt && current().prompt!.type !== "select"}>
                     <Show when={current().authUrl} fallback={<SettingLine label={current().prompt!.message}>
                       <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
                       <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
@@ -1848,7 +1863,7 @@ export function Settings(props: {
                 <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
                 <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
                 <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
-                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept by the Conduit durable agent on this server.">
+                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept on the hub.">
                     <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => setAddingAccount(event.currentTarget.value)}>
                       <option value="">Choose a provider</option>
                       <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>

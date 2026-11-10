@@ -44,7 +44,7 @@ export function ConnectorsGroup(props: { onOpenTools?: (connector: string) => vo
   // A hub without its agent has nothing to call them yet: the group waits for one.
   return <Show when={connectors().length}><Group title="Connectors">
     <For each={connectors()}>{(connector) =>
-      <SettingLine label={connector.label} title={`${connector.url}: your accounts through one MCP server, signed in once for this hub. The agent calls its tools from code; anything that is not a read asks you first.`}
+      <SettingLine label={connector.label} title={`${connector.url}: signed in once for this hub. Anything that is not a read asks you first.`}
         state={<>{failure()[connector.id] || (connector.status === "on"
           ? <Show when={props.onOpenTools} fallback={`${connector.tools} tools`}><SettingStateLink onClick={() => props.onOpenTools?.(connector.id)}>{connector.tools} tools</SettingStateLink></Show>
           : connector.status === "error" ? connector.error || CONNECTOR_STATE.error : CONNECTOR_STATE[connector.status])}</>}>

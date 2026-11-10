@@ -69,12 +69,10 @@ export function ToolsSettings() {
           </Select>
         </SettingLine>
         <Show when={connectorId()}>
-          <Note>{connectors().find((item) => item.id === connectorId())?.label ?? "This connector"}'s tools, declared to Conduit and taken up by {usedBy().length
-            ? usedBy().map(nameOf).join(", ") : "no profile yet"}. A profile's chats call them from codemode.</Note>
+          <Note>{connectors().find((item) => item.id === connectorId())?.label ?? "This connector"}'s tools, used by {usedBy().length ? usedBy().map(nameOf).join(", ") : "no profile yet"}.</Note>
         </Show>
         <Show when={profile()}>{(current) =>
-          <Note>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.
-            {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</Note>}
+          <Note>{current().tools.length} tools; {asking() ? `${asking()} can ask you first` : "none asks you first"}.</Note>}
         </Show>
       </Group>
       {/* A connected connector's tool count shows its toolset above. */}
@@ -91,10 +89,10 @@ export function ToolsSettings() {
       <McpAccess />
       <Group title="About this list">
         <SettingDetails summary="Where tools come from">
-          <Note>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
-            connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</Note>
+          <Note>Built-in tools are Conduit's own. Extensions are packages a profile loads (web search). Connectors are your
+            connected accounts. Codemode is the code tool and the helpers its scripts call.</Note>
           <Note>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
-            plus devices and handoff. Connected accounts appear once a connector is connected (Connectors, above).</Note>
+            plus devices and handoff.</Note>
         </SettingDetails>
       </Group>
     </>}
@@ -113,13 +111,13 @@ function McpAccess() {
   const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
     .catch(() => setCopied("Copying was not allowed here"));
   return <Show when={access()}>{(found) => <Group title="Other harnesses">
-    <SettingLine plain label="conduit" mono title="Conduit over MCP (Streamable HTTP): conduit_ui reads and arranges client tabs; conduit_inbox edits the hub's shared context inbox. A signed-in session or the hub's token may call it.">
+    <SettingLine plain label="conduit" mono title="Conduit's MCP server: another harness can arrange your tabs and edit the hub's shared inbox. It needs a signed-in session or the hub's token.">
       <SettingValue mono>{found().url}</SettingValue>
     </SettingLine>
-    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml" title="[mcp_servers.conduit] with the hub's token as its Authorization header, and [mcp_servers.agent-browser] on the shared page.">
+    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml">
       <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
     </SettingLine>
     <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
-    <Note>The hub's browser is agent-browser's own MCP server on the page you share{found().browser ? "" : " (not installed on this hub)"}. Claude Code chats Conduit starts on the hub have both already.</Note>
+    <Note>Claude Code chats started on the hub have both already.{found().browser ? "" : " The hub browser is not installed on this hub."}</Note>
   </Group>}</Show>;
 }

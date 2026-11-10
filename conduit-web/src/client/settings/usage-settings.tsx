@@ -87,7 +87,7 @@ export function UsageSettings() {
         <Segmented label="Period" size="sm" value={String(range())} options={RANGES.map((days) => ({ value: String(days), label: `${days} days` }))}
           onChange={(value) => { setRange(Number(value)); void load(); void loadDiagnostics(); }} />
       </SettingLine>
-      <SettingLine plain label="Spent" state="API-equivalent" title="Each call priced when it was made, at its model's API list price; kept as dollars, so later price changes never move a past day.">
+      <SettingLine plain label="Spent" state="API-equivalent" title="At each model's API list price when the call was made.">
         <SettingValue mono>{money(total().cost)}</SettingValue>
       </SettingLine>
       <SettingWide><Series label={`Spend per day, last ${range()} days: ${money(total().cost)}`} points={series()} ends={[series()[0]?.label || "", "Today"]} /></SettingWide>
@@ -127,11 +127,11 @@ export function UsageSettings() {
         <Show when={report().changes}>{(changes) =>
           <SettingDetails summary="Mid-conversation changes">
             <SettingLine plain label="Tools added" state={`${changes().toolSets.addedTools} tools`}
-              title="Tool declarations pi-durable appended with only what was new: the cache before them holds.">
+              title="Tool declarations appended with only what was new; the cache before them holds.">
               <SettingValue mono>{changes().toolSets.added} · {count(changes().toolSets.addedTokens)} tokens</SettingValue>
             </SettingLine>
             <SettingLine plain label="Whole tool set again" state={`${changes().toolSets.fullTools} tools`}
-              title="pi-durable declared every tool again: the tool order changed or a tool's definition did. Conduit keeps one append-only order so this stays rare.">
+              title="Every tool declared again, because the order or a definition changed.">
               <SettingValue mono>{changes().toolSets.full} · {count(changes().toolSets.fullTokens)} tokens</SettingValue>
             </SettingLine>
             <SettingLine plain label="System messages" title="Section updates and notices appended as system messages.">
@@ -159,8 +159,8 @@ export function UsageSettings() {
       </Group>
       <Show when={report().context}>{(context) =>
         <Group title={`${agent()}'s context`}>
-          <SettingLine plain label="Instructions" state="the system prompt, about 4 characters a token"
-            title={`What ${agent()}'s home thread sent with its last request, measured from the copy kept for keep-warm.`}>
+          <SettingLine plain label="Instructions" state="the system prompt"
+            title={`What ${agent()}'s home thread sent with its last request.`}>
             <SettingValue mono>{count(context().instructions)} tokens</SettingValue>
           </SettingLine>
           <SettingLine plain label="Tool definitions" state={`${context().byTool.length} tools${context().toolSets > 1 ? ` · sent ${context().toolSets} times in the thread, ${count(context().toolSetTokens)} tokens` : ""}`}

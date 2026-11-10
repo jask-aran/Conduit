@@ -70,6 +70,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ConduitTlsPlugin.class);
         registerPlugin(ConduitUpdaterPlugin.class);
         registerPlugin(ConduitPushPlugin.class);
+        registerPlugin(ConduitLoopbackPlugin.class);
         ConduitPushPlugin.handleIntent(this, getIntent());
         super.onCreate(savedInstanceState);
         /*

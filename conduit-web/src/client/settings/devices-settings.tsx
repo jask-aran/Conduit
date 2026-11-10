@@ -99,7 +99,7 @@ export function DevicesSettingsTile(props: {
     <For each={mounted(node)}>{(project) =>
       <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} meta={named ? node.name : undefined} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
     <For each={unmounted(node)}>{(root) =>
-      <Row density="nav" element="button" lead={<Icons.Folder />} meta="Add as workspace" title={`${root.label}: shared, not a workspace yet. Add it as one.`}
+      <Row density="nav" element="button" lead={<Icons.Folder />} meta="Add as workspace"
         onClick={() => void props.onAddWorkspace({ mode: "node", nodeId: node.id, rootId: root.id })}>{folderName(root.label)}</Row>}</For>
   </>;
 
@@ -120,7 +120,7 @@ export function DevicesSettingsTile(props: {
           <Show when={companion && paired()}>
             {/* Paired is connected: the workspaces mounted from here work whenever this app runs (in the tray too).
                 Sharing is the other thing: letting the hub go through this computer's folders and mount any of them. */}
-            <SettingLine label={`Share folders with ${server()}`} title={`${server()} can go through this computer's folders and mount any of them as a workspace (New workspace), with the grants below. Workspaces already mounted from here work either way, while this app runs. Set here only.`}>
+            <SettingLine label={`Share folders with ${server()}`} title={`${server()} can mount any of this computer's folders as a workspace, with the grants below. Workspaces already mounted from here keep working either way.`}>
               <Switch id="device-browse" label={`Share this computer's folders with ${server()}`} disabled={companion!.busy()} checked={Boolean(paired()?.browse)} onChange={(on) => void companion!.browse(on)} />
             </SettingLine>
             <SettingLine label="New folders can be edited" title="Folders mounted from here, or by browsing this computer.">

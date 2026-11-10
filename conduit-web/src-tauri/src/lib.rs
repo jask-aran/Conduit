@@ -10,6 +10,7 @@ mod dev_update;
 mod discovery;
 mod global_shortcuts;
 mod interface_bundle;
+mod loopback;
 mod node_companion;
 mod secrets;
 mod tray;
@@ -92,6 +93,8 @@ pub fn run() {
             secrets::secret_get,
             secrets::secret_set,
             secrets::secret_remove,
+            loopback::loopback_listen,
+            loopback::loopback_stop,
             desktop_settings::desktop_settings,
             desktop_settings::set_desktop_settings,
             dev_update::check_dev_update,

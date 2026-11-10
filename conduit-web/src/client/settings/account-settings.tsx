@@ -39,7 +39,7 @@ export function AccountSettings() {
       <Button size="sm" variant="secondary" disabled={busy()} onClick={() => chooser.click()}>{accountPicture() ? "Change" : "Choose…"}</Button>
       <Avatar name={accountName()} src={accountPicture()} size="lg" label={`${accountName() || "No name"}'s picture`} />
     </SettingLine>
-    <SettingLine label="Name" title="The name this hub knows you by, on every device signed in to it, and what your agent calls you.">
+    <SettingLine label="Name" title="What your agent calls you, on every device signed in to this hub.">
       <Input aria-label="Your name" placeholder="Your name" maxLength={60} value={accountName()}
         onChange={(event) => void save(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
     </SettingLine>
@@ -47,13 +47,13 @@ export function AccountSettings() {
   </Group>
   <Group title="Where you are">
     <Show when={agentView()?.enabled}>
-      <SettingLine label="Time zone" title="Your day: your agent's day, brief, quiet hours and budget are counted in it.">
+      <SettingLine label="Time zone" title="Your agent's brief, quiet hours and daily budget follow it.">
         <Select id="account-zone" value={zone()} onChange={(event) => void saveZone(event.currentTarget.value)}>
           <For each={zones.includes(zone()) ? zones : [zone(), ...zones]}>{(item) => <option value={item}>{item.replace(/_/g, " ")}</option>}</For>
         </Select>
       </SettingLine>
     </Show>
-    <SettingLine label="Home" title="Where you live, in your words (a city, a suburb): your agent's for weather, travel and what is near you.">
+    <SettingLine label="Home" title="Your agent uses it for weather, travel and what is near you.">
       <Input aria-label="Home" placeholder="City or suburb" maxLength={120} value={accountHome()}
         onChange={(event) => void saveHome(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
     </SettingLine>

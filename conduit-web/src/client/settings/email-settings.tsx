@@ -86,13 +86,12 @@ export function EmailSettings(props: { name: string }) {
 
   // Step one and two of the form: the token, made in Cloudflare with only what the mailbox needs.
   const TokenLines = () => <>
-    <SettingLine plain label="A Cloudflare token" title="Cloudflare opens with the permissions filled in. Choose your account and the address's domain only, and set an expiry.">
+    <SettingLine plain label="A Cloudflare token">
       <Button size="sm" variant="secondary" onClick={() => window.open(view()?.tokenUrl, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Create in Cloudflare</Button>
     </SettingLine>
     <Note>
       It needs only {(view()?.permissions ?? []).join(", ") || "Workers, R2 and Email Routing"}. In Cloudflare, limit it to this account and the
-      address's domain, give it an expiry, and filter it to this hub's IP address if you can. Tokens can't cap spending, but the mailbox
-      stays on Cloudflare's free Workers and R2 tiers and refuses mail over 10 MB. Conduit uses the token once and doesn't keep it.
+      address's domain, give it an expiry, and filter it to this hub's IP address if you can. Conduit uses the token once and doesn't keep it.
     </Note>
     <SettingLine label="Token">
       <Input id="agent-email-token" type="password" autocomplete="off" placeholder="Paste the token" value={token()} onInput={(event) => setToken(event.currentTarget.value)} />
@@ -108,7 +107,7 @@ export function EmailSettings(props: { name: string }) {
           {current().configured ? " Running setup again repairs the mailbox; for an address another hub has, it moves it here." : ""}
         </Note>
         <TokenLines />
-        <SettingLine label="Address" title="An address on a domain in your Cloudflare account, with Email Routing on.">
+        <SettingLine label="Address">
           <Input id="agent-email-address" type="email" placeholder={`${props.name.toLowerCase()}@yourdomain.com`} value={address()} onInput={(event) => setAddress(event.currentTarget.value)} />
         </SettingLine>
         <SettingLine label="Your addresses" title="Mail from these wakes it, and its replies go to them. Cloudflare emails each one a link to confirm before replies can reach it.">
@@ -119,8 +118,7 @@ export function EmailSettings(props: { name: string }) {
           <Button size="sm" disabled={!ready() || !!busy()} onClick={() => void setup()}>{busy() === "setup" ? "Setting up…" : "Set up"}</Button>
         </SettingLine>
       </>}>
-        <SettingLine label="Address" state={current().lastError || (current().lastCollectedAt ? `Collected ${when(current().lastCollectedAt)}` : "Waiting for its first collection")}
-          title={`Its mailbox: ${current().worker ?? ""}. The hub collects from it every minute, and the mailbox wakes the hub when mail lands if it can reach it.`}>
+        <SettingLine label="Address" state={current().lastError || (current().lastCollectedAt ? `Collected ${when(current().lastCollectedAt)}` : "Waiting for its first collection")}>
           <span data-mono="">{current().address}</span>
           <Button size="sm" variant="secondary" disabled={!!busy()} onClick={() => void check()}>{busy() === "check" ? "Checking…" : "Check now"}</Button>
         </SettingLine>
@@ -135,7 +133,7 @@ export function EmailSettings(props: { name: string }) {
         <SettingLine label="Replies by email" title="Its answers to your email go out as email, threaded. Off: it answers in the app.">
           <Switch label="Replies by email" checked={current().send} onChange={(send) => void save({ send })} />
         </SettingLine>
-        <SettingLine label="Mailbox" title="Set up again to repair it or bring it up to date; Remove takes the routing rule and the mailbox Worker away (mail already in its storage stays).">
+        <SettingLine label="Mailbox" title="Set up again to repair it. Remove takes the address away; mail already collected stays.">
           <Button size="sm" variant="secondary" disabled={!!busy()} onClick={() => { setRemoving(false); setSteps([]); setForm(true); }}>Set up again</Button>
           <Button size="sm" variant="destructive" outline disabled={!!busy()} onClick={() => { setForm(false); setSteps([]); setRemoving(true); }}>Remove</Button>
         </SettingLine>
