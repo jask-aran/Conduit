@@ -330,6 +330,8 @@ export class DurableRuntime {
       const registry = createRegistry();
       // Every extension a template may select, by name; a conversation selects its template's.
       this.extensions = new Map();
+      // What the last harness had installed is not in this registry: a reopen after a storage failure installs again.
+      this.connectorShape = this.browserShape = undefined;
       const install = this.install = (extension) => { registry.install(extension); this.extensions.set(extension.name, extension); };
       install(Conduit(this));
       // Images read or attached are resized and converted to fit the model
@@ -427,6 +429,7 @@ export class DurableRuntime {
         this.usage = null;
         this.harness = null;
         this.opening = null;
+        clearTimeout(this.keepWarmTimer);
       });
       // Whatever the last process left running goes on now, before anyone asks.
       this.harness.resume();
@@ -733,11 +736,13 @@ export class DurableRuntime {
   async freshModels() {
     await this.open();
     const signature = await this.modelFilesSignature();
+    // The signature is kept once its refresh has succeeded (a failed one is tried again), and a caller arriving
+    // during one waits for it rather than taking models not yet read.
     if (signature !== this.modelsSignature) {
-      this.modelsSignature = signature;
-      this.modelsRefresh ||= this.models.refresh({ allowNetwork: false }).finally(() => { this.modelsRefresh = null; });
-      await this.modelsRefresh;
+      this.modelsRefresh ||= this.models.refresh({ allowNetwork: false }).then(() => { this.modelsSignature = signature; })
+        .finally(() => { this.modelsRefresh = null; });
     }
+    await this.modelsRefresh;
     return this.models;
   }
 

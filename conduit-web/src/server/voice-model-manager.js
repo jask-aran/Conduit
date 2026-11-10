@@ -349,13 +349,14 @@ export class VoiceModelManager {
     this.startPromise = startPromise;
     this.startingModelId = model.id;
     try {
-      const runtime = await startPromise;
-      this.armIdleTimer();
-      return runtime;
+      return await startPromise;
     } finally {
       if (this.startPromise === startPromise) {
         this.startPromise = null;
         this.startingModelId = null;
+        // Armed once the start is over: armed while it stood, the timer declined, and a model loaded by an unpinned
+        // use (the settings test, a dictation that ended while it loaded) stayed resident.
+        this.armIdleTimer();
       }
     }
   }

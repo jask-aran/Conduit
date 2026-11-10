@@ -364,7 +364,7 @@ export class PtyManager extends EventEmitter {
 
     // Reserve before any asynchronous tmux work. This closes the attach/attach
     // race without introducing a global streaming lease.
-    const lease = { state: "attaching", handle: null, cancelled: false, owner };
+    const lease = { handle: null, cancelled: false, owner };
     this.attachments.set(id, lease);
     try {
       await this.ensureTmux();
@@ -391,7 +391,6 @@ export class PtyManager extends EventEmitter {
         },
       );
       lease.handle = handle;
-      lease.state = "attached";
       if (this.attachments.get(id) !== lease || lease.cancelled) {
         try { handle.kill(); } catch {}
         throw failure("pty_not_running", "Terminal is no longer available");
@@ -515,7 +514,7 @@ export class PtyManager extends EventEmitter {
   }
 
   async attachOnDevice(record, { cols, rows, takeover = false, owner = null }) {
-    const lease = { state: "attaching", handle: null, cancelled: false, owner };
+    const lease = { handle: null, cancelled: false, owner };
     this.attachments.set(record.id, lease);
     let shell;
     try {
@@ -536,7 +535,6 @@ export class PtyManager extends EventEmitter {
       shell.detach();
       throw failure("pty_not_running", "Terminal is no longer available");
     }
-    lease.state = "attached";
     lease.handle = { kill: () => shell.detach() };
     if (!this.metadata.has(record.id)) this.metadata.set(record.id, {});
     shell.resize(boundedDimension(cols, 80), boundedDimension(rows, 24));
@@ -594,7 +592,7 @@ export class PtyManager extends EventEmitter {
       previous.cancelled = true;
       try { previous.handle?.kill(); } catch {}
     }
-    const removalLease = { state: "destroying", handle: null, cancelled: true };
+    const removalLease = { handle: null, cancelled: true };
     this.attachments.set(id, removalLease);
     try {
       if (record.status === "running" && record.nodeId) this.killOnDevice(record);

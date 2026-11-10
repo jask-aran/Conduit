@@ -53,6 +53,8 @@ export function tunnelTo(hub, nodeId, endpoint) {
       withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT)), { FileError, ExecutionError });
     if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
     if (result.value?.error) throw Object.assign(new Error(result.value.error.message), { code: result.value.error.code });
+    // Destroyed while it opened: the device's end is closed, where it was left connected until the node dropped.
+    if (stream.destroyed) return void send({ end: true });
     open = true;
     stream.emit("connect");
   })();

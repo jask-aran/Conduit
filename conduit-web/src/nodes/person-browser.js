@@ -114,8 +114,13 @@ export class PersonBrowser {
   }
 
   /** A one-time code for a browser's extension to redeem; the one already out is given again while it lasts. */
-  async pair() {
-    if (this.pairing) return { code: this.pairing.code, expiresAt: this.pairing.expiresAt };
+  pair() {
+    if (this.pairing) return Promise.resolve({ code: this.pairing.code, expiresAt: this.pairing.expiresAt });
+    // One ask at a time: a second before the first's code arrived started a second child and orphaned the first's code.
+    return this.pairingAsked ||= this.askPair().finally(() => { this.pairingAsked = null; });
+  }
+
+  async askPair() {
     await this.ensureRelay();
     const child = spawn(process.execPath, [this.cli, "pair", "--wait-seconds", String(PAIR_SECONDS)], { env: { ...process.env, ...ENV }, stdio: ["ignore", "pipe", "pipe"] });
     const code = await new Promise((resolve, reject) => {

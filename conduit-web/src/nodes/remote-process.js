@@ -74,6 +74,8 @@ export class RemoteProcess {
 
   /** The device could not be followed again: a restarted device has none of its old processes. */
   lost(error) {
+    // The device went again mid-attach: the process may well be running, and its next hello resumes this.
+    if (error?.interrupted || error?.code === "device_offline") return;
     this.deliver({ kind: "exit", code: null, signal: /No such process/.test(error?.message || "") ? "device_process_gone" : "device_unreachable" });
   }
 
@@ -149,7 +151,8 @@ export class RemoteProcess {
     void call(this.hub, this.nodeId, "resize", [this.procId, cols, rows]).catch(() => {});
   }
 
-  kill(signal) { void call(this.hub, this.nodeId, "kill", [this.procId, signal]).catch(() => {}); }
+  /** @returns {Promise<Error | null>} why the device was not told, if it was not */
+  kill(signal) { return call(this.hub, this.nodeId, "kill", [this.procId, signal]).then(() => null, (error) => error); }
 
   /** Stop following; the process goes on running on the device. */
   detach() {

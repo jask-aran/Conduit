@@ -160,17 +160,19 @@ export function createLiveSessionLauncher({
       const held = liveProcessEntries(backends, context.chat.id).length + starting.size;
       if (max > 0 && held >= max) throw launchError("live_process_limit", "No room for a spare agent", 429);
     }).then(() => { starting.add(context.chat.id); }));
-    // A Conduit chat that has not chosen a model starts on its profile's last
-    // one, as its composer shows. A spare agent, started before the first pick,
-    // took the settings default with no effort and kept it as the chat's own.
-    if (!model && !context.chat.backend?.model && preferences
-      && (context.chat.backend?.implementation || "conduit-runtime") === "conduit-runtime") {
-      const remembered = rememberedModel(preferences, templateForChat(context.chat, context.project)?.id);
-      const known = remembered?.model && (await adapter.listAvailableModels?.(context.project.workingRoot) || [])
-        .some((item) => item.spec === remembered.model);
-      if (known) { model = remembered.model; thinkingLevel = remembered.thinkingLevel || ""; forceModel = true; }
-    }
+    // From here the chat holds a place under the cap, given back however the start ends: the model lookup below can
+    // fail too, and outside this it kept the place until the server restarted.
     try {
+      // A Conduit chat that has not chosen a model starts on its profile's last
+      // one, as its composer shows. A spare agent, started before the first pick,
+      // took the settings default with no effort and kept it as the chat's own.
+      if (!model && !context.chat.backend?.model && preferences
+        && (context.chat.backend?.implementation || "conduit-runtime") === "conduit-runtime") {
+        const remembered = rememberedModel(preferences, templateForChat(context.chat, context.project)?.id);
+        const known = remembered?.model && (await adapter.listAvailableModels?.(context.project.workingRoot) || [])
+          .some((item) => item.spec === remembered.model);
+        if (known) { model = remembered.model; thinkingLevel = remembered.thinkingLevel || ""; forceModel = true; }
+      }
       const result = await adapter.launch(context, { model, thinkingLevel, forceModel }, {
         catalogFor, config, lifecycle, runtimeFor, templateForChat,
       });

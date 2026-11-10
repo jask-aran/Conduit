@@ -95,7 +95,9 @@ export function placeProcesses(hub, { nodeId = null, place = null } = {}) {
       kill(procId) {
         if (!hub?.live.get(nodeId)?.ready) return void hub?.killLater(nodeId, procId);
         const shell = new RemoteProcess(hub, nodeId, { id: procId });
-        shell.kill();
+        // A kill that did not reach the device (it reads ready until a missed pong says otherwise) is kept for its
+        // next hello, as one asked while it is away is.
+        void shell.kill().then((error) => { if (error && !/No such process/.test(error.message || "")) return hub.killLater(nodeId, procId); });
         hub.unfollow(shell);
       },
     },
