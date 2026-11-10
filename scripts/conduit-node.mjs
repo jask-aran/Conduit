@@ -100,13 +100,21 @@ function takeOver() {
   fs.writeFileSync(lock, `${process.pid}\n`);
   process.on("exit", () => { try { if (Number(fs.readFileSync(lock, "utf8")) === process.pid) fs.rmSync(lock); } catch {} });
 }
-/** Whether a pid is still a node process (not one the system gave the number to since). */
+/**
+ * Whether a pid is still a run of this node (not a process the system gave the number to since), by its command
+ * line. Windows was asked only for the image name, so any node.exe that had come to hold a stale pid was stopped:
+ * and the lock is always stale there, since stopping a process on Windows runs no exit handler to remove it. Where
+ * it cannot be told, the older run is left: the hub lets only the newest hold the pairing, and the older one ends
+ * itself when it is replaced.
+ */
 function isNodeRun(pid) {
   try { process.kill(pid, 0); } catch { return false; }
   try {
-    if (process.platform === "win32") return /node\.exe/i.test(execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true }));
-    return /conduit-node/.test(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"));
-  } catch { return process.platform !== "linux"; }
+    if (process.platform === "win32") return /conduit-node/i.test(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: "utf8", windowsHide: true, timeout: 10_000 }));
+    if (process.platform === "linux") return /conduit-node/.test(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"));
+    return /conduit-node/.test(execFileSync("ps", ["-p", String(Number(pid)), "-o", "command="], { encoding: "utf8", timeout: 10_000 }));
+  } catch { return false; }
 }
 
 /** What a new folder may do there: as set by `new-folders`, editing but no commands until then. */

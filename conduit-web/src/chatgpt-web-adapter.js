@@ -209,7 +209,8 @@ export class ChatGptWebAdapter extends EventEmitter {
       this.closeTurn(record, "stop", fullText);
       this.settle(record, "settled");
     } catch (cause) {
-      if (cause.name === "AbortError") {
+      // A reply that errors as it is stopped was stopped (turn.js outcomeOf).
+      if (cause.name === "AbortError" || record.stopping) {
         this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
           messageId, stopReason: "aborted", errorMessage: null, blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
         this.closeTurn(record, "aborted", fullText);
