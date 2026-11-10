@@ -6,7 +6,8 @@ import WebSocket from "ws";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { err, FileError, ExecutionError } from "@earendil-works/pi-durable/env";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
-import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, rootFor } from "./protocol.js";
+import { encode, decode, HANDLE_METHODS, METHOD_GRANTS, NODE_PROTOCOL_VERSION, rootFor, servedCall } from "./protocol.js";
+import { helloCapabilities, NODE_TARGETS } from "../device-api.js";
 import { NodeProcesses } from "./node-processes.js";
 import { keptBack, rootDeny } from "./secrets.js";
 import { Receipts } from "./receipts.js";
@@ -264,8 +265,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
       // Roots go by id; the path is for people to read, main never sends it back.
       send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(), ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}),
-        roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
+        ...helloCapabilities({ harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(),
+          roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) }),
+        ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
     ws.on("message", async (raw) => {
@@ -515,6 +517,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     let readMachine = null;
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
+      // Only what is declared (device-api.js NODE_TARGETS); any other target is a handle this node opened.
+      if (Object.hasOwn(NODE_TARGETS, target) && !servedCall(target, method)) return err(new FileError("not_supported", `${method} is not served by this node`));
       // This device's browser (roadmap #9): its own agent-browser session and profile, offered as harnesses are --
       // only where a folder is shared with commands -- and reached from other clients through the hub. `stream`
       // answers the loopback port the hub then tunnels to (openTunnel, a port on this device).

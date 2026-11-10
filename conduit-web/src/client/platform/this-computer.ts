@@ -6,8 +6,9 @@
 import { api } from "../api/client.ts";
 import { httpUrl } from "../api/transport.js";
 import { desktopShell, type CompanionStatus } from "./installed-client.ts";
+import type { Device } from "./devices.ts";
 
-type Listed = { devices: Array<{ id: string; hub?: string | boolean; nodes: Array<{ id: string; online: boolean; browse?: boolean; roots: Array<{ label: string }> }> }> };
+type Listed = { devices: Device[] };
 type ListedNode = Listed["devices"][number]["nodes"][number];
 
 const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((device) => device.nodes);

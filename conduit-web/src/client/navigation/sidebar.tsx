@@ -33,6 +33,7 @@ import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { harnessStatusLabel } from "../harness-brand";
 import { agentName, agentNeeds, agentView, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
+import type { Device } from "../platform/devices.ts";
 
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
@@ -583,7 +584,7 @@ export function Sidebar(props: {
   type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number; browse: boolean; terminal: boolean };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
   const [hubName, setHubName] = createSignal("the hub");
-  const readMachines = () => void api<{ devices: Array<{ name: string; hub?: string; nodes: Array<{ id: string; name: string; local?: boolean; online: boolean; browse?: boolean; terminal?: boolean; roots: unknown[] }> }> }>("/v0/nodes")
+  const readMachines = () => void api<{ devices: Device[] }>("/v0/nodes")
     .then(({ devices }) => {
       setHubName(devices.find((device) => device.hub)?.hub || "the hub");
       setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local),

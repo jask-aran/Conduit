@@ -1,4 +1,5 @@
 import path from "node:path";
+import { NODE_TARGETS } from "../device-api.js";
 
 /**
  * The Conduit node protocol (plan decision 17), shared by both ends.
@@ -8,8 +9,8 @@ import path from "node:path";
  * Conduit's own and versioned, so an installed node survives changes to
  * pi-durable's environment API: main adapts it, the wire does not move.
  *
- * node -> main   { type: "hello", version, name, platform, boot, roots: [{ id, label, read, write, shell, allow }] }
- * main -> node   { type: "call", id, target: "env" | "proc" | <handle id>, method, args, cwd: { root, path },
+ * node -> main   { type: "hello", version, name, platform, boot, ...capabilities (device-api.js DEVICE_CAPABILITIES) }
+ * main -> node   { type: "call", id, target: <a NODE_TARGETS key, device-api.js> | <handle id>, method, args, cwd: { root, path },
  *                  action?, from? }
  *                { type: "abort", id } | { type: "abort", action }
  * node -> main   { type: "result", id, value }       a Result, encoded
@@ -92,6 +93,13 @@ export const METHOD_GRANTS = Object.freeze({
   // every shared root. A command's own spill files are the device's business.
   exec: { grant: "shell", paths: [] },
 });
+
+/** Whether a node serves this call (device-api.js NODE_TARGETS): asked of a declared target, a method it lists. */
+export function servedCall(target, method) {
+  const declared = Object.hasOwn(NODE_TARGETS, target) ? NODE_TARGETS[target] : null;
+  if (!declared) return false;
+  return declared.methods === "grants" ? Object.hasOwn(METHOD_GRANTS, method) : declared.methods.includes(method);
+}
 
 /** Methods of the handles a call can return, by the method that made them. */
 export const HANDLE_METHODS = Object.freeze(["readLine", "read", "scanLines", "info", "next", "close"]);

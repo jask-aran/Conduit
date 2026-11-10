@@ -6,7 +6,8 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { WebSocketServer } from "ws";
 import { awaitWithContext, BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
-import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION } from "./protocol.js";
+import { decode, encode, NODE_FEATURES, NODE_PROTOCOL_VERSION, servedCall } from "./protocol.js";
+import { capabilitiesOf, helloCapabilities, keptCapabilities, NODE_TARGETS } from "../device-api.js";
 import { channelKey, DIRECT_PTY_TTL_MS, DIRECT_TTL_MS, proofKey, signGrant } from "./direct.js";
 import { FileError } from "@earendil-works/pi-durable/env";
 
@@ -176,14 +177,9 @@ export class NodeHub extends EventEmitter {
 
   view(record) {
     const live = this.live.get(record.id);
+    // What it can do (device-api.js): as it said if it is connected, else what is remembered of it.
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
-      online: Boolean(live), roots: live?.roots || record.roots || [], harnesses: live?.harnesses || record.harnesses || [],
-      // The device lets this server browse it and share folders it picks (set on the device).
-      browse: live ? Boolean(live.browse) : Boolean(record.browse),
-      // It offers its browser to other clients (roadmap #9): only while it is connected.
-      browser: Boolean(live?.browser),
-      // A terminal in its home: where any folder is shared with commands (decision 27).
-      terminal: Boolean(live) && (live.roots || []).some((root) => root.shell), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
+      online: Boolean(live), ...capabilitiesOf(live, record), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
       // The environment relaying it (decision 25), when it is not dialling itself.
       via: live?.socket?.via || null };
   }
@@ -229,9 +225,10 @@ export class NodeHub extends EventEmitter {
       wsl ? distroName() : { win32: "Windows", darwin: "macOS" }[process.platform] || "Linux",
       this.hub.roots(),
     ]);
-    return { id: this.hub.nodeId, deviceId: this.hub.deviceId, name: platform, platform: process.platform, local: true,
-      // Its own terminal is the "computer" one this server always offers.
-      online: true, roots, harnesses: this.hub.harnesses(), terminal: true, lastSeenAt: new Date().toISOString() };
+    return { id: this.hub.nodeId, deviceId: this.hub.deviceId, name: platform, platform: process.platform, local: true, online: true,
+      // Its browser is the hub's own (browser:hub), not one offered through a node; its terminal is the "computer"
+      // one this server always offers.
+      ...capabilitiesOf({ roots, harnesses: this.hub.harnesses() }), terminal: true, lastSeenAt: new Date().toISOString() };
   }
 
   /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
@@ -455,10 +452,8 @@ export class NodeHub extends EventEmitter {
         }
         previous?.socket.close(4000, "replaced");
         // `boot` names this run of the node; a node without one keeps no receipts.
-        Object.assign(node, { roots: Array.isArray(message.roots) ? message.roots : [], platform: message.platform || null,
-          boot: typeof message.boot === "string" ? message.boot : null,
-          harnesses: Array.isArray(message.harnesses) ? message.harnesses.filter((id) => typeof id === "string") : [],
-          browse: message.browse === true, browser: message.browser === true, ready: true,
+        Object.assign(node, helloCapabilities(message), { platform: message.platform || null,
+          boot: typeof message.boot === "string" ? message.boot : null, ready: true,
           // Where it answers reads itself on its own machine (node-direct.js).
           direct: directOf(message.direct, this.lanNameOf.get(record.id)) });
         void this.offerLanName(node, record);
@@ -469,11 +464,8 @@ export class NodeHub extends EventEmitter {
             if (this.live.get(record.id) === node) node.send({ type: "routes", routes: routes || [], ...(this.identity ? { hub: this.identity } : {}) });
           });
         }
-        Object.assign(record, { roots: node.roots, platform: node.platform, harnesses: node.harnesses, browse: node.browse, lastSeenAt: new Date().toISOString() });
+        Object.assign(record, keptCapabilities(node), { platform: node.platform, lastSeenAt: new Date().toISOString() });
         if (message.name && record.name === "Device") record.name = String(message.name).slice(0, 80);
-        // Roots without ids are from a node older than root ids: it is not addressable.
-        node.roots = node.roots.filter((root) => typeof root?.id === "string");
-        record.roots = node.roots;
         void this.save().catch(() => {});
         this.emit("changed");
         this.emit(`online:${record.id}`);
@@ -570,6 +562,8 @@ export class NodeHub extends EventEmitter {
    * send to any other run -- a restarted node does not know the action.
    */
   async call(nodeId, message, context, { onEvent, onWait, onSent, boot } = {}) {
+    // Only what is declared (device-api.js); a handle's methods are the node's to check.
+    if (Object.hasOwn(NODE_TARGETS, message.target) && !servedCall(message.target, message.method)) throw new Error(`${message.target}.${message.method} is not a declared node call`);
     const node = await this.online(nodeId, context, onWait);
     if (boot !== undefined && node.boot !== boot) throw Object.assign(new Error("The device restarted"), { restarted: true });
     const { id, done } = node.call(message, onEvent);

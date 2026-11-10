@@ -8,7 +8,11 @@ watching or taking over helps.
 ## Names
 
 - **Client**: one open Conduit tab or app, `connection/tab` (`UiControl`, `server/ui-control.js`).
-- **Device**: a node (`nodes/`), or the hub itself.
+- **Device**: a machine on the network, the hub's own among them. It has one or more **environments** (Windows and a
+  WSL distro are two of one machine); the code's word for an environment is a node (`nodes/`), and agents name one
+  by its device's name, with its own when the device has several (`environmentName`).
+- **Capability**: something an environment can do for the network (`DEVICE_CAPABILITIES`, `device-api.js`): share
+  folders, run harnesses, be browsed, offer its browser, give a terminal.
 - **Screen**: something on a device that has a picture, takes input and can be acted on. Its view id is
   `<kind>:<device>`, as `browser:hub` is today.
 - **Origin**: the client a turn's message was sent from.
@@ -95,5 +99,15 @@ Findings behind the last two (source read 2026-11-10):
   a device's browser through its node's tunnel) and is now a view agents may open. Left for the first new kind:
   the browsers' routes (`/v0/browsers`) and pane stay the browser kind's own until a second kind shows what is
   common; one holder of input; an agent's actions on a device's browser (its tools work the hub's).
+- [x] 3a. The device API is declared once (`conduit-web/src/device-api.js`), as the UI API is. `DEVICE_CAPABILITIES`:
+  each capability's type, whether the environment says it in its hello or the hub works it out, whether it is kept
+  while the environment is away, the kind of screen it offers and the tool agents use it through. `NODE_TARGETS`:
+  every call the hub makes into a node, with its methods and the capabilities it serves. A node's hello is built
+  and read by it, the hub's view of a node is computed from it, the hub asks and a node serves only what is listed,
+  and the client's `Environment` and `Device` are typed from it (`client/platform/devices.ts`). A new kind of
+  screen starts as a capability with a `screen` and a target with its methods. Left: the hub's own environment is
+  listed by hand (its browser is `browser:hub`, not a capability); a client still names its environments by name
+  (`peer.nodes`), not id; the server's JavaScript is not typechecked, so there the declaration is enforced when a
+  call is made, not when it is written.
 - [ ] 4. `desktop:<device>`: the voxl spike on the Windows app, then the kind.
 - [ ] 5. `phone:<device>`: actions over adb, then a picture.

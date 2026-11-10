@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { Type } from "@earendil-works/pi-ai";
 import { McpClient, StdioTransport, toLlmContent } from "@earendil-works/pi-mcp";
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { environmentName } from "../device-api.js";
 
 /*
  * The browser document, version 1 (roadmap #7): a Chrome on the hub that the person and Conduit's agents share, one
@@ -419,7 +420,7 @@ export function createBrowsers({ hub, nodeHub, tunnelTo }) {
     async list() {
       const devices = await nodeHub.listDevices().catch(() => []);
       return [{ id: "hub", name: "Hub", available: hub.available },
-        ...devices.flatMap((device) => device.nodes.filter((node) => node.browser).map((node) => ({ id: node.id, name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name, available: true })))];
+        ...devices.flatMap((device) => device.nodes.filter((node) => node.browser).map((node) => ({ id: node.id, name: environmentName(device, node), available: true })))];
     },
     close() { for (const browser of remote.values()) browser.close(); },
   };

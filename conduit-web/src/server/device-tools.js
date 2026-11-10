@@ -2,6 +2,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { placeProcesses } from "../nodes/place-processes.js";
+import { environmentName } from "../device-api.js";
 import { callingChat } from "./conduit-mcp.js";
 
 /**
@@ -19,7 +20,7 @@ import { callingChat } from "./conduit-mcp.js";
 export async function reachableDevices(nodeHub) {
   if (!nodeHub) return [];
   return (await nodeHub.listDevices()).flatMap((device) => device.nodes.map((node) => ({
-    name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name,
+    name: environmentName(device, node),
     local: Boolean(node.local), online: Boolean(node.online), nodeId: node.id, roots: node.roots || [] })));
 }
 

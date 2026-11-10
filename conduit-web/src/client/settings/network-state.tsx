@@ -12,14 +12,15 @@ import { SettingLine, SettingValue } from "@/components/ui/overlay";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { harnessLabelFor } from "../harness-brand";
+import type { Device, Environment, SharedRoot } from "../platform/devices.ts";
 
-export type SharedRoot = { id: string; label: string; read: boolean; write: boolean; shell: boolean; allow?: string[] };
-export type Node = { id: string; deviceId: string; name: string; platform: string | null; online: boolean; local?: boolean; roots: SharedRoot[]; harnesses?: string[]; browser?: boolean; terminal?: boolean; lastSeenAt: string | null; via?: string | null };
+/** The hub's list of devices (GET /v0/nodes), as device-api.js declares it: an environment is the code's node. */
+export type { SharedRoot } from "../platform/devices.ts";
+export type Node = Environment;
 /** A client connected to this server now (runtime-hub.js): its kind, build, and what its user agent says it runs on. */
 /** `machine`: where the server saw it connect from -- "hub" (its own machine) or a tailnet machine's name. */
 type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
-/** `hub`: on the device the hub runs on, the server's name. */
-export type Device = { id: string; name: string; local?: boolean; hub?: string; nodes: Node[] };
+export type { Device };
 /** One client as a page shows it: on the map, and as its card. */
 export type Shown = { part: NetworkClient; node?: Node; mine: boolean };
 export type ShownDevice = { id: string; name: string; paired: boolean; clients: Shown[] };
