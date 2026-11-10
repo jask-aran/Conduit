@@ -12,7 +12,7 @@ import { placeProcesses } from "../nodes/place-processes.js";
 import { DeviceTools, deviceEnv } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { UsageLedger } from "./usage-ledger.js";
-import { UiTool } from "./ui-control.js";
+import { ConduitMcp } from "./conduit-mcp.js";
 import { AgentExtension } from "../agent/extension.js";
 import { ApprovedTool, askOf, connectorWraps } from "../agent/policy.js";
 import { awaitWithContext, BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -340,7 +340,8 @@ export class DurableRuntime {
       install(DeviceTools(this, coding));
       install(Subagents(this));
       install(Handoff);
-      install(defineExtension({ name: "ui", tools: [UiTool(this)] }));
+      // The conduit MCP server's tools, in-process (conduit-mcp.js): the same ones another harness calls over HTTP.
+      install(ConduitMcp(this));
       const web = await this.webTools();
       if (web) install(web);
       const codemode = createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
@@ -508,6 +509,11 @@ export class DurableRuntime {
       || this.templates.find((item) => item.id === "assistant") || this.templates[0] || null;
   }
 
+  /** The chat a tool call was made from (conduit-mcp.js callingChat). */
+  async chatOf(api, context) {
+    return (await api.snapshot(ConduitIds, api.conversationId, context))?.chatId || null;
+  }
+
   async subagentSettings(conversationId, context) {
     const identity = await this.harness.snapshot(ConduitIds, conversationId, context);
     const chat = identity?.chatId && this.agent?.registry.metadata(identity.chatId);
@@ -550,7 +556,9 @@ export class DurableRuntime {
       this.connectorShape = shape;
       // A connector's tools ask before they write, and `approved` runs what was allowed, in whichever chat selects them.
       this.install(defineExtension({ name: "connectors", tools: [...tools, ApprovedTool(this)], wraps: connectorWraps(this, tools) }));
-      this.install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools]));
+      // conduit_inbox is the conduit MCP server's, and under the agent's policy as when it was the agent's own.
+      const inbox = this.extensions.get("conduit-mcp").tools.filter((tool) => tool.name === "conduit_inbox");
+      this.install(AgentExtension(this, [...this.extensions.get("device-tools").tools, ...tools, ...inbox]));
       return this.refreshLiveTools?.("connectors");
     } catch (error) { console.warn("[tools] connector refresh failed", error); }
   }
@@ -585,7 +593,7 @@ export class DurableRuntime {
     const connects = isAgent || template.connectors === true;
     // Codemode comes with the connected accounts, or with a template that lists it.
     const codes = connects || template.tools.includes("codemode");
-    const extensions = [...new Set(["conduit", "ui", "skills", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
+    const extensions = [...new Set(["conduit", "conduit-mcp", "skills", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode", "browser"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
     const wanted = new Set([...ALWAYS, "conduit_ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),

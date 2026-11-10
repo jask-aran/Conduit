@@ -1,5 +1,6 @@
 import { createEffect, onCleanup } from "solid-js";
 import { api } from "./api/client";
+import { connectionId } from "./state/runtime";
 
 /*
  * What this tab shows, told to the server, and what an agent asks of it, done here (roadmap #11; the server side is
@@ -11,6 +12,9 @@ export type AgentUiPane = { pane: "main" | number; view: string | null; title: s
 export type AgentUiCommand = { action: "open" | "close" | "focus"; view?: string; pane?: "main" | number; beside?: boolean };
 
 const TAB = (() => { try { return crypto.randomUUID().slice(0, 8); } catch { return Math.random().toString(36).slice(2, 10); } })();
+
+/** This client as the hub names it (`connection/tab`), sent with each message as its origin; "" before the stream is up. */
+export const clientId = () => connectionId() ? `${connectionId()}/${TAB}` : "";
 
 export function createAgentUiBridge(deps: {
   connection: () => string;

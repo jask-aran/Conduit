@@ -1,14 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
+import { callingChat } from "./conduit-mcp.js";
 
 /*
  * Agents drive Conduit's UI (roadmap #11): what each open tab of Conduit shows, as it tells us (client agent-ui.ts),
- * and commands sent to one tab over its runtime stream, answered over HTTP. The `conduit_ui` tool (UiTool) is how Conduit's own
- * agents use it; GET /v0/ui and POST /v0/ui/commands are the same for a CLI or an MCP server.
+ * and commands sent to one tab over its runtime stream, answered over HTTP. The `conduit_ui` tool (UiTool) is how
+ * agents use it, one of the conduit MCP server's (conduit-mcp.js); GET /v0/ui and POST /v0/ui/commands are the same for a CLI.
  *
  * A tab is `connection/tab`: tabs of one browser share a stream (its connection), each with its own id. With none
- * named, a command goes to the tab the person is using: the one with focus, else one in view, else the latest to say.
+ * named, an agent's command goes to its chat's origin (the tab the person last wrote to it from), else a tab showing
+ * the chat, else the tab the person is using: the one with focus, else one in view, else the latest to say.
  */
 const ANSWER_MS = 10_000;
 
@@ -17,6 +19,24 @@ export class UiControl {
     this.hub = runtimeHub;
     this.views = new Map();
     this.pending = new Map();
+    this.origins = new Map();
+  }
+
+  /** A chat's origin: the client its latest message was sent from, as the send says it. */
+  sentFrom(chatId, client) {
+    if (!chatId || typeof client !== "string" || !/^[\w-]{1,64}\/[\w-]{1,16}$/.test(client)) return;
+    this.origins.set(chatId, client);
+  }
+
+  /**
+   * The tab a chat's command goes to with none named: its origin, else a tab showing the chat, else the one in use.
+   * A chat whose origin has closed is not left pointing at it.
+   */
+  targetFor(chatId, tabs = this.look()) {
+    const origin = chatId && this.origins.get(chatId);
+    return (origin && tabs.find((tab) => tab.client === origin))
+      || (chatId && tabs.find((tab) => tab.panes.some((pane) => pane.view === `chat:${chatId}`)))
+      || tabs[0] || null;
   }
 
   /** A tab's view, as it says it. Kept while its connection lasts. */
@@ -43,10 +63,10 @@ export class UiControl {
     });
   }
 
-  /** Send a command to a tab (`client`, or the one in use) and wait for what came of it. */
-  async command(command, client = null) {
+  /** Send a command to a tab (`client`, or the calling chat's: targetFor) and wait for what came of it. */
+  async command(command, client = null, chatId = null) {
     const tabs = this.look();
-    const target = client ? tabs.find((tab) => tab.client === client) : tabs[0];
+    const target = client ? tabs.find((tab) => tab.client === client) : this.targetFor(chatId, tabs);
     if (!target) throw Object.assign(new Error(client ? `No open Conduit tab ${client}` : "Conduit is not open anywhere right now"), { status: 409 });
     const id = randomBytes(6).toString("hex");
     const [connection, tab] = target.client.split("/");
@@ -77,10 +97,10 @@ export class UiControl {
 const rank = (view) => (view.focused ? 2e13 : 0) + (view.visible ? 1e13 : 0) + view.at;
 
 /** The `conduit_ui` tool's description of a look: one line per tab, then its panes. */
-export function describeLook(tabs) {
+export function describeLook(tabs, yours = null) {
   if (!tabs.length) return "Conduit is not open anywhere right now.";
   return tabs.map((tab, index) => [
-    `${index === 0 ? "In use: " : ""}${tab.client} (${[tab.app, tab.platform, tab.machine].filter(Boolean).join(", ")})${tab.inUse ? " has focus" : tab.visible ? " is in view" : " is in the background"}`,
+    `${tab.client === yours ? "Yours (where the person is talking to you from; commands go here): " : ""}${index === 0 ? "In use: " : ""}${tab.client} (${[tab.app, tab.platform, tab.machine].filter(Boolean).join(", ")})${tab.inUse ? " has focus" : tab.visible ? " is in view" : " is in the background"}`,
     ...tab.panes.map((pane) => `  pane ${pane.pane}${pane.focused ? " (keyboard)" : ""}: ${pane.view ? `${pane.title} [${pane.view}]` : "empty"}`),
   ].join("\n")).join("\n");
 }
@@ -97,21 +117,22 @@ export function UiTool(runtime) {
       + "with its panes, what each shows and which has the keyboard. open: show something -- chat:<id>, page:dashboard, "
       + "page:agent, page:project:<id>, browser:hub (the hub's browser, which you work through the agent_browser tools), terminal or files -- in a pane (pane: main or a number; default the one with the "
       + "keyboard) or beside it (beside: true). close: empty a pane (pane required). focus: give a pane the keyboard. Commands go to the tab "
-      + "in use unless client names one. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
+      + "the person is talking to you from (look marks it Yours; else the one in use) unless client names another. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
     parameters: Type.Object({
       action: Type.Union(["look", "open", "close", "focus"].map((value) => Type.Literal(value))),
       view: Type.Optional(Type.String({ description: "For open: what to show, such as chat:<id> or page:dashboard." })),
       pane: Type.Optional(Type.Union([Type.Literal("main"), Type.Number()], { description: "Which pane: main, or a pane's number from look." })),
       beside: Type.Optional(Type.Boolean({ description: "For open: in a new pane beside the one with the keyboard." })),
-      client: Type.Optional(Type.String({ description: "A tab from look (connection/tab); default the one in use." })),
+      client: Type.Optional(Type.String({ description: "Another tab from look (connection/tab); default yours." })),
     }),
     replay: "unsafe",
-    execute: async ({ action, view, pane, beside, client }) => {
+    execute: async ({ action, view, pane, beside, client }, api, context) => {
       const control = runtime.uiControl;
       if (!control) return text("Conduit's UI cannot be reached from here.", true);
-      if (action === "look") return text(describeLook(control.look()));
+      const chatId = await callingChat(runtime, api, context);
+      if (action === "look") { const tabs = control.look(); return text(describeLook(tabs, chatId ? control.targetFor(chatId, tabs)?.client : null)); }
       try {
-        const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null);
+        const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null, chatId);
         return text(`${result} (${tab})`);
       } catch (error) { return text(error.message, true); }
     },

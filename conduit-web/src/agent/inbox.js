@@ -210,7 +210,6 @@ export function InboxTools(runtime) {
     replay: "safe",
     execute: ending("failed"),
   });
-  const inbox = ConduitInboxTool(runtime);
   // The home thread sees what waits, each turn, so a person who talks first is never told stale news.
   const waiting = section("agent-inbox", async (input) => {
     const agent = runtime.agent;
@@ -219,7 +218,8 @@ export function InboxTools(runtime) {
     if (state.home?.conversationId !== input.conversationId) return undefined;
     return renderWaitingInbox(agent, state);
   });
-  return { tools: [quiet, failed, inbox], sections: [waiting] };
+  // conduit_inbox is the conduit MCP server's (server/conduit-mcp.js), which every profile's runtime mounts.
+  return { tools: [quiet, failed], sections: [waiting] };
 }
 
 export function ConduitInboxTool(runtime) {

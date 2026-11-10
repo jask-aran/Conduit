@@ -1057,6 +1057,7 @@ const dictationStream = createDictationStream({
 });
 lifetime.own("dictation streams", dictationStream, (owned) => owned.shutdown?.({ timeoutMs: 1_000 }));
 const liveSessionStream = createLiveSessionStream({
+  sentFrom: (chatId, client) => uiControl.sentFrom(chatId, client),
   backends,
   concurrency,
   maxGeneratingProcesses: () => runtimeSettings.get().maxGeneratingProcesses,

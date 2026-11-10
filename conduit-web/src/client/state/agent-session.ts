@@ -4,6 +4,7 @@ import { webSocketUrl } from "../api/transport";
 import type { LiveRecord, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
 import { frameIntervalMs } from "../frame-interval";
+import { clientId } from "../agent-ui";
 import { onPathChange } from "../platform/servers";
 
 
@@ -322,7 +323,9 @@ export function createAgentSession(deps: {
 
   const send = (command: UnknownCommand) => {
     if (!isOpen()) throw new Error("Not connected to the live session");
-    socket!.send(JSON.stringify(command));
+    // A message says which client sent it: its chat's origin, where the agent shows things (server ui-control.js).
+    const origin = ["prompt", "follow_up", "steer", "fork_and_prompt"].includes(String(command.type)) ? clientId() : "";
+    socket!.send(JSON.stringify(origin ? { ...command, client: origin } : command));
   };
 
   /** Send if the stream is up, otherwise get an agent first. */

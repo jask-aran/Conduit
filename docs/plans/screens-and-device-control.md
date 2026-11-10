@@ -74,7 +74,9 @@ Findings behind the last two (source read 2026-11-10):
 
 ## Order
 
-- [ ] 1. One MCP server, scoped calls, turn origin. Fixes `browser:hub` on two clients today.
+- [x] 1. One MCP server, scoped calls, turn origin (`server/conduit-mcp.js`; `/v0/mcp/chat/<id>`; `UiControl.sentFrom`
+  and `targetFor`). Left: an origin lasts until the chat's next send, so a routine's turn in a thread a person wrote in
+  still has one; Codex's endpoint is the one added by hand, unscoped.
 - [ ] 2. Clients name their device.
 - [ ] 3. The screen contract, `browser:hub` moved onto it unchanged.
 - [ ] 4. `desktop:<device>`: the voxl spike on the Windows app, then the kind.

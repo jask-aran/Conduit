@@ -71,6 +71,8 @@ export function createLiveSessionStream({
   maxGeneratingProcesses = () => 0,
   lifecycle,
   autoNameSession = async () => {},
+  // A send's client (`connection/tab`): the chat's origin, where its agent shows things (ui-control.js).
+  sentFrom = () => {},
 }) {
   if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
   if (!backends) throw new TypeError("Live session stream requires a backend registry");
@@ -310,6 +312,7 @@ export function createLiveSessionStream({
   async function handleClientCommand(record, command) {
     assertChildCommand(record, command);
     const adapter = adapterFor(record);
+    if (command.client && ["prompt", "follow_up", "steer", "fork_and_prompt"].includes(command.type)) sentFrom(record.chatId, command.client);
     if (command.type === "prompt") {
       if (record.ephemeral) return startGeneration(record,
         () => adapter.prompt(record.id, String(command.message || "")));
