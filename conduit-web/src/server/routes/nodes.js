@@ -37,7 +37,7 @@ export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () =
       .json({ error: result?.error?.message || "The device did not answer" });
   });
   app.get("/v0/nodes", async (_request, response, next) => {
-    try { response.json({ devices: await nodeHub.listDevices() }); } catch (error) { next(error); }
+    response.json({ devices: await nodeHub.listDevices() });
   });
 
   app.post("/v0/nodes", async (request, response) => {
@@ -61,7 +61,7 @@ export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () =
   });
 
   app.patch("/v0/devices/:id", async (request, response, next) => {
-    try { await nodeHub.renameDevice(request.params.id, request.body?.name); response.status(204).end(); } catch (error) { next(error); }
+    await nodeHub.renameDevice(request.params.id, request.body?.name); response.status(204).end();
   });
 
   app.delete("/v0/nodes/:id", async (request, response) => {

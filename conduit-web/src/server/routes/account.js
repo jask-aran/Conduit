@@ -20,8 +20,7 @@ export function registerAccountRoutes(app, { dataRoot }) {
   const stat = () => fs.stat(file).catch(() => null);
 
   app.get("/v0/account", async (_request, response, next) => {
-    try { const found = await stat(); response.json({ picture: found ? String(Math.round(found.mtimeMs)) : null }); }
-    catch (error) { next(error); }
+    const found = await stat(); response.json({ picture: found ? String(Math.round(found.mtimeMs)) : null });
   });
   app.get("/v0/account/picture", async (_request, response) => {
     if (!await stat()) return response.status(404).json({ error: "no_picture" });
@@ -41,7 +40,6 @@ export function registerAccountRoutes(app, { dataRoot }) {
     response.json({ picture: String(Math.round(found.mtimeMs)) });
   });
   app.delete("/v0/account/picture", async (_request, response, next) => {
-    try { await fs.rm(file, { force: true }); await fs.rm(typeFile, { force: true }); response.json({ picture: null }); }
-    catch (error) { next(error); }
+    await fs.rm(file, { force: true }); await fs.rm(typeFile, { force: true }); response.json({ picture: null });
   });
 }

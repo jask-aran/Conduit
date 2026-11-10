@@ -25,13 +25,11 @@ export function registerPushRoutes(app, { push, hubId, agent }) {
   });
 
   app.get("/v0/push", (request, response, next) => {
-    try { response.json({ publicKey: push.publicKey(), subscriptions: push.list() }); }
-    catch (error) { next(error); }
+    response.json({ publicKey: push.publicKey(), subscriptions: push.list() });
   });
 
   app.post("/v0/push/subscriptions", async (request, response, next) => {
-    try { response.status(201).json(await push.add(request.body)); }
-    catch (error) { next(error); }
+    response.status(201).json(await push.add(request.body));
   });
 
   app.delete("/v0/push/subscriptions/:id", async (request, response) => {

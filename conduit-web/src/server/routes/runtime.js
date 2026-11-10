@@ -62,7 +62,7 @@ export function registerRuntimeRoutes(app, {
   // Settings › Devices: this machine's readout (machine-readout.js), read while its folder is open.
   const readMachine = createMachineReadout({ root: config.dataRoot });
   app.get("/v0/server/machine", async (_request, response, next) => {
-    try { response.json(await readMachine()); } catch (error) { next(error); }
+    response.json(await readMachine());
   });
 
   app.put("/v0/server/name", async (request, response) => {

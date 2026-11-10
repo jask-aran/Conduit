@@ -73,12 +73,10 @@ export function registerPtyRoutes(app, { projects, terminals, nodeHub = null }) 
   });
 
   app.post("/v0/ptys/:id/rename", async (request, response, next) => {
-    try { const record = await terminals.rename(request.params.id, request.body?.title); if (!record) return response.status(404).json({ error: "pty_not_found" }); response.json(record); }
-    catch (error) { next(error); }
+    const record = await terminals.rename(request.params.id, request.body?.title); if (!record) return response.status(404).json({ error: "pty_not_found" }); response.json(record);
   });
 
   app.delete("/v0/ptys/:id", async (request, response, next) => {
-    try { const removed = await terminals.remove(request.params.id); if (!removed) return response.status(404).json({ error: "pty_not_found" }); response.status(204).end(); }
-    catch (error) { next(error); }
+    const removed = await terminals.remove(request.params.id); if (!removed) return response.status(404).json({ error: "pty_not_found" }); response.status(204).end();
   });
 }

@@ -2,8 +2,7 @@ export function registerNetworkRoutes(app, { lanNames }) {
   const route = "/v0/network/lan-names";
   app.get(route, async (request, response, next) => {
     response.setHeader("Cache-Control", "no-store");
-    try { response.json(await lanNames.status()); }
-    catch (error) { next(error); }
+    response.json(await lanNames.status());
   });
   app.put(route, async (request, response, next) => {
     response.setHeader("Cache-Control", "no-store");
@@ -15,7 +14,6 @@ export function registerNetworkRoutes(app, { lanNames }) {
   });
   app.delete(route, async (request, response, next) => {
     response.setHeader("Cache-Control", "no-store");
-    try { response.json(await lanNames.remove()); }
-    catch (error) { next(error); }
+    response.json(await lanNames.remove());
   });
 }

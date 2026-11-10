@@ -41,8 +41,7 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
   });
 
   app.get("/v0/voice/settings", async (_request, response, next) => {
-    try { noStore(response); response.json(await settingsView()); }
-    catch (error) { next(error); }
+    noStore(response); response.json(await settingsView());
   });
 
   app.put("/v0/voice/settings", async (request, response) => {
@@ -58,8 +57,7 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
   });
 
   app.post("/v0/voice/test", async (_request, response, next) => {
-    try { noStore(response); response.json(await voiceRuntime.test()); }
-    catch (error) { next(error); }
+    noStore(response); response.json(await voiceRuntime.test());
   });
 
   app.post("/v0/voice/model/install", async (request, response) => {

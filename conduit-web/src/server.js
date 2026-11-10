@@ -613,13 +613,13 @@ app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(mcp.afterAuth);
 
 app.get("/v0/chatgpt-web/status", async (_request, response, next) => {
-  try { response.json(await requireChatgptWeb().health()); } catch (error) { next(error); }
+  response.json(await requireChatgptWeb().health());
 });
 app.put("/v0/chatgpt-web/credential", async (request, response, next) => {
-  try { response.json(await requireChatgptWeb().setCredential(String(request.body?.cookie || ""))); } catch (error) { next(error); }
+  response.json(await requireChatgptWeb().setCredential(String(request.body?.cookie || "")));
 });
 app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
-  try { response.json(await requireChatgptWeb().removeCredential()); } catch (error) { next(error); }
+  response.json(await requireChatgptWeb().removeCredential());
 });
 
 registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist, throttleFile: path.join(config.dataRoot, "auth", "login-throttle.json") });
