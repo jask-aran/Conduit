@@ -61,7 +61,7 @@ import settingsIndex from "virtual:settings-index";
 import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
-import { OverlayDialog } from "@/components/ui/dialog";
+import { Dialog, OverlayDialog } from "@/components/ui/dialog";
 import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
@@ -824,21 +824,11 @@ export function Settings(props: {
           title: `${field.name}, stored with the key. Left empty, the one stored before stays, or the server's own ${field.name} is used.` }))}
         onSave={(key, env) => saveApiKey(provider.id, key, env)} onRemove={provider.auth.removable ? () => void removePiAuth(provider.id) : undefined}
         actions={<>
-          <Show when={provider.oauth && (!configured() || signedIn())}><Button variant="ghost" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>{signedIn() ? "Sign in again" : "Sign in"}</Button></Show>
-          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="sm" haptic="destructive" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}>Remove</Button></Show>
+          <Show when={provider.oauth && !configured()}><Button variant="secondary" size="sm" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}>Sign in</Button></Show>
+          <Show when={provider.oauth && signedIn()}><Button variant="ghost" size="icon-sm" aria-label={`Sign in to ${provider.label} again`} title="Sign in again" disabled={authLoading() || Boolean(authAttempt()?.active)} onClick={() => void startOAuth(provider.id)}><Icons.Refresh /></Button></Show>
+          <Show when={signedIn() && provider.auth.removable}><Button variant="ghost" size="icon-sm" haptic="destructive" aria-label={`Remove ${provider.label}`} title="Remove" disabled={authLoading()} onClick={() => void removePiAuth(provider.id)}><Icons.Delete /></Button></Show>
           <Show when={options.pending}><Button variant="ghost" size="sm" onClick={() => setAddingAccount("")}>Cancel</Button></Show>
         </>} />
-      <Show when={attempt()}>{(current) => <>
-        <SettingLine plain label="Sign-in" state={<>{current().message}</>}>
-          <Show when={current().authUrl}><SettingLink href={current().authUrl!}>Open sign-in</SettingLink></Show>
-          <Show when={current().active}><Button variant="ghost" size="sm" onClick={() => void cancelOAuth()}>Cancel</Button></Show>
-        </SettingLine>
-        <Show when={current().authUrl && current().instructions}><Note tone="quiet">{current().instructions}</Note></Show>
-        <Show when={current().deviceCode}><SettingLine plain label="Code" state={<><code>{current().deviceCode!.userCode}</code></>}><SettingLink href={current().deviceCode!.verificationUri}>Open verification page</SettingLink></SettingLine></Show>
-        <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="ghost" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
-        <Show when={current().prompt && current().prompt!.type !== "select"}><SettingLine plain label={current().prompt!.message}><Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter") void answerAuthPrompt(authResponse()); }} /><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine></Show>
-        <Show when={current().error}><Note tone="error">{current().error}</Note></Show>
-      </>}</Show>
     </>;
   };
 
@@ -1821,6 +1811,33 @@ export function Settings(props: {
               <Show when={chatGptError()}><Note tone="error">{chatGptError()}</Note></Show>
             </Group>
             <Group title="Provider accounts">
+              {/* A sign-in under way is a dialog of its steps: open the provider's page, then hand back what it ends on. */}
+              <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else setAuthAttempt(null); } }}
+                title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
+                <Show when={authAttempt()}>{(current) => <>
+                  <Show when={current().deviceCode}>{(device) => <>
+                    <SettingLine plain label="1 · Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
+                      <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingLine>
+                    <SettingLine plain label="2 · Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingLine>
+                    <Note tone="quiet">This finishes by itself once the provider accepts the code.</Note>
+                  </>}</Show>
+                  <Show when={!current().deviceCode && current().authUrl}>
+                    <SettingLine plain label="1 · Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingLine>
+                    <Show when={current().prompt && current().prompt!.type !== "select"}>
+                      <Note tone="quiet">On the hub's own machine this finishes by itself. Anywhere else the last page will not load: that is expected. Copy its address (it starts with http://localhost) and paste it below.</Note>
+                    </Show>
+                  </Show>
+                  <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
+                  <Show when={current().prompt && current().prompt!.type !== "select"}>
+                    <SettingLine label={current().authUrl ? "2 · Paste the address" : current().prompt!.message}>
+                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
+                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
+                    </SettingLine>
+                    <SettingLine plain label=""><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine>
+                  </Show>
+                  <Show when={current().error}><Note tone="error">{current().error}</Note></Show>
+                </>}</Show>
+              </Dialog>
               <Show when={authUnavailable()}><Note tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</Note></Show>
               <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
               <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>

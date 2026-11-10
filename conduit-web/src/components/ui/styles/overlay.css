@@ -179,9 +179,10 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 [data-density="phone"] .ui-overlay-hints { display: none; }
 [data-density="phone"] .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
 [data-density="phone"] .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
-/* The app's phone: a palette's dialog (pinned to the top) fills the screen inside the safe area; a centred one keeps its inset. */
+/* The app's phone: an overlay's dialog (the palette, chat search, Settings: pinned to the top or centred) fills the
+   screen inside the safe area, every one at the same inset; a small centred Dialog keeps its own. */
 @media (--conduit-phone-layout) {
-  .ui-scrim[data-dialog][data-placement="top"] { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
+  .ui-scrim[data-dialog]:is([data-placement="top"], :has(> .ui-overlay)) { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
   .ui-scrim > .ui-frost.ui-overlay { width: 100%; height: 100%; max-height: none; }
   .ui-scrim .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
   .ui-scrim :is(.ui-overlay-aside, .ui-overlay-hints) { display: none; }

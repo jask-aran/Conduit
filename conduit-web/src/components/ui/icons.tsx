@@ -30,6 +30,7 @@ import {
   CodeXmlIcon,
   Columns2Icon,
   CopyIcon,
+  ClipboardPasteIcon,
   CpuIcon,
   DeleteIcon,
   DownloadIcon,
@@ -164,6 +165,7 @@ export const Code = CodeXmlIcon;
 /** Compact the chat context. */
 export const Compact = ShrinkIcon;
 export const Copy = CopyIcon;
+export const Paste = ClipboardPasteIcon;
 /** A model hosted on this machine. */
 export const LocalModel = CpuIcon;
 /** The application dashboard. */

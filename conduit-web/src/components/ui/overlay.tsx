@@ -248,8 +248,10 @@ export function SettingCredential(props: {
     <SettingLine plain label={props.label} state={props.state} title={props.title}>
       <Show when={open()} fallback={<>
         {props.actions}
-        <Show when={props.editable !== false}><Button variant="ghost" size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.stored ? "Replace" : props.add || "Add key"}</Button></Show>
-        <Show when={props.stored && props.onRemove}><Button variant="ghost" size="sm" haptic="destructive" disabled={props.busy} onClick={() => props.onRemove?.()}>Remove</Button></Show>
+        {/* A stored key's actions are icons (replace, remove); adding one is the line's one outlined button. */}
+        <Show when={props.editable !== false}><Show when={props.stored} fallback={<Button variant="secondary" size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.add || "Add key"}</Button>}>
+          <Button variant="ghost" size="icon-sm" aria-label={`Replace ${props.label}'s key`} title="Replace key" disabled={props.busy} onClick={() => setOpen(true)}><Icons.Edit /></Button></Show></Show>
+        <Show when={props.stored && props.onRemove}><Button variant="ghost" size="icon-sm" haptic="destructive" aria-label={`Remove ${props.label}'s key`} title="Remove" disabled={props.busy} onClick={() => props.onRemove?.()}><Icons.Delete /></Button></Show>
       </>}>
         <Input data-credential="" aria-label={props.label} type="password" autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore
           ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} placeholder={props.placeholder || "API key"}
