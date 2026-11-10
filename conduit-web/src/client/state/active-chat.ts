@@ -771,25 +771,6 @@ export function createActiveChat(options: ActiveChatOptions) {
         if (event.beforeMessageId) setMessages((current) => truncateAt(current, event.beforeMessageId!, { inclusive: true }));
         else if (event.afterMessageId) setMessages((current) => truncateAt(current, event.afterMessageId!, { inclusive: false }));
         break;
-      // A process the server deliberately stopped stays stopped. The socket
-      // close that follows is otherwise indistinguishable from a dropped
-      // connection, so the reconnect timer used to start a replacement process
-      // within a second -- which is why Stop process appeared to do nothing and
-      // the live dot came straight back. A crash still reconnects.
-      case "runtime_exit":
-        stopRequest = null;
-        if (generation() === "stopping") setGeneration("idle");
-        if (event.deliberate) {
-          setLive(null);
-          resetLiveFlags();
-          setGeneration("idle");
-          generationStore.clear();
-          setActiveGeneration(null);
-          setActiveGenerationChange(null);
-          currentGeneration = null;
-          session.detach();
-        }
-        break;
       case "error":
         // A rejected command is not a failed turn. The scope says which this
         // is, rather than the browser reading it off two event names that only

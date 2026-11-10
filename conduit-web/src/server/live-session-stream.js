@@ -36,23 +36,13 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
 /**
  * One event, one path out.
  *
- * Every frame this stream sends a browser is the adapter's translation of the
- * event, stringified -- there is no second spelling of that anywhere. It used
- * to be written out at each send site, and the one site that forgot it was the
- * replay a reconnecting browser reads first, so it was the one path that put
- * native harness events in front of the client.
- *
- * The exception is Conduit refusing a command, which is Conduit's own
- * statement about its own API rather than a harness event, and is written in
- * the contract's words where it is raised.
+ * Every frame this stream sends a browser is an event in the contract's words
+ * (live-session-api.js LIVE_EVENTS), stringified: the adapter translated it
+ * before it was published, so nothing is translated here.
  */
-function sendClientEvent(ws, adapter, event) {
+function sendClientEvent(ws, event) {
   if (!event || ws.readyState !== 1) return false;
-  // An adapter may answer that the browser has no use for this one, and then
-  // nothing is sent rather than an envelope with the payload taken out of it.
-  const neutral = adapter.toClientEvent(event);
-  if (neutral == null) return false;
-  ws.send(JSON.stringify(neutral));
+  ws.send(JSON.stringify(event));
   return true;
 }
 
@@ -443,7 +433,7 @@ export function createLiveSessionStream({
       return;
     }
     const adapter = adapterFor(record);
-    const send = (event) => sendClientEvent(ws, adapter, event);
+    const send = (event) => sendClientEvent(ws, event);
     const log = logFor(record);
     // Establish the order before replay. A fresh browser starts at zero, so a
     // retained suffix begins with a visible gap and asks the log for its
@@ -485,9 +475,7 @@ export function createLiveSessionStream({
     ws.on("message", (data) => {
       // Conduit rejecting a command the browser sent is Conduit's own
       // statement, not a harness event, so it is written in the contract's
-      // words here rather than handed to a harness translator. Routing it
-      // through `toClientEvent` let backends rename it, so it read as the backend
-      // going away -- which failed a turn that was still running fine.
+      // words here.
       const report = (error) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({
           type: "error", scope: "request", generationId: null,

@@ -781,7 +781,6 @@ export class TestStreamAdapter extends EventEmitter {
   }
 
   getCapabilities() { return TEST_STREAM_CAPABILITIES; }
-  toClientEvent(event) { return event; }
 
   /**
    * What the turn so far looks like, for a browser that has just arrived.

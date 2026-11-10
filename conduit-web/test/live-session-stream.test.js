@@ -56,7 +56,6 @@ test("one socket delivers backend commands in browser order", async () => {
   const adapter = {
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
     queue: async (_id, _type, message) => { delivered.push(message); },
   };
@@ -106,7 +105,6 @@ test("a manifest-owned Codex prompt uses Conduit's naming service", async () => 
   const adapter = {
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
     getCapabilities: () => ({ attachments: true }),
     prompt: async () => ({ generationId: "generation-1", attachmentIdentity: { messageId: "user-1" } }),
@@ -155,7 +153,6 @@ test("a successful fork replaces the browser transcript before the new prompt", 
     getCapabilities: () => ({ fork: true, regenerate: true }),
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
     fork: async () => { operations.push("fork"); return { opaqueSession: "2" }; },
     publish: (_record, event) => { operations.push(event); },
@@ -210,7 +207,6 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
   const adapter = {
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
   };
   const ws = new EventEmitter();
@@ -251,7 +247,6 @@ test("a fresh socket learns the log order before replay", () => {
   const adapter = {
     attach: () => { sent.push({ type: "transcript_op", op: "message.close", log: { id: "log", seq: 7 } }); },
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
   };
   const ws = new EventEmitter();
@@ -291,7 +286,6 @@ test("a replacing sync that races the log still publishes", async () => {
   const adapter = {
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
     readTranscript: async () => {
       reads += 1;
@@ -341,7 +335,6 @@ test("a harness that names its own messages is told what the browser named this 
   const adapter = {
     attach: () => null,
     view: () => record,
-    toClientEvent: (event) => event,
     refreshContext: async () => {},
     getCapabilities: () => ({ attachments: false }),
     prompt: async (_id, _message, options) => { prompts.push(options); return "generation-1"; },

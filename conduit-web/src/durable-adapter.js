@@ -2015,7 +2015,6 @@ export class DurableAdapter extends EventEmitter {
   }
 
   getCapabilities() { return DURABLE_CAPABILITIES; }
-  toClientEvent(event) { return event; }
   waitForSession() { return Promise.resolve(); }
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   get(id) { return this.sessions.get(id); }

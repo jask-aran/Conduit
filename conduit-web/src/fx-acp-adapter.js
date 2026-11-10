@@ -742,7 +742,6 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   getCapabilities() { return FX_CAPABILITIES; }
-  toClientEvent(event) { return event; }
   waitForSession() { return Promise.resolve(); }
   replay(id) { return this.sessions.runtimeState(this.get(id)); }
   attach(id, socket) { return this.sessions.attach(id, socket); }

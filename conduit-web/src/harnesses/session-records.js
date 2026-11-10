@@ -1,5 +1,6 @@
 import { isLoggedEvent, LOGGED_STATUS_PHASES } from "../server/chat-log.js";
 import { SessionScope } from "../server/session-scope.js";
+import { isLiveEvent } from "../live-session-api.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 
 // The live-record store adapters share: the id and chat indexes, the attached
@@ -189,7 +190,9 @@ export class SessionRecords {
     return record?.chatId && !record.ephemeral ? this.logs?.get(record.chatId) || null : null;
   }
 
+  /** @param {{ type: keyof typeof import("../live-session-api.js").LIVE_EVENTS }} event one live-session-api.js declares */
   publish(record, event) {
+    if (!isLiveEvent(event?.type)) throw new TypeError(`Live event ${event?.type} is not declared (live-session-api.js)`);
     record.updatedAt = new Date().toISOString();
     // A tool starting or ending says when, once, here -- every fold of it,
     // the server's and each browser's, then agrees on how long it took.

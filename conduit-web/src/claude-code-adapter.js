@@ -1387,7 +1387,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
 
   getCapabilities() { return CLAUDE_CODE_CAPABILITIES; }
-  toClientEvent(event) { return event; }
   waitForSession() { return Promise.resolve(); }
   replay(id) {
     const record = this.get(id);

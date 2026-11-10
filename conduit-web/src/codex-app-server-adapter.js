@@ -1489,7 +1489,6 @@ export class CodexAppServerAdapter extends EventEmitter {
   waitForSession() { return Promise.resolve(); }
   replay(id) { return this.runtimeState(this.get(id)); }
   getCapabilities() { return CODEX_CAPABILITIES; }
-  toClientEvent(event) { return event; }
   async listModels(id) {
     const record = id ? this.get(id) : null;
     if (!record) return [];

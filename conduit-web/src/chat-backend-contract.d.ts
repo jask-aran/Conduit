@@ -58,7 +58,6 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
   waitForSession(liveSessionId: string): Promise<unknown>;
   attach(liveSessionId: string, socket: unknown): ChatBackendEvent | null;
   view(liveSession: unknown): unknown;
-  toClientEvent(event: unknown): unknown;
   publish(liveSession: unknown, event: unknown): unknown;
   queue(liveSessionId: string, mode: "steer" | "follow_up", message: string, options?: unknown): Promise<unknown>;
   clearQueue(liveSessionId: string): Promise<{ steering: unknown[]; followUp: unknown[] }>;
@@ -122,7 +121,8 @@ export type ChatLifecycleState =
   | "failed"
   | "closed";
 
-export type ChatStatus = "working" | "stopping" | "idle" | "failed";
+/** A turn's status. (A chat row's status is the client's ChatStatus, client/api/contracts.ts.) */
+export type TurnStatus = "working" | "stopping" | "idle" | "failed";
 export type ChatActivity =
   | "idle"
   | "starting"
@@ -297,7 +297,7 @@ export interface StatusEvent extends EventBase {
   type: "status";
   /** Absent when the event reports activity rather than a transition. */
   phase?: GenerationPhase;
-  status: ChatStatus;
+  status: TurnStatus;
   activity: ChatActivity;
   detail: string | null;
   /**
@@ -354,6 +354,21 @@ export interface UsageEvent extends EventBase {
 /** The turn's record on disk is settled. Carries the chat row and its artifacts. */
 export interface SessionCheckpointEvent extends EventBase {
   type: "session_checkpoint";
+  /** The whole chat row, or only its id and title. */
+  chat?: { id: string; title?: string | null; [field: string]: unknown };
+  chatId?: string;
+  title?: string | null;
+  artifacts?: unknown[];
+}
+
+/** The chat's subagents changed (one started or ended, or a running one's heartbeat): read them again. */
+export interface AgentsChangedEvent extends EventBase { type: "agents_changed" }
+
+/** A notice said once, as a toast, never kept in the transcript: a Pi extension's `ctx.ui.notify`, or the hub's own. */
+export interface ExtensionNoticeEvent extends EventBase {
+  type: "extension_notice";
+  message: string;
+  level?: "info" | "warning" | "error";
 }
 
 /**
@@ -368,7 +383,7 @@ export interface SessionCheckpointEvent extends EventBase {
 export interface RuntimeStateEvent extends EventBase {
   type: "runtime_state";
   lifecycle: ChatLifecycleState;
-  status: ChatStatus;
+  status: TurnStatus;
   activity: ChatActivity;
   capabilities: ChatCapabilities;
   session?: unknown;
@@ -414,6 +429,8 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
       kind: ToolKind;
       /** What it acted on, in one line: the command, path, query or page. */
       subject?: string; input: unknown;
+      /** The message that owns it, when the harness says. */
+      messageId?: string;
       /** When it started, stamped as it did. */
       timestamp: string }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
@@ -449,7 +466,7 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
  */
 export type ChatLogEvent = EventBase & (
   | { type: "log_state"; log: { id: string; seq: number } }
-  | { type: "log_reset"; log: { id: string; seq: number } }
+  | { type: "log_reset"; log: { id: string; seq: number } | null }
 );
 
 export type OptionalCapabilityEvent = EventBase & (
@@ -461,11 +478,6 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "generation_replay"; seq: number; generation: unknown }
   /** Where the history now ends, so the browser cuts to it rather than deducing it. */
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
-  /**
-   * The process is gone, and whether that was asked for. A deliberate exit
-   * settles the session; anything else is a drop the browser reconnects from.
-   */
-  | { type: "runtime_exit"; deliberate: boolean }
 );
 
 export type ChatBackendEvent =
@@ -480,4 +492,6 @@ export type ChatBackendEvent =
   | RuntimeStateEvent
   | TranscriptOpEvent
   | ChatLogEvent
+  | AgentsChangedEvent
+  | ExtensionNoticeEvent
   | OptionalCapabilityEvent;

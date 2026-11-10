@@ -315,7 +315,6 @@ export class ChatGptWebAdapter extends EventEmitter {
   async setThinkingLevel(id, thinkingLevel) { const record = this.get(id); if (record) record.thinkingLevel = thinkingLevel; return thinkingLevel; }
   getModelState(id) { const record = this.get(id); return Promise.resolve({ model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }); }
   getCapabilities() { return CHATGPT_WEB_CAPABILITIES; }
-  toClientEvent(event) { return event; }
   replay(id) { return this.runtimeState(this.get(id)); }
   waitForSession() { return Promise.resolve(); }
   attach(id, socket) { return this.sessions.attach(id, socket); }

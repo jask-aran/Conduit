@@ -1,5 +1,10 @@
 import type { CacheStats, ChatCapabilities, ChatSummary, ContextUsage, HostUiRequest, Question, QueueState, RetryState, SessionStats, ToolCallStep, ToolKind, TurnOutcome, TurnTiming } from "./contracts";
 import type { ProtocolMessage } from "../timeline-order";
+import type { LIVE_EVENTS } from "../../live-session-api.js";
+import type { ChatBackendEvent } from "../../chat-backend-contract.js";
+
+/** The events a live session's stream carries, as the hub declares them (live-session-api.js). */
+type LiveEventName = keyof typeof LIVE_EVENTS;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -110,9 +115,16 @@ export type LiveEvent = EventBase & (
   | { type: "log_reset" }
   | StructuredGenerationEvent
   | { type: "error"; scope: "runtime" | "request"; seq?: number; error?: { code?: string; message?: string } }
-  | { type: "runtime_exit"; deliberate: boolean }
   | { type: "unknown"; sourceType: string }
 );
+
+/**
+ * The three lists name the same events: what the hub declares, what its wire types describe (ChatBackendEvent) and
+ * what this file normalizes them into. One gaining or losing a name without the others is a type error here.
+ */
+type Same<A, B> = [A] extends [B] ? [B] extends [A] ? true : never : never;
+true satisfies Same<LiveEventName, ChatBackendEvent["type"]>;
+true satisfies Same<LiveEventName, Exclude<LiveEvent["type"], "unknown">>;
 
 const record = (value: unknown): UnknownRecord => value && typeof value === "object" ? value as UnknownRecord : {};
 const text = (value: unknown) => value == null ? "" : String(value);
@@ -331,7 +343,9 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     if (carries && !carries(source)) return { type: "unknown", sourceType, generationId };
     return { ...source, type: sourceType as StructuredGenerationType, generationId, seq } as StructuredGenerationEvent;
   }
-  switch (sourceType) {
+  // The stream's own names only; each has a case, or the default below is a type error.
+  const name = sourceType as LiveEventName;
+  switch (name) {
     // Whose fault it was is stated, not guessed from which of two event names
     // arrived. A rejected command leaves the turn alone; a runtime failure
     // ends it.
@@ -415,10 +429,11 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
         }) : null,
       };
     }
-    // The process is gone. `deliberate` separates a stop the server chose --
-    // the reaper, or someone picking Stop process -- from a crash, because only
-    // the second is worth reconnecting through.
-    case "runtime_exit": return { type: "runtime_exit", generationId, deliberate: Boolean(source.deliberate) };
-    default: return { type: "unknown", sourceType, generationId };
+    // A generation event with no `seq`, which no fold can place.
+    case "assistant_content": case "tool_activity": case "generation_replay": case "status":
+      return { type: "unknown", sourceType, generationId };
+    default:
+      name satisfies never;
+      return { type: "unknown", sourceType, generationId };
   }
 }

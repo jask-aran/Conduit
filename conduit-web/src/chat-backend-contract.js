@@ -7,7 +7,7 @@ const CHAT_HISTORY_MODES = Object.freeze(["none", "linear", "tree"]);
 
 export const REQUIRED_CHAT_BACKEND_METHODS = Object.freeze([
   "launch", "create", "restore", "prompt", "cancel", "close", "respondHostUi", "replay",
-  "waitForSession", "attach", "view", "toClientEvent", "publish", "queue",
+  "waitForSession", "attach", "view", "publish", "queue",
   "clearQueue", "fork", "setModel", "setThinkingLevel", "refreshContext", "compact",
   "readTranscript", "getCapabilities", "listModels", "listCommands", "listAvailableCommands", "getModelState", "get",
   "getByChatId", "list", "rawRecords", "readHistory",
