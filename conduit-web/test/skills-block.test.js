@@ -23,7 +23,7 @@ async function fixture(t) {
   const agent = { folder: root, settings: () => ({ name: "jbot" }), enabled: () => false };
   await seedRoutines(root, path.join(templatesRoot, "agent/seed/routines"));
   const store = new ContextStore({ root: path.join(root, "context"), templates, agent: () => agent,
-    seedDir: path.join(templatesRoot, "agent/seed"), webPath: path.join(templatesRoot, "conduit-runtime/WEB.md"),
+    seedDir: path.join(templatesRoot, "agent/seed"), webPath: path.join(templatesRoot, "web-tools/WEB.md"),
     chatNamingPath: path.join(templatesRoot, "chat-naming/SYSTEM.md"), subagentPath: path.join(templatesRoot, "subagent/BRIEF.md") });
   return { root, store, templates, agent };
 }
@@ -41,7 +41,7 @@ async function legacyPrompts(store, templates, vars) {
   }
   stacks.set("run:task", ["run-rules", ...legwork]);
   for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") stacks.set(`run:${item.routine.name}`, ["run-rules", item.id, ...legwork]);
-  stacks.set("subagent", ["subagent-brief", "base", ...legwork]);
+  stacks.set("subagent", ["subagent-brief", ...legwork]);
   stacks.set("service:approval", ["approval-judge"]);
   stacks.set("service:chat-naming", ["chat-naming"]);
   const field = (text, name) => new RegExp(`^${name}:\\s*(.+)$`, "m").exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "");

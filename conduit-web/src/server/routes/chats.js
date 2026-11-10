@@ -644,22 +644,6 @@ export function registerChatRoutes(app, {
     });
   });
 
-  app.post("/v0/runtime/chats", async (_request, response) => {
-    const template = config.piTemplates.find((item) => item.special === true && item.id === "runtime");
-    if (!template) return response.status(404).json({ error: "runtime_template_not_found" });
-    const project = await projects.get("chat");
-    if (!project) return response.status(404).json({ error: "project_not_found" });
-    await lifecycle.withProjects([project.id], async () => {
-      await projects.validate(project);
-      const chat = await registry.create(project, {
-        templateId: template.id,
-        templateVersion: template.version,
-        backend: templateBackend(template),
-      });
-      response.status(201).json(chatView(chat));
-    });
-  });
-
   app.delete("/v0/chats/:chatId", async (request, response) => {
     if (request.query.ifEmpty !== "true") return response.status(409).json({ error: "use_chat_delete_route" });
     if (!isChatId(request.params.chatId)) return response.status(404).json({ error: "chat_not_found" });

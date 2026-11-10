@@ -173,7 +173,8 @@ export class ContextStore {
       add("run:task", "run", "task", "Task run", ["run-rules", ...legwork], sections, ["notice-wake-run"], ["notice-wake-event", "notice-wake-webhook"]);
       for (const item of catalog.values()) if (item.routine && item.routine.gate !== "never") add(`run:${item.routine.name}`, "run", item.routine.name, item.routine.title, ["run-rules", item.id, ...legwork], [...(item.routine.context.length ? ["live-routine-context"] : []), ...sections], ["notice-wake-routine"]);
     }
-    add("subagent", "subagent", "default", "Subagent", ["subagent-brief", "base", ...legwork], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
+    // The brief stands alone: the Shared base speaks to an agent with a person to answer to, which a subagent has not.
+    add("subagent", "subagent", "default", "Subagent", ["subagent-brief", ...legwork], ["live-working-folder", "web-tools"], ["live-subagent-task"]);
     add("service:approval", "service", "approval", "Approval model", ["approval-judge"], ["live-approval-rules"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");

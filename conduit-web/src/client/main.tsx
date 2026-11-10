@@ -55,7 +55,7 @@ import { canScanQr, parsePairingLink, QrScanner, redeemPairing, type PairingLink
 import { authorizedFetch, clearNativeBearerToken, nativeBearerToken, NATIVE_AUTH_REQUIRED_EVENT, saveNativeBearerToken } from "./api/native-auth-client";
 import { resolveCapability } from "./chat-capabilities";
 import type { ChatSummary, DashboardChat, HarnessManifestView, Project, Template, TranscriptDetail, WorkspaceAppearance, WorkspacePolicy, WorkspaceSuggestion, WorkspaceSuggestionsPayload } from "./api/contracts";
-import { createErrorDiagnostic, formatRuntimeDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
+import { createErrorDiagnostic, formatDiagnosticPrompt, type ErrorDiagnostic, type ErrorDiagnosticContext } from "./error-diagnostics";
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
@@ -899,7 +899,7 @@ function App() {
   let workspaceSuggestionsRequest: Promise<void> | null = null;
 
   let diagnosticContext: () => ErrorDiagnosticContext = () => ({ route: location.pathname });
-  let askRuntimeForError: (diagnostic: ErrorDiagnostic) => Promise<void> = async () => {};
+  let askChatForError: (diagnostic: ErrorDiagnostic) => Promise<void> = async () => {};
   let suppressDiagnosticActions = false;
   // Set once the runtime store exists (below); until then nothing is known to be away.
   let hubAway = () => false;
@@ -912,7 +912,7 @@ function App() {
     const diagnostic = createErrorDiagnostic(error, diagnosticContext());
     toast.error(diagnostic.message, {
       duration: 12_000,
-      action: { label: "Ask Runtime", onClick: () => void askRuntimeForError(diagnostic) },
+      action: { label: "Ask in a chat", onClick: () => void askChatForError(diagnostic) },
     });
   };
   // An unsent draft is deleted when its page is left, which can be while it is
@@ -1581,18 +1581,12 @@ function App() {
     catalogue.selectProject(project);
     setRouteKind("chat");
     try {
-      const created = profileId === "runtime"
-        ? await api<ChatSummary>("/v0/runtime/chats", { method: "POST", body: JSON.stringify({}) })
-        : await createProfileChat(project, profileId);
+      const created = await createProfileChat(project, profileId);
       if (requestEpoch !== newChatRequestEpoch) {
         discardDraftImmediately(created.id);
         return null;
       }
-      const ownerProject = profileId === "runtime"
-        ? catalogue.projects().find((item) => item.id === created.projectId)
-          || catalogue.projects().find((item) => item.slug === "chat")
-        : project;
-      if (!ownerProject) throw new Error("The Runtime chat project is not available");
+      const ownerProject = project;
 
       const activation = activateCreatedChat(created, ownerProject, profileId);
       batch(() => {
@@ -2173,13 +2167,13 @@ function App() {
     else await openComputer();
   };
 
-  askRuntimeForError = async (diagnostic) => {
+  askChatForError = async (diagnostic) => {
     if (suppressDiagnosticActions) return;
     suppressDiagnosticActions = true;
     try {
-      const created = await createChat(undefined, { templateId: "runtime" }, { reportFailure: false });
-      if (!created) throw new Error("No Chats project is available for a Runtime chat");
-      chat.setDraft(formatRuntimeDiagnosticPrompt(diagnostic));
+      const created = await createChat(catalogue.projects().find((item) => item.slug === "chat"), {}, { reportFailure: false });
+      if (!created) throw new Error("No Chats project is available to diagnose in");
+      chat.setDraft(formatDiagnosticPrompt(diagnostic));
       await chat.send();
     } catch (error) {
       showPlainError(error);
@@ -5313,7 +5307,6 @@ function App() {
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
-    openRuntimeChat: () => void createChat(undefined, { templateId: "runtime" }),
     attach: () => focusedSession().openAttachments(),
     stashPrompt,
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),

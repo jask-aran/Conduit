@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   createErrorDiagnostic,
   ERROR_DIAGNOSTIC_LIMITS,
-  formatRuntimeDiagnosticPrompt,
+  formatDiagnosticPrompt,
   safeDiagnosticText,
 } from "../src/client/error-diagnostics.ts";
 
@@ -36,7 +36,7 @@ test("diagnostic text and prompts stay bounded", () => {
   const text = safeDiagnosticText(`password=hidden ${"x".repeat(2_000)}`);
   assert.ok(text.length <= ERROR_DIAGNOSTIC_LIMITS.maxFieldLength);
   assert.doesNotMatch(text, /hidden/);
-  const prompt = formatRuntimeDiagnosticPrompt(createErrorDiagnostic(new Error("x".repeat(10_000)), {
+  const prompt = formatDiagnosticPrompt(createErrorDiagnostic(new Error("x".repeat(10_000)), {
     route: "/chat/example",
     model: "example/reasoner",
   }));

@@ -5,7 +5,7 @@ import type { BooleanCapability, ChatCapabilities, ChatSummary, HarnessManifestV
  *
  * A profile elects a harness; the harness declares the capabilities. So the
  * join is the chat's implementation, which is the key a manifest is registered
- * under, and not its profile -- the Assistant, Coding and Runtime templates
+ * under, and not its profile -- the profiles' templates
  * share the durable agent's capabilities.
  *
  * Deliberately not the profile the picker shows, either. That one falls back to

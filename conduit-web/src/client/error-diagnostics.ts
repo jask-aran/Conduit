@@ -103,7 +103,7 @@ export function createErrorDiagnostic(error: unknown, context: ErrorDiagnosticCo
   return diagnostic;
 }
 
-export function formatRuntimeDiagnosticPrompt(diagnostic: ErrorDiagnostic): string {
+export function formatDiagnosticPrompt(diagnostic: ErrorDiagnostic): string {
   const prefix = "The following is a bounded, redacted Conduit error report. Explain what failed, what evidence supports the diagnosis, and the smallest safe recovery step.\n\nConduit error report:\n```json\n";
   const suffix = "\n```";
   let payload = JSON.stringify(diagnostic, null, 2);

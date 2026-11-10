@@ -11,7 +11,6 @@ Shipped profiles:
 | id | Label | Role |
 |----|-------|------|
 | `assistant` | Assistant | Workspace tools and model-agnostic web research |
-| `runtime` | Runtime | Special chat for Conduit runtime management |
 
 `templates/chat-naming/SYSTEM.md` is the prompt for the separate chat-title
 service. Settings can edit it, but it is not a selectable profile.
@@ -23,10 +22,8 @@ Profiles selects the default for new chats (`data/preferences.json`). Each chat
 stores `templateId` and `templateVersion` in `data/sessions.json`. On open, the
 server loads the current template and configures the durable conversation.
 
-Assistant is the selectable profile (Coding was retired on 2026-11-03; its id opens on the Assistant). Runtime is special: it cannot be
-a global or workspace default and does not appear in ordinary profile
-switching. Settings → Profiles provides **Open runtime chat**, which creates a
-new management chat.
+Assistant is the selectable profile (Coding was retired on 2026-11-03; its id opens on the Assistant). Runtime was
+retired on 2026-11-10.
 
 The server converts classic Pi chats at startup. It reads the active JSONL
 branch, writes it to a durable conversation, and replaces the stored session

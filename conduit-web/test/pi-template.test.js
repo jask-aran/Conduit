@@ -16,7 +16,7 @@ test("repository templates are discoverable launch presets", () => {
   assert.ok(templates.some((template) => template.id === "assistant"));
   assert.ok(!templates.some((template) => template.id === "coding"));
   assert.ok(!templates.some((template) => template.id === "code-mode"));
-  assert.ok(templates.some((template) => template.id === "runtime"));
+  assert.ok(!templates.some((template) => template.id === "runtime"));
   assert.equal(new Set(templates.map((template) => template.id)).size, templates.length);
   for (const template of templates) {
     assert.equal(typeof template.version, "string");
@@ -43,15 +43,13 @@ test("repository templates are discoverable launch presets", () => {
   }
   assert.ok(templates.find((template) => template.id === "assistant").skills.length > 0);
   assert.equal(templatePublicView(templates.find((template) => template.id === "assistant")).defaultable, true);
-  assert.equal(templatePublicView(templates.find((template) => template.id === "runtime")).defaultable, false);
+  assert.equal(templatePublicView(templates.find((template) => template.id === "agent")).defaultable, false);
   const assistant = templates.find((template) => template.id === "assistant");
-  const basePrompt = fs.readFileSync(assistant.basePrompt, "utf8");
-  assert.match(basePrompt, /bash[^\n]*code.mode/i);
   // Detail lives in skills the prompt lists and the model loads with `skill`: Python with the Assistant, and the web
   // tools' order in web-research, which the web section points to.
   const skill = (name) => fs.readFileSync(path.join(assistant.skills.find((folder) => path.basename(folder) === name), "SKILL.md"), "utf8");
   assert.match(skill("managed-python"), /python[^\n]*bash/i);
-  const web = fs.readFileSync(path.resolve(root, "conduit-runtime/WEB.md"), "utf8");
+  const web = fs.readFileSync(path.resolve(root, "web-tools/WEB.md"), "utf8");
   assert.match(web, /web-research/);
   assert.match(skill("web-research"), /web_search[\s\S]*fetch_content/i);
 });

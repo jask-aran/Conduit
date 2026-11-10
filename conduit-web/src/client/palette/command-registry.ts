@@ -45,7 +45,6 @@ export interface PaletteActions {
   newChat: (project?: Project | null, launch?: { templateId?: string }) => void;
   newFolder: () => void;
   newWorkspace: () => void;
-  openRuntimeChat: () => void;
   attach: () => void;
   stashPrompt: () => void;
   toggleDictation: () => void;
@@ -147,7 +146,6 @@ const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.copyTranscript]: "chat", [COMMAND_IDS.attachFiles]: "chat", [COMMAND_IDS.stashPrompt]: "chat",
   [COMMAND_IDS.toggleDictation]: "chat", [COMMAND_IDS.renameFolder]: "chat",
   [COMMAND_IDS.searchChats]: "navigation", [COMMAND_IDS.openSettings]: "navigation", [COMMAND_IDS.openWorkspaceViews]: "navigation",
-  [COMMAND_IDS.openRuntimeChat]: "navigation",
   [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
   [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
   [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
@@ -230,7 +228,6 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.newChat]: { isAvailable: () => true, run: (actions) => actions.newChat() },
   [COMMAND_IDS.newFolder]: { isAvailable: () => true, run: (actions) => actions.newFolder() },
   [COMMAND_IDS.newWorkspace]: { isAvailable: () => true, run: (actions) => actions.newWorkspace() },
-  [COMMAND_IDS.openRuntimeChat]: { isAvailable: () => true, run: (actions) => actions.openRuntimeChat() },
   [COMMAND_IDS.attachFiles]: { isAvailable: hasChat, run: (actions) => actions.attach() },
   [COMMAND_IDS.stashPrompt]: { isAvailable: hasChat, run: (actions) => actions.stashPrompt() },
   [COMMAND_IDS.toggleDictation]: { isAvailable: hasChat, run: (actions) => actions.toggleDictation() },
@@ -413,7 +410,7 @@ export const paletteSources: PaletteSource[] = [{
   commands(context) {
     const templates = (Array.isArray(context.templates) ? context.templates : [])
       .filter((template) => template.defaultable !== false);
-    const draft = context.chatStatus === "draft" && context.templateId !== "runtime";
+    const draft = context.chatStatus === "draft";
     return templates.flatMap((template) => {
       const rows: PaletteCommand[] = [{
         id: `new-chat-profile:${template.id}`,

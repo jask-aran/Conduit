@@ -114,9 +114,8 @@ exit 0
     const templateCatalog = await templatesResponse.json();
     assert.ok(templateCatalog.templates.some((item) => item.id === "assistant"));
     assert.ok(!templateCatalog.templates.some((item) => item.id === "coding"), "Coding was retired");
-    assert.ok(templateCatalog.templates.some((item) => item.id === "runtime"));
+    assert.ok(!templateCatalog.templates.some((item) => item.id === "runtime"), "Runtime was retired");
     assert.equal(templateCatalog.defaultTemplateId, "assistant");
-    assert.equal(templateCatalog.templates.find((item) => item.id === "runtime").defaultable, false);
     const promptCatalog = await fetch(`${origin}/v0/context`).then((response) => response.json());
     assert.ok(promptCatalog.blocks.some((item) => item.id === "assistant" && item.modified === false));
     assert.ok(promptCatalog.blocks.some((item) => item.id === "chat-naming" && item.source === "shipped"));
@@ -296,7 +295,7 @@ exit 0
     const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "runtime" }),
+      body: JSON.stringify({ defaultTemplateId: "agent" }),
     });
     assert.equal(runtimeDefault.status, 400);
     assert.equal((await runtimeDefault.json()).error, "special_template");
@@ -467,27 +466,10 @@ exit 0
     const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "project_chat", templateId: "runtime" }),
+      body: JSON.stringify({ projectId: "project_chat", templateId: "agent" }),
     });
     assert.equal(ordinaryRuntime.status, 400);
     assert.equal((await ordinaryRuntime.json()).error, "special_template");
-
-    const runtimeChat = await fetch(`${origin}/v0/runtime/chats`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    });
-    assert.equal(runtimeChat.status, 201);
-    const runtimeChatBody = await runtimeChat.json();
-    assert.equal(runtimeChatBody.templateId, "runtime");
-
-    const runtimeSwitch = await fetch(`${origin}/v0/chats/${runtimeChatBody.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "test" }),
-    });
-    assert.equal(runtimeSwitch.status, 409);
-    assert.equal((await runtimeSwitch.json()).error, "special_chat_locked");
 
     const freshLive = await fetch(`${origin}/v0/live-sessions`, {
       method: "POST",

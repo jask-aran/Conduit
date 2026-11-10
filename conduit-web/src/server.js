@@ -187,7 +187,7 @@ const contextStore = new ContextStore({
   skills,
   root: config.promptOverridesRoot, templates: config.piTemplates,
   agent: () => backends.adapters.get("conduit-runtime")?.runtime.agent,
-  webPath: path.join(config.repositoryRoot, "templates/conduit-runtime/WEB.md"),
+  webPath: path.join(config.repositoryRoot, "templates/web-tools/WEB.md"),
   seedDir: path.join(config.repositoryRoot, "templates/agent/seed"),
   subagentPath: path.join(config.repositoryRoot, "templates/subagent/BRIEF.md"),
   chatNamingPath: config.sessionNamePrompt,

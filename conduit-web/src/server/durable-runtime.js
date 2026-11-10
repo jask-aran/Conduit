@@ -32,7 +32,7 @@ export { ConduitNotices } from "../context/notices.js";
 
 // What the web tools are for and how to use them; a template that asks for
 // them also brings the web-research skill.
-const WEB_PROMPT = fs.readFileSync(new URL("../../../templates/conduit-runtime/WEB.md", import.meta.url), "utf8");
+const WEB_PROMPT = fs.readFileSync(new URL("../../../templates/web-tools/WEB.md", import.meta.url), "utf8");
 const WEB_ACCESS = fileURLToPath(new URL("../../node_modules/pi-web-access/index.ts", import.meta.url));
 // A template's own extension that only asked Pi for its codemode, offered alone.
 const CODEMODE_ONLY = /codemode-only\.js$/;
