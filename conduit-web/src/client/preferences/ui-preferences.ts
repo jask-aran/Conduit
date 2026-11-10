@@ -1,28 +1,19 @@
 import { createRoot } from "solid-js";
 import { api } from "../api/client.ts";
 import { createAutosave } from "../settings/autosave.ts";
+import type { UI_PREFERENCES } from "../../preferences-api.js";
 
 export const UI_PREFERENCE_CHANGE_EVENT = "conduit:ui-preference-change";
 
-export interface UiPreferences {
-  sidebarChatLimit: number | null;
-  collapsedProjectIds: string[] | null;
-  sidebarCollapsed: boolean | null;
-  markdownRenderer: string | null;
-  meteorField: boolean | null;
-  transcriptWidth: string | null;
-  transcriptWideBlocks: string | null;
-  codeBlockCollapse: string | null;
-  codeBlockCollapseLines: number | null;
-  codeBlockWidth: string | null;
-  panelMotion: string | null;
-  leaderMenu: string | null;
-  userMessageCollapse: string | null;
-  chatSort: string | null;
-  shortcutOverrides: Record<string, unknown> | null;
-  voicePreferences: Record<string, unknown> | null;
-  sidebarPins: string[] | null;
-}
+/* The UI preferences as the declaration lists them (preferences-api.js), plus the sidebar's pins, saved beside them. */
+type Declared = typeof UI_PREFERENCES;
+type ValueOf<P> = P extends { type: "boolean" } ? boolean
+  : P extends { type: "integer" } ? number
+  : P extends { type: "strings" } ? string[]
+  : P extends { type: "choice"; values: readonly (infer V)[] } ? V
+  : Record<string, unknown>;
+export type UiPreferences = { [K in keyof Declared]: ValueOf<Declared[K]> | null } & { sidebarPins: string[] | null };
+export type UiPreferenceChoice<K extends keyof Declared> = NonNullable<UiPreferences[K]>;
 
 export type UiPreferenceKey = keyof UiPreferences;
 

@@ -313,7 +313,6 @@ exit 0
         sidebarPins: ["chat:one", "project:two", "terminal:three"],
         sidebarChatLimit: 45,
         collapsedProjectIds: ["project_chat"],
-        rendererControlsVisible: false,
         voicePreferences: { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" },
       }),
     });
@@ -326,7 +325,6 @@ exit 0
     assert.deepEqual(savedPreferences.sidebarPins, ["chat:one", "project:two", "terminal:three"]);
     assert.equal(savedPreferences.sidebarChatLimit, 45);
     assert.deepEqual(savedPreferences.collapsedProjectIds, ["project_chat"]);
-    assert.equal(savedPreferences.rendererControlsVisible, false);
     const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },

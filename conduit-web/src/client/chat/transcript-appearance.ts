@@ -1,7 +1,10 @@
 import { createSignal } from "solid-js";
 import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, CODE_BLOCK_COLLAPSE_LINE_OPTIONS, type CodeBlockCollapseMode } from "./code-block";
 import { isUserMessageCollapseMode, selectedUserMessageCollapse, type UserMessageCollapseMode } from "./user-message-collapse";
+import type { UiPreferenceChoice } from "../preferences/ui-preferences";
 import "./transcript-appearance.css";
+
+type CollapseLines = UiPreferenceChoice<"codeBlockCollapseLines">;
 
 export {
   isUserMessageCollapseMode,
@@ -118,7 +121,7 @@ export function saveCodeBlockWidth(
   return selected;
 }
 
-export function isCodeBlockCollapseLines(value: unknown): value is number {
+export function isCodeBlockCollapseLines(value: unknown): value is CollapseLines {
   return typeof value === "number" && (CODE_BLOCK_COLLAPSE_LINE_OPTIONS as readonly number[]).includes(value);
 }
 
@@ -205,7 +208,7 @@ export function saveCodeBlockCollapse(
   return selected;
 }
 
-export function selectedCodeBlockCollapseLines(storage: Pick<Storage, "getItem"> = localStorage): number {
+export function selectedCodeBlockCollapseLines(storage: Pick<Storage, "getItem"> = localStorage): CollapseLines {
   const override = Number(param("codeBlockCollapseLines"));
   if (isCodeBlockCollapseLines(override)) return override;
   const stored = Number(storage.getItem(CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY));
@@ -215,7 +218,7 @@ export function selectedCodeBlockCollapseLines(storage: Pick<Storage, "getItem">
 export function saveCodeBlockCollapseLines(
   lines: number,
   storage: Pick<Storage, "setItem"> = localStorage,
-): number {
+): CollapseLines {
   const selected = isCodeBlockCollapseLines(lines) ? lines : CODE_BLOCK_COLLAPSE_DEFAULT_LINES;
   storage.setItem(CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY, String(selected));
   publish("codeBlockCollapseLines", selected);

@@ -1,5 +1,6 @@
 import { clientUiActions, declaredUiView } from "../../ui-api.js";
-import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
+import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts } from "../../preferences-store.js";
+import { uiPreferencePatch, validUiPreferencePatch } from "../../preferences-api.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 import { clientAddress, isTailnetOrLoopback } from "../../nodes/node-hub.js";
 import { tailnetMachine } from "../../tailscale-share.js";
@@ -193,6 +194,11 @@ export function registerRuntimeRoutes(app, {
       if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
         return response.status(400).json({ error: "invalid_session_name_thinking_level" });
       }
+      // The approval model (Settings › AI › Helper models: Review); "" gives it back to the naming model's.
+      const reviewModel = request.body?.reviewModel;
+      if (reviewModel != null && (typeof reviewModel !== "string" || (reviewModel.trim() && !/^[^/\s]+\/\S+$/.test(reviewModel.trim())))) {
+        return response.status(400).json({ error: "invalid_review_model" });
+      }
       const accountName = request.body?.accountName;
       const accountHome = request.body?.accountHome;
       if (accountHome != null && (typeof accountHome !== "string" || accountHome.trim().length > 120)) {
@@ -216,27 +222,17 @@ export function registerRuntimeRoutes(app, {
       if (!validUiPreferencePatch(request.body)) {
         return response.status(400).json({ error: "invalid_ui_preferences" });
       }
-      const uiKeys = [
-        "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
-        "rendererControlsVisible", "composerSurface", "contextMetrics",
-        "meteorField", "transcriptWidth", "transcriptWideBlocks",
-        "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth",
-        "userMessageCollapse", "chatSort",
-        "shortcutOverrides", "voicePreferences",
-      ];
-      const uiPatch = Object.fromEntries(uiKeys
-        .filter((key) => Object.hasOwn(request.body || {}, key))
-        .map((key) => [key, request.body[key]]));
       const saved = await preferences.save({
         defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
         ...(model != null ? { sessionNameModel: model } : {}),
         ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
+        ...(reviewModel != null ? { reviewModel } : {}),
         ...(accountName != null ? { accountName } : {}),
         ...(accountHome != null ? { accountHome } : {}),
         ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
         ...(sidebarPins != null ? { sidebarPins } : {}),
         ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
-        ...uiPatch,
+        ...uiPreferencePatch(request.body),
       });
       // The account's name and home are the person's: their agent knows them by them ({{person.name}}, its USER.md).
       if (accountName != null || accountHome != null) await Promise.resolve(onAccountRenamed?.({

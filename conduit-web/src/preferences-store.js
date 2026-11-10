@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { watch } from "node:fs";
 import path from "node:path";
 import { formatKeybindings, parseKeybindings } from "./keybindings.js";
+import { readUiPreferences, UI_PREFERENCE_KEYS } from "./preferences-api.js";
 
 const DEFAULTS = {
   defaultTemplateId: "assistant",
@@ -15,25 +16,8 @@ const DEFAULTS = {
   profileModelDefaults: {},
   terminalShortcuts: [],
   sidebarPins: [],
-  sidebarChatLimit: null,
-  collapsedProjectIds: null,
-  sidebarCollapsed: null,
-  markdownRenderer: null,
-  rendererControlsVisible: null,
-  composerSurface: null,
-  contextMetrics: null,
-  meteorField: null,
-  transcriptWidth: null,
-  transcriptWideBlocks: null,
-  codeBlockCollapse: null,
-  codeBlockCollapseLines: null,
-  codeBlockWidth: null,
-  panelMotion: null,
-  leaderMenu: null,
-  userMessageCollapse: null,
-  chatSort: null,
-  shortcutOverrides: null,
-  voicePreferences: null,
+  // The UI preferences (preferences-api.js): each unset until chosen.
+  ...Object.fromEntries(UI_PREFERENCE_KEYS.map((key) => [key, null])),
   knownServers: [],
 };
 
@@ -105,48 +89,6 @@ export function validSidebarPins(input) {
     && new Set(input).size === input.length;
 }
 
-const UI_PREFERENCE_KEYS = new Set([
-  "sidebarChatLimit", "collapsedProjectIds", "sidebarCollapsed", "markdownRenderer",
-  "rendererControlsVisible", "composerSurface", "contextMetrics",
-  "meteorField", "transcriptWidth", "transcriptWideBlocks",
-  "codeBlockCollapse", "codeBlockCollapseLines", "codeBlockWidth", "panelMotion",
-  "leaderMenu", "userMessageCollapse", "chatSort",
-  "shortcutOverrides", "voicePreferences",
-]);
-// Reading-surface presets. Free pixel values are deliberately not accepted: the
-// shell scales its geometry by density and container width, so only a named
-// preset stays correct across devices.
-const TRANSCRIPT_WIDTHS = ["compact", "default", "wide", "full"];
-const TRANSCRIPT_WIDE_BLOCKS = ["off", "default", "wider", "full"];
-const CODE_BLOCK_COLLAPSE_MODES = ["off", "long", "all"];
-const CODE_BLOCK_COLLAPSE_LINES = [10, 15, 25, 50];
-const CODE_BLOCK_WIDTHS = ["column", "wide"];
-const PANEL_MOTIONS = ["translate", "reflow"];
-const LEADER_MENUS = ["pause", "immediate", "never"];
-// The retired ids -- marked-stable, incremark, incremark-typewriter,
-// incremark-synthetic, incremark-fast -- are deliberately absent. A stored value that is no
-// longer a renderer normalizes to null, and the client falls back to its
-// default rather than asking for something that no longer exists.
-const MARKDOWN_RENDERERS = ["incremark", "incremark-fade", "marked"];
-const USER_MESSAGE_COLLAPSE = ["off", "6", "10", "15", "25"];
-const CHAT_SORTS = ["latest", "created"];
-const stringList = (value, limit) => Array.isArray(value) && value.length <= limit
-  && value.every((item) => typeof item === "string" && item.length <= 200);
-const oneOf = (value, choices) => typeof value === "string" && choices.includes(value);
-const validShortcutOverrides = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 100) return false;
-  return Object.entries(value).every(([commandId, bindings]) => commandId.length <= 100
-    && Array.isArray(bindings) && bindings.length <= 4
-    && bindings.every((binding) => Array.isArray(binding?.strokes) && binding.strokes.length >= 1 && binding.strokes.length <= 2
-      && binding.strokes.every((stroke) => typeof stroke?.code === "string" && stroke.code.length <= 40
-        && typeof stroke.key === "string" && stroke.key.length <= 40
-        && stringList(stroke.modifiers, 4))));
-};
-const validVoicePreferences = (value) => value && typeof value === "object" && !Array.isArray(value)
-  && typeof value.shortcut === "string" && value.shortcut.length <= 100
-  && oneOf(value.activation, ["push_to_talk", "toggle"])
-  && typeof value.autoSend === "boolean"
-  && oneOf(value.captureProfile, ["raw", "processed"]);
 // The last model somebody chose on a profile, so choosing it once is enough.
 // Keyed by profile rather than by backend: "Assistant" and "Coding" are two
 // answers to the same question, and sharing one entry between them meant
@@ -161,31 +103,6 @@ const normalizeProfileModelDefaults = (value) => {
       : [];
   }).slice(0, 20));
 };
-
-export function validUiPreferencePatch(input = {}) {
-  return Object.entries(input).every(([key, value]) => {
-    if (!UI_PREFERENCE_KEYS.has(key)) return true;
-    if (value == null) return false;
-    if (key === "sidebarChatLimit") return Number.isInteger(value) && value >= 5 && value <= 100;
-    if (key === "collapsedProjectIds") return stringList(value, 200);
-    if (["sidebarCollapsed", "rendererControlsVisible", "meteorField"].includes(key)) return typeof value === "boolean";
-    if (key === "markdownRenderer") return oneOf(value, MARKDOWN_RENDERERS);
-    if (key === "composerSurface") return oneOf(value, ["static", "frosted-live"]);
-    if (key === "contextMetrics") return stringList(value, 40);
-    if (key === "transcriptWidth") return oneOf(value, TRANSCRIPT_WIDTHS);
-    if (key === "transcriptWideBlocks") return oneOf(value, TRANSCRIPT_WIDE_BLOCKS);
-    if (key === "codeBlockCollapse") return oneOf(value, CODE_BLOCK_COLLAPSE_MODES);
-    if (key === "codeBlockCollapseLines") return CODE_BLOCK_COLLAPSE_LINES.includes(value);
-    if (key === "codeBlockWidth") return oneOf(value, CODE_BLOCK_WIDTHS);
-    if (key === "panelMotion") return oneOf(value, PANEL_MOTIONS);
-    if (key === "leaderMenu") return oneOf(value, LEADER_MENUS);
-    if (key === "userMessageCollapse") return oneOf(value, USER_MESSAGE_COLLAPSE);
-    if (key === "chatSort") return oneOf(value, CHAT_SORTS);
-    if (key === "shortcutOverrides") return validShortcutOverrides(value);
-    if (key === "voicePreferences") return validVoicePreferences(value);
-    return false;
-  });
-}
 
 export function normalizeTerminalShortcuts(input) {
   if (!Array.isArray(input)) return [];
@@ -235,17 +152,6 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const sidebarPins = Array.isArray(input.sidebarPins)
     ? normalizeSidebarPins(input.sidebarPins)
     : normalizeSidebarPins(fallback.sidebarPins);
-  const nullable = (key, normalize) => input[key] == null
-    ? (fallback[key] == null ? null : normalize(fallback[key]))
-    : normalize(input[key]);
-  const boolean = (value) => typeof value === "boolean" ? value : null;
-  const choice = (values) => (value) => values.includes(value) ? value : null;
-  const stringArray = (limit = 100) => (value) => Array.isArray(value)
-    ? [...new Set(value.filter((item) => typeof item === "string" && item.length <= 200))].slice(0, limit)
-    : null;
-  const plainObject = (value) => value && typeof value === "object" && !Array.isArray(value)
-    ? structuredClone(value)
-    : null;
   // The hub account's name (Settings › Account), whose initials are its picture in the server switcher.
   const accountName = typeof input.accountName === "string" ? input.accountName.trim().slice(0, 60)
     : typeof fallback.accountName === "string" ? fallback.accountName.trim().slice(0, 60) : "";
@@ -262,28 +168,7 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
     profileModelDefaults: normalizeProfileModelDefaults(input.profileModelDefaults ?? fallback.profileModelDefaults),
     terminalShortcuts,
     sidebarPins,
-    sidebarChatLimit: nullable("sidebarChatLimit", (value) => Number.isFinite(Number(value))
-      ? Math.min(100, Math.max(5, Math.round(Number(value))))
-      : null),
-    collapsedProjectIds: nullable("collapsedProjectIds", stringArray(200)),
-    sidebarCollapsed: nullable("sidebarCollapsed", boolean),
-    markdownRenderer: nullable("markdownRenderer", choice(MARKDOWN_RENDERERS)),
-    rendererControlsVisible: nullable("rendererControlsVisible", boolean),
-    composerSurface: nullable("composerSurface", choice(["static", "frosted-live"])),
-    contextMetrics: nullable("contextMetrics", stringArray(40)),
-    meteorField: nullable("meteorField", boolean),
-    transcriptWidth: nullable("transcriptWidth", choice(TRANSCRIPT_WIDTHS)),
-    transcriptWideBlocks: nullable("transcriptWideBlocks", choice(TRANSCRIPT_WIDE_BLOCKS)),
-    codeBlockCollapse: nullable("codeBlockCollapse", choice(CODE_BLOCK_COLLAPSE_MODES)),
-    codeBlockCollapseLines: nullable("codeBlockCollapseLines", (value) =>
-      CODE_BLOCK_COLLAPSE_LINES.includes(value) ? value : null),
-    codeBlockWidth: nullable("codeBlockWidth", choice(CODE_BLOCK_WIDTHS)),
-    panelMotion: nullable("panelMotion", choice(PANEL_MOTIONS)),
-    leaderMenu: nullable("leaderMenu", choice(LEADER_MENUS)),
-    userMessageCollapse: nullable("userMessageCollapse", choice(USER_MESSAGE_COLLAPSE)),
-    chatSort: nullable("chatSort", choice(CHAT_SORTS)),
-    shortcutOverrides: nullable("shortcutOverrides", (value) => validShortcutOverrides(value) ? plainObject(value) : null),
-    voicePreferences: nullable("voicePreferences", (value) => validVoicePreferences(value) ? plainObject(value) : null),
+    ...readUiPreferences(input, fallback),
   };
 }
 

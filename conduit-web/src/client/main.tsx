@@ -5495,7 +5495,7 @@ function App() {
       sidebarChatLimit: selectedSidebarChatLimit(),
       collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
       sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
-      markdownRenderer: localStorage.getItem(MARKDOWN_RENDERER_STORAGE_KEY) || selectedMarkdownRenderer(),
+      markdownRenderer: selectedMarkdownRenderer(),
       meteorField: selectedMeteorField(),
       transcriptWidth: selectedTranscriptWidth(),
       transcriptWideBlocks: selectedTranscriptWideBlocks(),

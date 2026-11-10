@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PreferencesStore, normalizePreferences, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../src/preferences-store.js";
+import { PreferencesStore, normalizePreferences, validSidebarPins, validTerminalShortcuts } from "../src/preferences-store.js";
+import { validUiPreferencePatch } from "../src/preferences-api.js";
 
 test("normalizePreferences falls back when the default template is unknown", () => {
   const known = ["chat", "workspace"];
@@ -37,9 +38,6 @@ test("preferences store persists general settings", async () => {
     collapsedProjectIds: ["project:one"],
     sidebarCollapsed: true,
     markdownRenderer: "incremark",
-    rendererControlsVisible: false,
-    composerSurface: "static",
-    contextMetrics: ["contextTokens", "sessionCost"],
     meteorField: false,
     transcriptWidth: "wide",
     transcriptWideBlocks: "wider",
@@ -65,7 +63,6 @@ test("preferences store persists general settings", async () => {
   assert.deepEqual(restored.get().sidebarPins, ["chat:one", "project:two", "terminal:three"]);
   assert.equal(restored.get().sidebarChatLimit, 45);
   assert.deepEqual(restored.get().collapsedProjectIds, ["project:one"]);
-  assert.equal(restored.get().rendererControlsVisible, false);
   assert.equal(restored.get().transcriptWidth, "wide");
   assert.equal(restored.get().transcriptWideBlocks, "wider");
   assert.equal(restored.get().codeBlockCollapse, "all");
@@ -80,7 +77,7 @@ test("preferences store persists general settings", async () => {
   assert.equal(validSidebarPins(restored.get().sidebarPins), true);
   assert.equal(validSidebarPins(["chat:one", "chat:one"]), false);
   assert.equal(validSidebarPins(["unknown:one"]), false);
-  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 45, rendererControlsVisible: false, chatSort: "latest" }), true);
+  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 45, chatSort: "latest" }), true);
   assert.equal(validUiPreferencePatch({ chatSort: "created" }), true);
   assert.equal(validUiPreferencePatch({ chatSort: "updated" }), false);
   assert.equal(validUiPreferencePatch({ sidebarChatLimit: 4 }), false);
