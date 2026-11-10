@@ -661,7 +661,8 @@ export class DurableRuntime {
         tools: selection.tools.map((tool) => {
           const extension = sourceOf.get(tool.name);
           const source = tool.name.startsWith("pi.codemode.") ? "codemode" : tool.name === "approved" ? "built-in" : SOURCES[extension] || "built-in";
-          return { name: tool.name, description: first(tool.description), source, extension,
+          // text and parameters: what the model is told of it, whole (Settings › Tools shows it as the tool's pane).
+          return { name: tool.name, description: first(tool.description), text: String(tool.description || ""), parameters: tool.parameters ?? null, source, extension,
             reach: (!direct || direct.has(tool.name)) && (!tool.callers || tool.callers.includes("model")) ? "model" : "codemode", ...askOf(tool, { guarded: selection.isAgent }) };
         }),
       };

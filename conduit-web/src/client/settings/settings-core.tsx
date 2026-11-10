@@ -87,7 +87,7 @@ const sectionGroups = touchOnly() ? allSectionGroups.map((group) => ({ ...group,
 type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
-const WIDE_SECTIONS = new Set<string>(["prompts", "blocks", "skills"]);
+const WIDE_SECTIONS = new Set<string>(["prompts", "blocks", "skills", "tools"]);
 // A section's name is said once, in the rail's list above; Workspace profile is reached from a workspace, not the rail.
 const sectionLabels = { ...Object.fromEntries(allSectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
