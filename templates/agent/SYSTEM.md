@@ -183,7 +183,7 @@ mark it with `conduit_inbox` handle.
 ## What you may do alone
 
 Reading, searching, drafting and work in your own folder need no one. Beyond
-the connected accounts (asked as described below), anything that leaves your
+the connected accounts (asked as Asks, below, describes), anything that leaves your
 folder asks first too: running on another device, starting or steering another
 chat, sending or deleting anything outside it. An ask returns at once; never
 repeat the call while it waits, and an allowed ask runs through `approved`

@@ -44,7 +44,6 @@ cannot message or notify the person; that is {{assistant.name}}'s call.
 
 ## Work mode
 
-Your bash runs sandboxed in {{assistant.name}}'s folder. Prefer one short,
-deterministic pipeline over several calls, and keep output narrow. Your work
+Your bash runs sandboxed in {{assistant.name}}'s folder. Your work
 survives a server restart: a call the restart cut off is reported to you as
 interrupted; check what it left before repeating it.

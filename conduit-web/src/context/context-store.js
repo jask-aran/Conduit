@@ -44,6 +44,17 @@ const VARS = [
   ["person.name", "The person's name (USER.md's name field)"], ["person.home", "Where they live (USER.md's home field)"],
   ["assistant.name", "jbot's name (Settings › jbot)"], ["timezone", "Their time zone"], ["now", "The current date and time; never filled in a system prompt"],
 ];
+/**
+ * A block's text with its fixed variables filled (never `now`: a system prompt does not change by the minute). A
+ * paragraph that needs one nobody has set (no home in USER.md, no jbot on this hub) is left out, not sent with a hole.
+ */
+const FIXED = VARS.map(([name]) => name).filter((name) => name !== "now");
+export function fillVars(text, vars) {
+  const { now: _now, ...fixed } = vars || {};
+  const value = (name) => name.split(".").reduce((at, key) => at?.[key], fixed);
+  const unset = (paragraph) => [...paragraph.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)].some(([, name]) => FIXED.includes(name) && !value(name));
+  return renderVars(text.split(/\n{2,}/).filter((paragraph) => !unset(paragraph)).join("\n\n"), fixed);
+}
 const NOTICE_SPECS = {
   "wake-run": [["now", "The current date and time"], ["reason", "The person asked for this run; A check-back you set; An event woke this run; A webhook woke this run; A feed's check; or A <kind> run"], ["task", "The run's task"]],
   "wake-event": [["task", "The watch's task"], ["event", "What happened"]],
@@ -302,8 +313,10 @@ export class ContextStore {
   async text(id) {
     const item = (await this.catalog()).get(id);
     if (!item || item.kind !== "text") throw fail("Unknown text block", 404);
-    return this.content(item);
+    return fillVars(await this.content(item), await this.vars());
   }
+  /** The variables as they stand, or none where this hub has no jbot to say them. */
+  async vars() { const agent = this.agent(); return agent ? promptVars(agent).catch(() => ({})) : {}; }
   async notice(name, vars = {}) {
     const item = (await this.catalog()).get(`notice-${name}`);
     if (!item || item.kind !== "notice") throw fail("Unknown notice", 404);
@@ -336,6 +349,8 @@ export class ContextStore {
   async textSections(id, { vars, catalog: loadedCatalog } = {}) {
     const catalog = loadedCatalog || await this.catalog(); const doc = (await this.documents(catalog)).find((item) => item.id === id);
     if (!doc) throw fail("Unknown document", 404);
+    // Every document's blocks take the variables, not jbot's alone: a shared block reads the same wherever it is placed.
+    vars ||= await this.vars();
     const sections = [];
     // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
     // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
@@ -344,7 +359,7 @@ export class ContextStore {
     const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
     for (const [index, { key, item }] of blocks.entries()) {
       let text = contents[index];
-      if (vars && (id === "agent" || id.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
+      text = fillVars(text, vars);
       if (item.routine) text = text.trim() ? block("routine", { name: item.routine.name, title: item.routine.title }, text) : "";
       else if (id !== "service:chat-naming") text = text.trim();
       if (text) sections.push({ blockId: key, label: item.label, kind: "text", part: "system", text });
@@ -364,7 +379,7 @@ export class ContextStore {
       if (!item?.skill || (this.skills && !this.skills.enabled(path.basename(item.skill)))
         || (item.subagents === false && (id === "subagent" || id?.startsWith("run:")))) continue;
       let text = await this.content(item);
-      if (vars && (id === "agent" || id?.startsWith("run:"))) { const { now: _now, ...fixed } = vars; text = renderVars(text, fixed); }
+      text = fillVars(text, vars || await this.vars());
       entries.push(`- **${skillName(text, item.skill)}**: ${skillDescription(text) || "(no description)"}`);
     }
     return entries.length ? `${SKILLS_INTRO}\n\n${entries.join("\n\n")}` : "";

@@ -1,1 +1,1 @@
-[Approval] Not allowed: {{ask.title}} (ask {{ask.id}}). Do not do it; say so if it matters.
+[Approval] Not allowed: {{ask.title}} (ask {{ask.id}}). Do not do it, and do not ask for it again unless the person brings it up; say so if it matters.

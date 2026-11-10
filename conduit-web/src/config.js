@@ -75,8 +75,6 @@ export function loadConfig(env = process.env) {
     voiceConfigFile: absolute(env.CONDUIT_VOICE_CONFIG_FILE || path.join(dataRoot, "voice.json")),
     voiceModelRoot: absolute(env.CONDUIT_VOICE_MODEL_ROOT || path.join(dataRoot, "voice", "models")),
     voiceRecordingsRoot: absolute(env.CONDUIT_VOICE_RECORDINGS_ROOT || path.join(dataRoot, "voice", "recordings")),
-    bridgeSystemPrompt: path.join(templatesRoot, "conduit-workspace", "SYSTEM.md"),
-    bridgeSkill: path.join(templatesRoot, "conduit-workspace", "SKILL.md"),
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     identityFile: absolute(env.CONDUIT_IDENTITY_FILE || path.join(dataRoot, "identity.json")),
     leafFile: absolute(env.CONDUIT_LEAF_FILE || path.join(dataRoot, "leaf.json")),
