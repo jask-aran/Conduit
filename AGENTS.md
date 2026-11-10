@@ -1,35 +1,36 @@
-# Repository Guidelines
-- `CONTRIBUTING.md` — GitHub issue taxonomy, readiness and lifecycle rules,
-  plus commit/history and performance-observation conventions.
-- `docs/TESTING.md` — test selection, commands, seams, local/VPS
-  boundaries and evidence requirements for every testing approach.
-- `conduit-web/README.md` — runtime model, HTTP API, auth mechanism, process
-  residency and caps, and the live-session WebSocket protocol.
-- `DESIGN.md` — in-app visual language for user-facing UI, read this before building or modifying any UI.
-- `docs/DEPLOYMENT.md` — installation, data recovery, client builds, several
-  servers and release constraints.
+# Conduit
 
-## Contribution guidance
+## Before you start
+- Committing, or creating, restructuring or closing a GitHub issue → read `CONTRIBUTING.md`.
+- Building or changing any UI → read `DESIGN.md`.
+- Touching the HTTP API, auth, process residency or the live-session WebSocket protocol → read
+  `conduit-web/README.md`.
+- Client builds, deployment, several servers or data recovery → read `docs/DEPLOYMENT.md`.
+- Any check beyond the table below → read `docs/TESTING.md`.
 
-Read `CONTRIBUTING.md` before `git commit`.
+Read each one once per session.
 
-Before creating, restructuring or closing GitHub issues, or committing project
-work, read `CONTRIBUTING.md`. It is the single reference for issue type,
-readiness, Roadmap/Feature decomposition, and commit/history and
-performance-observation conventions.
+## Checking your work
+Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 
-## Testing guidance
+| Change | Check |
+| --- | --- |
+| Types, routes, isolated logic | `npm run typecheck`, `node --test test/<file>.test.js` |
+| WebSocket, streaming, rendering | `npm run test:harness`, `npm run bench:renderer` |
+| A component or styling | `npm run gallery`, then Agent Browser |
+| A release | `npm test` (release only) |
 
-Read `docs/TESTING.md` before `npm run typecheck`, `npm run build`, or test commands.
+For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. The test count only
+shrinks (`test/budget.json`), so a change that needs a new test removes more than it adds.
 
-Before testing or reviewing the server, web UI, local server, candidate build,
-release artifact or VPS deployment, read `docs/TESTING.md`. It is
-the single reference for approach selection, commands, safety boundaries and
-evidence, what tools are available and how to use them.
+After each bounded change set, run `bash .devcontainer/start-conduit.sh restart` so the server is ready, then hand it
+to me: I confirm behaviour.
 
-- Dont reload/ re-read skills constantly, and run bash .devcontainer/start-conduit.sh restart to get the server ready for me to test, after each bounded change set.
-- Do not waste tokens on broad test sweeps, writing new tests, or waiting around for fixtures.
-- Pick only the single most surgical, token-efficient validation seam in docs/TESTING.md for the touched code.
-- Make concise code changes and defer to me to confirm behaviour.
-- If its reasonably low blast radius, skip testing and provide direct to me.
-- Do not start backgrounded long running test tasks.
+## Style
+Write concise code: say each thing once, and leave out speculative options, wrappers and comments that restate
+the code.
+
+## Build outputs
+A requested Windows or Android build may replace its own output without asking: `C:\Users\<user>\conduit-desktop-target\`,
+`C:\Users\<user>\conduit-desktop-target-dev\`, `conduit-web/android/app/build/outputs/` and `~/conduit-dev.apk`.
+Every other rule about writing outside the project still applies.

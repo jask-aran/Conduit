@@ -102,16 +102,7 @@ they do not establish a repository-wide clean-tree requirement for future work.
 
 ## Testing
 
-- `npm test` — the default gate: Node unit and integration tests, about forty
-  seconds. Run it for every change.
-- `npm run typecheck` — for any TypeScript change.
-- `npm run build` — Vite build plus bundle checks, when output size or the PWA
-  artefacts could move.
-- `npm run test:harness` — deterministic transport scenario emitting versioned
-  JSON, for streaming, batching or reconnect work.
-- `npm run qa:agent-browser` — drive a real browser when a change needs to be
-  seen rather than asserted. This is the only browser-level check; there is no
-  headless browser suite.
+How to choose and run a check is in `docs/TESTING.md`.
 
 ## Commits and history
 
