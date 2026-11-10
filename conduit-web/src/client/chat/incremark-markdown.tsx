@@ -1,7 +1,7 @@
 import { createFlash } from "@/components/ui/motion";
 import { CodeBlock } from "@/components/ui/code";
 import { ANSWER_MARKDOWN } from "@/components/ui/shared";
-import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createIncremarkParser, type DisplayBlock, type ParsedBlock } from "@incremark/core";
 import katex from "katex";
 import type { ChatMarkdownProps } from "./markdown";
@@ -1054,6 +1054,13 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(cancelSettlement);
   createEffect(() => { if (settled()) props.onSettled?.(); });
+  // The row is reconciled in place, so a settled message can still be handed new text (the stored answer restating
+  // the streamed one after it landed). That text unsettles it, to be taken and settle again: frozen, it was dropped.
+  createEffect(on(() => String(props.children || ""), (source) => {
+    if (!settled() || source === frozenSource()) return;
+    setFrozenSource(null);
+    setSettled(false);
+  }, { defer: true }));
   const typewriterController = new BufferedIncremarkTypewriter({
     onChange: (next) => {
       setDisplayBlocks(next);

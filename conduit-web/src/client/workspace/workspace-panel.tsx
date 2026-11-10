@@ -347,7 +347,14 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));
 
   // Over the panes, the dock takes no room from them, so nothing beneath it moves.
-  const panelMotion = (detail: Parameters<typeof dispatchPanelGeometryMotion>[0]) => { if (!props.overlay?.()) dispatchPanelGeometryMotion(detail); };
+  // Asked when a motion begins and held for all of it: a dock that went over the panes mid-drag dropped the motion's
+  // end, and the transcript kept the width it had pinned for it.
+  const begun = new Set<number>();
+  const panelMotion = (detail: Parameters<typeof dispatchPanelGeometryMotion>[0]) => {
+    if (detail.phase === "begin" ? props.overlay?.() : !begun.has(detail.id)) return;
+    if (detail.phase === "begin") begun.add(detail.id); else if (detail.phase === "end") begun.delete(detail.id);
+    dispatchPanelGeometryMotion(detail);
+  };
   // The panel takes room from the main pane only down to its minimum.
   const room = () => {
     if (props.overlay?.()) return Infinity;
