@@ -335,7 +335,7 @@ export function Settings(props: {
     const live: Entry[] = [
       ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" "),
         value: props.shortcuts.effectiveBindings(command.id).map((binding) => formatShortcutBinding(binding, props.shortcuts.environment)).join(" · ") })),
-      ...authProviders().filter((provider) => provider.auth.configured).map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account" })),
+      ...authProviders().filter((provider) => provider.auth.configured).map((provider) => ({ section: "integrations" as Section, group: "Model providers", label: provider.label, words: "account" })),
       ...(searchSettings()?.providers ?? []).filter((provider) => provider.ready).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label })),
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
       ...(context.data()?.blocks ?? []).map((block) => block.skill ? { section: "skills" as Section, group: "Skills", label: block.label, words: "skill" } : { section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" }),
@@ -876,7 +876,7 @@ export function Settings(props: {
       setAuthError(response.message);
     } finally { setAuthLoading(false); }
   };
-  createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
+  createEffect(() => { if (props.open && (section() === "models" || section() === "integrations")) void loadPiAuth(); });
   const loadChatGptStatus = async () => {
     try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
     catch (error) { setChatGptError((error as Error).message); }
@@ -895,7 +895,7 @@ export function Settings(props: {
     catch (error) { setChatGptError((error as Error).message); }
     finally { setChatGptBusy(false); }
   };
-  createEffect(() => { if (props.open && section() === "models") void loadChatGptStatus(); });
+  createEffect(() => { if (props.open && (section() === "models" || section() === "integrations")) void loadChatGptStatus(); });
   // An installed app catches the sign-in's last page itself (it ends on this device's localhost) and hands its
   // address to the hub, so nothing is copied; a browser tab cannot listen, and keeps the paste.
   const authTarget = createMemo(() => { const attempt = authAttempt(); return attempt?.active && attempt.owned && attempt.authUrl ? loopbackPort(attempt.authUrl) : null; });
@@ -1551,7 +1551,73 @@ export function Settings(props: {
           <Show when={section() === "skills"}><SkillsSettings context={context} skillId={openSkill()} onSkill={setOpenSkill} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
-          <Show when={section() === "integrations"}><IntegrationsSettings /></Show>
+          <Show when={section() === "integrations"}><>
+            <Group title="Model providers">
+              {/* A sign-in under way is a dialog of its steps: open the provider's page, then hand back what it ends on. */}
+              <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else setAuthAttempt(null); } }}
+                title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
+                <Show when={authAttempt()}>{(current) => <>
+                  <Show when={current().deviceCode}>{(device) => <>
+                    <SettingStep step={1} label="Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
+                      <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingStep>
+                    <SettingStep step={2} label="Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingStep>
+                  </>}</Show>
+                  <Show when={!current().deviceCode && current().authUrl}>
+                    <SettingStep step={1} label="Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingStep>
+                    <Show when={catching()} fallback={<Show when={current().prompt && current().prompt!.type !== "select"}>
+                      <Note tone="quiet">If the last page does not load, copy its address and paste it here.</Note>
+                    </Show>}>
+                      <SettingStep step={2} label="Come back here"><Spinner /></SettingStep>
+                    </Show>
+                  </Show>
+                  <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
+                  <Show when={!catching() && current().prompt && current().prompt!.type !== "select"}>
+                    <Show when={current().authUrl} fallback={<SettingLine label={current().prompt!.message}>
+                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
+                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
+                    </SettingLine>}>
+                      <SettingStep field step={2} label="Paste the address">
+                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
+                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
+                      </SettingStep>
+                    </Show>
+                    <SettingLine plain label=""><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine>
+                  </Show>
+                  <Show when={current().error}><Note tone="error">{current().error}</Note></Show>
+                </>}</Show>
+              </Dialog>
+              <Show when={authUnavailable()}><Note tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</Note></Show>
+              <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
+              <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
+                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
+                <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
+                <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
+                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept on the hub.">
+                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => setAddingAccount(event.currentTarget.value)}>
+                      <option value="">Choose a provider</option>
+                      <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                </Show>
+              </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
+            </Group>
+            <Group title="ChatGPT Web">
+              <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
+                busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
+                onSave={(cookie) => saveChatGptCookie(cookie)} onRemove={() => void removeChatGptCookie()} />
+              <SettingDetails summary="Where to find them">
+                <ol>
+                  <li>Sign in at <SettingLink href="https://chatgpt.com">chatgpt.com</SettingLink>.</li>
+                  <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
+                  <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
+                  <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
+                </ol>
+                <Note>Treat it like a password: do not paste it into a chat, issue, or log.</Note>
+              </SettingDetails>
+              <Show when={chatGptError()}><Note tone="error">{chatGptError()}</Note></Show>
+            </Group>
+            <IntegrationsSettings />
+          </></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "server"}><ServerSettings projects={props.projects} runtime={<>
               <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<Loading>Loading runtime settings…</Loading>}><Note tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></Note></Show>}>
@@ -1867,7 +1933,7 @@ export function Settings(props: {
                   }</For>
                   <SettingLine plain label="Cloudflare Workers AI" state={settings().cloudflare ? "connected" : "not set"}
                     title="Skips off-topic results and reads values off pages.">
-                    <Button variant="ghost" size="sm" onClick={() => openSection("models")}>Set in Models</Button>
+                    <Button variant="ghost" size="sm" onClick={() => openSection("integrations")}>Set in Integrations</Button>
                   </SettingLine>
                   <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
                     <SettingLine label="Add a provider" title="A search provider's API key, kept on the hub.">
@@ -1917,69 +1983,10 @@ export function Settings(props: {
                 </Select>
               </SettingLine>
             </Group>
-            <Group title="ChatGPT Web">
-              <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
-                busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
-                onSave={(cookie) => saveChatGptCookie(cookie)} onRemove={() => void removeChatGptCookie()} />
-              <SettingDetails summary="Where to find them">
-                <ol>
-                  <li>Sign in at <SettingLink href="https://chatgpt.com">chatgpt.com</SettingLink>.</li>
-                  <li>Open browser developer tools, select Network, then reload ChatGPT.</li>
-                  <li>Select a request to <code>chatgpt.com</code>. In Request Headers, copy the complete <code>Cookie</code> value.</li>
-                  <li>Add it above. It must include <code>__Secure-next-auth.session-token</code>, whole or split into numbered parts such as <code>.0</code> and <code>.1</code>.</li>
-                </ol>
-                <Note>Treat it like a password: do not paste it into a chat, issue, or log.</Note>
-              </SettingDetails>
-              <Show when={chatGptError()}><Note tone="error">{chatGptError()}</Note></Show>
-            </Group>
-            <Group title="Provider accounts">
-              {/* A sign-in under way is a dialog of its steps: open the provider's page, then hand back what it ends on. */}
-              <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else setAuthAttempt(null); } }}
-                title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
-                <Show when={authAttempt()}>{(current) => <>
-                  <Show when={current().deviceCode}>{(device) => <>
-                    <SettingStep step={1} label="Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
-                      <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingStep>
-                    <SettingStep step={2} label="Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingStep>
-                  </>}</Show>
-                  <Show when={!current().deviceCode && current().authUrl}>
-                    <SettingStep step={1} label="Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingStep>
-                    <Show when={catching()} fallback={<Show when={current().prompt && current().prompt!.type !== "select"}>
-                      <Note tone="quiet">If the last page does not load, copy its address and paste it here.</Note>
-                    </Show>}>
-                      <SettingStep step={2} label="Come back here"><Spinner /></SettingStep>
-                    </Show>
-                  </Show>
-                  <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
-                  <Show when={!catching() && current().prompt && current().prompt!.type !== "select"}>
-                    <Show when={current().authUrl} fallback={<SettingLine label={current().prompt!.message}>
-                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
-                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
-                    </SettingLine>}>
-                      <SettingStep field step={2} label="Paste the address">
-                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
-                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
-                      </SettingStep>
-                    </Show>
-                    <SettingLine plain label=""><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine>
-                  </Show>
-                  <Show when={current().error}><Note tone="error">{current().error}</Note></Show>
-                </>}</Show>
-              </Dialog>
-              <Show when={authUnavailable()}><Note tone="error">Set a Conduit password with <code>node scripts/conduit-auth.mjs set-password</code>, then sign in to manage agent credentials here.</Note></Show>
-              <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
-              <Show when={!authUnavailable() && authLoading() && !authProviders().length} fallback={<Show when={!authUnavailable()}>
-                <For each={authProviders().filter((provider) => provider.auth.configured)}>{(provider) => accountLine(provider)}</For>
-                <Show when={authProviders().find((provider) => provider.id === addingAccount() && !provider.auth.configured)}>{(provider) => accountLine(provider(), { pending: true })}</Show>
-                <Show when={authProviders().some((provider) => !provider.auth.configured && provider.id !== addingAccount())}>
-                  <SettingLine label="Add an account" title="A model provider's sign-in or API key, kept on the hub.">
-                    <Select id="pi-auth-provider" aria-label="Add an account" search="Search providers" value="" onChange={(event) => setAddingAccount(event.currentTarget.value)}>
-                      <option value="">Choose a provider</option>
-                      <For each={authProviders().filter((provider) => !provider.auth.configured && provider.id !== addingAccount())}>{(provider) => <option value={provider.id}>{provider.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                </Show>
-              </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
+            <Group title="Accounts">
+              <SettingLine plain label="Model providers" state={<>{authProviders().filter((provider) => provider.auth.configured).length} signed in</>} title="Sign-ins and API keys are in Services › Integrations.">
+                <Button variant="ghost" size="sm" onClick={() => openSection("integrations")}>Integrations</Button>
+              </SettingLine>
             </Group>
           </></Show>
   </>;
