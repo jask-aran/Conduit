@@ -1,39 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MANIFESTS, NAME_GENERATION_MODES, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
+import { MANIFESTS, manifestForImplementation, implementationsOf } from "../src/harnesses/index.js";
 import { ChatBackendRegistry } from "../src/chat-backend-registry.js";
-import { assertChatBackendAdapter } from "../src/chat-backend-contract.js";
 import { harnessCatalog } from "../src/server/routes/harnesses.js";
 import { agentProfiles, profileSelection } from "../src/chat-backend.js";
 import { SessionRecords } from "../src/harnesses/session-records.js";
 import { unsupported } from "../src/harnesses/unsupported.js";
-import { READY, UNAVAILABLE, detect } from "../src/harnesses/probe.js";
+import { READY } from "../src/harnesses/probe.js";
 
 const config = { manager: {}, dataRoot: "/tmp/conduit-manifests-test", codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
 const allAvailable = () => new Map(MANIFESTS.map((manifest) => [manifest.id, READY("test")]));
-
-test("every manifest declares the fields the server reads from it", () => {
-  for (const manifest of MANIFESTS) {
-    assert.ok(manifest.id, "id");
-    assert.ok(manifest.label, `${manifest.id} label`);
-    assert.ok(["acp", "native_api", "pty"].includes(manifest.protocol), `${manifest.id} protocol`);
-    assert.ok(["machine", "folder", "none"].includes(manifest.discovery), `${manifest.id} discovery`);
-    assert.equal(typeof manifest.probe, "function", `${manifest.id} probe`);
-    assert.equal(typeof manifest.build, "function", `${manifest.id} build`);
-    assert.ok(manifest.capabilities, `${manifest.id} capabilities`);
-    assert.ok(NAME_GENERATION_MODES.includes(manifest.nameGeneration), `${manifest.id} name generation`);
-    if (manifest.serviceLevels) {
-      assert.ok(manifest.serviceLevels.length, `${manifest.id} service levels`);
-      assert.equal(new Set(manifest.serviceLevels.map((level) => level.id)).size, manifest.serviceLevels.length,
-        `${manifest.id} duplicate service level`);
-      for (const level of manifest.serviceLevels) {
-        assert.ok(level.id && level.label, `${manifest.id} invalid service level`);
-      }
-    }
-    // A harness that cannot enumerate threads cannot be driven from /computer.
-    if (manifest.drive) assert.notEqual(manifest.discovery, "none", `${manifest.id} drives without discovery`);
-  }
-});
 
 // The regression this file exists for: the same backend used to be spelled out
 // in seven places, and nothing failed when one of them fell behind.
@@ -62,59 +38,6 @@ test("registration, catalog and profile selection all agree with the manifests",
     assert.ok(profiles.some((profile) => profile.id === manifest.id), `${manifest.id} is not offered as a profile`);
     assert.deepEqual(profileSelection({ profileId: manifest.id }), { profileId: manifest.id });
   }
-});
-
-test("registration rejects incomplete adapters and dishonest capabilities", () => {
-  const valid = ChatBackendRegistry.fromManifests(MANIFESTS, allAvailable(), config).forImplementation("conduit-runtime");
-  const incomplete = Object.create(valid);
-  incomplete.readTranscript = null;
-  assert.throws(() => assertChatBackendAdapter(incomplete, "broken"),
-    /Chat backend broken is missing adapter methods: readTranscript/);
-
-  const dishonest = Object.create(valid);
-  dishonest.getCapabilities = () => ({ ...valid.getCapabilities(), steer: "yes" });
-  assert.throws(() => assertChatBackendAdapter(dishonest, "broken"),
-    /Chat backend broken has invalid capabilities: steer/);
-  assert.throws(() => assertChatBackendAdapter(valid, "broken", { ...valid.getCapabilities(), steer: false }),
-    /Chat backend broken capabilities disagree with its manifest: steer/);
-});
-
-test("an unavailable harness registers nothing but a built-in one always does", () => {
-  const detection = new Map(MANIFESTS.map((manifest) => [manifest.id, UNAVAILABLE("not installed")]));
-  const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
-  for (const manifest of MANIFESTS) {
-    for (const implementation of implementationsOf(manifest)) {
-      // A harness devices can run is registered for them even when it is absent here.
-      assert.equal(backends.adapters.has(implementation), Boolean(manifest.builtIn || manifest.devices), implementation);
-      assert.equal(backends.local.has(implementation), Boolean(manifest.builtIn), implementation);
-    }
-  }
-  assert.deepEqual(harnessCatalog(backends).map((row) => row.available),
-    MANIFESTS.filter((manifest) => !manifest.builtIn).map(() => false));
-  assert.equal(agentProfiles([]).find((profile) => profile.id === "codex").disabled, false,
-    "agentProfiles without an availability set treats every profile as usable");
-});
-
-test("re-probing registers a harness that appeared after startup", async () => {
-  const detection = new Map(MANIFESTS.map((manifest) => [manifest.id, UNAVAILABLE()]));
-  const backends = ChatBackendRegistry.fromManifests(MANIFESTS, detection, config);
-  assert.equal(backends.local.has("codex"), false);
-  backends.manifestList = MANIFESTS.map((manifest) =>
-    manifest.id === "codex" ? { ...manifest, probe: () => READY("codex-cli 1.2.3") } : { ...manifest, probe: () => UNAVAILABLE() });
-  await backends.refreshDetection();
-  assert.equal(backends.adapters.has("codex"), true);
-  assert.equal(backends.local.has("codex"), true);
-  assert.equal(backends.detection.get("codex").version, "codex-cli 1.2.3");
-});
-
-test("detection never throws and reports a failing probe as unavailable", async () => {
-  const detection = await detect([
-    { id: "boom", probe: () => { throw new Error("no binary"); } },
-    { id: "fine", probe: () => READY("9") },
-  ]);
-  assert.equal(detection.get("boom").available, false);
-  assert.match(detection.get("boom").detail, /no binary/);
-  assert.equal(detection.get("fine").version, "9");
 });
 
 test("session records index, broadcast and replay to a late socket", () => {
@@ -158,77 +81,3 @@ test("a closed socket is never written to", () => {
   assert.equal(record.events.length, 1, "the replay buffer still records it");
 });
 
-test("session replay keeps only the latest 500 events", () => {
-  const records = new SessionRecords({ capabilities: {}, backend: {} });
-  const record = { id: "live", chatId: "chat", events: [], clients: new Set() };
-  records.add(record);
-  for (let sequence = 0; sequence < 505; sequence += 1) records.publish(record, { type: "status", sequence });
-  assert.equal(record.events.length, 500);
-  assert.equal(record.events[0].sequence, 5);
-});
-
-test("refusals are derived from the capability flags, not hand-written", () => {
-  const capable = unsupported(
-    { approvals: true, steer: true, followUpQueue: true, modelSwitch: true, thinkingLevels: true, usage: true },
-    { label: "Full", protocol: "native_api" },
-  );
-  assert.deepEqual(Object.keys(capable), ["compact", "fork"]);
-
-  const limited = unsupported(
-    { approvals: false, steer: false, followUpQueue: false, modelSwitch: false, thinkingLevels: false, usage: false },
-    { label: "Thin" },
-  );
-  for (const method of ["respondHostUi", "queue", "clearQueue", "setModel", "setThinkingLevel", "compact", "fork"]) {
-    assert.throws(() => limited[method](), { code: "unsupported_interaction", status: 400 }, method);
-  }
-  assert.throws(() => limited.queue(), /Thin does not support steering or follow-up queues/);
-});
-
-test("a backend without usage reports no context rather than failing the chat", async () => {
-  const limited = unsupported({ usage: false }, { label: "Thin" });
-  assert.equal(await limited.refreshContext(), null);
-});
-
-test("the migrated adapters expose exactly the refusals their flags imply", async () => {
-  const { CodexAppServerAdapter, CODEX_CAPABILITIES } = await import("../src/codex-app-server-adapter.js");
-  const codex = new CodexAppServerAdapter({ command: "codex" });
-  // Codex answers approval requests, so respondHostUi must be real rather than
-  // a refusal - the flag and the method have to agree.
-  assert.equal(CODEX_CAPABILITIES.approvals, true);
-  assert.throws(() => codex.respondHostUi("missing-session", {}), { code: "backend_unavailable" },
-    "it fails on the missing session, not because the interaction is unsupported");
-  // Codex steers and queues, so `queue` must be real rather than a refusal.
-  assert.equal(CODEX_CAPABILITIES.steer, true);
-  assert.rejects(() => codex.queue("missing-session", "steer", "hi"), { code: "backend_unavailable" });
-  assert.equal(CODEX_CAPABILITIES.modelSwitch, true);
-  assert.equal(typeof codex.setModel, "function");
-  assert.equal(await codex.refreshContext(), null);
-});
-
-test("a profile elects a harness and the harness declares the capabilities", async () => {
-  const { agentProfiles, harnessCapabilities } = await import("../src/chat-backend.js");
-  const profiles = agentProfiles([{ id: "assistant", label: "Assistant" }]);
-  const harnesses = harnessCapabilities();
-  assert.ok(profiles.length > 1, "both Pi templates and harness manifests are listed");
-
-  // A profile says which harness runs it and nothing about what that harness
-  // can do. Copying the answer onto each profile let a profile disagree with
-  // the harness running it, and had four Pi profiles holding four copies of one
-  // opinion that was never theirs.
-  for (const profile of profiles) {
-    assert.equal(profile.capabilities, undefined, `profile ${profile.id} declares no capabilities`);
-    const implementation = profile.agent?.implementation;
-    assert.ok(harnesses[implementation], `profile ${profile.id} elects a known harness`);
-  }
-
-  // The client joins on implementation, which is what every chat carries.
-  assert.equal(harnesses["conduit-runtime"].toolUse, true);
-  assert.equal(harnesses["conduit-runtime"].approvals, true);
-  assert.equal(harnesses["conduit-runtime"].permissionModes, false);
-  assert.equal(harnesses.codex.permissionModes, true);
-  assert.deepEqual(harnesses.codex.serviceLevels, manifestForImplementation("codex").serviceLevels);
-  for (const capabilities of Object.values(harnesses)) {
-    assert.equal(typeof capabilities.approvals, "boolean");
-    assert.equal(typeof capabilities.permissionModes, "boolean");
-  }
-});

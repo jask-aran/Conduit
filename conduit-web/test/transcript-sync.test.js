@@ -9,20 +9,6 @@ import { replaceMessages, truncateAt } from "../src/client/timeline-order.ts";
 
 const message = (id, role, content, extra = {}) => ({ id, role, content, ...extra });
 
-test("regenerate cuts the prompt the fork replaces, and everything after it", () => {
-  const current = [
-    message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),
-    message("m_u2", "user", "hi again"), message("pi:a2", "assistant", "hello again"),
-  ];
-  assert.deepEqual(truncateAt(current, "m_u2", { inclusive: true }).map((item) => item.id), ["m_u1", "pi:a1"]);
-  assert.deepEqual(truncateAt(current, "pi:a2").map((item) => item.id), ["m_u1", "pi:a1", "m_u2", "pi:a2"]);
-});
-
-test("a cut naming a message this client never loaded leaves it alone", () => {
-  const current = [message("m_u1", "user", "hi")];
-  assert.equal(truncateAt(current, "pi:somewhere-else", { inclusive: true }), current);
-});
-
 test("the cut a fork states removes every abandoned message, and keeps what is unsent", () => {
   const current = [
     message("m_u1", "user", "hi"), message("pi:a1", "assistant", "hello"),

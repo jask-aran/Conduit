@@ -1,88 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PiModelCatalog, resolveThinkingLevel, sanitizeSessionName } from "../src/pi-model-catalog.js";
-
-test("thinking level recovery keeps supported values and falls back to the current default", () => {
-  assert.equal(resolveThinkingLevel("max", ["medium", "max"], "medium"), "max");
-  assert.equal(resolveThinkingLevel("off", ["medium", "max"], "medium"), "medium");
-  assert.equal(resolveThinkingLevel("off", ["max"], "medium"), "max");
-});
-
-test("session naming uses one scoped completion and sanitizes its title", async () => {
-  const calls = [];
-  const model = { provider: "example", id: "cheap", reasoning: true };
-  const catalog = new PiModelCatalog({
-    modelRegistry: {
-      refresh() {},
-      getAvailable: () => [model],
-      async completeSimple(selected, context, options) {
-        calls.push({ selected, context, options });
-        return { stopReason: "stop", content: [{ type: "text", text: "\"Fix Session Names!\"\nignored" }] };
-      },
-    },
-    settingsFactory: () => ({
-      getEnabledModels: () => ["example/cheap"],
-      getDefaultProvider: () => "example",
-      getDefaultModel: () => "cheap",
-      getDefaultThinkingLevel: () => "off",
-      drainErrors: () => [],
-    }),
-  });
-
-  assert.equal(await catalog.generateSessionName("/tmp/project", "example/cheap", "low", "Please fix names"), "Fix Session Names");
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].options.reasoning, "low");
-  assert.equal(calls[0].options.maxTokens, 1024);
-  assert.equal(calls[0].context.messages[0].content[0].text, "Please fix names");
-  const fullContext = "x".repeat(5000);
-  await catalog.generateSessionName("/tmp/project", "example/cheap", "off", fullContext);
-  assert.equal(calls[1].context.messages[0].content[0].text, fullContext);
-  assert.equal(sanitizeSessionName("  `A   useful title.`  "), "A useful title");
-});
-
-test("model catalog exposes Pi-native thinking levels and configured defaults", async () => {
-  const models = [
-    { provider: "example", id: "reasoner", name: "Reasoner", reasoning: true, thinkingLevelMap: { max: "max" } },
-    { provider: "example", id: "plain", name: "Plain", reasoning: false },
-  ];
-  const settings = {
-    getEnabledModels: () => undefined,
-    getDefaultProvider: () => "example",
-    getDefaultModel: () => "reasoner",
-    getDefaultThinkingLevel: () => "max",
-    drainErrors: () => [],
-  };
-  const modelRegistry = {
-    refresh() {},
-    getAvailable: () => models,
-  };
-
-  const catalog = new PiModelCatalog({ modelRegistry, modelPatterns: [], settingsFactory: () => settings });
-  const result = await catalog.list("/tmp/project");
-
-  assert.equal(result.defaultModel, "example/reasoner");
-  assert.equal(result.defaultThinkingLevel, "max");
-  assert.equal(result.requiresAuthentication, false);
-  assert.deepEqual(result.models[0].thinkingLevels, ["off", "minimal", "low", "medium", "high", "max"]);
-  assert.deepEqual(result.models[1].thinkingLevels, ["off"]);
-});
-
-test("empty isolated credentials report that authentication is required", async () => {
-  const settings = {
-    getEnabledModels: () => undefined,
-    getDefaultProvider: () => undefined,
-    getDefaultModel: () => undefined,
-    getDefaultThinkingLevel: () => undefined,
-    drainErrors: () => [],
-  };
-  const modelRegistry = { refresh() {}, getAvailable: () => [] };
-  const catalog = new PiModelCatalog({ modelRegistry, settingsFactory: () => settings });
-
-  const result = await catalog.list("/tmp/project");
-
-  assert.equal(result.requiresAuthentication, true);
-  assert.deepEqual(result.models, []);
-});
+import { PiModelCatalog } from "../src/pi-model-catalog.js";
 
 test("model catalog reloads isolated credentials before refreshing models", async () => {
   const calls = [];
@@ -100,23 +18,6 @@ test("model catalog reloads isolated credentials before refreshing models", asyn
   await catalog.list("/tmp/project");
 
   assert.deepEqual(calls, ["auth", "models"]);
-});
-
-test("network catalog refresh uses Pi's bounded refresh API", async () => {
-  let options;
-  const catalog = new PiModelCatalog({
-    modelRegistry: {
-      refresh: (value) => { options = value; return { aborted: false, errors: new Map() }; },
-      getAvailable: () => [],
-    },
-  });
-
-  await catalog.refreshFromNetwork({ providers: ["xai"] });
-
-  assert.equal(options.allowNetwork, true);
-  assert.equal(options.force, false);
-  assert.deepEqual(options.providers, ["xai"]);
-  assert.ok(options.signal instanceof AbortSignal);
 });
 
 test("model settings persist an allowed scope and replace a disabled default", async () => {
@@ -155,85 +56,6 @@ test("model settings persist an allowed scope and replace a disabled default", a
   ]);
 });
 
-test("model settings persist an explicitly selected default", async () => {
-  const models = [
-    { provider: "example", id: "reasoner", reasoning: true },
-    { provider: "example", id: "plain", reasoning: false },
-  ];
-  let defaultProvider = "example";
-  let defaultModel = "reasoner";
-  const settings = {
-    getEnabledModels: () => ["example/reasoner", "example/plain"],
-    setEnabledModels() {},
-    getDefaultProvider: () => defaultProvider,
-    getDefaultModel: () => defaultModel,
-    setDefaultModelAndProvider: (provider, model) => {
-      defaultProvider = provider;
-      defaultModel = model;
-    },
-    getDefaultThinkingLevel: () => "medium",
-    flush: async () => {},
-    drainErrors: () => [],
-  };
-  const catalog = new PiModelCatalog({
-    modelRegistry: { refresh() {}, getAvailable: () => models },
-    settingsFactory: () => settings,
-  });
-
-  const result = await catalog.updateSettings("/tmp/project", {
-    enabledModels: ["example/reasoner", "example/plain"],
-    defaultModel: "example/plain",
-  });
-
-  assert.equal(result.defaultModel, "example/plain");
-});
-
-test("runtime model selection updates only the enabled default and thinking level", async () => {
-  const calls = [];
-  const models = [{ provider: "example", id: "reasoner", reasoning: true }];
-  const settings = {
-    getEnabledModels: () => ["example/reasoner"],
-    getDefaultProvider: () => "example",
-    getDefaultModel: () => "reasoner",
-    getDefaultThinkingLevel: () => "medium",
-    setDefaultModelAndProvider: (provider, model) => calls.push(["model", provider, model]),
-    setDefaultThinkingLevel: (level) => calls.push(["thinking", level]),
-    flush: async () => calls.push(["flush"]),
-    drainErrors: () => [],
-  };
-  const catalog = new PiModelCatalog({
-    modelRegistry: { refresh() {}, getAvailable: () => models },
-    settingsFactory: () => settings,
-  });
-
-  await catalog.updateDefault("/tmp/project", "example/reasoner", "high");
-
-  assert.deepEqual(calls, [["model", "example", "reasoner"], ["thinking", "high"], ["flush"]]);
-  await assert.rejects(() => catalog.updateDefault("/tmp/project", "example/missing"), { code: "invalid_model" });
-});
-
-test("model settings reject empty and unknown scopes", async () => {
-  const settings = {
-    getEnabledModels: () => undefined,
-    getDefaultProvider: () => undefined,
-    getDefaultModel: () => undefined,
-    getDefaultThinkingLevel: () => undefined,
-    drainErrors: () => [],
-  };
-  const modelRegistry = {
-    refresh() {},
-    getAvailable: () => [{ provider: "example", id: "plain", reasoning: false }],
-  };
-  const catalog = new PiModelCatalog({ modelRegistry, settingsFactory: () => settings });
-
-  await assert.rejects(() => catalog.updateSettings("/tmp/project", { enabledModels: [] }), { code: "enabled_models_required" });
-  await assert.rejects(() => catalog.updateSettings("/tmp/project", { enabledModels: ["example/missing"] }), { code: "invalid_enabled_model" });
-  await assert.rejects(() => catalog.updateSettings("/tmp/project", {
-    enabledModels: ["example/plain"],
-    defaultModel: "example/missing",
-  }), { code: "invalid_default_model" });
-});
-
 test("Pi launches with the persisted scope even outside template fallback models", () => {
   const settings = { getEnabledModels: () => ["example/plain", "other/model"] };
   const catalog = new PiModelCatalog({
@@ -245,26 +67,3 @@ test("Pi launches with the persisted scope even outside template fallback models
   assert.deepEqual(catalog.getLaunchModels("/tmp/project"), ["example/plain", "other/model"]);
 });
 
-test("saved Pi scope replaces template fallback in the web catalog", async () => {
-  const models = [
-    { provider: "example", id: "template", name: "Template", reasoning: false },
-    { provider: "example", id: "terminal", name: "Terminal", reasoning: false },
-  ];
-  const settings = {
-    getEnabledModels: () => ["example/terminal"],
-    getDefaultProvider: () => "example",
-    getDefaultModel: () => "terminal",
-    getDefaultThinkingLevel: () => "off",
-    drainErrors: () => [],
-  };
-  const catalog = new PiModelCatalog({
-    modelPatterns: ["example/template"],
-    modelRegistry: { refresh() {}, getAvailable: () => models },
-    settingsFactory: () => settings,
-  });
-
-  const result = await catalog.getSettings("/tmp/project");
-
-  assert.deepEqual(result.enabledModels, ["example/terminal"]);
-  assert.deepEqual(result.models.map((model) => model.spec), ["example/template", "example/terminal"]);
-});

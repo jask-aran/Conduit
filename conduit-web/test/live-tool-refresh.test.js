@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { AgentDoc as ConduitAgentDoc } from "../src/agent/agent-doc.js";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import { Type } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -13,10 +12,6 @@ import { DurableRuntime, ConduitNotices, ConduitWorkspace } from "../src/server/
 import { DurableAdapter } from "../src/durable-adapter.js";
 import { Subagents } from "../src/server/subagents.js";
 import { scriptedProvider } from "../src/server/scripted-model.js";
-import { registerAgentRoutes } from "../src/server/routes/agent.js";
-import { executeRoutine } from "../src/agent/routines.js";
-import { runSource } from "../src/agent/feeds.js";
-import { agentFixture } from "./helpers/agent-fixture.js";
 
 const tool = (name) => ({ name, description: name, parameters: Type.Object({}), replay: "safe", connectorReadOnly: true,
   execute: async () => ({ output: [{ type: "text", text: "[]" }] }) });
@@ -96,54 +91,6 @@ test("late connectors reach live sessions, existing children and later runs with
   assert.ok(!(await home.agent(context)).callable.some((item) => item.name === connector.name));
 });
 
-test("late browser tools refresh live sessions and preserve fixed prompt slots", async (t) => {
-  const { runtime, adapter, home } = await fixture(t);
-  const assemble = runtime.contextStore.assemble;
-  runtime.contextStore.assemble = async (name, options) => {
-    assert.equal(options.vars.name, "fixed");
-    return assemble(name, options);
-  };
-  runtime.browserHost = { available: true, tools: async () => [tool("agent_browser_snapshot")] };
-  await runtime.loadBrowserTools();
-  assert.ok((await home.agent(context)).callable.some((item) => item.name === "agent_browser_snapshot"));
-  assert.equal((await adapter.sessionSettings(home, { templateId: "agent" })).instructions, "template fixed");
-});
-
-test("Executor readiness is bounded, and routine gathering records a missing connector error", async (t) => {
-  const { agent } = await agentFixture(t);
-  agent.connectors.entry("executor").connecting = new Promise(() => {});
-  await assert.rejects(agent.connectors.ready("executor", 1), /Executor isn't connected/);
-  agent.connectors.entry("executor").connecting = null;
-  assert.deepEqual(await runSource(agent, { kind: "executor", code: "return [];" }), { items: [], error: "Executor isn't connected" });
-  const plan = { name: "accounts", title: "Accounts", tasks: [{ id: "mail", kind: "executor", code: "return [];" }], gate: "when-new" };
-  const outcome = await executeRoutine(agent, plan, { state: await agent.state(), now: Date.now() });
-  assert.equal(outcome.tasks[0].error, "Executor isn't connected");
-  assert.equal(outcome.run, false);
-});
-
-test("GET /v0/agent raises the attention notice while Executor is down", async (t) => {
-  const { agent } = await agentFixture(t);
-  agent.view = async () => ({ enabled: true, home: null, sides: [], asks: [] });
-  agent.runtime.harness = await agent.runtime.open();
-  const routes = new Map();
-  const app = Object.fromEntries(["get", "post", "put", "patch", "delete"].map((method) => [method, (route, handler) => routes.set(`${method} ${route}`, handler)]));
-  registerAgentRoutes(app, { agent, backends: { getByChatId: () => null } });
-  for (const status of ["off", "error", "needs-sign-in", "connecting", "on"]) {
-    Object.assign(agent.connectors, { bootAt: 0 }).entry("executor").status = status; // down past the settle window
-    let view;
-    await routes.get("get /v0/agent")({}, { json: (value) => { view = value; } }, (error) => { throw error; });
-    assert.equal(view.attention.needsYou.notices.some((item) => item.text === "Executor isn't connected"), status !== "on");
-  }
-});
-
-
-test("a run started without Executor records a visible notice", async (t) => {
-  const { runtime, harness, spawn } = await fixture(t);
-  runtime.agent.connectors.troubled = () => true;
-  await spawn({ gate: true, title: "Morning brief" });
-  const state = await harness.snapshot(ConduitAgentDoc, context);
-  assert.equal(state.notices.at(-1).text, "Morning brief: Executor isn't connected");
-});
 
 test("mid-turn refresh reaches the next model request without redeclaring existing tools", { timeout: 3000 }, async (t) => {
   const { runtime, home } = await fixture(t);

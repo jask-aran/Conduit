@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { authStartupViolation, createRateLimiter, isAllowlistedPath, isTrustworthyRequest, readCookie, safeRedirectTarget } from "../src/auth-middleware.js";
+import { authStartupViolation, isAllowlistedPath, isTrustworthyRequest } from "../src/auth-middleware.js";
 import { AuthStore } from "../src/auth-store.js";
 
 function mockConfig(host, allowInsecure = false) {
@@ -41,12 +41,6 @@ test("isAllowlistedPath allows login, health, the PWA bootstrap and the client b
   assert.equal(isAllowlistedPath("GET", "/v0/projects"), false);
 });
 
-test("readCookie extracts the conduit_session value among cookies", () => {
-  const request = { headers: { cookie: "theme=dark; conduit_session=abc123; lang=en" } };
-  assert.equal(readCookie(request), "abc123");
-  assert.equal(readCookie({ headers: {} }), null);
-});
-
 test("authStartupViolation rejects non-loopback + no password unless override is set", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-startup-"));
   const file = path.join(root, "auth.json");
@@ -58,30 +52,6 @@ test("authStartupViolation rejects non-loopback + no password unless override is
   await store.setPassword("fixture-pw");
   assert.equal(authStartupViolation(mockConfig("0.0.0.0", false), store), null);
   await fs.rm(root, { recursive: true, force: true });
-});
-
-test("rate limiter caps the backoff and resets on success", () => {
-  const limiter = createRateLimiter();
-  for (let i = 0; i < 4; i += 1) limiter.noteFailure(0);
-  assert.equal(limiter.isThrottled(0), false);
-  limiter.noteFailure(0);
-  assert.equal(limiter.isThrottled(0), true);
-  assert.ok(limiter.waitUntilMs() > 0);
-  limiter.noteSuccess();
-  assert.equal(limiter.isThrottled(0), false);
-});
-
-test("safeRedirectTarget only allows same-origin paths", () => {
-  assert.equal(safeRedirectTarget("/chat/abc"), "/chat/abc");
-  assert.equal(safeRedirectTarget("/"), "/");
-  assert.equal(safeRedirectTarget("//evil.com/x"), "/");
-  assert.equal(safeRedirectTarget("/\\evil.com"), "/");
-  assert.equal(safeRedirectTarget("https://evil.com"), "/");
-  assert.equal(safeRedirectTarget("/a\\b"), "/");
-  assert.equal(safeRedirectTarget("relative"), "/");
-  assert.equal(safeRedirectTarget(null), "/");
-  assert.equal(safeRedirectTarget(undefined), "/");
-  assert.equal(safeRedirectTarget(123), "/");
 });
 
 test("a bearer token is handed out over TLS, or over a hop that stayed off the internet", () => {

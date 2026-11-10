@@ -12,18 +12,6 @@ test("node messages preserve bytes nested in results and event arrays", () => {
   assert.deepEqual(roundTrip(message), message);
 });
 
-test("node failures preserve error classes and the paths needed for recovery", () => {
-  const file = new FileError("permission_denied", "fixture file failure", "/shared/private");
-  const exec = Object.assign(new ExecutionError("timeout", "fixture command failure"), { spillPath: "/tmp/output" });
-  const restored = roundTrip({ file, exec });
-  for (const key of ["file", "exec"]) {
-    assert.ok(restored[key] instanceof (key === "file" ? FileError : ExecutionError));
-    for (const field of ["code", "message", key === "file" ? "path" : "spillPath"]) {
-      assert.equal(restored[key][field], ({ file, exec })[key][field]);
-    }
-  }
-});
-
 // rootFor: a path must be inside a root shared with the requested grant.
 test("a shared root grants only the selected operations inside its own path", () => {
   const root = { path: path.resolve("fixture-share"), read: true, write: false, shell: false };

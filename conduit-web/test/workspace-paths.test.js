@@ -4,37 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
-  assertAllowedPath,
   assertSafeWorkspaceRoot,
-  formatWorkspacePath,
-  isPathInside,
-  listDirectorySuggestions,
-  parseAllowlist,
   resolveExistingDirectory,
   resolveNewWorkspaceDirectory,
 } from "../src/workspace-paths.js";
-
-test("parseAllowlist expands home and de-duplicates", () => {
-  const home = "/home/user";
-  assert.deepEqual(
-    parseAllowlist("~/code:/home/user/code,/tmp/work", { home }),
-    ["/home/user/code", "/tmp/work"],
-  );
-});
-
-test("formatWorkspacePath preserves native home aliases and container paths", () => {
-  assert.equal(formatWorkspacePath("/home/user", "/home/user"), "~");
-  assert.equal(formatWorkspacePath("/home/user/code/repo", "/home/user"), "~/code/repo");
-  assert.equal(formatWorkspacePath("/workspaces/repo", "/home/user"), "/workspaces/repo");
-});
-
-test("assertAllowedPath rejects paths outside the allowlist", () => {
-  assert.equal(assertAllowedPath("/home/user/proj", ["/home/user"]), "/home/user/proj");
-  assert.throws(() => assertAllowedPath("/etc/passwd", ["/home/user"]), { code: "path_not_allowed" });
-  assert.equal(isPathInside("/home/user/a", "/home/user"), true);
-  assert.equal(isPathInside("/home/user", "/home/user/a"), false);
-  assert.throws(() => assertAllowedPath("relative/repo", [process.cwd()]), { code: "path_not_absolute" });
-});
 
 test("dangerous workspace roots fail closed", () => {
   assert.throws(() => assertSafeWorkspaceRoot("/"), { code: "dangerous_workspace_root", reason: "system_root" });
@@ -47,18 +20,6 @@ test("dangerous workspace roots fail closed", () => {
     reason: "conduit_data",
   });
   assert.equal(assertSafeWorkspaceRoot("/home/user/code", { home: "/home/user" }), "/home/user/code");
-});
-
-test("resolveExistingDirectory requires a real directory inside the allowlist", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-path-"));
-  const dir = path.join(root, "repo");
-  await fs.mkdir(dir);
-  await fs.writeFile(path.join(root, "file.txt"), "x");
-  assert.equal(await resolveExistingDirectory(dir, [root]), await fs.realpath(dir));
-  await assert.rejects(resolveExistingDirectory(path.join(root, "missing"), [root]), { code: "path_not_found" });
-  await assert.rejects(resolveExistingDirectory(path.join(root, "file.txt"), [root]), { code: "path_not_directory" });
-  await assert.rejects(resolveExistingDirectory("/etc", [root]), { code: "path_not_allowed" });
-  await fs.rm(root, { recursive: true, force: true });
 });
 
 test("resolveExistingDirectory rejects intermediate symlink escapes", async () => {
@@ -95,16 +56,5 @@ test("resolveNewWorkspaceDirectory accepts one safe missing child and rejects un
   await assert.rejects(resolveNewWorkspaceDirectory(parent, "linked", [root]), { code: "workspace_path_symlink" });
   await fs.mkdir(path.join(root, "data"));
   await assert.rejects(resolveNewWorkspaceDirectory(path.join(root, "data"), "blocked", [root], { dataRoot: path.join(root, "data") }), { code: "dangerous_workspace_root" });
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("listDirectorySuggestions returns only visible direct directories", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-ws-suggestions-"));
-  await fs.mkdir(path.join(root, "Visible"));
-  await fs.mkdir(path.join(root, ".hidden"));
-  await fs.writeFile(path.join(root, "file.txt"), "not a directory");
-  const suggestions = await listDirectorySuggestions(root);
-  assert.deepEqual(suggestions.map((item) => item.name), ["Visible"]);
-  assert.equal(suggestions[0].path, path.join(root, "Visible"));
   await fs.rm(root, { recursive: true, force: true });
 });

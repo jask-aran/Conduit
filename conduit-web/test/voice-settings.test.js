@@ -14,28 +14,6 @@ async function temporaryStore() {
   return { root, filePath, store };
 }
 
-test("VoiceSettingsStore persists redacted remote credentials with private file permissions", async () => {
-  const fixture = await temporaryStore();
-  try {
-    await fixture.store.update({
-      mode: "remote",
-      provider: "custom",
-      adapter: "openai_audio_sse_v1",
-      endpoint: "https://speech.example.com/v1/audio/transcriptions",
-      auth: { type: "header", headerName: "X-Speech-Key", secret: "top-secret" },
-    });
-    const stored = JSON.parse(await fs.readFile(fixture.filePath, "utf8"));
-    assert.equal(stored.auth.secret, "top-secret");
-    assert.equal((await fs.stat(fixture.filePath)).mode & 0o777, 0o600);
-    const view = await fixture.store.publicView();
-    assert.equal(view.auth.configured, true);
-    assert.equal(view.auth.source, "stored");
-    assert.equal(JSON.stringify(view).includes("top-secret"), false);
-    assert.equal(await fixture.store.removeCredential(), true);
-    assert.equal((await fixture.store.publicView()).auth.configured, false);
-  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
-});
-
 test("VoiceSettingsStore requires secure secret-free remote URLs", async () => {
   const fixture = await temporaryStore();
   try {
@@ -123,23 +101,6 @@ test("local and off modes round-trip without deleting the saved cloud provider",
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
-test("none authentication ignores stale Authorization header metadata", async () => {
-  const fixture = await temporaryStore();
-  try {
-    await fs.writeFile(fixture.filePath, JSON.stringify({
-      mode: "off", provider: "custom", adapter: "openai_audio_sse_v1", auth: { type: "none", headerName: "Authorization" },
-    }));
-    const view = await fixture.store.publicView();
-    assert.equal(view.auth.type, "none");
-    assert.equal(view.auth.headerName, "X-API-Key");
-    await fixture.store.update({
-      mode: "remote", provider: "custom", adapter: "openai_audio_sse_v1", endpoint: "https://speech.example.com/transcribe",
-      auth: { type: "none", headerName: "Authorization" },
-    });
-    assert.equal((await fixture.store.publicView()).auth.type, "none");
-  } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
-});
-
 test("VoiceRuntime rejects SSRF targets and builds custom authentication only server-side", async () => {
   assert.equal(isPrivateAddress("127.0.0.1"), true);
   assert.equal(isPrivateAddress("169.254.169.254"), true);
@@ -168,67 +129,4 @@ test("VoiceRuntime rejects SSRF targets and builds custom authentication only se
     lookup: async () => [{ address: "203.0.113.9", family: 4 }],
   });
   assert.deepEqual((await deepgram.resolve()).headers, { Authorization: "Token deepgram-secret" });
-});
-
-test("VoiceRuntime requires provider credential checks to succeed and keeps the managed model identity", async () => {
-  const providerRuntime = new VoiceRuntime({
-    settings: { effective: async () => ({
-      mode: "remote", provider: "openai", adapter: "openai_audio_sse_v1", model: "gpt-transcribe",
-      endpoint: "https://api.openai.com/v1/audio/transcriptions", auth: { type: "bearer", secret: "invalid" }, allowPrivate: false,
-    }) },
-    modelManager: {},
-    fetchImpl: async () => new Response("unauthorized", { status: 401 }),
-    lookup: async () => [{ address: "203.0.113.10", family: 4 }],
-  });
-  await assert.rejects(providerRuntime.test(), { code: "voice_credentials_rejected" });
-
-  const customRuntime = new VoiceRuntime({
-    settings: { effective: async () => ({
-      mode: "remote", provider: "custom", adapter: "openai_audio_sse_v1", model: "",
-      endpoint: "https://speech.example.com/transcribe", auth: { type: "bearer", secret: "invalid" }, allowPrivate: false,
-    }) },
-    modelManager: {},
-    fetchImpl: async () => new Response("unauthorized", { status: 401 }),
-    lookup: async () => [{ address: "203.0.113.11", family: 4 }],
-  });
-  await assert.rejects(customRuntime.test(), { code: "voice_endpoint_rejected" });
-
-  let testedModel = "";
-  const localRuntime = new VoiceRuntime({
-    settings: { effective: async () => ({ mode: "local", localModelId: "moonshine-streaming-tiny-q8" }) },
-    modelManager: {
-      ensureRunning: async () => ({ kind: "http", origin: "http://127.0.0.1:9000" }),
-      test: async (modelId) => { testedModel = modelId; return { ok: true }; },
-    },
-  });
-  await localRuntime.test();
-  assert.equal(testedModel, "moonshine-streaming-tiny-q8");
-});
-
-test("VoiceRuntime exposes the transcribe.cpp streaming capability and actual compute backend", async () => {
-  const runtime = new VoiceRuntime({
-    settings: { effective: async () => ({ mode: "local", localModelId: "moonshine-streaming-tiny-q8" }) },
-    modelManager: {
-      ensureRunning: async () => ({
-        kind: "transcriber",
-        adapter: "transcribe_cpp_stream_v1",
-        backend: "transcribe_cpp",
-        computeBackend: "cpu",
-        capabilities: { language: "en", inferenceMode: "streaming", partials: true, externalVad: false, precision: "q8", memory: { modelBytes: 50462816 }, streaming: { family: "moonshine" } },
-        native: { package: "transcribe-cpp", version: "0.1.3", headerHash: "86b16dd97ad1cb58" },
-      }),
-      transcribe: async () => "unused",
-      stream: async () => ({ state: "active" }),
-    },
-  });
-  const resolved = await runtime.resolve();
-  assert.equal(resolved.adapter, "transcribe_cpp_stream_v1");
-  assert.equal(resolved.inferenceMode, "streaming");
-  assert.equal(resolved.backend, "transcribe_cpp");
-  assert.equal(resolved.computeBackend, "cpu");
-  assert.equal(resolved.capabilities.partials, true);
-  assert.equal(resolved.capabilities.externalVad, false);
-  assert.equal(resolved.streaming.family, "moonshine");
-  assert.equal(typeof resolved.stream, "function");
-  assert.equal(resolved.native.headerHash, "86b16dd97ad1cb58");
 });

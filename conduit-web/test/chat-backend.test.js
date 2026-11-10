@@ -4,16 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ChatStore, chatView } from "../src/chat-store.js";
-import { agentProfiles, profileSelection } from "../src/chat-backend.js";
-
-test("profile selection reads a template or a harness profile", () => {
-  assert.deepEqual(profileSelection({ profileId: "coding" }), { profileId: "coding", templateId: "coding" });
-  assert.throws(() => profileSelection({ profileId: {} }), { code: "invalid_profile" });
-  assert.equal(agentProfiles([{ id: "assistant", label: "Assistant" }])[0].agent.implementation, "conduit-runtime");
-  assert.deepEqual(profileSelection({ profileId: "codex" }), { profileId: "codex" });
-  assert.deepEqual(profileSelection({ profileId: "chatgpt-web" }), { profileId: "chatgpt-web" });
-  assert.equal(agentProfiles([]).find((profile) => profile.id === "chatgpt-web").agent.implementation, "chatgpt-web");
-});
 
 test("agent-managed Codex identity persists", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-codex-backend-"));

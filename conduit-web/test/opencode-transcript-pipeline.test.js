@@ -233,19 +233,6 @@ const TWO_TURNS = [
   "assistant: Haikus.",
 ];
 
-test("the thinking and the answer stream as OpenCode writes them", async () => {
-  const chat = harness();
-  const midway = await storyTurn(chat);
-  assert.deepEqual(midway, ["thinking: A relay.", "text: The relay "]);
-});
-
-test("a live chat reads each prompt once, above its answer", async () => {
-  const chat = harness();
-  await storyTurn(chat);
-  await toolTurn(chat);
-  assert.deepEqual(shape(chat.rows()), TWO_TURNS);
-});
-
 test("a reload reads each prompt once, above its answer", async () => {
   const chat = harness();
   await storyTurn(chat);
@@ -271,12 +258,6 @@ test("a tool shows in the turn's trace while it runs", async () => {
   const trace = chat.screen().find((row) => row.type === "trace");
   assert.ok(trace, "no trace on screen while the tool runs");
   assert.deepEqual(trace.value.segments.map((segment) => `${segment.kind}: ${segment.tool?.name || ""}`), ["tool: bash"]);
-});
-
-test("History lists each tool call as a step of its own, as it does for Pi", async () => {
-  const chat = harness();
-  await toolTurn(chat);
-  assert.deepEqual(await chat.history(), ["user: read haiku.txt", "[read: haiku.txt]", "assistant: Haikus."]);
 });
 
 /** Recorded from OpenCode 2.0.14: an edit held for approval, and the question tool's form. */

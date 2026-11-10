@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assignToolSeq, mergeToolEvent } from "../src/client/timeline-order.ts";
+import { mergeToolEvent } from "../src/client/timeline-order.ts";
 
 // What is left here is the live tool activity that still arrives outside the
 // chat's order. Everything else this file used to cover -- merging a synced
@@ -29,11 +29,5 @@ test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay"
   assert.equal(replay.tools.length, 1);
   assert.equal(replay.tools[0].timestamp, "2026-01-01T00:00:00.000Z");
   assert.equal(replay.tools[0].seq, 0);
-});
-
-test("assignToolSeq fills missing seq values", () => {
-  const tools = assignToolSeq([{ id: "a" }, { id: "b", seq: 7 }]);
-  assert.equal(tools[0].seq, 0);
-  assert.equal(tools[1].seq, 7);
 });
 

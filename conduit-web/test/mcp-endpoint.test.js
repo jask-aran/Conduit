@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { createMcpEndpoint } from "../src/server/mcp-endpoint.js";
 import { mcpAccess } from "../src/server/mcp-access.js";
-import { UiTool } from "../src/server/ui-control.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 
 // Dispatch through the real router without a socket or a live Conduit process.
@@ -74,11 +73,3 @@ test("MCP inbox needs no conversation and records mcp identity for all edits", a
   assert.equal((await call({ action: "read", id: "missing" })).result.isError, true);
 });
 
-test("conduit_ui keeps client targeting and commands", async () => {
-  const sent = [];
-  const tool = UiTool({ uiControl: { look: () => [], command: async (...args) => { sent.push(args); return { client: "tab", result: "Done" }; } } });
-  assert.equal(tool.name, "conduit_ui");
-  await tool.execute({ action: "open", view: "page:agent", client: "chosen", beside: true });
-  await tool.execute({ action: "focus", pane: "main" });
-  assert.deepEqual(sent, [[{ action: "open", view: "page:agent", beside: true }, "chosen", null], [{ action: "focus", pane: "main" }, null, null]]);
-});

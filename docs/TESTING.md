@@ -136,7 +136,7 @@ from `conduit-web` or is installed once into `.smoke-tools/`. Run it from the
 checkout the server serves, with its `CONDUIT_DATA_ROOT` (the session goes into
 that auth store), after
 any change to panes, tabs, drag, header folding or the dock -- performance
-work included. The tab rules are unit tests in `test/file-tabs.test.js`.
+work included.
 
 ## Browsers
 

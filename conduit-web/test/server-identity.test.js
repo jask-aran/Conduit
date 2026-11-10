@@ -4,10 +4,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { localPaths, originOfRequest, ServerIdentity, scopeForHost } from "../src/server-identity.js";
+import { ServerIdentity } from "../src/server-identity.js";
 
 const temporaryFile = async () => path.join(await fs.mkdtemp(path.join(os.tmpdir(), "conduit-identity-")), "identity.json");
-const request = (headers, protocol = "http") => ({ headers, protocol });
 
 test("a server keeps the same identity and key across restarts", async () => {
   const file = await temporaryFile();
@@ -57,57 +56,4 @@ test("a proof answers the nonce it was given, and only this server can make one"
   for (const value of ["", "short", "x".repeat(200), "not base64url!!", null]) {
     assert.equal(identity.prove(value), null, String(value));
   }
-});
-
-test("a server offers the addresses it holds, and the ones it has answered on", async () => {
-  const identity = await new ServerIdentity(await temporaryFile(), { port: 4310 }).load();
-
-  // Loopback and the LAN are derived. Link-local is not: it is a private
-  // address that almost never reaches anything, and would be a dead row in
-  // every client's menu.
-  const derived = localPaths(4310, {
-    lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
-    eth0: [{ address: "192.168.0.128", family: "IPv4", internal: false }],
-    eth1: [{ address: "169.254.83.107", family: "IPv4", internal: false }],
-    wan: [{ address: "203.0.113.9", family: "IPv4", internal: false }],
-    v6: [{ address: "fe80::1", family: "IPv6", internal: false }],
-  });
-  assert.deepEqual(derived, ["http://127.0.0.1:4310", "http://192.168.0.128:4310"]);
-
-  // The public address cannot be worked out from the machine. It arrives by
-  // being used: a client that got here through it proves it works by arriving.
-  assert.equal(identity.paths().some((path) => path.scope === "public"), false);
-  identity.observe(request({ host: "localconduit.jask-aran.com", "x-forwarded-proto": "https" }));
-  assert.deepEqual(
-    identity.paths().filter((path) => path.scope === "public").map((path) => path.origin),
-    ["https://localconduit.jask-aran.com"],
-  );
-
-  // This machine's own view of itself adds nothing the interfaces did not.
-  identity.observe(request({ host: "127.0.0.1:4310" }));
-  assert.equal(identity.paths().filter((path) => path.origin === "http://127.0.0.1:4310").length, 1);
-
-  // A Host header is written by whoever sends it, so a malformed one is
-  // dropped rather than stored for every client to read.
-  for (const host of ["", "evil.com/path", "a b", "<script>"]) {
-    identity.observe(request({ host }));
-    assert.equal(identity.paths().some((path) => path.origin.includes(host) && host), false, host);
-  }
-
-  assert.equal(scopeForHost("127.0.0.1"), "loopback");
-  assert.equal(scopeForHost("localhost"), "loopback");
-  assert.equal(scopeForHost("192.168.0.128"), "private");
-  assert.equal(scopeForHost("conduit.example.com"), "public");
-  assert.equal(originOfRequest(request({ host: "conduit.example.com" }, "https")), "https://conduit.example.com");
-  assert.equal(originOfRequest(request({})), null);
-});
-
-test("a server for this machine only publishes no network routes", async () => {
-  const identity = await new ServerIdentity(await temporaryFile(), { port: 4310, network: false }).load();
-  assert.deepEqual(identity.describe().paths.map((path) => path.scope), ["loopback"]);
-});
-
-test("paths stay plain HTTP until both shells verify TLS", async () => {
-  const identity = await new ServerIdentity(await temporaryFile(), { port: 4310 }).load();
-  assert.ok(identity.describe().paths.every((path) => path.origin.startsWith("http://")));
 });

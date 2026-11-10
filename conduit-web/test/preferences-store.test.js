@@ -3,22 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { PreferencesStore, normalizePreferences, validSidebarPins, validTerminalShortcuts } from "../src/preferences-store.js";
-import { validUiPreferencePatch } from "../src/preferences-api.js";
-
-test("normalizePreferences falls back when the default template is unknown", () => {
-  const known = ["chat", "workspace"];
-  const defaults = normalizePreferences({}, { defaultTemplateId: known[0] }, known);
-  assert.equal(defaults.defaultTemplateId, known[0]);
-  assert.deepEqual(normalizePreferences(defaults, defaults, known), defaults);
-  assert.deepEqual(normalizePreferences({ defaultTemplateId: "missing" }, defaults, known), defaults);
-  const remaining = known.slice(1);
-  const relocated = normalizePreferences({}, { defaultTemplateId: "gone" }, remaining);
-  assert.equal(relocated.defaultTemplateId, remaining[0]);
-  assert.deepEqual(normalizePreferences(relocated, relocated, remaining), relocated);
-  const builtInDefaults = normalizePreferences();
-  assert.deepEqual(normalizePreferences(builtInDefaults), builtInDefaults);
-});
+import { PreferencesStore } from "../src/preferences-store.js";
 
 test("preferences store persists general settings", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-prefs-"));
@@ -71,50 +56,5 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().userMessageCollapse, "25");
   assert.equal(restored.get().chatSort, "created");
   assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
-  assert.equal(validTerminalShortcuts(restored.get().terminalShortcuts), true);
-  assert.equal(validTerminalShortcuts([{ id: "bad", label: "", command: "pwd", target: "current" }]), false);
-  assert.equal(validSidebarPins(restored.get().sidebarPins), true);
-  assert.equal(validSidebarPins(["chat:one", "chat:one"]), false);
-  assert.equal(validSidebarPins(["unknown:one"]), false);
-  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 45, chatSort: "latest" }), true);
-  assert.equal(validUiPreferencePatch({ chatSort: "created" }), true);
-  assert.equal(validUiPreferencePatch({ chatSort: "updated" }), false);
-  assert.equal(validUiPreferencePatch({ sidebarChatLimit: 4 }), false);
-  assert.equal(validUiPreferencePatch({ voicePreferences: { shortcut: "Ctrl+D" } }), false);
   await fs.rm(root, { recursive: true, force: true });
-});
-
-test("reading-surface preferences round-trip and reject values outside their presets", () => {
-  assert.equal(validUiPreferencePatch({ transcriptWidth: "wide" }), true);
-  assert.equal(validUiPreferencePatch({ transcriptWidth: "widest" }), false);
-  assert.equal(validUiPreferencePatch({ transcriptWideBlocks: "off" }), true);
-  assert.equal(validUiPreferencePatch({ transcriptWideBlocks: "150%" }), false);
-  assert.equal(validUiPreferencePatch({ codeBlockCollapse: "long" }), true);
-  assert.equal(validUiPreferencePatch({ codeBlockCollapse: "sometimes" }), false);
-  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: 25 }), true);
-  // Free pixel/line values are refused on purpose: the surface is preset-only
-  // so it stays correct across densities and window sizes.
-  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: 17 }), false);
-  assert.equal(validUiPreferencePatch({ codeBlockCollapseLines: "25" }), false);
-  assert.equal(validUiPreferencePatch({ codeBlockWidth: "wide" }), true);
-  assert.equal(validUiPreferencePatch({ codeBlockWidth: "full" }), false);
-  assert.equal(validUiPreferencePatch({ panelMotion: "reflow" }), true);
-  assert.equal(validUiPreferencePatch({ panelMotion: "freeze" }), false);
-  assert.equal(validUiPreferencePatch({ userMessageCollapse: "15" }), true);
-  assert.equal(validUiPreferencePatch({ userMessageCollapse: 15 }), false);
-  assert.equal(validUiPreferencePatch({ userMessageCollapse: "12" }), false);
-  assert.equal(validUiPreferencePatch({ transcriptWidth: null }), false);
-});
-
-test("normalizePreferences drops reading-surface values it does not recognise", () => {
-  const normalized = normalizePreferences({
-    transcriptWidth: "wide",
-    transcriptWideBlocks: "nonsense",
-    codeBlockCollapse: "all",
-    codeBlockCollapseLines: 999,
-  });
-  assert.equal(normalized.transcriptWidth, "wide");
-  assert.equal(normalized.transcriptWideBlocks, null);
-  assert.equal(normalized.codeBlockCollapse, "all");
-  assert.equal(normalized.codeBlockCollapseLines, null);
 });

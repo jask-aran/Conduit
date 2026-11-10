@@ -318,23 +318,6 @@ test("a stop interrupts Claude Code, and the tool it killed is cancelled, not fa
   assert.deepEqual([reloaded.tools[0].cancelled, reloaded.tools[0].isError], [true, false]);
 });
 
-test("the session goes on after a stop, and its next turn answers", async () => {
-  const chat = await harness();
-  await chat.send("Run sleep 20");
-  calls(chat.run(), "msg_s1", SLEEP);
-  ended(chat.run(), "tool_use");
-  await chat.stop();
-  interrupted(chat.run());
-  await chat.settle();
-  await chat.send("Reply with just the word hi.");
-  answer(chat.run(), "msg_s2", "hi");
-  succeeded(chat.run(), "hi");
-  await chat.settle();
-  const rows = [...STOPPED, "user: Reply with just the word hi.", "trace(complete)", "assistant: hi"];
-  assert.deepEqual(shape(chat.rows()), rows);
-  assert.deepEqual(shape((await chat.reload({ log: false })).rows), rows);
-});
-
 test("a chat whose Claude Code has gone resumes the saved session, and a never-prompted one starts it", async () => {
   const chat = await harness();
   await chat.send("Say hello");

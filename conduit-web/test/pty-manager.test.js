@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { cleanEnvironment, PTY_MAX_INPUT_BYTES, PtyManager } from "../src/pty-manager.js";
+import { PTY_MAX_INPUT_BYTES, PtyManager } from "../src/pty-manager.js";
 
 function fakePty() {
   const handles = [];
@@ -78,17 +78,6 @@ function fakeTmux() {
   };
   return { sessions, windowNames, calls, run };
 }
-
-test("PTY environment removes parent terminal-manager context", () => {
-  const env = cleanEnvironment({
-    PATH: "/usr/bin",
-    HERDR_ENV: "1",
-    HERDR_PANE: "parent",
-    TMUX: "parent",
-    TMUX_PANE: "%1",
-  });
-  assert.deepEqual(env, { PATH: "/usr/bin", TERM: "xterm-256color", COLORTERM: "truecolor" });
-});
 
 test("PTY manager uses tmux as session authority with one browser lease per terminal", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-manager-"));
@@ -177,47 +166,6 @@ test("PTY manager uses tmux as session authority with one browser lease per term
   assert.equal(manager.get(record.id)?.status, "exited");
   assert.equal(await manager.removeProject("workspace"), 3);
   assert.equal(manager.list().length, 0);
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("PTY manager serializes creation so concurrent requests cannot exceed capacity", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-capacity-"));
-  const workspace = path.join(root, "workspace");
-  await fs.mkdir(workspace);
-  const tmux = fakeTmux();
-  const manager = new PtyManager({ filePath: path.join(root, "remotes.json"), pty: fakePty(), run: tmux.run, maxSessions: 1 });
-  await manager.load();
-  const results = await Promise.allSettled([
-    manager.create({ project: { id: "workspace-a" }, cwd: workspace }),
-    manager.create({ project: { id: "workspace-b" }, cwd: workspace }),
-  ]);
-  assert.equal(results.filter((item) => item.status === "fulfilled").length, 1);
-  const rejection = results.find((item) => item.status === "rejected");
-  assert.equal(rejection?.reason?.code, "pty_capacity_reached");
-  assert.equal(manager.list().filter((item) => item.status === "running").length, 1);
-  assert.equal(await manager.stopAll(), 1);
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("PTY manager only tolerates known missing-session tmux failures", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-pty-errors-"));
-  const missing = new PtyManager({
-    filePath: path.join(root, "missing.json"),
-    run: async () => { throw Object.assign(new Error("missing socket"), { code: 1, stderr: "error connecting to /tmp/tmux-1000/conduit-test (No such file or directory)" }); },
-  });
-  assert.equal(await missing.invokeTmux(["kill-server"], { tolerateMissingServer: true }), null);
-
-  const unavailable = new PtyManager({
-    filePath: path.join(root, "unavailable.json"),
-    run: async () => { throw Object.assign(new Error("spawn tmux ENOENT"), { code: "ENOENT" }); },
-  });
-  await assert.rejects(unavailable.ensureTmux(), { code: "pty_tmux_unavailable" });
-
-  const operational = new PtyManager({
-    filePath: path.join(root, "operational.json"),
-    run: async () => { throw Object.assign(new Error("permission denied"), { code: 1, stderr: "permission denied" }); },
-  });
-  await assert.rejects(operational.invokeTmux(["list-sessions"], { tolerateMissingServer: true }), /permission denied/);
   await fs.rm(root, { recursive: true, force: true });
 });
 

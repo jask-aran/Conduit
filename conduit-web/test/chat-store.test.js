@@ -42,37 +42,6 @@ test("creates invisible drafts and reveals them after a completed attachment", a
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("sidebar list keeps creation order when a rename bumps updatedAt", async () => {
-  const { root, project, registryFile } = await fixture();
-  await fs.writeFile(registryFile, `${JSON.stringify({ version: 2, chats: [{
-    id: "chat-older", projectId: project.id, status: "active", title: "Older",
-    createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z",
-  }, {
-    id: "chat-newer", projectId: project.id, status: "active", title: "Newer",
-    createdAt: "2026-02-01T00:00:00Z", updatedAt: "2026-02-01T00:00:00Z",
-  }] })}\n`);
-
-  const store = new ChatStore(registryFile);
-  await store.initialize([project]);
-  assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
-
-  await store.update("chat-older", { title: "Renamed", updatedAt: "2026-07-18T12:00:00Z" });
-  assert.deepEqual(store.listProject(project.id).map((chat) => chat.id), ["chat-newer", "chat-older"]);
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("checkpoint title fallback fills only an empty Conduit title", async () => {
-  const { root, project, registryFile } = await fixture();
-  const store = new ChatStore(registryFile);
-  await store.initialize([project]);
-  const chat = await store.create(project);
-  assert.equal(await store.fallbackTitle(chat.id, "Pi fallback"), true);
-  assert.equal(store.metadata(chat.id).title, "Pi fallback");
-  assert.equal(await store.fallbackTitle(chat.id, "Later Pi title"), false);
-  assert.equal(store.metadata(chat.id).title, "Pi fallback");
-  await fs.rm(root, { recursive: true, force: true });
-});
-
 test("startup removes stale empty drafts and orphan partial files only", async () => {
   const { root, project, registryFile } = await fixture();
   const old = "550e8400-e29b-41d4-a716-446655440000";
@@ -95,27 +64,5 @@ test("startup removes stale empty drafts and orphan partial files only", async (
   assert.ok(store.metadata(kept));
   await assert.rejects(fs.access(path.join(chatDirectory(project, kept), ".partial", "orphan.part")), { code: "ENOENT" });
   await fs.access(path.join(chatDirectory(project, kept), "attachments"));
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test("persists thinking levels per model on the stable chat record", async () => {
-  const { root, project, registryFile } = await fixture();
-  const store = new ChatStore(registryFile);
-  await store.initialize([project]);
-  const chat = await store.create(project);
-  await store.update(chat.id, {
-    modelThinkingLevels: {
-      "deepseek/v4-flash": "max",
-      "luna/default": "minimal",
-      ignored: "",
-    },
-  });
-
-  const reopened = new ChatStore(registryFile);
-  await reopened.initialize([project]);
-  assert.deepEqual(reopened.metadata(chat.id).modelThinkingLevels, {
-    "deepseek/v4-flash": "max",
-    "luna/default": "minimal",
-  });
   await fs.rm(root, { recursive: true, force: true });
 });

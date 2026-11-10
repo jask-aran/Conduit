@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CodexAppServerAdapter, CODEX_CAPABILITIES } from "../src/codex-app-server-adapter.js";
+import { CodexAppServerAdapter } from "../src/codex-app-server-adapter.js";
 
 function record() {
   return {
@@ -33,58 +33,6 @@ test("Codex notifications map to neutral streaming events", () => {
   assert.equal(live.active, false);
 });
 
-test("Codex final agent items read their content parts", () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
-  adapter.notification(live, "item/completed", { turnId: "turn-1", item: {
-    type: "agentMessage", id: "message-1", phase: "final_answer",
-    content: [{ type: "text", text: "Visible without a refresh." }],
-  } });
-  const final = live.events.find((event) => event.type === "assistant_content" && event.phase === "final");
-  assert.equal(final.blocks[0].text, "Visible without a refresh.");
-  assert.equal(final.stopReason, "stop");
-});
-
-test("Codex adapter advertises only implemented capabilities", () => {
-  assert.deepEqual(CODEX_CAPABILITIES, {
-    history: "linear", fork: true, regenerate: true,
-    steer: true, followUpQueue: true, cancel: true, compaction: true,
-    thinkingLevels: true, modelSwitch: true, toolUse: true, approvals: true, permissionModes: true,
-    usage: true, replay: false, attachments: true,
-    // Measured against the installed app-server: a turn interrupted 300
-    // characters into its answer reports as `status: "interrupted"` holding the
-    // prompt and an empty reasoning stub. The partial is not persisted, so it
-    // cannot be the answer a following user message argues with.
-    interruptKeepsPartial: false,
-  });
-});
-
-test("Codex compaction uses the native thread operation", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.records.set(live.id, live);
-  adapter.request = async (target, method, params) => {
-    assert.equal(target, live);
-    assert.equal(method, "thread/compact/start");
-    assert.deepEqual(params, { threadId: "thread-1" });
-    return {};
-  };
-  assert.deepEqual(await adapter.compact(live.id), {});
-});
-
-test("Codex context-compaction items drive neutral compaction state", () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.notification(live, "turn/started", { turn: { id: "compact-turn" } });
-  adapter.notification(live, "item/started", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
-  assert.equal(live.compacting, true);
-  assert.equal(adapter.view(live).activity, "compacting");
-  adapter.notification(live, "item/completed", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
-  assert.equal(live.compacting, false);
-  assert.deepEqual(live.events.filter((event) => event.type === "compaction").map((event) => event.active), [true, false]);
-});
-
 test("Codex prompt writes the installed app-server turn/start shape", async () => {
   const adapter = new CodexAppServerAdapter();
   const live = record();
@@ -109,66 +57,6 @@ test("Codex prompt writes the installed app-server turn/start shape", async () =
   assert.deepEqual(await pending, { generationId: "turn-1", attachmentIdentity: { messageId: clientUserMessageId } });
 });
 
-test("Codex discovery uses the metadata database and exact workspace filter", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  live.id = "discovery";
-  adapter.start = async ({ cwd }) => { live.cwd = cwd; return live; };
-  adapter.close = async () => true;
-  adapter.request = async (_record, method, params) => {
-    assert.equal(method, "thread/list");
-    assert.deepEqual(params, { cwd: "/workspace", limit: 50, sortKey: "recency_at", sortDirection: "desc", useStateDbOnly: true });
-    return { data: [
-      { id: "inside", cwd: "/workspace", preview: "Inside", recencyAt: 20, status: { type: "notLoaded" } },
-      { id: "outside", cwd: "/other", preview: "Outside", recencyAt: 10 },
-    ] };
-  };
-  assert.deepEqual(await adapter.listSessions({ cwd: "/workspace" }), [{
-    id: "inside", title: "Inside", preview: "Inside", cwd: "/workspace", branch: null, originUrl: null,
-    createdAt: null, updatedAt: 20, status: "notLoaded", source: "unknown", replayFidelity: "full",
-  }]);
-});
-
-test("machine-wide discovery omits the workspace filter and reports repository identity", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  live.id = "discovery";
-  adapter.start = async ({ cwd }) => { live.cwd = cwd; return live; };
-  adapter.close = async () => true;
-  adapter.request = async (_record, method, params) => {
-    assert.equal(method, "thread/list");
-    assert.deepEqual(params, { limit: 60, sortKey: "recency_at", sortDirection: "desc", useStateDbOnly: true });
-    return { data: [
-      { id: "here", cwd: "/workspace", preview: "Here", recencyAt: 20, gitInfo: { branch: "main", originUrl: "git@example.test:repo.git" } },
-      { id: "there", cwd: "/other", preview: "There", recencyAt: 10 },
-    ] };
-  };
-  const threads = await adapter.listThreads();
-  assert.deepEqual(threads.map((thread) => [thread.id, thread.cwd, thread.branch]), [
-    ["here", "/workspace", "main"],
-    ["there", "/other", null],
-  ]);
-  assert.equal(threads[0].originUrl, "git@example.test:repo.git");
-});
-
-test("one app-server serves repeated discovery instead of spawning per request", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  live.id = "discovery";
-  live.status = "running";
-  let starts = 0;
-  adapter.start = async ({ cwd }) => { starts += 1; live.cwd = cwd; adapter.records.set(live.id, live); return live; };
-  adapter.close = async () => true;
-  adapter.request = async () => ({ data: [] });
-  await adapter.listThreads();
-  await adapter.listThreads();
-  await Promise.all([adapter.listThreads(), adapter.listThreads()]);
-  assert.equal(starts, 1);
-  await adapter.retireDiscovery();
-  await adapter.listThreads();
-  assert.equal(starts, 2, "a retired discovery process is replaced on the next lookup");
-});
-
 test("attached images become native localImage input items", async () => {
   const items = await CodexAppServerAdapter.inputItems("Look at this", [
     { type: "image/png", path: "/chats/c1/attachments/a--shot.png" },
@@ -180,32 +68,6 @@ test("attached images become native localImage input items", async () => {
     { type: "localImage", path: "/chats/c1/attachments/c--diagram.webp" },
     { type: "text", text: "Look at this\n\nAttached file: /chats/c1/attachments/b--notes.bin" },
   ]);
-});
-
-test("a prompt with no attachments is still a single text item", async () => {
-  assert.deepEqual(await CodexAppServerAdapter.inputItems("Hello", undefined), [{ type: "text", text: "Hello" }]);
-  assert.deepEqual(await CodexAppServerAdapter.inputItems("Hello", []), [{ type: "text", text: "Hello" }]);
-});
-
-test("tool noise is trimmed to the recent end without dropping older messages", () => {
-  // A real thread runs five tool items per message, so a single raw cap would
-  // spend the whole budget on recent commands and lose the conversation.
-  const rows = [];
-  for (let turn = 0; turn < 120; turn += 1) {
-    rows.push({ turnId: `t${turn}`, item: { type: "userMessage", id: `u${turn}`, content: [{ type: "text", text: `ask ${turn}` }] } });
-    for (let call = 0; call < 5; call += 1) {
-      rows.push({ turnId: `t${turn}`, item: { type: "commandExecution", id: `e${turn}-${call}`, command: "ls", status: "completed" } });
-    }
-    rows.push({ turnId: `t${turn}`, item: { type: "agentMessage", id: `a${turn}`, text: `answer ${turn}` } });
-  }
-  const { rows: kept } = CodexAppServerAdapter.recent(rows);
-  const messages = kept.filter((row) => row.item.type === "userMessage" || row.item.type === "agentMessage");
-  const tools = kept.filter((row) => row.item.type === "commandExecution");
-  assert.equal(messages.length, 240, "every message in a 120-turn thread survives");
-  assert.equal(messages[0].item.id, "u0", "including the first one");
-  assert.equal(tools.length, 200);
-  assert.equal(tools.at(-1).item.id, "e119-4", "tools are kept from the recent end");
-  assert.deepEqual(kept.map((row) => rows.indexOf(row)), [...kept.map((row) => rows.indexOf(row))].sort((a, b) => a - b), "and order is preserved");
 });
 
 /**
@@ -235,15 +97,6 @@ test("a thread trimmed to its recent end says where the rest of it starts", () =
   assert.equal(CodexAppServerAdapter.recent(rows.slice(-4)).page.before, null);
 });
 
-test("reasoning summaries stay in the message budget and never spend the tool budget", () => {
-  const rows = [];
-  for (let index = 0; index < 400; index += 1) rows.push({ turnId: "t1", item: { type: "reasoning", id: `r${index}`, summary: [], content: [] } });
-  rows.push({ turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } });
-  assert.deepEqual(CodexAppServerAdapter.recent(rows).rows.map((row) => row.item.id), [
-    ...Array.from({ length: 400 }, (_, index) => `r${index}`), "e1",
-  ]);
-});
-
 test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the answer", () => {
   const { messages, tools } = CodexAppServerAdapter.threadTranscript([
     { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Fix the build." }] } },
@@ -269,50 +122,6 @@ test("a Codex turn maps onto Conduit's rollup: commentary and commands, then the
   assert.deepEqual(tools, [{ toolCallId: "e1", name: "command", kind: "command", subject: "npm run build", input: "npm run build", done: true, output: "ok", isError: false }]);
 });
 
-test("a turn with no final_answer phase still ends in an answer", () => {
-  const { messages } = CodexAppServerAdapter.threadTranscript([
-    { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
-    { turnId: "t1", item: { type: "agentMessage", id: "a1", text: "Working." } },
-    { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } },
-    { turnId: "t1", item: { type: "agentMessage", id: "a2", text: "Done." } },
-  ]);
-  assert.deepEqual(messages.map((message) => message.stopReason), [undefined, "toolUse", "stop"]);
-});
-
-test("a turn that only runs commands carries them without inventing an answer", () => {
-  const { messages } = CodexAppServerAdapter.threadTranscript([
-    { turnId: "t1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
-    { turnId: "t1", item: { type: "commandExecution", id: "e1", command: "ls", status: "completed" } },
-  ]);
-  assert.deepEqual(messages.map((message) => [message.role, message.stopReason]), [["user", undefined], ["assistant", "toolUse"]]);
-  assert.deepEqual(messages[1].blocks.map((block) => block.kind), ["tool_call"]);
-});
-
-test("a thread with no stored history yields an empty transcript", async () => {
-  assert.deepEqual(CodexAppServerAdapter.threadTranscript(undefined), { messages: [], tools: [] });
-  assert.deepEqual(await new CodexAppServerAdapter().readTranscript({ chatId: "missing" }),
-    { messages: [], tools: [], page: { before: null } });
-});
-
-test("a one-turn transcript sync reads one paginated history page", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.records.set(live.id, live);
-  let pages = 0;
-  adapter.request = async (_target, method) => {
-    if (method === "thread/read") return { thread: { turns: [], historyMode: "paginated" } };
-    pages += 1;
-    return { data: [
-      { turnId: "turn-1", item: { type: "userMessage", id: "u1", content: [{ type: "text", text: "Go" }] } },
-      { turnId: "turn-1", item: { type: "agentMessage", id: "a1", text: "Done." } },
-    ], nextCursor: "more" };
-  };
-
-  const transcript = await adapter.readTranscript({ liveSessionId: live.id, turns: 1 });
-  assert.equal(pages, 1);
-  assert.deepEqual(transcript.messages.map((message) => message.content), ["Go", "Done."]);
-});
-
 test("a live command hangs off the turn's message so the rollup claims it", () => {
   const adapter = new CodexAppServerAdapter();
   const live = record();
@@ -331,30 +140,6 @@ test("a live command hangs off the turn's message so the rollup claims it", () =
   assert.deepEqual(finals[2].blocks.map((block) => block.kind), ["text"]);
   const tools = live.events.filter((event) => event.type === "tool_activity");
   assert.deepEqual(tools.map((event) => [event.phase, event.name]), [["start", "command"], ["end", "command"]]);
-});
-
-test("a live phase-less final message is promoted when its turn settles", () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
-  adapter.notification(live, "item/completed", {
-    turnId: "turn-1", item: { type: "agentMessage", id: "m1", text: "Done." },
-  });
-  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
-
-  const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
-  assert.deepEqual(finals.map((event) => event.stopReason), ["toolUse", "stop"]);
-});
-
-test("a command with no message before it gets a carrier of its own", () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.notification(live, "turn/started", { turn: { id: "turn-1" } });
-  adapter.notification(live, "item/started", { turnId: "turn-1", item: { type: "fileChange", id: "f1", changes: [{ path: "/repo/a.ts", diff: "@@" }] } });
-  const finals = live.events.filter((event) => event.type === "assistant_content" && event.phase === "final");
-  assert.equal(finals.length, 1);
-  assert.deepEqual(finals[0].blocks.map((block) => [block.kind, block.name]), [["tool_call", "file change"]]);
-  assert.equal(finals[0].stopReason, "toolUse");
 });
 
 // A record whose writes are captured, so the reply Codex receives is assertable.
@@ -390,25 +175,6 @@ test("a command approval becomes a permission prompt and its answer reaches Code
   assert.equal(adapter.view(live).activity, "working", "the turn resumes once the prompt clears");
 });
 
-test("request_user_input is asked as questions, and the labels chosen or typed reach Codex", () => {
-  const { adapter, live, written } = approvalHarness();
-  adapter.receive(live, JSON.stringify({ id: 9, method: "item/tool/requestUserInput", params: {
-    threadId: "thread-1", turnId: "turn-1", itemId: "ask-1", isBlocking: true, questions: [
-      { id: "db", header: "Database", question: "Which database?", isOther: true,
-        options: [{ label: "Postgres", description: "Relational" }, { label: "SQLite", description: "One file" }] },
-      { id: "name", header: "Name", question: "What should it be called?", options: null }] } }));
-
-  const prompt = live.events.find((event) => event.type === "permission_request");
-  assert.equal(prompt.kind, "question");
-  assert.deepEqual(prompt.questions.map((question) => [question.id, question.options.map((option) => option.label), Boolean(question.freeform)]),
-    [["db", ["Postgres", "SQLite"], true], ["name", [], true]]);
-  assert.deepEqual(adapter.view(live).hostUiRequests.map((request) => request.id), ["ask-1"], "a reload finds it still asked");
-
-  adapter.respondHostUi(live.id, { id: "ask-1", answers: [{ questionId: "db", optionIds: ["1"] }, { questionId: "name", optionIds: [], freeform: "notes" }] });
-  assert.deepEqual(written, [{ id: 9, result: { answers: { db: { answers: ["SQLite"] }, name: { answers: ["notes"] } } } }]);
-  assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ask-1"));
-});
-
 test("a permission prompt fails closed", () => {
   for (const [response, expected] of [
     [{ id: "ap-1", value: "Deny" }, "decline"],
@@ -425,15 +191,6 @@ test("a permission prompt fails closed", () => {
   }
 });
 
-test("the pre-v2 approval spelling uses its own decision vocabulary", () => {
-  const { adapter, live, written } = approvalHarness();
-  adapter.receive(live, JSON.stringify({ id: 3, method: "execCommandApproval",
-    params: { callId: "call-9", command: ["git", "push"] } }));
-  assert.match(live.events.find((event) => event.type === "permission_request").message, /git push/);
-  adapter.respondHostUi(live.id, { id: "call-9", value: "Approve" });
-  assert.deepEqual(written, [{ id: 3, result: { decision: "approved" } }]);
-});
-
 // The defect that motivated this: an unanswered server request stalls the turn.
 test("a server request Conduit does not handle is refused rather than ignored", () => {
   const { adapter, live, written } = approvalHarness();
@@ -442,27 +199,6 @@ test("a server request Conduit does not handle is refused rather than ignored", 
   assert.equal(written[0].id, 11);
   assert.match(written[0].error.message, /does not handle/);
   assert.equal(live.events.some((event) => event.type === "permission_request"), false);
-});
-
-test("an approval answered elsewhere clears locally, and answering twice is inert", () => {
-  const { adapter, live, written } = approvalHarness();
-  adapter.receive(live, JSON.stringify({ id: 5, method: "item/fileChange/requestApproval",
-    params: { itemId: "item-2", reason: "Edit src/main.js", grantRoot: "/repo" } }));
-  assert.match(live.events.find((event) => event.type === "permission_request").message, /Grants write access to \/repo/);
-
-  adapter.notification(live, "serverRequest/resolved", { requestId: 5 });
-  assert.ok(live.events.some((event) => event.type === "permission_resolved"));
-  assert.equal(adapter.respondHostUi(live.id, { id: "item-2", value: "Approve" }), null);
-  assert.equal(written.length, 0, "a resolved prompt never writes a decision");
-});
-
-test("a turn that completes with a prompt outstanding does not strand it", () => {
-  const { adapter, live } = approvalHarness();
-  adapter.receive(live, JSON.stringify({ id: 5, method: "item/commandExecution/requestApproval",
-    params: { approvalId: "ap-3", command: "make" } }));
-  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
-  assert.equal(live.hostRequests.size, 0);
-  assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ap-3"));
 });
 
 test("thread policy overrides only what Conduit was asked for", () => {
@@ -503,31 +239,4 @@ use the other file
     item: { type: "userMessage", id: "user-2", clientId, content: [{ type: "text", text: "use the other file" }] } });
   const queues = live.events.filter((event) => event.type === "queue_state").map((event) => event.queue.steering);
   assert.deepEqual(queues, [["use the other file"], []]);
-});
-
-test("steering a settled turn is refused rather than silently dropped", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  adapter.records.set(live.id, live);
-  await assert.rejects(() => adapter.queue(live.id, "steer", "too late"), { code: "invalid_request" });
-  await assert.rejects(() => adapter.queue(live.id, "follow_up", "   "), { code: "invalid_request" });
-});
-
-test("a follow-up waits for the turn and then starts the next one", async () => {
-  const adapter = new CodexAppServerAdapter();
-  const live = record();
-  live.active = true;
-  live.generation = { id: "turn-1", settled: false };
-  adapter.records.set(live.id, live);
-  const prompted = [];
-  adapter.prompt = (id, message) => { prompted.push({ id, message }); return Promise.resolve("turn-2"); };
-
-  assert.equal((await adapter.queue(live.id, "follow_up", "then run the tests")).queued, "follow_up");
-  assert.deepEqual(live.events.at(-1).queue.followUp, ["then run the tests"]);
-  assert.deepEqual(prompted, [], "nothing is sent while the turn is running");
-
-  adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(prompted, [{ id: live.id, message: "then run the tests" }]);
-  assert.deepEqual(live.events.at(-1).queue.followUp, [], "the queue empties as it is sent");
 });

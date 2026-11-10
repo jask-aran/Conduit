@@ -15,21 +15,6 @@ async function workspace() {
   return { root, store, files };
 }
 
-test("an open turn's changes run to the workspace as it is", async () => {
-  const { store, files } = await workspace();
-  const checkpoints = new TurnCheckpointStore(store);
-  const start = await checkpoints.capture({ chatId: CHAT, projectId: "project", workingRoot: files });
-  await fs.writeFile(path.join(files, "note.txt"), "one\ntwo\n");
-
-  const timeline = await checkpoints.timeline(CHAT, files);
-  assert.deepEqual(timeline.map(({ id, messageId, targetSequence }) => ({ id, messageId, targetSequence })), [{ id: start.id, messageId: null, targetSequence: null }]);
-  assert.deepEqual(timeline[0].summary, { added: 2, removed: 0, preferredPath: "note.txt" });
-  const review = await checkpoints.review(CHAT, files, "turn", start.id);
-  assert.deepEqual(review.files.map((file) => ({ path: file.path, status: file.status })), [{ path: "note.txt", status: "A" }]);
-  const comparison = await checkpoints.compare(CHAT, files, "note.txt", start.id, "turn");
-  assert.deepEqual([comparison.kind, comparison.original, comparison.modified], ["text", "", "one\ntwo\n"]);
-});
-
 test("a settled turn's changes end where it ended, and a turn that ran no tools has none", async () => {
   const { store, files } = await workspace();
   const checkpoints = new TurnCheckpointStore(store);

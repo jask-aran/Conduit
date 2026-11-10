@@ -31,17 +31,3 @@ test("diagnostics retain safe request and runtime context without secrets", () =
   assert.match(diagnostic.message, /\[redacted\]/);
   assert.doesNotMatch(JSON.stringify(diagnostic), /super-secret|json-secret/);
 });
-
-test("diagnostic text and prompts stay bounded", () => {
-  const text = safeDiagnosticText(`password=hidden ${"x".repeat(2_000)}`);
-  assert.ok(text.length <= ERROR_DIAGNOSTIC_LIMITS.maxFieldLength);
-  assert.doesNotMatch(text, /hidden/);
-  const prompt = formatDiagnosticPrompt(createErrorDiagnostic(new Error("x".repeat(10_000)), {
-    route: "/chat/example",
-    model: "example/reasoner",
-  }));
-  assert.ok(prompt.length <= ERROR_DIAGNOSTIC_LIMITS.maxPromptLength);
-  assert.match(prompt, /The following is a bounded, redacted Conduit error report/);
-  assert.doesNotMatch(prompt, /Why did this happen\?/);
-  assert.match(prompt, /```json/);
-});

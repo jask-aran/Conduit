@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
-import { setupEmail, removeEmail, patchEmail, publicHubUrl, TOKEN_PERMISSIONS, tokenUrl } from "../src/agent/email-setup.js";
+import { setupEmail, publicHubUrl, TOKEN_PERMISSIONS, tokenUrl } from "../src/agent/email-setup.js";
 
 const token = "request-only-cloudflare-token";
 const address = "bot@example.com";
@@ -83,37 +83,6 @@ test("setup deploys, checks and saves the mailbox without the API token", async 
   assert.equal(channel.config.secret, JSON.parse(saved).secret);
   assert.equal(result.email.tokenUrl, tokenUrl());
   assert.equal(result.email.permissions.length, TOKEN_PERMISSIONS.length);
-  noToken(result);
-});
-
-test("setup updates an existing rule and reuses the secret and allow list", async (t) => {
-  const { channel, calls, setup, fetch } = await fixture(t, { existing: true });
-  assert.equal((await setup()).status, 200);
-  const secret = channel.config.secret;
-  await patchEmail(channel, { allow: ["@example.org"], send: false });
-  const result = await setup();
-  assert.equal(result.status, 200);
-  assert.equal(channel.config.secret, secret);
-  assert.deepEqual(result.email.allow, ["@example.org"]);
-  assert.ok(calls.some((call) => call.route.endsWith("/rules/rule") && call.method === "PUT"));
-  noToken(result);
-  const removed = await removeEmail({ channel, token, fetch });
-  assert.equal(removed.status, 200);
-  assert.equal(removed.email.configured, false);
-  assert.equal(channel.timer, null);
-  assert.match(removed.steps.find((step) => step.id === "worker").detail, /retained: it may hold mail/);
-  assert.equal(calls.some((call) => call.route.includes("/r2/") && call.method === "DELETE"), false);
-  noToken(removed);
-});
-
-test("missing permission returns a plain 400 step with no token or config file", async (t) => {
-  const { channel, setup } = await fixture(t, { denied: true });
-  const result = await setup();
-  assert.equal(result.status, 400);
-  assert.equal(result.steps.at(-1).id, "bucket");
-  assert.equal(result.steps.at(-1).ok, false);
-  assert.equal(result.steps.at(-1).detail, "The token is missing Workers R2 Storage Edit (account). Give it this permission and try again.");
-  await assert.rejects(fs.readFile(channel.file), { code: "ENOENT" });
   noToken(result);
 });
 

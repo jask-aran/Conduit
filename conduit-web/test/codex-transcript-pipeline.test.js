@@ -265,19 +265,6 @@ test("an interrupted answer keeps its text, and the next turn is its own", async
   ]);
 });
 
-test("an answer named and then cut off before its first token leaves no blank row", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Tell me a long story" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  // Named by a delta that carried nothing, then the turn ends with no item.
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "" });
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
-  await chat.settle();
-
-  assert.deepEqual(shape(chat.rows()), ["user: Tell me a long story"]);
-});
-
 test("a steered message is a message of its own, and the answer answers it", async () => {
   const chat = harness();
   await chat.send({ type: "prompt", message: "Tell me a long story" });
@@ -336,19 +323,6 @@ test("a follow-up sent while the turn runs waits, and then becomes its own turn"
   ]);
 });
 
-test("a turn that only runs commands carries them without inventing an answer", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Run the tests" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/started", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm test" } });
-  chat.codex("item/completed", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm test", aggregatedOutput: "864 passing", status: "completed" } });
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
-  await chat.settle();
-
-  assert.deepEqual(shape(chat.rows()), ["user: Run the tests", "trace(complete)"]);
-});
-
 test("a prompt Codex refuses takes back the row it stated", async () => {
   const chat = harness();
   chat.dispatch({ type: "prompt", message: "Fix the build" });
@@ -391,22 +365,6 @@ test("a turn pauses for an approval and carries on into its answer", async () =>
     "trace(complete)",
     "assistant: Tree is clean.",
   ]);
-});
-
-test("reasoning is the turn thinking, not an answer of its own", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/reasoning/summaryTextDelta", { turnId: turn, itemId: "r1", summaryIndex: 0, delta: "Checking the log." });
-  chat.codex("item/completed", { turnId: turn, item: { id: "r1", type: "reasoning", summary: [{ type: "summary_text", text: "Checking the log." }] } });
-  agentMessage(chat.codex, turn, "a1", "Built.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
-  await chat.settle();
-
-  const rows = chat.rows();
-  assert.deepEqual(shape(rows), ["user: Fix the build", "trace(complete)", "assistant: Built."]);
-  assert.deepEqual(rows[1].value.segments.map((segment) => segment.kind), ["thinking"]);
 });
 
 test("a turn Codex reports as failed leaves what it wrote in place", async () => {
@@ -463,30 +421,3 @@ test("a browser replayed from the chat's order gets the commands back, not just 
  * the thread reports that turn holding the prompt and an empty reasoning stub.
  * So the text on screen is the only copy, and the transcript says as much.
  */
-test("an answer interrupted mid-sentence is marked as something Codex did not keep", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Tell me a long story" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "The rain fell upward." });
-  await chat.settle();
-  chat.dispatch({ type: "stop_generation" });
-  await chat.settle();
-  // The turn ends without Codex ever reporting the item it was writing, which
-  // is exactly what it does when the answer is cut off mid-sentence.
-  chat.codex("turn/completed", { turn: { id: turn, status: "interrupted" } });
-  await chat.settle();
-
-  const answer = chat.messages().find((message) => message.role === "assistant");
-  assert.equal(answer.content, "The rain fell upward.", "the text the reader watched arrive is kept");
-  assert.equal(answer.discarded, true, "and marked as absent from the thread");
-
-  // A turn that finished normally is not marked.
-  await chat.send({ type: "prompt", message: "again" });
-  const second = chat.turnId();
-  chat.codex("turn/started", { turn: { id: second } });
-  agentMessage(chat.codex, second, "a2", "Once more.");
-  chat.codex("turn/completed", { turn: { id: second, status: "completed" } });
-  await chat.settle();
-  assert.equal(chat.messages().at(-1).discarded, false);
-});

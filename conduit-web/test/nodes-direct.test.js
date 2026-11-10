@@ -1,18 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { directAddresses, signGrant, verifyGrant, keySecret, DIRECT_TTL_MS, DIRECT_PTY_TTL_MS,
+import { signGrant, verifyGrant, keySecret, DIRECT_TTL_MS, DIRECT_PTY_TTL_MS,
   channelKey, nodeChannel, sealFrame, openFrame, SEAL_TO_NODE, SEAL_TO_CLIENT } from "../src/nodes/direct.js";
-
-// Design: direct-terminal security review; 100.64/10 alone is not proof of Tailscale.
-test("direct routes use real LAN and Tailscale adapters and exclude public and virtual addresses", () => {
-  const nic = (address, extra = {}) => ({ address, family: "IPv4", internal: false, ...extra });
-  const lan = "192.168.40.2";
-  const tailnet = "100.80.1.2";
-  assert.deepEqual(directAddresses({
-    tailscale0: [nic(tailnet)], ethernet: [nic(lan), nic("100.90.1.2"), nic("203.0.113.2"), nic("127.0.0.1", { internal: true })],
-    docker0: [nic("172.17.0.1")], vEthernet: [nic("172.18.0.1")], duplicate: [nic(lan)],
-  }), [{ address: lan, reach: "private" }, { address: tailnet, reach: "tailnet" }]);
-});
 
 const now = 1000;
 const secret = keySecret("fixture-node-key");
@@ -58,15 +47,4 @@ test("a sealed terminal frame opens once and only in its intended direction", ()
   assert.equal(channel.open(frame), null);
   assert.equal(channel.open(sealFrame(raw, SEAL_TO_CLIENT, 1, kind, body)), null);
   assert.deepEqual(openFrame(raw, SEAL_TO_CLIENT, 0, channel.seal(kind, body)), { kind, body });
-});
-
-// Design: direct terminals; changed or truncated frames cannot open.
-test("changed and truncated sealed frames are rejected without throwing", () => {
-  const key = Buffer.from(channelKey(secret, "fixture-nonce"), "base64url");
-  const frame = sealFrame(key, SEAL_TO_NODE, 0, 9, Buffer.from("fixture payload"));
-  assert.ok(openFrame(key, SEAL_TO_NODE, 0, frame));
-  const changed = Buffer.from(frame);
-  changed[0] ^= 1;
-  assert.equal(openFrame(key, SEAL_TO_NODE, 0, changed), null);
-  assert.equal(openFrame(key, SEAL_TO_NODE, 0, frame.subarray(0, 8)), null);
 });

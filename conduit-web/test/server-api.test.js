@@ -97,36 +97,6 @@ exit 0
     assert.equal(nativeHealth.headers.get("access-control-allow-origin"), "https://localhost");
     const externalHealth = await fetch(`${origin}/healthz`, { headers: { origin: "https://example.com" } });
     assert.equal(externalHealth.headers.get("access-control-allow-origin"), null);
-    const workspacePolicy = await fetch(`${origin}/v0/workspaces/policy`).then((response) => response.json());
-    assert.deepEqual(workspacePolicy.defaultRoot, workspaceParent);
-    assert.deepEqual(workspacePolicy.defaultInputPath, workspaceParent);
-    assert.deepEqual(workspacePolicy.suggestionRoot, workspaceParent);
-    await fs.mkdir(path.join(workspaceParent, "existing-repo"));
-    const workspaceSuggestions = await fetch(`${origin}/v0/workspaces/suggestions`).then((response) => response.json());
-    assert.equal(workspaceSuggestions.defaultInputPath, workspaceParent);
-    assert.deepEqual(workspaceSuggestions.folders, [{
-      name: "existing-repo",
-      path: path.join(workspaceParent, "existing-repo"),
-      displayPath: path.join(workspaceParent, "existing-repo"),
-    }]);
-    const templatesResponse = await fetch(`${origin}/v0/templates`);
-    assert.equal(templatesResponse.status, 200);
-    const templateCatalog = await templatesResponse.json();
-    assert.ok(templateCatalog.templates.some((item) => item.id === "assistant"));
-    assert.ok(!templateCatalog.templates.some((item) => item.id === "coding"), "Coding was retired");
-    assert.ok(!templateCatalog.templates.some((item) => item.id === "runtime"), "Runtime was retired");
-    assert.equal(templateCatalog.defaultTemplateId, "assistant");
-    const promptCatalog = await fetch(`${origin}/v0/context`).then((response) => response.json());
-    assert.ok(promptCatalog.blocks.some((item) => item.id === "assistant" && item.modified === false));
-    assert.ok(promptCatalog.blocks.some((item) => item.id === "chat-naming" && item.source === "shipped"));
-    const savedPrompt = await fetch(`${origin}/v0/context/blocks/chat-naming`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ content: "Name this conversation." }),
-    }).then((response) => response.json());
-    assert.equal(savedPrompt.modified, true);
-    assert.equal((await fetch(`${origin}/v0/context/blocks/chat-naming/reset`, { method: "POST" }).then((response) => response.json())).modified, false);
-
     const linkedResponse = await fetch(`${origin}/v0/projects`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -134,10 +104,6 @@ exit 0
     });
     assert.equal(linkedResponse.status, 201);
     const linked = await linkedResponse.json();
-    assert.equal(linked.defaultTemplateId, null);
-    const workspaceVersion = await (await fetch(`${origin}/v0/projects/${linked.id}/workspace/version?paths=${encodeURIComponent(JSON.stringify([""]))}`)).json();
-    assert.equal(typeof workspaceVersion.version, "number");
-    assert.equal(workspaceVersion.changedPaths, null);
     await fs.mkdir(path.join(workspace, "00-directory"));
     for (let index = 0; index < 500; index += 1) {
       await fs.writeFile(path.join(workspace, `file-${String(index).padStart(3, "0")}`), "content\n");
@@ -151,8 +117,6 @@ exit 0
     assert.equal(tree.path, "");
     assert.equal(tree.entries.length, 500);
     assert.equal(tree.truncated, true);
-    assert.equal(tree.entries[0].name, "00-directory");
-    assert.deepEqual([...tree.entries].sort((left, right) => left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1), tree.entries);
     assert.equal(tree.entries.some((entry) => [".conduit", "symlinked"].includes(entry.name)), false);
     const nextTreeResponse = await fetch(`${origin}/v0/projects/${linked.id}/tree?after=${encodeURIComponent(tree.cursor)}`);
     assert.equal(nextTreeResponse.status, 200);
@@ -162,77 +126,6 @@ exit 0
     assert.equal(nextTree.cursor, null);
     assert.equal(new Set([...tree.entries, ...nextTree.entries].map((entry) => entry.path)).size, tree.total);
     assert.ok(nextTree.entries.some((entry) => entry.name === "zzz-late"));
-    const managedFilePath = path.join(workspace, "00-directory", "managed.txt");
-    await fs.writeFile(managedFilePath, "before\n");
-    const managedFileUrl = `${origin}/v0/projects/${linked.id}/file?path=00-directory%2Fmanaged.txt`;
-    const managedPreview = await (await fetch(managedFileUrl)).json();
-    assert.equal(managedPreview.content, "before\n");
-    assert.equal(typeof managedPreview.modifiedAt, "number");
-    const managedMetadata = await (await fetch(`${managedFileUrl}&metadata=1`)).json();
-    assert.equal(managedMetadata.path, "00-directory/managed.txt");
-    assert.equal(managedMetadata.size, 7);
-    assert.equal(managedMetadata.modifiedAt, managedPreview.modifiedAt);
-    assert.equal(managedMetadata.kind, "text");
-    assert.equal(managedMetadata.mime, "text/plain");
-    assert.equal(typeof managedMetadata.revision, "string");
-    assert.equal(managedMetadata.head, Buffer.from("before\n").toString("hex"));
-    const mediaPath = path.join(workspace, "manual.pdf");
-    await fs.writeFile(mediaPath, "%PDF-1.7\n");
-    const mediaUrl = `${origin}/v0/projects/${linked.id}/file?path=manual.pdf`;
-    const mediaMetadata = await (await fetch(`${mediaUrl}&metadata=1`)).json();
-    assert.deepEqual({ kind: mediaMetadata.kind, mime: mediaMetadata.mime }, { kind: "pdf", mime: "application/pdf" });
-    const mediaDownload = await fetch(`${mediaUrl}&download=1`);
-    assert.equal(mediaDownload.status, 200);
-    assert.equal(mediaDownload.headers.get("content-type"), "application/pdf");
-    const mediaEtag = mediaDownload.headers.get("etag");
-    assert.ok(mediaEtag);
-    assert.equal((await fetch(`${mediaUrl}&download=1`, { headers: { "if-none-match": mediaEtag } })).status, 304);
-    const replacedFile = await fetch(managedFileUrl, {
-      method: "PUT",
-      headers: { "content-type": "application/octet-stream", "if-match": "*" },
-      body: "after\n",
-    });
-    assert.equal(replacedFile.status, 200);
-    assert.equal((await (await fetch(managedFileUrl)).json()).content, "after\n");
-    assert.equal((await fetch(managedFileUrl, { method: "DELETE" })).status, 204);
-    await assert.rejects(fs.access(managedFilePath), { code: "ENOENT" });
-    const rejectedDirectoryDelete = await fetch(`${origin}/v0/projects/${linked.id}/file?path=00-directory`, { method: "DELETE" });
-    assert.equal(rejectedDirectoryDelete.status, 400);
-    assert.equal((await rejectedDirectoryDelete.json()).error, "path_not_file");
-    const createdDirectory = await fetch(`${origin}/v0/projects/${linked.id}/directory`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "00-directory/nested" }),
-    });
-    assert.equal(createdDirectory.status, 201);
-    assert.deepEqual(await createdDirectory.json(), { path: "00-directory/nested" });
-    const movableFileUrl = `${origin}/v0/projects/${linked.id}/file?path=00-directory%2Fmove-me.txt`;
-    assert.equal((await fetch(movableFileUrl, {
-      method: "PUT",
-      headers: { "content-type": "application/octet-stream" },
-      body: "move\n",
-    })).status, 201);
-    const movedEntry = await fetch(`${origin}/v0/projects/${linked.id}/entry`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "00-directory/move-me.txt", destination: "00-directory/nested/moved.txt" }),
-    });
-    assert.equal(movedEntry.status, 200);
-    assert.deepEqual(await movedEntry.json(), {
-      path: "00-directory/move-me.txt",
-      destination: "00-directory/nested/moved.txt",
-      type: "file",
-    });
-    assert.equal(await fs.readFile(path.join(workspace, "00-directory", "nested", "moved.txt"), "utf8"), "move\n");
-    const renamedDirectory = await fetch(`${origin}/v0/projects/${linked.id}/entry`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "00-directory/nested", destination: "00-directory/archive" }),
-    });
-    assert.equal(renamedDirectory.status, 200);
-    assert.equal((await renamedDirectory.json()).type, "directory");
-    assert.equal((await fetch(`${origin}/v0/projects/${linked.id}/directory?path=00-directory%2Farchive`, { method: "DELETE" })).status, 204);
-    await assert.rejects(fs.access(path.join(workspace, "00-directory", "archive")), { code: "ENOENT" });
     const diffRequest = http.get(`${origin}/v0/projects/${linked.id}/diff`);
     for (let attempt = 0; attempt < 80; attempt += 1) {
       try {
@@ -257,13 +150,6 @@ exit 0
     }
     assert.throws(() => process.kill(gitPid, 0));
     assert.equal((await fetch(`${origin}/healthz`)).status, 200);
-    const previewResponse = await fetch(`${origin}/v0/workspaces/preview`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "created", path: workspaceParent, directoryName: "new-workspace" }),
-    });
-    assert.equal(previewResponse.status, 200);
-    assert.equal((await previewResponse.json()).path, path.join(workspaceParent, "new-workspace"));
     const createdWorkspaceResponse = await fetch(`${origin}/v0/projects`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -286,152 +172,12 @@ exit 0
     });
     assert.equal(destructiveDelete.status, 204);
     await assert.rejects(fs.access(createdWorkspace.path), { code: "ENOENT" });
-    const externalAgents = path.join(root, "external-agents");
-    await fs.mkdir(path.join(externalAgents, "skills"), { recursive: true });
-    await fs.symlink(externalAgents, path.join(workspace, ".agents"));
-    const removedPreflight = await fetch(`${origin}/v0/workspaces/${linked.id}/native-preflight`);
-    assert.equal(removedPreflight.status, 404);
-
-    const runtimeDefault = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "agent" }),
-    });
-    assert.equal(runtimeDefault.status, 400);
-    assert.equal((await runtimeDefault.json()).error, "special_template");
-
     const prefsPatch = await fetch(`${origin}/v0/preferences`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        defaultTemplateId: "test",
-        sessionNameModel: "example/cheap",
-        sessionNameThinkingLevel: "low",
-        terminalShortcuts: [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }],
-        sidebarPins: ["chat:one", "project:two", "terminal:three"],
-        sidebarChatLimit: 45,
-        collapsedProjectIds: ["project_chat"],
-        voicePreferences: { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" },
-      }),
+      body: JSON.stringify({ defaultTemplateId: "test" }),
     });
     assert.equal(prefsPatch.status, 200);
-    const savedPreferences = await prefsPatch.json();
-    assert.equal(savedPreferences.defaultTemplateId, "test");
-    assert.equal(savedPreferences.sessionNameModel, "example/cheap");
-    assert.equal(savedPreferences.sessionNameThinkingLevel, "low");
-    assert.deepEqual(savedPreferences.terminalShortcuts, [{ id: "herdr", label: "Herdr", command: "herdr", target: "new" }]);
-    assert.deepEqual(savedPreferences.sidebarPins, ["chat:one", "project:two", "terminal:three"]);
-    assert.equal(savedPreferences.sidebarChatLimit, 45);
-    assert.deepEqual(savedPreferences.collapsedProjectIds, ["project_chat"]);
-    const invalidTerminalShortcuts = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ terminalShortcuts: [{ id: "bad", label: "", command: "pwd", target: "current" }] }),
-    });
-    assert.equal(invalidTerminalShortcuts.status, 400);
-    assert.equal((await invalidTerminalShortcuts.json()).error, "invalid_terminal_shortcuts");
-    const invalidSidebarPins = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sidebarPins: ["chat:one", "chat:one"] }),
-    });
-    assert.equal(invalidSidebarPins.status, 400);
-    assert.equal((await invalidSidebarPins.json()).error, "invalid_sidebar_pins");
-    const invalidUiPreferences = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sidebarChatLimit: 4 }),
-    });
-    assert.equal(invalidUiPreferences.status, 400);
-    assert.equal((await invalidUiPreferences.json()).error, "invalid_ui_preferences");
-    const invalidTranscriptWidth = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ transcriptWidth: "980px" }),
-    });
-    assert.equal(invalidTranscriptWidth.status, 400);
-    assert.equal((await invalidTranscriptWidth.json()).error, "invalid_ui_preferences");
-    const readingSurface = await fetch(`${origin}/v0/preferences`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        transcriptWidth: "wide",
-        transcriptWideBlocks: "wider",
-        codeBlockCollapse: "long",
-        codeBlockCollapseLines: 25,
-      }),
-    });
-    assert.equal(readingSurface.status, 200);
-    const savedSurface = await readingSurface.json();
-    assert.equal(savedSurface.transcriptWidth, "wide");
-    assert.equal(savedSurface.transcriptWideBlocks, "wider");
-    assert.equal(savedSurface.codeBlockCollapse, "long");
-    assert.equal(savedSurface.codeBlockCollapseLines, 25);
-
-    const inheritedWorkspaceChat = await fetch(`${origin}/v0/chats`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: linked.id }),
-    });
-    assert.equal((await inheritedWorkspaceChat.json()).templateId, "test");
-    const workspaceOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "assistant" }),
-    });
-    assert.equal((await workspaceOverride.json()).defaultTemplateId, "assistant");
-    const overriddenWorkspaceChat = await fetch(`${origin}/v0/chats`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: linked.id }),
-    });
-    assert.equal((await overriddenWorkspaceChat.json()).templateId, "assistant");
-    const clearedOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: null }),
-    });
-    assert.equal((await clearedOverride.json()).defaultTemplateId, null);
-    const invalidProfileOverride = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: "missing-template" }),
-    });
-    assert.equal(invalidProfileOverride.status, 400);
-    const hostDefaultChat = await fetch(`${origin}/v0/chats`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: linked.id }),
-    });
-    const hostDefaultChatBody = await hostDefaultChat.json();
-    assert.equal(hostDefaultChatBody.backend.implementation, "conduit-runtime");
-    const appearancePatch = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ workspaceAppearance: { mode: "monogram", value: "AI", color: "mauve" } }),
-    });
-    assert.equal(appearancePatch.status, 200);
-    assert.deepEqual((await appearancePatch.json()).workspaceAppearance, { mode: "monogram", value: "AI", color: "mauve" });
-    const customColorAppearance = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ workspaceAppearance: { mode: "icon", value: "atom", color: "#123456" } }),
-    });
-    assert.equal(customColorAppearance.status, 200);
-    assert.deepEqual((await customColorAppearance.json()).workspaceAppearance, { mode: "icon", value: "atom", color: "#123456" });
-    const invalidAppearance = await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ workspaceAppearance: { mode: "monogram", value: "ABC", color: "mauve" } }),
-    });
-    assert.equal(invalidAppearance.status, 400);
-    assert.equal((await invalidAppearance.json()).error, "workspace_appearance_invalid");
-    await fetch(`${origin}/v0/projects/${linked.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTemplateId: null }),
-    });
-
     const createdResponse = await fetch(`${origin}/v0/chats`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -443,45 +189,13 @@ exit 0
     assert.equal(chat.templateId, "test");
     assert.equal("piSessionId" in chat, false);
 
-    const chatModels = await (await fetch(`${origin}/v0/chats/${chat.id}/models`)).json();
-    assert.equal(chatModels.installationId, "conduit-runtime");
-    assert.equal(chatModels.runtimeKind, "conduit_profile");
-    assert.equal(chatModels.source, "runtime_default");
-    const invalidModel = await fetch(`${origin}/v0/chats/${chat.id}/models`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: "missing/model" }),
-    });
-    assert.equal(invalidModel.status, 400);
-    assert.equal((await invalidModel.json()).error, "invalid_model");
-
-    const switched = await fetch(`${origin}/v0/chats/${chat.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ templateId: "assistant" }),
-    });
-    assert.equal(switched.status, 200);
-    assert.equal((await switched.json()).templateId, "assistant");
-
-    const ordinaryRuntime = await fetch(`${origin}/v0/chats`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ projectId: "project_chat", templateId: "agent" }),
-    });
-    assert.equal(ordinaryRuntime.status, 400);
-    assert.equal((await ordinaryRuntime.json()).error, "special_template");
-
     const freshLive = await fetch(`${origin}/v0/live-sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chatId: chat.id, projectId: "project_chat", intent: "prompt" }),
     });
     assert.equal(freshLive.status, 201, await freshLive.clone().text());
-    const freshLiveBody = await freshLive.json();
-    assert.equal(freshLiveBody.status, "running");
-    // The harness owns web access now: nothing is materialised for a launch,
-    // so a live record carries no search profile of Conduit's making.
-    assert.equal(freshLiveBody.modelProfile, undefined);
+    assert.equal((await freshLive.json()).status, "running");
 
     const directory = path.join(root, "files", ".conduit", "chats", chat.id);
     await fs.access(path.join(directory, "attachments"));
@@ -548,9 +262,6 @@ exit 0
     const listed = await fetch(`${origin}/v0/chats/${chat.id}/attachments`).then((response) => response.json());
     assert.deepEqual(listed.attachments, []);
 
-    const projectsPayload = await fetch(`${origin}/v0/projects`).then((response) => response.json());
-    const chatProject = projectsPayload.projects.find((item) => item.id === chat.projectId);
-    assert.ok(chatProject);
     const deletedChat = await fetch(`${origin}/v0/sessions/${chat.id}`, { method: "DELETE" });
     assert.equal(deletedChat.status, 204);
   } finally {

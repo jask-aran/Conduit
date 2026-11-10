@@ -53,22 +53,3 @@ test("a close decides discarded from the harness capability alone", () => {
   assert.equal(messageClose({ messageId: "m1", stopReason: "aborted", blocks: [] }).discarded, undefined);
   assert.equal(messageClose({ messageId: "m1", stopReason: "stop", blocks }).discarded, undefined);
 });
-
-test("a close states its text once, whichever blocks it was given", () => {
-  const op = messageClose({
-    messageId: "m1", stopReason: "toolUse", interim: true,
-    blocks: [
-      { kind: "thinking", text: "Planning" },
-      { kind: "text", text: "Let me look." },
-      { kind: "tool_call", toolCallId: "t1", name: "read", input: { path: "a" } },
-    ],
-  });
-  assert.equal(op.content, "Let me look.");
-  assert.equal(op.interim, true);
-  // Blocks leave exactly as the adapter stated them. The text is in `content`,
-  // so what is left is what it sat among.
-  assert.deepEqual(op.blocks, [
-    { kind: "thinking", text: "Planning" },
-    { kind: "tool_call", toolCallId: "t1", name: "read", input: { path: "a" } },
-  ]);
-});

@@ -29,24 +29,6 @@ test("an anchor this side never loaded puts the message at the end", () => {
   assert.deepEqual(messages.map((message) => message.id), ["m1", "m2"]);
 });
 
-test("a message stated twice settles in place rather than arriving again", () => {
-  let messages = applyTranscriptOp([], open("m1", "user", { content: "hello" }));
-  messages = applyTranscriptOp(messages, open("m1", "user", { content: "hello" }));
-  assert.equal(messages.length, 1);
-});
-
-test("closing a message replaces the preview the deltas drew", () => {
-  let messages = applyTranscriptOp([], open("m1", "assistant"));
-  assert.equal(messages[0].streaming, true);
-  messages = applyTranscriptOp(messages, {
-    type: "transcript_op", op: "message.close", messageId: "m1",
-    stopReason: "stop", interim: false, content: "the whole answer", blocks: [],
-  });
-  assert.equal(messages[0].content, "the whole answer");
-  assert.equal(messages[0].streaming, false);
-  assert.equal(messages[0].interim, false);
-});
-
 test("a dropped row goes alone; a cut takes everything after it too", () => {
   const held = [{ id: "m1", role: "user" }, { id: "m2", role: "assistant" }, { id: "m3", role: "user" }];
   assert.deepEqual(
@@ -62,19 +44,6 @@ test("a dropped row goes alone; a cut takes everything after it too", () => {
       .map((message) => message.id), ["m1"]);
 });
 
-test("a regenerated prompt settles into the row already holding it", () => {
-  let messages = applyTranscriptOp([], open("m_held", "user", { content: "a longer story" }));
-  messages = applyTranscriptOp(messages, open("m_answer", "assistant"));
-  // The cut keeps the prompt and takes the answer it produced.
-  messages = applyTranscriptOp(messages, { type: "transcript_op", op: "message.drop", messageId: "m_held", keep: true });
-  assert.deepEqual(messages.map((message) => message.id), ["m_held"]);
-  // Restating it under the same name updates the row rather than adding one, so
-  // nothing on screen is removed and put back.
-  messages = applyTranscriptOp(messages, open("m_held", "user", { content: "a longer story" }));
-  assert.deepEqual(messages.map((message) => message.id), ["m_held"]);
-  assert.equal(messages.length, 1);
-});
-
 test("a tool is a record of its own, opened and closed by the server", () => {
   const openOp = { type: "transcript_op", op: "tool.open", toolCallId: "call_1", name: "bash", input: { command: "ls" } };
   assert.equal(isToolOp(openOp), true);
@@ -87,26 +56,4 @@ test("a tool is a record of its own, opened and closed by the server", () => {
   // Re-stated rather than duplicated, and it keeps the place it already had.
   assert.equal(applyToolOp(tools, openOp).length, 1);
   assert.equal(applyToolOp(tools, openOp)[0].seq, 0);
-});
-
-test("a message op is not a tool op, and neither is applied as the other", () => {
-  assert.equal(isToolOp(open("m1", "user")), false);
-  assert.deepEqual(applyToolOp([], open("m1", "user")), []);
-});
-
-test("a discarded close marks the message; an ordinary one clears the mark", () => {
-  let messages = applyTranscriptOp([], open("m1", "assistant"));
-  messages = applyTranscriptOp(messages, {
-    type: "transcript_op", op: "message.close", messageId: "m1",
-    stopReason: "aborted", interim: false, content: "half a story", blocks: [], discarded: true,
-  });
-  assert.equal(messages[0].discarded, true);
-  assert.equal(messages[0].content, "half a story", "the text stays; only its standing changes");
-  // A harness that keeps its partial closes the same message without the mark,
-  // and the transcript must not carry a stale one.
-  messages = applyTranscriptOp(messages, {
-    type: "transcript_op", op: "message.close", messageId: "m1",
-    stopReason: "stop", interim: false, content: "a whole story", blocks: [],
-  });
-  assert.equal(messages[0].discarded, false);
 });

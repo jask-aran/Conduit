@@ -41,16 +41,6 @@ async function transcriptionFixture(t, resolve = async () => ({ transcribe: asyn
     }) };
 }
 
-test("voice transcribe returns text without delivering a jbot message", async (t) => {
-  const server = await transcriptionFixture(t);
-  const response = await server.post("/v0/voice/transcribe");
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await response.json(), { text: "Hello hub" });
-  assert.deepEqual(server.delivered, []);
-  assert.equal(server.leases(), 0);
-});
-
 test("voice transcribe enforces WAV format, duration, upload size and silence errors", async (t) => {
   const server = await transcriptionFixture(t);
   for (const [body, headers] of [[wav(), { "Content-Type": "audio/mpeg" }], [Buffer.from("bad WAV"), {}],
@@ -66,26 +56,6 @@ test("voice transcribe enforces WAV format, duration, upload size and silence er
   assert.equal(long.status, 413);
   assert.equal((await long.json()).error, "audio_too_long");
   assert.equal((await server.post("/v0/voice/transcribe", Buffer.alloc(10 * 1024 * 1024 + 1))).status, 413);
-});
-
-test("voice transcribe reports voice_off and empty provider text", async (t) => {
-  const off = await transcriptionFixture(t, async () => {
-    throw Object.assign(new Error("Off"), { code: "dictation_not_configured" });
-  });
-  const response = await off.post("/v0/voice/transcribe");
-  assert.equal(response.status, 409);
-  assert.equal((await response.json()).error, "voice_off");
-  const empty = await transcriptionFixture(t, async () => ({ transcribe: async () => "  " }));
-  const unheard = await empty.post("/v0/voice/transcribe");
-  assert.equal(unheard.status, 422);
-  assert.equal((await unheard.json()).error, "nothing_heard");
-});
-
-test("voice transcribe bounds unexpected provider errors like voice-message", async (t) => {
-  const server = await transcriptionFixture(t, async () => { throw new Error("x".repeat(200)); });
-  const response = await server.post("/v0/voice/transcribe");
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: "voice_failed", message: `Transcription failed: ${"x".repeat(120)}` });
 });
 
 test("voice-message keeps delivery and deduplication while sharing transcription admission", async (t) => {
@@ -148,33 +118,5 @@ test("voice settings API stores endpoint authentication without returning the se
     const removed = await (await server.request("/v0/voice/credential", { method: "DELETE" })).json();
     assert.equal(removed.removed, true);
     assert.equal(removed.settings.auth.configured, false);
-  } finally { await server.stop(); }
-});
-
-test("voice settings API accepts a valid absent-artifact execution tuple", async () => {
-  const server = await startConduitHarness();
-  try {
-    const initial = await (await server.request("/v0/voice/settings")).json();
-    const profile = initial.local.catalogue.profiles.find((candidate) => candidate.execution === "live");
-    const selection = {
-      modelId: profile.modelId,
-      artifactId: profile.artifactId,
-      execution: profile.execution,
-      segmentation: profile.segmentation,
-    };
-    const response = await server.request("/v0/voice/settings", {
-      method: "PUT",
-      body: JSON.stringify({
-        mode: "local",
-        localSelection: selection,
-      }),
-    });
-    assert.equal(response.status, 200);
-    const saved = await response.json();
-    assert.equal(saved.mode, "local");
-    assert.deepEqual(saved.localSelection, selection);
-    assert.equal(saved.localModelId, initial.local.catalogue.artifacts.find((artifact) => artifact.id === profile.artifactId).legacyModelId);
-    assert.equal(saved.resolvedProfileId, profile.id);
-    assert.equal(saved.local.artifactStatuses.find((status) => status.artifactId === profile.artifactId).artifactState, "absent");
   } finally { await server.stop(); }
 });

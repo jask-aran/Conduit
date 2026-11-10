@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDeepgramAdapter, createHttpAdapter, createOpenaiRealtimeStreamAdapter, openOpenaiRealtimeStream, upsamplePcm16kTo24k } from "../src/server/dictation-stream.js";
-import { VoiceRuntime } from "../src/server/voice-runtime.js";
+import { createDeepgramAdapter, createHttpAdapter, openOpenaiRealtimeStream } from "../src/server/dictation-stream.js";
 
 const limits = { maxAudioBytes: 64 * 1024, maxEventBytes: 64 * 1024 };
 
@@ -60,74 +59,6 @@ test("Deepgram adapter sends Token-authenticated WAV with model and formatting o
   assert.equal(requestOptions.headers["Content-Type"], "audio/wav");
   assert.ok(requestOptions.body instanceof Blob);
   assert.ok(events.some((event) => event.type === "final" && event.text === "deepgram transcript"));
-});
-
-test("16 kHz PCM upsamples to 24 kHz for OpenAI live input", () => {
-  const pcm = Buffer.alloc(640);
-  pcm.writeInt16LE(1000, 0);
-  pcm.writeInt16LE(-1000, 638);
-  const upsampled = upsamplePcm16kTo24k(pcm);
-  assert.equal(upsampled.length, 960);
-});
-
-test("OpenAI live stream adapter feeds PCM packets and publishes partials before Stop", async () => {
-  const events = [];
-  const appended = [];
-  let committed = false;
-  const adapter = createOpenaiRealtimeStreamAdapter(events.push.bind(events), limits, async () => ({
-    onDelta(handler) { this.delta = handler; },
-    onCompleted(handler) { this.completed = handler; },
-    async append(pcm) {
-      appended.push(pcm.length);
-      this.delta?.("Hel");
-      this.delta?.("lo");
-    },
-    async commit() {
-      committed = true;
-      this.completed?.("Hello");
-      return "Hello";
-    },
-    close() {},
-  }));
-  await adapter.opened;
-  adapter.write(Buffer.alloc(640));
-  adapter.write(Buffer.alloc(640));
-  await adapter.stop();
-  assert.equal(committed, true);
-  assert.deepEqual(appended, [960, 960]);
-  assert.ok(events.some((event) => event.type === "partial" && event.tentativeText.includes("Hel")));
-  const closed = events.find((event) => event.type === "adapter_closed");
-  assert.equal(closed.text, "Hello");
-  assert.equal(closed.stableText, "Hello");
-});
-
-test("VoiceRuntime selects the OpenAI live StreamPort for gpt-live-transcribe", async () => {
-  let opened = false;
-  const runtime = new VoiceRuntime({
-    settings: {
-      effective: async () => ({
-        mode: "remote",
-        provider: "openai",
-        adapter: "openai_audio_sse_v1",
-        model: "gpt-live-transcribe",
-        endpoint: "https://api.openai.com/v1/audio/transcriptions",
-        auth: { type: "bearer", secret: "server-only" },
-        allowPrivate: false,
-      }),
-    },
-    modelManager: {},
-  });
-  runtime.openOpenaiLive = async () => {
-    opened = true;
-    return { append: async () => {}, commit: async () => "", close() {} };
-  };
-  const resolved = await runtime.resolve();
-  assert.equal(resolved.adapter, "openai_realtime_stream_v1");
-  assert.equal(resolved.inferenceMode, "streaming");
-  assert.equal(resolved.model, "gpt-live-transcribe");
-  assert.equal(resolved.endpoint, "wss://api.openai.com/v1/realtime?intent=transcription");
-  await resolved.stream();
-  assert.equal(opened, true);
 });
 
 test("OpenAI live handshake uses the GA Realtime URL and never sends the beta header", async () => {

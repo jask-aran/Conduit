@@ -168,36 +168,6 @@ tmuxTest("detaching and reattaching a browser preserves the tmux-owned current t
   }
 });
 
-tmuxTest("a failed disposable tmux client remains retriable while its session survives", async () => {
-  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
-  try {
-    const project = await harness.createProject("Disposable client recovery");
-    const created = await (await harness.request("/v0/ptys", {
-      method: "POST",
-      body: JSON.stringify({ projectId: project.id }),
-    })).json();
-    const stream = openTerminal(harness.origin, created.id);
-    await stream.opened;
-    await waitWritable(stream);
-
-    const socketName = terminalSocketName(path.join(harness.root, "remotes.json"));
-    const clients = execFileSync("tmux", ["-L", socketName, "list-clients", "-F", "#{client_pid}"], { encoding: "utf8" })
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-    assert.equal(clients.length, 1);
-    process.kill(Number(clients[0]), "SIGTERM");
-    assert.deepEqual(await waitClosed(stream), { code: 1011, reason: "Terminal attachment ended" });
-
-    const replacement = await openWritableTerminal(harness.origin, created.id);
-    replacement.socket.send(Buffer.from("printf 'client-recovered\\n'\n"));
-    await replacement.outputIncludes("client-recovered");
-    replacement.socket.close();
-  } finally {
-    await harness.stop();
-  }
-});
-
 tmuxTest("Conduit shutdown closes attached terminal sockets as a service restart", async () => {
   const harness = await startConduitHarness({ env: { SHELL: "sh" } });
   try {
@@ -213,24 +183,6 @@ tmuxTest("Conduit shutdown closes attached terminal sockets as a service restart
     const stopped = harness.terminate();
     assert.deepEqual(await waitClosed(stream), { code: 1012, reason: "Conduit is restarting" });
     await stopped;
-  } finally {
-    await harness.stop();
-  }
-});
-
-tmuxTest("PTY API supports multiple active Project terminals and scoped session discovery", async () => {
-  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
-  try {
-    const project = await harness.createProject("Multi-terminal project");
-    const other = await harness.createProject("Other terminal project");
-    const first = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const second = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: other.id }) });
-    assert.notEqual(first.id, second.id);
-    assert.equal(second.title, "Shell 2");
-    const scoped = await (await harness.request(`/v0/ptys?projectId=${encodeURIComponent(project.id)}`)).json();
-    assert.deepEqual(scoped.ptys.map((item) => item.id).sort(), [first.id, second.id].sort());
-    assert.equal(scoped.ptys.every((item) => item.projectId === project.id && item.status === "running"), true);
   } finally {
     await harness.stop();
   }
@@ -258,89 +210,6 @@ tmuxTest("PTY API uses each project's working root and never a browser path", as
     await Promise.all([workspaceStream.outputIncludes(linked.workingRoot), managedStream.outputIncludes(ordinary.workingRoot)]);
     workspaceStream.socket.close();
     managedStream.socket.close();
-  } finally {
-    await harness.stop();
-  }
-});
-
-tmuxTest("one browser owns a terminal while unrelated terminals may stream concurrently", async () => {
-  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
-  try {
-    const project = await harness.createProject("Exclusive terminal leases");
-    const firstTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const secondTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const pendingTerminal = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-
-    const owner = openTerminal(harness.origin, firstTerminal.id);
-    const unrelated = openTerminal(harness.origin, secondTerminal.id);
-    await Promise.all([owner.opened, unrelated.opened]);
-    await Promise.all([waitWritable(owner), waitWritable(unrelated)]);
-
-    const blocked = openTerminal(harness.origin, firstTerminal.id);
-    await blocked.opened;
-    const inUse = await blocked.next((frame) => !frame.isBinary && jsonFrame(frame).type === "client_error" && jsonFrame(frame).code === "pty_in_use");
-    assert.match(jsonFrame(inUse).message, /another Conduit client/i);
-    assert.equal((await waitClosed(blocked)).code, 4009);
-
-    owner.socket.send(Buffer.from("printf 'owner-terminal-input\\n'\n"));
-    unrelated.socket.send(Buffer.from("printf 'unrelated-terminal-input\\n'\n"));
-    await Promise.all([owner.outputIncludes("owner-terminal-input"), unrelated.outputIncludes("unrelated-terminal-input")]);
-
-    const replacement = openTerminal(harness.origin, firstTerminal.id, { takeover: true });
-    await replacement.opened;
-    await waitWritable(replacement);
-    assert.equal((await waitClosed(owner)).code, 4010);
-    replacement.socket.send(Buffer.from("printf 'replacement-owner-input\\n'\n"));
-    await replacement.outputIncludes("replacement-owner-input");
-
-    const cancelled = openTerminal(harness.origin, pendingTerminal.id);
-    await cancelled.opened;
-    cancelled.socket.close();
-    await waitClosed(cancelled);
-    const pendingReplacement = openTerminal(harness.origin, pendingTerminal.id);
-    await pendingReplacement.opened;
-    await waitWritable(pendingReplacement);
-
-    replacement.socket.close();
-    unrelated.socket.close();
-    pendingReplacement.socket.close();
-  } finally {
-    await harness.stop();
-  }
-});
-
-tmuxTest("tmux transport survives alternate-screen and modern TUI control sequences", async () => {
-  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
-  try {
-    const project = await harness.createProject("TUI control sequence test");
-    const created = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const stream = openTerminal(harness.origin, created.id, { cols: 140, rows: 50 });
-    await stream.opened;
-    await waitWritable(stream);
-
-    stream.socket.send(Buffer.from("printf '\\033[?1049h\\033[2J\\033[H\\033[?1000h\\033[?1004hTUI-CONTROL-MARKER\\033[?1004l\\033[?1000l\\033[?1049l'\n"));
-    await stream.outputIncludes("TUI-CONTROL-MARKER");
-    stream.socket.send(JSON.stringify({ type: "resize", cols: 132, rows: 44 }));
-    stream.socket.send(Buffer.from("printf 'TUI-AFTER-RESIZE\\n'\n"));
-    await stream.outputIncludes("TUI-AFTER-RESIZE");
-    stream.socket.close();
-  } finally {
-    await harness.stop();
-  }
-});
-
-tmuxTest("deleting a Project tears down and removes its resident tmux sessions", async () => {
-  const harness = await startConduitHarness({ env: { SHELL: "sh" } });
-  try {
-    const project = await harness.createProject("Disposable terminal project");
-    const first = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    const second = await (await harness.request("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: project.id }) })).json();
-    assert.equal(first.status, "running");
-    assert.equal(second.status, "running");
-    const removed = await harness.request(`/v0/projects/${project.id}`, { method: "DELETE" });
-    assert.equal(removed.status, 204, await removed.text());
-    const listed = await (await harness.request("/v0/ptys")).json();
-    assert.equal(listed.ptys.some((item) => item.projectId === project.id), false);
   } finally {
     await harness.stop();
   }

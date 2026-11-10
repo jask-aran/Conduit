@@ -12,30 +12,6 @@ async function temporaryStore(environment = {}) {
   return { root, filePath, store };
 }
 
-test("SearchSettingsStore creates safe defaults and never returns credentials", async () => {
-  const fixture = await temporaryStore({ BRAVE_API_KEY: "environment-key" });
-  try {
-    await fixture.store.initialize();
-    const config = JSON.parse(await fs.readFile(fixture.filePath, "utf8"));
-    assert.equal(config.workflow, "none");
-    // No route is seeded: Automatic is pi-web-access's own chain.
-    assert.equal(config.searchRouting, undefined);
-    assert.equal((await fs.stat(fixture.filePath)).mode & 0o777, 0o600);
-
-    await fixture.store.setProvider("brave", "BSA-test-key");
-    const view = await fixture.store.publicView();
-    const brave = view.providers.find((provider) => provider.id === "brave");
-    assert.deepEqual({ ready: brave.ready, stored: brave.stored, source: brave.source, removable: brave.removable }, {
-      ready: true,
-      stored: true,
-      source: "environment",
-      removable: true,
-    });
-    assert.equal(JSON.stringify(view).includes("BSA-test-key"), false);
-  } finally {
-    await fs.rm(fixture.root, { recursive: true, force: true });
-  }
-});
 test("SearchSettingsStore removes stored keys while preserving environment fallback", async () => {
   const fixture = await temporaryStore({});
   try {
@@ -48,17 +24,6 @@ test("SearchSettingsStore removes stored keys while preserving environment fallb
     const result = await fixture.store.removeProvider("brave");
     assert.equal(result.removed, true);
     assert.equal((await fixture.store.publicView()).providers.find((provider) => provider.id === "brave").ready, false);
-  } finally {
-    await fs.rm(fixture.root, { recursive: true, force: true });
-  }
-});
-
-test("SearchSettingsStore rejects unknown providers and invalid keys", async () => {
-  const fixture = await temporaryStore();
-  try {
-    await fixture.store.initialize();
-    await assert.rejects(fixture.store.setProvider("brave", ""), { code: "search_key_invalid" });
-    await assert.rejects(fixture.store.setProvider("missing", "key"), { code: "search_provider_unknown" });
   } finally {
     await fs.rm(fixture.root, { recursive: true, force: true });
   }

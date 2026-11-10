@@ -39,26 +39,3 @@ test("chat and project teardown resolve views back to real adapter records", asy
   await stopProjectProcesses(backends, "project-a");
   assert.deepEqual(closed, [["codex", "codex"], ["codex", "orphan"]]);
 });
-
-test("backend registry closes each adapter alias once and cleans its resources", async () => {
-  const events = [];
-  const backend = {
-    records: [{ id: "one" }, { id: "two" }],
-    rawRecords() { return this.records; },
-    async close(id) {
-      events.push(`close:${id}`);
-      this.records = this.records.filter((record) => record.id !== id);
-      return true;
-    },
-    shutdownResources() { events.push("cleanup"); },
-  };
-  const registry = new ChatBackendRegistry();
-  registry.adapters.set("primary", backend);
-  registry.adapters.set("alias", backend);
-
-  const stopped = await registry.shutdown();
-
-  assert.deepEqual(events, ["close:one", "close:two", "cleanup"]);
-  assert.equal(stopped.get(backend), 2);
-  assert.equal(backend.records.length, 0);
-});

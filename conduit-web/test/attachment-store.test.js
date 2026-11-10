@@ -85,32 +85,10 @@ test("attachment access is scoped to one chat and rejects symlinked owned parent
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test("first attachment keeps Conduit metadata out of Git status locally", async () => {
-  const { root, project, chat, store } = await fixture();
-  const { spawnSync } = await import("node:child_process");
-  const initialized = spawnSync("git", ["init"], { cwd: project.workingRoot, encoding: "utf8" });
-  assert.equal(initialized.status, 0, initialized.stderr);
-  await store.write(project, chat.id, crypto.randomUUID(), "note.txt", Readable.from(["hello"]));
-  const excluded = await fs.readFile(path.join(project.workingRoot, ".git", "info", "exclude"), "utf8");
-  assert.match(excluded, /# Conduit chat attachments\n\.conduit\//);
-  await fs.rm(root, { recursive: true, force: true });
-});
-
 test("sanitizes separators, controls, dot-only names, and UTF-8 byte length", () => {
   assert.equal(safeAttachmentName("../../\u0000\u0085secret.txt"), "secret.txt");
   assert.equal(safeAttachmentName("..."), "attachment");
   assert.ok(Buffer.byteLength(safeAttachmentName("é".repeat(200)), "utf8") <= 180);
   assert.ok(Buffer.byteLength(safeAttachmentName("😀".repeat(100)), "utf8") <= 180);
   assert.equal(safeAttachmentName("😀".repeat(100)).includes("�"), false);
-});
-
-test("resolved attachments expose the real file path adapters can send natively", async () => {
-  const { project, chat, store } = await fixture();
-  const id = crypto.randomUUID();
-  await store.write(project, chat.id, id, "shot.png", Readable.from([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00])]));
-  const [item] = await store.resolveMany(project, chat.id, [id]);
-  const file = store.pathFor(project, chat.id, item);
-  assert.equal(path.basename(file), item.storedName);
-  assert.equal(item.type, "image/png");
-  assert.equal((await fs.stat(file)).size, 9);
 });

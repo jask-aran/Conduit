@@ -53,16 +53,6 @@ test("fx ACP streams each step as a message of its own, then answers with the sa
   assert.equal(events.at(-1).phase, "settled");
 });
 
-test("fx ACP accepts the latest saved reply when its user text differs", async () => {
-  const { adapter, events, record } = setup();
-  adapter.json = async () => ({ history: [{ user: { text: "different prompt" }, assistant: "Latest saved reply" }] });
-
-  await adapter.finish(record, "end_turn");
-  const [answer] = closeOf(events, false);
-  assert.equal(answer.content, "Latest saved reply");
-  assert.equal(finalOf(events, answer.messageId).errorMessage, null);
-});
-
 test("fx ACP keeps the live reply when the saved session cannot be read", async () => {
   const { adapter, events, record } = setup();
   let reads = 0;

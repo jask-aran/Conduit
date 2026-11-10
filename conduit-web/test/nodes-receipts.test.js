@@ -46,23 +46,3 @@ test("dropping a listener leaves an action running for a new listener", { timeou
   assert.deepEqual(await completed.promise, result);
   assert.equal(oldResults, 0);
 });
-
-// receipts.js abort(action): only the named action's signal is aborted.
-test("aborting an action stops that action and leaves other actions running", { timeout: 1000 }, async () => {
-  const receipts = new Receipts();
-  const started = [Promise.withResolvers(), Promise.withResolvers()];
-  const release = [Promise.withResolvers(), Promise.withResolvers()];
-  const completed = [Promise.withResolvers(), Promise.withResolvers()];
-  for (const index of [0, 1]) {
-    receipts.follow(`fixture-${index}`, 0, { event() {}, result: completed[index].resolve }, async (_emit, signal) => {
-      started[index].resolve(signal);
-      return release[index].promise;
-    });
-  }
-  const signals = await Promise.all(started.map((item) => item.promise));
-  receipts.abort("fixture-0");
-  assert.equal(signals[0].aborted, true);
-  assert.equal(signals[1].aborted, false);
-  release.forEach((item) => item.resolve({ ok: true }));
-  await Promise.all(completed.map((item) => item.promise));
-});

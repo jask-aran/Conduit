@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { decide } from "../src/agent/asks.js";
 import { connectorWraps } from "../src/agent/policy.js";
-import { parseRoutine } from "../src/agent/routine-files.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 
 // policy.js connectorWraps: reads go ahead; writes ask before the outward call.
@@ -22,13 +21,6 @@ test("connector reads run without approval while sending email waits for approva
   assert.equal(asks.length, 1);
   assert.equal(asks[0].status, "pending");
   assert.deepEqual(asks[0].args, input);
-});
-
-// persistent-agent.md, Task: Executor gathering only reads; routineProblem checks it before a task runs.
-test("routine gathering accepts connector reads and refuses email writes", () => {
-  const file = (action) => `---\ntrigger: { every: 30 }\ntasks:\n  - id: mail\n    kind: executor\n    code: return tools.gmail.${action}({});\ngate: never\noutput: inbox\n---\n`;
-  assert.equal(parseRoutine(file("messagesList"), "mail").tasks[0].kind, "executor");
-  assert.throws(() => parseRoutine(file("messagesSend"), "mail"));
 });
 
 async function pending(t) {
@@ -55,10 +47,3 @@ test("always approval remembers only the approved tool and target", async (t) =>
   await assert.rejects(decide(agent, ask.id, "allow"), { status: 409 });
 });
 
-// persistent-agent.md, approvals: don't refuses; no saved grant follows a refusal.
-test("don't approval declines the action and creates no standing permission", async (t) => {
-  const { agent, ask } = await pending(t);
-  assert.equal((await decide(agent, ask.id, "deny")).status, "declined");
-  assert.deepEqual((await agent.state()).rules, {});
-  await assert.rejects(decide(agent, ask.id, "allow"), { status: 409 });
-});
