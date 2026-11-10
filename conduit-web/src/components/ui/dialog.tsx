@@ -1,4 +1,5 @@
 import * as KDialog from "@kobalte/core/dialog";
+import { createBack } from "./back";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
 import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
 import { createFullscreenPortalMount } from "./portal";
@@ -34,6 +35,8 @@ export function Dialog(props: {
   });
   overlayHaptics(() => props.open);
   const change = (open: boolean) => { if (open || !props.busy) { if (!open) haptic("dismiss"); props.onOpenChange(open); } };
+  // Back shuts it; busy, it takes the step and stays, as Escape does.
+  createBack(() => props.open, () => change(false));
   const restore = (event: Event) => {
     if (props.onCloseAutoFocus) props.onCloseAutoFocus(event);
     else {

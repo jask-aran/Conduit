@@ -1,5 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { holdBack } from "@/components/ui/back";
 import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
@@ -777,7 +778,14 @@ export function Settings(props: {
     const releaseClose = props.shortcuts.registerHandler(COMMAND_IDS.openSettings, "settings", () => props.onOpenChange(false));
     const releaseFind = props.shortcuts.registerHandler(COMMAND_IDS.findInSettings, "settings", focusSearch, { when: findAvailable });
     document.addEventListener("keydown", dismissEscape, true);
+    // Back steps out as far as it came in: a search clears, a section goes back to the list of them, the list closes.
+    const releaseBack = holdBack(() => {
+      if (query()) return void setQuery("");
+      if (narrow() && !browsingSections()) return void backToSections();
+      props.onOpenChange(false);
+    });
     onCleanup(() => {
+      releaseBack();
       releaseSettingsContext();
       releaseClose();
       releaseFind();

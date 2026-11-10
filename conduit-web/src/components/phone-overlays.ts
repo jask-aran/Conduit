@@ -1,5 +1,6 @@
 import { isMobileLayout } from "../client/navigation/mobile-layout";
 import { installedClientKind } from "../client/platform/installed-client";
+import { stepBack } from "./ui/back";
 
 // Every menu, submenu and popover is drawn by the library (its slots are ui-*).
 const menus = '[data-slot^="ui-"]';
@@ -41,7 +42,13 @@ for (const type of ["pointerup", "mouseup", "click", "touchend"]) {
 
 if (installedClientKind === "android") {
   void import("@capacitor/app").then(({ App }) => App.addListener("backButton", ({ canGoBack }) => {
-    if ((visibleMenus().length || document.querySelector('[role="dialog"], [role="alertdialog"]')) && escape()) return;
+    // One step: a menu shuts first; then whatever holds a step back (components/ui/back.ts: a dialog, a page reached
+    // from a list, a search); then a dialog that holds none, by Escape; and only then the app's own history.
+    if (visibleMenus().length && (escape() || !visibleMenus().length)) return;
+    if (stepBack()) return;
+    const dialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].filter((element) => !gone(element) && element.dataset.state !== "closed").length;
+    const open = dialogs();
+    if (open && (escape() || dialogs() < open)) return;
     if (canGoBack) history.back();
   }));
 }

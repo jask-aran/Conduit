@@ -1,4 +1,6 @@
 import { Show, type JSX } from "solid-js";
+import { createBack } from "./back";
+import { PHONE_LAYOUT_QUERY } from "./layout";
 import { Note } from "./state";
 import { Row } from "./row";
 import * as Icons from "./icons";
@@ -18,8 +20,10 @@ export const WorkbenchTitle = (props: { title: JSX.Element; actions?: JSX.Elemen
  *  On a phone there is no room for both, so they take turns: the side column is the page, and the main pane is a
  *  screen of its own once open, with a way back named for what it shows (mainLabel). What opens it is the caller's
  *  (a ChainLink's onSelect sets open), or, with opens, a row the split draws at the head of the side column. */
-export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element; open?: boolean; onOpenChange?: (open: boolean) => void; mainLabel?: string; opens?: string }) =>
-  <div class={props.open ? "ui-workbench-split ui-workbench-split-open" : "ui-workbench-split"}>
+export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element; open?: boolean; onOpenChange?: (open: boolean) => void; mainLabel?: string; opens?: string }) => {
+  // Where the columns take turns, back from the main pane is the side column (its own Back button's step).
+  createBack(() => props.open && props.onOpenChange && matchMedia(PHONE_LAYOUT_QUERY).matches, () => props.onOpenChange?.(false));
+  return <div class={props.open ? "ui-workbench-split ui-workbench-split-open" : "ui-workbench-split"}>
     <div class="ui-workbench-side">
       <Show when={props.opens}><Row density="nav" element="button" class="ui-workbench-opens" end={<Icons.ChevronRight />} onClick={() => props.onOpenChange?.(true)}>{props.opens}</Row></Show>
       {props.side}
@@ -29,6 +33,7 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element; op
       {props.main}
     </section>
   </div>;
+};
 /** A titled group in the side column (Used in, Slots). */
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
 export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) =>
