@@ -567,20 +567,16 @@ const offerUpdates = () => void readOffer().then((offer) => runtimeHub.offerUpda
 offerUpdates();
 const offerTimer = setInterval(offerUpdates, 20_000);
 offerTimer.unref?.();
-app.get("/client-bundle/manifest.json", async (_request, response, next) => {
-  try {
-    response.setHeader("Cache-Control", "no-store");
-    response.json(await clientBundle.manifest());
-  } catch (error) { next(error); }
+app.get("/client-bundle/manifest.json", async (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.json(await clientBundle.manifest());
 });
-app.get("/client-bundle/:build.zip", async (request, response, next) => {
-  try {
-    const zip = await clientBundle.zip(request.params.build);
-    if (!zip) { response.status(404).end(); return; }
-    response.setHeader("Content-Type", "application/zip");
-    response.setHeader("Cache-Control", "no-store");
-    response.end(zip);
-  } catch (error) { next(error); }
+app.get("/client-bundle/:build.zip", async (request, response) => {
+  const zip = await clientBundle.zip(request.params.build);
+  if (!zip) { response.status(404).end(); return; }
+  response.setHeader("Content-Type", "application/zip");
+  response.setHeader("Cache-Control", "no-store");
+  response.end(zip);
 });
 
 // Conduit as an MCP server (mcp-endpoint.js): the hub's token lets a harness in ahead of the sign-in check; a signed-in

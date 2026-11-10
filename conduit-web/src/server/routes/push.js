@@ -34,23 +34,19 @@ export function registerPushRoutes(app, { push, hubId, agent }) {
     catch (error) { next(error); }
   });
 
-  app.delete("/v0/push/subscriptions/:id", async (request, response, next) => {
-    try {
-      if (await push.remove(request.params.id)) response.status(204).end();
-      else response.status(404).json({ error: "not_found" });
-    } catch (error) { next(error); }
+  app.delete("/v0/push/subscriptions/:id", async (request, response) => {
+    if (await push.remove(request.params.id)) response.status(204).end();
+    else response.status(404).json({ error: "not_found" });
   });
 
-  app.post("/v0/push/test", async (request, response, next) => {
-    try {
-      if (request.body !== undefined && (!request.body || typeof request.body !== "object" || Array.isArray(request.body))) {
-        throw Object.assign(new Error("invalid_body"), { status: 400, code: "invalid_body" });
-      }
-      const id = request.body?.id;
-      if (id !== undefined && (typeof id !== "string" || !id)) {
-        throw Object.assign(new Error("invalid_id"), { status: 400, code: "invalid_id" });
-      }
-      response.json(await push.send({ v: 1, title: "Conduit", body: "Notifications work on this device.", path: "/", tag: "conduit-test", hub: hubId?.(), urgency: "normal" }, id === undefined ? {} : { only: [id] }));
-    } catch (error) { next(error); }
+  app.post("/v0/push/test", async (request, response) => {
+    if (request.body !== undefined && (!request.body || typeof request.body !== "object" || Array.isArray(request.body))) {
+      throw Object.assign(new Error("invalid_body"), { status: 400, code: "invalid_body" });
+    }
+    const id = request.body?.id;
+    if (id !== undefined && (typeof id !== "string" || !id)) {
+      throw Object.assign(new Error("invalid_id"), { status: 400, code: "invalid_id" });
+    }
+    response.json(await push.send({ v: 1, title: "Conduit", body: "Notifications work on this device.", path: "/", tag: "conduit-test", hub: hubId?.(), urgency: "normal" }, id === undefined ? {} : { only: [id] }));
   });
 }

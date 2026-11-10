@@ -148,23 +148,21 @@ export function registerRuntimeRoutes(app, {
     });
   });
 
-  app.get("/v0/workspaces/suggestions", async (_request, response, next) => {
-    try {
-      const suggestionRoot = config.workspaceSuggestionRoot;
-      if (!config.workspaceAllowlist.some((root) => isPathInside(suggestionRoot, root))) {
-        return response.json({ root: suggestionRoot, ...workspacePolicy(), folders: [] });
-      }
-      const folders = await listDirectorySuggestions(suggestionRoot);
-      response.json({
-        root: suggestionRoot,
-        ...workspacePolicy(),
-        folders: folders.map((folder) => ({
-          name: folder.name,
-          path: folder.path,
-          displayPath: formatWorkspacePath(folder.path),
-        })),
-      });
-    } catch (error) { next(error); }
+  app.get("/v0/workspaces/suggestions", async (_request, response) => {
+    const suggestionRoot = config.workspaceSuggestionRoot;
+    if (!config.workspaceAllowlist.some((root) => isPathInside(suggestionRoot, root))) {
+      return response.json({ root: suggestionRoot, ...workspacePolicy(), folders: [] });
+    }
+    const folders = await listDirectorySuggestions(suggestionRoot);
+    response.json({
+      root: suggestionRoot,
+      ...workspacePolicy(),
+      folders: folders.map((folder) => ({
+        name: folder.name,
+        path: folder.path,
+        displayPath: formatWorkspacePath(folder.path),
+      })),
+    });
   });
 
   app.get("/v0/templates", (_request, response) => {
@@ -180,66 +178,64 @@ export function registerRuntimeRoutes(app, {
     response.json({ ...preferences.get(), keybindings: preferences.keybindings() });
   });
 
-  app.patch("/v0/preferences", async (request, response, next) => {
-    try {
-      const requested = request.body?.defaultTemplateId;
-      const template = requested == null ? null : resolveTemplate(config, requested);
-      if (requested != null && !template) return response.status(400).json({ error: "unknown_template", templateId: requested });
-      if (template?.defaultable === false) return response.status(400).json({ error: "special_template", templateId: requested });
-      const model = request.body?.sessionNameModel;
-      const thinkingLevel = request.body?.sessionNameThinkingLevel;
-      if (model != null && (typeof model !== "string" || !/^[^/\s]+\/\S+$/.test(model.trim()))) {
-        return response.status(400).json({ error: "invalid_session_name_model" });
-      }
-      if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
-        return response.status(400).json({ error: "invalid_session_name_thinking_level" });
-      }
-      // The approval model (Settings › AI › Helper models: Review); "" gives it back to the naming model's.
-      const reviewModel = request.body?.reviewModel;
-      if (reviewModel != null && (typeof reviewModel !== "string" || (reviewModel.trim() && !/^[^/\s]+\/\S+$/.test(reviewModel.trim())))) {
-        return response.status(400).json({ error: "invalid_review_model" });
-      }
-      const accountName = request.body?.accountName;
-      const accountHome = request.body?.accountHome;
-      if (accountHome != null && (typeof accountHome !== "string" || accountHome.trim().length > 120)) {
-        return response.status(400).json({ error: "invalid_account_home" });
-      }
-      if (accountName != null && (typeof accountName !== "string" || accountName.trim().length > 60)) {
-        return response.status(400).json({ error: "invalid_account_name" });
-      }
-      const terminalShortcuts = request.body?.terminalShortcuts;
-      if (terminalShortcuts != null && !validTerminalShortcuts(terminalShortcuts)) {
-        return response.status(400).json({ error: "invalid_terminal_shortcuts" });
-      }
-      const sidebarPins = request.body?.sidebarPins;
-      if (sidebarPins != null && !validSidebarPins(sidebarPins)) {
-        return response.status(400).json({ error: "invalid_sidebar_pins" });
-      }
-      const knownServers = request.body?.knownServers;
-      if (knownServers != null && !validKnownServers(knownServers)) {
-        return response.status(400).json({ error: "invalid_known_servers" });
-      }
-      if (!validUiPreferencePatch(request.body)) {
-        return response.status(400).json({ error: "invalid_ui_preferences" });
-      }
-      const saved = await preferences.save({
-        defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
-        ...(model != null ? { sessionNameModel: model } : {}),
-        ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
-        ...(reviewModel != null ? { reviewModel } : {}),
-        ...(accountName != null ? { accountName } : {}),
-        ...(accountHome != null ? { accountHome } : {}),
-        ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
-        ...(sidebarPins != null ? { sidebarPins } : {}),
-        ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
-        ...uiPreferencePatch(request.body),
-      });
-      // The account's name and home are the person's: their agent knows them by them ({{person.name}}, its USER.md).
-      if (accountName != null || accountHome != null) await Promise.resolve(onAccountRenamed?.({
-        ...(accountName != null ? { name: saved.accountName || "" } : {}), ...(accountHome != null ? { home: saved.accountHome || "" } : {}),
-      })).catch((error) => console.warn("[account] agent not told:", error?.message || error));
-      response.json(saved);
-    } catch (error) { next(error); }
+  app.patch("/v0/preferences", async (request, response) => {
+    const requested = request.body?.defaultTemplateId;
+    const template = requested == null ? null : resolveTemplate(config, requested);
+    if (requested != null && !template) return response.status(400).json({ error: "unknown_template", templateId: requested });
+    if (template?.defaultable === false) return response.status(400).json({ error: "special_template", templateId: requested });
+    const model = request.body?.sessionNameModel;
+    const thinkingLevel = request.body?.sessionNameThinkingLevel;
+    if (model != null && (typeof model !== "string" || !/^[^/\s]+\/\S+$/.test(model.trim()))) {
+      return response.status(400).json({ error: "invalid_session_name_model" });
+    }
+    if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
+      return response.status(400).json({ error: "invalid_session_name_thinking_level" });
+    }
+    // The approval model (Settings › AI › Helper models: Review); "" gives it back to the naming model's.
+    const reviewModel = request.body?.reviewModel;
+    if (reviewModel != null && (typeof reviewModel !== "string" || (reviewModel.trim() && !/^[^/\s]+\/\S+$/.test(reviewModel.trim())))) {
+      return response.status(400).json({ error: "invalid_review_model" });
+    }
+    const accountName = request.body?.accountName;
+    const accountHome = request.body?.accountHome;
+    if (accountHome != null && (typeof accountHome !== "string" || accountHome.trim().length > 120)) {
+      return response.status(400).json({ error: "invalid_account_home" });
+    }
+    if (accountName != null && (typeof accountName !== "string" || accountName.trim().length > 60)) {
+      return response.status(400).json({ error: "invalid_account_name" });
+    }
+    const terminalShortcuts = request.body?.terminalShortcuts;
+    if (terminalShortcuts != null && !validTerminalShortcuts(terminalShortcuts)) {
+      return response.status(400).json({ error: "invalid_terminal_shortcuts" });
+    }
+    const sidebarPins = request.body?.sidebarPins;
+    if (sidebarPins != null && !validSidebarPins(sidebarPins)) {
+      return response.status(400).json({ error: "invalid_sidebar_pins" });
+    }
+    const knownServers = request.body?.knownServers;
+    if (knownServers != null && !validKnownServers(knownServers)) {
+      return response.status(400).json({ error: "invalid_known_servers" });
+    }
+    if (!validUiPreferencePatch(request.body)) {
+      return response.status(400).json({ error: "invalid_ui_preferences" });
+    }
+    const saved = await preferences.save({
+      defaultTemplateId: requested ?? preferences.get().defaultTemplateId,
+      ...(model != null ? { sessionNameModel: model } : {}),
+      ...(thinkingLevel != null ? { sessionNameThinkingLevel: thinkingLevel } : {}),
+      ...(reviewModel != null ? { reviewModel } : {}),
+      ...(accountName != null ? { accountName } : {}),
+      ...(accountHome != null ? { accountHome } : {}),
+      ...(terminalShortcuts != null ? { terminalShortcuts } : {}),
+      ...(sidebarPins != null ? { sidebarPins } : {}),
+      ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
+      ...uiPreferencePatch(request.body),
+    });
+    // The account's name and home are the person's: their agent knows them by them ({{person.name}}, its USER.md).
+    if (accountName != null || accountHome != null) await Promise.resolve(onAccountRenamed?.({
+      ...(accountName != null ? { name: saved.accountName || "" } : {}), ...(accountHome != null ? { home: saved.accountHome || "" } : {}),
+    })).catch((error) => console.warn("[account] agent not told:", error?.message || error));
+    response.json(saved);
   });
 
   app.get("/v0/runtime", (_request, response) => {

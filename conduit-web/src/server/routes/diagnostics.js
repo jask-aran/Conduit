@@ -5,9 +5,7 @@
 import { usageReport } from "../diagnostics/usage-report.js";
 
 export function registerDiagnosticsRoutes(app, { dataRoot }) {
-  app.get("/v0/diagnostics/usage", async (request, response, next) => {
-    try {
-      response.json(await usageReport({ dataRoot, hours: request.query.hours }));
-    } catch (error) { next(error); }
+  app.get("/v0/diagnostics/usage", async (request, response) => {
+    response.json(await usageReport({ dataRoot, hours: request.query.hours }));
   });
 }

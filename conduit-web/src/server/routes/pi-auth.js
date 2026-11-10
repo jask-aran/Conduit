@@ -14,14 +14,12 @@ function noStore(response) {
 }
 
 export function registerPiAuthRoutes(app, { piAuth }) {
-  app.get("/v0/pi-auth", async (request, response, next) => {
-    try {
-      piAuthOwner(request);
-      noStore(response);
-      const kinds = await piAuth.storedKinds();
-      const providers = piAuth.providers().map((provider) => provider.auth.source === "stored" ? { ...provider, auth: { ...provider.auth, kind: kinds[provider.id] || null } } : provider);
-      response.json({ installationId: "conduit-pinned", providers });
-    } catch (error) { next(error); }
+  app.get("/v0/pi-auth", async (request, response) => {
+    piAuthOwner(request);
+    noStore(response);
+    const kinds = await piAuth.storedKinds();
+    const providers = piAuth.providers().map((provider) => provider.auth.source === "stored" ? { ...provider, auth: { ...provider.auth, kind: kinds[provider.id] || null } } : provider);
+    response.json({ installationId: "conduit-pinned", providers });
   });
 
   app.get("/v0/pi-auth/attempt", (request, response, next) => {
@@ -54,21 +52,17 @@ export function registerPiAuthRoutes(app, { piAuth }) {
     } catch (error) { next(error); }
   });
 
-  app.put("/v0/pi-auth/api-key", async (request, response, next) => {
-    try {
-      piAuthOwner(request);
-      await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key, request.body?.env);
-      noStore(response);
-      response.status(204).end();
-    } catch (error) { next(error); }
+  app.put("/v0/pi-auth/api-key", async (request, response) => {
+    piAuthOwner(request);
+    await piAuth.setApiKey(String(request.body?.providerId || ""), request.body?.key, request.body?.env);
+    noStore(response);
+    response.status(204).end();
   });
 
-  app.delete("/v0/pi-auth/:providerId", async (request, response, next) => {
-    try {
-      piAuthOwner(request);
-      const removed = await piAuth.remove(String(request.params.providerId || ""));
-      noStore(response);
-      response.json({ removed });
-    } catch (error) { next(error); }
+  app.delete("/v0/pi-auth/:providerId", async (request, response) => {
+    piAuthOwner(request);
+    const removed = await piAuth.remove(String(request.params.providerId || ""));
+    noStore(response);
+    response.json({ removed });
   });
 }

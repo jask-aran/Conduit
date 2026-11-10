@@ -75,11 +75,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     return false;
   };
 
-  app.get("/v0/agent/policy", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      response.json(await readPolicy(agent));
-    } catch (error) { next(error); }
+  app.get("/v0/agent/policy", async (request, response) => {
+    if (!enabled(response)) return;
+    response.json(await readPolicy(agent));
   });
 
   app.put("/v0/agent/policy", async (request, response, next) => {
@@ -92,11 +90,9 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
   });
 
-  app.get("/v0/agent/approvals", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      response.json({ records: await readApprovals(path.join(agent.runtime.dataRoot, "agent", "approvals"), request.query.limit) });
-    } catch (error) { next(error); }
+  app.get("/v0/agent/approvals", async (request, response) => {
+    if (!enabled(response)) return;
+    response.json({ records: await readApprovals(path.join(agent.runtime.dataRoot, "agent", "approvals"), request.query.limit) });
   });
 
   /**
@@ -212,12 +208,10 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
   });
 
-  app.delete("/v0/agent/connectors/:id", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      await agent.connectors.disconnect(request.params.id);
-      response.status(204).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/agent/connectors/:id", async (request, response) => {
+    if (!enabled(response)) return;
+    await agent.connectors.disconnect(request.params.id);
+    response.status(204).end();
   });
 
   app.post("/v0/agent/inbox", async (request, response, next) => {
@@ -253,27 +247,25 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
   });
 
-  app.post("/v0/agent/feedback", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const { messageId, text: input } = request.body || {};
-      const text = typeof input === "string" ? input.trim() : "";
-      if (typeof messageId !== "string" || !messageId.trim() || !text || text.length > 2000) {
-        return response.status(400).json({ error: "invalid_feedback" });
-      }
-      const message = agent.runtime.messageLog?.messages.find((item) => item.id === messageId
-        && item.channel === "app" && item.direction === "out" && item.sender === "jbot");
-      if (!message) return response.status(404).json({ error: "message_not_found" });
-      const original = String(message.body || "").trim();
-      const quote = original.length > 600 ? `${original.slice(0, 599)}…` : original;
-      const key = `feedback:${crypto.randomUUID()}`;
-      const id = await agent.update(async (doc, tx) => (await fileEntry(tx, {
-        key, kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled",
-        title: "Feedback", headline: text.split(/\r?\n/)[0], author: "person", via: "feedback", text, messageId,
-        body: `${text}\n\nAbout jbot message ${message.id} at ${message.at}:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}`,
-      })).id);
-      response.status(201).json({ id });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/feedback", async (request, response) => {
+    if (!enabled(response)) return;
+    const { messageId, text: input } = request.body || {};
+    const text = typeof input === "string" ? input.trim() : "";
+    if (typeof messageId !== "string" || !messageId.trim() || !text || text.length > 2000) {
+      return response.status(400).json({ error: "invalid_feedback" });
+    }
+    const message = agent.runtime.messageLog?.messages.find((item) => item.id === messageId
+      && item.channel === "app" && item.direction === "out" && item.sender === "jbot");
+    if (!message) return response.status(404).json({ error: "message_not_found" });
+    const original = String(message.body || "").trim();
+    const quote = original.length > 600 ? `${original.slice(0, 599)}…` : original;
+    const key = `feedback:${crypto.randomUUID()}`;
+    const id = await agent.update(async (doc, tx) => (await fileEntry(tx, {
+      key, kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled",
+      title: "Feedback", headline: text.split(/\r?\n/)[0], author: "person", via: "feedback", text, messageId,
+      body: `${text}\n\nAbout jbot message ${message.id} at ${message.at}:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}`,
+    })).id);
+    response.status(201).json({ id });
   });
 
   const deliverMessage = async (text, via = "app", id = `in:${crypto.randomUUID()}`) => {
@@ -290,13 +282,11 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     return message;
   };
 
-  app.post("/v0/agent/messages", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
-      if (!agent.runtime.messageLog || !text) return response.status(400).json({ error: "Say something", code: "empty_message" });
-      response.status(201).json({ message: await deliverMessage(text) });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/messages", async (request, response) => {
+    if (!enabled(response)) return;
+    const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+    if (!agent.runtime.messageLog || !text) return response.status(400).json({ error: "Say something", code: "empty_message" });
+    response.status(201).json({ message: await deliverMessage(text) });
   });
 
   const voiceRequests = new Map();
@@ -467,114 +457,98 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
    * (wakeChat), with no run behind it and no clock. jbot is asked to send the person a notification saying hi, so a
    * report's turn can be watched end to end without waiting on a heartbeat.
    */
-  app.post("/v0/agent/test-report", async (_request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const { conversationId } = await agent.home();
-      const harness = await agent.runtime.open();
-      const home = await harness.conversation(conversationId, agent.context);
-      const at = new Date().toISOString(), key = `test-report:${randomUUID()}`;
-      const report = "This is a test report from Conduit. Send the person a notification that says hi.";
-      const content = await notice(agent.runtime.contextStore, "report-run", { report, title: "Test report" });
-      let number = null;
-      await harness.commit(async (tx) => {
-        number = (await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, trigger: "Manual", startedAt: at })).number;
-        await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: `Asked ${agent.settings().name} to say hi` });
-        await closeWork(tx, `test:${key}`, "finished", at);
-      }, agent.context);
-      await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
-        messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
-        run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
-      agent.runtime.wakeChat?.(conversationId);
-      response.status(202).json({ id: key });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/test-report", async (_request, response) => {
+    if (!enabled(response)) return;
+    const { conversationId } = await agent.home();
+    const harness = await agent.runtime.open();
+    const home = await harness.conversation(conversationId, agent.context);
+    const at = new Date().toISOString(), key = `test-report:${randomUUID()}`;
+    const report = "This is a test report from Conduit. Send the person a notification that says hi.";
+    const content = await notice(agent.runtime.contextStore, "report-run", { report, title: "Test report" });
+    let number = null;
+    await harness.commit(async (tx) => {
+      number = (await openWork(tx, { id: `test:${key}`, kind: "test", title: "Test report", origin: { kind: "manual" }, trigger: "Manual", startedAt: at })).number;
+      await noteWork(tx, `test:${key}`, { woke: true, reportedAt: at, summary: `Asked ${agent.settings().name} to say hi` });
+      await closeWork(tx, `test:${key}`, "finished", at);
+    }, agent.context);
+    await home.submit({ type: "input", whenBusy: "followUp", requestId: key, content, entry: { kind: "conduit.subagent-report", data: {
+      messageId: key, subagentId: null, conversationId: null, title: "Test report", status: "finished", report,
+      run: { routine: "test", label: "Test report", number, trigger: "Manual", woke: true, status: "finished", startedAt: null, endedAt: at } } } }, agent.context);
+    agent.runtime.wakeChat?.(conversationId);
+    response.status(202).json({ id: key });
   });
 
-  app.delete("/v0/agent/watches/:id", async (request, response, next) => {
-    try {
-      if (!await removeWatch(agent, String(request.params.id))) return response.status(404).json({ error: "watch_not_found" });
-      response.json({ ok: true });
-    } catch (error) { next(error); }
+  app.delete("/v0/agent/watches/:id", async (request, response) => {
+    if (!await removeWatch(agent, String(request.params.id))) return response.status(404).json({ error: "watch_not_found" });
+    response.json({ ok: true });
   });
 
   // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }.
-  app.post("/v0/agent/runs/:id/open", async (request, response, next) => {
-    try {
-      const harness = await agent.runtime.open();
-      const run = (await harness.snapshot(WorkLog, agent.context).catch(() => null))?.items?.[request.params.id];
-      const home = (await agent.state().catch(() => null))?.home?.conversationId;
-      if (run?.conversationId == null || !home) return response.status(404).json({ error: "run_not_found" });
-      const child = await agent.runtime.ensureSubagent?.(home, { conversationId: run.conversationId, id: run.label ?? null, title: run.title });
-      if (!child?.id) return response.status(404).json({ error: "run_not_found" });
-      response.json({ chatId: child.id });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/runs/:id/open", async (request, response) => {
+    const harness = await agent.runtime.open();
+    const run = (await harness.snapshot(WorkLog, agent.context).catch(() => null))?.items?.[request.params.id];
+    const home = (await agent.state().catch(() => null))?.home?.conversationId;
+    if (run?.conversationId == null || !home) return response.status(404).json({ error: "run_not_found" });
+    const child = await agent.runtime.ensureSubagent?.(home, { conversationId: run.conversationId, id: run.label ?? null, title: run.title });
+    if (!child?.id) return response.status(404).json({ error: "run_not_found" });
+    response.json({ chatId: child.id });
   });
 
   app.get("/v0/agent/messages", async (request, response, next) => {
-    try {
-      const log = agent.runtime.messageLog;
-      const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
-      const messages = log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [];
-      // The runs since the first message read, and before the next page's, when an older page is read.
-      const home = (await agent.state().catch(() => null))?.home?.conversationId;
-      const since = messages[0]?.at ?? "";
-      const until = request.query.before ? messages.at(-1)?.at ?? "" : null;
-      const runs = home && messages.length ? (await logRuns(home)).filter((run) => run.at >= since && (until === null || run.at <= until)) : [];
-      response.json({ messages, runs });
-    } catch (error) { next(error); }
+    const log = agent.runtime.messageLog;
+    const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
+    const messages = log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [];
+    // The runs since the first message read, and before the next page's, when an older page is read.
+    const home = (await agent.state().catch(() => null))?.home?.conversationId;
+    const since = messages[0]?.at ?? "";
+    const until = request.query.before ? messages.at(-1)?.at ?? "" : null;
+    const runs = home && messages.length ? (await logRuns(home)).filter((run) => run.at >= since && (until === null || run.at <= until)) : [];
+    response.json({ messages, runs });
   });
 
   // A message's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
   // before it in its thread; each of the person's that steered a running turn, that turn up to it. Lean unless full
   // (workOps).
   app.get("/v0/agent/work", async (request, response, next) => {
-    try {
-      const log = agent.runtime.messageLog;
-      const ids = String(request.query.ids || "").split(",").filter(Boolean).slice(0, 200);
-      const harness = await agent.runtime.open();
-      const work = {};
-      for (const id of ids) {
-        const message = log?.messages.find((item) => item.id === id);
-        if (!message || message.entryId == null) continue;
-        const before = log.messages.findLast((item) => item.entryId != null && item.entryId < message.entryId && String(item.conversationId) === String(message.conversationId));
-        const from = before ? before.entryId + (before.direction === "out" ? 1 : 0) : 0;
-        const conversation = await harness.conversation(Number(message.conversationId), agent.context);
-        if (!conversation) continue;
-        const entries = [];
-        let cursor;
-        do {
-          const page = await conversation.entries({ order: "ascending", minEntryId: from, maxEntryId: message.entryId }, 500, cursor, agent.context);
-          entries.push(...page.items);
-          cursor = page.next;
-        } while (cursor);
-        const ops = workOps(entries, from, message.entryId, { lean: !request.query.full, steer: message.direction === "in" });
-        if (ops) work[id] = ops;
-      }
-      response.json({ work });
-    } catch (error) { next(error); }
+    const log = agent.runtime.messageLog;
+    const ids = String(request.query.ids || "").split(",").filter(Boolean).slice(0, 200);
+    const harness = await agent.runtime.open();
+    const work = {};
+    for (const id of ids) {
+      const message = log?.messages.find((item) => item.id === id);
+      if (!message || message.entryId == null) continue;
+      const before = log.messages.findLast((item) => item.entryId != null && item.entryId < message.entryId && String(item.conversationId) === String(message.conversationId));
+      const from = before ? before.entryId + (before.direction === "out" ? 1 : 0) : 0;
+      const conversation = await harness.conversation(Number(message.conversationId), agent.context);
+      if (!conversation) continue;
+      const entries = [];
+      let cursor;
+      do {
+        const page = await conversation.entries({ order: "ascending", minEntryId: from, maxEntryId: message.entryId }, 500, cursor, agent.context);
+        entries.push(...page.items);
+        cursor = page.next;
+      } while (cursor);
+      const ops = workOps(entries, from, message.entryId, { lean: !request.query.full, steer: message.direction === "in" });
+      if (ops) work[id] = ops;
+    }
+    response.json({ work });
   });
 
-  app.get("/v0/agent", async (request, response, next) => {
-    try {
-      const state = agent.enabled() ? await agent.state() : null;
-      const view = await agent.view(state);
-      response.json({ ...view, connectors: agent.connectors.list(), ...(view.enabled ? { attention: await attention(view, state) } : {}) });
-    } catch (error) { next(error); }
+  app.get("/v0/agent", async (request, response) => {
+    const state = agent.enabled() ? await agent.state() : null;
+    const view = await agent.view(state);
+    response.json({ ...view, connectors: agent.connectors.list(), ...(view.enabled ? { attention: await attention(view, state) } : {}) });
   });
 
-  app.post("/v0/agent", async (request, response, next) => {
-    try {
-      const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
-      response.status(201).json(await agent.enable(name ? { name } : {}));
-    } catch (error) { next(error); }
+  app.post("/v0/agent", async (request, response) => {
+    const name = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    response.status(201).json(await agent.enable(name ? { name } : {}));
   });
 
-  app.patch("/v0/agent", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      await agent.saveSettings(request.body || {});
-      response.json(await agent.view());
-    } catch (error) { next(error); }
+  app.patch("/v0/agent", async (request, response) => {
+    if (!enabled(response)) return;
+    await agent.saveSettings(request.body || {});
+    response.json(await agent.view());
   });
 
   app.post("/v0/agent/asks/:id", async (request, response, next) => {
@@ -587,221 +561,193 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     }
   });
 
-  app.post("/v0/agent/threads", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      response.status(201).json(chatView(await agent.side(String(request.body?.title || "").trim().slice(0, 120))));
-    } catch (error) { next(error); }
+  app.post("/v0/agent/threads", async (request, response) => {
+    if (!enabled(response)) return;
+    response.status(201).json(chatView(await agent.side(String(request.body?.title || "").trim().slice(0, 120))));
   });
 
-  app.post("/v0/agent/wake", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
-      const task = String(request.body?.task || "").trim();
-      if (!task) return response.status(400).json({ error: "invalid_task" });
-      const run = await agent.wake({ key: `manual:${crypto.randomUUID()}`, kind: "manual", title: String(request.body?.title || "").trim() || undefined, task });
-      response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/wake", async (request, response) => {
+    if (!enabled(response)) return;
+    if (!agent.active()) return response.status(409).json({ error: "agent_off" });
+    const task = String(request.body?.task || "").trim();
+    if (!task) return response.status(400).json({ error: "invalid_task" });
+    const run = await agent.wake({ key: `manual:${crypto.randomUUID()}`, kind: "manual", title: String(request.body?.title || "").trim() || undefined, task });
+    response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
   });
 
   // The person adds a feed directly: they are who jbot's feeds would ask.
   let addClocked = null;
-  app.post("/v0/agent/feeds", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const body = { title: request.body?.title, everyMinutes: Number(request.body?.everyMinutes), source: request.body?.source, level: request.body?.level };
-      const problem = feedProblem(body);
-      if (problem) return response.status(400).json({ error: "invalid_feed", message: problem });
-      const { conversationId } = await agent.home();
-      const harness = await agent.runtime.open();
-      const conversation = await harness.conversation(conversationId, agent.context);
-      addClocked ||= clockAdder(agent.runtime);
-      const id = await conversation.commit(async (tx) => {
-        const doc = await tx.doc(AgentDoc);
-        const item = feedItem(doc, body, "person");
-        await addClocked(tx, doc, item, conversationId);
-        return item.id;
-      }, agent.context);
-      response.status(201).json({ id });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/feeds", async (request, response) => {
+    if (!enabled(response)) return;
+    const body = { title: request.body?.title, everyMinutes: Number(request.body?.everyMinutes), source: request.body?.source, level: request.body?.level };
+    const problem = feedProblem(body);
+    if (problem) return response.status(400).json({ error: "invalid_feed", message: problem });
+    const { conversationId } = await agent.home();
+    const harness = await agent.runtime.open();
+    const conversation = await harness.conversation(conversationId, agent.context);
+    addClocked ||= clockAdder(agent.runtime);
+    const id = await conversation.commit(async (tx) => {
+      const doc = await tx.doc(AgentDoc);
+      const item = feedItem(doc, body, "person");
+      await addClocked(tx, doc, item, conversationId);
+      return item.id;
+    }, agent.context);
+    response.status(201).json({ id });
   });
-  app.post("/v0/agent/feeds/test", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const problem = sourceProblem(request.body?.source);
-      if (problem) return response.status(400).json({ error: "invalid_source", message: problem });
-      response.json(await runSource(agent, request.body.source));
-    } catch (error) { next(error); }
+  app.post("/v0/agent/feeds/test", async (request, response) => {
+    if (!enabled(response)) return;
+    const problem = sourceProblem(request.body?.source);
+    if (problem) return response.status(400).json({ error: "invalid_source", message: problem });
+    response.json(await runSource(agent, request.body.source));
   });
-  app.post("/v0/agent/feeds/:id/forget", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const ids = Array.isArray(request.body?.ids) ? new Set(request.body.ids.map(String)) : null;
-      const forgot = await agent.update((doc) => {
-        const feed = doc.schedules[request.params.id]?.feed;
-        if (!feed) return null;
-        const before = feed.seen.length;
-        // `latest`: the newest n (seen is kept newest first), to have a feed report its last few again.
-        const latest = Number.isInteger(request.body?.latest) && request.body.latest > 0 ? request.body.latest : null;
-        feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : latest ? feed.seen.slice(latest) : [];
-        return before - feed.seen.length;
-      });
-      if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
-      response.json({ forgot });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/feeds/:id/forget", async (request, response) => {
+    if (!enabled(response)) return;
+    const ids = Array.isArray(request.body?.ids) ? new Set(request.body.ids.map(String)) : null;
+    const forgot = await agent.update((doc) => {
+      const feed = doc.schedules[request.params.id]?.feed;
+      if (!feed) return null;
+      const before = feed.seen.length;
+      // `latest`: the newest n (seen is kept newest first), to have a feed report its last few again.
+      const latest = Number.isInteger(request.body?.latest) && request.body.latest > 0 ? request.body.latest : null;
+      feed.seen = ids ? feed.seen.filter((id) => !ids.has(id)) : latest ? feed.seen.slice(latest) : [];
+      return before - feed.seen.length;
+    });
+    if (forgot === null) return response.status(404).json({ error: "feed_not_found" });
+    response.json({ forgot });
   });
   app.patch("/v0/agent/feeds/:id", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const { title, everyMinutes, source, level } = request.body || {};
-      const changed = await agent.update((doc) => {
-        const item = doc.schedules[request.params.id];
-        if (!item?.feed) return null;
-        const next = { title: title ?? item.title, everyMinutes: everyMinutes ?? item.everyMinutes, source: source ?? item.feed.source };
-        const problem = feedProblem(next);
-        if (problem) return { problem };
-        item.title = String(next.title).slice(0, 80);
-        item.everyMinutes = next.everyMinutes;
-        item.feed.source = next.source;
-        if (["fyi", "attention", "urgent"].includes(level)) item.feed.level = level;
-        item.feed.lastError = null;
-        return { ok: true };
-      });
-      if (!changed) return response.status(404).json({ error: "feed_not_found" });
-      if (changed.problem) return response.status(400).json({ error: changed.problem });
-      response.json({ ok: true });
-    } catch (error) { next(error); }
+    if (!enabled(response)) return;
+    const { title, everyMinutes, source, level } = request.body || {};
+    const changed = await agent.update((doc) => {
+      const item = doc.schedules[request.params.id];
+      if (!item?.feed) return null;
+      const next = { title: title ?? item.title, everyMinutes: everyMinutes ?? item.everyMinutes, source: source ?? item.feed.source };
+      const problem = feedProblem(next);
+      if (problem) return { problem };
+      item.title = String(next.title).slice(0, 80);
+      item.everyMinutes = next.everyMinutes;
+      item.feed.source = next.source;
+      if (["fyi", "attention", "urgent"].includes(level)) item.feed.level = level;
+      item.feed.lastError = null;
+      return { ok: true };
+    });
+    if (!changed) return response.status(404).json({ error: "feed_not_found" });
+    if (changed.problem) return response.status(400).json({ error: changed.problem });
+    response.json({ ok: true });
   });
-  app.post("/v0/agent/schedules/:id/run", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
-      const state = await agent.state();
-      // A routine without a clock (switched off, or started only by an event) runs by hand all the same.
-      const routineId = /^r-([a-z0-9][a-z0-9-]*)$/.exec(request.params.id)?.[1];
-      const schedule = state.schedules[request.params.id]
-        || (routineId && await readRoutine(agent.folder, routineId).catch(() => null) ? { id: request.params.id, routine: routineId } : null);
-      if (!schedule) return response.status(404).json({ error: "schedule_not_found" });
-      const key = `now:${schedule.id}:${crypto.randomUUID()}`;
-      if (schedule.feed && schedule.feed.source.kind !== "run") {
-        const outcome = await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] });
-        const fresh = await agent.update(async (doc, tx) => {
-          const current = doc.schedules[schedule.id];
-          if (!current?.feed) return 0;
-          await applyOutcome(tx, current, outcome, new Date().toISOString());
-          return outcome.error ? 0 : current.feed.lastCount;
-        });
-        return response.json({ checked: outcome.items.length, new: fresh, error: outcome.error || null });
-      }
-      if (schedule.routine) {
-        const fired = await agent.fireRoutine(schedule.routine, key);
-        if (fired.error) return response.status(fired.status || 409).json({ error: fired.error });
-        return response.status(202).json(fired);
-      }
-      const task = schedule.feed ? schedule.feed.source.task : schedule.task;
-      const run = await agent.wake({ key, kind: schedule.feed ? "feed" : "checkback", title: schedule.title, task });
-      // Run while it was due (its clock late): this run is that slot's, so the clock does not run it again.
-      if (run) await agent.update((doc) => {
+  app.post("/v0/agent/schedules/:id/run", async (request, response) => {
+    if (!enabled(response)) return;
+    if (!agent.active()) return response.status(409).json({ error: "agent_off" });
+    const state = await agent.state();
+    // A routine without a clock (switched off, or started only by an event) runs by hand all the same.
+    const routineId = /^r-([a-z0-9][a-z0-9-]*)$/.exec(request.params.id)?.[1];
+    const schedule = state.schedules[request.params.id]
+      || (routineId && await readRoutine(agent.folder, routineId).catch(() => null) ? { id: request.params.id, routine: routineId } : null);
+    if (!schedule) return response.status(404).json({ error: "schedule_not_found" });
+    const key = `now:${schedule.id}:${crypto.randomUUID()}`;
+    if (schedule.feed && schedule.feed.source.kind !== "run") {
+      const outcome = await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] });
+      const fresh = await agent.update(async (doc, tx) => {
         const current = doc.schedules[schedule.id];
-        if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
+        if (!current?.feed) return 0;
+        await applyOutcome(tx, current, outcome, new Date().toISOString());
+        return outcome.error ? 0 : current.feed.lastCount;
       });
-      response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
-    } catch (error) { next(error); }
+      return response.json({ checked: outcome.items.length, new: fresh, error: outcome.error || null });
+    }
+    if (schedule.routine) {
+      const fired = await agent.fireRoutine(schedule.routine, key);
+      if (fired.error) return response.status(fired.status || 409).json({ error: fired.error });
+      return response.status(202).json(fired);
+    }
+    const task = schedule.feed ? schedule.feed.source.task : schedule.task;
+    const run = await agent.wake({ key, kind: schedule.feed ? "feed" : "checkback", title: schedule.title, task });
+    // Run while it was due (its clock late): this run is that slot's, so the clock does not run it again.
+    if (run) await agent.update((doc) => {
+      const current = doc.schedules[schedule.id];
+      if (current?.nextAt && Date.parse(current.nextAt) <= Date.now()) current.lastAt = current.nextAt;
+    });
+    response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
   });
-  app.get("/v0/agent/routines", async (_request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const state = await agent.state();
-      response.json({ routines: (await listRoutines(agent.folder)).map((routine) => ({ ...routine,
-        cursors: state.cursors?.[routine.name] || {}, last: state.routineState?.[routine.name] || null,
-        schedule: state.schedules[`r-${routine.name}`] ? { nextAt: state.schedules[`r-${routine.name}`].nextAt } : null })) });
-    } catch (error) { next(error); }
+  app.get("/v0/agent/routines", async (_request, response) => {
+    if (!enabled(response)) return;
+    const state = await agent.state();
+    response.json({ routines: (await listRoutines(agent.folder)).map((routine) => ({ ...routine,
+      cursors: state.cursors?.[routine.name] || {}, last: state.routineState?.[routine.name] || null,
+      schedule: state.schedules[`r-${routine.name}`] ? { nextAt: state.schedules[`r-${routine.name}`].nextAt } : null })) });
   });
-  app.post("/v0/agent/routines/:name/test", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const routine = await readRoutine(agent.folder, request.params.name).catch((error) => ({ error: error.message }));
-      if (!routine) return response.status(404).json({ error: "routine_not_found" });
-      if (routine.error) return response.status(400).json({ error: routine.error });
-      const state = await agent.state();
-      const outcome = await executeRoutine(agent, routine, { cursors: state.cursors?.[routine.name] || {}, state, force: true });
-      response.json({ tasks: outcome.tasks, fresh: outcome.fresh, run: outcome.run, instructions: outcome.instructions || null, message: outcome.message || null });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/routines/:name/test", async (request, response) => {
+    if (!enabled(response)) return;
+    const routine = await readRoutine(agent.folder, request.params.name).catch((error) => ({ error: error.message }));
+    if (!routine) return response.status(404).json({ error: "routine_not_found" });
+    if (routine.error) return response.status(400).json({ error: routine.error });
+    const state = await agent.state();
+    const outcome = await executeRoutine(agent, routine, { cursors: state.cursors?.[routine.name] || {}, state, force: true });
+    response.json({ tasks: outcome.tasks, fresh: outcome.fresh, run: outcome.run, instructions: outcome.instructions || null, message: outcome.message || null });
   });
   // A task the runtime parked after too many restarts (pi-durable's restart limit) runs again from its checkpoint.
-  app.post("/v0/agent/tasks/:id/retry", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const id = Number(request.params.id);
-      if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "invalid_task" });
-      const harness = await agent.runtime.open();
-      await harness.retryTask(id, agent.context);
-      response.json({ retried: id });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/tasks/:id/retry", async (request, response) => {
+    if (!enabled(response)) return;
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "invalid_task" });
+    const harness = await agent.runtime.open();
+    await harness.retryTask(id, agent.context);
+    response.json({ retried: id });
   });
-  app.post("/v0/agent/routines/:name/forget", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const { task, latest } = request.body || {};
-      if (typeof task !== "string") return response.status(400).json({ error: "task is required" });
-      const forgot = await agent.update((doc) => {
-        const cursor = doc.cursors?.[request.params.name]?.[task];
-        if (!cursor?.seen) return null;
-        const before = cursor.seen.length;
-        cursor.seen = Number.isInteger(latest) && latest > 0 ? cursor.seen.slice(latest) : [];
-        return before - cursor.seen.length;
-      });
-      response.status(forgot === null ? 404 : 200).json(forgot === null ? { error: "cursor_not_found" } : { forgot });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/routines/:name/forget", async (request, response) => {
+    if (!enabled(response)) return;
+    const { task, latest } = request.body || {};
+    if (typeof task !== "string") return response.status(400).json({ error: "task is required" });
+    const forgot = await agent.update((doc) => {
+      const cursor = doc.cursors?.[request.params.name]?.[task];
+      if (!cursor?.seen) return null;
+      const before = cursor.seen.length;
+      cursor.seen = Number.isInteger(latest) && latest > 0 ? cursor.seen.slice(latest) : [];
+      return before - cursor.seen.length;
+    });
+    response.status(forgot === null ? 404 : 200).json(forgot === null ? { error: "cursor_not_found" } : { forgot });
   });
   /**
    * Start over: a new home thread, and an empty inbox, attention list and work log. Its settings, memory files, feeds
    * (with what they have seen), schedules and saved approval rules stay; their clocks move to the new thread. The old home thread is
    * the caller's to delete (DELETE /v0/sessions/:id); its runs' chats go here.
    */
-  app.post("/v0/agent/reset", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const previous = (await agent.state()).home;
-      await agent.update((doc) => {
-        // Side threads outlive the reset, and what they read stays in them: only the old home thread's taint goes.
-        const tainted = { ...doc.tainted };
-        delete tainted[previous?.conversationId];
-        Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
-        delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
-      });
-      // Working on and Recent start empty, numbered from one; nothing from before is read into them again.
-      await (await agent.runtime.open()).commit(async (tx) => Object.assign(await tx.doc(WorkLog), { items: {}, counters: {}, seeded: true }), agent.context);
-      const home = await agent.home();
-      await seedSchedules(agent);
-      let runs = 0;
-      // listProject leaves run chats out; they are the agent project's subagent chats under any other thread.
-      for (const chat of agent.registry.list({ includeHidden: true })) {
-        if (chat.status !== "subagent" || chat.projectId !== agent.project.id || chat.backend?.parentChatId === home.chat.id) continue;
-        await agent.registry.remove(chat.id, agent.project);
-        runs++;
-      }
-      response.json({ previous: previous?.chatId || null, home: home.chat.id, runs });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/reset", async (request, response) => {
+    if (!enabled(response)) return;
+    const previous = (await agent.state()).home;
+    await agent.update((doc) => {
+      // Side threads outlive the reset, and what they read stays in them: only the old home thread's taint goes.
+      const tainted = { ...doc.tainted };
+      delete tainted[previous?.conversationId];
+      Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
+      delete doc.beatLine; delete doc.heartbeatSeenAt; delete doc.heartbeatSweptAt;
+    });
+    // Working on and Recent start empty, numbered from one; nothing from before is read into them again.
+    await (await agent.runtime.open()).commit(async (tx) => Object.assign(await tx.doc(WorkLog), { items: {}, counters: {}, seeded: true }), agent.context);
+    const home = await agent.home();
+    await seedSchedules(agent);
+    let runs = 0;
+    // listProject leaves run chats out; they are the agent project's subagent chats under any other thread.
+    for (const chat of agent.registry.list({ includeHidden: true })) {
+      if (chat.status !== "subagent" || chat.projectId !== agent.project.id || chat.backend?.parentChatId === home.chat.id) continue;
+      await agent.registry.remove(chat.id, agent.project);
+      runs++;
+    }
+    response.json({ previous: previous?.chatId || null, home: home.chat.id, runs });
   });
 
-  app.delete("/v0/agent/feeds/:id", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      const item = (await agent.state()).schedules[request.params.id];
-      if (!item?.feed) return response.status(404).json({ error: "feed_not_found" });
-      await cancelSchedule(agent, request.params.id);
-      response.status(204).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/agent/feeds/:id", async (request, response) => {
+    if (!enabled(response)) return;
+    const item = (await agent.state()).schedules[request.params.id];
+    if (!item?.feed) return response.status(404).json({ error: "feed_not_found" });
+    await cancelSchedule(agent, request.params.id);
+    response.status(204).end();
   });
 
   // The memory view: every line with its scope and provenance, and forgetting one exactly as it was shown.
-  app.get("/v0/agent/memory", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      response.json({ entries: await memoryEntries(agent, { days: Math.min(60, Math.max(1, Number(request.query.days) || 14)) }) });
-    } catch (error) { next(error); }
+  app.get("/v0/agent/memory", async (request, response) => {
+    if (!enabled(response)) return;
+    response.json({ entries: await memoryEntries(agent, { days: Math.min(60, Math.max(1, Number(request.query.days) || 14)) }) });
   });
   app.post("/v0/agent/memory/forget", async (request, response, next) => {
     try {
@@ -813,47 +759,39 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   });
 
   for (const [verb, act] of [["accept", acceptProposal], ["reject", rejectProposal]]) {
-    app.post(`/v0/agent/proposals/:id/${verb}`, async (request, response, next) => {
-      try {
-        if (!enabled(response)) return;
-        const done = await act(agent, request.params.id);
-        response.status(done ? 200 : 404).json(done || { error: "proposal_not_found" });
-      } catch (error) { next(error); }
+    app.post(`/v0/agent/proposals/:id/${verb}`, async (request, response) => {
+      if (!enabled(response)) return;
+      const done = await act(agent, request.params.id);
+      response.status(done ? 200 : 404).json(done || { error: "proposal_not_found" });
     });
   }
 
-  app.delete("/v0/agent/rules/:id", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      let found = false;
-      await agent.update((doc) => {
-        if (Object.hasOwn(doc.rules || {}, request.params.id)) { delete doc.rules[request.params.id]; found = true; }
-      });
-      response.status(found ? 204 : 404).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/agent/rules/:id", async (request, response) => {
+    if (!enabled(response)) return;
+    let found = false;
+    await agent.update((doc) => {
+      if (Object.hasOwn(doc.rules || {}, request.params.id)) { delete doc.rules[request.params.id]; found = true; }
+    });
+    response.status(found ? 204 : 404).end();
   });
 
-  app.delete("/v0/agent/notices/:id", async (request, response, next) => {
-    try {
-      if (!enabled(response)) return;
-      // This notice reflects current status and remains until Executor connects.
-      if (request.params.id === "connector-executor") return response.status(204).end();
-      let found = false;
-      await agent.update((doc) => {
-        const index = doc.notices.findIndex((notice) => notice.id === request.params.id);
-        if (index >= 0) { doc.notices.splice(index, 1); found = true; }
-      });
-      response.status(found ? 204 : 404).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/agent/notices/:id", async (request, response) => {
+    if (!enabled(response)) return;
+    // This notice reflects current status and remains until Executor connects.
+    if (request.params.id === "connector-executor") return response.status(204).end();
+    let found = false;
+    await agent.update((doc) => {
+      const index = doc.notices.findIndex((notice) => notice.id === request.params.id);
+      if (index >= 0) { doc.notices.splice(index, 1); found = true; }
+    });
+    response.status(found ? 204 : 404).end();
   });
 
-  app.post("/v0/agent/hooks/:token", async (request, response, next) => {
-    try {
-      if (!agent.enabled()) return response.status(404).json({ error: "not_found" });
-      if (!agent.active()) return response.status(409).json({ error: "agent_off" });
-      const run = await webhook(agent, request.params.token, request.body);
-      // An unknown token says no more than a missing route would.
-      response.status(run === null ? 404 : 202).json(run === null ? { error: "not_found" } : { accepted: true });
-    } catch (error) { next(error); }
+  app.post("/v0/agent/hooks/:token", async (request, response) => {
+    if (!agent.enabled()) return response.status(404).json({ error: "not_found" });
+    if (!agent.active()) return response.status(409).json({ error: "agent_off" });
+    const run = await webhook(agent, request.params.token, request.body);
+    // An unknown token says no more than a missing route would.
+    response.status(run === null ? 404 : 202).json(run === null ? { error: "not_found" } : { accepted: true });
   });
 }

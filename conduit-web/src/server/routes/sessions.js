@@ -134,77 +134,67 @@ export function registerSessionRoutes(app, {
     }
   });
 
-  app.get("/v0/sessions/:id", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      const projection = await adapter.readTranscript({
-        chatId: context.chat.id,
-        opaqueSession: context.chat.backend?.opaqueSession,
-        project: context.project,
-        before: request.query.before,
-      });
-      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-      if (chatLogs?.timings) projection.messages = await chatLogs.timings.decorate(context.chat.id, projection.messages);
-      response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
-        ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
-        page: projection.page || { before: null } });
-    } catch (error) { next(error); }
+  app.get("/v0/sessions/:id", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    const projection = await adapter.readTranscript({
+      chatId: context.chat.id,
+      opaqueSession: context.chat.backend?.opaqueSession,
+      project: context.project,
+      before: request.query.before,
+    });
+    projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+    if (chatLogs?.timings) projection.messages = await chatLogs.timings.decorate(context.chat.id, projection.messages);
+    response.json({ ...chatView(context.chat), turnOpen: turnOpen(context.chat.id),
+      ...upToDate(context, projection, projection.page, request.query.before), attachments: [],
+      page: projection.page || { before: null } });
   });
 
-  app.get("/v0/sessions/:id/transcript", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      response.type("text/markdown").send(await transcriptFor(context));
-    } catch (error) { next(error); }
+  app.get("/v0/sessions/:id/transcript", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.type("text/markdown").send(await transcriptFor(context));
   });
 
-  app.post("/v0/sessions/:id/read", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      // The body echoes a completion timestamp this server issued, so the
-      // watermark never depends on the browser's clock.
-      const upTo = typeof request.body?.upTo === "string" ? request.body.upTo : null;
-      await registry.markRead(context.chat.id, upTo);
-      response.json(chatView(registry.metadata(context.chat.id)));
-    } catch (error) { next(error); }
+  app.post("/v0/sessions/:id/read", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    // The body echoes a completion timestamp this server issued, so the
+    // watermark never depends on the browser's clock.
+    const upTo = typeof request.body?.upTo === "string" ? request.body.upTo : null;
+    await registry.markRead(context.chat.id, upTo);
+    response.json(chatView(registry.metadata(context.chat.id)));
   });
 
-  app.patch("/v0/sessions/:id", async (request, response, next) => {
-    try {
-      const name = String(request.body?.name || "").trim();
-      if (!name) return response.status(400).json({ error: "session_name_required" });
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      await registry.update(context.chat.id, { title: name });
-      response.json(chatView(registry.metadata(context.chat.id)));
-    } catch (error) { next(error); }
+  app.patch("/v0/sessions/:id", async (request, response) => {
+    const name = String(request.body?.name || "").trim();
+    if (!name) return response.status(400).json({ error: "session_name_required" });
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    await registry.update(context.chat.id, { title: name });
+    response.json(chatView(registry.metadata(context.chat.id)));
   });
 
-  app.post("/v0/sessions/:id/auto-name", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const transcript = await transcriptFor(context);
-      if (!transcript) return response.status(409).json({
-        error: "session_context_required",
-        message: "This chat has no persisted context to name.",
-      });
-      await sessionNames.run({
-        chatId: context.chat.id,
-        cwd: context.project.workingRoot,
-        source: "command",
-        message: transcript,
-        apply: async (name) => {
-          await registry.update(context.chat.id, { title: name });
-          return "applied";
-        },
-      });
-      response.json(chatView(registry.metadata(context.chat.id)));
-    } catch (error) { next(error); }
+  app.post("/v0/sessions/:id/auto-name", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const transcript = await transcriptFor(context);
+    if (!transcript) return response.status(409).json({
+      error: "session_context_required",
+      message: "This chat has no persisted context to name.",
+    });
+    await sessionNames.run({
+      chatId: context.chat.id,
+      cwd: context.project.workingRoot,
+      source: "command",
+      message: transcript,
+      apply: async (name) => {
+        await registry.update(context.chat.id, { title: name });
+        return "applied";
+      },
+    });
+    response.json(chatView(registry.metadata(context.chat.id)));
   });
 
   app.post("/v0/sessions/:id/move", async (request, response, next) => {
@@ -236,53 +226,51 @@ export function registerSessionRoutes(app, {
     response.status(409).json({ error: "chat_duplication_deferred", message: "Chat duplication is unavailable while attachment ownership is unsettled." });
   });
 
-  app.delete("/v0/sessions/:id", async (request, response, next) => {
-    try {
-      if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
-      const deleted = await lifecycle.deleteChat(request.params.id, async () => {
-        const context = await findChatContext(request.params.id);
-        if (!context) return false;
-        return lifecycle.withProjects([context.project.id], async () => {
-          const session = await findDeletableSession(registry, await projects.list(), context.chat);
-          const installationRoot = sessionDirectoryRootForChat(config, context.chat);
-          const sessionOptions = session && installationRoot
-            ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
-            : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
-          // A transcript outside this installation (written by another checkout)
-          // is not Conduit's to remove, but the chat that names it still is:
-          // the file is left where it is and the chat goes.
-          let family = [];
-          let foreign = false;
-          try { family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : []; }
-          catch (error) {
-            if (error?.reason !== "outside-installation") throw error;
-            foreign = true;
-            console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
-          }
-          await discardSession(backends, context.chat, registry);
-          if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
-          // A converted chat's classic session goes too: left behind, startup
-          // recovers it as a lost session and the chat comes back.
-          const convertedFrom = context.chat.backend?.convertedFrom;
-          if (convertedFrom && installationRoot) {
-            await removeSessionFamily(convertedFrom, context.project, { sessionsDir: path.dirname(convertedFrom), allowedRoot: installationRoot })
-              .catch((error) => console.warn("Chat deleted; its classic session was left in place", { chatId: context.chat.id, file: convertedFrom, error: error.message }));
-          }
-          const familyFiles = new Set(family.map((file) => path.resolve(file)));
-          const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
-            .filter((chat) => chat.id === context.chat.id
-              || (conduitPiSessionFile(chat) && familyFiles.has(path.resolve(conduitPiSessionFile(chat)))));
-          await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
-          // The draft goes with the chat. Nothing else ever removes one, so a
-          // chat deleted with something unsent left its text and its
-          // attachments held for as long as the store kept them.
-          await Promise.all(relatedChats.map((chat) => drafts.dropChat(chat.id)));
-          await Promise.all(relatedChats.map((chat) => chatLogs?.timings?.forget(chat.id)));
-          return true;
-        });
+  app.delete("/v0/sessions/:id", async (request, response) => {
+    if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
+    const deleted = await lifecycle.deleteChat(request.params.id, async () => {
+      const context = await findChatContext(request.params.id);
+      if (!context) return false;
+      return lifecycle.withProjects([context.project.id], async () => {
+        const session = await findDeletableSession(registry, await projects.list(), context.chat);
+        const installationRoot = sessionDirectoryRootForChat(config, context.chat);
+        const sessionOptions = session && installationRoot
+          ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
+          : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
+        // A transcript outside this installation (written by another checkout)
+        // is not Conduit's to remove, but the chat that names it still is:
+        // the file is left where it is and the chat goes.
+        let family = [];
+        let foreign = false;
+        try { family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : []; }
+        catch (error) {
+          if (error?.reason !== "outside-installation") throw error;
+          foreign = true;
+          console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
+        }
+        await discardSession(backends, context.chat, registry);
+        if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
+        // A converted chat's classic session goes too: left behind, startup
+        // recovers it as a lost session and the chat comes back.
+        const convertedFrom = context.chat.backend?.convertedFrom;
+        if (convertedFrom && installationRoot) {
+          await removeSessionFamily(convertedFrom, context.project, { sessionsDir: path.dirname(convertedFrom), allowedRoot: installationRoot })
+            .catch((error) => console.warn("Chat deleted; its classic session was left in place", { chatId: context.chat.id, file: convertedFrom, error: error.message }));
+        }
+        const familyFiles = new Set(family.map((file) => path.resolve(file)));
+        const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
+          .filter((chat) => chat.id === context.chat.id
+            || (conduitPiSessionFile(chat) && familyFiles.has(path.resolve(conduitPiSessionFile(chat)))));
+        await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
+        // The draft goes with the chat. Nothing else ever removes one, so a
+        // chat deleted with something unsent left its text and its
+        // attachments held for as long as the store kept them.
+        await Promise.all(relatedChats.map((chat) => drafts.dropChat(chat.id)));
+        await Promise.all(relatedChats.map((chat) => chatLogs?.timings?.forget(chat.id)));
+        return true;
       });
-      if (!deleted) return response.status(404).json({ error: "chat_not_found" });
-      response.status(204).end();
-    } catch (error) { next(error); }
+    });
+    if (!deleted) return response.status(404).json({ error: "chat_not_found" });
+    response.status(204).end();
   });
 }

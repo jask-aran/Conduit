@@ -44,43 +44,41 @@ export function registerRunRoutes(app, {
     return chat?.untracked && chat.run ? chat : null;
   };
 
-  app.post("/v0/runs", async (request, response, next) => {
-    try {
-      const prompt = String(request.body?.prompt || "").trim();
-      if (!prompt) throw failure("invalid_prompt", "A run needs a prompt", 400);
-      const project = await projects.get(request.body?.projectId || "chat");
-      if (!project) throw failure("project_not_found", "Project not found", 404);
-      await projects.validate(project);
-      const profileId = request.body?.profileId || project.defaultTemplateId || null;
-      // How long an approval or question may wait before it is cancelled.
-      const hostUiTimeoutMs = Math.trunc(Number(request.body?.hostUiTimeoutMs) || 0);
-      const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
-        // Off unless asked: a run is named only with { autoName: true }.
-        ...(request.body?.autoName === true ? { autoName: true } : {}) };
-      // Any profile a chat can use: a harness profile or a Conduit template.
-      const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.local || backends.adapters.keys()) })
-        .find((profile) => profile.id === profileId && profile.management === "agent");
-      let chat;
-      if (harness) {
-        if (harness.disabled || !backends.adapters.has(harness.agent.implementation)) throw failure(`${profileId}_unavailable`, `${profileId} is unavailable`, 409);
-        chat = await registry.create(project, { untracked: true, run, backend: {
-          profileId, profileRevision: null, management: harness.management, ...harness.agent, opaqueSession: null,
-        } });
-      } else {
-        const template = profileId ? resolveTemplate(config, profileId) : defaultTemplate();
-        if (!template || template.defaultable === false) throw failure("unknown_profile", `Unknown profile: ${profileId}`, 400);
-        chat = await registry.create(project, {
-          templateId: template.id, templateVersion: template.version,
-          backend: templateBackend(template), untracked: true, run,
-        });
-      }
-      const model = String(request.body?.model || "");
-      const thinkingLevel = String(request.body?.thinkingLevel || "");
-      await launchLiveSession({ chatId: chat.id, requestedProject: project.id, model, thinkingLevel, forceModel: Boolean(model) });
-      const generationId = await submitPrompt(chat.id, prompt);
-      response.status(201).json({ ...runView(registry.metadata(chat.id)), generationId,
-        eventsUrl: `/v0/runs/${chat.id}/events` });
-    } catch (error) { next(error); }
+  app.post("/v0/runs", async (request, response) => {
+    const prompt = String(request.body?.prompt || "").trim();
+    if (!prompt) throw failure("invalid_prompt", "A run needs a prompt", 400);
+    const project = await projects.get(request.body?.projectId || "chat");
+    if (!project) throw failure("project_not_found", "Project not found", 404);
+    await projects.validate(project);
+    const profileId = request.body?.profileId || project.defaultTemplateId || null;
+    // How long an approval or question may wait before it is cancelled.
+    const hostUiTimeoutMs = Math.trunc(Number(request.body?.hostUiTimeoutMs) || 0);
+    const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
+      // Off unless asked: a run is named only with { autoName: true }.
+      ...(request.body?.autoName === true ? { autoName: true } : {}) };
+    // Any profile a chat can use: a harness profile or a Conduit template.
+    const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.local || backends.adapters.keys()) })
+      .find((profile) => profile.id === profileId && profile.management === "agent");
+    let chat;
+    if (harness) {
+      if (harness.disabled || !backends.adapters.has(harness.agent.implementation)) throw failure(`${profileId}_unavailable`, `${profileId} is unavailable`, 409);
+      chat = await registry.create(project, { untracked: true, run, backend: {
+        profileId, profileRevision: null, management: harness.management, ...harness.agent, opaqueSession: null,
+      } });
+    } else {
+      const template = profileId ? resolveTemplate(config, profileId) : defaultTemplate();
+      if (!template || template.defaultable === false) throw failure("unknown_profile", `Unknown profile: ${profileId}`, 400);
+      chat = await registry.create(project, {
+        templateId: template.id, templateVersion: template.version,
+        backend: templateBackend(template), untracked: true, run,
+      });
+    }
+    const model = String(request.body?.model || "");
+    const thinkingLevel = String(request.body?.thinkingLevel || "");
+    await launchLiveSession({ chatId: chat.id, requestedProject: project.id, model, thinkingLevel, forceModel: Boolean(model) });
+    const generationId = await submitPrompt(chat.id, prompt);
+    response.status(201).json({ ...runView(registry.metadata(chat.id)), generationId,
+      eventsUrl: `/v0/runs/${chat.id}/events` });
   });
 
   app.get("/v0/runs/:id", (request, response) => {
@@ -113,26 +111,22 @@ export function registerRunRoutes(app, {
   });
 
   /** Another prompt in the same run, once the last has settled. */
-  app.post("/v0/runs/:id/messages", async (request, response, next) => {
-    try {
-      const chat = runChat(request.params.id);
-      if (!chat) return response.status(404).json({ error: "run_not_found" });
-      const prompt = String(request.body?.prompt || "").trim();
-      if (!prompt) throw failure("invalid_prompt", "A run needs a prompt", 400);
-      if (runView(chat).status === "running") throw failure("run_busy", "The run is still answering", 409);
-      const model = String(request.body?.model || "");
-      await launchLiveSession({ chatId: chat.id, model, forceModel: Boolean(model) });
-      const generationId = await submitPrompt(chat.id, prompt);
-      response.status(201).json({ ...runView(registry.metadata(chat.id)), generationId });
-    } catch (error) { next(error); }
+  app.post("/v0/runs/:id/messages", async (request, response) => {
+    const chat = runChat(request.params.id);
+    if (!chat) return response.status(404).json({ error: "run_not_found" });
+    const prompt = String(request.body?.prompt || "").trim();
+    if (!prompt) throw failure("invalid_prompt", "A run needs a prompt", 400);
+    if (runView(chat).status === "running") throw failure("run_busy", "The run is still answering", 409);
+    const model = String(request.body?.model || "");
+    await launchLiveSession({ chatId: chat.id, model, forceModel: Boolean(model) });
+    const generationId = await submitPrompt(chat.id, prompt);
+    response.status(201).json({ ...runView(registry.metadata(chat.id)), generationId });
   });
 
-  app.post("/v0/runs/:id/stop", async (request, response, next) => {
-    try {
-      const chat = runChat(request.params.id);
-      if (!chat) return response.status(404).json({ error: "run_not_found" });
-      if (backends.getByChatId(chat.id)) await stopGeneration(chat.id);
-      response.json(runView(chat));
-    } catch (error) { next(error); }
+  app.post("/v0/runs/:id/stop", async (request, response) => {
+    const chat = runChat(request.params.id);
+    if (!chat) return response.status(404).json({ error: "run_not_found" });
+    if (backends.getByChatId(chat.id)) await stopGeneration(chat.id);
+    response.json(runView(chat));
   });
 }

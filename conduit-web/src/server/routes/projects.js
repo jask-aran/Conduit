@@ -153,11 +153,9 @@ export function registerProjectRoutes(app, {
     ]);
     return { project, home: os.homedir(), parent: path.dirname(project.workingRoot), repository: Boolean(gitRoot), repositoryRoot: gitRoot, listing };
   };
-  app.get("/v0/computer", async (request, response, next) => {
-    try {
-      const project = await computerContext(request.query.path === undefined ? os.homedir() : request.query.path);
-      response.json(await readComputerLocation(project));
-    } catch (error) { next(error); }
+  app.get("/v0/computer", async (request, response) => {
+    const project = await computerContext(request.query.path === undefined ? os.homedir() : request.query.path);
+    response.json(await readComputerLocation(project));
   });
 
   /*
@@ -165,67 +163,61 @@ export function registerProjectRoutes(app, {
    * it makes available (their grants are set on the device), so its first is home and nothing above a root is
    * listed. Same shape as /v0/computer, its project standing for the place.
    */
-  app.get("/v0/nodes/:id/computer", async (request, response, next) => {
-    try {
-      const node = nodeHub && (await nodeHub.list()).find((item) => item.id === request.params.id);
-      if (!node) return response.status(404).json({ error: "node_not_found" });
-      if (!node.online) return response.status(503).json({ error: "device_offline", message: `${node.name} is offline` });
-      if (node.browse) {
-        // It lets this server browse it: any folder its user can list, by name and kind.
-        const seen = await nodeHub.computer(node.id, "list", String(request.query.path || ""));
-        const name = seen.path.split(/[\\/]/).filter(Boolean).at(-1) || seen.path;
-        const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name, workingRoot: seen.path, nodeId: node.id, kind: "workspace", sessions: [] };
-        return response.json({ project, home: seen.home, parent: seen.parent ?? seen.path, repository: false, repositoryRoot: null,
-          listing: { entries: seen.entries, cursor: null } });
-      }
-      if (!node.roots.length) return response.status(409).json({ error: "root_not_shared", message: `${node.name} makes no folders available yet` });
-      const place = placeOnDevice(node.roots, request.query.path === undefined || request.query.path === "" ? node.roots[0].label : request.query.path);
-      if (!place) return response.status(400).json({ error: "root_not_shared", message: `That folder is not one ${node.name} makes available` });
-      const host = deviceHost({ hub: nodeHub, nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, label: place.path });
-      const listing = await listWorkspaceDirectory(host);
-      const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name: place.sub.at(-1) || place.root.label, workingRoot: place.path,
-        nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, kind: "workspace", sessions: [] };
-      response.json({ project, home: node.roots[0].label, parent: place.parent ?? place.path, repository: false, repositoryRoot: null, listing });
-    } catch (error) { next(error); }
+  app.get("/v0/nodes/:id/computer", async (request, response) => {
+    const node = nodeHub && (await nodeHub.list()).find((item) => item.id === request.params.id);
+    if (!node) return response.status(404).json({ error: "node_not_found" });
+    if (!node.online) return response.status(503).json({ error: "device_offline", message: `${node.name} is offline` });
+    if (node.browse) {
+      // It lets this server browse it: any folder its user can list, by name and kind.
+      const seen = await nodeHub.computer(node.id, "list", String(request.query.path || ""));
+      const name = seen.path.split(/[\\/]/).filter(Boolean).at(-1) || seen.path;
+      const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name, workingRoot: seen.path, nodeId: node.id, kind: "workspace", sessions: [] };
+      return response.json({ project, home: seen.home, parent: seen.parent ?? seen.path, repository: false, repositoryRoot: null,
+        listing: { entries: seen.entries, cursor: null } });
+    }
+    if (!node.roots.length) return response.status(409).json({ error: "root_not_shared", message: `${node.name} makes no folders available yet` });
+    const place = placeOnDevice(node.roots, request.query.path === undefined || request.query.path === "" ? node.roots[0].label : request.query.path);
+    if (!place) return response.status(400).json({ error: "root_not_shared", message: `That folder is not one ${node.name} makes available` });
+    const host = deviceHost({ hub: nodeHub, nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, label: place.path });
+    const listing = await listWorkspaceDirectory(host);
+    const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name: place.sub.at(-1) || place.root.label, workingRoot: place.path,
+      nodeId: node.id, place: { root: place.root.id, path: place.sub.join("/") }, kind: "workspace", sessions: [] };
+    response.json({ project, home: node.roots[0].label, parent: place.parent ?? place.path, repository: false, repositoryRoot: null, listing });
   });
 
-  app.post("/v0/computer/prefetch", async (request, response, next) => {
-    try {
-      const project = await resolveComputerContext(String(request.body?.id || ""));
-      const paths = request.body?.paths;
-      if (!project || !Array.isArray(paths) || paths.length > 8 || paths.some((item) => typeof item !== "string")) {
-        return response.status(400).json({ error: "computer_prefetch_invalid" });
-      }
-      const locations = await Promise.all(paths.map(async (relativePath) => {
-        try {
-          const resolved = await resolveInspectorPath(project.workingRoot, relativePath, { kind: "directory" });
-          return await readComputerLocation(await computerContext(resolved.path));
-        } catch { return null; }
-      }));
-      response.json({ locations: locations.filter(Boolean) });
-    } catch (error) { next(error); }
+  app.post("/v0/computer/prefetch", async (request, response) => {
+    const project = await resolveComputerContext(String(request.body?.id || ""));
+    const paths = request.body?.paths;
+    if (!project || !Array.isArray(paths) || paths.length > 8 || paths.some((item) => typeof item !== "string")) {
+      return response.status(400).json({ error: "computer_prefetch_invalid" });
+    }
+    const locations = await Promise.all(paths.map(async (relativePath) => {
+      try {
+        const resolved = await resolveInspectorPath(project.workingRoot, relativePath, { kind: "directory" });
+        return await readComputerLocation(await computerContext(resolved.path));
+      } catch { return null; }
+    }));
+    response.json({ locations: locations.filter(Boolean) });
   });
 
-  app.get("/v0/projects", async (_request, response, next) => {
-    try {
-      const items = await projects.list();
-      const live = backends.list();
-      response.json({ projects: await Promise.all(items.map(async (project) => ({
-        ...project,
-        // Whose it is and what can be done there, so the client asks that and never `nodeId`.
-        capabilities: await backends.capabilities?.(project) || null,
-        sessions: registry.listProject(project.id).map((chat) => {
-          const process = live.find((item) => item.chatId === chat.id);
-          return {
-            ...chatView(chat),
-            liveStatus: process?.status || null,
-            liveId: process?.id || null,
-            liveActivity: process?.activity || null,
-            liveActive: process?.active || false,
-          };
-        }),
-      }))), live });
-    } catch (error) { next(error); }
+  app.get("/v0/projects", async (_request, response) => {
+    const items = await projects.list();
+    const live = backends.list();
+    response.json({ projects: await Promise.all(items.map(async (project) => ({
+      ...project,
+      // Whose it is and what can be done there, so the client asks that and never `nodeId`.
+      capabilities: await backends.capabilities?.(project) || null,
+      sessions: registry.listProject(project.id).map((chat) => {
+        const process = live.find((item) => item.chatId === chat.id);
+        return {
+          ...chatView(chat),
+          liveStatus: process?.status || null,
+          liveId: process?.id || null,
+          liveActivity: process?.activity || null,
+          liveActive: process?.active || false,
+        };
+      }),
+    }))), live });
   });
 
   app.get("/v0/projects/:id/dashboard", async (request, response, next) => {
@@ -259,18 +251,16 @@ export function registerProjectRoutes(app, {
     }
   });
 
-  app.post("/v0/workspaces/preview", async (request, response, next) => {
-    try {
-      const mode = String(request.body?.mode || "").trim().toLowerCase();
-      if (!["link", "linked", "create", "created"].includes(mode)) {
-        return response.status(400).json({ error: "workspace_preview_mode_invalid", message: "Preview supports linking or creating a folder" });
-      }
-      response.json(await projects.previewWorkspace({
-        mode,
-        path: request.body?.path,
-        directoryName: request.body?.directoryName,
-      }));
-    } catch (error) { next(error); }
+  app.post("/v0/workspaces/preview", async (request, response) => {
+    const mode = String(request.body?.mode || "").trim().toLowerCase();
+    if (!["link", "linked", "create", "created"].includes(mode)) {
+      return response.status(400).json({ error: "workspace_preview_mode_invalid", message: "Preview supports linking or creating a folder" });
+    }
+    response.json(await projects.previewWorkspace({
+      mode,
+      path: request.body?.path,
+      directoryName: request.body?.directoryName,
+    }));
   });
 
   app.get("/v0/workspace-operations/:id", (request, response) => {
@@ -279,12 +269,10 @@ export function registerProjectRoutes(app, {
     response.json(operation);
   });
 
-  app.delete("/v0/workspace-operations/:id", async (request, response, next) => {
-    try {
-      const operation = await projects.cancelCloneOperation(request.params.id);
-      if (!operation) return response.status(404).json({ error: "workspace_operation_not_found" });
-      response.json(operation);
-    } catch (error) { next(error); }
+  app.delete("/v0/workspace-operations/:id", async (request, response) => {
+    const operation = await projects.cancelCloneOperation(request.params.id);
+    if (!operation) return response.status(404).json({ error: "workspace_operation_not_found" });
+    response.json(operation);
   });
 
   app.post("/v0/projects", async (request, response, next) => {
@@ -358,152 +346,132 @@ export function registerProjectRoutes(app, {
     }
   });
 
-  app.patch("/v0/projects/:id", async (request, response, next) => {
-    try {
-      const current = await projects.get(request.params.id);
-      if (!current) return response.status(404).json({ error: "project_not_found" });
-      const hasName = Object.hasOwn(request.body || {}, "name");
-      const hasDefault = Object.hasOwn(request.body || {}, "defaultTemplateId");
-      const hasAppearance = Object.hasOwn(request.body || {}, "workspaceAppearance");
-      if (!hasName && !hasDefault && !hasAppearance) return response.status(400).json({ error: "project_update_required" });
-      const changes = {};
-      if (hasName) {
-        changes.name = String(request.body.name || "").trim();
-        if (!changes.name) return response.status(400).json({ error: "project_name_required" });
-      }
-      if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(config, request.body.defaultTemplateId, null);
-      if (hasAppearance) {
-        if (current.kind !== "workspace" && !["linked", "created", "cloned"].includes(current.origin)) return response.status(400).json({ error: "workspace_appearance_not_supported" });
-        changes.workspaceAppearance = normalizeWorkspaceAppearance(request.body.workspaceAppearance);
-      }
-      const project = await projects.update(request.params.id, changes);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json(project);
-    } catch (error) { next(error); }
+  app.patch("/v0/projects/:id", async (request, response) => {
+    const current = await projects.get(request.params.id);
+    if (!current) return response.status(404).json({ error: "project_not_found" });
+    const hasName = Object.hasOwn(request.body || {}, "name");
+    const hasDefault = Object.hasOwn(request.body || {}, "defaultTemplateId");
+    const hasAppearance = Object.hasOwn(request.body || {}, "workspaceAppearance");
+    if (!hasName && !hasDefault && !hasAppearance) return response.status(400).json({ error: "project_update_required" });
+    const changes = {};
+    if (hasName) {
+      changes.name = String(request.body.name || "").trim();
+      if (!changes.name) return response.status(400).json({ error: "project_name_required" });
+    }
+    if (hasDefault) changes.defaultTemplateId = resolveProjectDefaultTemplateId(config, request.body.defaultTemplateId, null);
+    if (hasAppearance) {
+      if (current.kind !== "workspace" && !["linked", "created", "cloned"].includes(current.origin)) return response.status(400).json({ error: "workspace_appearance_not_supported" });
+      changes.workspaceAppearance = normalizeWorkspaceAppearance(request.body.workspaceAppearance);
+    }
+    const project = await projects.update(request.params.id, changes);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.json(project);
   });
 
-  app.get("/v0/projects/:id/tree", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      const listing = await listWorkspaceDirectory(rootOf(project), request.query.path, { after: request.query.after });
-      response.json({ path: String(request.query.path || ""), ...listing });
-    } catch (error) { next(error); }
+  app.get("/v0/projects/:id/tree", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    const listing = await listWorkspaceDirectory(rootOf(project), request.query.path, { after: request.query.after });
+    response.json({ path: String(request.query.path || ""), ...listing });
   });
 
-  app.get("/v0/projects/:id/workspace/version", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths), tag: request.params.id }));
-    } catch (error) { next(error); }
+  app.get("/v0/projects/:id/workspace/version", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths), tag: request.params.id }));
   });
 
   // A grant to read this workspace's files from its node itself, the shortest way (nodes/direct.js).
-  app.get("/v0/projects/:id/direct", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      const nodeId = remoteNode(project);
-      if (!nodeId) return response.status(404).json({ error: "direct_not_on_node" });
-      // The page asking is named in the grant, so the node lets it read the answer (the apps' origins it knows already).
-      // It says which it is: a same-origin request carries no Origin. Naming another gains nothing; it holds the grant.
-      const named = String(request.query.origin || request.headers.origin || "");
-      const origin = /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(named) ? named.toLowerCase() : "";
-      const grant = await nodeHub.directGrant(nodeId, project.place, project.workingRoot, origin);
-      if (!grant) return response.status(404).json({ error: "direct_unavailable" });
-      response.setHeader("Cache-Control", "no-store");
-      response.json(grant);
-    } catch (error) { next(error); }
+  app.get("/v0/projects/:id/direct", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    const nodeId = remoteNode(project);
+    if (!nodeId) return response.status(404).json({ error: "direct_not_on_node" });
+    // The page asking is named in the grant, so the node lets it read the answer (the apps' origins it knows already).
+    // It says which it is: a same-origin request carries no Origin. Naming another gains nothing; it holds the grant.
+    const named = String(request.query.origin || request.headers.origin || "");
+    const origin = /^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(named) ? named.toLowerCase() : "";
+    const grant = await nodeHub.directGrant(nodeId, project.place, project.workingRoot, origin);
+    if (!grant) return response.status(404).json({ error: "direct_unavailable" });
+    response.setHeader("Cache-Control", "no-store");
+    response.json(grant);
   });
 
-  app.get("/v0/projects/:id/file", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      const root = rootOf(project);
-      if (request.query.download === "1" || request.query.inline === "1") {
-        const resolved = await resolveInspectorPath(root, request.query.path, { kind: "file" });
-        const metadata = await readWorkspaceFileMetadata(root, request.query.path);
-        const inline = request.query.inline === "1";
-        if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) {
-          return response.status(415).json({ error: "unsupported_inline_type" });
-        }
-        if (inline && metadata.mime === "image/svg+xml") response.setHeader("Content-Security-Policy", "sandbox");
-        const etag = `"${metadata.revision}"`;
-        response.setHeader("ETag", etag);
-        if (request.headers["if-none-match"] === etag) return response.status(304).end();
-        const downloadName = encodeURIComponent(path.basename(resolved.relativePath)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-        response.setHeader("Content-Type", metadata.mime);
-        response.setHeader("X-Content-Type-Options", "nosniff");
-        response.setHeader("Cache-Control", "private, no-cache");
-        response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-        if (resolved.path) return response.sendFile(path.basename(resolved.path), { root: path.dirname(resolved.path), dotfiles: "allow" });
-        // A device's file comes through the device, whole.
-        if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
-        return response.end(await resolved.host.read(resolved.relativePath));
+  app.get("/v0/projects/:id/file", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+    const root = rootOf(project);
+    if (request.query.download === "1" || request.query.inline === "1") {
+      const resolved = await resolveInspectorPath(root, request.query.path, { kind: "file" });
+      const metadata = await readWorkspaceFileMetadata(root, request.query.path);
+      const inline = request.query.inline === "1";
+      if (inline && !["image", "pdf", "audio", "video"].includes(metadata.kind)) {
+        return response.status(415).json({ error: "unsupported_inline_type" });
       }
-      if (request.query.metadata === "1") {
-        return response.json(await readWorkspaceFileMetadata(root, request.query.path));
-      }
-      response.json(await readWorkspaceFile(root, request.query.path, {
-        forceText: request.query.force === "text",
-        preview: request.query.preview === "1",
-      }));
-    } catch (error) { next(error); }
+      if (inline && metadata.mime === "image/svg+xml") response.setHeader("Content-Security-Policy", "sandbox");
+      const etag = `"${metadata.revision}"`;
+      response.setHeader("ETag", etag);
+      if (request.headers["if-none-match"] === etag) return response.status(304).end();
+      const downloadName = encodeURIComponent(path.basename(resolved.relativePath)).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+      response.setHeader("Content-Type", metadata.mime);
+      response.setHeader("X-Content-Type-Options", "nosniff");
+      response.setHeader("Cache-Control", "private, no-cache");
+      response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
+      if (resolved.path) return response.sendFile(path.basename(resolved.path), { root: path.dirname(resolved.path), dotfiles: "allow" });
+      // A device's file comes through the device, whole.
+      if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
+      return response.end(await resolved.host.read(resolved.relativePath));
+    }
+    if (request.query.metadata === "1") {
+      return response.json(await readWorkspaceFileMetadata(root, request.query.path));
+    }
+    response.json(await readWorkspaceFile(root, request.query.path, {
+      forceText: request.query.force === "text",
+      preview: request.query.preview === "1",
+    }));
   });
 
-  app.put("/v0/projects/:id/file", express.raw({ type: "application/octet-stream", limit: config.maxAttachmentBytes }), async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
-      const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      const written = await writeWorkspaceFile(rootOf(project), request.query.path, content, { expectedRevision });
-      response.status(expectedRevision == null ? 201 : 200).json(written);
-    } catch (error) { next(error); }
+  app.put("/v0/projects/:id/file", express.raw({ type: "application/octet-stream", limit: config.maxAttachmentBytes }), async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+    const expectedRevision = typeof request.headers["if-match"] === "string" ? request.headers["if-match"] : null;
+    const content = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+    const written = await writeWorkspaceFile(rootOf(project), request.query.path, content, { expectedRevision });
+    response.status(expectedRevision == null ? 201 : 200).json(written);
   });
 
-  app.delete("/v0/projects/:id/file", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await deleteWorkspaceFile(rootOf(project), request.query.path);
-      response.status(204).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/projects/:id/file", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+    await deleteWorkspaceFile(rootOf(project), request.query.path);
+    response.status(204).end();
   });
 
-  app.post("/v0/projects/:id/directory", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
-      response.status(201).json(await createWorkspaceDirectory(rootOf(project), request.body.path));
-    } catch (error) { next(error); }
+  app.post("/v0/projects/:id/directory", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.body?.path) return response.status(400).json({ error: "workspace_path_required" });
+    response.status(201).json(await createWorkspaceDirectory(rootOf(project), request.body.path));
   });
 
-  app.patch("/v0/projects/:id/entry", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.body?.path || !request.body?.destination) {
-        return response.status(400).json({ error: "workspace_path_required" });
-      }
-      response.json(await moveWorkspaceEntry(rootOf(project), request.body.path, request.body.destination));
-    } catch (error) { next(error); }
+  app.patch("/v0/projects/:id/entry", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.body?.path || !request.body?.destination) {
+      return response.status(400).json({ error: "workspace_path_required" });
+    }
+    response.json(await moveWorkspaceEntry(rootOf(project), request.body.path, request.body.destination));
   });
 
-  app.delete("/v0/projects/:id/directory", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
-      await deleteWorkspaceDirectory(rootOf(project), request.query.path);
-      response.status(204).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/projects/:id/directory", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (!request.query.path) return response.status(400).json({ error: "workspace_path_required" });
+    await deleteWorkspaceDirectory(rootOf(project), request.query.path);
+    response.status(204).end();
   });
 
   app.get("/v0/projects/:id/diff", async (request, response, next) => {
@@ -530,26 +498,24 @@ export function registerProjectRoutes(app, {
     }
   });
 
-  app.get("/v0/projects/:id/turn-artifact", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
-      const chat = registry.metadata(chatId);
-      if (!chat || chat.projectId !== project.id) return response.json(null);
-      // Turn checkpoints snapshot the workspace where it is; a place that cannot (a device without Git there) has none.
-      const can = await backends.capabilities?.(project);
-      if (can && !can.checkpoints) return response.json(null);
-      if (request.query.timeline === "1") {
-        return response.json(await turnCheckpoints.timeline(chatId, rootOf(project)));
-      }
-      const baseline = request.query.baseline === "turn" ? "turn" : "chat";
-      const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
-      const artifact = request.query.path
-        ? await turnCheckpoints.compare(chatId, rootOf(project), request.query.path, checkpointId, baseline)
-        : await turnCheckpoints.review(chatId, rootOf(project), baseline, checkpointId);
-      response.json(artifact);
-    } catch (error) { next(error); }
+  app.get("/v0/projects/:id/turn-artifact", async (request, response) => {
+    const project = await inspectionContext(request.params.id);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
+    const chat = registry.metadata(chatId);
+    if (!chat || chat.projectId !== project.id) return response.json(null);
+    // Turn checkpoints snapshot the workspace where it is; a place that cannot (a device without Git there) has none.
+    const can = await backends.capabilities?.(project);
+    if (can && !can.checkpoints) return response.json(null);
+    if (request.query.timeline === "1") {
+      return response.json(await turnCheckpoints.timeline(chatId, rootOf(project)));
+    }
+    const baseline = request.query.baseline === "turn" ? "turn" : "chat";
+    const checkpointId = typeof request.query.checkpointId === "string" ? request.query.checkpointId : null;
+    const artifact = request.query.path
+      ? await turnCheckpoints.compare(chatId, rootOf(project), request.query.path, checkpointId, baseline)
+      : await turnCheckpoints.review(chatId, rootOf(project), baseline, checkpointId);
+    response.json(artifact);
   });
 
   app.get("/v0/projects/:id/commits/:hash", async (request, response, next) => {
@@ -571,51 +537,47 @@ export function registerProjectRoutes(app, {
     }
   });
 
-  app.post("/v0/projects/:id/git", async (request, response, next) => {
-    try {
-      const project = await inspectionContext(request.params.id, true);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
-      response.json(await runWorkspaceGitAction(rootOf(project), {
-        action: request.body?.action,
-        relativePath: request.body?.path,
-        message: request.body?.message,
-      }));
-    } catch (error) { next(error); }
+  app.post("/v0/projects/:id/git", async (request, response) => {
+    const project = await inspectionContext(request.params.id, true);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (project.kind !== "workspace") return response.status(403).json({ error: "source_control_disabled", message: "Source Control is available only for Workspaces." });
+    response.json(await runWorkspaceGitAction(rootOf(project), {
+      action: request.body?.action,
+      relativePath: request.body?.path,
+      message: request.body?.message,
+    }));
   });
 
   // Every Conduit chat of one place moves to another; chats of other harnesses
   // stay (their history is the harness's, tied to the folder) and are listed.
-  app.post("/v0/projects/:id/move-sessions", async (request, response, next) => {
-    try {
-      const source = await projects.get(request.params.id);
-      const target = await projects.get(request.body?.projectId || "");
-      if (!source || !target) return response.status(404).json({ error: "project_not_found" });
-      await lifecycle.withProjects([source.id, target.id], async () => {
-        await projects.validate(source);
-        await projects.validate(target);
-        if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
-        const moved = [];
-        const kept = [];
-        for (const { id } of registry.listProject(source.id, { includeHidden: true })) {
-          const item = await lifecycle.run(id, async () => {
-            const chat = registry.metadata(id);
-            if (!chat || chat.projectId !== source.id) return null;
-            lifecycle.assertAvailable(chat.id, source.id);
-            lifecycle.assertAvailable(chat.id, target.id);
-            try {
-              return { sourceId: chat.id, session: chatView(await moveDurableChat({ chat, source, target, backends, registry })) };
-            } catch (error) {
-              if (error.code !== "chat_move_not_supported") throw error;
-              kept.push({ id: chat.id, reason: error.message });
-              return null;
-            }
-          });
-          if (item) moved.push(item);
-        }
-        response.json({ moved, kept });
-      });
-    } catch (error) { next(error); }
+  app.post("/v0/projects/:id/move-sessions", async (request, response) => {
+    const source = await projects.get(request.params.id);
+    const target = await projects.get(request.body?.projectId || "");
+    if (!source || !target) return response.status(404).json({ error: "project_not_found" });
+    await lifecycle.withProjects([source.id, target.id], async () => {
+      await projects.validate(source);
+      await projects.validate(target);
+      if (source.id === target.id) throw Object.assign(new Error("Project target is unchanged"), { code: "project_target_unchanged", status: 409 });
+      const moved = [];
+      const kept = [];
+      for (const { id } of registry.listProject(source.id, { includeHidden: true })) {
+        const item = await lifecycle.run(id, async () => {
+          const chat = registry.metadata(id);
+          if (!chat || chat.projectId !== source.id) return null;
+          lifecycle.assertAvailable(chat.id, source.id);
+          lifecycle.assertAvailable(chat.id, target.id);
+          try {
+            return { sourceId: chat.id, session: chatView(await moveDurableChat({ chat, source, target, backends, registry })) };
+          } catch (error) {
+            if (error.code !== "chat_move_not_supported") throw error;
+            kept.push({ id: chat.id, reason: error.message });
+            return null;
+          }
+        });
+        if (item) moved.push(item);
+      }
+      response.json({ moved, kept });
+    });
   });
 
   app.delete("/v0/projects/:id", async (request, response, next) => {

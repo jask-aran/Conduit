@@ -122,64 +122,58 @@ export function registerChatRoutes(app, {
     return reply ? { text: reply.content.slice(0, 2000), at: reply.timestamp || chat.lastAssistantCompletedAt || null } : null;
   };
 
-  app.get("/v0/chats/recent", async (request, response, next) => {
-    try {
-      const limit = Math.min(50, Math.max(1, Math.trunc(Number(request.query.limit) || 20)));
-      const places = new Map((await projects.list()).map((project) => [project.id, project]));
-      const live = new Map(backends.list().map((process) => [process.chatId, process]));
-      const sort = preferences?.get().chatSort === "created" ? "created" : "latest";
-      // Match the dashboard/sidebar comparator, including numeric timestamps.
-      const activity = (chat) => {
-        const value = sort === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt;
-        if (typeof value === "string") return value;
-        if (typeof value !== "number" || !Number.isFinite(value)) return "";
-        const date = new Date(value < 1_000_000_000_000 ? value * 1_000 : value);
-        return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-      };
-      const chats = registry.list().filter((chat) => chat.status === "active" && !chat.untracked && places.has(chat.projectId))
-        .sort((a, b) => activity(b).localeCompare(activity(a)) || b.id.localeCompare(a.id)).slice(0, limit);
-      response.set("Cache-Control", "no-store");
-      const results = new Array(chats.length);
-      let nextIndex = 0;
-      await Promise.all(Array.from({ length: Math.min(4, chats.length) }, async () => {
-        while (nextIndex < chats.length) {
-          const index = nextIndex++;
-          const chat = chats[index];
-          results[index] = {
-            chatId: chat.id, title: chat.title || "", projectId: chat.projectId,
-            projectName: places.get(chat.projectId).name, lastMessageAt: chat.lastMessageAt || null,
-            liveStatus: live.get(chat.id)?.status || null,
-            latestReply: await latestReply(chat, places.get(chat.projectId)),
-          };
-        }
-      }));
-      response.json({ chats: results });
-    } catch (error) { next(error); }
+  app.get("/v0/chats/recent", async (request, response) => {
+    const limit = Math.min(50, Math.max(1, Math.trunc(Number(request.query.limit) || 20)));
+    const places = new Map((await projects.list()).map((project) => [project.id, project]));
+    const live = new Map(backends.list().map((process) => [process.chatId, process]));
+    const sort = preferences?.get().chatSort === "created" ? "created" : "latest";
+    // Match the dashboard/sidebar comparator, including numeric timestamps.
+    const activity = (chat) => {
+      const value = sort === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt;
+      if (typeof value === "string") return value;
+      if (typeof value !== "number" || !Number.isFinite(value)) return "";
+      const date = new Date(value < 1_000_000_000_000 ? value * 1_000 : value);
+      return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+    };
+    const chats = registry.list().filter((chat) => chat.status === "active" && !chat.untracked && places.has(chat.projectId))
+      .sort((a, b) => activity(b).localeCompare(activity(a)) || b.id.localeCompare(a.id)).slice(0, limit);
+    response.set("Cache-Control", "no-store");
+    const results = new Array(chats.length);
+    let nextIndex = 0;
+    await Promise.all(Array.from({ length: Math.min(4, chats.length) }, async () => {
+      while (nextIndex < chats.length) {
+        const index = nextIndex++;
+        const chat = chats[index];
+        results[index] = {
+          chatId: chat.id, title: chat.title || "", projectId: chat.projectId,
+          projectName: places.get(chat.projectId).name, lastMessageAt: chat.lastMessageAt || null,
+          liveStatus: live.get(chat.id)?.status || null,
+          latestReply: await latestReply(chat, places.get(chat.projectId)),
+        };
+      }
+    }));
+    response.json({ chats: results });
   });
 
-  app.get("/v0/chats/:chatId/agents", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-        const context = await findChatContext(request.params.chatId);
-        if (!context) return response.status(404).json({ error: "chat_not_found" });
-        const adapter = backends.forChat(context.chat);
-        response.json({ agents: typeof adapter.agents === "function" ? await adapter.agents(context.chat) : [] });
-      });
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/agents", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      response.json({ agents: typeof adapter.agents === "function" ? await adapter.agents(context.chat) : [] });
+    });
   });
 
-  app.post("/v0/chats/:chatId/agents/:id/stop", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-        const context = await findChatContext(request.params.chatId);
-        if (!context) return response.status(404).json({ error: "chat_not_found" });
-        const adapter = backends.forChat(context.chat);
-        if (!adapter.stopAgent || !await adapter.stopAgent(context.chat, request.params.id)) {
-          return response.status(409).json({ error: "agent_not_running" });
-        }
-        response.status(204).end();
-      });
-    } catch (error) { next(error); }
+  app.post("/v0/chats/:chatId/agents/:id/stop", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return response.status(404).json({ error: "chat_not_found" });
+      const adapter = backends.forChat(context.chat);
+      if (!adapter.stopAgent || !await adapter.stopAgent(context.chat, request.params.id)) {
+        return response.status(409).json({ error: "agent_not_running" });
+      }
+      response.status(204).end();
+    });
   });
 
   const discoverable = discoverableFrom(backends);
@@ -202,81 +196,75 @@ export function registerChatRoutes(app, {
       if (error.code !== "live_process_limit") console.error("Could not start new chat runtime", { chatId: chat.id, error });
     });
   };
-  app.get("/v0/projects/:projectId/backend-sessions", async (request, response, next) => {
-    try {
-      const project = await projects.get(request.params.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
-      const implementation = String(request.query.implementation || defaultDiscovery());
-      if (!discoverable(implementation)) {
-        return response.status(409).json({ error: "backend_discovery_unavailable" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      const sessions = await adapter.listSessions({ cwd: project.workingRoot });
-      const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true, includeUntracked: false }), sessions,
-        projectId: project.id, implementation });
-      response.json({ implementation, replayFidelity: "full",
-        ...projection });
-    } catch (error) { next(error); }
+  app.get("/v0/projects/:projectId/backend-sessions", async (request, response) => {
+    const project = await projects.get(request.params.projectId);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    const implementation = String(request.query.implementation || defaultDiscovery());
+    if (!discoverable(implementation)) {
+      return response.status(409).json({ error: "backend_discovery_unavailable" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    const sessions = await adapter.listSessions({ cwd: project.workingRoot });
+    const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true, includeUntracked: false }), sessions,
+      projectId: project.id, implementation });
+    response.json({ implementation, replayFidelity: "full",
+      ...projection });
   });
 
-  app.post("/v0/projects/:projectId/backend-sessions/:sessionId/adopt", async (request, response, next) => {
-    try {
-      const project = await projects.get(request.params.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await lifecycle.withProjects([project.id], async () => {
-        await projects.validate(project);
-        const implementation = String(request.query.implementation || defaultDiscovery());
-        const manifest = discoverable(implementation);
-        if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
-        const adapter = backends.forImplementation(implementation);
-        const liveId = typeof request.body?.liveSessionId === "string" ? request.body.liveSessionId : "";
-        const live = liveId ? adapter.get(liveId) : null;
-        if (liveId && (!live || live.sessionId !== request.params.sessionId)) {
-          return response.status(409).json({ error: "live_session_mismatch" });
-        }
-        const session = (await adapter.listSessions({ cwd: project.workingRoot }))
-          .find((item) => item.id === request.params.sessionId);
-        if (!session) return response.status(404).json({ error: "backend_session_not_found" });
-        const alreadyTracked = registry.list({ includeHidden: true, includeUntracked: false }).find((chat) =>
-          chat.backend?.implementation === implementation && opaqueSessionId(chat) === session.id);
-        if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
-        const chat = await registry.create(project, { backend: {
-          profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
-          implementation, installationId: manifest.installationId, opaqueSession: { threadId: session.id },
-        } });
-        const timestamp = new Date().toISOString();
-        // Adopted history is not new to anyone: seed the read watermark past it
-        // so the thread does not arrive unread.
-        await registry.update(chat.id, { status: "active", title: session.title,
-          lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp,
-          lastReadAt: session.updatedAt || timestamp });
-        if (live) {
-          adapter.track(live.id, chat.id);
-          live.ephemeral = false;
-        }
-        response.status(201).json(chatView(registry.metadata(chat.id)));
-      });
-    } catch (error) { next(error); }
+  app.post("/v0/projects/:projectId/backend-sessions/:sessionId/adopt", async (request, response) => {
+    const project = await projects.get(request.params.projectId);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await lifecycle.withProjects([project.id], async () => {
+      await projects.validate(project);
+      const implementation = String(request.query.implementation || defaultDiscovery());
+      const manifest = discoverable(implementation);
+      if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
+      const adapter = backends.forImplementation(implementation);
+      const liveId = typeof request.body?.liveSessionId === "string" ? request.body.liveSessionId : "";
+      const live = liveId ? adapter.get(liveId) : null;
+      if (liveId && (!live || live.sessionId !== request.params.sessionId)) {
+        return response.status(409).json({ error: "live_session_mismatch" });
+      }
+      const session = (await adapter.listSessions({ cwd: project.workingRoot }))
+        .find((item) => item.id === request.params.sessionId);
+      if (!session) return response.status(404).json({ error: "backend_session_not_found" });
+      const alreadyTracked = registry.list({ includeHidden: true, includeUntracked: false }).find((chat) =>
+        chat.backend?.implementation === implementation && opaqueSessionId(chat) === session.id);
+      if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
+      const chat = await registry.create(project, { backend: {
+        profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
+        implementation, installationId: manifest.installationId, opaqueSession: { threadId: session.id },
+      } });
+      const timestamp = new Date().toISOString();
+      // Adopted history is not new to anyone: seed the read watermark past it
+      // so the thread does not arrive unread.
+      await registry.update(chat.id, { status: "active", title: session.title,
+        lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp,
+        lastReadAt: session.updatedAt || timestamp });
+      if (live) {
+        adapter.track(live.id, chat.id);
+        live.ephemeral = false;
+      }
+      response.status(201).json(chatView(registry.metadata(chat.id)));
+    });
   });
 
   // Tracking an untracked thread keeps its chat and everything in it, and only
   // makes it Conduit's: it stops being hidden and belongs to the workspace its
   // folder is, which the caller has made one if it was not.
-  app.post("/v0/chats/:chatId/track", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      if (!context.chat.untracked) return response.json(chatView(context.chat));
-      const project = await projects.get(String(request.body?.projectId || ""));
-      const real = (root) => fs.realpath(root).catch(() => root);
-      const roots = project && await Promise.all([real(project.workingRoot), real(context.project.workingRoot)]);
-      if (!roots || roots[0] !== roots[1]) {
-        return response.status(400).json({ error: "workspace_mismatch" });
-      }
-      await registry.update(context.chat.id, { untracked: false, projectId: project.id });
-      response.json(chatView(registry.metadata(context.chat.id)));
-    } catch (error) { next(error); }
+  app.post("/v0/chats/:chatId/track", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    if (!context.chat.untracked) return response.json(chatView(context.chat));
+    const project = await projects.get(String(request.body?.projectId || ""));
+    const real = (root) => fs.realpath(root).catch(() => root);
+    const roots = project && await Promise.all([real(project.workingRoot), real(context.project.workingRoot)]);
+    if (!roots || roots[0] !== roots[1]) {
+      return response.status(400).json({ error: "workspace_mismatch" });
+    }
+    await registry.update(context.chat.id, { untracked: false, projectId: project.id });
+    response.json(chatView(registry.metadata(context.chat.id)));
   });
 
   // Profiles say which harness they elect; harnesses say what they can do.
@@ -285,23 +273,19 @@ export function registerChatRoutes(app, {
     harnesses: harnessCapabilities(),
   }));
   // Settings › System › Usage: Conduit's agents' spend per day (usage-ledger.js), the last `days` (default 30).
-  app.get("/v0/usage", async (request, response, next) => {
-    try {
-      const runtime = backends.adapters.get("conduit-runtime")?.runtime;
-      if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
-      await runtime.open();
-      if (!runtime.usage) return response.status(503).json({ error: "usage_unavailable" });
-      const days = Math.min(366, Math.max(1, Number.parseInt(String(request.query.days || "30"), 10) || 30));
-      response.json(runtime.usage.view(days));
-    } catch (error) { next(error); }
+  app.get("/v0/usage", async (request, response) => {
+    const runtime = backends.adapters.get("conduit-runtime")?.runtime;
+    if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
+    await runtime.open();
+    if (!runtime.usage) return response.status(503).json({ error: "usage_unavailable" });
+    const days = Math.min(366, Math.max(1, Number.parseInt(String(request.query.days || "30"), 10) || 30));
+    response.json(runtime.usage.view(days));
   });
   // Settings › AI › Tools: each Conduit profile's tools, their source and whether they ask. Read-only.
-  app.get("/v0/profiles/tools", async (_request, response, next) => {
-    try {
-      const runtime = backends.adapters.get("conduit-runtime")?.runtime;
-      if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
-      response.json({ profiles: await runtime.toolsView() });
-    } catch (error) { next(error); }
+  app.get("/v0/profiles/tools", async (_request, response) => {
+    const runtime = backends.adapters.get("conduit-runtime")?.runtime;
+    if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
+    response.json({ profiles: await runtime.toolsView() });
   });
   // A place is a project or workspace, or -- for an untracked thread's chat --
   // any folder on the Computer.
@@ -343,402 +327,372 @@ export function registerChatRoutes(app, {
     }
   });
 
-  app.post("/v0/chats", async (request, response, next) => {
-    try {
-      request.body = profileSelection(request.body);
-      const project = await projects.get(request.body?.projectId || "chat");
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await lifecycle.withProjects([project.id], async () => {
-        await projects.validate(project);
-        // What the workspace's place runs (src/place.js): on the head, what is
-        // installed here; on a device, its own harnesses and the durable agent.
-        const can = await backends.capabilities?.(project);
-        const offered = (implementation) => !can || can.harnesses.includes(implementation);
-        const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-        // A profile that is not an agent's is a Conduit template: the durable agent.
-        const implementation = selectedProfile?.agent.implementation || "conduit-runtime";
-        if (!offered(implementation)) {
-          return response.status(409).json({ error: "harness_not_here",
-            message: `${selectedProfile?.label || config.piTemplates.find((item) => item.id === request.body?.profileId)?.label || "That profile"} is not available on ${can.device.name}` });
+  app.post("/v0/chats", async (request, response) => {
+    request.body = profileSelection(request.body);
+    const project = await projects.get(request.body?.projectId || "chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await lifecycle.withProjects([project.id], async () => {
+      await projects.validate(project);
+      // What the workspace's place runs (src/place.js): on the head, what is
+      // installed here; on a device, its own harnesses and the durable agent.
+      const can = await backends.capabilities?.(project);
+      const offered = (implementation) => !can || can.harnesses.includes(implementation);
+      const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+      // A profile that is not an agent's is a Conduit template: the durable agent.
+      const implementation = selectedProfile?.agent.implementation || "conduit-runtime";
+      if (!offered(implementation)) {
+        return response.status(409).json({ error: "harness_not_here",
+          message: `${selectedProfile?.label || config.piTemplates.find((item) => item.id === request.body?.profileId)?.label || "That profile"} is not available on ${can.device.name}` });
+      }
+      if (selectedProfile) {
+        const profileId = request.body.profileId;
+        if ((!can && selectedProfile.disabled) || !backends.adapters.has(selectedProfile.agent.implementation)) {
+          return response.status(409).json({ error: `${profileId}_unavailable` });
         }
-        if (selectedProfile) {
-          const profileId = request.body.profileId;
-          if ((!can && selectedProfile.disabled) || !backends.adapters.has(selectedProfile.agent.implementation)) {
-            return response.status(409).json({ error: `${profileId}_unavailable` });
-          }
-          const chat = await registry.create(project, { backend: {
-            profileId, profileRevision: null, management: selectedProfile.management,
-            ...selectedProfile.agent, opaqueSession: null,
-          } });
-          return completeCreation(request, response, chat, project, { start: request.body?.warm === true });
-        }
-        const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
-        const template = requestedTemplateId
-          ? resolveTemplate(config, requestedTemplateId)
-          : defaultTemplate();
-        if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
-        if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-        const runtimeKind = request.body?.runtimeKind || "conduit_profile";
-        if (runtimeKind !== "conduit_profile") {
-          return response.status(400).json({ error: "unknown_runtime_kind" });
-        }
-        // The durable agent runs in process: there is no process to warm.
-        // `roaming`: a chat with no home device, whose tools pick one per call
-        // (decision 21; the persistent agent's shape). Only from this server's own folders.
-        const roaming = request.body?.roaming === true && project.local;
-        const chat = await registry.create(project, {
-          templateId: template.id,
-          templateVersion: template.version,
-          backend: { ...templateBackend(template), ...(roaming ? { roaming: true } : {}) },
-        });
-        completeCreation(request, response, chat, project, { start: request.body?.warm === true });
+        const chat = await registry.create(project, { backend: {
+          profileId, profileRevision: null, management: selectedProfile.management,
+          ...selectedProfile.agent, opaqueSession: null,
+        } });
+        return completeCreation(request, response, chat, project, { start: request.body?.warm === true });
+      }
+      const requestedTemplateId = request.body?.templateId || project.defaultTemplateId || null;
+      const template = requestedTemplateId
+        ? resolveTemplate(config, requestedTemplateId)
+        : defaultTemplate();
+      if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
+      if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
+      const runtimeKind = request.body?.runtimeKind || "conduit_profile";
+      if (runtimeKind !== "conduit_profile") {
+        return response.status(400).json({ error: "unknown_runtime_kind" });
+      }
+      // The durable agent runs in process: there is no process to warm.
+      // `roaming`: a chat with no home device, whose tools pick one per call
+      // (decision 21; the persistent agent's shape). Only from this server's own folders.
+      const roaming = request.body?.roaming === true && project.local;
+      const chat = await registry.create(project, {
+        templateId: template.id,
+        templateVersion: template.version,
+        backend: { ...templateBackend(template), ...(roaming ? { roaming: true } : {}) },
       });
-    } catch (error) { next(error); }
+      completeCreation(request, response, chat, project, { start: request.body?.warm === true });
+    });
   });
 
-  app.get("/v0/chats/:chatId", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      response.json(chatView(context.chat));
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.json(chatView(context.chat));
   });
 
   // Start a durable chat's context again, optionally from a handoff note (backend only, for now).
-  app.post("/v0/chats/:chatId/reset", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      if (typeof adapter.reset !== "function") return response.status(409).json({ error: "reset_unsupported" });
-      await adapter.reset({ liveSessionId: backends.getByChatId(context.chat.id)?.id,
-        opaqueSession: context.chat.backend?.opaqueSession, handoff: request.body?.handoff });
-      response.json({ ok: true });
-    } catch (error) { next(error); }
+  app.post("/v0/chats/:chatId/reset", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    if (typeof adapter.reset !== "function") return response.status(409).json({ error: "reset_unsupported" });
+    await adapter.reset({ liveSessionId: backends.getByChatId(context.chat.id)?.id,
+      opaqueSession: context.chat.backend?.opaqueSession, handoff: request.body?.handoff });
+    response.json({ ok: true });
   });
 
   // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
-  app.get("/v0/chats/:chatId/subagents{/:conversationId}", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      if (typeof adapter.subagents !== "function") return response.json({ subagents: [] });
-      const options = { liveSessionId: backends.getByChatId(context.chat.id)?.id, opaqueSession: context.chat.backend?.opaqueSession };
-      const subagents = await adapter.subagents(options);
-      if (!request.params.conversationId) return response.json({ subagents });
-      if (!subagents.some((item) => item.conversationId === request.params.conversationId)) return response.status(404).json({ error: "subagent_not_found" });
-      response.json(await adapter.readTranscript({ opaqueSession: request.params.conversationId }));
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/subagents{/:conversationId}", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    if (typeof adapter.subagents !== "function") return response.json({ subagents: [] });
+    const options = { liveSessionId: backends.getByChatId(context.chat.id)?.id, opaqueSession: context.chat.backend?.opaqueSession };
+    const subagents = await adapter.subagents(options);
+    if (!request.params.conversationId) return response.json({ subagents });
+    if (!subagents.some((item) => item.conversationId === request.params.conversationId)) return response.status(404).json({ error: "subagent_not_found" });
+    response.json(await adapter.readTranscript({ opaqueSession: request.params.conversationId }));
   });
 
-  app.get("/v0/chats/:chatId/history", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      const capabilities = adapter.getCapabilities();
-      if (capabilities.history === "none") return response.status(409).json({ error: "chat_history_unavailable" });
-      const resident = backends.getByChatId(context.chat.id);
-      if (!resident && context.chat.status === "draft") return response.json({ leafId: null, tree: [] });
-      response.json(await adapter.readHistory({
-        liveSessionId: resident?.id,
-        chatId: context.chat.id,
-        opaqueSession: context.chat.backend?.opaqueSession,
-        project: context.project,
-      }));
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/history", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    const capabilities = adapter.getCapabilities();
+    if (capabilities.history === "none") return response.status(409).json({ error: "chat_history_unavailable" });
+    const resident = backends.getByChatId(context.chat.id);
+    if (!resident && context.chat.status === "draft") return response.json({ leafId: null, tree: [] });
+    response.json(await adapter.readHistory({
+      liveSessionId: resident?.id,
+      chatId: context.chat.id,
+      opaqueSession: context.chat.backend?.opaqueSession,
+      project: context.project,
+    }));
   });
 
-  app.get("/v0/chats/:chatId/commands", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      const resident = backends.getByChatId(context.chat.id);
-      const commands = resident
-        ? await adapter.listCommands(resident.id)
-        : await adapter.listAvailableCommands({
-          cwd: context.project.workingRoot,
-          template: templateForChat(context.chat, context.project),
-        });
-      response.json({ commands });
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/commands", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    const resident = backends.getByChatId(context.chat.id);
+    const commands = resident
+      ? await adapter.listCommands(resident.id)
+      : await adapter.listAvailableCommands({
+        cwd: context.project.workingRoot,
+        template: templateForChat(context.chat, context.project),
+      });
+    response.json({ commands });
   });
 
-  app.get("/v0/chats/:chatId/permission-profiles", async (request, response, next) => {
-    try {
+  app.get("/v0/chats/:chatId/permission-profiles", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function"
+      || typeof adapter.listAvailablePermissionModes !== "function") return response.json({ modes: [], selected: "" });
+    const resident = backends.getByChatId(context.chat.id);
+    const modes = resident
+      ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
+      : await adapter.listAvailablePermissionModes(context.project.workingRoot);
+    const selected = resident?.permissionMode || context.chat.backend.permissionMode
+      || (context.chat.backend.permissionProfile ? modes.find((mode) => mode.profile === context.chat.backend.permissionProfile)?.id : "")
+      || (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
+    response.json({ modes, selected });
+  });
+
+  app.patch("/v0/chats/:chatId/permission-profiles", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
+      lifecycle.assertAvailable(context.chat.id, context.project.id);
       const adapter = backends.forChat(context.chat);
       if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function"
-        || typeof adapter.listAvailablePermissionModes !== "function") return response.json({ modes: [], selected: "" });
+        || typeof adapter.listAvailablePermissionModes !== "function" || typeof adapter.setPermissionMode !== "function") {
+        return response.status(409).json({ error: "permission_profiles_unavailable" });
+      }
       const resident = backends.getByChatId(context.chat.id);
       const modes = resident
         ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
         : await adapter.listAvailablePermissionModes(context.project.workingRoot);
-      const selected = resident?.permissionMode || context.chat.backend.permissionMode
-        || (context.chat.backend.permissionProfile ? modes.find((mode) => mode.profile === context.chat.backend.permissionProfile)?.id : "")
-        || (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
+      const selected = String(request.body?.permissionMode || "").trim();
+      const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
+      if (!mode) return response.status(400).json({ error: "invalid_permission_mode" });
+      if (resident) await adapter.setPermissionMode(resident.id, mode);
+      const backend = { ...context.chat.backend, permissionMode: selected };
+      if (mode.profile) backend.permissionProfile = mode.profile;
+      else delete backend.permissionProfile;
+      if (mode.approvalPolicy) backend.approvalPolicy = mode.approvalPolicy;
+      else delete backend.approvalPolicy;
+      if (mode.approvalsReviewer) backend.approvalsReviewer = mode.approvalsReviewer;
+      else delete backend.approvalsReviewer;
+      await registry.update(context.chat.id, { backend });
       response.json({ modes, selected });
-    } catch (error) { next(error); }
+    });
   });
 
-  app.patch("/v0/chats/:chatId/permission-profiles", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-        const context = await findChatContext(request.params.chatId);
-        if (!context) return response.status(404).json({ error: "chat_not_found" });
-        lifecycle.assertAvailable(context.chat.id, context.project.id);
-        const adapter = backends.forChat(context.chat);
-        if (!adapter.getCapabilities().permissionModes || typeof adapter.listPermissionModes !== "function"
-          || typeof adapter.listAvailablePermissionModes !== "function" || typeof adapter.setPermissionMode !== "function") {
-          return response.status(409).json({ error: "permission_profiles_unavailable" });
-        }
-        const resident = backends.getByChatId(context.chat.id);
-        const modes = resident
-          ? await adapter.listPermissionModes(resident.id, context.project.workingRoot)
-          : await adapter.listAvailablePermissionModes(context.project.workingRoot);
-        const selected = String(request.body?.permissionMode || "").trim();
-        const mode = modes.find((candidate) => candidate.id === selected && candidate.allowed);
-        if (!mode) return response.status(400).json({ error: "invalid_permission_mode" });
-        if (resident) await adapter.setPermissionMode(resident.id, mode);
-        const backend = { ...context.chat.backend, permissionMode: selected };
-        if (mode.profile) backend.permissionProfile = mode.profile;
-        else delete backend.permissionProfile;
-        if (mode.approvalPolicy) backend.approvalPolicy = mode.approvalPolicy;
-        else delete backend.approvalPolicy;
-        if (mode.approvalsReviewer) backend.approvalsReviewer = mode.approvalsReviewer;
-        else delete backend.approvalsReviewer;
-        await registry.update(context.chat.id, { backend });
-        response.json({ modes, selected });
-      });
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/service-levels", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const levels = manifestForImplementation(context.chat.backend?.implementation)?.serviceLevels || [];
+    const resident = backends.getByChatId(context.chat.id);
+    const selected = resident?.serviceLevel || context.chat.backend?.serviceLevel || levels[0]?.id || "";
+    response.json({ levels, selected });
   });
 
-  app.get("/v0/chats/:chatId/service-levels", async (request, response, next) => {
-    try {
+  app.patch("/v0/chats/:chatId/service-levels", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
       const context = await findChatContext(request.params.chatId);
       if (!context) return response.status(404).json({ error: "chat_not_found" });
+      lifecycle.assertAvailable(context.chat.id, context.project.id);
       const levels = manifestForImplementation(context.chat.backend?.implementation)?.serviceLevels || [];
+      const selected = String(request.body?.serviceLevel || "").trim();
+      if (!levels.some((level) => level.id === selected)) {
+        return response.status(400).json({ error: "invalid_service_level" });
+      }
       const resident = backends.getByChatId(context.chat.id);
-      const selected = resident?.serviceLevel || context.chat.backend?.serviceLevel || levels[0]?.id || "";
+      const adapter = backends.forChat(context.chat);
+      if (resident) {
+        if (typeof adapter.setServiceLevel !== "function") {
+          return response.status(409).json({ error: "service_levels_unavailable" });
+        }
+        await adapter.setServiceLevel(resident.id, selected);
+      }
+      await registry.update(context.chat.id, {
+        backend: { ...context.chat.backend, serviceLevel: selected },
+      });
       response.json({ levels, selected });
-    } catch (error) { next(error); }
+    });
   });
 
-  app.patch("/v0/chats/:chatId/service-levels", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-        const context = await findChatContext(request.params.chatId);
-        if (!context) return response.status(404).json({ error: "chat_not_found" });
-        lifecycle.assertAvailable(context.chat.id, context.project.id);
-        const levels = manifestForImplementation(context.chat.backend?.implementation)?.serviceLevels || [];
-        const selected = String(request.body?.serviceLevel || "").trim();
-        if (!levels.some((level) => level.id === selected)) {
-          return response.status(400).json({ error: "invalid_service_level" });
-        }
-        const resident = backends.getByChatId(context.chat.id);
-        const adapter = backends.forChat(context.chat);
-        if (resident) {
-          if (typeof adapter.setServiceLevel !== "function") {
-            return response.status(409).json({ error: "service_levels_unavailable" });
-          }
-          await adapter.setServiceLevel(resident.id, selected);
-        }
-        await registry.update(context.chat.id, {
-          backend: { ...context.chat.backend, serviceLevel: selected },
-        });
-        response.json({ levels, selected });
+  app.patch("/v0/chats/:chatId", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
+    request.body = profileSelection(request.body);
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    lifecycle.assertAvailable(context.chat.id, context.project.id);
+    if (request.body?.profileId && context.chat.lastUserMessageAt) {
+      return response.status(409).json({
+        error: "backend_locked",
+        message: "Fork this chat to change its backend.",
+        fork: { required: true, profileId: request.body.profileId },
       });
-    } catch (error) { next(error); }
-  });
-
-  app.patch("/v0/chats/:chatId", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-      request.body = profileSelection(request.body);
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      lifecycle.assertAvailable(context.chat.id, context.project.id);
-      if (request.body?.profileId && context.chat.lastUserMessageAt) {
-        return response.status(409).json({
-          error: "backend_locked",
-          message: "Fork this chat to change its backend.",
-          fork: { required: true, profileId: request.body.profileId },
-        });
+    }
+    const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
+    if (selectedProfile) {
+      const profileId = request.body.profileId;
+      const can = await backends.capabilities?.(context.project);
+      if ((can ? !can.harnesses.includes(selectedProfile.agent.implementation) : selectedProfile.disabled)
+        || !backends.adapters.has(selectedProfile.agent.implementation)) {
+        return response.status(409).json({ error: `${profileId}_unavailable`,
+          ...(can ? { message: `${selectedProfile.label} is not available on ${can.device.name}` } : {}) });
       }
-      const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-      if (selectedProfile) {
-        const profileId = request.body.profileId;
-        const can = await backends.capabilities?.(context.project);
-        if ((can ? !can.harnesses.includes(selectedProfile.agent.implementation) : selectedProfile.disabled)
-          || !backends.adapters.has(selectedProfile.agent.implementation)) {
-          return response.status(409).json({ error: `${profileId}_unavailable`,
-            ...(can ? { message: `${selectedProfile.label} is not available on ${can.device.name}` } : {}) });
-        }
-        const resident = backends.getByChatId(context.chat.id);
-        if (resident) await backends.stop(resident.id);
-        await registry.update(context.chat.id, {
-          status: "draft",
-          templateId: null,
-          templateVersion: null,
-          runtime: null,
-          backend: { profileId, profileRevision: null, management: selectedProfile.management,
-            ...selectedProfile.agent, opaqueSession: null },
-        });
-        return response.json(chatView(registry.metadata(context.chat.id)));
-      }
-      let selectedTemplate = templateForChat(context.chat, context.project);
-      if (request.body?.templateId != null) {
-        const currentTemplate = resolveTemplate(config, context.chat.templateId);
-        if (currentTemplate?.special === true) {
-          return response.status(409).json({ error: "special_chat_locked" });
-        }
-        if (context.chat.lastUserMessageAt) {
-          return response.status(409).json({ error: "template_locked" });
-        }
-        const template = resolveTemplate(config, request.body.templateId);
-        if (!template) {
-          return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId });
-        }
-        if (template.defaultable === false) {
-          return response.status(400).json({ error: "special_template", templateId: template.id });
-        }
-        const resident = backends.getByChatId(context.chat.id);
-        if (resident) await backends.stop(resident.id);
-        await registry.update(context.chat.id, {
-          status: "draft",
-          templateId: template.id,
-          templateVersion: template.version,
-          runtime: null,
-          backend: templateBackend(template),
-        });
-        selectedTemplate = template;
-      }
-      if (request.body?.runtimeKind != null) {
-        if (context.chat.lastUserMessageAt) {
-          return response.status(409).json({ error: "runtime_locked" });
-        }
-        const runtimeKind = request.body.runtimeKind;
-        if (runtimeKind !== "conduit_profile") {
-          return response.status(400).json({ error: "unknown_runtime_kind" });
-        }
-        const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
-        await registry.update(context.chat.id, { runtime });
-      }
-      response.json(chatView(registry.metadata(context.chat.id)));
+      const resident = backends.getByChatId(context.chat.id);
+      if (resident) await backends.stop(resident.id);
+      await registry.update(context.chat.id, {
+        status: "draft",
+        templateId: null,
+        templateVersion: null,
+        runtime: null,
+        backend: { profileId, profileRevision: null, management: selectedProfile.management,
+          ...selectedProfile.agent, opaqueSession: null },
       });
-    } catch (error) { next(error); }
+      return response.json(chatView(registry.metadata(context.chat.id)));
+    }
+    let selectedTemplate = templateForChat(context.chat, context.project);
+    if (request.body?.templateId != null) {
+      const currentTemplate = resolveTemplate(config, context.chat.templateId);
+      if (currentTemplate?.special === true) {
+        return response.status(409).json({ error: "special_chat_locked" });
+      }
+      if (context.chat.lastUserMessageAt) {
+        return response.status(409).json({ error: "template_locked" });
+      }
+      const template = resolveTemplate(config, request.body.templateId);
+      if (!template) {
+        return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId });
+      }
+      if (template.defaultable === false) {
+        return response.status(400).json({ error: "special_template", templateId: template.id });
+      }
+      const resident = backends.getByChatId(context.chat.id);
+      if (resident) await backends.stop(resident.id);
+      await registry.update(context.chat.id, {
+        status: "draft",
+        templateId: template.id,
+        templateVersion: template.version,
+        runtime: null,
+        backend: templateBackend(template),
+      });
+      selectedTemplate = template;
+    }
+    if (request.body?.runtimeKind != null) {
+      if (context.chat.lastUserMessageAt) {
+        return response.status(409).json({ error: "runtime_locked" });
+      }
+      const runtimeKind = request.body.runtimeKind;
+      if (runtimeKind !== "conduit_profile") {
+        return response.status(400).json({ error: "unknown_runtime_kind" });
+      }
+      const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
+      await registry.update(context.chat.id, { runtime });
+    }
+    response.json(chatView(registry.metadata(context.chat.id)));
+    });
   });
 
-  app.get("/v0/chats/:chatId/models", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      response.json(await chatModelView(context));
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/models", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    response.json(await chatModelView(context));
   });
 
-  app.patch("/v0/chats/:chatId/models", async (request, response, next) => {
-    try {
-      await lifecycle.run(request.params.chatId, async () => {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      lifecycle.assertAvailable(context.chat.id, context.project.id);
-      const spec = String(request.body?.model || "").trim();
-      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
-      const current = await chatModelView(context);
-      if (spec && !current.models.some((item) => item.spec === spec && !item.outsideScope)) {
-        return response.status(400).json({ error: "invalid_model" });
-      }
-      const targetModel = spec || current.model;
-      const target = current.models.find((item) => item.spec === targetModel);
-      if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
-        return response.status(400).json({ error: "invalid_thinking_level" });
-      }
-      if (manifestForImplementation(context.chat.backend?.implementation)?.profile) {
-        const implementation = context.chat.backend.implementation;
-        const model = targetModel;
-        const effort = thinkingLevel || context.chat.modelThinkingLevels?.[model]
-          || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
-        const resident = backends.getByChatId(context.chat.id);
-        if (resident) {
-          const adapter = backends.forChat(context.chat);
-          await adapter.setModel(resident.id, model);
-          if (effort) await adapter.setThinkingLevel(resident.id, effort);
-        }
-        const modelThinkingLevels = effort
-          ? { ...(context.chat.modelThinkingLevels || {}), [model]: effort }
-          : context.chat.modelThinkingLevels || {};
-        await registry.update(context.chat.id, {
-          backend: { ...context.chat.backend, model }, modelThinkingLevels,
-        });
-        await rememberModel(preferences, implementation, model, effort);
-        return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
-      }
-      const saveThinkingPreference = async () => {
-        const modelThinkingLevels = targetModel && thinkingLevel
-          ? { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel }
-          : context.chat.modelThinkingLevels || {};
-        return registry.update(context.chat.id, {
-          backend: targetModel ? { ...context.chat.backend, model: targetModel } : context.chat.backend,
-          modelThinkingLevels,
-        });
-      };
+  app.patch("/v0/chats/:chatId/models", async (request, response) => {
+    await lifecycle.run(request.params.chatId, async () => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    lifecycle.assertAvailable(context.chat.id, context.project.id);
+    const spec = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    const current = await chatModelView(context);
+    if (spec && !current.models.some((item) => item.spec === spec && !item.outsideScope)) {
+      return response.status(400).json({ error: "invalid_model" });
+    }
+    const targetModel = spec || current.model;
+    const target = current.models.find((item) => item.spec === targetModel);
+    if (thinkingLevel && target && !target.thinkingLevels.includes(thinkingLevel)) {
+      return response.status(400).json({ error: "invalid_thinking_level" });
+    }
+    if (manifestForImplementation(context.chat.backend?.implementation)?.profile) {
+      const implementation = context.chat.backend.implementation;
+      const model = targetModel;
+      const effort = thinkingLevel || context.chat.modelThinkingLevels?.[model]
+        || target?.defaultThinkingLevel || target?.thinkingLevels[0] || "";
       const resident = backends.getByChatId(context.chat.id);
       if (resident) {
         const adapter = backends.forChat(context.chat);
-        // Changing model is a live setting, not a relaunch. It used to restart
-        // the agent whenever the new model resolved to a different search
-        // overlay, because the overlay was materialised into the process at
-        // launch; the harness does its own web access now, so there is nothing
-        // to rebuild and nothing to restart.
-        if (spec && spec !== current.model) await adapter.setModel(resident.id, spec);
-        if (thinkingLevel) await adapter.setThinkingLevel(resident.id, thinkingLevel);
+        await adapter.setModel(resident.id, model);
+        if (effort) await adapter.setThinkingLevel(resident.id, effort);
       }
-      await saveThinkingPreference();
-      await rememberModel(preferences, templateForChat(context.chat, context.project)?.id, targetModel,
-        thinkingLevel || context.chat.modelThinkingLevels?.[targetModel] || "");
-      response.json(await chatModelView(context));
+      const modelThinkingLevels = effort
+        ? { ...(context.chat.modelThinkingLevels || {}), [model]: effort }
+        : context.chat.modelThinkingLevels || {};
+      await registry.update(context.chat.id, {
+        backend: { ...context.chat.backend, model }, modelThinkingLevels,
       });
-    } catch (error) { next(error); }
+      await rememberModel(preferences, implementation, model, effort);
+      return response.json({ ...current, model, thinkingLevel: effort, modelThinkingLevels });
+    }
+    const saveThinkingPreference = async () => {
+      const modelThinkingLevels = targetModel && thinkingLevel
+        ? { ...(context.chat.modelThinkingLevels || {}), [targetModel]: thinkingLevel }
+        : context.chat.modelThinkingLevels || {};
+      return registry.update(context.chat.id, {
+        backend: targetModel ? { ...context.chat.backend, model: targetModel } : context.chat.backend,
+        modelThinkingLevels,
+      });
+    };
+    const resident = backends.getByChatId(context.chat.id);
+    if (resident) {
+      const adapter = backends.forChat(context.chat);
+      // Changing model is a live setting, not a relaunch. It used to restart
+      // the agent whenever the new model resolved to a different search
+      // overlay, because the overlay was materialised into the process at
+      // launch; the harness does its own web access now, so there is nothing
+      // to rebuild and nothing to restart.
+      if (spec && spec !== current.model) await adapter.setModel(resident.id, spec);
+      if (thinkingLevel) await adapter.setThinkingLevel(resident.id, thinkingLevel);
+    }
+    await saveThinkingPreference();
+    await rememberModel(preferences, templateForChat(context.chat, context.project)?.id, targetModel,
+      thinkingLevel || context.chat.modelThinkingLevels?.[targetModel] || "");
+    response.json(await chatModelView(context));
+    });
   });
 
-  app.post("/v0/runtime/chats", async (_request, response, next) => {
-    try {
-      const template = config.piTemplates.find((item) => item.special === true && item.id === "runtime");
-      if (!template) return response.status(404).json({ error: "runtime_template_not_found" });
-      const project = await projects.get("chat");
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await lifecycle.withProjects([project.id], async () => {
-        await projects.validate(project);
-        const chat = await registry.create(project, {
-          templateId: template.id,
-          templateVersion: template.version,
-          backend: templateBackend(template),
-        });
-        response.status(201).json(chatView(chat));
+  app.post("/v0/runtime/chats", async (_request, response) => {
+    const template = config.piTemplates.find((item) => item.special === true && item.id === "runtime");
+    if (!template) return response.status(404).json({ error: "runtime_template_not_found" });
+    const project = await projects.get("chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await lifecycle.withProjects([project.id], async () => {
+      await projects.validate(project);
+      const chat = await registry.create(project, {
+        templateId: template.id,
+        templateVersion: template.version,
+        backend: templateBackend(template),
       });
-    } catch (error) { next(error); }
+      response.status(201).json(chatView(chat));
+    });
   });
 
-  app.delete("/v0/chats/:chatId", async (request, response, next) => {
-    try {
-      if (request.query.ifEmpty !== "true") return response.status(409).json({ error: "use_chat_delete_route" });
-      if (!isChatId(request.params.chatId)) return response.status(404).json({ error: "chat_not_found" });
-      const removed = await lifecycle.deleteChat(request.params.chatId, async () => {
-        const context = await findChatContext(request.params.chatId);
-        if (!context) return null;
-        return lifecycle.withProjects([context.project.id], async () => {
-          // Only a draft is stopped: a chat that has begun (its first reply streaming) keeps its agent; 409 below.
-          if (registry.metadata(context.chat.id)?.status !== "draft") return false;
-          await stopSessionProcesses(backends, context.chat);
-          return registry.removeEmptyDraft(context.chat.id, context.project);
-        });
+  app.delete("/v0/chats/:chatId", async (request, response) => {
+    if (request.query.ifEmpty !== "true") return response.status(409).json({ error: "use_chat_delete_route" });
+    if (!isChatId(request.params.chatId)) return response.status(404).json({ error: "chat_not_found" });
+    const removed = await lifecycle.deleteChat(request.params.chatId, async () => {
+      const context = await findChatContext(request.params.chatId);
+      if (!context) return null;
+      return lifecycle.withProjects([context.project.id], async () => {
+        // Only a draft is stopped: a chat that has begun (its first reply streaming) keeps its agent; 409 below.
+        if (registry.metadata(context.chat.id)?.status !== "draft") return false;
+        await stopSessionProcesses(backends, context.chat);
+        return registry.removeEmptyDraft(context.chat.id, context.project);
       });
-      if (removed == null) return response.status(404).json({ error: "chat_not_found" });
-      response.status(removed ? 204 : 409).end();
-    } catch (error) { next(error); }
+    });
+    if (removed == null) return response.status(404).json({ error: "chat_not_found" });
+    response.status(removed ? 204 : 409).end();
   });
 }

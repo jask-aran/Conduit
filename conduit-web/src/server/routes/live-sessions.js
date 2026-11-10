@@ -41,36 +41,32 @@ export function registerLiveSessionRoutes(app, {
     response.json(runtimeView());
   });
 
-  app.patch("/v0/runtime/settings", async (request, response, next) => {
-    try {
-      const saved = await runtimeSettings.save({
-        maxLiveProcesses: request.body?.maxLiveProcesses,
-        maxGeneratingProcesses: request.body?.maxGeneratingProcesses,
-      });
-      await enforceLiveProcessLimit(backends, saved.maxLiveProcesses);
-      response.json(runtimeView());
-    } catch (error) { next(error); }
+  app.patch("/v0/runtime/settings", async (request, response) => {
+    const saved = await runtimeSettings.save({
+      maxLiveProcesses: request.body?.maxLiveProcesses,
+      maxGeneratingProcesses: request.body?.maxGeneratingProcesses,
+    });
+    await enforceLiveProcessLimit(backends, saved.maxLiveProcesses);
+    response.json(runtimeView());
   });
 
   // A first message the browser could not send over the chat's stream: it left the chat while the agent was starting.
   // Started here if it is not yet (with the composer's model), then sent as the stream would have sent it.
-  app.post("/v0/chats/:chatId/prompt", async (request, response, next) => {
-    try {
-      const chatId = request.params.chatId;
-      const message = typeof request.body?.message === "string" ? request.body.message : "";
-      const attachmentIds = Array.isArray(request.body?.attachmentIds) ? request.body.attachmentIds : [];
-      if (!message.trim() && !attachmentIds.length) return response.status(400).json({ error: "empty_prompt" });
-      if (registry.metadata(chatId)?.status === "subagent") return response.status(409).json({ error: "subagent_read_only" });
-      // The browser's own launch may still be under way: the prompt waits for it rather than racing it with settings
-      // of its own (a launch with other settings is refused while one runs).
-      await lifecycle.launches?.get(chatId)?.promise.catch(() => {});
-      if (!backends.getByChatId(chatId)) {
-        await launchLiveSession({ chatId, requestedProject: request.body?.projectId || "", model: request.body?.model || "",
-          thinkingLevel: request.body?.thinkingLevel || "", forceModel: true });
-      }
-      const generationId = await promptChat(chatId, { messageId: request.body?.messageId, message, attachmentIds });
-      response.status(202).json({ chatId, generationId: generationId || null });
-    } catch (error) { next(error); }
+  app.post("/v0/chats/:chatId/prompt", async (request, response) => {
+    const chatId = request.params.chatId;
+    const message = typeof request.body?.message === "string" ? request.body.message : "";
+    const attachmentIds = Array.isArray(request.body?.attachmentIds) ? request.body.attachmentIds : [];
+    if (!message.trim() && !attachmentIds.length) return response.status(400).json({ error: "empty_prompt" });
+    if (registry.metadata(chatId)?.status === "subagent") return response.status(409).json({ error: "subagent_read_only" });
+    // The browser's own launch may still be under way: the prompt waits for it rather than racing it with settings
+    // of its own (a launch with other settings is refused while one runs).
+    await lifecycle.launches?.get(chatId)?.promise.catch(() => {});
+    if (!backends.getByChatId(chatId)) {
+      await launchLiveSession({ chatId, requestedProject: request.body?.projectId || "", model: request.body?.model || "",
+        thinkingLevel: request.body?.thinkingLevel || "", forceModel: true });
+    }
+    const generationId = await promptChat(chatId, { messageId: request.body?.messageId, message, attachmentIds });
+    response.status(202).json({ chatId, generationId: generationId || null });
   });
 
   app.post("/v0/live-sessions", async (request, response, next) => {
@@ -107,23 +103,21 @@ export function registerLiveSessionRoutes(app, {
     }
   });
 
-  app.get("/v0/live-sessions/:id/snapshot", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const context = live.chatId ? await findChatContext(live.chatId) : null;
-      const adapter = backends.adapterForRecord(live);
-      const projection = await adapter.readTranscript({
-        liveSessionId: live.id,
-        chatId: live.chatId,
-        opaqueSession: context?.chat?.backend?.opaqueSession,
-        project: context?.project,
-      });
-      if (context) {
-        projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-      }
-      response.json({ live: backends.view(live), events: live.events, ...projection });
-    } catch (error) { next(error); }
+  app.get("/v0/live-sessions/:id/snapshot", async (request, response) => {
+    const live = backends.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    const context = live.chatId ? await findChatContext(live.chatId) : null;
+    const adapter = backends.adapterForRecord(live);
+    const projection = await adapter.readTranscript({
+      liveSessionId: live.id,
+      chatId: live.chatId,
+      opaqueSession: context?.chat?.backend?.opaqueSession,
+      project: context?.project,
+    });
+    if (context) {
+      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
+    }
+    response.json({ live: backends.view(live), events: live.events, ...projection });
   });
 
   // Model selection for a live record, not a chat. A driven harness thread has
@@ -135,79 +129,69 @@ export function registerLiveSessionRoutes(app, {
     return { models, model: live.model || "", thinkingLevel: live.thinkingLevel || "", modelThinkingLevels: {} };
   };
 
-  app.get("/v0/live-sessions/:id/models", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      response.json(await liveModelView(live));
-    } catch (error) { next(error); }
+  app.get("/v0/live-sessions/:id/models", async (request, response) => {
+    const live = backends.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    response.json(await liveModelView(live));
   });
 
-  app.get("/v0/live-sessions/:id/commands", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const commands = await backends.adapterForRecord(live).listCommands(live.id);
-      response.json({ commands });
-    } catch (error) { next(error); }
+  app.get("/v0/live-sessions/:id/commands", async (request, response) => {
+    const live = backends.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    const commands = await backends.adapterForRecord(live).listCommands(live.id);
+    response.json({ commands });
   });
 
   // A driven thread has no Conduit chat, so its settled history cannot come from
   // /v0/sessions/:id. It comes from the adapter that is running the thread.
-  app.get("/v0/live-sessions/:id/transcript", async (request, response, next) => {
-    try {
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const adapter = backends.adapterForRecord(live);
-      const transcript = await adapter.readTranscript({ liveSessionId: live.id, chatId: live.chatId });
-      if (live.chatId) {
-        const context = await findChatContext(live.chatId);
-        if (context) {
-          transcript.messages = await attachments.decorateMessages(context.project, context.chat.id, transcript.messages);
-        }
+  app.get("/v0/live-sessions/:id/transcript", async (request, response) => {
+    const live = backends.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    const adapter = backends.adapterForRecord(live);
+    const transcript = await adapter.readTranscript({ liveSessionId: live.id, chatId: live.chatId });
+    if (live.chatId) {
+      const context = await findChatContext(live.chatId);
+      if (context) {
+        transcript.messages = await attachments.decorateMessages(context.project, context.chat.id, transcript.messages);
       }
-      response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
-    } catch (error) { next(error); }
+    }
+    response.json({ id: live.chatId || live.id, status: "active", ...transcript, attachments: [], page: { before: null } });
   });
 
-  app.patch("/v0/live-sessions/:id/models", async (request, response, next) => {
-    try {
-      const child = backends.get(request.params.id);
-      if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
-        return response.status(409).json({ error: "subagent_read_only" });
-      }
-      const live = backends.get(request.params.id);
-      if (!live) return response.status(404).json({ error: "live_session_not_found" });
-      const adapter = backends.adapterForRecord(live);
-      const current = await liveModelView(live);
-      const spec = String(request.body?.model || "").trim();
-      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
-      if (spec && !current.models.some((item) => item.spec === spec)) {
-        return response.status(400).json({ error: "invalid_model" });
-      }
-      const targetModel = spec || current.model;
-      const target = current.models.find((item) => item.spec === targetModel);
-      if (thinkingLevel && target && target.thinkingLevels.length && !target.thinkingLevels.includes(thinkingLevel)) {
-        return response.status(400).json({ error: "invalid_thinking_level" });
-      }
-      if (spec) await adapter.setModel(live.id, spec);
-      if (thinkingLevel) await adapter.setThinkingLevel(live.id, thinkingLevel);
-      // Driving a harness thread is still choosing on that profile.
-      await rememberModel(preferences, live.adapterImplementation, targetModel,
-        thinkingLevel || current.thinkingLevel || "");
-      response.json({ ...current, model: targetModel, thinkingLevel: thinkingLevel || current.thinkingLevel });
-    } catch (error) { next(error); }
+  app.patch("/v0/live-sessions/:id/models", async (request, response) => {
+    const child = backends.get(request.params.id);
+    if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
+      return response.status(409).json({ error: "subagent_read_only" });
+    }
+    const live = backends.get(request.params.id);
+    if (!live) return response.status(404).json({ error: "live_session_not_found" });
+    const adapter = backends.adapterForRecord(live);
+    const current = await liveModelView(live);
+    const spec = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    if (spec && !current.models.some((item) => item.spec === spec)) {
+      return response.status(400).json({ error: "invalid_model" });
+    }
+    const targetModel = spec || current.model;
+    const target = current.models.find((item) => item.spec === targetModel);
+    if (thinkingLevel && target && target.thinkingLevels.length && !target.thinkingLevels.includes(thinkingLevel)) {
+      return response.status(400).json({ error: "invalid_thinking_level" });
+    }
+    if (spec) await adapter.setModel(live.id, spec);
+    if (thinkingLevel) await adapter.setThinkingLevel(live.id, thinkingLevel);
+    // Driving a harness thread is still choosing on that profile.
+    await rememberModel(preferences, live.adapterImplementation, targetModel,
+      thinkingLevel || current.thinkingLevel || "");
+    response.json({ ...current, model: targetModel, thinkingLevel: thinkingLevel || current.thinkingLevel });
   });
 
-  app.delete("/v0/live-sessions/:id/process", async (request, response, next) => {
-    try {
-      const child = backends.get(request.params.id);
-      if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
-        return response.status(409).json({ error: "subagent_read_only" });
-      }
-      const stopped = await backends.stop(request.params.id);
-      response.status(stopped ? 202 : 404).json({ stopped });
-    } catch (error) { next(error); }
+  app.delete("/v0/live-sessions/:id/process", async (request, response) => {
+    const child = backends.get(request.params.id);
+    if (child && (child.readOnly || registry.metadata(child.chatId)?.status === "subagent")) {
+      return response.status(409).json({ error: "subagent_read_only" });
+    }
+    const stopped = await backends.stop(request.params.id);
+    response.status(stopped ? 202 : 404).json({ stopped });
   });
 
   return launchLiveSession;

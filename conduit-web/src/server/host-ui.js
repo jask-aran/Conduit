@@ -72,21 +72,19 @@ export function createHostUi({ backends, registry, respondHostUi }) {
   function registerRoutes(app) {
     app.get("/v0/host-ui", (_request, response) => response.json({ requests: pending() }));
 
-    app.post("/v0/chats/:chatId/host-ui/:requestId", async (request, response, next) => {
-      try {
-        const { chatId, requestId } = request.params;
-        if (!isChatId(chatId)) return response.status(404).json({ error: "chat_not_found" });
-        const open = pending().some((item) => item.chatId === chatId && item.request.id === requestId);
-        if (!open) return response.status(404).json({ error: "host_ui_request_not_found" });
-        const body = request.body || {};
-        await respondHostUi(chatId, {
-          id: requestId,
-          ...(body.cancelled ? { cancelled: true }
-            : typeof body.confirmed === "boolean" ? { confirmed: body.confirmed }
-              : body.value != null ? { value: String(body.value) } : {}),
-        });
-        response.status(204).end();
-      } catch (error) { next(error); }
+    app.post("/v0/chats/:chatId/host-ui/:requestId", async (request, response) => {
+      const { chatId, requestId } = request.params;
+      if (!isChatId(chatId)) return response.status(404).json({ error: "chat_not_found" });
+      const open = pending().some((item) => item.chatId === chatId && item.request.id === requestId);
+      if (!open) return response.status(404).json({ error: "host_ui_request_not_found" });
+      const body = request.body || {};
+      await respondHostUi(chatId, {
+        id: requestId,
+        ...(body.cancelled ? { cancelled: true }
+          : typeof body.confirmed === "boolean" ? { confirmed: body.confirmed }
+            : body.value != null ? { value: String(body.value) } : {}),
+      });
+      response.status(204).end();
     });
   }
 

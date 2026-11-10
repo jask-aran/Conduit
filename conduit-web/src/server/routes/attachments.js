@@ -24,52 +24,46 @@ export function registerAttachmentRoutes(app, { attachments, findChatContext }) 
     }
   });
 
-  app.get("/v0/chats/:chatId/attachments", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      // What the composer is holding is what has not been sent, so both
-      // records of a send count. The send ledger is the one every harness
-      // writes; the Pi session file is read as well because a chat that
-      // predates the ledger has its sends recorded only there.
-      const sessionFile = conduitPiSessionFile(context.chat);
-      const sessionIds = sessionFile
-        ? readAnnouncedAttachmentIds(sessionFile, context.project).then((ids) => ({ ids }), (error) => ({ error }))
-        : Promise.resolve({ ids: new Set() });
-      const announced = await attachments.announcedIds(context.project, context.chat.id);
-      const legacy = await sessionIds;
-      if (legacy.error && legacy.error.code !== "ENOENT") throw legacy.error;
-      for (const id of legacy.ids || []) announced.add(id);
-      response.json({ attachments: (await attachments.list(context.project, context.chat.id))
-        .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
-    } catch (error) { next(error); }
+  app.get("/v0/chats/:chatId/attachments", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    // What the composer is holding is what has not been sent, so both
+    // records of a send count. The send ledger is the one every harness
+    // writes; the Pi session file is read as well because a chat that
+    // predates the ledger has its sends recorded only there.
+    const sessionFile = conduitPiSessionFile(context.chat);
+    const sessionIds = sessionFile
+      ? readAnnouncedAttachmentIds(sessionFile, context.project).then((ids) => ({ ids }), (error) => ({ error }))
+      : Promise.resolve({ ids: new Set() });
+    const announced = await attachments.announcedIds(context.project, context.chat.id);
+    const legacy = await sessionIds;
+    if (legacy.error && legacy.error.code !== "ENOENT") throw legacy.error;
+    for (const id of legacy.ids || []) announced.add(id);
+    response.json({ attachments: (await attachments.list(context.project, context.chat.id))
+      .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
   });
 
   app.get("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const attachment = await attachments.open(context.project, context.chat.id, request.params.attachmentId);
-      if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
-      const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
-      response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
-      response.setHeader("X-Content-Type-Options", "nosniff");
-      response.setHeader("Cache-Control", "private, no-cache");
-      const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-      response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
-      response.setHeader("Content-Length", attachment.size);
-      const stream = attachment.stream();
-      stream.once("error", next);
-      stream.pipe(response);
-    } catch (error) { next(error); }
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const attachment = await attachments.open(context.project, context.chat.id, request.params.attachmentId);
+    if (!attachment) return response.status(404).json({ error: "attachment_not_found" });
+    const preview = request.query.preview === "1" && /^image\/(png|jpeg|gif|webp)$/.test(attachment.type);
+    response.setHeader("Content-Type", preview ? attachment.type : "application/octet-stream");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "private, no-cache");
+    const downloadName = encodeURIComponent(attachment.name).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    response.setHeader("Content-Disposition", `${preview ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
+    response.setHeader("Content-Length", attachment.size);
+    const stream = attachment.stream();
+    stream.once("error", next);
+    stream.pipe(response);
   });
 
-  app.delete("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.chatId);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const removed = await attachments.delete(context.project, context.chat.id, request.params.attachmentId);
-      response.status(removed ? 204 : 404).end();
-    } catch (error) { next(error); }
+  app.delete("/v0/chats/:chatId/attachments/:attachmentId", async (request, response) => {
+    const context = await findChatContext(request.params.chatId);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const removed = await attachments.delete(context.project, context.chat.id, request.params.attachmentId);
+    response.status(removed ? 204 : 404).end();
   });
 }

@@ -97,135 +97,125 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     response.json({ harnesses });
   });
 
-  app.get("/v0/harnesses/:implementation/sessions", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
-        return response.status(404).json({ error: "harness_not_found" });
-      }
-      const project = await projects.get(request.query.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
-      const adapter = backends.forImplementation(implementation);
-      if (!adapter.listSessions) return response.json({ tracked: [], sessions: [], replayFidelity: "from-now" });
-      const sessions = await adapter.listSessions({ cwd: project.workingRoot });
-      const tracked = registry.list({ includeHidden: true, includeUntracked: false }).filter((chat) =>
-        chat.projectId === project.id && chat.backend?.implementation === implementation);
-      const trackedIds = new Set(tracked.map(opaqueSessionId).filter(Boolean));
-      response.json({ tracked: tracked.map(chatView), sessions: sessions.filter((session) => !trackedIds.has(session.id)), replayFidelity: "full" });
-    } catch (error) { next(error); }
+  app.get("/v0/harnesses/:implementation/sessions", async (request, response) => {
+    const implementation = request.params.implementation;
+    if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
+      return response.status(404).json({ error: "harness_not_found" });
+    }
+    const project = await projects.get(request.query.projectId);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    const adapter = backends.forImplementation(implementation);
+    if (!adapter.listSessions) return response.json({ tracked: [], sessions: [], replayFidelity: "from-now" });
+    const sessions = await adapter.listSessions({ cwd: project.workingRoot });
+    const tracked = registry.list({ includeHidden: true, includeUntracked: false }).filter((chat) =>
+      chat.projectId === project.id && chat.backend?.implementation === implementation);
+    const trackedIds = new Set(tracked.map(opaqueSessionId).filter(Boolean));
+    response.json({ tracked: tracked.map(chatView), sessions: sessions.filter((session) => !trackedIds.has(session.id)), replayFidelity: "full" });
   });
 
   // Machine-wide thread discovery. Folders come from the threads themselves,
   // so this deliberately does not require - or create - a Conduit project.
-  app.get("/v0/harnesses/:implementation/threads", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
-        return response.status(404).json({ error: "harness_not_found" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      if (!adapter.listThreads) return response.json({ scope: "none", groups: [], truncated: false });
-      const limit = Math.min(Math.max(Number(request.query.limit) || 60, 1), 200);
-      const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
-      const cwd = requested ? (await resolveFolder(requested)).workingRoot : undefined;
-      const threads = await adapter.listThreads({ cwd, limit });
-      const tracked = trackedByThread(registry.list({ includeHidden: true, includeUntracked: false }), implementation);
-      const groups = groupThreadsByFolder(threads, { tracked });
-      await Promise.all(groups.map(async (group) => { group.missing = !(await isDirectory(group.path)); }));
-      response.json({ scope: requested ? "folder" : "machine", groups, truncated: threads.length >= limit });
-    } catch (error) { next(error); }
+  app.get("/v0/harnesses/:implementation/threads", async (request, response) => {
+    const implementation = request.params.implementation;
+    if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
+      return response.status(404).json({ error: "harness_not_found" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    if (!adapter.listThreads) return response.json({ scope: "none", groups: [], truncated: false });
+    const limit = Math.min(Math.max(Number(request.query.limit) || 60, 1), 200);
+    const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
+    const cwd = requested ? (await resolveFolder(requested)).workingRoot : undefined;
+    const threads = await adapter.listThreads({ cwd, limit });
+    const tracked = trackedByThread(registry.list({ includeHidden: true, includeUntracked: false }), implementation);
+    const groups = groupThreadsByFolder(threads, { tracked });
+    await Promise.all(groups.map(async (group) => { group.missing = !(await isDirectory(group.path)); }));
+    response.json({ scope: requested ? "folder" : "machine", groups, truncated: threads.length >= limit });
   });
 
-  app.get("/v0/harnesses/:implementation/models", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
-        return response.status(404).json({ error: "harness_not_found" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
-      const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
-      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
-      const remembered = rememberedModel(preferences, implementation);
-      const models = await harnessModels.list(implementation, cwd, adapter, { require: remembered?.model || "" });
-      const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
-      const model = rememberedSpec || models[0]?.spec || "";
-      // The profile's model is gone and this is a stand-in, which the composer
-      // says out loud rather than opening on a model nobody chose.
-      const modelFallback = remembered?.model && !rememberedSpec && model
-        ? { from: remembered.model, to: model }
-        : null;
-      const selected = models.find((item) => item.spec === model);
-      const thinkingLevel = rememberedSpec && selected?.thinkingLevels.includes(remembered?.thinkingLevel)
-        ? remembered.thinkingLevel
-        : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
-      response.json({
-        installationId: backends.manifestFor(implementation)?.installationId || implementation,
-        runtimeKind: implementation,
-        models,
-        model,
-        thinkingLevel,
-        defaultModel: models[0]?.spec || "",
-        defaultThinkingLevel: selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "",
-        requiresAuthentication: false,
-        warnings: [],
-        ...(modelFallback ? { modelFallback } : {}),
-        source: "catalog",
-      });
-    } catch (error) { next(error); }
+  app.get("/v0/harnesses/:implementation/models", async (request, response) => {
+    const implementation = request.params.implementation;
+    if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
+      return response.status(404).json({ error: "harness_not_found" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
+    const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
+    const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+    const remembered = rememberedModel(preferences, implementation);
+    const models = await harnessModels.list(implementation, cwd, adapter, { require: remembered?.model || "" });
+    const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
+    const model = rememberedSpec || models[0]?.spec || "";
+    // The profile's model is gone and this is a stand-in, which the composer
+    // says out loud rather than opening on a model nobody chose.
+    const modelFallback = remembered?.model && !rememberedSpec && model
+      ? { from: remembered.model, to: model }
+      : null;
+    const selected = models.find((item) => item.spec === model);
+    const thinkingLevel = rememberedSpec && selected?.thinkingLevels.includes(remembered?.thinkingLevel)
+      ? remembered.thinkingLevel
+      : selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "";
+    response.json({
+      installationId: backends.manifestFor(implementation)?.installationId || implementation,
+      runtimeKind: implementation,
+      models,
+      model,
+      thinkingLevel,
+      defaultModel: models[0]?.spec || "",
+      defaultThinkingLevel: selected?.defaultThinkingLevel || selected?.thinkingLevels[0] || "",
+      requiresAuthentication: false,
+      warnings: [],
+      ...(modelFallback ? { modelFallback } : {}),
+      source: "catalog",
+    });
   });
 
   // The launch composer has no chat to PATCH, so a model chosen there would
   // otherwise only stick once a message created one. The choice is the
   // decision: it is remembered for the profile the moment it is made.
-  app.patch("/v0/harnesses/:implementation/models", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
-        return response.status(404).json({ error: "harness_not_found" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
-      const model = String(request.body?.model || "").trim();
-      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
-      if (!model) return response.status(400).json({ error: "invalid_model" });
-      const requested = typeof request.body?.path === "string" && request.body.path ? request.body.path : null;
-      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
-      const models = await harnessModels.list(implementation, cwd, adapter, { require: model });
-      const selected = models.find((item) => item.spec === model);
-      if (!selected) return response.status(400).json({ error: "invalid_model" });
-      if (thinkingLevel && selected.thinkingLevels.length && !selected.thinkingLevels.includes(thinkingLevel)) {
-        return response.status(400).json({ error: "invalid_thinking_level" });
-      }
-      await rememberModel(preferences, implementation, model, thinkingLevel);
-      response.json({ model, thinkingLevel });
-    } catch (error) { next(error); }
+  app.patch("/v0/harnesses/:implementation/models", async (request, response) => {
+    const implementation = request.params.implementation;
+    if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
+      return response.status(404).json({ error: "harness_not_found" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    if (!adapter.listAvailableModels) return response.status(409).json({ error: "harness_models_unavailable" });
+    const model = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    if (!model) return response.status(400).json({ error: "invalid_model" });
+    const requested = typeof request.body?.path === "string" && request.body.path ? request.body.path : null;
+    const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+    const models = await harnessModels.list(implementation, cwd, adapter, { require: model });
+    const selected = models.find((item) => item.spec === model);
+    if (!selected) return response.status(400).json({ error: "invalid_model" });
+    if (thinkingLevel && selected.thinkingLevels.length && !selected.thinkingLevels.includes(thinkingLevel)) {
+      return response.status(400).json({ error: "invalid_thinking_level" });
+    }
+    await rememberModel(preferences, implementation, model, thinkingLevel);
+    response.json({ model, thinkingLevel });
   });
 
   // The same answer `/v0/chats/:chatId/permission-profiles` gives, for a chat
   // that does not exist yet: the launch composer offers the choice up front so
   // the first message starts under the mode somebody picked, rather than under
   // whatever the harness defaults to.
-  app.get("/v0/harnesses/:implementation/permission-modes", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
-        return response.status(404).json({ error: "harness_not_found" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      if (!adapter.getCapabilities().permissionModes || typeof adapter.listAvailablePermissionModes !== "function") {
-        return response.json({ modes: [], selected: "" });
-      }
-      const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
-      const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
-      const key = `${implementation}\0${cwd}`;
-      let modes = permissionCatalogs.get(key);
-      if (modes) void refreshPermissionModes(implementation, cwd, adapter).catch(() => {});
-      else modes = await refreshPermissionModes(implementation, cwd, adapter);
-      const selected = (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
-      response.json({ modes, selected });
-    } catch (error) { next(error); }
+  app.get("/v0/harnesses/:implementation/permission-modes", async (request, response) => {
+    const implementation = request.params.implementation;
+    if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
+      return response.status(404).json({ error: "harness_not_found" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    if (!adapter.getCapabilities().permissionModes || typeof adapter.listAvailablePermissionModes !== "function") {
+      return response.json({ modes: [], selected: "" });
+    }
+    const requested = typeof request.query.path === "string" && request.query.path ? request.query.path : null;
+    const cwd = requested ? (await resolveFolder(requested)).workingRoot : (await computerContext()).workingRoot;
+    const key = `${implementation}\0${cwd}`;
+    let modes = permissionCatalogs.get(key);
+    if (modes) void refreshPermissionModes(implementation, cwd, adapter).catch(() => {});
+    else modes = await refreshPermissionModes(implementation, cwd, adapter);
+    const selected = (modes.some((mode) => mode.id === "custom") ? "custom" : modes[0]?.id) || "";
+    response.json({ modes, selected });
   });
 
   /*
@@ -237,64 +227,62 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
    * thread stays with the harness. A thread Conduit already tracks opens as
    * that chat instead, and one already open is opened again, not duplicated.
    */
-  app.post("/v0/harnesses/:implementation/threads/open", async (request, response, next) => {
-    try {
-      const implementation = request.params.implementation;
-      const manifest = backends.manifestFor?.(implementation);
-      if (!manifest?.drive || !backends.adapters.has(implementation)) {
-        return response.status(409).json({ error: "harness_drive_unavailable" });
-      }
-      const adapter = backends.forImplementation(implementation);
-      const every = registry.list({ includeHidden: true, includeUntracked: true })
-        .filter((chat) => chat.backend?.implementation === implementation);
-      const reply = async (chat, tracked = false) => {
-        const project = await projects.get(chat.projectId) || await resolveComputerContext(chat.projectId);
-        return response.json({ chat: chatView(chat), project: { ...project, sessions: [] }, tracked });
-      };
-      const chatId = typeof request.body?.chatId === "string" ? request.body.chatId : "";
-      if (chatId) {
-        const open = every.find((chat) => chat.id === chatId);
-        return open ? reply(open, !open.untracked) : response.status(404).json({ error: "chat_not_found" });
-      }
-      const folder = await resolveFolder(String(request.body?.path || ""));
-      const sessionId = typeof request.body?.sessionId === "string" ? request.body.sessionId : "";
-      if (sessionId) {
-        const known = every.find((chat) => opaqueSessionId(chat) === sessionId && !chat.untracked)
-          || every.find((chat) => opaqueSessionId(chat) === sessionId);
-        if (known) return reply(known, !known.untracked);
-      }
-      // The folder's own place when Conduit has one, compared as real paths.
-      const registered = await Promise.all((await projects.list()).map(async (project) =>
-        ({ project, root: await fs.realpath(project.workingRoot).catch(() => null) })));
-      const workspace = registered.find((entry) => entry.root === folder.workingRoot)?.project;
-      const project = workspace || folder;
-      const backend = { profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
-        implementation, installationId: manifest.installationId };
-      if (sessionId) {
-        const session = (await adapter.listThreads({ cwd: folder.workingRoot })).find((item) => item.id === sessionId);
-        if (!session) return response.status(404).json({ error: "backend_session_not_found" });
-        const chat = await registry.create(project, { backend: { ...backend, opaqueSession: { threadId: session.id } }, untracked: true });
-        const timestamp = new Date().toISOString();
-        await registry.update(chat.id, { status: "active", title: session.title || "",
-          lastMessageAt: session.updatedAt || timestamp, lastReadAt: timestamp });
-        return reply(registry.metadata(chat.id));
-      }
-      // A new thread carries what the harness's page chose for it, as a new
-      // chat carries what its composer chose.
-      const model = String(request.body?.model || "").trim();
-      const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
-      const requestedMode = String(request.body?.permissionMode || "").trim();
-      const mode = requestedMode && typeof adapter.listAvailablePermissionModes === "function"
-        ? (await adapter.listAvailablePermissionModes(folder.workingRoot)).find((candidate) => candidate.id === requestedMode && candidate.allowed)
-        : null;
-      const chat = await registry.create(project, { untracked: true, backend: { ...backend,
-        ...(model ? { model } : {}),
-        ...(mode ? { permissionMode: mode.id, ...(mode.profile ? { permissionProfile: mode.profile } : {}),
-          ...(mode.approvalPolicy ? { approvalPolicy: mode.approvalPolicy } : {}),
-          ...(mode.approvalsReviewer ? { approvalsReviewer: mode.approvalsReviewer } : {}) } : {}),
-      } });
-      if (model && thinkingLevel) await registry.update(chat.id, { modelThinkingLevels: { [model]: thinkingLevel } });
+  app.post("/v0/harnesses/:implementation/threads/open", async (request, response) => {
+    const implementation = request.params.implementation;
+    const manifest = backends.manifestFor?.(implementation);
+    if (!manifest?.drive || !backends.adapters.has(implementation)) {
+      return response.status(409).json({ error: "harness_drive_unavailable" });
+    }
+    const adapter = backends.forImplementation(implementation);
+    const every = registry.list({ includeHidden: true, includeUntracked: true })
+      .filter((chat) => chat.backend?.implementation === implementation);
+    const reply = async (chat, tracked = false) => {
+      const project = await projects.get(chat.projectId) || await resolveComputerContext(chat.projectId);
+      return response.json({ chat: chatView(chat), project: { ...project, sessions: [] }, tracked });
+    };
+    const chatId = typeof request.body?.chatId === "string" ? request.body.chatId : "";
+    if (chatId) {
+      const open = every.find((chat) => chat.id === chatId);
+      return open ? reply(open, !open.untracked) : response.status(404).json({ error: "chat_not_found" });
+    }
+    const folder = await resolveFolder(String(request.body?.path || ""));
+    const sessionId = typeof request.body?.sessionId === "string" ? request.body.sessionId : "";
+    if (sessionId) {
+      const known = every.find((chat) => opaqueSessionId(chat) === sessionId && !chat.untracked)
+        || every.find((chat) => opaqueSessionId(chat) === sessionId);
+      if (known) return reply(known, !known.untracked);
+    }
+    // The folder's own place when Conduit has one, compared as real paths.
+    const registered = await Promise.all((await projects.list()).map(async (project) =>
+      ({ project, root: await fs.realpath(project.workingRoot).catch(() => null) })));
+    const workspace = registered.find((entry) => entry.root === folder.workingRoot)?.project;
+    const project = workspace || folder;
+    const backend = { profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
+      implementation, installationId: manifest.installationId };
+    if (sessionId) {
+      const session = (await adapter.listThreads({ cwd: folder.workingRoot })).find((item) => item.id === sessionId);
+      if (!session) return response.status(404).json({ error: "backend_session_not_found" });
+      const chat = await registry.create(project, { backend: { ...backend, opaqueSession: { threadId: session.id } }, untracked: true });
+      const timestamp = new Date().toISOString();
+      await registry.update(chat.id, { status: "active", title: session.title || "",
+        lastMessageAt: session.updatedAt || timestamp, lastReadAt: timestamp });
       return reply(registry.metadata(chat.id));
-    } catch (error) { next(error); }
+    }
+    // A new thread carries what the harness's page chose for it, as a new
+    // chat carries what its composer chose.
+    const model = String(request.body?.model || "").trim();
+    const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
+    const requestedMode = String(request.body?.permissionMode || "").trim();
+    const mode = requestedMode && typeof adapter.listAvailablePermissionModes === "function"
+      ? (await adapter.listAvailablePermissionModes(folder.workingRoot)).find((candidate) => candidate.id === requestedMode && candidate.allowed)
+      : null;
+    const chat = await registry.create(project, { untracked: true, backend: { ...backend,
+      ...(model ? { model } : {}),
+      ...(mode ? { permissionMode: mode.id, ...(mode.profile ? { permissionProfile: mode.profile } : {}),
+        ...(mode.approvalPolicy ? { approvalPolicy: mode.approvalPolicy } : {}),
+        ...(mode.approvalsReviewer ? { approvalsReviewer: mode.approvalsReviewer } : {}) } : {}),
+    } });
+    if (model && thinkingLevel) await registry.update(chat.id, { modelThinkingLevels: { [model]: thinkingLevel } });
+    return reply(registry.metadata(chat.id));
   });
 }
