@@ -8,6 +8,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
@@ -1110,20 +1111,16 @@ export class CodexAppServerAdapter extends EventEmitter {
       // Captured before the flag resets below: a turn the user stopped settles
       // the same way a finished one does, and only one of them is readable.
       const stopped = Boolean(record.stopping);
-      record.active = false;
-      record.turnStarting = false;
-      record.stopping = false;
+      // Stopped by us, or by Codex's own TUI or another client -- as the turn's status rather than through our stop.
+      const interrupted = stopped || params.turn?.status === "interrupted";
+      const outcome = failed ? "failed" : interrupted ? "interrupted" : "complete";
+      endTurn(record, outcome);
       record.compacting = false;
-      record.failed = failed;
-      if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
       // A turn nobody stopped, whose last message Codex never labelled, ends by
       // saying that message was the answer. A turn that was interrupted says no
       // such thing: what it had written is where it got to, not what it meant
       // to say, and calling it the answer would hide that it was cut off.
-      // Codex reports an interrupt it was told about elsewhere -- its own TUI,
-      // another client -- as the turn's status rather than through our stop.
-      const interrupted = stopped || params.turn?.status === "interrupted";
       const promoted = !failed && !interrupted && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
         && !record.turn.blocks.some((block) => block.kind === "tool_call");
       if (promoted) {
@@ -1138,14 +1135,12 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.dropUnwrittenMessages(record, failed || interrupted ? "aborted" : "stop");
       // Every prompt the turn answered, a steer included, ended with it.
       for (const promptId of this.states(record) ? record.prompts || [] : []) {
-        this.publish(record, turnSettle({ promptId, generationId: turnId,
-          outcome: failed ? "failed" : interrupted ? "interrupted" : "complete" }));
+        this.publish(record, turnSettle({ promptId, generationId: turnId, outcome }));
       }
       record.prompts = new Set();
       record.answering = null;
-      this.publish(record, failed
-        ? { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } }
-        : { type: "status", generationId: turnId, phase: "settled", seq: ++record.generationSeq, status: "idle", activity: "idle", detail: null });
+      if (failed) this.publish(record, { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } });
+      this.publish(record, turnEnded(record, outcome, turnId));
       this.emit("settled", { record, completed: !failed && !stopped });
       if (record.status !== "stopped" && record.followUp.length) void this.flushFollowUp(record);
     }

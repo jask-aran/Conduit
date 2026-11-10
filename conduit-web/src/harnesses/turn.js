@@ -38,3 +38,31 @@ export function activityOf(record) {
 export const turnInFlight = (record) => Boolean(record && (record.active || record.turnStarting || record.stopping
   || record.compacting || openRequests(record)
   || (record.generation && !record.generation.closed && !record.generation.settled)));
+
+/**
+ * A turn ends, the same way on every harness.
+ *
+ * Each adapter used to clear these by hand and word the last status itself,
+ * and they disagreed: a stopped turn ended "settled" on four of them and
+ * "stopped" on three, a failed one read "failed" on some and "idle" on others,
+ * and Codex and ChatGPT Web ended a failed turn with an error and no status at
+ * all -- so no other page was told it had ended and its timing was never kept.
+ *
+ * `endTurn` is the record's side of it; `turnEnded` is the statement, numbered
+ * when it is made so an adapter may publish what the turn left open in between.
+ *
+ * @param {"complete" | "interrupted" | "failed"} outcome
+ */
+export function endTurn(record, outcome) {
+  record.active = false;
+  record.turnStarting = false;
+  record.stopping = false;
+  record.failed = outcome === "failed";
+  if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
+}
+
+/** @param {"complete" | "interrupted" | "failed"} outcome */
+export const turnEnded = (record, outcome, generationId = record.generation?.id || null) => ({
+  type: "status", generationId, phase: outcome === "interrupted" ? "stopped" : "settled", seq: ++record.generationSeq,
+  status: outcome === "failed" ? "failed" : "idle", activity: activityOf(record), detail: null,
+});

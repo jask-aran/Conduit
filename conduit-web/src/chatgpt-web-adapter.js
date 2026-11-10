@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -255,11 +256,10 @@ export class ChatGptWebAdapter extends EventEmitter {
     if (record.generation?.settled) return;
     Object.assign(record.generation, { closed: true, settled: true });
     this.settleTurn(record, detail === "stopped" ? "interrupted" : "complete");
-    record.active = false;
-    record.stopping = false;
+    const outcome = detail === "stopped" ? "interrupted" : "complete";
+    endTurn(record, outcome);
     record.abortController = null;
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.generationSeq,
-      status: "idle", activity: "idle", detail: null });
+    this.publish(record, turnEnded(record, outcome));
     this.emit("settled", { record, completed: detail !== "stopped" });
   }
 
@@ -268,13 +268,12 @@ export class ChatGptWebAdapter extends EventEmitter {
     if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
     this.closeTurn(record, "error", text);
     this.settleTurn(record, "failed");
-    record.active = false;
-    record.stopping = false;
-    record.failed = true;
+    endTurn(record, "failed");
     record.abortController = null;
     const code = ["auth_expired", "rate_limited", "backend_unavailable"].includes(cause.code) ? cause.code : "backend_unavailable";
     this.publish(record, { type: "error", generationId: record.generation?.id || null,
       error: { code, message: cause.message, ...(code === "rate_limited" ? { retryAfterMs: cause.retryAfterMs || 60_000 } : {}) } });
+    if (record.generation) this.publish(record, turnEnded(record, "failed"));
     this.emit("settled", { record, completed: false });
   }
 

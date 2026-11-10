@@ -5,6 +5,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
@@ -523,12 +524,8 @@ export class FxAcpAdapter extends EventEmitter {
     if (record.answering) {
       this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id, outcome }));
     }
-    record.active = false;
-    record.stopping = false;
-    record.failed = stopReason === "error";
-    Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
-      seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
+    endTurn(record, outcome);
+    this.publish(record, turnEnded(record, outcome));
     this.emit("settled", { record, completed: !stopped && !error });
   }
 

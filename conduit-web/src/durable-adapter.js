@@ -14,6 +14,7 @@ import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
@@ -936,6 +937,7 @@ export class DurableAdapter extends EventEmitter {
 
   beginTurn(record, inputs, generationId = crypto.randomUUID()) {
     record.active = true;
+    record.failed = false;
     record.doing = null;
     if (record.templateId === "agent") this.runtime.agentChanged?.();
     record.generation = { id: generationId, closed: false, settled: false };
@@ -1364,12 +1366,9 @@ export class DurableAdapter extends EventEmitter {
     for (const request of [...record.hostUiRequests]) this.settleAsk(record, request.id, { id: request.id, cancelled: true });
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome, generationId: turn.generationId }));
     record.turn = null;
-    record.active = false;
+    endTurn(record, outcome);
     if (record.templateId === "agent") this.runtime.agentChanged?.();
-    record.stopping = false;
-    Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
-      phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
+    this.publish(record, turnEnded(record, outcome, turn.generationId));
     void this.publishUsage(record);
     if (!record.readOnly) this.emit("settled", { record, completed: outcome === "complete" });
   }

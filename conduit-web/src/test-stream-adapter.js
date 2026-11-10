@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
@@ -692,21 +693,16 @@ export class TestStreamAdapter extends EventEmitter {
     if (waiting?.called) this.publish(record, toolClose({ toolCallId: waiting.toolCallId, output: "", cancelled: true, generationId: turn.generationId }));
     this.closeAnswer(record, stopReason);
     record.turn = null;
-    record.active = false;
-    record.stopping = false;
+    const outcome = stopReason === "aborted" ? "interrupted" : "complete";
+    endTurn(record, outcome);
     // One user message for the prompt, one more for every steer taken mid-turn,
     // and one assistant message per answer opened -- a turn that called a tool
     // opened more than one.
     record.messages += (turn.userMessages || 1) + (turn.messages || 1);
     record.pendingApproval = null;
     record.hostUiRequests = [];
-    Object.assign(record.generation, { closed: true, settled: true });
-    for (const promptId of turn.prompts) {
-      this.publish(record, turnSettle({ promptId, generationId: turn.generationId,
-        outcome: stopReason === "aborted" ? "interrupted" : "complete" }));
-    }
-    this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
-      phase: stopReason === "aborted" ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
+    for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, generationId: turn.generationId, outcome }));
+    this.publish(record, turnEnded(record, outcome, turn.generationId));
     this.publishUsage(record);
     // A follow-up waited for exactly this moment. It is a prompt of its own,
     // which is the difference between the two queues.

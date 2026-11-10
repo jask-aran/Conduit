@@ -8,6 +8,7 @@ import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
@@ -1068,12 +1069,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.closeSteps(record, stopReason, spoke ? last : null, errorMessage);
     const outcome = OUTCOMES[stopReason] || "complete";
     this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id, outcome }));
-    record.active = false;
-    record.stopping = false;
-    record.failed = stopReason === "error";
-    Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
-      seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
+    endTurn(record, outcome);
+    this.publish(record, turnEnded(record, outcome));
     this.emit("settled", { record, completed: !stopped && !failed });
     // A stop takes the steers with it; a turn that ended by itself leaves them to open the next.
     if (stopped && record.steering.length) { record.steering = []; this.publishQueue(record); }

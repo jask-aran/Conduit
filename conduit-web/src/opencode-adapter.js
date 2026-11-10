@@ -9,6 +9,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
+import { endTurn, turnEnded } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -796,16 +797,12 @@ export class OpenCodeAdapter extends EventEmitter {
       }
       if (!state.closed) this.closeLiveMessage(record, state.row || this.rowFromState(state), state, stopReason);
     }
+    const ended = { succeeded: "complete", failed: "failed" }[outcome] || "interrupted";
     if (record.answering) {
-      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id,
-        outcome: { succeeded: "complete", failed: "failed" }[outcome] || "interrupted" }));
+      this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id, outcome: ended }));
     }
-    record.active = false;
-    record.stopping = false;
-    record.failed = outcome === "failed";
-    Object.assign(record.generation, { closed: true, settled: true });
-    this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
-      seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
+    endTurn(record, ended);
+    this.publish(record, turnEnded(record, ended));
     this.emit("settled", { record, completed: outcome === "succeeded" });
     void this.request("GET", `/session/${encodeURIComponent(record.sessionId)}`).then((session) => {
       if (session?.title) this.emit("changed", { record, reason: "named", name: session.title });
