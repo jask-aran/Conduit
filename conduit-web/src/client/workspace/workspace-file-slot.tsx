@@ -193,7 +193,9 @@ export default function WorkspaceFileSlot(props: {
   const [imageDimensions, setImageDimensions] = createSignal<{ width: number; height: number } | null>(null);
   const [editorDirty, setEditorDirty] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
-  const [saving, setSaving] = createSignal(false);
+  // conflict: the file changed on disk since it was read, so nothing saves until Reload or Overwrite.
+  const [saveState, setSaveState] = createSignal<"idle" | "saving" | "conflict" | "overwriting">("idle");
+  const saving = () => saveState() === "saving" || saveState() === "overwriting";
   const [documentProjectId, setDocumentProjectId] = createSignal(props.projectId);
   const hasUnsavedChanges = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated && editorDirty());
   const label = props.slot === "primary" ? "File preview" : "Second file preview";
@@ -385,35 +387,48 @@ export default function WorkspaceFileSlot(props: {
     const key = `${projectId}\u0000${path ?? ""}`;
     if (key === loadedKey) return;
     loadedKey = key;
+    if (saveState() === "conflict") setSaveState("idle");
     void load();
   }));
 
-  const save = async (content?: string) => {
+  // overwrite writes over whatever is on disk, and is only offered from a conflict.
+  const write = async (overwrite: boolean, content?: string) => {
     const file = preview();
     const projectId = props.projectId;
-    if (!file || documentProjectId() !== projectId || file.path !== props.path || !hasUnsavedChanges() || saving()) return;
+    const from = overwrite ? "conflict" : "idle";
+    if (!file || documentProjectId() !== projectId || file.path !== props.path || !hasUnsavedChanges() || saveState() !== from) return;
     const submittedEditor = editor;
     const submittedContent = content ?? submittedEditor?.getValue() ?? file.content;
+    const current = () => props.projectId === projectId && documentProjectId() === projectId && preview()?.path === file.path && editor === submittedEditor;
     // A read started before this write must not replace its content or revision.
     loadToken.drop();
-    setSaving(true);
+    setSaveState(overwrite ? "overwriting" : "saving");
+    let next: "idle" | "conflict" = "idle";
     try {
       const written = await api<FileWriteResult>(
         `/v0/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(file.path)}`,
-        { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": file.revision }, body: submittedContent },
+        { method: "PUT", headers: { "content-type": "application/octet-stream", "if-match": overwrite ? "*" : file.revision }, body: submittedContent },
       );
-      if (props.projectId === projectId && documentProjectId() === projectId && preview()?.path === file.path && editor === submittedEditor) {
-        const next = { ...file, ...written, content: submittedContent };
-        setPreview(next);
-        if (editor === submittedEditor) submittedEditor?.acknowledgeSaved(submittedContent);
-        props.onLoaded?.(next);
+      if (current()) {
+        const saved = { ...file, ...written, content: submittedContent };
+        setPreview(saved);
+        submittedEditor?.acknowledgeSaved(submittedContent);
+        props.onLoaded?.(saved);
         props.onSaved?.();
       }
     } catch (cause) {
-      props.onError((cause as Error).message);
+      if (current() && (overwrite || errorCode(cause) === "workspace_file_changed")) next = "conflict";
+      if (overwrite || next !== "conflict") props.onError((cause as Error).message);
     } finally {
-      setSaving(false);
+      setSaveState(next);
     }
+  };
+  const save = (content?: string) => write(false, content);
+  const overwrite = () => void write(true);
+  const reloadFromDisk = () => {
+    setSaveState("idle");
+    setEditorDirty(false);
+    void load();
   };
 
   const edit = async () => {
@@ -453,6 +468,7 @@ export default function WorkspaceFileSlot(props: {
       if (!file) return;
       editor?.replaceDocument(file.content);
       setEditorDirty(false);
+      if (saveState() === "conflict") setSaveState("idle");
     },
   });
 
@@ -513,7 +529,7 @@ export default function WorkspaceFileSlot(props: {
     {gitControls()}
     <Show when={!props.headerTabs}><FileDirty dirty={hasUnsavedChanges()} /></Show>
     <Show when={hasUnsavedChanges()}>
-      <IconButton kind="file" wide type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saving()} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</IconButton>
+      <IconButton kind="file" wide type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saveState() !== "idle"} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</IconButton>
     </Show>
     {fileActions()}
     <FileSuffix>{props.headerSuffix}</FileSuffix>
@@ -613,6 +629,12 @@ export default function WorkspaceFileSlot(props: {
           <Show when={file().readOnly && !file().truncated}>
             <Notice kind="tool" tone="warn">Opened as text. Editing is disabled.</Notice>
           </Show>
+          <Show when={saveState() === "conflict" || saveState() === "overwriting"}>
+            <Notice kind="tool" tone="warn" live action={[
+              { label: "Reload", disabled: saving(), onClick: reloadFromDisk },
+              { label: "Overwrite", busy: saving(), busyLabel: "Overwriting…", disabled: !hasUnsavedChanges(), onClick: overwrite },
+            ]}>Changed on disk</Notice>
+          </Show>
           <Show when={file().truncated} fallback={<FileBody editing={editing()} wrap={props.wrap}>
             <Show when={file().path}>{(path) =>
               <Suspense fallback={<Empty>Loading preview…</Empty>}>
@@ -670,7 +692,7 @@ export default function WorkspaceFileSlot(props: {
         <MenuSection>
           <Show when={preview()}>
             <MenuRow disabled={!editable()} onSelect={() => void edit()} icon={<Icons.Edit />}>Edit</MenuRow>
-            <MenuRow disabled={!hasUnsavedChanges() || saving()} onSelect={() => void save()} icon={<SaveIcon />}>Save</MenuRow>
+            <MenuRow disabled={!hasUnsavedChanges() || saveState() !== "idle"} onSelect={() => void save()} icon={<SaveIcon />}>Save</MenuRow>
             <MenuRow onSelect={() => copy(currentText())} icon={<Icons.Copy />}>Copy contents</MenuRow>
           </Show>
           <MenuRow onSelect={() => void download()} icon={<Icons.Download />}>Download</MenuRow>

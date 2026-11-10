@@ -51,9 +51,9 @@ export function Note(props: JSX.HTMLAttributes<HTMLElement> & { kind?: NoteKind;
 export type NoticeKind = "reading" | "nav" | "tool" | "capsule";
 export type NoticeAction = { label: string; name?: string; busy?: boolean; busyLabel?: string; disabled?: boolean; quiet?: boolean; onClick: () => void };
 
-/** A line worth saying where it sits, with one action: busy, a spinner for its icon; ready, it waits on a person; live,
+/** A line worth saying where it sits, with its actions: busy, a spinner for its icon; ready, it waits on a person; live,
  *  said politely as it changes; hint, the whole on hover. In reading, title is the line and children what it means. */
-export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: JSX.Element; busy?: boolean; ready?: boolean; tone?: "warn"; live?: boolean; hint?: string; action?: NoticeAction; children?: JSX.Element }) {
+export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: JSX.Element; busy?: boolean; ready?: boolean; tone?: "warn"; live?: boolean; hint?: string; action?: NoticeAction | NoticeAction[]; children?: JSX.Element }) {
   const kind = props.kind ?? "reading";
   const act = (action: NoticeAction) => kind === "nav"
     ? <Button size="sm" variant={action.quiet ? "ghost" : undefined} onClick={() => action.onClick()}>{action.label}</Button>
@@ -64,6 +64,6 @@ export function Notice(props: { kind?: NoticeKind; icon?: JSX.Element; title?: J
     data-ready={props.ready ? "" : undefined} data-tone={props.tone}>
     <Show when={props.busy} fallback={props.icon}><Spinner /></Show>
     {kind === "reading" ? <div><strong>{props.title}</strong><Show when={props.children}><p>{props.children}</p></Show></div> : kind === "tool" ? props.children : <span>{props.children}</span>}
-    <Show when={props.action} keyed>{(action) => act(action)}</Show>
+    <For each={props.action ? [props.action].flat() : []}>{act}</For>
   </Dynamic>;
 }
