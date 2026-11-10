@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { appendEntry } from "../src/agent/inbox.js";
-import { completeRoutine, block, executeRoutine, migrateToRoutines, routineClocks, runInstructions, triggerWords } from "../src/agent/routines.js";
+import { completeRoutine, block, executeRoutine, routineClocks, runInstructions, triggerWords } from "../src/agent/routines.js";
 import { ContextStore } from "../src/context/context-store.js";
 import { MemoryTools, rejectProposal } from "../src/agent/memory.js";
 import { listSchedules, seedSchedules, slotFate } from "../src/agent/schedule.js";
@@ -33,7 +32,6 @@ test("a saved routine keeps its trigger, tasks and instructions in its own file"
   assert.deepEqual(await readRoutine(root, expected.name), expected);
 });
 
-const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const currentSeeds = new URL("../../templates/agent/seed/routines/", import.meta.url);
 // Production history is shipped with the templates; tests need no git checkout history.
 const oldSeed = (commit, name, encoding) => fs.readFile(new URL(`../../templates/agent/seed-history/${commit}/routines/${name}.md`, import.meta.url), encoding);
@@ -55,7 +53,7 @@ test("every shipped historical routine upgrades, including serialized Settings c
   const commits = JSON.parse(await fs.readFile(new URL("index.json", history), "utf8"));
   for (const commit of commits) {
     const names = await fs.readdir(new URL(`${commit}/routines/`, history)).catch(() => []);
-    // A routine no longer shipped (email.md, now the heartbeat's email task) is retired, not upgraded: retireEmailRoutine.
+    // Only routines still shipped are upgraded.
     const shipped = new Set(await fs.readdir(currentSeeds));
     for (const file of names.filter((name) => shipped.has(name))) for (const serialized of [false, true]) await t.test(`${commit}/${file} serialized=${serialized}`, async (t) => {
       const { root } = await agentFixture(t);
@@ -199,22 +197,6 @@ test("RUN.md infers historical bytes and flags unknown bodies on old folders", a
   assert.equal(await seedTemplateUpdate(root, "RUN.md", "Current rules"), true);
 });
 
-test("hash-only records migrate from shipped content, including interrupted old replacements", async (t) => {
-  for (const pending of [false, true]) await t.test(`pending=${pending}`, async (t) => {
-    const { root } = await agentFixture(t);
-    const old = await oldSeed("0ec426a5", "heartbeat", "utf8");
-    const current = await fs.readFile(new URL("heartbeat.md", currentSeeds), "utf8");
-    await fs.mkdir(path.join(root, "routines"));
-    await fs.writeFile(path.join(root, "routines", "heartbeat.md"), pending ? current : serializeRoutine({ ...parseRoutine(old, "heartbeat"), enabled: false }));
-    await fs.writeFile(path.join(root, "routines", ".seeds.json"), JSON.stringify({ heartbeat: { hash: sha256(old), ...(pending ? { pending: sha256(current) } : {}) } }));
-    await seedRoutines(root, fileURLToPath(currentSeeds));
-    assert.equal((await readRoutine(root, "heartbeat")).body, parseRoutine(current, "heartbeat").body);
-    assert.equal((await readRoutine(root, "heartbeat")).enabled, pending);
-    assert.equal(await baseText(root, "routines/heartbeat.md"), current);
-    await assert.rejects(fs.readFile(path.join(root, "routines", ".seeds.json")), { code: "ENOENT" });
-  });
-});
-
 test("pending content journals recover before and after replacement while preserving intervening edits", async (t) => {
   for (const position of ["before", "after", "edited", "settings"]) await t.test(position, async (t) => {
     const { root } = await agentFixture(t);
@@ -234,12 +216,10 @@ test("pending content journals recover before and after replacement while preser
   });
 });
 
-test("agent seeding tracks templates and preserves migrated settings and personal memory files", async (t) => {
-  const { root, agent } = await agentFixture(t, { brief: { enabled: false, at: "09:00" } });
+test("agent seeding tracks templates and preserves personal memory files", async (t) => {
+  const { root, agent } = await agentFixture(t);
   for (const name of ["SOUL.md", "USER.md", "MEMORY.md"]) await fs.writeFile(path.join(root, name), `Personal ${name}`);
   await agent.seedFolder();
-  assert.equal((await readRoutine(root, "morning-brief")).enabled, false);
-  assert.equal((await readRoutine(root, "morning-brief")).trigger.time, "09:00");
   for (const name of ["heartbeat", "morning-brief", "reflect"]) {
     assert.equal(await baseText(root, `routines/${name}.md`), await fs.readFile(new URL(`${name}.md`, currentSeeds), "utf8"));
   }
@@ -339,8 +319,8 @@ test("a fork can handle only inbox entries supplied in its task blocks", async (
     assert.equal(forkAllows(agent, record, "conduit_inbox", args), false);
   }
   assert.equal(forkAllows(agent, {}, "conduit_inbox", { action: "handle", id }), false);
-  const { InboxTools } = await import("../src/agent/inbox.js");
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const { ConduitInboxTool } = await import("../src/agent/inbox.js");
+  const tool = ConduitInboxTool(agent.runtime);
   await tool.execute({ action: "handle", ids: [id], outcome: "Added USER directive" }, api);
   assert.equal((await agent.state()).inbox[id].status, "handled");
 });
@@ -990,7 +970,7 @@ test("quiet windows resolve from current settings and disable without changing o
 test("reseeding rebuilds quiet-window clocks after settings change and preserves unchanged clocks", async (t) => {
   const { root } = await agentFixture(t);
   await writeRoutine(root, parseRoutine(text.replace('{ every: 30 }', '[{ every: 60 }, { every: 120, during: quiet }]'), "heartbeat"));
-  const state = { schedules: {}, feedsMigrated: true };
+  const state = { schedules: {} };
   const settings = { timezone: "UTC", quietHours: { enabled: true, start: "23:00", end: "07:00" } };
   let count = 0;
   const aborted = [];
@@ -1027,15 +1007,6 @@ test("settings show and update the unwindowed rule without discarding the window
   assert.deepEqual((await readRoutine(root, "heartbeat")).trigger, [{ kind: "every", minutes: 90 }, { kind: "every", minutes: 120, during: "quiet" }]);
   await agent.saveSettings({ heartbeat: { enabled: true, everyMinutes: 45 } });
   assert.deepEqual((await readRoutine(root, "heartbeat")).trigger, [{ kind: "every", minutes: 45 }, { kind: "every", minutes: 120, during: "quiet" }]);
-});
-
-test("routine migration preserves additional brief trigger rules", async (t) => {
-  const { root, agent } = await agentFixture(t);
-  const seedDir = path.join(root, "seeds");
-  await fs.mkdir(seedDir);
-  await fs.writeFile(path.join(seedDir, "morning-brief.md"), text.replace('{ every: 30 }', '[{ at: "09:00" }, { at: "11:00", during: "10:00-12:00" }]'));
-  await migrateToRoutines(agent, seedDir);
-  assert.deepEqual((await readRoutine(root, "morning-brief")).trigger, [{ kind: "at", time: "08:00" }, { kind: "at", time: "11:00", during: "10:00-12:00" }]);
 });
 
 test("schedule listings describe rule lists and leave dormant schedules dormant", async (t) => {

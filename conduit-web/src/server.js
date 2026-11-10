@@ -33,7 +33,7 @@ import { LanAdvertisement } from "./lan-advertisement.js";
 import { DraftStore } from "./draft-store.js";
 import { PreferencesStore } from "./preferences-store.js";
 import { SessionNameService } from "./session-name-service.js";
-import { normalizeTemplateId, templatePublicView } from "../../scripts/pi-runtime.mjs";
+import { templatePublicView } from "../../scripts/pi-runtime.mjs";
 import { formatWorkspacePath, isPathInside, listDirectorySuggestions } from "./workspace-paths.js";
 import fs from "node:fs/promises";
 import { AuthStore } from "./auth-store.js";
@@ -124,10 +124,6 @@ const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn
 void turnCheckpoints.sweep().catch((error) => console.warn("Could not clear old turn checkpoints", error.message));
 const projects = new ProjectStore(config);
 await projects.initialize();
-for (const project of await projects.list()) {
-  const normalized = normalizeTemplateId(project.defaultTemplateId);
-  if (normalized && normalized !== project.defaultTemplateId) await projects.update(project.id, { defaultTemplateId: normalized });
-}
 // Everything below that has to be let go when the server stops is handed to
 // this as it is made, and let go in reverse.
 const lifetime = new ServerLifetime();
@@ -147,7 +143,6 @@ const hub = hubIds(serverIdentity.id);
 projects.hubNodeId = hub.nodeId;
 const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
-await registry.migrateTemplateIds(normalizeTemplateId);
 const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
 const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));

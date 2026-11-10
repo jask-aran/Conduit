@@ -20,28 +20,16 @@ function memoryStorage(initial = {}, { failWrites = () => false } = {}) {
   };
 }
 
-test("migrates scoped keys into one state object and removes unknown scopes", () => {
-  const storage = memoryStorage({
-    "conduit:workspace-panel:project:chat-old:tab": "diff",
-    "conduit:workspace-panel:project:chat-old:width": "400",
-    "conduit:workspace-panel:project:chat-old:files:detail-height": "200",
-    "conduit:workspace-panel:unknown:tab": "files",
-    "conduit:workspace:wrap-lines": "true",
-  });
+test("pruning removes scopes that are no longer valid", () => {
+  const storage = memoryStorage();
   const panel = createWorkspacePanelStorage(storage);
+  panel.writeSetting("project:chat", "tab", "diff");
+  panel.writeSetting("unknown", "tab", "files");
 
-  panel.migrateWorkspacePanelStorage(["project:chat-old"]);
+  panel.pruneWorkspacePanelStorage(["project:chat"]);
 
-  assert.equal(panel.readSetting("project:chat-old", "tab"), "diff");
-  assert.equal(panel.readSetting("project:chat-old", "width"), "320");
-  assert.equal(panel.readSetting("project:chat-old", "files:detail-height"), "160");
-  assert.equal(panel.readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines"), "true");
-  assert.equal(storage.getItem("conduit:workspace-panel:project:chat-old:tab"), null);
+  assert.equal(panel.readSetting("project:chat", "tab"), "diff");
   assert.equal(storage.getItem("conduit:workspace-panel:unknown:state"), null);
-  assert.equal(storage.getItem("conduit:workspace:wrap-lines"), null);
-  assert.deepEqual(Object.keys(storage.snapshot()).filter((key) => key.startsWith("conduit:workspace-panel:project:chat-old:")), [
-    "conduit:workspace-panel:project:chat-old:state",
-  ]);
 });
 
 test("dropping a chat scope removes every persisted panel setting", () => {
@@ -82,7 +70,7 @@ test("keeps the 100 most recently written scopes", () => {
   const scopes = Array.from({ length: 101 }, (_, index) => `project-${index}`);
 
   for (const scope of scopes) panel.writeSetting(scope, "tab", "files");
-  panel.migrateWorkspacePanelStorage(scopes);
+  panel.pruneWorkspacePanelStorage(scopes);
 
   assert.equal(panel.readSetting(scopes[0], "tab"), null);
   assert.equal(panel.readSetting(scopes[1], "tab"), "files");

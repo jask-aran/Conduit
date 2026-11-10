@@ -168,18 +168,6 @@ export class ChatStore {
     return this.list(options).filter((chat) => chat.projectId === projectId && chat.status !== "subagent");
   }
 
-  async migrateTemplateIds(normalize) {
-    let changed = false;
-    for (const chat of this.chats) {
-      const templateId = normalize(chat.templateId);
-      if (templateId && templateId !== chat.templateId) {
-        chat.templateId = templateId;
-        changed = true;
-      }
-    }
-    if (changed) await this.flush();
-  }
-
   metadata(id) {
     return this.chats.find((chat) => chat.id === id) || null;
   }

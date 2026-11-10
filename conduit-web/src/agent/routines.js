@@ -1,6 +1,4 @@
 import { notice } from "../context/notices.js";
-import fs from "node:fs/promises";
-import path from "node:path";
 import { entryText, listInbox } from "./inbox.js";
 import { inboxEntryText } from "./inbox-files.js";
 import { itemText, runSource, SEEN_KEPT } from "./feeds.js";
@@ -8,7 +6,7 @@ import { heldMailTask, mailTask } from "./mail-task.js";
 import { defineTool } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { startRoutine } from "./routine-task.js";
-import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, updateTrigger, writeRoutine } from "./routine-files.js";
+import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, writeRoutine } from "./routine-files.js";
 
 /**
  * Routines (docs/plans/persistent-agent.md, "Verbs and structures"): a trigger fires a routine; its tasks gather
@@ -51,9 +49,6 @@ export async function promptVars(agent, now = Date.now()) {
   };
 }
 
-async function readText(file) {
-  return fs.readFile(file, "utf8").catch((error) => { if (error.code === "ENOENT") return ""; throw error; });
-}
 /** The agent's own folder is the agent's to change, so the hub reads it never through a link. */
 const folderText = async (agent, ...parts) => (await readFolderFile(agent.folder, ...parts)) ?? "";
 
@@ -267,60 +262,6 @@ export async function routineClocks(agent) {
       title: routine.title, task: null, routine: routine.name };
   }
   return clocks;
-}
-
-/**
- * From before routines, once and never over a file: the brief's time and switch (agent.json) and the heartbeat's
- * switch become routines/morning-brief.md and routines/heartbeat.md from the seed; HEARTBEAT.md, whose instructions
- * the heartbeat routine's body now holds, goes. (Feeds become routines in schedule.js, which holds their state.)
- */
-export async function migrateToRoutines(agent, seedDir) {
-  const settings = agent.settings();
-  for (const [name, adjust] of [
-    ["morning-brief", (routine) => ({ ...routine, enabled: settings.brief.enabled !== false, trigger: settings.brief.at ? updateTrigger(routine.trigger, "at", { time: settings.brief.at }) : routine.trigger })],
-    ["heartbeat", (routine) => ({ ...routine, enabled: settings.heartbeat.enabled !== false })],
-  ]) {
-    if (await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
-    const seed = await readText(path.join(seedDir, `${name}.md`));
-    if (!seed) continue;
-    const original = parseRoutine(seed, name);
-    const adjusted = adjust(original);
-    if (JSON.stringify(adjusted) === JSON.stringify(original)) {
-      // Preserve the exact seed bytes so future seed upgrades can identify it.
-      const target = path.join(agent.folder, "routines", `${name}.md`);
-      await fs.mkdir(path.dirname(target), { recursive: true });
-      await fs.writeFile(target, seed, { flag: "wx" });
-    } else await writeRoutine(agent.folder, adjusted);
-    if (name === "heartbeat") await fs.unlink(path.join(agent.folder, "HEARTBEAT.md")).catch(() => {});
-  }
-}
-
-/**
- * The Email routine (a Gmail reader on its own clock, filing into the context inbox) became the heartbeat's email task
- * (mail-task.js): once, its file goes when it is still the packaged one (its tasks as shipped), and what it had seen
- * becomes the heartbeat's email task's, so the next heartbeat reports only what is new. A Gmail routine the person
- * wrote or changed is theirs, and stays.
- */
-export async function retireEmailRoutine(agent, historyDir) {
-  const current = await readRoutine(agent.folder, "email").catch(() => null);
-  if (!current) return;
-  const shipped = [];
-  for (const commit of JSON.parse(await readText(path.join(historyDir, "index.json")) || "[]")) {
-    const text = await readText(path.join(historyDir, commit, "routines", "email.md"));
-    if (text) shipped.push(JSON.stringify(parseRoutine(text, "email").tasks));
-  }
-  if (!shipped.includes(JSON.stringify(current.tasks))) return;
-  await agent.update((doc) => {
-    const seen = doc.cursors?.email?.items?.seen || [];
-    doc.cursors ||= {};
-    doc.cursors.heartbeat ||= {};
-    if (seen.length && !doc.cursors.heartbeat.email) doc.cursors.heartbeat.email = { primed: true, seen };
-    delete doc.cursors.email;
-  });
-  await removeRoutine(agent.folder, "email");
-  for (const file of [path.join(".seeds", "routines", "email.md"), path.join(".seeds", "routines", "email.md.state.json")]) {
-    await fs.rm(path.join(agent.folder, file), { force: true });
-  }
 }
 
 const toolResult = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });

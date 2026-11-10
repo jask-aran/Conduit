@@ -19,7 +19,7 @@ import { directTerminalFailed, directTerminalSocket } from "./direct-terminal";
 import { pwaUpdateImpending } from "../pwa-update";
 import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, type TerminalRenderer } from "./terminal-renderer";
 import { terminalRecoveryView, type TerminalConnectionState, type TerminalRecoveryView } from "./terminal-recovery";
-import { LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY, normalizeTerminalShortcuts, readLegacyTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
+import { normalizeTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
 export type Pty = {
   id: string;
@@ -994,17 +994,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     };
     window.addEventListener("conduit:ptys-changed", ptyChangeListener);
     void readShared<{ terminalShortcuts?: unknown }>("/v0/preferences")
-      .then(async (saved) => {
-        const persisted = normalizeTerminalShortcuts(saved.terminalShortcuts);
-        const legacy = persisted.length ? [] : readLegacyTerminalShortcuts();
-        if (!legacy.length) return setShortcuts(persisted);
-        const migrated = await api<{ terminalShortcuts?: unknown }>("/v0/preferences", {
-          method: "PATCH",
-          body: JSON.stringify({ terminalShortcuts: legacy }),
-        });
-        setShortcuts(normalizeTerminalShortcuts(migrated.terminalShortcuts));
-        localStorage.removeItem(LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY);
-      })
+      .then((saved) => setShortcuts(normalizeTerminalShortcuts(saved.terminalShortcuts)))
       .catch((cause) => setError((cause as Error).message))
       .finally(() => shortcutsLoaded());
     if (props.active !== false) void attachExisting(activeProjectId);

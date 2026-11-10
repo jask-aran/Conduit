@@ -7,40 +7,9 @@ type PersistedState = {
   values: Record<string, string>;
 };
 
-type PanelKey = { scopeId: string; name: string };
-
 export const WORKSPACE_PANEL_STORAGE_PREFIX = "conduit:workspace-panel:";
 export const WORKSPACE_PANEL_GLOBAL_SCOPE = "__global__";
 const STATE_NAME = "state";
-const STORAGE_MIGRATION_KEY = "conduit:workspace-panel-storage-v3";
-const LEGACY_WRAP_LINES_KEY = "conduit:workspace:wrap-lines";
-const LEGACY_SETTING_NAMES = [
-  "secondary-tab",
-  "file-secondary",
-  "file-split-ratio",
-  "diff:source-detail-height",
-  "diff:source-detail-open",
-  "terminal:detail-height",
-  "terminal:detail-open",
-  "artifacts:detail-height",
-  "artifacts:detail-open",
-  "chat:detail-height",
-  "chat:detail-open",
-  "files:detail-height",
-  "files:detail-open",
-  "diff:detail-height",
-  "diff:detail-open",
-  "tree-collapsed",
-  "kept-visible",
-  "tree-width",
-  "show-hidden",
-  "split-ratio",
-  "wrap-lines",
-  "tab",
-  "file",
-  "width",
-  STATE_NAME,
-].sort((left, right) => right.length - left.length);
 
 function browserStorage(): WorkspacePanelStorageBackend | null {
   try {
@@ -74,23 +43,11 @@ function stateKey(scopeId: string): string {
   return `${WORKSPACE_PANEL_STORAGE_PREFIX}${scopeId}:${STATE_NAME}`;
 }
 
-function legacyKey(scopeId: string, name: string): string {
-  return `${WORKSPACE_PANEL_STORAGE_PREFIX}${scopeId}:${name}`;
-}
-
-function parsePanelKey(key: string): PanelKey | null {
-  if (!key.startsWith(WORKSPACE_PANEL_STORAGE_PREFIX)) return null;
-  const name = LEGACY_SETTING_NAMES.find((candidate) => key.endsWith(`:${candidate}`));
-  if (!name) return null;
-  const scopeEnd = key.length - name.length - 1;
-  const scopeId = key.slice(WORKSPACE_PANEL_STORAGE_PREFIX.length, scopeEnd);
-  return scopeId ? { scopeId, name } : null;
-}
-
-function migrateGeometryValue(name: string, value: string): string {
-  if (name !== "width" && !name.endsWith(":detail-height")) return value;
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? String(Math.round(number * 8) / 10) : value;
+/** The scope a stored panel state belongs to, or null for any other key. */
+function stateScope(key: string): string | null {
+  const suffix = `:${STATE_NAME}`;
+  if (!key.startsWith(WORKSPACE_PANEL_STORAGE_PREFIX) || !key.endsWith(suffix)) return null;
+  return key.slice(WORKSPACE_PANEL_STORAGE_PREFIX.length, -suffix.length) || null;
 }
 
 export function createWorkspacePanelStorage(storage: WorkspacePanelStorageBackend | null = browserStorage()) {
@@ -168,8 +125,7 @@ export function createWorkspacePanelStorage(storage: WorkspacePanelStorageBacken
 
   const readSetting = (scopeId: string, name: string): string | null => {
     const state = readState(scopeId);
-    if (state && Object.hasOwn(state.values, name)) return state.values[name] ?? null;
-    return readRaw(legacyKey(scopeId, name));
+    return state && Object.hasOwn(state.values, name) ? state.values[name] ?? null : null;
   };
 
   const writeSetting = (scopeId: string, name: string, value: string | null): void => {
@@ -188,55 +144,24 @@ export function createWorkspacePanelStorage(storage: WorkspacePanelStorageBacken
 
   const dropScope = (scopeId: string): void => {
     memory.delete(scopeId);
-    const keys = listKeys();
-    for (const key of keys) {
-      const parsed = parsePanelKey(key);
-      if (parsed?.scopeId === scopeId) removeRaw(key);
-    }
+    removeRaw(stateKey(scopeId));
   };
 
-  const migrateWorkspacePanelStorage = (validScopeIds: Iterable<string>): void => {
+  /** Load every stored scope, drop the ones no longer valid, and keep the 100 most recently written. */
+  const pruneWorkspacePanelStorage = (validScopeIds: Iterable<string>): void => {
     const validScopes = new Set(validScopeIds);
     validScopes.add(WORKSPACE_PANEL_GLOBAL_SCOPE);
-    const keys = listKeys();
     const discovered = new Set<string>();
-    const legacy = new Map<string, Map<string, string>>();
-    for (const key of keys) {
-      const parsed = parsePanelKey(key);
-      if (!parsed) continue;
-      discovered.add(parsed.scopeId);
-      if (parsed.name === STATE_NAME) continue;
-      const value = readRaw(key);
-      if (value !== null) {
-        if (!legacy.has(parsed.scopeId)) legacy.set(parsed.scopeId, new Map());
-        legacy.get(parsed.scopeId)?.set(parsed.name, value);
-      }
-    }
-    const legacyWrapLines = readRaw(LEGACY_WRAP_LINES_KEY);
-    if (legacyWrapLines !== null) {
-      discovered.add(WORKSPACE_PANEL_GLOBAL_SCOPE);
-      if (!legacy.has(WORKSPACE_PANEL_GLOBAL_SCOPE)) legacy.set(WORKSPACE_PANEL_GLOBAL_SCOPE, new Map());
-      legacy.get(WORKSPACE_PANEL_GLOBAL_SCOPE)?.set("wrap-lines", legacyWrapLines);
-    }
-    const migrationNeeded = readRaw(STORAGE_MIGRATION_KEY) !== "true";
-    for (const scopeId of discovered) {
-      const current = parseState(readRaw(stateKey(scopeId)));
+    for (const key of listKeys()) {
+      const scopeId = stateScope(key);
+      if (!scopeId) continue;
+      discovered.add(scopeId);
+      const current = parseState(readRaw(key));
       if (current) {
         lastUpdatedAt = Math.max(lastUpdatedAt, current.updatedAt);
         memory.set(scopeId, current);
       }
-      const legacyValues = legacy.get(scopeId);
-      if (!legacyValues?.size && current) continue;
-      const values = { ...(current?.values || {}) };
-      for (const [name, value] of legacyValues || []) {
-        if (!Object.hasOwn(values, name)) values[name] = migrationNeeded ? migrateGeometryValue(name, value) : value;
-      }
-      const saved = saveState(scopeId, { updatedAt: current?.updatedAt || nextUpdatedAt(), values });
-      if (!saved) continue;
-      for (const [name] of legacyValues || []) removeRaw(legacyKey(scopeId, name));
-      if (scopeId === WORKSPACE_PANEL_GLOBAL_SCOPE) removeRaw(LEGACY_WRAP_LINES_KEY);
     }
-    if (migrationNeeded) writeRaw(STORAGE_MIGRATION_KEY, "true");
 
     for (const scopeId of new Set([...discovered, ...memory.keys()])) {
       if (!validScopes.has(scopeId)) dropScope(scopeId);
@@ -247,7 +172,7 @@ export function createWorkspacePanelStorage(storage: WorkspacePanelStorageBacken
     for (const [scopeId] of kept.slice(100)) dropScope(scopeId);
   };
 
-  return { readSetting, writeSetting, dropScope, migrateWorkspacePanelStorage };
+  return { readSetting, writeSetting, dropScope, pruneWorkspacePanelStorage };
 }
 
 const defaultStorage = createWorkspacePanelStorage();
@@ -255,4 +180,4 @@ const defaultStorage = createWorkspacePanelStorage();
 export const readSetting = defaultStorage.readSetting;
 export const writeSetting = defaultStorage.writeSetting;
 export const dropScope = defaultStorage.dropScope;
-export const migrateWorkspacePanelStorage = defaultStorage.migrateWorkspacePanelStorage;
+export const pruneWorkspacePanelStorage = defaultStorage.pruneWorkspacePanelStorage;

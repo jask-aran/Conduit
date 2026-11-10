@@ -10,15 +10,6 @@ import { splitFrontMatter } from "./routine-files.js";
 
 const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
-/** The persona was IDENTITY.md until it took the name the products use (SOUL.md); an agent made before moves on. */
-export async function migrateSoul(folder) {
-  if (!folder) return;
-  const from = path.join(folder, "IDENTITY.md");
-  const to = path.join(folder, "SOUL.md");
-  if (await fs.stat(to).catch(() => null)) return;
-  await fs.rename(from, to).catch((error) => { if (error.code !== "ENOENT") throw error; });
-}
-
 /** Where an added line goes: under `## section` (made at the end if missing), after its last line; else the end. */
 function addUnder(content, section, text) {
   if (!section) return `${content}${text}\n`;

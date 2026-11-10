@@ -24,15 +24,13 @@ let gathering = Promise.resolve();
 
 /**
  * Fetch the new mail into the mailbox. `fetchNew(state)` runs the source and reads each email (mail-task.js), returning
- * `{ error } | { accounts, known, lines }`. `legacy` is a routine cursor from before the mailbox (its seen ids and
- * accounts), taken over once. The first gathering only learns what is there.
+ * `{ error } | { accounts, known, lines }`. The first gathering only learns what is there.
  */
-export function gatherMail(agent, fetchNew, { legacy } = {}) {
+export function gatherMail(agent, fetchNew) {
   const run = gathering.then(async () => {
     const folder = agent.folder;
     const stateFile = path.join(folder, STATE);
     let state = await readJson(stateFile);
-    if (!state && legacy?.primed) state = { primed: true, accounts: legacy.accounts || [], known: legacy.seen || [] };
     state ||= { primed: false, accounts: [], known: [] };
     const got = await fetchNew(state);
     if (got.error) return { error: got.error, added: 0 };

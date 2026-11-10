@@ -5,7 +5,7 @@ import { legacyRoutineTask } from "./legacy-routine-task.js";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { applyOutcome, runSource } from "./feeds.js";
 import { applyRoutine, routineClocks, triggerWords } from "./routines.js";
-import { listRoutines, readRoutine, writeRoutine } from "./routine-files.js";
+import { listRoutines, readRoutine } from "./routine-files.js";
 
 const terminal = () => ({ status: "terminal", outcome: { status: "completed" } });
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
@@ -371,42 +371,6 @@ export function ScheduleTools(runtime) {
 const seeding = new WeakMap();
 const clockOn = new WeakMap();
 
-/**
- * From before routines, once: a feed that reads (a program, a script) becomes a routine file (its task, gate never,
- * output inbox) and keeps what it has seen as its task's cursor; the heartbeat's place in the inbox becomes its
- * cursor. The feed's own clock goes (the routine's replaces it).
- */
-async function feedsToRoutines(agent, harness, conversation) {
-  const state = await agent.state();
-  // Once: a feed added since (the feed tool, Settings) stays a feed.
-  for (const item of state.feedsMigrated ? [] : Object.values(state.schedules)) {
-    if (!item.feed || item.feed.source.kind === "run" || item.cancelling) continue;
-    const name = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || item.id;
-    if (!/^[a-z]/.test(name) || await readRoutine(agent.folder, name).catch(() => "invalid") !== null) continue;
-    const source = item.feed.source;
-    await writeRoutine(agent.folder, { name, title: item.title, trigger: { kind: "every", minutes: item.everyMinutes },
-      tasks: [source.kind === "executor" ? { id: "items", kind: "executor", code: source.code } : { id: "items", kind: "script", command: source.command }],
-      gate: "never", output: "inbox", model: null, effort: null, level: item.feed.level || "fyi", quiet: false, enabled: true, context: [], body: "" });
-    if (item.clock) {
-      await harness.abortTask(item.clock, agent.context);
-      await harness.waitForTask(item.clock, agent.context);
-    }
-    await conversation.commit(async (tx) => {
-      const doc = await tx.doc(AgentDoc);
-      // Through the doc, not the object `||=` returns: only writes through it are recorded.
-      doc.cursors ||= {};
-      doc.cursors[name] = { items: { primed: item.feed.primed, seen: item.feed.seen || [] } };
-      delete doc.schedules[item.id];
-    }, agent.context);
-  }
-  if (!state.feedsMigrated) await conversation.commit(async (tx) => { (await tx.doc(AgentDoc)).feedsMigrated = true; }, agent.context);
-  if (state.heartbeatSeenAt && !state.cursors?.heartbeat) await conversation.commit(async (tx) => {
-    const doc = await tx.doc(AgentDoc);
-    doc.cursors ||= {};
-    doc.cursors.heartbeat ||= { inbox: { since: doc.heartbeatSeenAt } };
-  }, agent.context);
-}
-
 /** Keep settings-owned clocks stable across ordinary restarts. */
 export async function seedSchedules(agent) {
   if (!agent?.enabled()) return;
@@ -421,7 +385,6 @@ export async function seedSchedules(agent) {
     const settings = agent.settings();
     const resumed = clockOn.get(agent) === false && settings.on !== false;
     clockOn.set(agent, settings.on !== false);
-    await feedsToRoutines(agent, harness, conversation);
     // The routine files are the clocks the hub owns: one `r-<name>` each. A built-in schedule from before them (the
     // brief's, the heartbeat's) or one whose routine file went is removed.
     const desired = await routineClocks(agent);

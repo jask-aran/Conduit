@@ -64,15 +64,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const panelScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
   const projectScope = () => WORKSPACE_PANEL_GLOBAL_SCOPE;
   const fileScope = () => props.settingsScope ? props.projectId() : props.chatId();
-  const readPanelSetting = (name: string, legacyScope = props.chatId()) => {
-    const globalValue = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name);
-    if (globalValue !== null) return globalValue;
-    const legacyValue = readSetting(legacyScope, name);
-    if (legacyValue !== null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name, legacyValue);
-    return legacyValue;
-  };
-  const readGeometrySetting = (name: string) => readPanelSetting(name, props.settingsScope?.() || props.projectId());
-  const settings: WorkspaceSettings = { panel: (name) => readPanelSetting(name), geometry: readGeometrySetting, fileScope };
+  const readPanelSetting = (name: string) => readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name);
+  const readGeometrySetting = readPanelSetting;
+  const settings: WorkspaceSettings = { panel: readPanelSetting, geometry: readGeometrySetting, fileScope };
   const storedTab = () => {
     const value = readPanelSetting("tab") || "";
     return panelTab(value) ?? "files";

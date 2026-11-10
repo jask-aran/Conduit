@@ -46,9 +46,9 @@ export type UploadTarget = { kind: "directory"; path: string } | { kind: "replac
 
 /** How a view reads the panel's stored settings (workspace-panel-storage). */
 export interface WorkspaceSettings {
-  /** A panel-wide setting, migrating a per-chat value the first time it is read. */
+  /** A panel-wide setting. */
   panel: (name: string) => string | null;
-  /** A geometry setting, migrating a per-project value the first time it is read. */
+  /** A geometry setting (panel-wide too). */
   geometry: (name: string) => string | null;
   /** Where the open files are remembered: per project on the Computer page, per chat otherwise. */
   fileScope: () => string;

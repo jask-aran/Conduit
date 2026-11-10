@@ -7,8 +7,6 @@ export type TerminalShortcut = {
   onStart?: boolean;
 };
 
-export const LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY = "conduit:terminal-shortcuts:v1";
-
 export function normalizeTerminalShortcuts(value: unknown): TerminalShortcut[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 12).flatMap((item) => {
@@ -18,9 +16,4 @@ export function normalizeTerminalShortcuts(value: unknown): TerminalShortcut[] {
     const target = item?.target === "new" ? "new" : item?.target === "current" ? "current" : null;
     return id && label && command && target ? [{ id, label, command, target, ...(item.onStart === true ? { onStart: true } : {}) }] : [];
   });
-}
-
-export function readLegacyTerminalShortcuts(storage: Storage = localStorage): TerminalShortcut[] {
-  try { return normalizeTerminalShortcuts(JSON.parse(storage.getItem(LEGACY_TERMINAL_SHORTCUTS_STORAGE_KEY) || "[]")); }
-  catch { return []; }
 }

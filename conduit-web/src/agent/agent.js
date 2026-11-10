@@ -8,8 +8,7 @@ import { AgentDoc } from "./agent-doc.js";
 import { listAsks } from "./asks.js";
 import { filedText, InboxText, listInbox } from "./inbox.js";
 import { inboxFile, syncInboxFiles } from "./inbox-files.js";
-import { migrateSoul } from "./memory.js";
-import { migrateToRoutines, promptVars, retireEmailRoutine, runInstructions } from "./routines.js";
+import { promptVars, runInstructions } from "./routines.js";
 import { startRoutine } from "./routine-task.js";
 import { listRoutines, readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
@@ -99,7 +98,6 @@ export class PersistentAgent {
     const project = (await this.projects.list()).find((item) => item.slug === "conduit-agent");
     if (!project) return null;
     this.project = project;
-    await migrateSoul(this.folder);
     await this.readSettings();
     await this.seedFolder();
     await this.connectors.start();
@@ -176,12 +174,10 @@ export class PersistentAgent {
   active() { return this.enabled() && this.settings().on !== false; }
 
   /**
-   * The seed files it lacks (never over the person's): memory files, RUN.md, the built-in routines. HEARTBEAT.md and
-   * the brief's settings from before routines become routines/heartbeat.md and routines/morning-brief.md first.
+   * The seed files it lacks (never over the person's): memory files, RUN.md, the built-in routines.
    */
   async seedFolder() {
     await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
-    await migrateToRoutines(this, path.join(SEED, "routines"));
     for (const entry of await fs.readdir(SEED, { withFileTypes: true })) {
       if (!entry.isFile() || entry.name === "RUN.md") continue;
       await fs.copyFile(path.join(SEED, entry.name), path.join(this.folder, entry.name), fs.constants.COPYFILE_EXCL).catch((error) => {
@@ -189,8 +185,6 @@ export class PersistentAgent {
       });
     }
     await seedRoutines(this.folder, path.join(SEED, "routines"));
-    await retireEmailRoutine(this, fileURLToPath(new URL("../../../templates/agent/seed-history/", import.meta.url)))
-      .catch((error) => console.warn("The Email routine could not be retired", error.message));
   }
 
   /** agent.json as last read, over the defaults. */
@@ -212,8 +206,6 @@ export class PersistentAgent {
     try { this.cached = JSON.parse(await fs.readFile(path.join(this.folder, "agent.json"), "utf8")); }
     catch { this.cached = {}; }
     this.cached ||= {};
-    if (this.cached.toolsDecide === undefined && this.cached.executorDecides !== undefined) this.cached.toolsDecide = this.cached.executorDecides;
-    delete this.cached.executorDecides;
     return this.settings();
   }
 
@@ -230,9 +222,7 @@ export class PersistentAgent {
     if (patch.dial !== undefined) { if (!DIALS.has(patch.dial)) fail("dial is quiet, normal or chatty"); next.dial = patch.dial; }
     if (patch.on !== undefined) { if (typeof patch.on !== "boolean") fail("on is true or false"); next.on = patch.on; }
     if (patch.youAsk !== undefined) { if (typeof patch.youAsk !== "boolean") fail("youAsk is true or false"); next.youAsk = patch.youAsk; }
-    if (patch.executorDecides !== undefined) { if (typeof patch.executorDecides !== "boolean") fail("executorDecides is true or false"); next.toolsDecide = patch.executorDecides; }
     if (patch.toolsDecide !== undefined) { if (typeof patch.toolsDecide !== "boolean") fail("toolsDecide is true or false"); next.toolsDecide = patch.toolsDecide; }
-    delete next.executorDecides;
     if (patch.remindMinutes !== undefined) {
       const minutes = Number(patch.remindMinutes);
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) fail("remindMinutes is 0 to 1440");
@@ -349,7 +339,6 @@ export class PersistentAgent {
     if (!this.project) {
       this.project = await this.projects.ensure({ slug: "conduit-agent", name: name || DEFAULT_SETTINGS.name, kind: "workspace", origin: "managed" });
     }
-    await migrateSoul(this.folder);
     await this.readSettings();
     await this.seedFolder();
     await this.connectors.start();

@@ -66,8 +66,6 @@ export interface ServerEntry {
 
 export const SERVERS_STORAGE_KEY = "conduit.servers";
 export const ACTIVE_SERVER_STORAGE_KEY = "conduit.servers.active";
-/** What a client that could only hold one server wrote. Read, never written. */
-export const LEGACY_ORIGIN_STORAGE_KEY = "conduit.native.server-origin";
 
 // Where plain HTTP is allowed, and why it is not simply "never".
 //
@@ -230,25 +228,7 @@ export function writeServers(storage: Storageish | null, list: ServerEntry[]) {
   try { storage?.setItem(SERVERS_STORAGE_KEY, JSON.stringify(list)); } catch { /* nothing to do about a full or blocked store */ }
 }
 
-/**
- * Carry the one server a previous version could hold into the list.
- *
- * The old key is left where it is: the token that belongs to that server is
- * still stored under the old name too, and the only way to know which server
- * to hand it to is to remember which one was configured.
- */
-export function migrateLegacyServer(storage: Storageish | null) {
-  if (!storage || storage.getItem(SERVERS_STORAGE_KEY)) return;
-  const legacy = storage.getItem(LEGACY_ORIGIN_STORAGE_KEY);
-  if (!legacy) return;
-  let origin: string;
-  try { origin = normalizeServerOrigin(legacy); } catch { return; }
-  writeServers(storage, [{ origin, name: defaultServerName(origin), shared: sharedByDefault(origin) }]);
-  try { storage.setItem(ACTIVE_SERVER_STORAGE_KEY, origin); } catch {}
-}
-
 const store = storageOrNull();
-migrateLegacyServer(store);
 
 const [serverList, setServerList] = createSignal<ServerEntry[]>(readServers(store));
 

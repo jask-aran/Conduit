@@ -88,14 +88,13 @@ test("all shipped documents preserve the old prompt bytes and skill order", asyn
   assert.equal(available.find((skill) => skill.name === "managed-python").load, "nudge");
 });
 
-test("saved skill blocks migrate on read; PUT saves skills and usedBy follows membership", async (t) => {
+test("saved skills read back; PUT saves skills and usedBy follows membership", async (t) => {
   const { store } = await fixture(t);
   const skills = ["skill-executor", "skill-web-research"];
-  await store.writeJson("documents.json", { "profile:assistant": { blocks: ["assistant", "base", ...skills] } });
+  await store.writeJson("documents.json", { "profile:assistant": { blocks: ["assistant", "base"], skills } });
   const doc = await store.document("profile:assistant");
   assert.deepEqual(doc.blocks, ["assistant", "base"]);
   assert.deepEqual(doc.skills, skills);
-  assert.deepEqual((await store.json("documents.json"))[doc.id], { blocks: doc.blocks, skills });
   assert.ok((await store.get("skill-executor")).usedBy.includes(doc.id));
   const routes = new Map();
   const app = Object.fromEntries(["get", "put", "post", "delete"].map((method) => [method, (url, handler) => routes.set(`${method} ${url}`, handler)]));

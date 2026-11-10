@@ -127,7 +127,7 @@ const SHOWN = 60;
  */
 export async function mailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
   const zone = agent.settings().timezone;
-  const gathered = await gatherMail(agent, (state) => fetchGmail(agent, task, state), { legacy: cursor.seen ? cursor : null })
+  const gathered = await gatherMail(agent, (state) => fetchGmail(agent, task, state))
     .catch((error) => ({ error: error.message }));
   const since = cursor.since || new Date(now - 86400_000).toISOString();
   const lines = await mailSince(agent, since);

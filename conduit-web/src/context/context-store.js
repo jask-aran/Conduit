@@ -166,14 +166,6 @@ export class ContextStore {
     add("service:approval", "service", "approval", "Approval model", ["approval-judge"], ["live-approval-rules"]);
     add("service:chat-naming", "service", "chat-naming", "Chat naming", ["chat-naming"]);
     const saved = await this.json("documents.json");
-    let migrated = false;
-    for (const stored of Object.values(saved)) {
-      if (!Array.isArray(stored.blocks) || !stored.blocks.some(isSkill)) continue;
-      stored.skills ??= stored.blocks.filter(isSkill);
-      stored.blocks = stored.blocks.filter((key) => !isSkill(key));
-      migrated = true;
-    }
-    if (migrated) await this.writeJson("documents.json", saved);
     return docs.map((doc) => {
       const stored = saved[doc.id];
       const blocks = stored?.blocks || doc.blocks;

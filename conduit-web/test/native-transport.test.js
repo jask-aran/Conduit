@@ -2,9 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ACTIVE_SERVER_STORAGE_KEY,
-  LEGACY_ORIGIN_STORAGE_KEY,
   defaultServerName,
-  migrateLegacyServer,
   normalizeServerOrigin,
   activeOrigin,
   activePath,
@@ -81,22 +79,6 @@ test("a stored server list keeps only addresses it would accept", () => {
   ]);
   assert.equal(defaultServerName("https://conduit.tailnet.ts.net"), "conduit.tailnet.ts.net");
   assert.deepEqual(readServers(memoryStorage()), []);
-});
-
-test("the one server an older client held becomes the first of the list", () => {
-  const storage = memoryStorage();
-  storage.setItem(LEGACY_ORIGIN_STORAGE_KEY, "https://conduit.tailnet.ts.net");
-  migrateLegacyServer(storage);
-  assert.deepEqual(readServers(storage), [{ origin: "https://conduit.tailnet.ts.net", name: "conduit.tailnet.ts.net", shared: true }]);
-  assert.equal(storage.getItem(ACTIVE_SERVER_STORAGE_KEY), "https://conduit.tailnet.ts.net");
-  // Left in place: the token for that server is still filed under the old name
-  // too, and this is the only record of which server it belongs to.
-  assert.equal(storage.getItem(LEGACY_ORIGIN_STORAGE_KEY), "https://conduit.tailnet.ts.net");
-
-  // A list that already exists is never overwritten by a stale single server.
-  writeServers(storage, [{ origin: "http://127.0.0.1:4310", name: "Local" }]);
-  migrateLegacyServer(storage);
-  assert.deepEqual(readServers(storage), [{ origin: "http://127.0.0.1:4310", name: "Local", shared: false }]);
 });
 
 test("transport builds every remote path from the configured origin", () => {

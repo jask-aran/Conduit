@@ -108,7 +108,7 @@ import { EMPTY_FILE_VIEW, fileEntryKey, formatFileView, parseFileView, sameFileE
 import { dropWash, dropZoneAt, fileTabParam, fileTabsFromParams, moveKey, nextShownTab, reconcileSide, swapRecordKeys, withoutTab, type FileTabs } from "./workspace/file-tabs";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
-import { dropScope, migrateWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
+import { dropScope, pruneWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { PANE_LAYOUTS, readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
 import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
@@ -1454,8 +1454,8 @@ function App() {
     if (!scope) return;
     const globalOpen = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open");
     const globalExpanded = readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "expanded");
-    const open = globalOpen ?? readSetting(scope, "open") ?? (scope === "computer" ? "true" : "false");
-    const expanded = globalExpanded ?? readSetting(scope, "expanded") ?? "false";
+    const open = globalOpen ?? (scope === "computer" ? "true" : "false");
+    const expanded = globalExpanded ?? "false";
     if (globalOpen === null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open", open);
     if (globalExpanded === null) writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "expanded", expanded);
     setPanelOpen(open === "true");
@@ -2448,7 +2448,7 @@ function App() {
 
   const refresh = async () => {
     const projects = await catalogue.refresh();
-    migrateWorkspacePanelStorage(workspacePanelScopes(projects));
+    pruneWorkspacePanelStorage(workspacePanelScopes(projects));
     return projects;
   };
   const addProject = async (input: { mode: string; name?: string; path?: string; nodeId?: string; rootId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string }) => {
@@ -5911,7 +5911,7 @@ function App() {
         selectedChatRequest && cachedCatalogue ? Promise.race([selectedChatRequest, awayOnBoot]) : selectedChatRequest || Promise.resolve(null),
       ]);
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
-      migrateWorkspacePanelStorage(workspacePanelScopes(projects));
+      pruneWorkspacePanelStorage(workspacePanelScopes(projects));
       catalogue.setProjects(projects);
       // Usually the server says what the cache did; then there is nothing to
       // redraw, and replacing every row with an equal one was a phone's

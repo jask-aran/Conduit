@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeTerminalShortcuts, readLegacyTerminalShortcuts } from "../src/client/remotes/terminal-shortcuts.ts";
+import { normalizeTerminalShortcuts } from "../src/client/remotes/terminal-shortcuts.ts";
 
 test("terminal shortcuts keep only bounded valid commands", () => {
   const shortcuts = normalizeTerminalShortcuts([
@@ -14,7 +14,4 @@ test("terminal shortcuts keep only bounded valid commands", () => {
     { id: "two", label: "Herdr", command: "herdr", target: "new" },
   ]);
   assert.deepEqual(normalizeTerminalShortcuts({}), []);
-  assert.deepEqual(readLegacyTerminalShortcuts({
-    getItem: () => JSON.stringify([{ id: "two", label: "Herdr", command: "herdr", target: "new" }]),
-  }), [{ id: "two", label: "Herdr", command: "herdr", target: "new" }]);
 });

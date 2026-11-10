@@ -1,5 +1,4 @@
 import { constants } from "node:fs";
-import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -325,7 +324,6 @@ export async function removeRoutine(folder, name) {
   catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
-const digest = (text) => createHash("sha256").update(text).digest("hex");
 const SEED_HISTORY = new URL("../../../templates/agent/seed-history/", import.meta.url);
 const seedStatePath = (relative) => path.join(".seeds", `${relative}.state.json`);
 const isRoutineSeed = (relative) => relative.startsWith(`${ROUTINES_DIR}/`);
@@ -391,9 +389,6 @@ export async function seedRoutines(folder, seedDir) {
   try { files = await fs.readdir(seedDir); }
   catch (error) { if (error.code === "ENOENT") return; throw error; }
   await seedDirectory(folder, ROUTINES_DIR);
-  const legacyText = await readFolderFile(folder, ROUTINES_DIR, ".seeds.json");
-  const legacy = legacyText === null ? {} : JSON.parse(legacyText);
-  if (!object(legacy)) throw new Error("Invalid routine seed record.");
   const sources = files.filter((file) => file.endsWith(".md")).map((file) => ({
     relative: `${ROUTINES_DIR}/${file}`, source: path.join(seedDir, file),
   }));
@@ -423,16 +418,9 @@ export async function seedRoutines(folder, seedDir) {
     if (base === null) {
       const history = await historicalSeeds(SEED_HISTORY, relative);
       const candidates = [seed, ...history];
-      const record = legacy[path.basename(relative, ".md")];
-      const hash = record?.pending === (current === null ? null : digest(current)) ? record.pending : record?.hash;
-      // Old migrations also recorded the serializer's default-settings form of the template.
-      const recorded = hash && candidates.flatMap((candidate) => {
-        try { return [candidate, serializeRoutine(parseRoutine(candidate, path.basename(relative, ".md")))]; }
-        catch { return [candidate]; }
-      }).find((candidate) => digest(candidate) === hash);
       const matched = current === null ? seed : candidates.find((candidate) => sameSeedBody(relative, current, candidate));
-      base = recorded || matched || history.find((version) => version !== seed) || seed;
-      inferredEdit = current !== null && !recorded && !matched;
+      base = matched || history.find((version) => version !== seed) || seed;
+      inferredEdit = current !== null && !matched;
       await saveSeedState(folder, relative, { ...state, waiting: Boolean(state.waiting || inferredEdit) });
       await writeFolderFile(folder, path.join(".seeds", relative), base);
     }
@@ -471,7 +459,6 @@ export async function seedRoutines(folder, seedDir) {
     await writeFolderFile(folder, path.join(".seeds", relative), nextBase);
     await saveSeedState(folder, relative, { waiting });
   }
-  if (legacyText !== null) await fs.unlink(path.join(folder, ROUTINES_DIR, ".seeds.json"));
 }
 
 export async function readPerson(folder) {
