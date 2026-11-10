@@ -23,6 +23,9 @@ Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. The test count only
 shrinks (`test/budget.json`), so a change that needs a new test removes more than it adds.
 
+`npm run typecheck`, the build and `restart` report convention problems (`scripts/check-conventions.mjs`, each rule's
+reason is in it): tell me about any you see, then fix them.
+
 After each bounded change set, run `bash .devcontainer/start-conduit.sh restart` so the server is ready, then hand it
 to me: I confirm behaviour.
 

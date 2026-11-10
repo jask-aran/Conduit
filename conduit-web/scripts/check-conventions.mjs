@@ -1,0 +1,162 @@
+#!/usr/bin/env node
+// Conduit's conventions, checked. Each rule below is here because agents kept breaking it (evidence from session
+// transcripts and commit history, 2026-10 to 2026-11); the reason sits with the rule. tsc catches types; this
+// catches the rest that a pattern can.
+//
+//   node scripts/check-conventions.mjs           list every problem, exit 1 if any (npm run typecheck)
+//   node scripts/check-conventions.mjs --warn    list every problem, exit 0, save a summary (npm run build)
+//   node scripts/check-conventions.mjs --summary print the saved summary as one line (start-conduit.sh restart)
+//
+// A line that must break a rule carries `conventions-ok: <reason>` in a comment on it or the line above.
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const summaryFile = path.join(root, "node_modules", ".cache", "conduit-conventions.txt");
+const mode = process.argv[2] || "--check";
+
+if (mode === "--summary") {
+  console.log(fs.existsSync(summaryFile) ? fs.readFileSync(summaryFile, "utf8").trim() : "Conventions: not checked (no build yet)");
+  process.exit(0);
+}
+
+const rel = (file) => path.relative(root, file);
+const walk = (dir, out = []) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
+    else out.push(full);
+  }
+  return out;
+};
+const files = walk(path.join(root, "src"));
+const inDir = (file, dir) => rel(file).startsWith(dir + "/");
+const lineOf = (text, index) => text.slice(0, index).split("\n").length;
+const allowed = (lines, line) => /conventions-ok/.test(lines[line - 1] || "") || /conventions-ok/.test(lines[line - 2] || "");
+// Blank out comments, keeping offsets, so commented-out code and prose don't count.
+const stripComments = (text, css) => text.replace(css ? /\/\*[\s\S]*?\*\//g : /\/\*[\s\S]*?\*\/|(?<![:"'`\\])\/\/[^\n]*/g, (m) => m.replace(/[^\n]/g, " "));
+
+const problems = [];
+const report = (file, text, index, rule, fix) => {
+  const line = lineOf(text, index);
+  const entry = `${rel(file)}:${line}  ${rule}: ${fix}`;
+  if (!allowed(text.split("\n"), line) && !problems.includes(entry)) problems.push(entry);
+};
+const each = (file, text, regex, fn) => { for (const m of text.matchAll(regex)) fn(m); };
+
+const appCode = files.filter((f) => /\.tsx$/.test(f) && inDir(f, "src/client"));
+const uiCode = files.filter((f) => /\.tsx?$/.test(f) && (inDir(f, "src/client") || inDir(f, "src/components/ui")));
+// The gallery is dev tooling that lays out specimens; its own CSS is not app styling.
+const css = files.filter((f) => f.endsWith(".css") && !inDir(f, "src/gallery"));
+const tokenFiles = ["foundations.css", "theme.css", "palettes.css"];
+const serverCode = files.filter((f) => f.endsWith(".js") && inDir(f, "src/server"));
+
+// 1. App markup wearing library classes (DESIGN.md, Components v2). The app calls components; it does not write
+//    their markup with `ui-*` classes or raw controls. 419 `ui-` class additions in 95 commits over six weeks, 153 of
+//    them after the v2 cutover, kept being added and removed again.
+for (const file of appCode) {
+  const text = stripComments(fs.readFileSync(file, "utf8"));
+  each(file, text, /\bclass(?:List)?=\{?\s*["'`][^"'`]*\bui-[a-z]/g, (m) =>
+    report(file, text, m.index, "library class in app code", "use the component from components/ui instead of its ui-* class (DESIGN.md Components v2)"));
+  each(file, text, /<(button|input|select|textarea)\b/g, (m) =>
+    report(file, text, m.index, `raw <${m[1]}>`, "use the components/ui control (DESIGN.md Components v2)"));
+}
+
+// 3. A fixed delay where the UI should wait for an event. The same bug was fixed three times (5618a21f, 41d6b828,
+//    7b951f8f): a literal 150-600 ms timer that a slowed Animation speed outlasts, or that nothing clears. Wait for
+//    the motion to end (whenMotionEnds), use a duration token, or name the constant when it is a real backoff.
+for (const file of uiCode) {
+  const text = stripComments(fs.readFileSync(file, "utf8"));
+  for (const m of text.matchAll(/\bsetTimeout\s*\(/g)) {
+    let depth = 0, i = m.index + m[0].length - 1, lastComma = -1, quote = null;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (quote) { if (c === quote && text[i - 1] !== "\\") quote = null; continue; }
+      if (c === '"' || c === "'" || c === "`") quote = c;
+      else if ("([{".includes(c)) depth++;
+      else if (")]}".includes(c)) { depth--; if (depth === 0) break; }
+      else if (c === "," && depth === 1) lastComma = i;
+    }
+    if (lastComma > 0 && /^\s*\d[\d_]*\s*$/.test(text.slice(lastComma + 1, i)))
+      report(file, text, m.index, "literal setTimeout delay", "wait for the event (whenMotionEnds, a duration token), or name the constant if it is a real backoff");
+  }
+}
+
+// 4. Hand-kept "latest ask wins" counters. 5618a21f replaced seventeen counters compared after an await with
+//    createLatest (client/state/latest.ts); they creep back as `const id = ++counter`.
+for (const file of uiCode.filter((f) => !f.endsWith(path.join("state", "latest.ts")))) {
+  const text = stripComments(fs.readFileSync(file, "utf8"));
+  each(file, text, /\bconst\s+\w+\s*=\s*\+\+[\w.]+/g, (m) =>
+    report(file, text, m.index, "hand-kept latest counter", "use createLatest from client/state/latest.ts"));
+}
+
+// 5. Literal values where a token belongs. Outside the token files, sizes, colours, durations and layers come from
+//    tokens. 260 px values and 134 colours were added in three weeks after the cutover removed 1,500+, and the person
+//    had to ask for tokens by name. 0 and 1px pass (whole-pixel lines, DESIGN.md); media and container queries pass.
+// 6. Frost redeclared outside frost.css. "Why am I still seeing three different frosts?" was asked twice (10-10,
+//    10-12); check-bundle.mjs's comment says the build rejects a surface's own blur and fill, but nothing did.
+// 8. Focus rings. DESIGN.md: never focus rings; foundations.css removes outlines globally.
+for (const file of css) {
+  const text = stripComments(fs.readFileSync(file, "utf8"), true);
+  const name = path.basename(file);
+  if (!tokenFiles.includes(name)) {
+    for (const m of text.matchAll(/([a-z-]+)\s*:\s*([^;{}]+)/g)) {
+      const [, prop, value] = m;
+      const before = text.lastIndexOf("{", m.index);
+      if (/@(media|container|supports)[^{]*$/.test(text.slice(text.lastIndexOf("}", before) + 1, before))) continue;
+      const at = m.index + (m[0].length - value.length);
+      for (const px of value.matchAll(/(?<![\w.-])(\d*\.?\d+)px\b/g))
+        if (parseFloat(px[1]) >= 2) report(file, text, at, "literal px", `${prop}: ${px[0]} -- use a size token (foundations.css)`);
+      // A mask's #000 is an opacity stop, not a colour.
+      if (!/^(-webkit-)?mask/.test(prop) && /#[0-9a-fA-F]{3,8}\b|\b(?:oklch|rgba?|hsla?)\(/.test(value))
+        report(file, text, at, "literal colour", `${prop} -- use a colour token (theme.css, palettes.css)`);
+      // 0s and the reduced-motion 0.01ms are "no motion", not a duration.
+      const durations = [...value.matchAll(/(?<![\w.-])(\d*\.?\d+)(m?s)\b/g)].map(([, n, u]) => parseFloat(n) * (u === "s" ? 1000 : 1));
+      if (/^(transition|animation)/.test(prop) && durations.some((ms) => ms > 0.01))
+        report(file, text, at, "literal duration", `${prop} -- use a duration token (DESIGN.md Motion)`);
+      if (prop === "z-index" && /^\s*\d+\s*$/.test(value) && parseInt(value, 10) >= 10)
+        report(file, text, at, "literal z-index", "use a --layer-* token");
+    }
+  }
+  if (name !== "frost.css" && !tokenFiles.includes(name)) {
+    each(file, text, /(?:^|[;{\s])(backdrop-filter|-webkit-backdrop-filter|--frost-fill|--frost-blur)\s*:(?!\s*none\b)/g, (m) =>
+      report(file, text, m.index, "frost outside frost.css", "use the Frost surface; don't set blur or fill here (DESIGN.md Frost)"));
+  }
+  each(file, text, /([^{}]*:focus[^{}]*)\{([^{}]*)\}/g, (m) => {
+    if (/(?:^|;)\s*(outline|box-shadow)\s*:(?!\s*(?:none|0)\b)/.test(m[2]))
+      report(file, text, m.index + m[1].search(/\S/), "focus ring", "remove it: DESIGN.md says never focus rings");
+  });
+}
+
+// 7. Express handlers wrapped in try/catch that only call next(error). Express 5 passes a rejected handler on by
+//    itself; two sweeps (1e785f30, c2a1abb1) removed 147 such lines and a few survived.
+for (const file of serverCode) {
+  const text = stripComments(fs.readFileSync(file, "utf8"));
+  each(file, text, /catch\s*\(\s*(\w+)\s*\)\s*\{\s*(?:return\s+)?next\(\s*\1\s*\);?\s*\}/g, (m) =>
+    report(file, text, m.index, "try/catch around next(error)", "remove the try/catch; Express 5 forwards the rejection"));
+}
+
+// 2. Unused locals, imports and parameters. 11dc3eba cleared them to zero (main.tsx alone had 19 unused imports);
+//    they drifted back. tsc finds them with these flags; they stay out of tsconfig.json so a plain type error and
+//    leftover code are reported separately.
+try {
+  execFileSync(path.join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "--noUnusedLocals", "--noUnusedParameters", "--pretty", "false"], { cwd: root, stdio: "pipe" });
+} catch (error) {
+  for (const line of String(error.stdout).split("\n")) {
+    const m = line.match(/^(.+?)\((\d+),\d+\): error TS6(?:133|138|192|196|198|199|205): (.+)$/);
+    if (m) problems.push(`${m[1]}:${m[2]}  unused: ${m[3]}`);
+  }
+}
+
+for (const problem of problems) console.log(problem);
+const byRule = {};
+for (const p of problems) { const rule = p.split("  ")[1].split(":")[0]; byRule[rule] = (byRule[rule] || 0) + 1; }
+const summary = problems.length
+  ? `Conventions: ${problems.length} problems (${Object.entries(byRule).map(([r, n]) => `${n} ${r}`).join(", ")}); npm run typecheck lists them`
+  : "Conventions: clean";
+console.log(summary);
+if (mode === "--warn") {
+  fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
+  fs.writeFileSync(summaryFile, summary + "\n");
+} else if (problems.length) process.exitCode = 1;

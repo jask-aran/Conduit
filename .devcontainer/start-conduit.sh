@@ -448,6 +448,8 @@ case "$COMMAND" in
     wait_for_client_restart_grace
     stop
     start_server false
+    # Last, so `restart | tail -1` still shows it: the build's convention check (scripts/check-conventions.mjs).
+    (cd "$WEB_DIR" && node scripts/check-conventions.mjs --summary)
     ;;
   status) status ;;
   logs) logs "$@" ;;

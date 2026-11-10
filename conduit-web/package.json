@@ -8,7 +8,7 @@
   },
   "scripts": {
     "postinstall": "node scripts/patch-pi-ai.mjs",
-    "build": "vite build && node scripts/check-bundle.mjs",
+    "build": "vite build && node scripts/check-bundle.mjs && node scripts/check-conventions.mjs --warn",
     "icons:generate": "node scripts/generate-app-icons.mjs",
     "dev": "vite --host 0.0.0.0",
     "gallery": "vite build --mode gallery && vite preview --mode gallery --outDir dist-gallery --host 0.0.0.0 --port 5180 --strictPort",
@@ -18,7 +18,7 @@
     "test": "node scripts/test-budget.mjs && node --test test/*.test.js",
     "test:budget": "node scripts/test-budget.mjs",
     "smoke:panes": "node scripts/panes-smoke.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && node scripts/check-conventions.mjs",
     "cap:sync": "npm run build && cap sync android",
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "android:open": "cap open android",
