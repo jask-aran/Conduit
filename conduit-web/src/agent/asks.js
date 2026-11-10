@@ -1,13 +1,18 @@
 import { notice } from "../context/notices.js";
 import { nextId } from "./agent-doc.js";
+import { permissionChoices } from "../approval-api.js";
 
 const HOUR24 = 86400_000;
 const statusAt = (ask, now) => ask.status === "pending" && Date.parse(ask.expiresAt) <= now ? "expired" : ask.status;
+/** The answers an ask offers: its permission's (approval-api.js), less Always where no lasting rule fits this call. An
+ *  ask from before permissions were recorded offers what it did then. */
+const choicesOf = (ask) => (ask.permission ? permissionChoices(ask.permission) : ["allow", "always", "deny"]).filter((choice) => choice !== "always" || Boolean(ask.ruleTarget));
 function askView(ask, now = Date.now()) {
   const { id, chatId, toolCallId, parentCallId, title, service, lines, createdAt, expiresAt, decidedAt, choice } = ask;
   // A run's ask: the run's conversation, whose report it shows under.
   return { id, chatId, toolCallId, parentCallId, run: ask.run ? String(ask.sourceConversationId) : null, title, service, lines, createdAt, expiresAt,
-    status: statusAt(ask, now), always: ask.ruleTarget ? ask.ruleLabel ?? null : null, ...(decidedAt ? { decidedAt } : {}), ...(choice ? { choice } : {}) };
+    status: statusAt(ask, now), ...(ask.permission ? { permission: ask.permission } : {}), choices: choicesOf(ask),
+    always: choicesOf(ask).includes("always") ? ask.ruleLabel ?? null : null, ...(decidedAt ? { decidedAt } : {}), ...(choice ? { choice } : {}) };
 }
 export function listAsks(state) {
   const now = Date.now();
@@ -23,7 +28,7 @@ export async function decide(agent, id, choice) {
     if (!ask) return { error: 404 };
     if (ask.status === "pending" && ask.expiresAt <= now) ask.status = "expired";
     if (ask.status !== "pending") return { error: 409 };
-    if (choice === "always" && !ask.ruleTarget) return { error: 400 };
+    if (!choicesOf(ask).includes(choice)) return { error: 400 };
     ask.status = choice === "deny" ? "declined" : "allowed";
     ask.decidedAt = now;
     ask.choice = choice;
@@ -35,7 +40,7 @@ export async function decide(agent, id, choice) {
     // Copied out: the doc's objects (an ask's lines) cannot be read once the commit settles.
     return { ask: JSON.parse(JSON.stringify(askView(ask))) };
   });
-  if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : outcome.error === 400 ? "This approval has no reusable rule" : "Ask already decided or expired"), { status: outcome.error });
+  if (outcome.error) throw Object.assign(new Error(outcome.error === 404 ? "Ask not found" : outcome.error === 400 ? "This approval does not offer that answer" : "Ask already decided or expired"), { status: outcome.error });
   const ask = outcome.ask;
   const told = await notice(agent.runtime?.contextStore, choice === "deny" ? "approval-denied" : "approval-allowed", { ask });
   // A run's ask outlives the run: the home thread is told whose it was, so its result is used for what the run was doing.

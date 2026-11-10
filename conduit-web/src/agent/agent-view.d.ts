@@ -4,6 +4,10 @@
  * JavaScript is not checked against them, so a field added to the builder is added here.
  */
 import type { ApprovalLine } from "../components/ui/approval.tsx";
+import type { APPROVAL_CHOICES, PERMISSIONS } from "../approval-api.js";
+
+/** An answer to an ask, as declared. */
+export type ApprovalAnswer = keyof typeof APPROVAL_CHOICES;
 
 export type AgentDial = "quiet" | "normal" | "chatty";
 /** The model and effort a kind of background run uses; null is the home thread's. */
@@ -37,7 +41,7 @@ export interface AgentInboxEntry { id: string; at: string; kind: AgentRunKind; t
   /** Its text as a file in the agent's folder (inbox/…md), which a row opens in the file viewer. */
   file?: string }
 export interface AgentNotice { id: string; kind: string; text: string; at: string | null; taskId?: number }
-export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; /** What Always would allow from now on; null: no lasting rule fits. */ always?: string | null; decidedAt?: string; choice?: "allow" | "always" | "deny" }
+export interface AgentAsk { id: string; chatId: string; toolCallId: string; parentCallId: string | null; title: string; service: string | null; lines: ApprovalLine[]; createdAt: string; expiresAt: string; status: "pending" | "allowed" | "declined" | "expired" | "used"; /** The kind of permission asked for, and the answers it offers (approval-api.js). */ permission?: keyof typeof PERMISSIONS; choices?: ApprovalAnswer[]; /** What Always would allow from now on; null: it is not offered. */ always?: string | null; decidedAt?: string; choice?: ApprovalAnswer }
 export interface AgentView {
   enabled: boolean;
   /** Its workspace: its folder, holding its memory files. */

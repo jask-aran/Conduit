@@ -150,7 +150,7 @@ const focusComposerSoon = () => requestAnimationFrame(() => document.querySelect
 type TurnAction = { label: string; icon: JSX.Element; run: () => void };
 
 /** An approval as the thread draws it (GET /v0/agent `asks`). */
-export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; title: string; service: string | null; lines: ApprovalLine[]; expiresAt: string; status: ApprovalState };
+export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; choices?: ApprovalChoice[]; title: string; service: string | null; lines: ApprovalLine[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
 // How long a message in or out reads before it folds ("Show all"): a heartbeat's report is often a page.
 const ENVELOPE_FOLD = 8;
@@ -182,7 +182,7 @@ function SentRow(props: { tool: ToolItem }) {
 const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: ApprovalChoice) => Promise<void> }) {
   const [busy, setBusy] = createSignal(false);
-  return <ApprovalCard title={props.ask.title} service={props.ask.service} lines={props.ask.lines} state={props.ask.status} busy={busy()} always={props.ask.always ?? null}
+  return <ApprovalCard title={props.ask.title} service={props.ask.service} lines={props.ask.lines} state={props.ask.status} busy={busy()} always={props.ask.always ?? null} choices={props.ask.choices}
     meta={props.ask.status === "pending" ? waitsFor(props.ask.expiresAt) : undefined}
     onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
 }

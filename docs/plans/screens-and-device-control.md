@@ -118,6 +118,6 @@ Findings behind the last two (source read 2026-11-10):
   HTTP), and pairing from Settings › Devices (`/v0/person-browsers`). Proven on the hub's own environment with a
   Windows Chrome. Left: the hop through a device's node has not run (no companion restarted on it); it has no pane or
   picture: instead of decision 8 (moves only in sight) the person is asked (`agent/policy.js` `browserWraps`: Allow covers
-  the thread for a day, Always every thread and callers with no thread; watching their own window is theirs);
-  another harness over MCP cannot ask, so it drives a browser only after an Always; the relay is the
+  the thread for a day; its permission is declared with no Always, `approval-api.js`; watching their own window is
+  theirs); another harness over MCP has no thread to ask from, so it cannot drive one yet; the relay is the
   hub's or node's child and stops with it; whether it replaces agent-browser for `browser:<device>` or sits beside it.

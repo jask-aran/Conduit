@@ -1,7 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
-import { browserAlwaysAllowed } from "../agent/policy.js";
 
 /*
  * `conduit_browser`: the person's own browser on any device of the network, for agents (a spike). The engine is
@@ -40,10 +39,8 @@ export function PersonBrowserTool(runtime) {
         const browser = browsers.reach(device);
         if (!tool) return text(`${device.name}'s browser, through OpenCode Browse. Tools:\n${JSON.stringify(await browser.tools(), null, 1)}`);
         // A thread of Conduit's own asks the person first (agent/policy.js browserWraps). A caller with no thread to
-        // ask from, another harness over MCP, drives it only where they have said Always.
-        if (!api?.conversationId && !await browserAlwaysAllowed(runtime.agent, device.name)) {
-          return text(`The person has not allowed this for ${device.name}. Driving their browser there is theirs to allow: a Conduit chat asks them, and their Always for that device covers you too.`, true);
-        }
+        // ask from, another harness over MCP, cannot be allowed: the permission has no standing answer (approval-api.js).
+        if (!api?.conversationId) return text(`Driving the person's browser on ${device.name} is theirs to allow, each thread, and you have no Conduit thread to ask from. Its tools can be listed; ask the person to do this from a Conduit chat.`, true);
         const result = await browser.call(tool, args || {});
         return { output: result.output, ...(result.isError ? { isError: true } : {}) };
       } catch (error) { return text(`The browser did not answer: ${String(error?.message || error).slice(0, 400)}`, true); }

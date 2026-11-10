@@ -10,6 +10,7 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 import { createApprover, executorHolder, jsonlAudit } from "pi-durable-approver";
 import { readPolicy } from "./approval-policy.js";
 import { personWords } from "./person-words.js";
+import { permissionChoices } from "../approval-api.js";
 import { browserFor } from "../server/person-browser-tool.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
@@ -179,9 +180,9 @@ const summary = (name, args) => {
 };
 /*
  * The person's own browser on a device (conduit_browser, server/person-browser-tool.js): driving it is acting as
- * them, signed in, so it is theirs to allow. One decision a device, not a call: Allow lets this thread drive it for a
- * day, Always lets every thread. Listing its tools (no `tool`) asks nothing. Watching it or not is theirs: it is their
- * own browser window.
+ * them, signed in, so it is theirs to allow. One decision a thread and device, not a call: Allow lets this thread drive
+ * it for a day. Its permission offers no Always (approval-api.js), so no rule ever stands in for the person. Listing
+ * its tools (no `tool`) asks nothing. Watching it or not is theirs: it is their own browser window.
  */
 const BROWSER = "conduit_browser";
 const BROWSER_MS = 86400_000;
@@ -201,7 +202,7 @@ export function askOf(tool, { guarded = false } = {}) {
         ? { asks: "sometimes", when: "Connected tools decide: reads run, and what they hold for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
         : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
   }
-  if (name === BROWSER) return { asks: "sometimes", when: "Asks before it drives a device's browser: Allow covers this thread for a day, Always every thread. Listing its tools goes ahead." };
+  if (name === BROWSER) return { asks: "sometimes", when: "Asks before it drives a device's browser, each thread: Allow covers that thread for a day, and there is no Always. Listing its tools goes ahead." };
   if (!guarded) return { asks: "never" };
   if (ALWAYS_OUTWARD[name] && OUTWARD_ACTIONS[name]) return { asks: "sometimes", when: `Asks to ${OUTWARD_ACTIONS[name].join(" or ")}; its other actions go ahead.` };
   if (ALWAYS_OUTWARD[name]) return { asks: "always", when: "Unless a standing rule you set allows it." };
@@ -210,17 +211,24 @@ export function askOf(tool, { guarded = false } = {}) {
 }
 const SOURCE_WORDS = { executor: "Executor program", script: "Script in its folder", run: "A model run" };
 
+/** The kind of permission a call asks for (approval-api.js PERMISSIONS), which says what answers it offers. */
+export function permissionOf(name, args) {
+  if (name === BROWSER) return "browser";
+  // Resuming Executor's held request is one decision about one action, and a program cannot be read ahead of running.
+  if (name.startsWith("mcp__")) return resumeTool(name) || (!connectorCalls(name, args) && connectorTool(name) === "execute") ? "program" : "connector";
+  if (name === "feed" || name === "routine") return name;
+  if (name === "start_chat" || name === "steer_chat") return "chat";
+  return "device";
+}
+
+/** What an Always would allow from now on, or null: the permission offers none, or nothing lasting fits this call. */
 async function ruleTarget(runtime, name, args) {
-  // Resuming Executor's held request is one decision about one action: an "Always" would allow every future one.
-  if (resumeTool(name)) return null;
+  if (!permissionChoices(permissionOf(name, args)).includes("always")) return null;
   if (name.startsWith("mcp__")) {
-    // A gateway call's rule is the exact set of actions; a program has none to match.
+    // A gateway call's rule is the exact set of actions.
     const paths = connectorCalls(name, args);
-    return paths ? JSON.stringify([...new Set(paths)].sort()) : connectorTool(name) === "execute" ? null : name;
+    return paths ? JSON.stringify([...new Set(paths)].sort()) : name;
   }
-  if (name === BROWSER) return String(args.device);
-  // Each feed and routine change is its own decision: no lasting rule.
-  if (name === "feed" || name === "routine") return null;
   if (name === "start_chat") {
     if (typeof args.workspace !== "string" || !args.workspace.trim()) return null;
     const workspace = args.workspace.trim();
@@ -277,7 +285,7 @@ function presentation(name, args) {
   if (name === BROWSER) {
     const code = args.tool === "execute" ? args.arguments?.code : null;
     return { title: `Drive your browser on ${args.device}`, service: null,
-      lines: ["Your own signed-in browser there. Allow covers this thread for a day; Always, every thread.", ...code ? [{ text: "First", code: codeOf(code) }] : []] };
+      lines: ["Your own signed-in browser there. Allow covers this thread for a day.", ...code ? [{ text: "First", code: codeOf(code) }] : []] };
   }
   if (name === "feed") {
     const source = args.source || {};
@@ -354,7 +362,7 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
     if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: plain(pending), waiting: true }; }
     const id = nextId(doc, "a");
     const ask = { id, chatId: thread.chatId, conversationId: thread.conversationId, toolCallId: api.callId, parentCallId,
-      sourceConversationId: api.conversationId, run: thread.run, tool: name, args, argsKey, ...info, createdAt: now.toISOString(),
+      sourceConversationId: api.conversationId, run: thread.run, tool: name, permission: permissionOf(name, args), args, argsKey, ...info, createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 86400_000).toISOString(), status: "pending", ruleTarget: target ?? "", ruleLabel: ruleLabel(name, args),
       tainted: Boolean(doc.tainted?.[api.conversationId]) };
     doc.asks[id] = ask;
@@ -419,11 +427,6 @@ export function connectorWraps(runtime, tools) {
 /** conduit_browser wherever a chat selects it: driving a device's browser asks first, with the device it would drive named. */
 export function browserWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => tool.name === BROWSER), false);
-}
-/** Whether a caller with no thread to ask from (another harness, over MCP) may drive a device's browser: the person said Always. */
-export async function browserAlwaysAllowed(agent, device) {
-  const rules = agent ? (await agent.state().catch(() => null))?.rules : null;
-  return Object.values(rules || {}).some((rule) => rule.tool === BROWSER && rule.target === device);
 }
 /** The thread an ask belongs to: a run's goes to the home thread, which outlives it. */
 async function threadFor(runtime, api) {

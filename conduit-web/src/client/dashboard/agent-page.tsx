@@ -214,7 +214,7 @@ export function AgentPage(props: {
             <IconButton kind="dash" aria-label="Don't" title="Don't" disabled={busy() !== null} onClick={(event: MouseEvent) => { stop(event); void decideAsk(ask.id, "deny"); }}><Icons.Close /></IconButton>
           </Show>} />
         <Expand open={unfolded() === ask.id}>
-          <ApprovalCard bare title={ask.title} service={ask.service} lines={ask.lines} state="pending" busy={busy() !== null} always={ask.always ?? null}
+          <ApprovalCard bare title={ask.title} service={ask.service} lines={ask.lines} state="pending" busy={busy() !== null} always={ask.always ?? null} choices={ask.choices}
             onChoose={(choice) => void decideAsk(ask.id, choice)} />
         </Expand>
       </>}

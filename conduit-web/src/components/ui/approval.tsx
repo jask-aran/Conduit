@@ -52,13 +52,17 @@ export type ApprovalChoice = "allow" | "always" | "deny";
  */
 export function ApprovalCard(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
   /** What Always would allow from now on ("Gmail · send, any input"); null: no lasting rule fits, so no Always. */
-  always?: string | null; bare?: boolean; onChoose?: (choice: ApprovalChoice) => void }) {
+  always?: string | null;
+  /** The answers this approval offers; all three when not said. One left out is not drawn. */
+  choices?: readonly ApprovalChoice[];
+  bare?: boolean; onChoose?: (choice: ApprovalChoice) => void }) {
+  const offers = (choice: ApprovalChoice) => !props.choices || props.choices.includes(choice);
   const actions = () => <div class="ui-approval-actions">
-    <Button size="sm" disabled={props.busy} onClick={() => props.onChoose?.("allow")}>Allow</Button>
-    <Show when={props.always !== null}>
+    <Show when={offers("allow")}><Button size="sm" disabled={props.busy} onClick={() => props.onChoose?.("allow")}>Allow</Button></Show>
+    <Show when={offers("always") && props.always !== null}>
       <Button size="sm" variant="ghost" outline disabled={props.busy} title={props.always ? `Always allow: ${props.always}` : undefined} onClick={() => props.onChoose?.("always")}>Always</Button>
     </Show>
-    <Button size="sm" variant="ghost" disabled={props.busy} onClick={() => props.onChoose?.("deny")}>Don't</Button>
+    <Show when={offers("deny")}><Button size="sm" variant="ghost" disabled={props.busy} onClick={() => props.onChoose?.("deny")}>Don't</Button></Show>
   </div>;
   return <Switch>
     <Match when={props.state === "pending" && props.bare}>
