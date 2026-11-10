@@ -86,6 +86,7 @@ import { PersistentAgent } from "./agent/agent.js";
 import { createChatHost } from "./agent/chat-host.js";
 import { startEvents } from "./agent/events.js";
 import { seedSchedules } from "./agent/schedule.js";
+import { armReminders } from "./agent/asks.js";
 import { agentNotifier } from "./agent/notify.js";
 import { MessageLog, mirrorHomeThread } from "./agent/messages.js";
 import { EmailChannel } from "./agent/email.js";
@@ -863,7 +864,8 @@ if (persistentAgent) {
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
   lifetime.own("jbot inbox files", persistentAgent, (owned) => owned.stopFollowing());
   lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());
-  void persistentAgent.load().then((project) => project && seedSchedules(persistentAgent))
+  // Its schedules are seeded and the reminders its asks still owe are taken up again (asks.js).
+  void persistentAgent.load().then((project) => project && Promise.all([seedSchedules(persistentAgent), armReminders(persistentAgent)]))
     .catch((error) => console.error("[agent] could not load", error));
 }
 registerDiagnosticsRoutes(app, { dataRoot: config.dataRoot });

@@ -7,14 +7,18 @@ const WEEK = 7 * HOUR24;
 
 /*
  * An ask's lifecycle, the one place that reads or moves its status: pending → allowed | declined | expired (the person
- * answered, or a day passed without an answer); allowed → used (its one call was made). Expiry is worked out when read,
- * not swept: a pending ask past its expiresAt is expired, so nothing has to write it, and one an older hub wrote as
- * "expired" still reads so. Everything else reads `statusAt` and moves an ask with `transition`.
+ * answered, or a day passed without an answer); allowed → used (its one call was made) | expired (the call was never
+ * made and the yes lapsed, after the agent's grantHours: a yes is to what was asked then, not to the same call weeks
+ * on). Expiry is worked out when read, not swept: a pending ask past its expiresAt, or an allowed one past its
+ * lapsesAt, is expired, so nothing has to write it, and one an older hub wrote as "expired" still reads so. An allowed
+ * ask from before grants lapsed has no lapsesAt and stands. Everything else reads `statusAt` and moves an ask with
+ * `transition`.
  */
 const MOVES = { pending: ["allowed", "declined", "expired"], allowed: ["used"] };
 const ms = (now) => (typeof now === "number" ? now : now instanceof Date ? now.getTime() : Date.parse(now));
 /** An ask's status at `now` (ms, a Date or an ISO string). */
-export const statusAt = (ask, now = Date.now()) => ask.status === "pending" && Date.parse(ask.expiresAt) <= ms(now) ? "expired" : ask.status;
+export const statusAt = (ask, now = Date.now()) => (ask.status === "pending" && Date.parse(ask.expiresAt) <= ms(now))
+  || (ask.status === "allowed" && ask.lapsesAt && Date.parse(ask.lapsesAt) <= ms(now)) ? "expired" : ask.status;
 /** The fields a new ask starts with: pending, for a day. */
 export const opened = (now = new Date()) => ({ createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + HOUR24).toISOString(), status: "pending" });
 /**
@@ -22,15 +26,42 @@ export const opened = (now = new Date()) => ({ createdAt: now.toISOString(), exp
  * expired, it was used). An answer records when and which; a use records the call that used it, so a replay of that
  * call is known for what it is.
  */
-export function transition(ask, to, { now = new Date(), choice, callId } = {}) {
+export function transition(ask, to, { now = new Date(), choice, callId, lapseMs = 0 } = {}) {
   if (!MOVES[statusAt(ask, now)]?.includes(to)) return false;
   ask.status = to;
   if (to === "allowed" || to === "declined") { ask.decidedAt = new Date(ms(now)).toISOString(); ask.choice = choice; }
+  if (to === "allowed" && lapseMs > 0) ask.lapsesAt = new Date(ms(now) + lapseMs).toISOString();
   if (to === "used") ask.usedCallId = callId;
   return true;
 }
-/** Settled (declined, expired or used) for a week: nothing reads it any more. An allowed ask is never pruned. */
+/** Settled (declined, expired or used) for a week: nothing reads it any more. */
 export const prunable = (ask, now = Date.now()) => ["declined", "expired", "used"].includes(statusAt(ask, now)) && Date.parse(ask.decidedAt || ask.createdAt) < ms(now) - WEEK;
+/*
+ * An ask still waiting at its remind.at is pushed once more. The reminder is the ask's own (when, and what to push, are
+ * on it), so it outlives the hub restarting: armReminders takes up every one still owed when the hub starts. It was a
+ * timer alone, and every restart inside those minutes lost it.
+ */
+const reminders = new WeakMap();
+export function armReminder(agent, ask) {
+  const timers = reminders.get(agent) || reminders.set(agent, new Map()).get(agent);
+  if (!ask.remind || ask.reminded || timers.has(ask.id)) return;
+  const timer = setTimeout(async () => {
+    timers.delete(ask.id);
+    try {
+      const held = (await agent.state()).asks?.[ask.id];
+      if (!held || held.reminded || statusAt(held) !== "pending") return;
+      const pushed = await agent.runtime?.agentNotify?.(held.remind?.push || ask.remind.push);
+      // Marked whether or not a device took it: it is one reminder, not one a restart.
+      await agent.update((doc) => { const now = doc.asks?.[ask.id]; if (now) now.reminded = pushed || true; });
+    } catch {}
+  }, Math.max(0, Date.parse(ask.remind.at) - Date.now()));
+  timer.unref?.();
+  timers.set(ask.id, timer);
+}
+export async function armReminders(agent) {
+  if (!agent?.enabled?.()) return;
+  for (const ask of Object.values((await agent.state()).asks || {})) if (statusAt(ask) === "pending") armReminder(agent, ask);
+}
 /** The answers an ask offers: its permission's (approval-api.js), less Always where no lasting rule fits this call. An
  *  ask from before permissions were recorded offers what it did then. */
 const choicesOf = (ask) => (ask.permission ? permissionChoices(ask.permission) : ["allow", "always", "deny"]).filter((choice) => choice !== "always" || Boolean(ask.ruleTarget));
@@ -55,7 +86,7 @@ export async function decide(agent, id, choice) {
     if (!ask) return { error: 404 };
     if (statusAt(ask, now) !== "pending") return { error: 409 };
     if (!choicesOf(ask).includes(choice)) return { error: 400 };
-    transition(ask, choice === "deny" ? "declined" : "allowed", { now, choice });
+    transition(ask, choice === "deny" ? "declined" : "allowed", { now, choice, lapseMs: Number(agent.settings().grantHours ?? 24) * 3600_000 });
     if (choice === "always") {
       const ruleId = nextId(doc, "r");
       doc.rules ||= {};

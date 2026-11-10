@@ -136,6 +136,11 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
             <For each={[[0, "Never"], [5, "After 5 minutes"], [10, "After 10 minutes"], [30, "After 30 minutes"], [60, "After an hour"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
           </Select>
         </SettingLine>
+        <SettingLine label="An unused yes lasts" title="You allowed something and the call was never made: after this long the yes lapses, and the same call asks again.">
+          <Select id="agent-grant" value={String(current().grantHours ?? 24)} onChange={(event) => set({ grantHours: Number(event.currentTarget.value) })}>
+            <For each={[[1, "An hour"], [24, "A day"], [168, "A week"], [0, "Until it is used"]] as const}>{([value, label]) => <option value={String(value)}>{label}</option>}</For>
+          </Select>
+        </SettingLine>
       </Group>
       <Group title="Routine">
         <SettingLine label="Email" title="Every 30 minutes, new mail from your Gmail accounts connected in Executor goes to its inbox for the heartbeat.">

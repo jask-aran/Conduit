@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   toolsDecide: true,
   // An ask still waiting is pushed once more after this many minutes; 0 never.
   remindMinutes: 10,
+  // A yes whose call is never made lapses after this many hours (asks.js); 0 never.
+  grantHours: 24,
   // Background runs stop for the day once they have spent this (USD); 0 is no limit.
   budgetUsdPerDay: 2,
   timezone: null,
@@ -227,6 +229,11 @@ export class PersistentAgent {
       const minutes = Number(patch.remindMinutes);
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) fail("remindMinutes is 0 to 1440");
       next.remindMinutes = minutes;
+    }
+    if (patch.grantHours !== undefined) {
+      const hours = Number(patch.grantHours);
+      if (!Number.isInteger(hours) || hours < 0 || hours > 720) fail("grantHours is 0 to 720");
+      next.grantHours = hours;
     }
     if (patch.budgetUsdPerDay !== undefined) {
       const budget = Number(patch.budgetUsdPerDay);
