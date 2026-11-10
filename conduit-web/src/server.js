@@ -56,6 +56,7 @@ import { UiControl } from "./server/ui-control.js";
 import { createMcpEndpoint, mcpToken } from "./server/mcp-endpoint.js";
 import { mcpAccess } from "./server/mcp-access.js";
 import { BrowserHost, createBrowsers } from "./server/browser-host.js";
+import { PersonBrowser } from "./nodes/person-browser.js";
 import { tunnelTo } from "./nodes/remote-tunnel.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
 import { createScreens } from "./server/screens.js";
@@ -690,6 +691,9 @@ const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: conf
   // Its settings changed or it started again: every Browser pane takes its frame rate again and reconnects if it must.
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
+// The person's own browser on the hub's machine (nodes/person-browser.js), and every device's through its node: conduit_browser's.
+const personBrowser = lifetime.own("person's browser", new PersonBrowser(), (owned) => owned.close());
+Object.assign(mcpRuntime, { personBrowser, nodeHub });
 // The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
 const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
 registerBrowserRoutes(app, { browsers, proxy: browserProxyFor });
@@ -816,6 +820,7 @@ if (durableAdapter) {
   durableAdapter.runtime.uiControl = uiControl;
   durableAdapter.runtime.screens = screens;
   durableAdapter.runtime.browserHost = browserHost;
+  durableAdapter.runtime.personBrowser = personBrowser;
   void durableAdapter.runtime.loadBrowserTools();
 }
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;

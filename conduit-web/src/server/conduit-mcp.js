@@ -1,6 +1,7 @@
 import { defineExtension } from "@earendil-works/pi-durable";
 import { ConduitInboxTool } from "../agent/inbox.js";
 import { UiTool } from "./ui-control.js";
+import { PersonBrowserTool } from "./person-browser-tool.js";
 
 /*
  * The conduit MCP server's tools (docs/plans/screens-and-device-control.md, decision 1): Conduit as an agent reaches
@@ -11,7 +12,7 @@ import { UiTool } from "./ui-control.js";
  * A call knows its chat: `api.chatId` over HTTP (the chat's own endpoint), `api.conversationId` in-process
  * (`runtime.chatOf` resolves it). A call with neither (a server someone added by hand) is no one's.
  */
-export const conduitTools = (runtime) => [UiTool(runtime), ConduitInboxTool(runtime)];
+export const conduitTools = (runtime) => [UiTool(runtime), ConduitInboxTool(runtime), PersonBrowserTool(runtime)];
 
 export const ConduitMcp = (runtime) => defineExtension({ name: "conduit-mcp", tools: conduitTools(runtime) });
 

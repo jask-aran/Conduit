@@ -32,6 +32,8 @@ export const DEVICE_CAPABILITIES = /** @type {const} */ ({
     says: "It lets the hub browse its disk and share the folders a person picks" },
   browser: { type: "flag", from: "hello", kept: false, screen: "browser", agent: "conduit_ui",
     says: "It offers its browser to the network's clients" },
+  personBrowser: { type: "flag", from: "hello", kept: false, screen: null, agent: "conduit_browser",
+    says: "The person's own browser there, which agents drive through OpenCode Browse" },
   terminal: { type: "flag", from: (/** @type {{ roots: SharedRoot[] }} */ held) => held.roots.some((root) => root.shell), kept: false, screen: null, agent: null,
     says: "A terminal in its home: some folder is shared with commands" },
 });
@@ -48,6 +50,7 @@ export const NODE_TARGETS = /** @type {const} */ ({
   harness: { for: ["harnesses"], methods: ["claudeSession", "codexRollout", "opencodeService"], says: "What a harness saved there, for the sessions the hub runs on it" },
   computer: { for: ["browse"], methods: ["list", "share"], says: "Its disk, to pick a folder to share" },
   browser: { for: ["browser"], methods: ["status", "describe", "configure", "act", "stream"], says: "Its browser: what it shows, input, and the port its picture streams from" },
+  personBrowser: { for: ["personBrowser"], methods: ["tools", "call"], says: "The person's own browser: OpenCode Browse's tools, listed and called" },
   tunnel: { for: ["browser", "harnesses"], methods: ["open"], says: "A stream to a port on it, through the hub" },
   machine: { for: [], methods: ["read"], says: "Its readout: CPU, memory, disk, network, processes" },
 });

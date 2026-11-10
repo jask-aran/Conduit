@@ -34,7 +34,7 @@ test("conduit MCP exposes both named tools at the canonical path and old alias",
     assert.match(initialized.body.result.instructions, /conduit_ui/);
     assert.match(initialized.body.result.instructions, /conduit_inbox/);
     const listed = await request(endpoint.afterAuth, path, { id: 2, method: "tools/list" });
-    assert.deepEqual(listed.body.result.tools.map((tool) => tool.name), ["conduit_ui", "conduit_inbox"]);
+    assert.deepEqual(listed.body.result.tools.map((tool) => tool.name), ["conduit_ui", "conduit_inbox", "conduit_browser"]);
     assert.ok(!Object.hasOwn(listed.body.result.tools[1].inputSchema.properties, "client"));
     assert.equal((await request(endpoint.afterAuth, path, null, { method: "GET" })).status, 405);
     assert.equal((await request(endpoint.beforeAuth, path, { id: 3, method: "ping" }, { bearer: "wrong" })).status, 404);
@@ -80,5 +80,5 @@ test("conduit_ui keeps client targeting and commands", async () => {
   assert.equal(tool.name, "conduit_ui");
   await tool.execute({ action: "open", view: "page:agent", client: "chosen", beside: true });
   await tool.execute({ action: "focus", pane: "main" });
-  assert.deepEqual(sent, [[{ action: "open", view: "page:agent", beside: true }, "chosen"], [{ action: "focus", pane: "main" }, null]]);
+  assert.deepEqual(sent, [[{ action: "open", view: "page:agent", beside: true }, "chosen", null], [{ action: "focus", pane: "main" }, null, null]]);
 });
