@@ -8,7 +8,7 @@ import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
@@ -606,14 +606,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
   beginTurn(record, prompt) {
     const generationId = crypto.randomUUID();
     record.counts.userMessages += 1;
-    Object.assign(record, { active: true, failed: false, stopping: false,
-      generation: { id: generationId, closed: false, settled: false }, answering: prompt.id,
-      steps: new Map(), stepOrder: [], step: null });
+    beginTurn(record, generationId);
+    Object.assign(record, { answering: prompt.id, steps: new Map(), stepOrder: [], step: null });
     record.tools.clear();
     this.publish(record, messageOpen({ id: prompt.id, role: "user", ...(prompt.origin ? { origin: prompt.origin } : {}),
       generationId, content: prompt.content, timestamp: new Date().toISOString() }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
   }
 
   /**
@@ -899,10 +897,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const generationId = crypto.randomUUID();
     const uuid = uuidOf(options.clientUserMessageId);
     const userMessageId = options.clientUserMessageId || promptId(uuid);
-    record.active = true;
-    record.failed = false;
-    record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false };
+    beginTurn(record, generationId);
     record.answering = userMessageId;
     record.promptText = parseAttachmentEnvelope(message).message;
     record.steps = new Map();
@@ -912,8 +907,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     record.counts.userMessages += 1;
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: record.promptText, timestamp: new Date().toISOString() }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
     try {
       record.input.push({ type: "user", uuid, session_id: record.sessionId, parent_tool_use_id: null,
         message: { role: "user", content: await promptContent(record.promptText, options.attachments, { onDevice: Boolean(record.nodeId) }) } });

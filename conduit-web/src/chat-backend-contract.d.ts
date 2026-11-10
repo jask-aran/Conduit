@@ -112,15 +112,6 @@ export function assertChatBackendAdapter<T extends ChatBackendAdapter>(
   expectedCapabilities?: ChatCapabilities | null,
 ): T;
 
-export type ChatLifecycleState =
-  | "creating"
-  | "restoring"
-  | "idle"
-  | "working"
-  | "stopping"
-  | "failed"
-  | "closed";
-
 /** A turn's status. (A chat row's status is the client's ChatStatus, client/api/contracts.ts.) */
 export type TurnStatus = "working" | "stopping" | "idle" | "failed";
 export type ChatActivity =
@@ -382,7 +373,6 @@ export interface ExtensionNoticeEvent extends EventBase {
  */
 export interface RuntimeStateEvent extends EventBase {
   type: "runtime_state";
-  lifecycle: ChatLifecycleState;
   status: TurnStatus;
   activity: ChatActivity;
   capabilities: ChatCapabilities;

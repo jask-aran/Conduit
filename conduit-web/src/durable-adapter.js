@@ -14,7 +14,7 @@ import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
@@ -929,18 +929,16 @@ export class DurableAdapter extends EventEmitter {
       if (slot.callId && slot.status !== "done") turn.tools.set(slot.callId, { messageId: null, name: slot.name,
         input: calls.find((call) => call.id === slot.callId)?.arguments || {}, details: slot.details, opened: true, output: slot.output || "" });
     }
-    this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record, turn.generationId));
     this.publish(record, { type: "status", generationId: turn.generationId, phase: "running", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
   }
 
   beginTurn(record, inputs, generationId = crypto.randomUUID()) {
-    record.active = true;
-    record.failed = false;
+    // A stop asked for before the run took the prompt still stands.
+    beginTurn(record, generationId, { stopping: record.stopping });
     record.doing = null;
     if (record.templateId === "agent") this.runtime.agentChanged?.();
-    record.generation = { id: generationId, closed: false, settled: false };
     record.turn = { generationId, inputs: [...(inputs || [])], prompts: [], answers: null, messageId: null, tools: new Map(), last: null };
     return record.turn;
   }
@@ -957,8 +955,7 @@ export class DurableAdapter extends EventEmitter {
     this.publish(record, messageOpen({ id: messageId, role: "user", generationId: turn.generationId,
       content: message, timestamp: new Date().toISOString(),
       ...(options.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
-    this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record, turn.generationId));
     turn.opened = new Set([messageId]);
     try {
       await this.submit(record, message, messageId, undefined, options.attachments, options.notice, options.author === "person" && !options.notice);
@@ -1063,8 +1060,7 @@ export class DurableAdapter extends EventEmitter {
               ...(data.notes !== undefined ? { notes: data.notes } : {}),
               ...(data.attachments?.length ? { attachments: data.attachments } : {}) }));
           }
-          this.publish(record, { type: "status", generationId: turn.generationId, phase: "started", seq: ++record.generationSeq,
-            status: "working", activity: "working", detail: null });
+          this.publish(record, turnStarted(record, turn.generationId));
         }
         this.publish(record, { type: "status", generationId: turn.generationId, phase: "running", seq: ++record.generationSeq,
           status: "working", activity: "working", detail: null });

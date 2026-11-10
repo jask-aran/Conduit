@@ -8,7 +8,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
@@ -950,13 +950,9 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
     } else if (method === "turn/started") {
       const stopOwed = record.turnStarting && record.stopping;
-      record.active = true;
-      record.turnStarting = false;
-      record.stopping = Boolean(stopOwed);
-      record.failed = false;
-      record.generation = { id: turnId, closed: false, settled: false };
+      beginTurn(record, turnId, { stopping: Boolean(stopOwed) });
       record.turn = null;
-      this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+      this.publish(record, turnStarted(record, turnId));
       if (stopOwed) void this.cancel(record.id, turnId).catch((cause) => {
         this.emit("diagnostic", { chatId: record.chatId, message: `Codex turn interrupt failed: ${cause.message}` });
       });

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
@@ -338,16 +338,13 @@ export class TestStreamAdapter extends EventEmitter {
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
     const replay = REPLAY_ALIASES.get(record.model)?.replay || replayFromPrompt(message);
     record.tokens = replay ? replayTokens(replay).length : amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
-    record.active = true;
-    record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false };
+    beginTurn(record, generationId);
     // Both rows are named before a byte of the answer exists, so nothing
     // arriving later needs a place worked out for it.
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: message, timestamp: new Date().toISOString(),
       ...(options?.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
     record.turn = {
       generationId,
       answers: userMessageId,

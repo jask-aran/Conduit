@@ -92,8 +92,7 @@ export function registerRuntimeRoutes(app, {
     // not try that against a server that does not say so.
     response.setHeader("X-Conduit-Pwa-Prepare", "2");
     const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
-      && (process.active || process.stopping || process.compacting
-        || process.generation && !process.generation.settled)).length;
+      && process.turnInFlight).length;
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",

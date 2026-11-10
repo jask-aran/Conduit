@@ -18,7 +18,6 @@ export interface TurnArtifactSummary {
 
 export interface GenerationHandle {
   id: string | null;
-  closed: boolean;
   settled: boolean;
 }
 
@@ -283,7 +282,7 @@ function question(value: unknown): Question {
 function generation(value: unknown): GenerationHandle | null {
   const source = record(value);
   if (!Object.keys(source).length) return null;
-  return { id: optionalText(source.id), closed: Boolean(source.closed), settled: Boolean(source.settled) };
+  return { id: optionalText(source.id), settled: Boolean(source.settled) };
 }
 
 function sessionSnapshot(value: unknown): SessionSnapshot {

@@ -362,7 +362,7 @@ function approvalHarness() {
   const adapter = new CodexAppServerAdapter();
   const live = record();
   live.active = true;
-  live.generation = { id: "turn-1", closed: false, settled: false };
+  live.generation = { id: "turn-1", settled: false };
   const written = [];
   adapter.write = (_record, message) => written.push(message);
   adapter.records.set(live.id, live);
@@ -480,7 +480,7 @@ test("steering stays visible until Codex reports that it consumed the message", 
   const adapter = new CodexAppServerAdapter();
   const live = record();
   live.active = true;
-  live.generation = { id: "turn-1", closed: false, settled: false };
+  live.generation = { id: "turn-1", settled: false };
   adapter.records.set(live.id, live);
   const sent = [];
   adapter.request = (_record, method, params) => { sent.push({ method, params }); return Promise.resolve({}); };
@@ -517,7 +517,7 @@ test("a follow-up waits for the turn and then starts the next one", async () => 
   const adapter = new CodexAppServerAdapter();
   const live = record();
   live.active = true;
-  live.generation = { id: "turn-1", closed: false, settled: false };
+  live.generation = { id: "turn-1", settled: false };
   adapter.records.set(live.id, live);
   const prompted = [];
   adapter.prompt = (id, message) => { prompted.push({ id, message }); return Promise.resolve("turn-2"); };

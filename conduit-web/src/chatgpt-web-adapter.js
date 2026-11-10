@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { applyTranscriptOp } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -159,10 +159,8 @@ export class ChatGptWebAdapter extends EventEmitter {
     const generationId = crypto.randomUUID();
     const messageId = `assistant-${generationId}`;
     const userMessageId = crypto.randomUUID();
-    record.active = true;
-    record.failed = false;
-    record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false, prompt: userMessageId };
+    beginTurn(record, generationId);
+    record.generation.prompt = userMessageId;
     record.abortController = new AbortController();
     // The prompt and the answer it will produce are both named before the
     // request goes out, so nothing arrives needing a place to be worked out.
@@ -172,7 +170,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     // What the turn has written so far, so an answer that fails or is stopped
     // can still be settled with the text the reader watched arrive.
     record.turn = { messageId, blocks: [] };
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
     this.publish(record, { type: "assistant_content", generationId, phase: "start", seq: ++record.generationSeq, messageId });
     void this.runPrompt(record, { generationId, messageId, message: userMessage });
     return generationId;
@@ -254,7 +252,8 @@ export class ChatGptWebAdapter extends EventEmitter {
 
   settle(record, detail) {
     if (record.generation?.settled) return;
-    Object.assign(record.generation, { closed: true, settled: true });
+    // Claimed first: what follows publishes, and must not find the turn still open.
+    record.generation.settled = true;
     this.settleTurn(record, detail === "stopped" ? "interrupted" : "complete");
     const outcome = detail === "stopped" ? "interrupted" : "complete";
     endTurn(record, outcome);
@@ -265,7 +264,7 @@ export class ChatGptWebAdapter extends EventEmitter {
 
   failGeneration(record, cause, text = "") {
     if (record.generation?.settled) return;
-    if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
+    if (record.generation) record.generation.settled = true;
     this.closeTurn(record, "error", text);
     this.settleTurn(record, "failed");
     endTurn(record, "failed");

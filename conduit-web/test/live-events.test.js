@@ -197,7 +197,7 @@ test("carries adapter events into the reducer under the names the contract gave 
   // `lifecycle` string. There is one shape now; the thin one existed for a
   // second frame that attach no longer sends.
   const state = normalizeLiveEvent({
-    type: "runtime_state", generationId: null, lifecycle: "idle", status: "idle", activity: "idle",
+    type: "runtime_state", generationId: null, status: "idle", activity: "idle",
     session: { active: false, capabilities: { steer: false, replay: true } },
   });
   assert.equal(state.type, "runtime_state");

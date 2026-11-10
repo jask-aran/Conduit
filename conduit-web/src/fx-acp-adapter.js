@@ -5,7 +5,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
@@ -434,10 +434,7 @@ export class FxAcpAdapter extends EventEmitter {
     if (record.active) throw failure("fx session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
     const userMessageId = options.clientUserMessageId || crypto.randomUUID();
-    record.active = true;
-    record.failed = false;
-    record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false };
+    beginTurn(record, generationId);
     record.answering = userMessageId;
     record.promptText = parseAttachmentEnvelope(message).message;
     record.steps = [];
@@ -448,8 +445,7 @@ export class FxAcpAdapter extends EventEmitter {
       .then((data) => data.history?.length ?? null, () => null);
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: record.promptText, timestamp: new Date().toISOString() }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
     const request = record.client.request("session/prompt", {
       sessionId: record.sessionId,
       prompt: [{ type: "text", text: record.promptText }],
@@ -459,9 +455,9 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   async finish(record, acpStopReason) {
-    if (!record.active || record.generation.closed) return;
+    if (!record.active || record.generation.finishing) return;
     // Claim the turn before reading history; process exit can fail it again.
-    record.generation.closed = true;
+    record.generation.finishing = true;
     let stopReason = FX_STOP_REASONS[acpStopReason] || "stop";
     const stopped = stopReason === "aborted" || stopReason === "error";
     let error = null;
@@ -530,7 +526,7 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   failPrompt(record, cause) {
-    if (!record.active || record.generation.closed) return;
+    if (!record.active || record.generation.finishing) return;
     this.publish(record, { type: "error", generationId: record.generation?.id || null, scope: "runtime",
       error: { code: "backend_unavailable", message: cause.message || String(cause) } });
     void this.finish(record, "error");

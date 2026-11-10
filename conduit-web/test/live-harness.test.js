@@ -140,7 +140,7 @@ test("live harness measures visible text deltas without counting thinking blocks
     // browser's names for these events, which meant the harness was only ever
     // proved against a server that does not exist.
     setTimeout(() => socket.send(JSON.stringify({
-      type: "runtime_state", generationId: null, lifecycle: "idle", status: "idle", activity: "idle",
+      type: "runtime_state", generationId: null, status: "idle", activity: "idle",
     })), 10);
     socket.once("message", () => {
       socket.send(JSON.stringify({

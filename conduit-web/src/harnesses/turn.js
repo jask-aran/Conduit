@@ -37,7 +37,23 @@ export function activityOf(record) {
  */
 export const turnInFlight = (record) => Boolean(record && (record.active || record.turnStarting || record.stopping
   || record.compacting || openRequests(record)
-  || (record.generation && !record.generation.closed && !record.generation.settled)));
+  || (record.generation && !record.generation.settled)));
+
+/**
+ * A turn begins: the record's side of it, and the statement. Each adapter says when (Codex on turn/started, durable
+ * once for a turn begun before its run), and may carry a stop asked for while the turn was still on its way.
+ */
+export function beginTurn(record, generationId, { stopping = false } = {}) {
+  record.active = true;
+  record.turnStarting = false;
+  record.failed = false;
+  record.stopping = stopping;
+  record.generation = { id: generationId, settled: false };
+}
+
+export const turnStarted = (record, generationId = record.generation.id) => ({
+  type: "status", generationId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null,
+});
 
 /**
  * A turn ends, the same way on every harness.
@@ -58,7 +74,7 @@ export function endTurn(record, outcome) {
   record.turnStarting = false;
   record.stopping = false;
   record.failed = outcome === "failed";
-  if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
+  if (record.generation) record.generation.settled = true;
 }
 
 /** @param {"complete" | "interrupted" | "failed"} outcome */

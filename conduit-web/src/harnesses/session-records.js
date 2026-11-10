@@ -2,7 +2,7 @@ import { isLoggedEvent, LOGGED_STATUS_PHASES } from "../server/chat-log.js";
 import { SessionScope } from "../server/session-scope.js";
 import { isLiveEvent } from "../live-session-api.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
-import { activityOf } from "./turn.js";
+import { activityOf, turnInFlight } from "./turn.js";
 
 // The live-record store adapters share: the id and chat indexes, the attached
 // browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
@@ -164,6 +164,9 @@ export class SessionRecords {
       // came up, and two backends would tell the same story differently.
       activity: ready ? activityOf(record) : "starting",
       active: record.active, stopping: record.stopping, generation: record.generation,
+      // A turn is under way by any of the ways a harness says so (turn.js): what a restart waits out. The flags above
+      // are not the whole of it -- a turn sent to Codex and not yet begun, a compaction outside a turn.
+      turnInFlight: turnInFlight(record),
       model: record.model, capabilities: this.capabilities, backend: this.backend,
       createdAt: record.createdAt || null, updatedAt: record.updatedAt || record.createdAt || null,
       ...this.extras(record),
@@ -173,10 +176,8 @@ export class SessionRecords {
   runtimeState(record) {
     return {
       type: "runtime_state", generationId: record?.generation?.id || null,
-      lifecycle: record?.status === "stopped" ? "closed" : record?.status === "starting" ? "creating"
-        : record?.active ? "working" : "idle",
       status: record?.stopping ? "stopping" : record?.failed ? "failed"
-        : record?.active ? "working" : "idle",
+        : record?.active || record?.turnStarting ? "working" : "idle",
       activity: activityOf(record), capabilities: this.capabilities,
     };
   }

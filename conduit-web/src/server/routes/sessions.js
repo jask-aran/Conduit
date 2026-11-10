@@ -48,9 +48,9 @@ export function registerSessionRoutes(app, {
    * attaches, and until then this is what says the turn has not ended yet.
    */
   const turnOpen = (chatId) => {
-    const process = backends.list().find((item) => item.chatId === chatId);
-    return Boolean(process && (process.active || process.stopping
-      || process.generation && !process.generation.settled));
+    // A compaction outside a turn is not one: the transcript has no prompt waiting on it.
+    const record = backends.getByChatId(chatId);
+    return Boolean(record && (record.active || record.turnStarting || record.stopping));
   };
 
   async function transcriptFor(context) {

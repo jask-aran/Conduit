@@ -667,7 +667,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (session.compacting != null) setCompacting(session.compacting);
     if (session.retry !== undefined) setRetry(session.retry);
     if (session.capabilities) setCapabilities(session.capabilities);
-    const turnOpen = Boolean(session.generation && !session.generation.closed && !session.generation.settled);
+    const turnOpen = Boolean(session.generation && !session.generation.settled);
     if (session.stopping || (stopRequest && (turnOpen || session.active))) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
     else {

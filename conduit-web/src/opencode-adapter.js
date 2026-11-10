@@ -9,7 +9,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { endTurn, turnEnded } from "./harnesses/turn.js";
+import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -362,18 +362,14 @@ export class OpenCodeAdapter extends EventEmitter {
     if (record.active) throw failure("OpenCode session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
     const clientUserMessageId = options.clientUserMessageId || `m_${crypto.randomUUID()}`;
-    record.active = true;
-    record.failed = false;
-    record.stopping = false;
-    record.generation = { id: generationId, closed: false, settled: false };
+    beginTurn(record, generationId);
     record.promptStartedAt = Date.now();
     record.answering = clientUserMessageId;
     record.liveMessages.clear();
     this.service(record.nodeId).streamAttempts = 0;
     this.publish(record, messageOpen({ id: clientUserMessageId, role: "user", generationId,
       content: parseAttachmentEnvelope(message).message, timestamp: new Date().toISOString() }));
-    this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null });
+    this.publish(record, turnStarted(record));
     try {
       // Listen before asking, so the turn's first events are not missed.
       await this.ensureStream(record.nodeId);
