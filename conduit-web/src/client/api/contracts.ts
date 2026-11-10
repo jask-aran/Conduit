@@ -858,6 +858,24 @@ export interface PtysPayload {
   ptys: Pty[];
 }
 
+/** An environment that can offer the person's own browser (nodes/person-browser.js status), by its node id. */
+export interface PersonBrowserEnvironment {
+  id: string;
+  name: string;
+  online: boolean;
+  available: boolean;
+  browsers: Array<{ id: string; name: string; connected: boolean }>;
+  /** A one-time code out for a browser's extension to redeem. */
+  pairing: { code: string; expiresAt: string } | null;
+  extensionUrl: string;
+  error?: string;
+}
+
+/** GET /v0/person-browsers. */
+export interface PersonBrowsersPayload {
+  environments: PersonBrowserEnvironment[];
+}
+
 /** GET /v0/projects. */
 export interface ProjectsPayload {
   projects: Project[];

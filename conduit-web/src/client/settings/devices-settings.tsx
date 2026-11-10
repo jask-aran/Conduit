@@ -11,6 +11,7 @@ import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer, keepThisComputerConnected } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
+import { PersonBrowsersSettings } from "./person-browsers-settings.tsx";
 import { MachineReadout } from "./machine-readout.tsx";
 import { createNetwork, DeviceHarnesses, mountedOn, together, type Device, type Node, type Shown, type ShownDevice } from "./network-state.tsx";
 import { createPushControl } from "../platform/push.ts";
@@ -176,6 +177,9 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
 
     {/* The network's own settings, the server in use's: another is switched to first. */}
     <Show when={active()}><NetworkSettings /></Show>
+
+    {/* Each environment's own browser, paired for agents to work in. */}
+    <Show when={active()}><PersonBrowsersSettings /></Show>
 
     <Show when={others().length}>
       <Group title="Devices">

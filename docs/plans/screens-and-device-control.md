@@ -69,6 +69,7 @@ watching or taking over helps.
 | --- | --- | --- |
 | `browser:hub` | the hub's Chrome | agent-browser (built) |
 | `browser:<device>` | a device's browser | agent-browser on the node (built: the person's to see and use); the desktop app's own webview later (surfaces roadmap #33) |
+| (no view yet) | the person's own browser on a device | OpenCode Browse on the environment: an extension in their Chromium paired to a relay there (built 2026-11-10: `conduit_browser`, Settings › Devices › Your browsers). The way device browsers go from here |
 | `desktop:<device>` | a device's display | voxl, to be proven by a spike |
 | `phone:<device>` | an Android over adb | adb for actions; a picture is unsolved |
 
@@ -111,3 +112,10 @@ Findings behind the last two (source read 2026-11-10):
   call is made, not when it is written.
 - [ ] 4. `desktop:<device>`: the voxl spike on the Windows app, then the kind.
 - [ ] 5. `phone:<device>`: actions over adb, then a picture.
+- [x] 3b. The person's own browser (2026-11-10). OpenCode Browse (MIT, vendored) on an environment
+  (`nodes/person-browser.js`): the `personBrowser` capability and target, the hub's one way to each
+  (`server/person-browsers.js`), `conduit_browser` in the conduit MCP server (behind codemode in a chat, by name over
+  HTTP), and pairing from Settings › Devices (`/v0/person-browsers`). Proven on the hub's own environment with a
+  Windows Chrome. Left: the hop through a device's node has not run (no companion restarted on it); it has no pane or
+  picture, so decision 8 (moves only in sight) is not kept and it stands on the shell grant alone; the relay is the
+  hub's or node's child and stops with it; whether it replaces agent-browser for `browser:<device>` or sits beside it.
