@@ -354,16 +354,17 @@ export class PtyManager extends EventEmitter {
     return view(record, this.metadata.get(id));
   }
 
-  async attach(id, { cols = 80, rows = 24, takeover = false } = {}) {
+  /** `owner`: whoever asks, so it can let go of its own lease while the attach is in flight (killAttachment). */
+  async attach(id, { cols = 80, rows = 24, takeover = false, owner = null } = {}) {
     const record = this.records.get(id);
     if (!record) throw failure("pty_not_found", "Terminal was not found");
     if (record.status !== "running") throw failure("pty_not_running", "Terminal is not running");
     if (this.attachments.has(id)) throw failure("pty_in_use", "Terminal is attached in another Conduit client");
-    if (record.nodeId) return this.attachOnDevice(record, { cols, rows, takeover });
+    if (record.nodeId) return this.attachOnDevice(record, { cols, rows, takeover, owner });
 
     // Reserve before any asynchronous tmux work. This closes the attach/attach
     // race without introducing a global streaming lease.
-    const lease = { state: "attaching", handle: null, cancelled: false };
+    const lease = { state: "attaching", handle: null, cancelled: false, owner };
     this.attachments.set(id, lease);
     try {
       await this.ensureTmux();
@@ -513,8 +514,8 @@ export class PtyManager extends EventEmitter {
     return view(record, this.metadata.get(id));
   }
 
-  async attachOnDevice(record, { cols, rows, takeover = false }) {
-    const lease = { state: "attaching", handle: null, cancelled: false };
+  async attachOnDevice(record, { cols, rows, takeover = false, owner = null }) {
+    const lease = { state: "attaching", handle: null, cancelled: false, owner };
     this.attachments.set(record.id, lease);
     let shell;
     try {
@@ -573,9 +574,10 @@ export class PtyManager extends EventEmitter {
     placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.kill(record.procId);
   }
 
-  killAttachment(id) {
+  /** End the lease under `id`; with `owner`, only if it is that owner's (remove() may hold the id by then). */
+  killAttachment(id, owner) {
     const lease = this.attachments.get(id);
-    if (!lease) return;
+    if (!lease || (owner !== undefined && lease.owner !== owner)) return;
     lease.cancelled = true;
     try { lease.handle?.kill(); } catch {}
     if (this.attachments.get(id) === lease) this.attachments.delete(id);

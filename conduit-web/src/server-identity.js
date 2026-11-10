@@ -288,6 +288,14 @@ export class ServerIdentity {
     this.writing.unref?.();
   }
 
+  /** The server is stopping: a write still waiting on the coalescing timer happens now. */
+  async flush() {
+    if (!this.writing) return;
+    clearTimeout(this.writing);
+    this.writing = null;
+    await this.save();
+  }
+
   async save() {
     const payload = JSON.stringify({
       id: this.id,

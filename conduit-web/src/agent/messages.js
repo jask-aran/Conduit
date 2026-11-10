@@ -21,7 +21,9 @@ import { headlineOf } from "./inbox.js";
  * `destination` worked out then and kept (an email's recipients, subject and the message it answers), so what it was
  * sent to never depends on settings or a room changed after it was written; carried, it is sent or failed. One still
  * pending when the log loads was being carried when the hub stopped: it may or may not have gone, so it is uncertain,
- * never sent again on its own. `held`: an email in from someone who does not wake jbot (email.js).
+ * never sent again on its own. A message in is sent (it reached jbot's thread) or, when the thread would not take it,
+ * failed; or `held`, an email in from someone who does not wake jbot (email.js), which stays held: the person sees it in
+ * its mail room and the held-mail routine reads it there (mail-task.js).
  */
 const APP = { channel: "app", room: "app" };
 
@@ -79,7 +81,10 @@ export class MessageLog {
       try { destination = channel ? channel.destination?.(message) || null : null; }
       catch (error) { unsent = error; }
     }
-    const written = { ...APP, notify: "none", delivery: { state: away ? "pending" : "sent", at: message.at }, ...(destination ? { destination } : {}), ...message };
+    // Its delivery starts here and only `held` is the caller's to say; a delivery passed for anything else is not kept.
+    const { delivery: given, ...rest } = message;
+    const delivery = away ? { state: "pending", at: message.at } : given?.state === "held" ? given : { state: "sent", at: message.at };
+    const written = { ...APP, notify: "none", ...(destination ? { destination } : {}), ...rest, delivery };
     this.messages.push(written);
     this.ids.add(written.id);
     this.persist();

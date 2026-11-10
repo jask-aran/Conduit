@@ -58,13 +58,33 @@ export async function renderWaitingInbox(agent, state = null) {
 export const InboxText = defineDocFamily({ family: true, checkpointWhen: () => false, kind: "conduit.agent.inbox-text", version: 1,
   scope: "session", initial: (seed) => ({ text: String(seed ?? "") }) });
 
-/** File an entry in the caller's commit: its index in the agent's document, its text (`body`) beside it. */
-export async function fileEntry(tx, entry, now = Date.now()) {
-  const { body, ...index } = entry;
+/*
+ * An entry's status moves only here. It is filed unhandled, or handled as it is filed when it records what was told at
+ * once; handle and dismiss mark it handled once, with when, how and by which conversation; reopen takes it back to
+ * unhandled.
+ */
+function markHandled(item, outcome, at, conversationId) {
+  if (item.status === "handled") return;
+  item.status = "handled";
+  item.handledAt = at;
+  item.outcome = outcome;
+  if (conversationId !== undefined) item.handledBy = conversationId;
+}
+function markUnhandled(item, reopenedAt) {
+  item.status = "unhandled";
+  delete item.handledAt; delete item.outcome; delete item.handledBy;
+  item.reopenedAt = reopenedAt;
+}
+
+/** File an entry in the caller's commit: its index in the agent's document, its text (`body`) beside it. `handled`
+ *  (an outcome) files it already handled. */
+export async function fileEntry(tx, entry, now = Date.now(), { handled } = {}) {
+  const { body, status, handledAt, outcome, ...index } = entry;
   const doc = await tx.doc(AgentDoc);
   const before = new Set(Object.keys(doc.inbox || {}));
   const existing = Object.values(doc.inbox || {}).find((item) => item.key === entry.key);
   const item = appendEntry(doc, index, now);
+  if (!existing && handled !== undefined) markHandled(item, handled, item.at);
   if (!existing && typeof body === "string" && body) await tx.doc(InboxText, item.id, body);
   for (const id of before) if (!Object.hasOwn(doc.inbox, id)) await tx.retireDoc(InboxText, id);
   return item;
@@ -85,7 +105,7 @@ export function appendEntry(doc, entry, now = Date.now()) {
     if (item.status === "handled" && Date.parse(item.handledAt || item.at) < now - KEPT_MS) delete doc.inbox[id];
   }
   const id = nextId(doc, "i");
-  doc.inbox[id] = { id, at: new Date(now).toISOString(), ...entry };
+  doc.inbox[id] = { id, at: new Date(now).toISOString(), status: "unhandled", ...entry };
   const all = Object.values(doc.inbox).sort((a, b) => a.at.localeCompare(b.at));
   for (const item of all.slice(0, Math.max(0, all.length - KEPT_MAX))) if (item.status === "handled") delete doc.inbox[item.id];
   return doc.inbox[id];
@@ -122,7 +142,7 @@ export async function addInboxEntry(tx, input, { author, by, key = `note:${crypt
   if (input.body !== undefined && typeof input.body !== "string") throw badInbox("body must be text.");
   const kind = input.kind === undefined ? "note" : inboxText(input.kind, "kind");
   const addressed = input.for === undefined ? {} : { for: recipients(input.for) };
-  return entryCopy(await fileEntry(tx, { key, title, headline, kind, level: input.level, status: "unhandled", author, by,
+  return entryCopy(await fileEntry(tx, { key, title, headline, kind, level: input.level, author, by,
     ...(input.body === undefined ? {} : { body: input.body }), ...addressed }));
 }
 
@@ -138,17 +158,10 @@ export function editInboxEntries(doc, input, { by, conversationId } = {}) {
   for (const item of entries) {
     if (input.action === "address") item.for = addressed;
     else if (input.action === "reopen") {
-      item.status = "unhandled";
-      delete item.handledAt; delete item.outcome; delete item.handledBy;
       // Keep arrival time. Move eligibility past all existing routine cursors, even within the same millisecond.
       const cursors = Object.values(doc.cursors || {}).flatMap((tasks) => Object.values(tasks));
-      item.reopenedAt = new Date(Math.max(Date.now(), ...cursors.map((cursor) => (Date.parse(cursor.since || "") || 0) + 1))).toISOString();
-    } else if (item.status !== "handled") {
-      item.status = "handled";
-      item.handledAt = new Date().toISOString();
-      item.outcome = outcome;
-      if (conversationId !== undefined) item.handledBy = conversationId;
-    }
+      markUnhandled(item, new Date(Math.max(Date.now(), ...cursors.map((cursor) => (Date.parse(cursor.since || "") || 0) + 1))).toISOString());
+    } else markHandled(item, outcome, new Date().toISOString(), conversationId);
     if (by !== undefined) item.by = by;
   }
   return entries.map(entryCopy);

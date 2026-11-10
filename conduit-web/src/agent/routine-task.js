@@ -306,7 +306,7 @@ export function routineTask(runtime) {
           if (record.routine.output !== "jbot") await api.commit(async (tx) => {
             await phaseWork(tx, workId(task.id), "Filing the report");
             const filed = await fileEntry(tx, { key: record.key, kind: record.routine.name, title: record.routine.title,
-              level: record.routine.level, status: "unhandled", headline: headlineOf(record.summary), body: record.summary }, Date.parse(record.slot));
+              level: record.routine.level, headline: headlineOf(record.summary), body: record.summary }, Date.parse(record.slot));
             await noteWork(tx, workId(task.id), { inboxId: filed.id, summary: headlineOf(record.summary) });
           }, context);
           if (record.routine.output !== "inbox") {

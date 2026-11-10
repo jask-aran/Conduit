@@ -6,7 +6,7 @@ import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { fileEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 import { inboxFile, writeInboxFile } from "../agent/inbox-files.js";
-import { closeWork, noteWork, openWork, phaseWork } from "../agent/work-log.js";
+import { closeWork, noteWork, openWork, phaseWork, WorkLog } from "../agent/work-log.js";
 
 const SubagentRoster = defineDoc({
   checkpointWhen: () => false, kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -143,6 +143,8 @@ export async function stopBackgroundSubagent(harness, conversationId, id, contex
  * message or a report twice. Its spend stays in the child's own ledger, which
  * the chat's totals add (`backgroundSubagents`): pi-durable's ledger is its own.
  */
+const ownsWork = async (tx, key, child) => String((await tx.doc(WorkLog)).items[key]?.conversationId) === String(child);
+
 export function Subagents(runtime) {
   const limits = () => ({ ...SUBAGENT_LIMITS, ...runtime.subagentLimits });
   // Foreground calls running per conversation, by call task id (a replayed call is the same one, so is counted once).
@@ -263,6 +265,8 @@ export function Subagents(runtime) {
         const item = (await tx.doc(SubagentRoster, api.conversationId)).children[task.input.id];
         item.status = "stopped";
         item.endedAt = new Date().toISOString();
+        // Its reporter, aborted first (abort runs bottom-up), closes nothing: a home-thread agent's work item ends here.
+        if (String((await tx.doc(AgentDoc)).home?.conversationId) === String(api.conversationId)) await closeWork(tx, `run:${task.input.id}`, "stopped", Date.now());
         return { status: "terminal", outcome: { status: "aborted" } };
       }, context);
       const item = (await backgroundSubagents(runtime.harness, api.conversationId, context)).find((item) => (item.key || item.id) === task.input.id);
@@ -361,8 +365,7 @@ export function Subagents(runtime) {
           const at = await api.memo("entryAt", new Date().toISOString(), context);
           await api.commit(async (tx) => {
             await fileEntry(tx, { key: `${child}:${number}`, kind, title, subagentId: label, conversationId: child, level,
-              headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer),
-              status: "unhandled" }, Date.parse(at));
+              headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer) }, Date.parse(at));
           }, context);
         }
         // A routine's report told to jbot is kept in the context inbox as well, handled as it is told: what the routine
@@ -378,7 +381,7 @@ export function Subagents(runtime) {
             const sources = doc.routineRuns?.[task.input.origin.routineTaskId]?.outcome?.sources || [];
             const body = sources.length ? `${report.answer}\n\n## Sources\n\n${sources.map((source) => `- [${source.title}](../${source.path})`).join("\n")}` : report.answer;
             const filed = await fileEntry(tx, { key: `${child}:${number}:report`, kind, title, subagentId: label, conversationId: child,
-              level, headline: headlineOf(report.answer), status: "handled", handledAt: at, outcome: `Told ${runtime.agent?.settings().name || "jbot"}`, body }, Date.parse(at));
+              level, headline: headlineOf(report.answer), body }, Date.parse(at), { handled: `Told ${runtime.agent?.settings().name || "jbot"}` });
             entry = { ...JSON.parse(JSON.stringify(filed)), body };
           }, context);
           if (runtime.agent?.folder) await writeInboxFile(runtime.agent.folder, entry, { text: entry.body }).catch(() => {});
@@ -479,6 +482,9 @@ export function Subagents(runtime) {
           const summary = failed ? end?.reason || headlineOf(report.answer) : level === "none" ? "Nothing new" : headlineOf(report.answer);
           const key = workKey;
           const did = runtime.subagentDid?.(runtime.subagentStarts?.get(child) || []) || null;
+          // Roster keys are a chat's own and the work log is shared: only this run's item (a routine's, or the one
+          // opened for this child) is written, where a chat's agent closed a home-thread item of the same key.
+          if (!routineTaskId && !(await ownsWork(tx, key, child))) return;
           await noteWork(tx, key, { woke: Boolean(heard && !stopped), level, summary, reportedAt: workAt, ...(did ? { did } : {}) });
           if (!routineTaskId) await closeWork(tx, key, stopped ? "stopped" : failed ? "failed" : "finished", Date.now());
         }, context);
@@ -492,7 +498,7 @@ export function Subagents(runtime) {
             item.status = "failed";
             if (!task.input.gate || !item.endedAt) item.endedAt = new Date().toISOString();
           }
-          if (!task.input.origin?.routineTaskId) await closeWork(tx, `run:${id}`, "failed", Date.now(), { summary: error?.message || "Failed" });
+          if (!task.input.origin?.routineTaskId && await ownsWork(tx, `run:${id}`, item.child)) await closeWork(tx, `run:${id}`, "failed", Date.now(), { summary: error?.message || "Failed" });
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: "failed" });
         throw error;

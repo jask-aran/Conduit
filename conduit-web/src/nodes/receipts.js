@@ -32,7 +32,7 @@ export class Receipts {
   follow(action, from, listener, start) {
     let receipt = this.items.get(action);
     if (!receipt) {
-      receipt = { events: [], first: 0, bytes: 0, result: undefined, listener: null, controller: new AbortController(), timer: null };
+      receipt = { events: [], first: 0, bytes: 0, done: false, result: undefined, listener: null, controller: new AbortController(), timer: null };
       this.items.set(action, receipt);
       this.trim();
       const emit = (event) => {
@@ -50,6 +50,7 @@ export class Receipts {
         .then(() => start(emit, receipt.controller.signal))
         .catch((error) => ({ failure: error?.message || String(error) }))
         .then((result) => {
+          receipt.done = true;
           receipt.result = result;
           receipt.listener?.result(result);
           receipt.listener = null;
@@ -59,7 +60,7 @@ export class Receipts {
     } else {
       for (const event of receipt.events) if (event.seq >= from) listener.event(event);
     }
-    if (receipt.result !== undefined) listener.result(receipt.result);
+    if (receipt.done) listener.result(receipt.result);
     else receipt.listener = listener;
     return {
       // The socket went: the work goes on, nobody hears it until asked again.
@@ -73,7 +74,7 @@ export class Receipts {
   trim() {
     if (this.items.size <= MAX_RECEIPTS) return;
     for (const [action, receipt] of this.items) {
-      if (receipt.result === undefined) continue;
+      if (!receipt.done) continue;
       clearTimeout(receipt.timer);
       this.items.delete(action);
       if (this.items.size <= MAX_RECEIPTS) return;

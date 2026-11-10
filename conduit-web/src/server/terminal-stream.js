@@ -110,9 +110,9 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       removeExit();
       removeTaken();
       try {
-        // No attachment yet means attach is still in flight and its lease, reserved synchronously, is this socket's.
+        // No attachment yet means attach is still in flight: its lease is ended only if it is still this socket's.
         if (attachment) attachment.kill();
-        else terminals.killAttachment(id);
+        else terminals.killAttachment(id, ws);
       } catch {}
       attachment = undefined;
     };
@@ -152,7 +152,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
 
     void (async () => {
       try {
-        attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows, takeover });
+        attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows, takeover, owner: ws });
         if (disposed || ws.readyState !== ws.OPEN || terminalClients.get(id) !== ws) {
           disposed = true;
           attachment.kill();

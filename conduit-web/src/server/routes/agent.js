@@ -256,7 +256,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     const quote = original.length > 600 ? `${original.slice(0, 599)}…` : original;
     const key = `feedback:${crypto.randomUUID()}`;
     const id = await agent.update(async (doc, tx) => (await fileEntry(tx, {
-      key, kind: "feedback", for: ["reflect"], level: "fyi", status: "unhandled",
+      key, kind: "feedback", for: ["reflect"], level: "fyi",
       title: "Feedback", headline: text.split(/\r?\n/)[0], author: "person", via: "feedback", text, messageId,
       body: `${text}\n\nAbout jbot message ${message.id} at ${message.at}:\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}`,
     })).id);

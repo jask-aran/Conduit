@@ -797,6 +797,7 @@ export class DurableRuntime {
   }
 
   async close() {
+    this.prefixWatch?.flush();
     const harness = this.harness;
     if (!harness) return;
     await harness.close(this.context);

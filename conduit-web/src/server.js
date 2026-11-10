@@ -140,7 +140,7 @@ await terminals.load();
 // through this machine -- directly, or by Tailscale, a tunnel or SSH landing
 // here -- so it neither publishes its network addresses nor advertises on one.
 const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
-const serverIdentity = await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load();
+const serverIdentity = lifetime.own("server identity", await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load(), (owned) => owned.flush());
 serverIdentity.followObserved();
 // The hub's own device and node (decision 24), known before anything reads a project.
 const hub = hubIds(serverIdentity.id);

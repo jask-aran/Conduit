@@ -86,6 +86,14 @@ export function prefixWatch(file) {
   };
   // A line of the runtime's own about a request it made (a keep-warm ping and what it read from cache).
   watch.note = (record) => fs.appendFile(file, JSON.stringify({ t: new Date().toISOString(), ...record, warm: true }) + "\n", () => {});
+  // The server is stopping (durable-runtime.js close): what waits on a timer above is written now, or it is lost.
+  watch.flush = () => {
+    try {
+      if (saving) fs.writeFileSync(saved, JSON.stringify(Object.fromEntries(last)));
+      if (pending.size) fs.mkdirSync(dir, { recursive: true });
+      for (const key of pending) if (payloads.has(key)) fs.writeFileSync(payloadFile(key), JSON.stringify(payloads.get(key)));
+    } catch { /* diagnostics never break a stop */ }
+  };
   watch.last = (key) => {
     if (!payloads.has(key)) { try { payloads.set(key, JSON.parse(fs.readFileSync(payloadFile(key), "utf8"))); } catch { return null; } }
     return payloads.get(key);

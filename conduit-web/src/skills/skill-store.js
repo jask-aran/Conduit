@@ -26,6 +26,10 @@ function skillFrontMatter(text) {
   return { name: field("name"), description: field("description") };
 }
 
+const processAlive = (pid) => {
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+};
+
 const idFor = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
 
 export class SkillStore {
@@ -48,6 +52,11 @@ export class SkillStore {
         installed: saved.installed && typeof saved.installed === "object" ? saved.installed : {},
       };
     } catch (error) { if (error.code !== "ENOENT") throw error; }
+    // An install cut off by a crash left its staging folder, under a pid that will not come back to it.
+    for (const name of await fs.readdir(this.root).catch(() => [])) {
+      const pid = Number(/^\..+\.(\d+)\.staging$/.exec(name)?.[1]);
+      if (pid && !processAlive(pid)) await fs.rm(path.join(this.root, name), { recursive: true, force: true }).catch(() => {});
+    }
     return this;
   }
 
@@ -119,6 +128,13 @@ export class SkillStore {
       bytes += Buffer.byteLength(file.contents);
     }
     if (bytes > MAX_BYTES) throw Object.assign(new Error("The skill is larger than 5 MB"), { status: 413 });
+    // One install picks its id and writes its folder at a time: two at once would take the same free id and staging folder.
+    const placed = (this.placing || Promise.resolve()).then(() => this.place(source, skillId, files));
+    this.placing = placed.catch(() => {});
+    return placed;
+  }
+
+  async place(source, skillId, files) {
     // Its id: the skill's own, unless that is taken by a shipped or another installed one.
     const taken = new Set((await this.list()).map((skill) => skill.id));
     const existing = Object.entries(this.state.installed).find(([, item]) => item.source === source && item.skillId === skillId)?.[0];
