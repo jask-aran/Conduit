@@ -3,7 +3,34 @@ import { nextId } from "./agent-doc.js";
 import { permissionChoices } from "../approval-api.js";
 
 const HOUR24 = 86400_000;
-const statusAt = (ask, now) => ask.status === "pending" && Date.parse(ask.expiresAt) <= now ? "expired" : ask.status;
+const WEEK = 7 * HOUR24;
+
+/*
+ * An ask's lifecycle, the one place that reads or moves its status: pending → allowed | declined | expired (the person
+ * answered, or a day passed without an answer); allowed → used (its one call was made). Expiry is worked out when read,
+ * not swept: a pending ask past its expiresAt is expired, so nothing has to write it, and one an older hub wrote as
+ * "expired" still reads so. Everything else reads `statusAt` and moves an ask with `transition`.
+ */
+const MOVES = { pending: ["allowed", "declined", "expired"], allowed: ["used"] };
+const ms = (now) => (typeof now === "number" ? now : now instanceof Date ? now.getTime() : Date.parse(now));
+/** An ask's status at `now` (ms, a Date or an ISO string). */
+export const statusAt = (ask, now = Date.now()) => ask.status === "pending" && Date.parse(ask.expiresAt) <= ms(now) ? "expired" : ask.status;
+/** The fields a new ask starts with: pending, for a day. */
+export const opened = (now = new Date()) => ({ createdAt: now.toISOString(), expiresAt: new Date(now.getTime() + HOUR24).toISOString(), status: "pending" });
+/**
+ * Moves an ask to `to`, or returns false when the move is not one its lifecycle has (it was already decided, it
+ * expired, it was used). An answer records when and which; a use records the call that used it, so a replay of that
+ * call is known for what it is.
+ */
+export function transition(ask, to, { now = new Date(), choice, callId } = {}) {
+  if (!MOVES[statusAt(ask, now)]?.includes(to)) return false;
+  ask.status = to;
+  if (to === "allowed" || to === "declined") { ask.decidedAt = new Date(ms(now)).toISOString(); ask.choice = choice; }
+  if (to === "used") ask.usedCallId = callId;
+  return true;
+}
+/** Settled (declined, expired or used) for a week: nothing reads it any more. An allowed ask is never pruned. */
+export const prunable = (ask, now = Date.now()) => ["declined", "expired", "used"].includes(statusAt(ask, now)) && Date.parse(ask.decidedAt || ask.createdAt) < ms(now) - WEEK;
 /** The answers an ask offers: its permission's (approval-api.js), less Always where no lasting rule fits this call. An
  *  ask from before permissions were recorded offers what it did then. */
 const choicesOf = (ask) => (ask.permission ? permissionChoices(ask.permission) : ["allow", "always", "deny"]).filter((choice) => choice !== "always" || Boolean(ask.ruleTarget));
@@ -22,20 +49,17 @@ export function listAsks(state) {
 }
 export async function decide(agent, id, choice) {
   if (!["allow", "always", "deny"].includes(choice)) throw Object.assign(new Error("Invalid choice"), { status: 400 });
-  const now = new Date().toISOString();
+  const now = new Date();
   const outcome = await agent.update((doc) => {
     const ask = doc.asks?.[id];
     if (!ask) return { error: 404 };
-    if (ask.status === "pending" && ask.expiresAt <= now) ask.status = "expired";
-    if (ask.status !== "pending") return { error: 409 };
+    if (statusAt(ask, now) !== "pending") return { error: 409 };
     if (!choicesOf(ask).includes(choice)) return { error: 400 };
-    ask.status = choice === "deny" ? "declined" : "allowed";
-    ask.decidedAt = now;
-    ask.choice = choice;
+    transition(ask, choice === "deny" ? "declined" : "allowed", { now, choice });
     if (choice === "always") {
       const ruleId = nextId(doc, "r");
       doc.rules ||= {};
-      doc.rules[ruleId] = { id: ruleId, tool: ask.tool, target: ask.ruleTarget, label: ask.ruleLabel, createdAt: now };
+      doc.rules[ruleId] = { id: ruleId, tool: ask.tool, target: ask.ruleTarget, label: ask.ruleLabel, createdAt: ask.decidedAt };
     }
     // Copied out: the doc's objects (an ask's lines) cannot be read once the commit settles.
     return { ask: JSON.parse(JSON.stringify(askView(ask))) };

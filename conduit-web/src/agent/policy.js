@@ -11,6 +11,7 @@ import { createApprover, executorHolder, jsonlAudit } from "pi-durable-approver"
 import { readPolicy } from "./approval-policy.js";
 import { personWords } from "./person-words.js";
 import { permissionChoices } from "../approval-api.js";
+import { opened, prunable, statusAt, transition } from "./asks.js";
 import { browserFor } from "../server/person-browser-tool.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
@@ -324,7 +325,7 @@ function tellPerson(runtime, ask, send) {
   const timer = setTimeout(async () => {
     try {
       const held = (await runtime.agent.state()).asks?.[ask.id];
-      if (held?.status === "pending" && held.expiresAt > new Date().toISOString()) record(await send(), "reminded");
+      if (held && statusAt(held) === "pending") record(await send(), "reminded");
     } catch {}
   }, remind * 60_000);
   timer.unref?.();
@@ -341,33 +342,32 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
   const now = new Date();
   const outcome = await api.commit(async (tx) => {
     const doc = await tx.doc(AgentDoc);
-    for (const [id, ask] of Object.entries(doc.asks ||= {})) {
-      if (["declined", "expired", "used"].includes(ask.status) && Date.parse(ask.decidedAt || ask.createdAt) < now.getTime() - 7 * 86400_000) delete doc.asks[id];
-    }
-    const asks = Object.values(doc.asks ||= {});
-    for (const ask of asks) if (ask.status === "pending" && ask.expiresAt <= now.toISOString()) ask.status = "expired";
+    for (const [id, ask] of Object.entries(doc.asks ||= {})) if (prunable(ask, now)) delete doc.asks[id];
+    const asks = Object.values(doc.asks);
+    const is = (ask, status) => ask.chatId === thread.chatId && ask.argsKey === argsKey && statusAt(ask, now) === status;
     // A replay of the original ask must never consume a later grant or match a new rule.
     const replay = asks.find((ask) => (ask.toolCallId === api.callId && ask.sourceConversationId === api.conversationId) || ask.waiters?.some((waiter) => waiter.callId === api.callId && waiter.conversationId === api.conversationId));
     if (replay) return { ask: plain(replay), replay: true };
     // A replay after consuming a grant must not execute the external call a second time.
     const consumed = asks.find((ask) => ask.usedCallId === api.callId && ask.chatId === thread.chatId);
     if (consumed) return { ask: plain(consumed), consumed: true };
-    // A browser allowed in this thread stays allowed for a day: one decision, not one a call.
-    if (name === BROWSER && asks.some((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "used" && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS)) return { allowed: true };
-    const grant = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "allowed");
+    // A browser allowed in this thread stays allowed for a day: one decision, not one a call. The first call uses the
+    // grant, and a used one decided within the day lets the rest through.
+    if (name === BROWSER && asks.some((ask) => is(ask, "used") && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS)) return { allowed: true };
+    const grant = asks.find((ask) => is(ask, "allowed"));
     const rule = !doc.tainted?.[api.conversationId] && target != null && Object.values(doc.rules || {}).some((item) => item.tool === name && item.target === target);
-    if (grant) { grant.status = "used"; grant.usedCallId = api.callId; return { allowed: true }; }
+    if (grant && transition(grant, "used", { now, callId: api.callId })) return { allowed: true };
     if (rule) return { allowed: true };
     // A browser the person said no to in this thread stays refused: no second ask, until they ask for it themselves
     // (the call then says so, `again`).
-    const refused = name === BROWSER && !args?.again && asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "declined" && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS);
+    const refused = name === BROWSER && !args?.again && asks.find((ask) => is(ask, "declined") && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS);
     if (refused) return { ask: plain(refused), refused: true };
-    const pending = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "pending");
+    const pending = asks.find((ask) => is(ask, "pending"));
     if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: plain(pending), waiting: true }; }
     const id = nextId(doc, "a");
     const ask = { id, chatId: thread.chatId, conversationId: thread.conversationId, toolCallId: api.callId, parentCallId,
-      sourceConversationId: api.conversationId, run: thread.run, tool: name, permission: permissionOf(name, args), args, argsKey, ...info, createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 86400_000).toISOString(), status: "pending", ruleTarget: target ?? "", ruleLabel: ruleLabel(name, args),
+      sourceConversationId: api.conversationId, run: thread.run, tool: name, permission: permissionOf(name, args), args, argsKey, ...info, ...opened(now),
+      ruleTarget: target ?? "", ruleLabel: ruleLabel(name, args),
       tainted: Boolean(doc.tainted?.[api.conversationId]) };
     doc.asks[id] = ask;
     return { ask, created: true };
@@ -402,8 +402,8 @@ export function ApprovedTool(runtime) {
         const ask = (await tx.doc(AgentDoc)).asks?.[args.ask];
         if (!ask || !chatId || ask.chatId !== chatId) return { error: `No ask ${args.ask} in this thread.` };
         if (ask.usedCallId === api.callId) return { ask: plain(ask), interrupted: true };
-        if (ask.status !== "allowed") return { error: `Ask ${ask.id} is ${ask.status === "used" ? "already done" : ask.status === "pending" ? "still waiting for the person" : ask.status}; do not do it.` };
-        ask.status = "used"; ask.usedCallId = api.callId;
+        const status = statusAt(ask);
+        if (!transition(ask, "used", { callId: api.callId })) return { error: `Ask ${ask.id} is ${status === "used" ? "already done" : status === "pending" ? "still waiting for the person" : status}; do not do it.` };
         return { ask: plain(ask) };
       }, context);
       if (outcome.error) return result(outcome.error, args.ask, true);

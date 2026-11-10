@@ -1,4 +1,5 @@
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
+import { statusAt } from "./asks.js";
 
 /** Trusted intent only; ambiguous conduit.user entries are omitted. */
 export async function personWords(agent, conversationId, { messages = 20, chars = 1200 } = {}) {
@@ -7,7 +8,7 @@ export async function personWords(agent, conversationId, { messages = 20, chars 
   const source = thread?.role === "run" ? state.home?.conversationId : conversationId;
   const now = Date.now();
   const answers = Object.values(state.asks || {})
-    .filter((ask) => ["allowed", "declined", "used"].includes(ask.status)
+    .filter((ask) => ["allowed", "declined", "used"].includes(statusAt(ask, now))
       && ["allow", "always", "deny"].includes(ask.choice) && typeof ask.title === "string"
       && Date.parse(ask.decidedAt) >= now - 30 * 86400_000 && Date.parse(ask.decidedAt) <= now)
     .sort((a, b) => Date.parse(b.decidedAt) - Date.parse(a.decidedAt)).slice(0, 20)

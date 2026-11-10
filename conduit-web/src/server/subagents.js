@@ -1,4 +1,4 @@
-import { listAsks } from "../agent/asks.js";
+import { listAsks, statusAt } from "../agent/asks.js";
 import { notice, stopPending, submitWithNotes } from "../context/notices.js";
 import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc as PiAgentDoc, configure, defineDoc, defineExtension, defineTask, defineTool, LiveDoc, UsageDoc, watchEvents } from "@earendil-works/pi-durable";
@@ -347,7 +347,7 @@ export function Subagents(runtime) {
         const output = task.input.origin?.output;
         const asked = (output ? output !== "inbox" : ["brief", "manual", "heartbeat"].includes(kind)) && level !== "none";
         const waiting = task.input.gate && !task.input.origin?.test ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
-          .filter((ask) => ask.status === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
+          .filter((ask) => statusAt(ask) === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || await api.memo("heard", level !== "none" && (asked || waiting > 0 || level === "urgent"), context);
         // Its unit of work in the log (work-log.js) says where the report is going as it goes.
         const workKey = task.input.origin?.routineTaskId ? `routine:${task.input.origin.routineTaskId}` : `run:${id}`;
