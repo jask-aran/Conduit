@@ -392,7 +392,9 @@ export async function seedSchedules(agent) {
     const ids = new Set([...Object.keys(desired), ...Object.keys(schedules)]);
     for (const id of ids) {
       const old = (await agent.state()).schedules[id];
-      if (old?.cancelling) continue;
+      // A cancel that never finished (the hub stopped between marking and deleting) is finished here;
+      // one still under way finishes the same way, so the second delete changes nothing.
+      if (old?.cancelling) { await cancelSchedule(agent, id); continue; }
       let target = Object.hasOwn(desired, id) ? desired[id] : old?.system ? null : old;
       // A one-off that passed while off is finished; recurring clocks resume at a future slot.
       if (resumed && target?.kind === "once" && Date.parse(target.at) <= Date.now()) target = null;

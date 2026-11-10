@@ -157,8 +157,19 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   const directInfo = () => ({ port: directPort, addresses: directAddresses(os.networkInterfaces()), pty: "sealed", reads: "sealed",
     ...(granting ? { grantKey } : {}), ...(served?.secureRoute() ? { tls: served.secureRoute() } : {}) });
   let attempt = 0;
-  let stopped = false;
+  // Why this run ended for good, or null while it runs: "refused" by main, "replaced" by another run of this node,
+  // or "stopped" by its owner. Each ends it the same way: nothing dials again and nothing it started goes on.
+  let ended = null;
   let timer = null;
+  const end = (reason) => {
+    if (ended) return;
+    ended = reason;
+    processes.stopAll();
+    for (const relay of relays) relay.stop();
+    served?.close();
+    clearTimeout(timer);
+    socket?.close();
+  };
 
   /*
    * Where a call runs: a root by id and a path inside it, `{ root, path }`.
@@ -225,7 +236,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const plain = new URL(chosen.url);
     if (!attest || chosen.ca || !pinned || plain.protocol !== "http:" || !net.isIP(plain.hostname) || /^127\./.test(plain.hostname)) return dialWay(chosen);
     void attest(plain.hostname, Number(plain.port) || 80, pinned, 2000).catch(() => null).then((ca) => {
-      if (!stopped) dialWay(ca ? { url: `https://${plain.host}`, ca } : chosen);
+      if (!ended) dialWay(ca ? { url: `https://${plain.host}`, ca } : chosen);
     });
   };
   const dialWay = ({ url: via, ca }) => {
@@ -315,12 +326,11 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }
       if (message.type === "refused") {
         log.error?.(`[conduit-node] main refused this node: ${message.reason}`);
-        stopped = true;
-        // Grants main gave before no longer stand.
-        served?.close();
+        // Grants main gave before no longer stand (the direct server closes with the rest).
+        end(message.replaced === true ? "replaced" : "refused");
         ws.close();
         // Replaced by a newer run of it: as when main takes the connection over.
-        if (message.replaced === true) onReplaced?.();
+        if (ended === "replaced") onReplaced?.();
         return;
       }
       if (message.type !== "call") return;
@@ -358,7 +368,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       clearInterval(beat);
       // Main took another connection of this node over the one in use: another run of it (an app updated or
       // opened twice) has the pairing now. Redialling would only take it back, and back again.
-      if (code === 4000 && socket === ws) { stopped = true; log.warn?.(`[conduit-node] another run of this node took over ${mainUrl}; stopping this one`); onReplaced?.(); }
+      if (code === 4000 && socket === ws) { end("replaced"); log.warn?.(`[conduit-node] another run of this node took over ${mainUrl}; stopping this one`); onReplaced?.(); }
       for (const relay of relays) relay.detach();
       for (const detach of following.values()) detach();
       following.clear();
@@ -369,7 +379,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       for (const handle of handles.values()) void handle.close?.(BACKGROUND_CONTEXT);
       handles.clear();
       if (socket === ws) socket = null;
-      if (stopped) return;
+      if (ended) return;
       // Not reached this way: the next one at once. After a drop, the same way again first.
       if (!opened) {
         way = (way + 1) % ways.length;
@@ -379,7 +389,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         if (findHub && pinned && Date.now() - lookedAt > 60_000) {
           lookedAt = Date.now();
           void findHub(pinned).catch(() => []).then((found) => {
-            if (stopped) return;
+            if (ended) return;
             for (const item of [...found].reverse()) addWay(item, true);
             if (found.length) { way = 0; log.info?.(`[conduit-node] found ${mainUrl} at ${found[0].url}`); connect(); }
             else timer = setTimeout(connect, RETRY_MS[Math.min(attempt++, RETRY_MS.length - 1)]);
@@ -575,7 +585,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     const legacy = keySecret(key);
     served = serveDirect({ secret: () => (granting ? grantKey : legacy), runSecret: () => (granting ? grantKey : null),
       call: envCall, log, certificate, shells: directShells });
-    void served.listening.then((port) => { directPort = port; if (!stopped) connect(); });
+    void served.listening.then((port) => { directPort = port; if (!ended) connect(); });
     // The https route comes when a certificate does: told to main then, and in every hello after.
     served.onSecureChange(tellDirect);
     // Its addresses change without its connection doing so (a laptop joins another network, Tailscale comes up after
@@ -584,14 +594,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     watching.unref?.();
   } else connect();
   return {
-    stop() {
-      stopped = true;
-      processes.stopAll();
-      for (const relay of relays) relay.stop();
-      served?.close();
-      clearTimeout(timer);
-      socket?.close();
-    },
+    stop() { end("stopped"); },
   };
 }
 

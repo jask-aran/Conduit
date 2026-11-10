@@ -191,6 +191,7 @@ export class PiAuthBroker {
   }
 
   waitForInput(attempt, prompt) {
+    if (!["running", "waiting"].includes(attempt.state)) return Promise.reject(new Error("Authentication ended"));
     attempt.state = "waiting";
     attempt.prompt = prompt;
     return new Promise((resolve, reject) => {
@@ -273,23 +274,29 @@ export class PiAuthBroker {
         await this.authStorage.login(attempt.providerId, callbacks);
       }
       if (this.attempt !== attempt) return;
-      attempt.state = "completed";
-      attempt.message = "Model-provider authentication completed.";
-      attempt.authUrl = null;
-      attempt.deviceCode = null;
-      attempt.prompt = null;
-      attempt.expiresAt = this.now() + COMPLETED_ATTEMPT_TTL_MS;
+      // A login that resolves after a cancel still stored what it got, so the credentials are refreshed either way.
+      this.settle(attempt, "completed", "Model-provider authentication completed.");
       await this.onCredentialsChanged(attempt.providerId);
     } catch (failure) {
       if (this.attempt !== attempt) return;
-      attempt.state = attempt.controller.signal.aborted ? "cancelled" : "failed";
-      attempt.error = attempt.controller.signal.aborted ? null : messageFor(failure);
-      attempt.message = attempt.error || "Authentication cancelled.";
-      attempt.authUrl = null;
-      attempt.deviceCode = null;
-      attempt.prompt = null;
-      attempt.expiresAt = this.now() + COMPLETED_ATTEMPT_TTL_MS;
+      // An abort is always a cancel or an expiry that has already settled the attempt.
+      const reason = messageFor(failure);
+      this.settle(attempt, "failed", reason, reason);
     }
+  }
+
+  // An attempt ends once. Whichever of completion, failure, cancel or expiry comes first decides its
+  // state; what follows (the aborted login rejecting, a cancel after it finished) changes nothing.
+  settle(attempt, state, message, failure = null) {
+    if (!["running", "waiting"].includes(attempt.state)) return false;
+    attempt.state = state;
+    attempt.error = failure;
+    attempt.message = message;
+    attempt.authUrl = null;
+    attempt.deviceCode = null;
+    attempt.prompt = null;
+    attempt.expiresAt = this.now() + COMPLETED_ATTEMPT_TTL_MS;
+    return true;
   }
 
   respond(owner, value) {
@@ -306,14 +313,10 @@ export class PiAuthBroker {
   cancel(owner, { expired = false } = {}) {
     const attempt = this.attempt;
     if (!attempt || attempt.owner !== owner) return false;
+    if (!this.settle(attempt, expired ? "expired" : "cancelled",
+      expired ? "Authentication expired. Start again to continue." : "Authentication cancelled.")) return false;
     attempt.controller.abort();
     attempt.rejectInput?.(new Error(expired ? "Authentication expired" : "Login cancelled"));
-    attempt.state = expired ? "expired" : "cancelled";
-    attempt.message = expired ? "Authentication expired. Start again to continue." : "Authentication cancelled.";
-    attempt.authUrl = null;
-    attempt.deviceCode = null;
-    attempt.prompt = null;
-    attempt.expiresAt = this.now() + COMPLETED_ATTEMPT_TTL_MS;
     return true;
   }
 

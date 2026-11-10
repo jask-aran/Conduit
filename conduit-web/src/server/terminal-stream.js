@@ -110,6 +110,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       removeExit();
       removeTaken();
       try {
+        // No attachment yet means attach is still in flight and its lease, reserved synchronously, is this socket's.
         if (attachment) attachment.kill();
         else terminals.killAttachment(id);
       } catch {}
@@ -153,6 +154,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       try {
         attachment = await terminals.attach(id, { cols: initialCols, rows: initialRows, takeover });
         if (disposed || ws.readyState !== ws.OPEN || terminalClients.get(id) !== ws) {
+          disposed = true;
           attachment.kill();
           attachment = undefined;
           return;
@@ -186,6 +188,11 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
         sendStatus(ws, terminals.get(id));
         ws.send(JSON.stringify({ type: "control", writable: true }));
       } catch (error) {
+        // A failed attach holds no lease, so this socket has nothing to dispose. Its later close must
+        // not reach killAttachment(id), which would end whatever lease holds the id by then. (A failure
+        // after the attach is the socket's own attachment, and goes the usual way.)
+        if (attachment) disposeAttachment();
+        else disposed = true;
         detachClient(id, ws);
         if (ws.readyState === ws.OPEN) {
           sendClientError(ws, error);
