@@ -1,4 +1,4 @@
-import { UI_VIEWS } from "../../ui-api.js";
+import type { UI_VIEWS } from "../../ui-api.js";
 // Shapes the workspace views share: the tree and file endpoints, Git state,
 // and a chat's history tree.
 

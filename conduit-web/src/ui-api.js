@@ -15,6 +15,7 @@ export const UI_ARGS = /** @type {const} */ ({
 /** `by`: who does it, the hub from what clients told it, or the client it is sent to. */
 export const UI_ACTIONS = /** @type {const} */ ({
   look: { agent: true, by: "hub", args: [], says: "each open Conduit tab or app (the one in use first), the device it is on where it says (a name the devices tool takes), with its panes, what each shows and which has the keyboard" },
+  screens: { agent: true, by: "hub", args: [], says: "the screens that can be shown (a device's browser and the like): each one's view, its device and the clients showing it" },
   open: { agent: true, by: "client", args: ["view", "pane", "beside"], says: "show a view in a pane (pane: main or a number; default the one with the keyboard) or beside it (beside: true)" },
   close: { agent: true, by: "client", args: ["pane"], says: "empty a pane (pane required)" },
   focus: { agent: true, by: "client", args: ["pane"], says: "give a pane the keyboard" },
@@ -28,6 +29,7 @@ export const UI_VIEWS = /** @type {const} */ ([
   { kind: "page", view: "page:jbot", agent: true, says: "" },
   { kind: "page", view: "page:project:<id>", agent: true, says: "" },
   { kind: "browser", view: "browser:hub", agent: true, says: "the hub's browser, which you work through the agent_browser tools" },
+  { kind: "browser", view: "browser:<device>", agent: true, says: "a device's browser, by its view from screens: for the person to see and use; your browser tools work the hub's" },
   { kind: "terminal", view: "terminal", agent: true, says: "" },
   { kind: "files", view: "files", agent: true, says: "" },
   // A person's own: panes that belong to a chat or a path they picked.

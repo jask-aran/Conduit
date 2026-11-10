@@ -64,7 +64,7 @@ watching or taking over helps.
 | View | What | Engine |
 | --- | --- | --- |
 | `browser:hub` | the hub's Chrome | agent-browser (built) |
-| `browser:<device>` | a device's browser | agent-browser on the node, or the desktop app's own webview (surfaces roadmap #33) |
+| `browser:<device>` | a device's browser | agent-browser on the node (built: the person's to see and use); the desktop app's own webview later (surfaces roadmap #33) |
 | `desktop:<device>` | a device's display | voxl, to be proven by a spike |
 | `phone:<device>` | an Android over adb | adb for actions; a picture is unsolved |
 
@@ -90,6 +90,10 @@ Findings behind the last two (source read 2026-11-10):
   (`RuntimeHub.locate`); `conduit_ui look` now says each client's device and `devices` marks the person's
   (`person: true`). The name is the client's own word: it aims, it never grants. Left: the Android app has no node, so
   a phone names none until `phone:<device>` gives it one; a browser tab names none.
-- [ ] 3. The screen contract, `browser:hub` moved onto it unchanged.
+- [x] 3. Screens as one list across kinds (`server/screens.js`): `conduit_ui screens` gives each one's view, device
+  and the clients showing it, and `mayAct` is decision 8's rule. `browser:<device>` was already built (`RemoteBrowser`,
+  a device's browser through its node's tunnel) and is now a view agents may open. Left for the first new kind:
+  the browsers' routes (`/v0/browsers`) and pane stay the browser kind's own until a second kind shows what is
+  common; one holder of input; an agent's actions on a device's browser (its tools work the hub's).
 - [ ] 4. `desktop:<device>`: the voxl spike on the Windows app, then the kind.
 - [ ] 5. `phone:<device>`: actions over adb, then a picture.

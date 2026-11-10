@@ -58,6 +58,7 @@ import { mcpAccess } from "./server/mcp-access.js";
 import { BrowserHost, createBrowsers } from "./server/browser-host.js";
 import { tunnelTo } from "./nodes/remote-tunnel.js";
 import { registerBrowserRoutes } from "./server/routes/browsers.js";
+import { createScreens } from "./server/screens.js";
 import { createBrowserProxy } from "./server/browser-proxy.js";
 import { registerSkillRoutes } from "./server/routes/skills.js";
 import { SkillStore } from "./skills/skill-store.js";
@@ -710,6 +711,9 @@ mcpAccess.browser = browserHost.mcpServer();
 // The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
 const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
 registerBrowserRoutes(app, { browsers, proxy: browserProxyFor });
+// Screens (screens.js): every kind's, as one list for agents (conduit_ui screens) and the rule for acting on one.
+const screens = createScreens({ browsers, uiControl });
+mcpRuntime.screens = screens;
 registerSkillRoutes(app, { skills });
 registerRuntimeRoutes(app, {
   uiControl,
@@ -829,6 +833,7 @@ await push.load();
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
 if (durableAdapter) {
   durableAdapter.runtime.uiControl = uiControl;
+  durableAdapter.runtime.screens = screens;
   durableAdapter.runtime.browserHost = browserHost;
   void durableAdapter.runtime.loadBrowserTools();
 }

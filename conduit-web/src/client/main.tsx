@@ -126,7 +126,6 @@ import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { applyMotionScale } from "./preferences/motion-scale";
 import { harnessLabelFor } from "./harness-brand";
 import { createAgentUiBridge, type AgentUiCommand } from "./agent-ui";
-import { agentUiViews, declaredUiView } from "../ui-api.js";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -4688,7 +4687,8 @@ function App() {
         open: async (command) => {
           const { shown, pane } = paneOf(command, false);
           const view = command.view;
-          if (!view || !declaredUiView(view) || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use ${agentUiViews()}.`);
+          // The hub has checked it against the declared views (ui-api.js); this is the client's own check of its form.
+          if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}.`);
           if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
             const slot = await openBeside(view, true);
             // Where it landed: a pane in the row, or the dock when the window has no room for another beside.

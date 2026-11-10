@@ -3,6 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
 import { reachableDevices } from "./device-tools.js";
+import { describeScreens } from "./screens.js";
 import { agentUiActions, agentUiViews, declaredUiView, UI_ACTIONS, UI_ARGS } from "../ui-api.js";
 
 const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options) => Type.Boolean(options),
@@ -144,6 +145,7 @@ export function UiTool(runtime) {
       const chatId = await callingChat(runtime, api, context);
       if (!actions.includes(action)) return text(`Not an action: ${action}.`, true);
       if (view !== undefined && !declaredUiView(view, { agent: true })) return text(`Not a view you can open: ${view}. Views: ${agentUiViews()}.`, true);
+      if (action === "screens") return runtime.screens ? text(describeScreens(await runtime.screens.list())) : text("Screens cannot be reached from here.", true);
       if (action === "look") { const tabs = await control.look(); return text(describeLook(tabs, chatId ? (await control.targetFor(chatId, tabs))?.client : null)); }
       try {
         const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null, chatId);

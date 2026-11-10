@@ -1,7 +1,8 @@
 import { createEffect, onCleanup } from "solid-js";
 import { api } from "./api/client";
 import { connectionId } from "./state/runtime";
-import { UI_ACTIONS } from "../ui-api.js";
+// Types only: the declaration's words are the hub's to say, and stay out of the client's bundle.
+import type { UI_ACTIONS } from "../ui-api.js";
 
 /*
  * What this tab shows, told to the server, and what an agent asks of it, done here (roadmap #11; the server side is
