@@ -237,3 +237,5 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
 .ui-setting-line > span:first-child[data-mono] { display: block; min-width: 0; flex-basis: var(--measure-2xs); text-overflow: ellipsis; }
 .ui-setting-line > span:first-child[data-mono] > small { display: inline; width: auto; }
+/* A read value alone in a line (a path, an address) shortens rather than dropping under its name. */
+.ui-setting-control:has(> .ui-setting-value:only-child) { min-width: 0; }

@@ -113,7 +113,7 @@ export function EmailSettings(props: { name: string }) {
         <SettingLine label="Your addresses" title="Mail from these wakes it, and its replies go to them. Cloudflare emails each one a link to confirm before replies can reach it.">
           <Input id="agent-email-person" type="text" placeholder="you@example.com, …" value={person()} onInput={(event) => setPerson(event.currentTarget.value)} />
         </SettingLine>
-        <SettingLine label={current().configured ? "Set up again" : "Set up"}>
+        <SettingLine plain label="">
           <Show when={current().configured}><Button size="sm" variant="secondary" disabled={!!busy()} onClick={() => { setForm(false); setToken(""); setSteps([]); }}>Cancel</Button></Show>
           <Button size="sm" disabled={!ready() || !!busy()} onClick={() => void setup()}>{busy() === "setup" ? "Setting up…" : "Set up"}</Button>
         </SettingLine>

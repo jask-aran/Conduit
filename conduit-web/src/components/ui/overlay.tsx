@@ -228,6 +228,8 @@ export const SettingStep = (props: { step: number; label: JSX.Element; state?: J
  *  beside what was typed. editable false: held elsewhere (the server's environment). */
 export function SettingCredential(props: {
   label: string; state?: JSX.Element; title?: string; stored?: boolean; editable?: boolean; busy?: boolean;
+  /** It already works without a key (a provider that needs none): adding one is a quiet button, not the line's outlined one. */
+  optional?: boolean;
   add?: string; placeholder?: string; actions?: JSX.Element;
   fields?: Array<{ name: string; label: string; placeholder?: string; title?: string }>;
   onSave: (secret: string, fields: Record<string, string>) => unknown | Promise<unknown>; onRemove?: () => void;
@@ -253,7 +255,7 @@ export function SettingCredential(props: {
       <Show when={open()} fallback={<>
         {props.actions}
         {/* A stored key's actions are icons (replace, remove); adding one is the line's one outlined button. */}
-        <Show when={props.editable !== false}><Show when={props.stored} fallback={<Button variant="secondary" size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.add || "Add key"}</Button>}>
+        <Show when={props.editable !== false}><Show when={props.stored} fallback={<Button variant={props.optional ? "ghost" : "secondary"} size="sm" disabled={props.busy} onClick={() => setOpen(true)}>{props.add || "Add key"}</Button>}>
           <Button variant="ghost" size="icon-sm" aria-label={`Replace ${props.label}'s key`} title="Replace key" disabled={props.busy} onClick={() => setOpen(true)}><Icons.Edit /></Button></Show></Show>
         <Show when={props.stored && props.onRemove}><Button variant="ghost" size="icon-sm" haptic="destructive" aria-label={`Remove ${props.label}'s key`} title="Remove" disabled={props.busy} onClick={() => props.onRemove?.()}><Icons.Delete /></Button></Show>
       </>}>

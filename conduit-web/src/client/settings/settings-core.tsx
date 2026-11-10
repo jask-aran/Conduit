@@ -78,13 +78,14 @@ const allSectionGroups = [
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
-const sectionGroups = allSectionGroups;
+// A device with no keyboard (a phone) has no keys to set: Shortcuts is not listed there.
+const sectionGroups = touchOnly() ? allSectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => item.id !== "shortcuts") })) : allSectionGroups;
 type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
 const WIDE_SECTIONS = new Set<string>(["prompts", "blocks"]);
 // A section's name is said once, in the rail's list above; Workspace profile is reached from a workspace, not the rail.
-const sectionLabels = { ...Object.fromEntries(sectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
+const sectionLabels = { ...Object.fromEntries(allSectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
 interface RuntimeSettings {
   maxLiveProcesses: number;
@@ -1751,7 +1752,7 @@ export function Settings(props: {
                   {/* Those that can search now, then the one being added; the rest are a search away. */}
                   <For each={settings().providers.filter((provider) => provider.ready || provider.id === addingSearch())}>{(provider) =>
                     <SettingCredential label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}
-                      busy={searchSaving()} stored={provider.stored} editable={provider.source !== "environment"}
+                      busy={searchSaving()} stored={provider.stored} optional={provider.ready} editable={provider.source !== "environment"}
                       actions={<Show when={!provider.ready}><Button variant="ghost" size="sm" onClick={() => setAddingSearch("")}>Cancel</Button></Show>}
                       onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
@@ -1769,7 +1770,6 @@ export function Settings(props: {
                   </Show>
                   <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
                   <Show when={authError() && !authUnavailable()}><Note tone="error">{authError()}</Note></Show>
-                  <Note>pi-web-access knows about forty more providers, set in its web-search.json. <SettingLink href="https://github.com/nicobailon/pi-web-access#configuration">Docs</SettingLink></Note>
                 </Group>
               </>}
             </Show>
