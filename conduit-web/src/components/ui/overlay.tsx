@@ -160,7 +160,8 @@ export function OverlayPage(props: { title: string; status?: string; busy?: bool
       lead={<Show when={props.onBack}><Button variant="ghost" size="icon-sm" haptic="dismiss" aria-label="All settings" onClick={() => props.onBack?.()}><Icons.ChevronLeft /></Button></Show>}
       detail={<Show when={status()}><span class="ui-overlay-status" role="status" data-failed={props.failed && held() === null ? "" : undefined} title={props.why}><Show when={busy()}><Spinner /></Show>{status()}
         <Show when={props.failed && props.onRetry}><Button variant="ghost" size="sm" onClick={() => props.onRetry?.()}>Retry</Button></Show></span></Show>} />
-    {props.children}
+    {/* The head stays while the page's body scrolls under it: on a phone it says which section this screen is. */}
+    <div class="ui-overlay-page-body">{props.children}</div>
   </main>;
 }
 

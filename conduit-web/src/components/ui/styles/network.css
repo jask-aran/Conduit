@@ -55,3 +55,10 @@ button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--mut
 .ui-chain-break::before, .ui-chain-break::after { height: var(--space-md); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-chain-break > .ui-title { margin: 0; padding: var(--space-2xs) var(--space-sm); }
 .ui-chain-modified { --dot: var(--space-xs); }
+/* On a phone the map is one column: every box the page's width, a stem from each to the next, no bus. */
+@media (--conduit-phone-layout) {
+  .ui-network { align-items: stretch; }
+  .ui-network-spokes { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: calc(var(--space-xl) - var(--space-md)); padding-top: var(--space-md); }
+  .ui-network-spoke::before { display: none; }
+  .ui-network-spoke::after { top: calc(var(--space-md) - var(--space-xl)); }
+}

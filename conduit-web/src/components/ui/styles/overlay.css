@@ -75,7 +75,10 @@
 .ui-overlay-facts > dl > div { display: contents; }
 .ui-overlay-facts dt { color: var(--muted-foreground); white-space: nowrap; }
 .ui-overlay-facts dd { min-width: 0; margin: 0; overflow: hidden; color: var(--foreground); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
-.ui-overlay-page { display: flex; min-width: 0; flex: 1; flex-direction: column; overflow: auto; padding: var(--space-2xl) var(--space-4xl) var(--space-4xl); }
+.ui-overlay-page { --page-inset: var(--space-4xl); --page-top: var(--space-2xl); --page-bottom: var(--space-4xl); display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+/* Its head holds still and its body scrolls, so the section's name and the way back are always there. */
+.ui-overlay-page > .ui-overlay-page-head { flex: none; margin: 0; padding: var(--page-top) var(--page-inset) var(--space-lg) calc(var(--page-inset) + var(--space-md)); }
+.ui-overlay-page-body { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: auto; padding: 0 var(--page-inset) var(--page-bottom); }
 /* Settling to a new width (overlay.tsx createWidthSettle): the page holds the width it lands at against the rail and
    the frame clips it, as a pane's document does (shell.css .ui-sheet[data-moving]). */
 .ui-overlay[data-settling] > .ui-overlay-page { width: var(--overlay-page-width, auto); flex: none; }
@@ -113,7 +116,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 @media (hover: hover) { .ui-recorder-hints > button:hover { color: var(--foreground); } }
 .ui-live-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ui-recorder-hints > button + .ui-keycap, .ui-recorder-hints > .ui-keycap:not(:first-child) { margin-left: var(--space-md); }
-.ui-setting-line > span:first-child { max-width: 100%; flex: 1 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The name never shortens; its state after it does (an ellipsis), before the control would drop under the name. So a
+   line wraps only when the name and the control cannot share it. */
+.ui-setting-line > span:first-child { display: flex; min-width: min-content; max-width: 100%; flex: 1 1 min-content; align-items: baseline; overflow: hidden; white-space: nowrap; }
+/* The state counts for nothing in the name's width (width 0) and takes what the line has left. */
+.ui-setting-line > span:first-child > small { width: 0; min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; }
 /* mono: the name is data (a model id, a tool), in the data face; its state stays in the row's. */
 .ui-setting-line > span:first-child[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-line > span:first-child[data-mono] > small { font: var(--weight-rest) var(--text-row) var(--font-sans); }
@@ -163,9 +170,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 [data-density="phone"] .ui-overlay-aside { display: none; }
 [data-density="phone"] .ui-overlay-rail { width: 100%; border-right: 0; }
 /* A phone's settings run nearly edge to edge, the fields a narrower column, so a name and its control share a line on any reasonable phone; wrapping is only the fallback. */
-[data-density="phone"] :is(.ui-overlay-rail, .ui-overlay-page) { padding: var(--space-lg) var(--space-md); }
+[data-density="phone"] .ui-overlay-rail { padding: var(--space-lg) var(--space-md); }
+[data-density="phone"] .ui-overlay-page { --page-inset: var(--space-md); --page-top: var(--space-lg); --page-bottom: var(--space-lg); }
 [data-density="phone"] .ui-setting-line { column-gap: var(--space-lg); }
-[data-density="phone"] .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
+[data-density="phone"] .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; }
+[data-density="phone"] .ui-setting-control:has(> .ui-input) { flex: 1 1 0; }
 [data-density="phone"] .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
 [data-density="phone"] .ui-overlay-hints { display: none; }
 [data-density="phone"] .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
@@ -177,9 +186,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
   .ui-scrim .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
   .ui-scrim :is(.ui-overlay-aside, .ui-overlay-hints) { display: none; }
   .ui-scrim .ui-overlay-rail { width: 100%; border-right: 0; }
-  .ui-scrim :is(.ui-overlay-rail, .ui-overlay-page) { padding: var(--space-lg) var(--space-md); }
+  .ui-scrim .ui-overlay-rail { padding: var(--space-lg) var(--space-md); }
+  .ui-scrim .ui-overlay-page { --page-inset: var(--space-md); --page-top: var(--space-lg); --page-bottom: var(--space-lg); }
   .ui-scrim .ui-setting-line { column-gap: var(--space-lg); }
-  .ui-scrim .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; flex: 1 1 0; }
+  .ui-scrim .ui-setting-control { --setting-control-width: var(--measure-xs); min-width: min-content; }
+  .ui-scrim .ui-setting-control:has(> .ui-input) { flex: 1 1 0; }
   .ui-scrim .ui-setting-control > input.ui-input { width: 0; min-width: calc(var(--measure-xs) / 3); flex: 0 1 var(--measure-xs); }
   .ui-scrim .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
   .ui-scrim .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
@@ -217,3 +228,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* Settings search: the rail's field under its title, and the line a result led to, marked for a moment. */
 .ui-overlay-rail > .ui-lead-input { flex: none; margin-bottom: var(--space-sm); }
 .ui-setting-line[data-found] { border-radius: var(--radius-control); background: var(--tint); transition: background var(--duration-gentle) var(--ease-arrive); }
+/* A line's acting button is quieter than a title (the lifted weight, not the strong one): with no wash at rest, a
+   column of strong buttons read as headings. A value read at the line's end is inset as a button's words are, so
+   the column's words end on one edge. */
+:is(.ui-setting-control, .ui-actions:where([data-actions="setting"])) > .ui-button:where([data-variant="ghost"]) { font-weight: var(--weight-lift); }
+.ui-setting-control > .ui-setting-value:last-child { padding-inline-end: var(--space-lg); }
+/* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
+.ui-setting-line > span:first-child[data-mono] { display: block; min-width: 0; flex-basis: var(--measure-2xs); text-overflow: ellipsis; }
+.ui-setting-line > span:first-child[data-mono] > small { display: inline; width: auto; }

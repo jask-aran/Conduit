@@ -17,3 +17,11 @@
 .ui-workbench-fact code { flex: none; font: var(--text-caption) var(--font-data); }
 .ui-workbench-fact > .ui-row-context { flex: 0 1 auto; font-size: inherit; }
 .ui-workbench-fact > .ui-row-end { margin-left: 0; padding-left: 0; }
+/* On a phone the side column and the main pane stack, each at its own height, the page scrolling both. */
+@media (--conduit-phone-layout) {
+  .ui-workbench, .ui-workbench-split { flex: none; }
+  .ui-workbench-split { flex-direction: column; }
+  .ui-workbench-side { max-width: none; flex: none; overflow: visible; }
+  /* The main pane keeps a screen's worth of height and scrolls inside it, so a long text does not push the page on. */
+  .ui-workbench-main { height: min(var(--measure-3xl), 75dvh); min-height: 0; flex: none; }
+}
