@@ -1088,7 +1088,7 @@ boundary, not a restriction on explicit Git paths. Runtime data defaults to
 
 ### UI feedback
 
-On a development client (the desktop or Android development app, or a browser on Vite's dev server:
+On a development client (the desktop or Android development app, or a browser whose interface is not a release's:
 `isDevClient`, `src/client/platform/build-info.ts`) the workspace rail's UI feedback button and the `feedback.toggle`
 command (Alt+Shift+F) open the feedback tool (`src/client/feedback/`). It locks onto library pieces by name:
 `scripts/ui-pieces.mjs` reads the library's source into `virtual:ui-pieces` (each `ui-*` class's piece, source line
