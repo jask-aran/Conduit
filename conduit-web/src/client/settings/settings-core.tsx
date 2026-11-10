@@ -59,6 +59,7 @@ import {
 import type { CodeBlockCollapseMode } from "../chat/code-block";
 import { ShortcutsSettings } from "./shortcuts-settings";
 import settingsIndex from "virtual:settings-index";
+import { markSwept, readSettings, rememberSettings, seenSettings, sweptAt } from "./settings-values";
 import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
@@ -270,6 +271,8 @@ export function Settings(props: {
   /** A workspace from its device's list: Settings closes and the workspace opens. */
   onOpenWorkspace: (project: Project) => void;
   shortcuts: ShortcutManager;
+  /** Drawn out of sight to read every section's values (settings-values.ts): no dialog, no keys of its own; called when done. */
+  harvest?: () => void;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
@@ -308,7 +311,7 @@ export function Settings(props: {
   const results = createMemo(() => {
     const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
-    type Entry = { section: Section; group: string | null; label: string; words?: string };
+    type Entry = { section: Section; group: string | null; label: string; words?: string; value?: string };
     // A section answers to its name and to the words the command palette knows it by.
     const sections: Entry[] = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null, label: label(item.id as Section),
       words: SETTINGS_SECTIONS.find((known) => known.id === item.id)?.keywords.join(" ") })));
@@ -322,14 +325,21 @@ export function Settings(props: {
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
       ...(context.data()?.blocks ?? []).map((block) => ({ section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" })),
     ];
-    const entries: Entry[] = [...sections, ...[...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live].filter((entry) => known.has(entry.section))];
+    // What each is set to, as its page last showed it; a setting only the page knows (a row written from data) joins too.
+    const values = new Map(seenSettings().map((seen) => [`${seen.section}\0${seen.label}`, seen]));
+    const named = [...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live];
+    const have = new Set(named.map((entry) => `${entry.section}\0${entry.label}`));
+    const entries: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: values.get(`${entry.section}\0${entry.label}`)?.value })),
+      ...[...values.values()].filter((seen) => !have.has(`${seen.section}\0${seen.label}`)).map((seen) => ({ ...seen, section: seen.section as Section }))].filter((entry) => known.has(entry.section))];
     const scored = entries.map((entry) => {
       const name = entry.label.toLowerCase();
       const where = `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase();
       const said = (entry.words ?? "").toLowerCase();
-      if (!words.every((word) => name.includes(word) || where.includes(word) || said.includes(word))) return null;
-      // By name first (from its start, then anywhere), then by where it is, then by what it says.
-      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : words.every((word) => name.includes(word) || where.includes(word)) ? 2 : 3)
+      const set = (entry.value ?? "").toLowerCase();
+      if (!words.every((word) => name.includes(word) || where.includes(word) || set.includes(word) || said.includes(word))) return null;
+      // By name first (from its start, then anywhere), then by where it is, then by what it is set to, then by what else it says.
+      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : words.every((word) => name.includes(word) || where.includes(word)) ? 2
+        : words.every((word) => name.includes(word) || where.includes(word) || set.includes(word)) ? 2.5 : 3)
         + (entry.group === null && entry.label === label(entry.section) ? -0.5 : 0);
       return { ...entry, score };
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
@@ -378,10 +388,16 @@ export function Settings(props: {
     for (const element of out) element.setAttribute("data-filtered-out", "");
   };
   createEffect(() => {
-    const found = !narrow() && query().trim() ? matches().get(section()) ?? null : null;
+    const searching = !narrow() && Boolean(query().trim());
+    const found = searching ? matches().get(section()) ?? null : null;
     const body = dialogEl()?.querySelector(".ui-overlay-page-body");
     if (!body) return;
     filterPage(body, found);
+    // Nothing anywhere matched: the page shows nothing, as the rail says.
+    if (searching && !found) {
+      for (const child of body.children) child.setAttribute("data-filtered-out", "");
+      onCleanup(() => { for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out"); });
+    }
     if (!found) return;
     let frame = 0;
     const watcher = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => filterPage(body, found)); });
@@ -711,7 +727,7 @@ export function Settings(props: {
   });
 
   createEffect(() => {
-    if (!props.open) return;
+    if (!props.open || props.harvest) return;
     // A modal: the app's chords do not reach the page under it (docs/plans/keyboard-model.md › Ownership); its own
     // chord (Ctrl+,) closes it.
     const releaseSettingsContext = props.shortcuts.activateContext("settings", { exclusive: true });
@@ -1352,45 +1368,8 @@ export function Settings(props: {
     return kind === "saving" ? { status: "Saving", busy: true } : kind === "saved" ? { status: "Saved" }
       : kind === "failed" ? { status: "Not saved", failed: true, why: (saveState()!.state as { message: string }).message, onRetry: saveState()!.retry } : {};
   };
-  return <OverlayDialog
-    open={props.open}
-    onOpenChange={props.onOpenChange}
-    label="Settings"
-    placement="center"
-    layout="rail"
-    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
-    onEscapeKeyDown={dismissEscape}
-    onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
-  >
-    <Show when={!narrow() || showingIndex()}>
-      <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
-        <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onClear={() => setQuery("")}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && flat()[cursor()]) { event.preventDefault(); if (narrow()) openResult(flat()[cursor()]!); else focusPage(); }
-            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && narrow() && flat().length) {
-              event.preventDefault();
-              setCursor((cursor() + (event.key === "ArrowDown" ? 1 : -1) + flat().length) % flat().length);
-              dialogEl()?.querySelector(`[data-result="${cursor()}"]`)?.scrollIntoView({ block: "nearest" });
-            } else if (event.key === "ArrowDown") { event.preventDefault(); focusRail(); }
-            if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
-          }} />
-        <Show when={query().trim() && !flat().length}><Group kind="nav" title="No setting matches" /></Show>
-        {/* A phone: what matched, under the section it is in; a row opens the section on its line. */}
-        <Show when={query().trim() && narrow()}>
-          <For each={[...matches()]}>{([id, found]) => <Group kind="nav" title={label(id)}>
-            <For each={found}>{(result) => <Row density="nav" element="button" data-result={flat().indexOf(result)} data-focus-shown={flat().indexOf(result) === cursor() ? "" : undefined} tabIndex={-1}
-              detail={result.group ?? undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? `All of ${label(id)}` : result.label}</Row>}</For>
-          </Group>}</For>
-        </Show>
-        {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
-        <For each={!query().trim() ? sectionGroups : narrow() ? [] : sectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => matches().has(item.id as Section)) })).filter((group) => group.sections.length)}>{(group) => <Group kind="nav" title={group.label}>
-          <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            lead={<item.icon />} meta={query().trim() ? String(matches().get(item.id as Section)?.length ?? "") : undefined} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
-        </Group>}</For>
-      </OverlayRail>
-    </Show>
-    <Show when={!showingIndex()}>
-      <OverlayPage title={label(section())} {...status()} onBack={narrow() ? backToSections : undefined} onClose={close}>
+  // The sections' pages, drawn by the dialog and, out of sight, by the sweep that reads their values.
+  const pages = () => <>
           <Show when={section() === "prompts"}><PromptsSettings context={context} documentId={contextDocument()} onDocument={setContextDocument} onEditBlock={(id) => { setContextBlock(id); openSection("blocks"); }} models={namingModels} onManageModels={props.onOpenModelSelector} /></Show>
           <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "ui"}>
@@ -1948,7 +1927,102 @@ export function Settings(props: {
               </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </Group>
           </></Show>
+  </>;
+  // Every setting's value, for search: the page in view is read as it changes...
+  createEffect(() => {
+    if (!props.open || props.harvest || showingIndex()) return;
+    const shown = section();
+    let over = false;
+    let timer = 0;
+    const read = () => { const body = dialogEl()?.querySelector(".ui-overlay-page-body"); if (body && !over) rememberSettings(shown, readSettings(body, shown)); };
+    const watcher = new MutationObserver(() => { clearTimeout(timer); timer = window.setTimeout(read, 400); });
+    const attach = () => {
+      if (over) return;
+      const body = dialogEl()?.querySelector(".ui-overlay-page-body");
+      if (!body) { requestAnimationFrame(attach); return; }
+      watcher.observe(body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["aria-checked"] });
+      timer = window.setTimeout(read, 400);
+    };
+    attach();
+    onCleanup(() => { over = true; watcher.disconnect(); clearTimeout(timer); });
+  });
+  // ...and the rest are swept once Settings is open and idle: a second Settings, out of sight, draws each section in
+  // turn until its lines settle, reads them, and is gone. Again when what it read is five minutes old.
+  const SWEPT: Section[] = ["ui", "account", "models", "agent", "tools", "skills", "server", "device", "devices", "voice", "search", "browser"];
+  const [sweeping, setSweeping] = createSignal(false);
+  createEffect(() => {
+    if (props.harvest || !props.open || sweeping() || Date.now() - sweptAt < 5 * 60_000) return;
+    const timer = window.setTimeout(() => setSweeping(true), 1200);
+    onCleanup(() => clearTimeout(timer));
+  });
+  createEffect(() => { if (!props.open) setSweeping(false); });
+  let harvestEl: HTMLDivElement | undefined;
+  if (props.harvest) onMount(() => {
+    let over = false;
+    onCleanup(() => { over = true; });
+    const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    void (async () => {
+      for (const id of SWEPT) {
+        if (over) return;
+        setSection(id);
+        // Its lines come with its data: wait until their number holds still, a second and a half at most.
+        let last = -1;
+        for (let tries = 0; tries < 15 && !over; tries++) {
+          await pause(100);
+          const count = harvestEl?.querySelectorAll(".ui-setting-line").length ?? 0;
+          if (count && count === last && !harvestEl?.querySelector(".ui-loading")) break;
+          last = count;
+        }
+        if (!over && harvestEl) rememberSettings(id, readSettings(harvestEl, id));
+      }
+      if (!over) { markSwept(); props.harvest?.(); }
+    })();
+  });
+  if (props.harvest) return <div ref={harvestEl} hidden aria-hidden="true">{pages()}</div>;
+
+  return <><OverlayDialog
+    open={props.open}
+    onOpenChange={props.onOpenChange}
+    label="Settings"
+    placement="center"
+    layout="rail"
+    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
+    onEscapeKeyDown={dismissEscape}
+    onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
+  >
+    <Show when={!narrow() || showingIndex()}>
+      <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
+        <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onClear={() => setQuery("")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && flat()[cursor()]) { event.preventDefault(); if (narrow()) openResult(flat()[cursor()]!); else focusPage(); }
+            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && narrow() && flat().length) {
+              event.preventDefault();
+              setCursor((cursor() + (event.key === "ArrowDown" ? 1 : -1) + flat().length) % flat().length);
+              dialogEl()?.querySelector(`[data-result="${cursor()}"]`)?.scrollIntoView({ block: "nearest" });
+            } else if (event.key === "ArrowDown") { event.preventDefault(); focusRail(); }
+            if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
+          }} />
+        <Show when={query().trim() && !flat().length}><Group kind="nav" title="No setting matches" /></Show>
+        {/* A phone: what matched, under the section it is in; a row opens the section on its line. */}
+        <Show when={query().trim() && narrow()}>
+          <For each={[...matches()]}>{([id, found]) => <Group kind="nav" title={label(id)}>
+            <For each={found}>{(result) => <Row density="nav" element="button" data-result={flat().indexOf(result)} data-focus-shown={flat().indexOf(result) === cursor() ? "" : undefined} tabIndex={-1}
+              detail={result.group ?? undefined} meta={result.value || undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? `All of ${label(id)}` : result.label}</Row>}</For>
+          </Group>}</For>
+        </Show>
+        {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
+        <For each={!query().trim() ? sectionGroups : narrow() ? [] : sectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => matches().has(item.id as Section)) })).filter((group) => group.sections.length)}>{(group) => <Group kind="nav" title={group.label}>
+          <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
+            lead={<item.icon />} meta={query().trim() ? String(matches().get(item.id as Section)?.length ?? "") : undefined} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
+        </Group>}</For>
+      </OverlayRail>
+    </Show>
+    <Show when={!showingIndex()}>
+      <OverlayPage title={label(section())} {...status()} onBack={narrow() ? backToSections : undefined} onClose={close}>
+{pages()}
       </OverlayPage>
     </Show>
-  </OverlayDialog>;
+  </OverlayDialog>
+  <Show when={sweeping()}><Settings {...props} open harvest={() => setSweeping(false)} /></Show>
+  </>;
 }
