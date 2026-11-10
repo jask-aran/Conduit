@@ -17,11 +17,18 @@
 .ui-workbench-fact code { flex: none; font: var(--text-caption) var(--font-data); }
 .ui-workbench-fact > .ui-row-context { flex: 0 1 auto; font-size: inherit; }
 .ui-workbench-fact > .ui-row-end { margin-left: 0; padding-left: 0; }
-/* On a phone the side column and the main pane stack, each at its own height, the page scrolling both. */
+/* The rows that turn a phone's workbench between its side column and its main pane: not drawn where both show. */
+.ui-workbench-opens, .ui-workbench-back { display: none; }
+/* On a phone the side column and the main pane take turns (WorkbenchSplit open). Closed: the side column is the page,
+   at its own height, the page scrolling. Open: the main pane fills the page under its way back, the title gone. */
 @media (--conduit-phone-layout) {
   .ui-workbench, .ui-workbench-split { flex: none; }
   .ui-workbench-split { flex-direction: column; }
   .ui-workbench-side { max-width: none; flex: none; overflow: visible; }
-  /* The main pane keeps a screen's worth of height and scrolls inside it, so a long text does not push the page on. */
-  .ui-workbench-main { height: min(var(--measure-3xl), 75dvh); min-height: 0; flex: none; }
+  .ui-workbench-main { display: none; }
+  .ui-workbench-opens, .ui-workbench-back { display: flex; flex: none; }
+  .ui-workbench:has(> .ui-workbench-split-open), .ui-workbench-split-open { min-height: 0; flex: 1; }
+  .ui-workbench:has(> .ui-workbench-split-open) > .ui-workbench-title { display: none; }
+  .ui-workbench-split-open > .ui-workbench-side { display: none; }
+  .ui-workbench-split-open > .ui-workbench-main { display: flex; min-height: 0; flex: 1; }
 }

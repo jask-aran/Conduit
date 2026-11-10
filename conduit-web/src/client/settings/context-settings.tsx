@@ -76,6 +76,8 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal("");
   const [chosen, setChosen] = createSignal("");
+  // A phone's: the chosen block's text is a screen of its own, opened from the chain.
+  const [editing, setEditing] = createSignal(false);
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [liveView, setLiveView] = createSignal<"template" | "now">("template");
   const details = createBlockDetails(props.context);
@@ -178,7 +180,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   </FileView>;
   const link = (id: string, index?: number) => { const block = () => props.context.block(id);
     return <ChainLink index={index} live={block()?.kind === "live"} notice={block()?.kind === "notice"} name={block()?.label ?? id} modified={block()?.modified} meta={block() ? (index == null ? block()!.tag ? `<${block()!.tag}>` : block()!.kind === "notice" && block()!.modified ? "changed" : undefined : SOURCE[block()!.source]) : "missing"}
-      size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); }} />; };
+      size={block() ? tokens(block()!.chars) : undefined} current={chosen() === id} onSelect={() => { setChosen(id); setLiveView("template"); setEditing(true); }} />; };
   const Detail = () => <Show when={chosen() !== "live-skills"} fallback={<Skills />}><Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(block) => {
     const live = () => block().kind === "live";
     const shown = () => live() ? (liveView() === "now" ? block().preview ?? "" : block().template ?? "") : block().content ?? "";
@@ -216,7 +218,7 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
         </Select>}
         actions={<><Children /><Button variant="ghost" size="icon-sm" aria-label="Reset to its default blocks" title="Reset to its default blocks" disabled={busy() || !doc().modified} onClick={() => void reset()}><Icons.Reset /></Button></>} />
       <Show when={failure()}><Note tone="error">{failure()}</Note></Show>
-      <WorkbenchSplit main={<Detail />} side={<ChainMap label={`${doc().role.label}'s document`}>
+      <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={props.context.block(chosen())?.label ?? "Blocks"} main={<Detail />} side={<ChainMap label={`${doc().role.label}'s document`}>
         <For each={doc().blocks}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id, index() + 1)}</>}</For>
         <Show when={doc().live.length}><ChainBreak label="Conduit adds" /><For each={doc().live}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
         <Show when={doc().first.length}><ChainBreak label="First message" /><For each={doc().first}>{(id, index) => <><Show when={index() > 0}><ChainGap /></Show>{link(id)}</>}</For></Show>
@@ -236,6 +238,8 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const [state, setState] = createSignal<"idle" | "saving" | "saved">("idle");
   const [failure, setFailure] = createSignal("");
   const [liveView, setLiveView] = createSignal<"template" | "now">("template");
+  // A phone's: the text is a screen of its own, opened from the facts.
+  const [editing, setEditing] = createSignal(false);
   const blocks = () => props.context.data()?.blocks ?? [];
   const current = createMemo(() => props.context.block(props.blockId) ?? blocks()[0]);
   createEffect(() => { if (!props.context.block(props.blockId) && blocks()[0]) props.onBlock(blocks()[0]!.id); });
@@ -317,7 +321,7 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
         </Select>}
         actions={<Button variant="ghost" size="icon-sm" aria-label="New block" title="New block" disabled={state() === "saving"} onClick={() => void create()}><Icons.Add /></Button>} />
       <Show when={failure()}><Note tone="error">{failure()}</Note></Show>
-      <WorkbenchSplit main={<Main />} side={<>
+      <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={block().label} opens="Text" main={<Main />} side={<>
         <Show when={block().source === "custom"}>
           <Group kind="workbench" title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></Group>
         </Show>
