@@ -1864,27 +1864,25 @@ function App() {
     harnessId: () => string;
     session: ChatSession;
     input: Parameters<NonNullable<ComponentProps<typeof HarnessDashboard>["composer"]>>[0];
-    drafted: () => boolean;
-    ensure: (cwd: string, choices: HarnessChoices) => Promise<void>;
-    send: (cwd: string, choices: HarnessChoices, prompt: string) => Promise<void>;
-    setTyped: (text: string) => void;
+    draft: HarnessDraft;
     serviceLevels?: boolean;
     modelSelectorShortcut?: boolean;
   }) => {
+    const drafted = () => props.draft.made(props.harnessId());
     // Once there is a draft it is a chat, and chooses as one; the
     // page's pickers stand in before that, and hand their choice on.
-    const choices = (): HarnessChoices => props.drafted()
+    const choices = (): HarnessChoices => drafted()
       ? { model: props.session.models.model(), thinkingLevel: props.session.models.effort(), permissionMode: props.session.permissions.selected() }
       : props.input.choices;
     // A draft already made follows the folder.
     createEffect(on(() => props.input.folder.current, (cwd) => {
-      if (untrack(props.drafted)) void props.ensure(cwd, untrack(choices));
+      if (untrack(drafted)) void props.draft.ensure(props.harnessId(), cwd, untrack(choices));
     }, { defer: true }));
     const manifest = () => harnessCapabilities()[harnessProfile(props.harnessId())?.implementation || props.harnessId()] || null;
-    const use = () => props.ensure(props.input.folder.current, choices());
+    const use = () => props.draft.ensure(props.harnessId(), props.input.folder.current, choices());
     return <div style={{ display: "contents" }}
-      onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) props.setTyped(event.target.value); void use(); }}>
-      <Composer shortcuts={shortcutManager} chat={props.session.chat} launches supports={(name) => resolveCapability(manifest(), props.session.chat.capabilities(), name, false)} attachments={props.session.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={props.drafted() ? props.session.models : props.input.models} modelsLoading={props.drafted() ? undefined : props.input.loading} folder={props.input.folder} permissions={manifest()?.permissionModes ? (props.drafted() ? props.session.permissions : props.input.permissions) : undefined} serviceLevels={props.serviceLevels && manifest()?.serviceLevels?.length ? props.session.serviceLevels : undefined} profiles={harnessProfile(props.harnessId()) ? [harnessProfile(props.harnessId())!] : []} activeProfile={harnessProfile(props.harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={props.modelSelectorShortcut ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => props.session.openAttachments())} onSendDraft={(prompt) => props.send(props.input.folder.current, choices(), prompt)} />
+      onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) props.draft.setTyped(event.target.value); void use(); }}>
+      <Composer shortcuts={shortcutManager} chat={props.session.chat} launches supports={(name) => resolveCapability(manifest(), props.session.chat.capabilities(), name, false)} attachments={props.session.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? props.session.models : props.input.models} modelsLoading={drafted() ? undefined : props.input.loading} folder={props.input.folder} permissions={manifest()?.permissionModes ? (drafted() ? props.session.permissions : props.input.permissions) : undefined} serviceLevels={props.serviceLevels && manifest()?.serviceLevels?.length ? props.session.serviceLevels : undefined} profiles={harnessProfile(props.harnessId()) ? [harnessProfile(props.harnessId())!] : []} activeProfile={harnessProfile(props.harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={props.modelSelectorShortcut ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => props.session.openAttachments())} onSendDraft={(prompt) => props.draft.send(props.harnessId(), props.input.folder.current, choices(), prompt)} />
     </div>;
   };
   /*
@@ -1895,42 +1893,17 @@ function App() {
   const renderPaneHarness = (pane: PaneSlot, harnessId: string) => {
     const side = pane.session;
     const [scope, setScope] = createSignal<string | null>(null);
-    const [draft, setDraft] = createSignal<{ cwd: string; chatId: string } | null>(null);
-    let request: Promise<void> | null = null;
-    let typed = "";
-    const drop = (id: string) => void api(`/v0/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
-    const ensure = (cwd: string, choices: HarnessChoices): Promise<void> => {
-      if (request) return request.then(() => ensure(cwd, choices));
-      const current = draft();
-      if (!cwd || (current?.cwd === cwd && side.chat.loadedId() === current.chatId)) return Promise.resolve();
-      typed = side.chat.draft();
-      const pending: Promise<void> = openThreadChat(harnessId, { path: cwd, newThread: true, ...choices }).then(async (opened) => {
-        if (untrack(() => slotView(pane.index)) !== `page:harness:${encodeURIComponent(harnessId)}`) { drop(opened.chat.id); return; }
-        setDraft({ cwd, chatId: opened.chat.id });
-        await side.open(opened.chat, opened.project);
-        if (typed && !side.chat.draft()) side.chat.setDraft(typed);
-        typed = "";
-        if (current && current.chatId !== opened.chat.id) drop(current.chatId);
-      }).catch(showDraftError).finally(() => { request = null; });
-      request = pending;
-      return pending;
-    };
-    const send = async (cwd: string, choices: HarnessChoices, prompt: string) => {
-      await ensure(cwd, choices);
-      const made = draft();
-      if (!made || side.chat.loadedId() !== made.chatId) return;
-      setDraft(null);
-      paneThreads.set(pane.index, made.chatId);
-      await setSlotView(pane.index, `chat:${made.chatId}`);
-      side.chat.setDraft(prompt);
-      await side.chat.send();
-    };
-    onCleanup(() => { const left = draft(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); drop(left.chatId); } });
+    const here = () => untrack(() => slotView(pane.index)) === `page:harness:${encodeURIComponent(harnessId)}`;
+    const draft = createHarnessDraft({
+      chat: side.chat, here, failed: showDraftError,
+      open: (opened) => side.open(opened.chat, opened.project),
+      // The thread runs in this pane, as a chat it holds.
+      start: (made) => { paneThreads.set(pane.index, made.chatId); return setSlotView(pane.index, `chat:${made.chatId}`); },
+    });
+    onCleanup(() => { const left = draft.current(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); draft.drop(left.chatId); } });
     return <>{<ChatHeader title={harnessLabelFor(harnessId) || harnessId} tabActions={paneTabActions(pane.index)} tabs={documentTab(pane.index)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}<HarnessDashboard harnessId={harnessId} projects={catalogue.projects()} runtime={runtime} scope={scope()} onScope={setScope} home={computerLocation()?.home || ""}
-      composer={(input) => <HarnessDraftComposer harnessId={() => harnessId} session={side} input={input}
-        drafted={() => Boolean(draft() && side.chat.loadedId() === draft()!.chatId)}
-        ensure={ensure} send={send} setTyped={(text) => { typed = text; }} />}
-      onStartThread={(launch) => send(launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChatFromPage(target, project)} /></>;
+      composer={(input) => <HarnessDraftComposer harnessId={() => harnessId} session={side} input={input} draft={draft} />}
+      onStartThread={(launch) => draft.send(harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChatFromPage(target, project)} /></>;
   };
   // Threads started in a pane beside A run as hidden chats that end when the
   // pane lets go of them.
@@ -2067,43 +2040,63 @@ function App() {
    * then the page's own pickers stand in, and what they chose goes into it. It
    * moves when the folder changes, taking its text along.
    */
-  const [harnessDraft, setHarnessDraft] = createSignal<{ harnessId: string; cwd: string; chatId: string } | null>(null);
-  let harnessDraftRequest: Promise<void> | null = null;
-  // Typing does not wait for the chat: what is typed while it is being made is
-  // kept here, since opening the chat starts its composer empty.
-  let typedBeforeDraft = "";
-  const ensureHarnessDraft = (harnessId: string, cwd: string, choices: HarnessChoices): Promise<void> => {
-    if (harnessDraftRequest) return harnessDraftRequest.then(() => ensureHarnessDraft(harnessId, cwd, choices));
-    const current = harnessDraft();
-    if (!cwd || harnessThread() || computerHarness() !== harnessId
-      || (current?.harnessId === harnessId && current.cwd === cwd && chat.loadedId() === current.chatId)) return Promise.resolve();
-    typedBeforeDraft = chat.draft();
-    const request = openThreadChat(harnessId, { path: cwd, newThread: true, ...choices }).then(async (opened) => {
-      if (routeKind() !== "computer" || computerHarness() !== harnessId || harnessThread()) {
-        void api(`/v0/sessions/${encodeURIComponent(opened.chat.id)}`, { method: "DELETE" }).catch(() => {});
-        return;
-      }
-      setHarnessDraft({ harnessId, cwd, chatId: opened.chat.id });
-      await chat.select(opened.chat, opened.project, { history: "none" });
-      if (typedBeforeDraft && !chat.draft()) chat.setDraft(typedBeforeDraft);
-      typedBeforeDraft = "";
-      if (current && current.chatId !== opened.chat.id) void api(`/v0/sessions/${encodeURIComponent(current.chatId)}`, { method: "DELETE" }).catch(() => {});
-    }).catch((error) => { showError(error); }).finally(() => { harnessDraftRequest = null; });
-    harnessDraftRequest = request;
-    return request;
+  type HarnessDraft = ReturnType<typeof createHarnessDraft>;
+  const createHarnessDraft = (on: {
+    chat: ChatSession["chat"];
+    /** The page still shows this harness, with no thread open on it. */
+    here: (harnessId: string) => boolean;
+    open: (opened: OpenedThread) => Promise<unknown>;
+    /** The draft becomes the thread: where it now shows. */
+    start: (made: { harnessId: string; cwd: string; chatId: string }, prompt: string) => unknown;
+    failed: (error: unknown) => void;
+  }) => {
+    const [current, setCurrent] = createSignal<{ harnessId: string; cwd: string; chatId: string } | null>(null);
+    let request: Promise<void> | null = null;
+    // Typing does not wait for the chat: what is typed while it is being made is
+    // kept here, since opening the chat starts its composer empty.
+    let typed = "";
+    const drop = (id: string) => void api(`/v0/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    const made = (harnessId: string) => { const draft = current(); return Boolean(draft && draft.harnessId === harnessId && on.chat.loadedId() === draft.chatId); };
+    const ensure = (harnessId: string, cwd: string, choices: HarnessChoices): Promise<void> => {
+      if (request) return request.then(() => ensure(harnessId, cwd, choices));
+      const before = current();
+      if (!cwd || !on.here(harnessId) || (made(harnessId) && before!.cwd === cwd)) return Promise.resolve();
+      typed = on.chat.draft();
+      const pending: Promise<void> = openThreadChat(harnessId, { path: cwd, newThread: true, ...choices }).then(async (opened) => {
+        if (!on.here(harnessId)) { drop(opened.chat.id); return; }
+        setCurrent({ harnessId, cwd, chatId: opened.chat.id });
+        await on.open(opened);
+        if (typed && !on.chat.draft()) on.chat.setDraft(typed);
+        typed = "";
+        if (before && before.chatId !== opened.chat.id) drop(before.chatId);
+      }).catch(on.failed).finally(() => { request = null; });
+      request = pending;
+      return pending;
+    };
+    // Sending turns the draft into the thread.
+    const send = async (harnessId: string, cwd: string, choices: HarnessChoices, prompt: string) => {
+      await ensure(harnessId, cwd, choices);
+      const draft = current();
+      if (!draft || on.chat.loadedId() !== draft.chatId || !on.here(harnessId)) return;
+      await batch(() => { setCurrent(null); return on.start(draft, prompt); });
+      on.chat.setDraft(prompt);
+      await on.chat.send();
+    };
+    return { current, made, ensure, send, drop, setTyped: (text: string) => { typed = text; } };
   };
-  // Sending turns the page's draft into the thread, on a page of its own.
-  const sendHarnessDraft = async (harnessId: string, cwd: string, choices: HarnessChoices, prompt: string) => {
-    await ensureHarnessDraft(harnessId, cwd, choices);
-    const draft = harnessDraft();
-    if (!draft || chat.loadedId() !== draft.chatId || harnessThread()) return;
-    const target: HarnessThreadTarget = { harnessId, path: draft.cwd, id: "", chatId: draft.chatId,
-      title: prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread" };
-    batch(() => { setHarnessDraft(null); setHarnessScope(draft.cwd); setHarnessThread(target); });
-    history.pushState({}, "", threadPath(target));
-    chat.setDraft(prompt);
-    await chat.send();
-  };
+  // The main harness page's: sending opens the thread on a page of its own.
+  const harnessDraft = createHarnessDraft({
+    chat, failed: showError,
+    here: (harnessId) => routeKind() === "computer" && computerHarness() === harnessId && !harnessThread(),
+    open: (opened) => chat.select(opened.chat, opened.project, { history: "none" }),
+    start: (made, prompt) => {
+      const target: HarnessThreadTarget = { harnessId: made.harnessId, path: made.cwd, id: "", chatId: made.chatId,
+        title: prompt.trim().split("\n")[0]?.slice(0, 80) || "New thread" };
+      setHarnessScope(made.cwd);
+      setHarnessThread(target);
+      history.pushState({}, "", threadPath(target));
+    },
+  });
   // Tracking keeps the chat the thread already runs as, and makes it Conduit's
   // in the workspace its folder is -- made one first when it is not.
   const trackHarnessThread = async () => {
@@ -6438,11 +6431,8 @@ function App() {
           </>}>{(nodeId) => renderEnvironment(nodeId(), "main")}</Show>}>{(harnessId) => <>
             <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
-              composer={(input) => <HarnessDraftComposer harnessId={harnessId} session={session} input={input}
-                drafted={() => { const draft = harnessDraft(); return Boolean(draft && draft.harnessId === harnessId() && chat.loadedId() === draft.chatId); }}
-                ensure={(cwd, choices) => ensureHarnessDraft(harnessId(), cwd, choices)} send={(cwd, choices, prompt) => sendHarnessDraft(harnessId(), cwd, choices, prompt)}
-                setTyped={(text) => { typedBeforeDraft = text; }} serviceLevels modelSelectorShortcut />}
-              onStartThread={(launch) => sendHarnessDraft(launch.harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
+              composer={(input) => <HarnessDraftComposer harnessId={harnessId} session={session} input={input} draft={harnessDraft} serviceLevels modelSelectorShortcut />}
+              onStartThread={(launch) => harnessDraft.send(launch.harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
           </>}</Show>}>{(thread) => {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
             const label = () => harnessLabelFor(thread().harnessId) || thread().harnessId;
