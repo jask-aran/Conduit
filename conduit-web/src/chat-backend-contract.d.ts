@@ -1,34 +1,5 @@
 /** Backend-neutral contract for chat adapters. */
 
-export type SessionSurface = "chat" | "terminal";
-export type AgentProtocol = "acp" | "native_api" | "pty";
-export type AgentImplementation = "codex" | "claude-code" | "opencode" | "chatgpt-web" | (string & {});
-export type ProfileManagement = "conduit" | "agent";
-
-export interface AgentProfile {
-  id: string;
-  label: string;
-  management: ProfileManagement;
-  agent: {
-    protocol: AgentProtocol;
-    implementation: AgentImplementation;
-    installationId: string;
-  };
-}
-
-export interface PersistedChatBackend {
-  /** Null for imported chats whose profile has not yet been assigned. */
-  profileId: string | null;
-  profileRevision: string | null;
-  management: ProfileManagement;
-  protocol: AgentProtocol;
-  implementation: AgentImplementation;
-  installationId: string;
-  /** Adapter-owned model choice made before the backend session starts. */
-  model?: string;
-  opaqueSession: unknown;
-}
-
 export interface ChatCapabilities {
   history: "none" | "linear" | "tree";
   fork: boolean;
@@ -258,6 +229,12 @@ export type AssistantContentEvent = EventBase & (
   }
 );
 
+/**
+ * What a tool did, from the adapter's own table of its tool names (harnesses/transcript-ops.js TOOL_KINDS refuses any
+ * other). `agent`: a subagent spawned or reporting; `message`: the agent sending the person something outside the thread.
+ */
+export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
+
 /** Paint: a tool running, and its output as it arrives. Same promises. */
 export type ToolActivityEvent = EventBase & {
   type: "tool_activity";
@@ -266,7 +243,7 @@ export type ToolActivityEvent = EventBase & {
   toolCallId: string;
   name: string;
   /** On `start`: what it did, as `tool.open` states it; on `end`, only if it is known only then. */
-  kind?: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
+  kind?: ToolKind;
   subject?: string;
   /** On `start` and `end`: when, stated once where it is published. */
   at?: string;
@@ -402,6 +379,9 @@ export interface RuntimeStateEvent extends EventBase {
   cacheStats?: unknown | null;
 }
 
+/** How a turn ended (`turn.settle`). */
+export type TurnOutcome = "complete" | "interrupted" | "failed";
+
 /**
  * What the transcript holds, stated by the adapter.
  *
@@ -431,7 +411,7 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string;
       /** What it did, from the adapter's own table of its tool names. */
-      kind: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other";
+      kind: ToolKind;
       /** What it acted on, in one line: the command, path, query or page. */
       subject?: string; input: unknown;
       /** When it started, stamped as it did. */
@@ -439,7 +419,7 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true;
       /** What it did and to what, when that was only known once it had. */
-      kind?: "command" | "read" | "edit" | "search" | "fetch" | "script" | "other"; subject?: string;
+      kind?: ToolKind; subject?: string;
       /** The tools a script step called, in order. */
       calls?: { name: string; kind: string; subject?: string; isError?: boolean; durationMs?: number }[];
       /** When it finished, stamped as it did. */
@@ -452,7 +432,7 @@ export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
    * turn ends, before the event that ends it. The browser refuses a finished
    * turn that did not say, the same way it refuses a message without `answers`.
    */
-  | { op: "turn.settle"; promptId: string; outcome: "complete" | "interrupted" | "failed" }
+  | { op: "turn.settle"; promptId: string; outcome: TurnOutcome }
   /** How long the turn took, as Conduit measured it (server/turn-timings.js). */
   | { op: "turn.time"; promptId: string; timing: Record<string, unknown> }
 );

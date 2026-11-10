@@ -508,6 +508,7 @@ export class PersistentAgent {
     return settings;
   }
 
+  /** @returns {Promise<import("./agent-view.js").AgentView>} the view GET /v0/agent sends, attention aside (agent-view.d.ts) */
   async view(state) {
     if (!this.enabled()) return { enabled: false };
     const [current, settings] = await Promise.all([state || this.state(), this.shownSettings()]);

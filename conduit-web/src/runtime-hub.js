@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isRuntimeEvent } from "./runtime-stream-api.js";
 
 /**
  * Global runtime fan-out: snapshot-first, low-frequency process updates.
@@ -49,8 +50,10 @@ export class RuntimeHub {
     this.publish({ type: "updates_offered", updates, at: new Date().toISOString() });
   }
 
+  /** @param {{ type: keyof typeof import("./runtime-stream-api.js").RUNTIME_EVENTS }} event one runtime-stream-api.js declares */
   publish(event) {
     if (!event || typeof event !== "object") return;
+    if (!isRuntimeEvent(event.type)) throw new TypeError(`Runtime event ${event.type} is not declared (runtime-stream-api.js)`);
     const payload = JSON.stringify(event);
     for (const client of this.clients) this.write(client, payload);
   }
@@ -74,6 +77,7 @@ export class RuntimeHub {
 
   /** One connection's event alone (an agent's command to a tab of it); false when it has gone. */
   sendTo(id, event) {
+    if (!isRuntimeEvent(event?.type)) throw new TypeError(`Runtime event ${event?.type} is not declared (runtime-stream-api.js)`);
     const client = [...this.clients].find((candidate) => candidate.peer.id === id);
     if (!client) return false;
     this.write(client, JSON.stringify(event));

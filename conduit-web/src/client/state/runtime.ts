@@ -8,6 +8,7 @@ import { browserRegistrationId, finishPwaRestart, preparePwaRestart } from "../p
 import { api, replayHeldWrites } from "../api/client";
 import { RESUME_RECONNECT_AFTER_MS } from "./agent-session";
 import { buildLabel, clientBuild } from "../platform/build-info";
+import type { RUNTIME_EVENTS } from "../../runtime-stream-api.js";
 
 /** How long the runtime stream's answer (its headers, not its frames) is waited for before the attempt counts as lost. */
 const STREAM_ANSWER_TIMEOUT_MS = 10_000;
@@ -38,6 +39,9 @@ const takeDevices = (list: unknown) => {
   // Back: what waited on it (a file tree, a diff) reads again.
   for (const [id, state] of next) if (state.online && before.get(id)?.online === false) window.dispatchEvent(new CustomEvent("conduit:device-online", { detail: id }));
 };
+
+/** An event of the runtime stream: one the hub declares (runtime-stream-api.js), its other fields read as they come. */
+type RuntimeEvent = { type: keyof typeof RUNTIME_EVENTS } & Record<string, unknown>;
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
 
@@ -120,7 +124,7 @@ export function createRuntimeStore() {
     lastFrameAt = Date.now();
     if (leading) channel?.postMessage({ type: "frame", data });
     try {
-      const event = JSON.parse(data) as Record<string, unknown>;
+      const event = JSON.parse(data) as RuntimeEvent;
       if (event.type === "ping") {
         if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); replayHeldWrites(); }
         setStale(false);
@@ -185,7 +189,7 @@ export function createRuntimeStore() {
   };
   // What a tab arriving after the stream's own snapshot needs: the state as the leader holds it now.
   const snapshot = () => JSON.stringify({
-    type: "runtime_global_snapshot",
+    type: "runtime_global_snapshot" satisfies RuntimeEvent["type"],
     processes: [...processes().values()],
     devices: [...deviceStates().values()],
     connection: connectionId(),

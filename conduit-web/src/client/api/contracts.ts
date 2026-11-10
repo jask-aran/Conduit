@@ -6,8 +6,8 @@ export type BooleanCapability = {
   [K in keyof ChatCapabilities]: ChatCapabilities[K] extends boolean ? K : never
 }[keyof ChatCapabilities];
 
-/** What a chat's backend can do, as the hub declares it (chat-backend-contract.d.ts). */
-import type { ChatCapabilities } from "../../chat-backend-contract.js";
+/** What a chat's backend can do, how a turn ends and what a tool did, as the hub declares them (chat-backend-contract.d.ts). */
+import type { ChatCapabilities, ToolKind, TurnOutcome } from "../../chat-backend-contract.js";
 export type { ChatCapabilities };
 
 export interface HarnessCommand {
@@ -245,7 +245,7 @@ export interface ContentBlock {
   redacted?: boolean;
 }
 
-export type TurnOutcome = "complete" | "interrupted" | "failed";
+export type { TurnOutcome };
 /**
  * How long a turn took, as Conduit measured it whichever harness answered
  * (server/turn-timings.js). Times are ISO; tokens are estimated from the
@@ -267,9 +267,8 @@ export interface TurnTiming {
   tokensPerSecond: number | null;
   tools: Array<{ name: string; kind: string; startedAt: string; endedAt: string | null; ms: number | null; failed?: boolean; cancelled?: boolean }>;
 }
-/** What a tool did, stated by the harness adapter from its own tool names. */
-/** `message`: the agent sending the person something outside the thread (a notification), drawn as what it sent. */
-export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
+/** What a tool did, stated by the harness adapter from its own tool names (the hub declares them). */
+export type { ToolKind };
 /** The subagent a spawn or a report is about: its id (bg-3 in the background, fg-3 for a turn's own; sa-3 in older chats) and its conversation. */
 export interface AgentRef { id: string | null; conversationId: number | string | null }
 /**
