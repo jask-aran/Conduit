@@ -18,6 +18,7 @@ import { IntegrationsSettings } from "./connectors-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { createLatest } from "../state/latest";
+import { createSingleFlight } from "../state/single-flight";
 import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
@@ -821,7 +822,8 @@ export function Settings(props: {
   const [processes, setProcesses] = createSignal<LiveProcess[]>([]);
   const chatTitles = new Map<string, string>();
   const [titlesSeen, setTitlesSeen] = createSignal(0);
-  const loadProcesses = async () => {
+  // One read out at a time: the 5 s poll, a slow answer outlasting it, follows that answer rather than racing it.
+  const loadProcesses = createSingleFlight(async () => {
     try {
       const { sessions } = await api<{ sessions: LiveProcess[] }>("/v0/live-sessions");
       const live = sessions.filter((session) => session.status !== "stopped");
@@ -834,7 +836,7 @@ export function Settings(props: {
       }));
       if (unknown.length) setTitlesSeen((count) => count + 1);
     } catch { /* the counts above still say how many */ }
-  };
+  });
   createEffect(() => {
     if (!props.open || section() !== "server") return;
     void loadProcesses();

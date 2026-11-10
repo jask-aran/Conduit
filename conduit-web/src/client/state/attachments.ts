@@ -60,7 +60,8 @@ export function createAttachments(
 
   const upload = async (item: UploadAttachment) => {
     const owner = chatId();
-    if (!owner || !item.file) return;
+    // Taken off the queue, an item no upload will take ends here: left queued, it waited for good.
+    if (!owner || !item.file) { update(item.id, { status: "error", error: "No chat to attach to" }); return; }
     // The slot and the epoch are taken before the auth await, so drain() sees
     // this upload as running and a clear() during the await abandons it.
     const epoch = uploadEpoch;

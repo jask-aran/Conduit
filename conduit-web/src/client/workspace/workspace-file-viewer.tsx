@@ -93,7 +93,8 @@ export default function FileViewer(props: {
     const places = new Map<string, string[]>();
     props.entries.forEach((entry) => places.set(entry.projectId, [...(places.get(entry.projectId) ?? []), entry.path]));
     const entries = props.entries;
-    const timers: number[] = [];
+    // Each place's pending probe, cleared with the effect: one per place, not one per probe ever armed.
+    const stops: Array<() => void> = [];
     let cancelled = false;
     const listeners: Array<(event: Event) => void> = [];
     for (const [projectId, paths] of places) {
@@ -128,8 +129,8 @@ export default function FileViewer(props: {
         if (cancelled) return;
         if (again) { again = false; return void probe(); }
         timer = window.setTimeout(probe, away ? DEVICE_AWAY_POLL_MS : told ? TOLD_POLL_INTERVAL_MS : POLL_INTERVAL_MS);
-        timers.push(timer);
       };
+      stops.push(() => window.clearTimeout(timer));
       const onChanged = (event: Event) => { if ((event as CustomEvent<string[]>).detail?.includes(projectId)) void probe(); };
       const onDeviceOnline = () => { if (away) void probe(); };
       window.addEventListener("conduit:workspace-changed", onChanged);
@@ -139,7 +140,7 @@ export default function FileViewer(props: {
     }
     onCleanup(() => {
       cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
+      stops.forEach((stop) => stop());
       listeners.forEach((listener) => { window.removeEventListener("conduit:workspace-changed", listener); window.removeEventListener("conduit:device-online", listener); });
     });
   });

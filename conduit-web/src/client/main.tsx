@@ -450,6 +450,9 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const useLocalServer = () => {
     const origin = localServer();
     if (!origin) return;
+    // A check still running for what was typed before would land over this choice.
+    clearTimeout(checkTimer);
+    checkRun.drop();
     setAddress(origin);
     setCheck({ state: "found", title: "This computer", detail: hostOf(origin) });
     setVerifiedOrigin(origin);

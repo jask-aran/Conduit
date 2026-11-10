@@ -4,6 +4,7 @@ import { lowerOtherAudio, restoreOtherAudio } from "../platform/audio-ducking";
 import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, shouldSwapToSpeakerphone, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
 import { dictationSocketUrl } from "../api/transport";
+import { createLatest } from "../state/latest";
 
 export type VoiceDictationState = "idle" | "starting" | "listening" | "finishing" | "waiting" | "transcribing" | "completed" | "failed";
 
@@ -532,8 +533,11 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
   };
   requestStop = stop;
 
+  // Each take's start, so one left behind by a later take does not open a socket for it.
+  const takes = createLatest();
   const beginStart = async (acceptedAt: number) => {
     if (state !== "starting") return;
+    const thisTake = takes.next();
     explicitlyClosed = false;
     stopRequested = false;
     releaseWarmAfterStop = false;
@@ -620,7 +624,11 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           fail(formatted);
         },
       );
-      const current = new WebSocket(await dictationSocketUrl());
+      const url = await dictationSocketUrl();
+      // Disposed or failed meanwhile, the take is over: a socket now would be no one's. A stop still needs it, as its
+      // stop frame and the server's "completed" are how the take ends.
+      if (!thisTake() || !["starting", "finishing"].includes(state)) return;
+      const current = new WebSocket(url);
       socket = current;
       socket.binaryType = "arraybuffer";
       // An earlier take's socket goes on telling (its close comes late): only the current one is heard.

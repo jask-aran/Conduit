@@ -161,9 +161,10 @@ export function ResizeEdge(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "onPo
   onCleanup(() => stop?.());
   return <div role="separator" aria-orientation="vertical" tabIndex={local.onStep ? 0 : undefined} {...rest} class="ui-resize-edge" data-edge={local.kind} data-dock={local.dock ? "" : undefined}
     onPointerDown={(event) => {
+      // The drag before this one ends first: its end, run after the new start, undid what the start had set.
+      stop?.();
       const drag = local.startDrag?.(event, () => stop?.());
       if (!drag) return;
-      stop?.();
       stop = dragEdge(event, drag, () => { stop = undefined; });
     }}
     onKeyDown={(event) => {

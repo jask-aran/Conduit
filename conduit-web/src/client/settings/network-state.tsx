@@ -5,6 +5,7 @@ import { nativeBearerToken } from "../api/native-auth-client.ts";
 import { activeOrigin, dialOrigin, servers } from "../platform/servers.ts";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { connectionId } from "../state/runtime.ts";
+import { createSingleFlight } from "../state/single-flight.ts";
 import type { Project } from "../api/contracts";
 import type { NetworkClient } from "@/components/ui/network";
 import { StatusDot } from "@/components/ui/nav";
@@ -75,21 +76,24 @@ export function createNetwork(options: {
   const projects = () => active() ? options.projects() : theirProjects();
   const refresh = () => {
     const asked = options.origin();
-    if (!readable()) return;
+    if (!readable()) return Promise.resolve();
     const mine = (apply: () => void) => { if (options.origin() === asked) apply(); };
-    void get<{ devices: Device[] }>("/v0/nodes")
+    const reads = [get<{ devices: Device[] }>("/v0/nodes")
       .then((answer) => mine(() => { setDevices(answer.devices); setError(""); }))
-      .catch((cause: Error) => mine(() => setError(cause.message || "The server did not list its devices.")));
-    void get<{ clients?: Client[] }>("/v0/runtime/clients").then((answer) => mine(() => setClients(answer.clients || []))).catch(() => {});
-    if (!active()) void get<{ projects?: Project[] } | Project[]>("/v0/projects")
-      .then((answer) => mine(() => setTheirProjects(Array.isArray(answer) ? answer : answer.projects || []))).catch(() => {});
+      .catch((cause: Error) => mine(() => setError(cause.message || "The server did not list its devices."))),
+    get<{ clients?: Client[] }>("/v0/runtime/clients").then((answer) => mine(() => setClients(answer.clients || []))).catch(() => {})];
+    if (!active()) reads.push(get<{ projects?: Project[] } | Project[]>("/v0/projects")
+      .then((answer) => mine(() => setTheirProjects(Array.isArray(answer) ? answer : answer.projects || []))).catch(() => {}));
     options.onRefresh?.();
+    return Promise.all(reads).then(() => {});
   };
   // A server picked: its network, from nothing, so one server's devices never show under another's name.
   createEffect(on(options.origin, () => { setDevices(null); setClients([]); setTheirProjects([]); setError(""); refresh(); }, { defer: true }));
   refresh();
   // Whether each client is connected changes under the page.
-  const timer = setInterval(refresh, 5_000);
+  // A tick while the last reads are still out (a slow hub waits up to api's timeout) follows them, not stacks on them.
+  const poll = createSingleFlight(refresh);
+  const timer = setInterval(() => void poll(), 5_000);
   onCleanup(() => clearInterval(timer));
 
   const network = createMemo(() => networkOf(devices() || [], clients(), active() ? connectionId() : null, active() ? options.own?.() ?? null : null, projects()));

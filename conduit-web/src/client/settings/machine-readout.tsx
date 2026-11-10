@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { Reading, ReadingStat, ReadingStats, SettingLine, SettingValue, Group, Note } from "@/components/ui";
 import { api } from "../api/client";
+import { createSingleFlight } from "../state/single-flight";
 
 /** GET /v0/server/machine (machine-readout.js): rates are since the previous reading; null where the platform cannot say. */
 type Machine = {
@@ -25,15 +26,16 @@ export function MachineReadout(props: { open: boolean; url?: string; title?: str
   createEffect(() => {
     if (!props.open) return;
     let stopped = false;
-    const read = () => api<Machine>(props.url || "/v0/server/machine").then((value) => { if (!stopped) { setMachine(value); setError(""); } })
+    // One read out at a time: a slow answer is followed by the next, not overtaken (and overwritten) by it.
+    const read = createSingleFlight(() => api<Machine>(props.url || "/v0/server/machine").then((value) => { if (!stopped) { setMachine(value); setError(""); } })
       .catch((failure) => {
         if (stopped) return;
         // A device whose Conduit predates readouts answers 501: it is told to update, not shown as broken.
         const older = (failure as { status?: number })?.status === 501;
         setError(older ? "This device's Conduit is older: update it there to see its readout." : failure instanceof Error ? failure.message : String(failure));
         if (older) clearInterval(timer);
-      });
-    const timer = window.setInterval(read, 3000);
+      }));
+    const timer = window.setInterval(() => void read(), 3000);
     void read();
     onCleanup(() => { stopped = true; clearInterval(timer); });
   });

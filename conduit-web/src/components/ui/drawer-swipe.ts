@@ -1,6 +1,6 @@
 import { beginEdgeSwipe, EDGE_PX, swipeBlocked, type EdgeSwipe } from "./edge-swipe";
 import { haptic } from "./haptics";
-import { duration } from "./motion";
+import { whenMotionEnds } from "./motion";
 import { feelDrawerAhead } from "./nav";
 
 /** What the phone's drawer swipe reads and sets: the NavPane's drawer and the workspace panel at the other edge. */
@@ -35,12 +35,12 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
   // Carried past where it lands, it is felt there, and again if it comes back; let go, a landing already felt plays
   // nothing more, and one a flick changed plays as a tap's does.
   let drag: { parts: DrawerParts; progress: number; frame: number; from: boolean; felt: boolean } | null = null;
-  let settleTimer = 0;
+  let stopSettle = () => {};
   const carry = (progress: number, lands: boolean) => {
     if (!drag) {
       const parts = drawerParts();
       if (!parts) return;
-      window.clearTimeout(settleTimer);
+      stopSettle();
       for (const part of [parts.pane, parts.shell, parts.backdrop]) { part.removeAttribute("data-drawer-settle"); part.setAttribute("data-drawer-drag", ""); }
       drag = { parts, progress, frame: 0, from: drawerOpen(), felt: drawerOpen() };
       // Where it is taken from is drawn at once, in the same frame the settle stops: a frame later it has jumped.
@@ -75,8 +75,9 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     for (const part of [parts.body, parts.shell, parts.backdrop]) part.style.removeProperty("--drawer");
     for (const part of [parts.pane, parts.shell, parts.backdrop]) { part.removeAttribute("data-drawer-drag"); part.setAttribute("data-drawer-settle", ""); }
     setDrawerOpen(open);
-    // Kept for as long as the settle takes (the Animation speed setting slows it), not a fixed time it can outlast.
-    settleTimer = window.setTimeout(() => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); }, duration("--duration-gentle") * 2 + 150);
+    // Kept until the body has landed, the wait the sidebar's own settle makes (whenMotionEnds; its timer catches a
+    // slide that never runs): the shell and the dim travel with it on the same duration.
+    stopSettle = whenMotionEnds(parts.body, "transform", "--duration-gentle", () => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); });
   };
   // Heard first, on the window in capture: an open popover stops a touch outside it, which left a carried sidebar
   // never let go. Moves and end are also heard where the touch started (once each), since once that target leaves
