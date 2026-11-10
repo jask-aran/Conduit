@@ -9,7 +9,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { beginTurn, endTurn, stopTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -810,15 +810,7 @@ export class OpenCodeAdapter extends EventEmitter {
   async cancel(id) {
     const record = this.get(id);
     if (!record?.active) return false;
-    const generation = record.generation;
-    record.stopping = true;
-    try {
-      await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} });
-    } catch (cause) {
-      // The stop never reached OpenCode, so the turn is still running, not stopping.
-      if (record.generation === generation) record.stopping = false;
-      throw cause;
-    }
+    await stopTurn(record, () => this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} }));
     return true;
   }
 

@@ -56,6 +56,20 @@ export const turnStarted = (record, generationId = record.generation.id) => ({
 });
 
 /**
+ * A stop is asked of the harness. The turn reads "stopping" from here; if the ask never reached the harness the turn
+ * is still running, so the flag is taken back (unless the turn ended meanwhile) and the failure is the caller's.
+ */
+export async function stopTurn(record, send) {
+  const generation = record.generation;
+  record.stopping = true;
+  try { return await send(); }
+  catch (cause) {
+    if (record.generation === generation && record.active) record.stopping = false;
+    throw cause;
+  }
+}
+
+/**
  * How a turn ended, when the person asked it to stop: the harness's word stands. A turn it says completed did, even
  * if the stop was already on its way, and one it says was interrupted was. The stop decides only where the harness
  * says the turn failed or says nothing (a timer gave up on it, the request was aborted): a turn that errors as it

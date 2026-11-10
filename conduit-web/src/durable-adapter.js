@@ -14,7 +14,7 @@ import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { beginTurn, endTurn, outcomeOf, stopTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
@@ -1457,16 +1457,27 @@ export class DurableAdapter extends EventEmitter {
     // A Stop for a turn that has already ended (from another tab, say) leaves the next one alone.
     if (generationId && record.generation?.id && generationId !== record.generation.id) return null;
     const generation = record.generation;
-    record.stopping = true;
-    await record.conversation.commit(async (tx) => {
-      const state = await tx.doc(ConduitNotices, record.conversationId);
-      state.pending = [{ name: "stop", id: record.generation?.id || crypto.randomUUID() }];
-    }, this.context);
-    // The turn ended while the stop was being written: there is nothing left to stop.
+    let said = false;
+    try {
+      await stopTurn(record, async () => {
+        await record.conversation.commit(async (tx) => {
+          const state = await tx.doc(ConduitNotices, record.conversationId);
+          state.pending = [{ name: "stop", id: record.generation?.id || crypto.randomUUID() }];
+        }, this.context);
+        // The turn ended while the stop was being written: there is nothing left to stop.
+        if (!record.active || record.generation !== generation) return;
+        this.publish(record, { type: "status", generationId: record.generation?.id || null, phase: "stopping", seq: ++record.generationSeq,
+          status: "stopping", activity: "stopping", detail: null });
+        said = true;
+        await record.conversation.abort(this.context);
+      });
+    } catch (cause) {
+      // The stop did not take and the turn runs on: said so, where "stopping" was.
+      if (said && record.active && record.generation === generation) this.publish(record, { type: "status", generationId: generation?.id || null,
+        phase: "running", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
+      throw cause;
+    }
     if (!record.active || record.generation !== generation) return null;
-    this.publish(record, { type: "status", generationId: record.generation?.id || null, phase: "stopping", seq: ++record.generationSeq,
-      status: "stopping", activity: "stopping", detail: null });
-    await record.conversation.abort(this.context);
     // A run that never started has no run_end to settle it.
     if (record.turn && !record.turn.inputs.length) this.finish(record);
     return null;
