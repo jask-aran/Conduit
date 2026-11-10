@@ -140,6 +140,29 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /*
+     * Coming back from the app switcher without a flash.
+     *
+     * Android shows its own picture of the app (the switcher's preview) while the app returns, and takes it down at
+     * the window's first frame. A WebView's first frame after being hidden is not the page: its drawn tiles were let
+     * go when it left the screen, so that frame is the WebView's background colour, and the page follows a few
+     * frames later once it has been drawn again. The preview is exactly what the page is about to show; what sits
+     * between them is those empty frames.
+     *
+     * So the app keeps its own last frame (copied from the window as it is paused) and lays it over the WebView
+     * while it is stopped. The window's first frame back is then that picture, the same as the preview it replaces,
+     * and it is taken away only once the WebView says the page is ready to be drawn, and has drawn it.
+     */
+    private android.graphics.Bitmap lastFrame;
+    private android.widget.ImageView returnCover;
+    private final Runnable dropReturnCover = () -> {
+        if (returnCover == null) return;
+        android.view.ViewGroup parent = (android.view.ViewGroup) returnCover.getParent();
+        if (parent != null) parent.removeView(returnCover);
+        returnCover.setImageDrawable(null);
+        returnCover = null;
+    };
+
     @Override
     public void onResume() {
         ConduitFloatService.setAppForeground(true);
@@ -150,6 +173,53 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         ConduitFloatService.setAppForeground(false);
+        // A copy that fails (the surface already gone) leaves no frame, never an older one.
+        lastFrame = null;
+        if (android.os.Build.VERSION.SDK_INT < 26) return;
+        android.view.View decor = getWindow().getDecorView();
+        if (decor.getWidth() <= 0 || decor.getHeight() <= 0) return;
+        try {
+            android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(decor.getWidth(), decor.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+            android.view.PixelCopy.request(getWindow(), frame, result -> {
+                if (result == android.view.PixelCopy.SUCCESS) lastFrame = frame;
+            }, new android.os.Handler(android.os.Looper.getMainLooper()));
+        } catch (RuntimeException ignored) { /* no surface to copy: come back uncovered */ }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        // Laid over while out of sight, so it is already there in the first frame back.
+        android.view.ViewGroup decor = (android.view.ViewGroup) getWindow().getDecorView();
+        if (lastFrame == null || returnCover != null || lastFrame.getWidth() != decor.getWidth() || lastFrame.getHeight() != decor.getHeight()) return;
+        returnCover = new android.widget.ImageView(this);
+        returnCover.setImageBitmap(lastFrame);
+        returnCover.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        returnCover.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        decor.addView(returnCover, new android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (returnCover == null) return;
+        android.view.View cover = returnCover;
+        // The window changed shape while away (rotated, split): the picture no longer fits it.
+        android.view.View decor = getWindow().getDecorView();
+        if (lastFrame == null || lastFrame.getWidth() != decor.getWidth() || lastFrame.getHeight() != decor.getHeight()) { dropReturnCover.run(); return; }
+        getBridge().getWebView().postVisualStateCallback(1, new WebView.VisualStateCallback() {
+            // Ready to be drawn is not yet drawn: two frames on, the page is what is under the picture.
+            @Override public void onComplete(long requestId) { cover.postOnAnimation(() -> cover.postOnAnimation(dropReturnCover)); }
+        });
+        // A page that never answers is not left under a still picture.
+        cover.postDelayed(dropReturnCover, 800);
+    }
+
+    @Override
+    public void onDestroy() {
+        dropReturnCover.run();
+        lastFrame = null;
+        super.onDestroy();
     }
 
     @Override
