@@ -1,12 +1,14 @@
 import { createSignal } from "solid-js";
-import { publishUiPreference } from "../preferences/ui-preferences";
+import { publishUiPreference, type UiPreferenceChoice } from "../preferences/ui-preferences";
+import { UI_PREFERENCES } from "../../preferences-api.js";
 
 /**
  * When the leader menu shows after the leader, Ctrl+G. By default only after a pause, so
  * someone who knows the key they want never sees it; the menu is for the
  * moment of stepping back to look.
  */
-export type LeaderMenuMode = "pause" | "immediate" | "never";
+export type LeaderMenuMode = UiPreferenceChoice<"leaderMenu">;
+const LEADER_MENU_MODES = new Set<string>(UI_PREFERENCES.leaderMenu.values);
 
 export const LEADER_MENU_STORAGE_KEY = "conduit:leader-menu";
 export const LEADER_MENU_PAUSE_MS = 450;
@@ -17,7 +19,7 @@ export const LEADER_MENU_OPTIONS: ReadonlyArray<{ value: LeaderMenuMode; label: 
 ];
 
 export function isLeaderMenuMode(value: unknown): value is LeaderMenuMode {
-  return value === "pause" || value === "immediate" || value === "never";
+  return typeof value === "string" && LEADER_MENU_MODES.has(value);
 }
 
 export function selectedLeaderMenu(storage: Pick<Storage, "getItem"> = localStorage): LeaderMenuMode {

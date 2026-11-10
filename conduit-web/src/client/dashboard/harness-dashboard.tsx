@@ -4,7 +4,7 @@ import { Icons, GroupHeading, Note, Empty, IconButton } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 
 import { api } from "../api/client";
-import type { ChatSummary, ComputerLocation, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, PermissionMode, PermissionModeState, Project } from "../api/contracts";
+import type { ChatSummary, ComputerLocation, HarnessesPayload, HarnessSummary, HarnessThread, HarnessThreadDiscovery, HarnessThreadGroup, ModelOption, ModelState, PermissionMode, PermissionModeState, Project } from "../api/contracts";
 import type { ComposerModels } from "../chat/composer-models";
 import type { ComposerPermissions } from "../chat/composer-permissions";
 import type { FolderOptions } from "../chat/place-picker";
@@ -89,7 +89,7 @@ export function HarnessDashboard(props: {
   createEffect(() => {
     const id = props.harnessId;
     setHarnessLoaded(false);
-    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
+    void api<HarnessesPayload>("/v0/harnesses")
       .then((result) => { if (id === props.harnessId) setHarness(result.harnesses.find((item) => item.id === id) || null); })
       .catch(() => setHarness(null))
       .finally(() => setHarnessLoaded(true));

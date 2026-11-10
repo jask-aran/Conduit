@@ -5,6 +5,7 @@ import { createAgentSession } from "./agent-session";
 import { isFoldedTurnEvent, isStructuredGenerationEvent, normalizeLiveEvent } from "../api/live-events";
 import type { FoldedTurnEvent, LiveEvent, RuntimeStateEvent, StructuredGenerationEvent, TurnArtifactSummary } from "../api/live-events";
 import type {
+  AgentsPayload,
   AgentSummary,
   ChatStatus,
   Attachment,
@@ -12,6 +13,7 @@ import type {
   CacheStats,
   ChatCapabilities,
   ContextUsage,
+  ContextUsagePayload,
   GenerationState,
   HostUiRequest,
   HarnessCommand,
@@ -620,7 +622,7 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   /* A chat with no live process still has the context its history records. */
   const contextFromHistory = async (chatId: string) => {
-    const usage = await api<{ contextUsage?: ContextUsage; sessionStats?: SessionStats; cacheStats?: CacheStats | null }>(
+    const usage = await api<ContextUsagePayload>(
       `/v0/sessions/${encodeURIComponent(chatId)}/context`).catch(() => null);
     if (!usage?.contextUsage || selectedId() !== chatId) return;
     setContextUsage(usage.contextUsage);
@@ -632,7 +634,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const loadBreakdown = async () => {
     const chatId = selectedId();
     if (!chatId) return;
-    const usage = await api<{ contextUsage?: ContextUsage; sessionStats?: SessionStats; cacheStats?: CacheStats | null }>(
+    const usage = await api<ContextUsagePayload>(
       `/v0/sessions/${encodeURIComponent(chatId)}/context/breakdown`, { method: "POST", timeout: false });
     if (selectedId() !== chatId || !usage?.contextUsage) return;
     setContextUsage(usage.contextUsage);
@@ -886,7 +888,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!chatId) return Promise.resolve();
     if (agentsRequest) { agentsAgain = true; return agentsRequest; }
     agentsAsked = chatId;
-    agentsRequest = api<{ agents: AgentSummary[] }>(`/v0/chats/${encodeURIComponent(chatId)}/agents`)
+    agentsRequest = api<AgentsPayload>(`/v0/chats/${encodeURIComponent(chatId)}/agents`)
       .then((body) => { if (loadedId() === chatId) setAgents(body.agents || []); })
       .catch(() => {})
       .finally(() => { agentsRequest = null; if (agentsAgain) { agentsAgain = false; void refreshAgents(); } });

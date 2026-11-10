@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { api, readShared } from "../api/client";
+import type { PreferencesPayload } from "../api/contracts";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport.js";
 
@@ -50,11 +51,11 @@ export async function removeAccountPicture() {
 }
 
 export const saveAccountName = async (name: string) => {
-  const saved = await api<{ accountName?: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountName: name.trim() }) });
+  const saved = await api<PreferencesPayload>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountName: name.trim() }) });
   setAccountName(saved.accountName || "");
 };
 
 export const saveAccountHome = async (home: string) => {
-  const saved = await api<{ accountHome?: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountHome: home.trim() }) });
+  const saved = await api<PreferencesPayload>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ accountHome: home.trim() }) });
   setAccountHome(saved.accountHome || "");
 };

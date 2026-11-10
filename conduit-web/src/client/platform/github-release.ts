@@ -1,3 +1,4 @@
+import type { DownloadsPayload } from "../api/contracts.ts";
 export const RELEASES_API = "https://api.github.com/repos/jask-aran/Conduit/releases/latest";
 
 export interface PublishedRelease {
@@ -45,7 +46,7 @@ export function installerDownloads(): Promise<Pick<PublishedRelease, "windowsUrl
 async function askDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
   const { api } = await import("../api/client.ts");
   const { httpUrl } = await import("../api/transport.js");
-  const own = await api<{ windowsUrl: string | null; apkUrl: string | null }>("/v0/downloads").catch(() => null);
+  const own = await api<DownloadsPayload>("/v0/downloads").catch(() => null);
   const needsRelease = !own?.windowsUrl || !own?.apkUrl;
   const release = needsRelease ? await latestRelease().catch(() => null) : null;
   const served = (url: string | null | undefined) => (url ? new URL(httpUrl(url), location.href).href : null);

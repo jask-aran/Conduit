@@ -1,4 +1,5 @@
 import type { ApprovalLine } from "@/components/ui";
+import type { Device } from "../platform/devices";
 export type RuntimeKind = "conduit_profile" | "codex";
 /** The capability flags that are a plain yes or no, so UI can be gated on one. */
 export type BooleanCapability = {
@@ -822,4 +823,112 @@ export interface ComputerLocation {
 
 export interface ComputerPrefetchPayload {
   locations: ComputerLocation[];
+}
+
+/** GET /v0/harnesses. */
+export interface HarnessesPayload {
+  harnesses: HarnessSummary[];
+}
+
+/** GET /v0/share-origin: the origin a shared link is made on. */
+export interface ShareOriginPayload {
+  origin: string;
+}
+
+/** A terminal the hub runs (GET /v0/ptys lists them; POST /v0/ptys starts one). */
+export type Pty = {
+  id: string;
+  nodeId?: string | null;
+  projectId: string;
+  templateId?: string;
+  title?: string;
+  cwd?: string | null;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+  currentCommand?: string | null;
+  lastActivityAt?: string | null;
+  paneDead?: boolean;
+};
+
+/** GET /v0/ptys. */
+export interface PtysPayload {
+  ptys: Pty[];
+}
+
+/** GET /v0/projects. */
+export interface ProjectsPayload {
+  projects: Project[];
+}
+
+/** GET /v0/nodes. */
+export interface NodesPayload {
+  devices: Device[];
+}
+
+/** GET /v0/chats/:id/agents. */
+export interface AgentsPayload {
+  agents: AgentSummary[];
+}
+
+/** GET /v0/sessions/:id/context and POST /v0/sessions/:id/context/breakdown. */
+export interface ContextUsagePayload {
+  contextUsage?: ContextUsage;
+  sessionStats?: SessionStats;
+  cacheStats?: CacheStats | null;
+}
+
+/** GET /v0/downloads: this server's own client builds. */
+export interface DownloadsPayload {
+  windowsUrl: string | null;
+  apkUrl: string | null;
+  apkVersion: string | null;
+}
+
+/** GET and PATCH /v0/preferences: the account preferences the client reads back. */
+export interface PreferencesPayload {
+  accountName?: string;
+  accountHome?: string;
+  defaultTemplateId?: string;
+  terminalShortcuts?: unknown;
+  sidebarPins?: unknown;
+  keybindings?: { path: string; errors: string[] };
+}
+
+export interface PiAuthProvider {
+  id: string;
+  label: string;
+  oauth: boolean;
+  usesCallbackServer: boolean;
+  /** What its key goes with (Cloudflare's account ID), asked for beside it. */
+  fields?: Array<{ name: string; label: string }>;
+  /** kind: a stored credential's, a sign-in or a key. */
+  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; kind?: "oauth" | "key" | null; removable: boolean };
+}
+
+export interface PiAuthAttempt {
+  id: string;
+  providerId: string;
+  providerLabel: string;
+  state: string;
+  message: string;
+  authUrl: string | null;
+  instructions: string | null;
+  deviceCode: { userCode: string; verificationUri: string; expiresInSeconds: number | null } | null;
+  prompt: { type: "text" | "manual_code" | "select"; message: string; placeholder?: string; options?: { id: string; label: string }[] } | null;
+  error: string | null;
+  active: boolean;
+  owned: boolean;
+}
+
+/** GET /v0/pi-auth. */
+export interface PiAuthProvidersPayload {
+  providers: PiAuthProvider[];
+}
+
+/** GET /v0/pi-auth/attempt. */
+export interface PiAuthAttemptPayload {
+  attempt: PiAuthAttempt | null;
 }

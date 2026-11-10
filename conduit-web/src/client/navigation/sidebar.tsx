@@ -13,7 +13,7 @@ import { ServerSwitcher } from "./server-switcher";
 import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
 
 
-import type { ChatSummary, ComputerLocation, HarnessSummary, Project, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
+import type { ChatSummary, ComputerLocation, HarnessesPayload, HarnessSummary, NodesPayload, Project, PtysPayload, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
 import type { UpdateState } from "../main";
 import { androidShell, desktopShell, installedClientKind } from "../platform/installed-client";
 import { makeFolderAvailable, pairingWith } from "../platform/this-computer";
@@ -22,7 +22,7 @@ import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
 import { PlaceGlyph } from "../chat/place-picker";
-import type { Pty } from "../remotes/terminal-pane";
+import type { Pty } from "../api/contracts";
 import { deviceStates, type RuntimeStore } from "../state/runtime";
 import { focusFirst, isMobileLayout, MOBILE_LAYOUT_QUERY, restoreFocus } from "./mobile-layout";
 import { ProjectActivityIndicator, RuntimeIndicator } from "./runtime-indicator";
@@ -368,12 +368,12 @@ export function Sidebar(props: {
   // restart does not leave the harness rows missing until a reload.
   createEffect(() => {
     if (props.runtime.connectivity() !== "online") return;
-    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
+    void api<HarnessesPayload>("/v0/harnesses")
       .then((result) => setHarnesses(result.harnesses.filter((item) => item.available)))
       .catch(() => {});
   });
   onMount(() => {
-    const loadTerminals = () => void api<{ ptys: Pty[] }>("/v0/ptys")
+    const loadTerminals = () => void api<PtysPayload>("/v0/ptys")
       .then(({ ptys }) => setTerminals(ptys.filter((item) => item.status === "running" && !item.paneDead)))
       .catch(() => {});
     const onPtysChanged = () => loadTerminals();
@@ -584,7 +584,7 @@ export function Sidebar(props: {
   type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number; browse: boolean; terminal: boolean };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
   const [hubName, setHubName] = createSignal("the hub");
-  const readMachines = () => void api<{ devices: Device[] }>("/v0/nodes")
+  const readMachines = () => void api<NodesPayload>("/v0/nodes")
     .then(({ devices }) => {
       setHubName(devices.find((device) => device.hub)?.hub || "the hub");
       setMachines(devices.flatMap((device) => device.nodes.map((node) => ({ id: node.id, label: `${device.name} · ${node.name}`, hub: Boolean(node.local),

@@ -21,12 +21,12 @@ import { Card, CardDetails, CardRead } from "@/components/ui/card";
 import { Section } from "@/components/ui/popover";
 import { ChatMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api } from "../api/client";
-import type { Template, DashboardChat, Project, ProjectDashboardPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
+import type { Template, DashboardChat, Project, ProjectDashboardPayload, PtysPayload, WorkspaceAppearance, WorkspaceOperation } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import type { SidebarCommand } from "../navigation/sidebar";
 import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { SplitCounts, SplitDashboard, SplitEmpty, SplitGroup, SplitHeader, SplitQuickActions } from "../dashboard/primitives/split";
-import type { Pty } from "../remotes/terminal-pane";
+import type { Pty } from "../api/contracts";
 import { awayDevice, type RuntimeStore } from "../state/runtime";
 import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/chat-sort";
 import { WorkspaceGlyph } from "./workspace-appearance";
@@ -182,7 +182,7 @@ export function ProjectDashboard(props: {
 
   const refreshTerminals = async () => {
     try {
-      const result = await api<{ ptys: Pty[] }>("/v0/ptys");
+      const result = await api<PtysPayload>("/v0/ptys");
       setTerminals(result.ptys || []);
     } catch {
       setTerminals([]);

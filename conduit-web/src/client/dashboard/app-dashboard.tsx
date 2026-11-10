@@ -8,11 +8,11 @@ import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, Con
 import { ContextMenu as MenuHost, ContextMenuContent as MenuContent, ContextMenuTrigger as MenuTrigger } from "@/components/ui/menus";
 import { ChatMenuFor, PlaceMenuFor, type ItemActions } from "../navigation/item-menus";
 import { api, projectPath } from "../api/client";
-import type { ChatSummary, Project, Template } from "../api/contracts";
+import type { ChatSummary, Project, PtysPayload, Template } from "../api/contracts";
 import { activityDetail, runtimeActivity, RuntimeIndicator } from "../navigation/runtime-indicator";
 import { activityLabel } from "../../activity.js";
 
-import type { Pty } from "../remotes/terminal-pane";
+import type { Pty } from "../api/contracts";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { awayDevice, type RuntimeStore } from "../state/runtime";
 import type { SidebarCommand } from "../navigation/sidebar";
@@ -120,7 +120,7 @@ export function AppDashboard(props: {
 
   const refresh = async () => {
     try {
-      const payload = await api<{ ptys: Pty[] }>("/v0/ptys");
+      const payload = await api<PtysPayload>("/v0/ptys");
       setTerminals((payload.ptys || []).filter((terminal) => terminal.status === "running"));
     } finally {
       setLoading(false);

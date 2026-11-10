@@ -1,6 +1,6 @@
 import { createMemo, createSignal } from "solid-js";
 import { api, asList } from "../api/client";
-import type { ChatSummary, Project } from "../api/contracts";
+import type { ChatSummary, Project, ProjectsPayload } from "../api/contracts";
 
 export function createCatalogueStore() {
   const [projects, setProjectList] = createSignal<Project[]>([]);
@@ -35,7 +35,7 @@ export function createCatalogueStore() {
   });
 
   const refresh = async () => {
-    const payload = await api<{ projects?: Project[] }>("/v0/projects");
+    const payload = await api<ProjectsPayload>("/v0/projects");
     const next = asList<Project>(payload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
     setProjects(next);
     return next;

@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, CODE_BLOCK_COLLAPSE_LINE_OPTIONS, type CodeBlockCollapseMode } from "./code-block";
+import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, type CodeBlockCollapseMode } from "./code-block";
 import { UI_PREFERENCES } from "../../preferences-api.js";
 import { isUserMessageCollapseMode, selectedUserMessageCollapse, type UserMessageCollapseMode } from "./user-message-collapse";
 import type { UiPreferenceChoice } from "../preferences/ui-preferences";
@@ -59,7 +59,7 @@ export const CODE_BLOCK_COLLAPSE_OPTIONS: ReadonlyArray<{ value: CodeBlockCollap
   { value: "all", label: "Always" },
 ];
 
-export const CODE_BLOCK_COLLAPSE_LINE_CHOICES = CODE_BLOCK_COLLAPSE_LINE_OPTIONS;
+export const CODE_BLOCK_COLLAPSE_LINE_CHOICES = UI_PREFERENCES.codeBlockCollapseLines.values;
 
 export const CODE_BLOCK_WIDTH_OPTIONS: ReadonlyArray<{ value: CodeBlockWidthMode; label: string }> = [
   { value: "column", label: "Reading column" },

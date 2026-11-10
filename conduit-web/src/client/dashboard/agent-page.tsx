@@ -9,7 +9,7 @@ import { DashPanel, DashPeek, GroupAction } from "@/components/ui/dashboard";
 import { Glance, GlanceBody, GlanceHead } from "@/components/ui/overlay";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { api } from "../api/client";
-import type { AgentSummary, ChatSummary } from "../api/contracts";
+import type { AgentsPayload, AgentSummary, ChatSummary } from "../api/contracts";
 import { agentName, agentNeeds, agentView, dismissNotices, dismissableNotices, foldNotices, jbotDoing, refreshAgent, type AgentInboxEntry, type AgentNoticeRow, type AgentRun, type AgentSchedule } from "../state/agent";
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, SplitQuickActions } from "./primitives/split";
 import { setAgentDashboardLaidOut } from "../state/arrival";
@@ -106,7 +106,7 @@ export function AgentPage(props: {
   createEffect(on(runsKey, () => {
     const home = untrack(() => view()?.home?.chatId);
     if (!home) return;
-    void api<{ agents: AgentSummary[] }>(`/v0/chats/${encodeURIComponent(home)}/agents`)
+    void api<AgentsPayload>(`/v0/chats/${encodeURIComponent(home)}/agents`)
       .then(({ agents }) => setRunChats(new Map(agents.filter((agent) => agent.conversationId != null && agent.chatId).map((agent) => [String(agent.conversationId), agent.chatId!]))))
       .catch(() => {});
   }));

@@ -2,10 +2,11 @@
  * The code block's rules: its language, its lines, when it folds. The block itself is the library's CodeBlock.
  */
 
-export const CODE_BLOCK_COLLAPSE_LINE_OPTIONS = [10, 15, 25, 50] as const;
+import type { UiPreferenceChoice } from "../preferences/ui-preferences";
+
 export const CODE_BLOCK_COLLAPSE_DEFAULT_LINES = 15;
 
-export type CodeBlockCollapseMode = "off" | "long" | "all";
+export type CodeBlockCollapseMode = UiPreferenceChoice<"codeBlockCollapse">;
 
 /**
  * Fired after a card's collapse state flips.

@@ -6,12 +6,11 @@
 import { api } from "../api/client.ts";
 import { httpUrl } from "../api/transport.js";
 import { desktopShell, type CompanionStatus } from "./installed-client.ts";
-import type { Device } from "./devices.ts";
+import type { NodesPayload } from "../api/contracts.ts";
 
-type Listed = { devices: Device[] };
-type ListedNode = Listed["devices"][number]["nodes"][number];
+type ListedNode = NodesPayload["devices"][number]["nodes"][number];
 
-const nodes = async () => (await api<Listed>("/v0/nodes")).devices.flatMap((device) => device.nodes);
+const nodes = async () => (await api<NodesPayload>("/v0/nodes")).devices.flatMap((device) => device.nodes);
 
 /** This computer's pairing with the hub in use, made if there is none, and its node serving. */
 async function paired() {
@@ -79,7 +78,7 @@ export async function pairThisComputer(status: CompanionStatus | null) {
   // On the hub's own machine (it dials the hub on loopback) this computer is the hub's device, another side of it
   // (decision 29: Windows beside the WSL that is the hub), not a device of its own named for the machine.
   const onHub = Boolean(mainUrl && /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|$)/.test(mainUrl));
-  const deviceId = onHub ? (await api<Listed>("/v0/nodes")).devices.find((device) => device.hub)?.id : undefined;
+  const deviceId = onHub ? (await api<NodesPayload>("/v0/nodes")).devices.find((device) => device.hub)?.id : undefined;
   const paired = await api<{ node: { id: string }; key: string; mainUrl: string; routes?: string[] }>("/v0/nodes", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ deviceName, name: thisPlatform(), mainUrl, ...(deviceId ? { deviceId } : {}) }),

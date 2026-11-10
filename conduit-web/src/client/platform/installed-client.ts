@@ -13,6 +13,7 @@ import { createSignal } from "solid-js";
  * it is running in.
  */
 import { Capacitor } from "@capacitor/core";
+import type { DownloadsPayload } from "../api/contracts.ts";
 
 export type InstalledClientKind = "browser" | "android" | "desktop";
 
@@ -141,7 +142,7 @@ async function androidRelease(): Promise<{ version: string; apkUrl: string } | n
     return release?.apkUrl && isNewerVersion(release.version, app.version) ? { version: release.version, apkUrl: release.apkUrl } : null;
   }
   const [{ api }, { httpUrl }] = await Promise.all([import("../api/client.ts"), import("../api/transport.js")]);
-  const own = await api<{ apkUrl: string | null; apkVersion: string | null }>("/v0/downloads").catch(() => null);
+  const own = await api<DownloadsPayload>("/v0/downloads").catch(() => null);
   // An app built without a stamp (before this) is older than any stamped build.
   const stamp = (version: string) => version.match(/-dev\.(\d{14})\./)?.[1] ?? "";
   if (!own?.apkUrl || !own.apkVersion || stamp(own.apkVersion) <= stamp(app.version)) return null;

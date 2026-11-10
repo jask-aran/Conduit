@@ -21,22 +21,7 @@ import { clipboardPasteText, createTerminalRenderer, type TerminalPasteFiles, ty
 import { terminalRecoveryView, type TerminalConnectionState, type TerminalRecoveryView } from "./terminal-recovery";
 import { normalizeTerminalShortcuts, type TerminalShortcut } from "./terminal-shortcuts";
 
-export type Pty = {
-  id: string;
-  nodeId?: string | null;
-  projectId: string;
-  templateId?: string;
-  title?: string;
-  cwd?: string | null;
-  status: string;
-  createdAt?: string;
-  updatedAt?: string;
-  exitCode?: number | null;
-  signal?: string | null;
-  currentCommand?: string | null;
-  lastActivityAt?: string | null;
-  paneDead?: boolean;
-};
+import type { PreferencesPayload, Pty, PtysPayload } from "../api/contracts";
 const PTY_IN_USE_CLOSE_CODE = 4009;
 const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
 const SERVER_RESTART_CLOSE_CODE = 1012;
@@ -579,7 +564,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   };
 
   const refreshSessions = async (projectId = activeProjectId) => {
-    const { ptys = [] } = await api<{ ptys: Pty[] }>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
+    const { ptys = [] } = await api<PtysPayload>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
     const running = ptys.filter((item) => item.projectId === projectId && item.status === "running");
     if (projectId === activeProjectId) {
       setSessions(running);
@@ -686,7 +671,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setShortcutSaving(true);
     setShortcutError("");
     try {
-      const saved = await api<{ terminalShortcuts?: unknown }>("/v0/preferences", {
+      const saved = await api<PreferencesPayload>("/v0/preferences", {
         method: "PATCH",
         body: JSON.stringify({ terminalShortcuts: next }),
       });

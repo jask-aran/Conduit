@@ -1,11 +1,13 @@
 import { createSignal } from "solid-js";
-import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "./ui-preferences.ts";
+import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceChoice } from "./ui-preferences.ts";
+import { UI_PREFERENCES } from "../../preferences-api.js";
 
 export const CHAT_SORT_STORAGE_KEY = "conduit:chat-sort";
-export type ChatSort = "latest" | "created";
+export type ChatSort = UiPreferenceChoice<"chatSort">;
+const CHAT_SORTS = new Set<string>(UI_PREFERENCES.chatSort.values);
 
 export function isChatSort(value: unknown): value is ChatSort {
-  return value === "latest" || value === "created";
+  return typeof value === "string" && CHAT_SORTS.has(value);
 }
 
 export function parseChatSort(value: unknown): ChatSort {

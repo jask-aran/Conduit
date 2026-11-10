@@ -16,7 +16,7 @@ applyTranscriptFont();
 import { focusSplitSection, splitSections } from "./dashboard/primitives/split-cursor";
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ItemActions } from "./navigation/item-menus";
-import type { ComputerLocation, ComputerPrefetchPayload, RuntimeProcess } from "./api/contracts";
+import type { ComputerLocation, ComputerPrefetchPayload, PreferencesPayload, ProjectsPayload, Pty, PtysPayload, RuntimeProcess, ShareOriginPayload } from "./api/contracts";
 import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
@@ -759,7 +759,7 @@ function App() {
   // and behind the browser's six connections to a server it queued for a
   // whole round trip behind reads nothing waits on. A route cannot finish
   // loading if it fails during a long outage, so it keeps retrying.
-  const catalogueFresh = apiWhenServed<{ projects: Project[] }>("/v0/projects", true)
+  const catalogueFresh = apiWhenServed<ProjectsPayload>("/v0/projects", true)
     .then((payload) => { writeCachedCatalogue(payload); return payload; });
   // The dashboard is drawn from the last catalogue this device saw, if it has
   // one, and corrected when the server answers: a cold open no longer waits
@@ -1808,7 +1808,7 @@ function App() {
     const location = computerLocation();
     if (!location) return;
     try {
-      const terminal = await api<{ id: string }>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: "computer", cwd: location.project.workingRoot }) });
+      const terminal = await api<Pty>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId: "computer", cwd: location.project.workingRoot }) });
       window.dispatchEvent(new Event("conduit:ptys-changed"));
       await openWorkspaceView("terminal", terminal.id);
     } catch (error) { showError(error); }
@@ -2131,7 +2131,7 @@ function App() {
   };
   const shareHarnessThread = async () => {
     try {
-      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      const { origin } = await api<ShareOriginPayload>("/v0/share-origin");
       await navigator.clipboard.writeText(`${origin}${location.pathname}${location.search}`);
       toast.success("Tailscale thread link copied");
     } catch (error) { showError(error); }
@@ -2164,7 +2164,7 @@ function App() {
   /** A shell on a device itself (Settings › Devices): this server's "computer" one, or a device's in its home. */
   const openDeviceTerminal = async (node: { id: string; local?: boolean }) => {
     try {
-      const terminal = await api<{ id: string }>("/v0/ptys", { method: "POST",
+      const terminal = await api<Pty>("/v0/ptys", { method: "POST",
         body: JSON.stringify({ projectId: node.local ? "computer" : `device:${node.id}` }) });
       setSettingsOpen(false);
       await openTerminalRoute("push", terminal.id);
@@ -2569,7 +2569,7 @@ function App() {
   };
   const copyChatLinks = async (targets: Array<{ chat: ChatSummary; project: Project }>) => {
     try {
-      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      const { origin } = await api<ShareOriginPayload>("/v0/share-origin");
       const links = targets.map((target) => `${origin}/chat/${encodeURIComponent(target.chat.id)}`);
       await navigator.clipboard.writeText(links.join("\n"));
       toast.success(`${links.length} chat links copied`);
@@ -2679,7 +2679,7 @@ function App() {
     if (state.kind === "failed" && !untrack(settingsOpen)) showError(new Error(`Preferences not saved: ${state.message}`));
   });
   const saveDefaultTemplate = async (id: string) => {
-    const saved = await api<{ defaultTemplateId: string }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
+    const saved = await api<PreferencesPayload>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ defaultTemplateId: id }) });
     setDefaultTemplateId(saved.defaultTemplateId || id);
     return saved;
   };
@@ -3028,10 +3028,10 @@ function App() {
     if (!projectId) return null;
     const open = new Set(panesShown().map(viewOf).filter((view) => view?.startsWith("term:")).map((view) => view!.slice("term:".length)));
     try {
-      const { ptys = [] } = await api<{ ptys: { id: string; status: string }[] }>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
+      const { ptys = [] } = await api<PtysPayload>(`/v0/ptys?projectId=${encodeURIComponent(projectId)}`);
       let id = ptys.find((item) => item.status === "running" && !open.has(item.id))?.id;
       if (!id) {
-        id = (await api<{ id: string }>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId, ...(computer && computerLocation() ? { cwd: computerLocation()!.project.workingRoot } : {}) }) })).id;
+        id = (await api<Pty>("/v0/ptys", { method: "POST", body: JSON.stringify({ projectId, ...(computer && computerLocation() ? { cwd: computerLocation()!.project.workingRoot } : {}) }) })).id;
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       }
       return id;
@@ -3371,7 +3371,7 @@ function App() {
    *  the dock or on a phone it keeps one header, the bar, with the pane's actions and its close. */
   const renderTerminalDocument = (pane: PaneKey, shell: string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
-    void api<{ ptys: { id: string; projectId: string; cwd?: string | null; title?: string | null; status: string }[] }>("/v0/ptys")
+    void api<PtysPayload>("/v0/ptys")
       .then(({ ptys = [] }) => {
         const found = ptys.find((item) => item.id === shell && item.status === "running") ?? null;
         setRecord(found);
@@ -5177,7 +5177,7 @@ function App() {
   const shareChat = async (chatId = catalogue.selectedId()) => {
     if (!chatId) return;
     try {
-      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      const { origin } = await api<ShareOriginPayload>("/v0/share-origin");
       await navigator.clipboard.writeText(`${origin}/chat/${encodeURIComponent(chatId)}`);
       toast.success("Tailscale chat link copied");
     } catch (error) {
@@ -5187,7 +5187,7 @@ function App() {
   const shareProject = async (project = selectedProject()) => {
     if (!project) return;
     try {
-      const { origin } = await api<{ origin: string }>("/v0/share-origin");
+      const { origin } = await api<ShareOriginPayload>("/v0/share-origin");
       await navigator.clipboard.writeText(`${origin}${projectPath(project)}`);
       toast.success("Tailscale workspace link copied");
     } catch (error) { showError(error); }
@@ -5212,7 +5212,7 @@ function App() {
     const next = previous.includes(ref) ? previous.filter((item) => item !== ref) : [...previous, ref];
     setSidebarPins(next);
     try {
-      const saved = await api<{ sidebarPins?: unknown }>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ sidebarPins: next }) });
+      const saved = await api<PreferencesPayload>("/v0/preferences", { method: "PATCH", body: JSON.stringify({ sidebarPins: next }) });
       if (Array.isArray(saved.sidebarPins)) setSidebarPins(saved.sidebarPins.filter((item): item is string => typeof item === "string"));
     } catch (error) {
       setSidebarPins(previous);

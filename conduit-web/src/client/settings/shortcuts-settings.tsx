@@ -6,6 +6,7 @@ import {
 import { Button, Input, Keycap, Switch, LiveNote, SettingLine, SettingRecorder, SettingValue, Group, Note } from "@/components/ui";
 import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
+import type { PreferencesPayload } from "../api/contracts";
 import { desktopShell } from "../platform/installed-client";
 import { shortcutConflicts } from "../shortcuts/shortcut-conflicts";
 import { shortcutEnvironmentLabel } from "../shortcuts/shortcut-environment";
@@ -240,7 +241,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
 
   // The hub's keybindings.json: where it is, and what in it could not be read (read again when it changes there).
   const [file, setFile] = createSignal<{ path: string; errors: string[] } | null>(null);
-  const readFile = () => void api<{ keybindings?: { path: string; errors: string[] } }>("/v0/preferences")
+  const readFile = () => void api<PreferencesPayload>("/v0/preferences")
     .then((preferences) => setFile(preferences.keybindings || null)).catch(() => {});
   readFile();
   const onFileChanged = () => readFile();

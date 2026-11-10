@@ -1,5 +1,5 @@
 import { api } from "../api/client";
-import type { HarnessSummary, HarnessThread, HarnessThreadDiscovery } from "../api/contracts";
+import type { HarnessesPayload, HarnessSummary, HarnessThread, HarnessThreadDiscovery } from "../api/contracts";
 
 // Threads the machine's harnesses ran that no Conduit chat owns: in one folder
 // for a workspace's Not in Conduit, across the machine for the Conduit
@@ -14,7 +14,7 @@ export function timestampOf(value: number | string | null | undefined) {
 }
 
 export async function loadOutsideThreads(path?: string) {
-  const { harnesses } = await api<{ harnesses: HarnessSummary[] }>("/v0/harnesses");
+  const { harnesses } = await api<HarnessesPayload>("/v0/harnesses");
   const visible = harnesses.filter((harness) => harness.available && harness.discovery === "machine");
   const query = path ? `?path=${encodeURIComponent(path)}` : "";
   const found = await Promise.all(visible.map((harness) => api<HarnessThreadDiscovery>(`/v0/harnesses/${encodeURIComponent(harness.id)}/threads${query}`)

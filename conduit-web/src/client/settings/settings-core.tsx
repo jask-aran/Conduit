@@ -31,7 +31,7 @@ import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type Tr
 import { MOTION_SCALE_OPTIONS, motionScale, saveMotionScale, type MotionScale } from "../preferences/motion-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
-import type { Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { PiAuthAttempt, PiAuthAttemptPayload, PiAuthProvider, PiAuthProvidersPayload, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -119,32 +119,6 @@ interface GeneralPreferences {
   reviewModel?: string;
 }
 
-
-interface PiAuthProvider {
-  id: string;
-  label: string;
-  oauth: boolean;
-  usesCallbackServer: boolean;
-  /** What its key goes with (Cloudflare's account ID), asked for beside it. */
-  fields?: Array<{ name: string; label: string }>;
-  /** kind: a stored credential's, a sign-in or a key. */
-  auth: { configured: boolean; source: "stored" | "environment" | "managed" | null; kind?: "oauth" | "key" | null; removable: boolean };
-}
-
-interface PiAuthAttempt {
-  id: string;
-  providerId: string;
-  providerLabel: string;
-  state: string;
-  message: string;
-  authUrl: string | null;
-  instructions: string | null;
-  deviceCode: { userCode: string; verificationUri: string; expiresInSeconds: number | null } | null;
-  prompt: { type: "text" | "manual_code" | "select"; message: string; placeholder?: string; options?: { id: string; label: string }[] } | null;
-  error: string | null;
-  active: boolean;
-  owned: boolean;
-}
 
 interface ChatGptWebStatus {
   auth: "configured" | "missing";
@@ -767,8 +741,8 @@ export function Settings(props: {
     setAuthLoading(true);
     try {
       const [status, attempt] = await Promise.all([
-        api<{ providers: PiAuthProvider[] }>("/v0/pi-auth"),
-        api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt"),
+        api<PiAuthProvidersPayload>("/v0/pi-auth"),
+        api<PiAuthAttemptPayload>("/v0/pi-auth/attempt"),
       ]);
       applyAuthProviders(status.providers);
       setAuthAttempt(attempt.attempt);
@@ -805,10 +779,10 @@ export function Settings(props: {
   createEffect(() => {
     if (!props.open || section() !== "models" || !authAttempt()?.active) return;
     const timer = window.setInterval(() => {
-      api<{ attempt: PiAuthAttempt | null }>("/v0/pi-auth/attempt")
+      api<PiAuthAttemptPayload>("/v0/pi-auth/attempt")
         .then((result) => {
           setAuthAttempt(result.attempt);
-          if (!result.attempt?.active) return api<{ providers: PiAuthProvider[] }>("/v0/pi-auth")
+          if (!result.attempt?.active) return api<PiAuthProvidersPayload>("/v0/pi-auth")
             .then((status) => applyAuthProviders(status.providers));
         })
         .catch((error) => setAuthError((error as Error).message));

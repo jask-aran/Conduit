@@ -11,7 +11,7 @@ import { Grid2X2Icon, ListIcon, UnlinkIcon } from "lucide-solid";
 import { Select } from "@/components/ui/menus";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger, DropdownMenu, MenuContent, MenuGroup, MenuItem, MenuTrigger } from "@/components/ui/menus";
 import { api } from "../api/client";
-import type { ComputerLocation, HarnessSummary, Project } from "../api/contracts";
+import type { ComputerLocation, HarnessesPayload, HarnessSummary, Project } from "../api/contracts";
 import { isConduitManagedProject } from "../navigation/sidebar-preferences";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 
@@ -123,7 +123,7 @@ export function ComputerDashboard(props: {
   });
   createEffect(() => {
     if (props.dialog || props.device) return;
-    void api<{ harnesses: HarnessSummary[] }>("/v0/harnesses")
+    void api<HarnessesPayload>("/v0/harnesses")
       .then((result) => setHarnesses(result.harnesses))
       .catch(() => setHarnesses([]));
   });
