@@ -376,7 +376,7 @@ test("a turn pauses for an approval and carries on into its answer", async () =>
   await chat.settle();
   assert.equal(chat.record.activity, "waiting_for_user");
 
-  chat.dispatch({ type: "host_ui_response", id: "ap-1", value: "Approve" });
+  chat.dispatch({ type: "extension_ui_response", id: "ap-1", value: "Approve" });
   await chat.settle();
   assert.equal(chat.record.activity, "working", "the turn resumes once the prompt clears");
 

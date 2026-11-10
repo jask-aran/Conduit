@@ -540,7 +540,7 @@ export function createLiveSessionStream({
     return lifecycle.run(chatId, async () => {
       const record = backends.getByChatId(chatId);
       if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
-      return handleClientCommand(record, { type: "host_ui_response", ...response });
+      return handleClientCommand(record, { type: "extension_ui_response", ...response });
     });
   }
 
