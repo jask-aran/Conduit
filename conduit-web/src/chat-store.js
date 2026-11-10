@@ -1,12 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { readSessionMetadata, readSessionParentSession, validateSessionFile } from "./session-store.js";
 import { ensureChatTree } from "./owned-paths.js";
-import { harnessIdForImplementation, piBackendFor, templateBackend, withPiCompatibilityFields } from "./chat-backend.js";
-import { conduitPiSessionFile } from "./backend-session.js";
+import { harnessIdForImplementation, templateBackend } from "./chat-backend.js";
 import { placeOf } from "./place.js";
-import { mapLimit } from "./server/effect-concurrency.js";
 import { writePrivateFile } from "./private-file.js";
 
 const CHAT_ID = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -19,11 +16,6 @@ async function readJson(file, fallback) {
     if (error.code === "ENOENT") return fallback;
     throw error;
   }
-}
-
-async function fileExists(file) {
-  try { return (await fs.stat(file)).isFile(); }
-  catch (error) { if (error.code === "ENOENT") return false; throw error; }
 }
 
 export function isChatId(value) {
@@ -49,7 +41,7 @@ const chatIsUnread = (chat) => chat?.status !== "subagent" && at(chat?.lastAssis
 export function chatView(chat) {
   if (!chat) return null;
   const { backend, ...view } = chat;
-  const { opaqueSession, ...identity } = backend || piBackendFor(chat);
+  const { opaqueSession, ...identity } = backend;
   return {
     ...view,
     unread: chatIsUnread(chat),
@@ -60,11 +52,6 @@ export function chatView(chat) {
   };
 }
 
-function sessionFileFor(item) {
-  const file = conduitPiSessionFile(item);
-  return file ? path.resolve(file) : null;
-}
-
 function modelThinkingLevelsFor(item) {
   if (!item?.modelThinkingLevels || typeof item.modelThinkingLevels !== "object" || Array.isArray(item.modelThinkingLevels)) return {};
   return Object.fromEntries(Object.entries(item.modelThinkingLevels)
@@ -72,108 +59,19 @@ function modelThinkingLevelsFor(item) {
     .map(([spec, level]) => [spec.trim(), level.trim()]));
 }
 
-function sessionFamilies(files, parents) {
-  const links = new Map([...files].map((file) => [file, new Set()]));
-  for (const [file, parent] of parents) {
-    links.get(file)?.add(parent);
-    links.get(parent)?.add(file);
-  }
-  const families = new Map();
-  for (const file of links.keys()) {
-    if (families.has(file)) continue;
-    const members = [];
-    const pending = [file];
-    while (pending.length) {
-      const current = pending.pop();
-      if (families.has(current)) continue;
-      families.set(current, null);
-      members.push(current);
-      pending.push(...(links.get(current) || []));
-    }
-    const id = members.sort().at(0);
-    for (const member of members) families.set(member, id);
-  }
-  return families;
-}
-
-function preferredFamilyChat(rows) {
-  return [...rows].sort((left, right) => String(right.updatedAt || right.createdAt || "").localeCompare(String(left.updatedAt || left.createdAt || "")))[0];
-}
-
 export class ChatStore {
-  constructor(file, { now = () => Date.now(), defaultRuntime = null } = {}) {
+  constructor(file, { now = () => Date.now() } = {}) {
     this.file = path.resolve(file);
     this.now = now;
     this.chats = [];
     this.visibleDrafts = new Set();
     this.writeQueue = Promise.resolve();
-    this.defaultRuntime = defaultRuntime || {
-      kind: "conduit_profile",
-      installationId: "conduit-pinned",
-      binaryVersion: null,
-      profileId: null,
-      profileVersion: null,
-    };
-  }
-
-  runtimeFor(item, templateId = null, templateVersion = null) {
-    const stored = item?.runtime;
-    if (stored?.kind === "native_pi") {
-      return {
-        ...this.defaultRuntime,
-        profileId: templateId || this.defaultRuntime.profileId || null,
-        profileVersion: templateVersion || this.defaultRuntime.profileVersion || null,
-      };
-    }
-    return {
-      kind: "conduit_profile",
-      installationId: stored?.installationId || this.defaultRuntime.installationId,
-      binaryVersion: stored?.binaryVersion || this.defaultRuntime.binaryVersion || null,
-      profileId: stored?.profileId || templateId || this.defaultRuntime.profileId || null,
-      profileVersion: stored?.profileVersion || templateVersion || this.defaultRuntime.profileVersion || null,
-    };
   }
 
   async initialize(projects) {
-    const stored = await readJson(this.file, { version: 2, sessions: [] });
-    const legacyRegistry = !Array.isArray(stored.chats);
-    const rows = (Array.isArray(stored.chats) ? stored.chats : Array.isArray(stored.sessions) ? stored.sessions : [])
-      .map(withPiCompatibilityFields);
+    const stored = await readJson(this.file, { version: 5, chats: [] });
+    const rows = Array.isArray(stored.chats) ? stored.chats : [];
     const projectById = new Map(projects.map((project) => [project.id, project]));
-    const discoveredFiles = new Map();
-
-    for (const project of projects) {
-      let entries = [];
-      try { entries = await fs.readdir(project.sessionsDir, { withFileTypes: true }); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
-      for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-        const file = path.resolve(project.sessionsDir, entry.name);
-        discoveredFiles.set(file, [...(discoveredFiles.get(file) || []), project]);
-      }
-    }
-    // Each discovered file's parent link, its index built on the way (the loops below read it warm): independent
-    // reads, so several at once rather than every session file in turn on each start.
-    const parentSessions = new Map();
-    const discovered = [...discoveredFiles];
-    const parents = await mapLimit(discovered, 8, async ([file, candidates]) => {
-      for (const project of candidates) {
-        try { return { parent: await readSessionParentSession(file, project) }; } catch {}
-      }
-      return null;
-    });
-    discovered.forEach(([file], index) => {
-      const parent = parents[index]?.parent;
-      if (parent && discoveredFiles.has(parent)) parentSessions.set(file, parent);
-    });
-    const families = sessionFamilies(discoveredFiles.keys(), parentSessions);
-    const familyChats = new Map();
-    for (const item of rows) {
-      const family = families.get(sessionFileFor(item));
-      if (!family) continue;
-      familyChats.set(family, [...(familyChats.get(family) || []), item]);
-    }
-    const familyOwners = new Map([...familyChats].map(([family, members]) => [family, preferredFamilyChat(members).id]));
 
     const reconciled = [];
     const usedIds = new Set();
@@ -185,22 +83,7 @@ export class ChatStore {
       const project = projectById.get(item.projectId);
       if (!project) continue;
       const id = isChatId(item.id) && !usedIds.has(item.id) ? item.id : crypto.randomUUID();
-      let piSessionFile = sessionFileFor(item);
-      const family = families.get(piSessionFile);
-      if (family && familyOwners.get(family) !== item.id) {
-        continue;
-      }
-      const active = legacyRegistry
-        ? item.status === "active" || item.status === "persisted" || Boolean(item.file)
-        : item.status === "active";
-      const externalBackend = item.backend && item.backend.protocol !== "pi_rpc";
-      if (active && (!piSessionFile || !await fileExists(piSessionFile)) && !externalBackend) continue;
-      let sessionMetadata = null;
-      if (piSessionFile && await fileExists(piSessionFile)) {
-        try { sessionMetadata = await readSessionMetadata(piSessionFile, project); }
-        catch { continue; }
-      }
-      if (!active && piSessionFile && !await fileExists(piSessionFile)) piSessionFile = null;
+      const active = item.status === "active";
       const createdAt = item.createdAt || new Date(this.now()).toISOString();
       const chat = {
         id,
@@ -211,26 +94,17 @@ export class ChatStore {
         templateVersion: typeof item.templateVersion === "string" && item.templateVersion.trim()
           ? item.templateVersion.trim()
           : null,
-        runtime: externalBackend ? null : this.runtimeFor(item, item.templateId, item.templateVersion),
-        backend: externalBackend ? item.backend : {
-          ...(item.backend || piBackendFor(item)),
-          opaqueSession: piSessionFile,
-        },
+        backend: item.backend || templateBackend({ id: item.templateId || "assistant", version: item.templateVersion }),
         modelThinkingLevels: modelThinkingLevelsFor(item),
         // The device that owns the thread's work (decision 21); rows from before it was kept take their workspace's.
         // ("head" was the head's name for a while before it was a device.)
         owner: typeof item.owner === "string" && item.owner && item.owner !== "head" ? item.owner : placeOf(project).device,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
-        lastUserMessageAt: item.lastUserMessageAt || sessionMetadata?.lastUserMessageAt || null,
-        lastAssistantCompletedAt: item.lastAssistantCompletedAt || sessionMetadata?.lastAssistantCompletedAt || null,
-        lastMessageAt: item.lastMessageAt || sessionMetadata?.lastMessageAt || null,
-        // Rows written before the watermark carried an `unread` flag: a read
-        // chat has been read up to its stored completion, an unread one has
-        // not. Completions the session file gained while this was down are
-        // newer than the watermark either way, so they come back unread.
-        lastReadAt: item.lastReadAt
-          || (item.unread ? null : item.lastAssistantCompletedAt || null),
+        lastUserMessageAt: item.lastUserMessageAt || null,
+        lastAssistantCompletedAt: item.lastAssistantCompletedAt || null,
+        lastMessageAt: item.lastMessageAt || null,
+        lastReadAt: item.lastReadAt || null,
       };
       let hasAttachments = false;
       try {
@@ -241,75 +115,12 @@ export class ChatStore {
         if (project.origin !== "linked" || !["ENOENT", "unsafe_conduit_path"].includes(error.code)) throw error;
       }
       if (chat.status === "draft" && !hasAttachments && this.now() - Date.parse(chat.createdAt) > DAY) {
-        if (piSessionFile) {
-          discoveredFiles.delete(piSessionFile);
-          await fs.rm(piSessionFile, { force: true });
-        }
         await fs.rm(chatDirectory(project, id), { recursive: true, force: true });
         continue;
       }
       if (hasAttachments) this.visibleDrafts.add(id);
-      if (piSessionFile) discoveredFiles.delete(piSessionFile);
       usedIds.add(id);
       reconciled.push(chat);
-    }
-
-    // A classic session a chat was converted from (convert-classic-chats.js)
-    // is that chat's, with its whole family of forks: not a lost session to
-    // recover as another chat.
-    for (const item of rows) {
-      const from = item.backend?.convertedFrom;
-      if (!from) continue;
-      const family = families.get(path.resolve(from));
-      for (const file of [...discoveredFiles.keys()]) {
-        if (file === path.resolve(from) || (family && families.get(file) === family)) discoveredFiles.delete(file);
-      }
-    }
-    const discoveredFamilies = new Map();
-    for (const [file, candidates] of discoveredFiles) {
-      const family = families.get(file) || file;
-      discoveredFamilies.set(family, [...(discoveredFamilies.get(family) || []), { file, candidates }]);
-    }
-    const parentFiles = new Set(parentSessions.values());
-    for (const [family, files] of discoveredFamilies) {
-      if (usedIds.has(familyOwners.get(family))) continue;
-      files.sort((left, right) => Number(parentFiles.has(left.file)) - Number(parentFiles.has(right.file)) || right.file.localeCompare(left.file));
-      let imported = false;
-      for (const { file, candidates } of files) {
-        for (const project of candidates) {
-          try {
-            const session = await readSessionMetadata(file, project);
-            // Recovered before, under its own id (and converted since): it is
-            // that chat already, not a lost session.
-            if (usedIds.has(session.id)) { imported = true; break; }
-            const id = isChatId(session.id) ? session.id : crypto.randomUUID();
-            const chat = {
-              id,
-              projectId: project.id,
-              status: "active",
-              title: session.title,
-              templateId: null,
-              templateVersion: null,
-              runtime: this.runtimeFor(null),
-              backend: { ...piBackendFor({ runtime: this.defaultRuntime }), opaqueSession: session.file },
-              modelThinkingLevels: {},
-              createdAt: session.createdAt,
-              updatedAt: session.updatedAt,
-              lastUserMessageAt: session.lastUserMessageAt || null,
-              lastAssistantCompletedAt: session.lastAssistantCompletedAt || null,
-              lastMessageAt: session.lastMessageAt || null,
-              lastReadAt: session.lastAssistantCompletedAt || null,
-            };
-            await this.ensureDirectories(project, id);
-            await this.removePartials(project, id);
-            usedIds.add(id);
-            reconciled.push(chat);
-            imported = true;
-            break;
-          } catch {}
-        }
-        if (imported) break;
-      }
     }
 
     this.chats = reconciled;
@@ -361,14 +172,8 @@ export class ChatStore {
     let changed = false;
     for (const chat of this.chats) {
       const templateId = normalize(chat.templateId);
-      const profileId = normalize(chat.runtime?.profileId);
       if (templateId && templateId !== chat.templateId) {
         chat.templateId = templateId;
-        if (chat.backend?.implementation === "conduit_pi") chat.backend.profileId = templateId;
-        changed = true;
-      }
-      if (chat.runtime?.kind === "conduit_profile" && profileId && profileId !== chat.runtime.profileId) {
-        chat.runtime.profileId = profileId;
         changed = true;
       }
     }
@@ -379,17 +184,7 @@ export class ChatStore {
     return this.chats.find((chat) => chat.id === id) || null;
   }
 
-  async find(projects, id) {
-    const chat = this.metadata(id);
-    const sessionFile = conduitPiSessionFile(chat);
-    if (!sessionFile) return null;
-    const project = projects.find((item) => item.id === chat.projectId);
-    if (!project) return null;
-    try { return { ...(await validateSessionFile(sessionFile, project)), chatId: chat.id }; }
-    catch (error) { if (error.code === "ENOENT") return null; throw error; }
-  }
-
-  async create(project, { templateId = null, templateVersion = null, runtime = null, backend = null, untracked = false, run = false, subagent = null } = {}) {
+  async create(project, { templateId = null, templateVersion = null, backend = null, untracked = false, run = false, subagent = null } = {}) {
     const timestamp = new Date(this.now()).toISOString();
     const selectedBackend = backend || templateBackend({ id: templateId || "assistant", version: templateVersion });
     const chat = {
@@ -401,7 +196,6 @@ export class ChatStore {
       templateVersion: typeof templateVersion === "string" && templateVersion.trim()
         ? templateVersion.trim()
         : null,
-      runtime: backend?.protocol === "pi_rpc" ? this.runtimeFor({ runtime }, templateId, templateVersion) : null,
       backend: selectedBackend,
       modelThinkingLevels: {},
       // The device that owns the thread's work (plan decision 21): its
@@ -441,21 +235,6 @@ export class ChatStore {
     return this.subagentChats.get(key);
   }
 
-  async commitSession(chatId, session) {
-    const chat = this.metadata(chatId);
-    if (!chat) return null;
-    Object.assign(chat, {
-      status: "active",
-      backend: { ...(chat.backend || piBackendFor(chat)), opaqueSession: path.resolve(session.file) },
-      updatedAt: session.updatedAt || new Date(this.now()).toISOString(),
-      lastUserMessageAt: laterOf(chat.lastUserMessageAt, session.lastUserMessageAt),
-      lastAssistantCompletedAt: laterOf(chat.lastAssistantCompletedAt, session.lastAssistantCompletedAt),
-      lastMessageAt: laterOf(chat.lastMessageAt, session.lastMessageAt),
-    });
-    await this.flush();
-    return chat;
-  }
-
   async fallbackTitle(chatId, title) {
     const chat = this.metadata(chatId);
     const name = String(title || "").trim();
@@ -463,22 +242,6 @@ export class ChatStore {
     chat.title = name;
     await this.flush();
     return true;
-  }
-
-  async syncFile(chatId, file, project, { waitForFileMs = 0 } = {}) {
-    const deadline = Date.now() + waitForFileMs;
-    let session;
-    while (!session) {
-      try {
-        session = await validateSessionFile(file, project);
-      } catch (error) {
-        if (["session_cwd_mismatch", "invalid_session_mapping"].includes(error.code)) return null;
-        if (error.code !== "ENOENT" || Date.now() >= deadline) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-    }
-    await this.commitSession(chatId, session);
-    return session;
   }
 
   async update(chatId, patch) {
@@ -490,7 +253,6 @@ export class ChatStore {
       "title",
       "templateId",
       "templateVersion",
-      "runtime",
       "backend",
       "modelThinkingLevels",
       "owner",
@@ -509,11 +271,6 @@ export class ChatStore {
       chat.lastAssistantCompletedAt = laterOf(previousCompletedAt, patch.lastAssistantCompletedAt);
     }
     chat.modelThinkingLevels = modelThinkingLevelsFor(chat);
-    if (chat.runtime?.kind === "conduit_profile" && (Object.hasOwn(patch, "templateId") || Object.hasOwn(patch, "templateVersion"))) {
-      chat.runtime.profileId = chat.templateId;
-      chat.runtime.profileVersion = chat.templateVersion;
-    }
-    if (chat.runtime) chat.runtime = this.runtimeFor(chat, chat.templateId, chat.templateVersion);
     if (chat.status !== "subagent" && (patch.status === "draft" || patch.status === "active")) chat.status = patch.status;
     if (!patch.updatedAt) chat.updatedAt = new Date(this.now()).toISOString();
     await this.flush();
@@ -591,8 +348,6 @@ export class ChatStore {
   async removeEmptyDraft(chatId, project) {
     const chat = this.metadata(chatId);
     if (!chat || chat.status !== "draft" || await this.hasAttachments(project, chatId)) return false;
-    const sessionFile = conduitPiSessionFile(chat);
-    if (sessionFile) await fs.rm(sessionFile, { force: true });
     await this.remove(chatId, project);
     return true;
   }
@@ -604,10 +359,6 @@ export class ChatStore {
   }
 
   flush() {
-    for (const chat of this.chats) {
-      if (chat.backend?.protocol === "pi_rpc") chat.backend = { ...chat.backend, opaqueSession: conduitPiSessionFile(chat) };
-      else chat.backend ||= templateBackend({ id: chat.templateId || "assistant", version: chat.templateVersion });
-    }
     const value = `${JSON.stringify({ version: 5, chats: this.chats }, null, 2)}\n`;
     const write = () => writePrivateFile(this.file, value);
     // A failed write fails its own flush, not every one after it: the next

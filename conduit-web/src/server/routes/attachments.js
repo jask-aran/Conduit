@@ -1,6 +1,3 @@
-import { readAnnouncedAttachmentIds } from "../../session-store.js";
-import { conduitPiSessionFile } from "../../backend-session.js";
-
 export function registerAttachmentRoutes(app, { attachments, findChatContext }) {
   app.put("/v0/chats/:chatId/attachments/:attachmentId", async (request, response, next) => {
     try {
@@ -27,18 +24,8 @@ export function registerAttachmentRoutes(app, { attachments, findChatContext }) 
   app.get("/v0/chats/:chatId/attachments", async (request, response) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
-    // What the composer is holding is what has not been sent, so both
-    // records of a send count. The send ledger is the one every harness
-    // writes; the Pi session file is read as well because a chat that
-    // predates the ledger has its sends recorded only there.
-    const sessionFile = conduitPiSessionFile(context.chat);
-    const sessionIds = sessionFile
-      ? readAnnouncedAttachmentIds(sessionFile, context.project).then((ids) => ({ ids }), (error) => ({ error }))
-      : Promise.resolve({ ids: new Set() });
+    // What the composer is holding is what has not been sent: the send ledger says which were.
     const announced = await attachments.announcedIds(context.project, context.chat.id);
-    const legacy = await sessionIds;
-    if (legacy.error && legacy.error.code !== "ENOENT") throw legacy.error;
-    for (const id of legacy.ids || []) announced.add(id);
     response.json({ attachments: (await attachments.list(context.project, context.chat.id))
       .map((attachment) => ({ ...attachment, announced: announced.has(attachment.id) })) });
   });

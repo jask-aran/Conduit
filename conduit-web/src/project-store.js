@@ -3,7 +3,6 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { sessionDirectoryFor } from "./session-store.js";
 import { assertAllowedPath, assertSafeWorkspaceRoot, isPathInside, resolveExistingDirectory, resolveNewWorkspaceDirectory } from "./workspace-paths.js";
 import { ensureConduitRoot } from "./owned-paths.js";
 import { terminate } from "./server/effect-process.js";
@@ -216,7 +215,6 @@ export class ProjectStore {
       // this machine. For a device's workspace that is not its working root,
       // which is a path on the device.
       chatRoot: remote ? this.managedPath(project.slug) : projectPath,
-      sessionsDir: sessionDirectoryFor(projectPath, this.piAgentDir),
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };
   }

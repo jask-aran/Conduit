@@ -6,7 +6,6 @@ import path from "node:path";
 import test from "node:test";
 import { writePrivateJson } from "../src/private-file.js";
 import { ProjectStore, runCommand } from "../src/project-store.js";
-import { sessionDirectoryFor } from "../src/session-store.js";
 
 async function waitForReady(store, id) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -43,7 +42,6 @@ test("stores project metadata centrally and keeps working directories clean", as
   assert.equal(chat.path, filesRoot);
   assert.equal(chat.workingRoot, filesRoot);
   assert.equal(store.workingRoot(chat), filesRoot);
-  assert.equal(chat.sessionsDir, sessionDirectoryFor(filesRoot, piAgentDir));
 
   const project = await store.create({ name: "Conduit Core" });
   assert.equal(project.slug, "conduit-core");
@@ -103,17 +101,10 @@ test("deletes named project files and catalog metadata without touching collidin
   await store.initialize();
   const project = await store.create({ name: "Disposable" });
   await fs.writeFile(path.join(project.path, "work.txt"), "temporary");
-  await fs.mkdir(project.sessionsDir, { recursive: true });
-  const projectSession = path.join(project.sessionsDir, "session.jsonl");
-  await fs.writeFile(projectSession, `${JSON.stringify({ type: "session", cwd: project.path })}\n`);
-  const foreignSession = path.join(project.sessionsDir, "collision.jsonl");
-  await fs.writeFile(foreignSession, `${JSON.stringify({ type: "session", cwd: path.join(root, "foreign") })}\n`);
 
   await store.remove(project.id);
 
   await assert.rejects(fs.access(project.path), { code: "ENOENT" });
-  assert.match(await fs.readFile(projectSession, "utf8"), /\"type\":\"session\"/);
-  assert.equal(await fs.readFile(foreignSession, "utf8"), `${JSON.stringify({ type: "session", cwd: path.join(root, "foreign") })}\n`);
   assert.equal(await store.get(project.id), null);
   await assert.rejects(store.remove("project_chat"), { code: "reserved_project" });
   await fs.rm(root, { recursive: true, force: true });

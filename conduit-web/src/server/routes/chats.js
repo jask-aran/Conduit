@@ -46,7 +46,6 @@ export function registerChatRoutes(app, {
   preferences,
   projects,
   registry,
-  runtimeFor,
   templateForChat,
 }) {
   const durable = backends.adapters?.get("conduit-runtime");
@@ -361,10 +360,6 @@ export function registerChatRoutes(app, {
         : defaultTemplate();
       if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
       if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-      const runtimeKind = request.body?.runtimeKind || "conduit_profile";
-      if (runtimeKind !== "conduit_profile") {
-        return response.status(400).json({ error: "unknown_runtime_kind" });
-      }
       // The durable agent runs in process: there is no process to warm.
       // `roaming`: a chat with no home device, whose tools pick one per call
       // (decision 21; the persistent agent's shape). Only from this server's own folders.
@@ -552,7 +547,6 @@ export function registerChatRoutes(app, {
       });
       return response.json(chatView(registry.metadata(context.chat.id)));
     }
-    let selectedTemplate = templateForChat(context.chat, context.project);
     if (request.body?.templateId != null) {
       const currentTemplate = resolveTemplate(config, context.chat.templateId);
       if (currentTemplate?.special === true) {
@@ -574,21 +568,8 @@ export function registerChatRoutes(app, {
         status: "draft",
         templateId: template.id,
         templateVersion: template.version,
-        runtime: null,
         backend: templateBackend(template),
       });
-      selectedTemplate = template;
-    }
-    if (request.body?.runtimeKind != null) {
-      if (context.chat.lastUserMessageAt) {
-        return response.status(409).json({ error: "runtime_locked" });
-      }
-      const runtimeKind = request.body.runtimeKind;
-      if (runtimeKind !== "conduit_profile") {
-        return response.status(400).json({ error: "unknown_runtime_kind" });
-      }
-      const runtime = runtimeFor({ runtimeKind, template: selectedTemplate });
-      await registry.update(context.chat.id, { runtime });
     }
     response.json(chatView(registry.metadata(context.chat.id)));
     });

@@ -6,7 +6,6 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { sessionDirectoryFor } from "../src/session-store.js";
 
 /**
  * The origin the server actually bound, read from the server itself.

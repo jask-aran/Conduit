@@ -1,25 +1,22 @@
-import path from "node:path";
-import { conduitPiSessionFile } from "../../backend-session.js";
 import { chatView, isChatId } from "../../chat-store.js";
 import { applyTranscriptOps } from "../../transcript-fold.js";
 import {
-  removeSessionFamily,
-  sessionFamilyFiles,
-  transcriptFromMessages,
-} from "../../session-store.js";
-import {
-  findDeletableSession,
   moveDurableChat,
-  sessionDirectoryForChat,
-  sessionDirectoryRootForChat,
   discardSession,
 } from "../../session-operations.js";
+
+const transcriptFromMessages = (messages) => messages
+  .filter((message) => message.content.trim())
+  .map((message) => {
+    const role = message.role === "user" ? "User" : message.role === "assistant" ? "Assistant" : "Tool result";
+    return `## ${role}\n\n${message.content.trim()}`;
+  })
+  .join("\n\n");
 
 export function registerSessionRoutes(app, {
   attachments,
   backends,
   chatLogs,
-  config,
   drafts,
   findChatContext,
   lifecycle,
@@ -232,41 +229,13 @@ export function registerSessionRoutes(app, {
       const context = await findChatContext(request.params.id);
       if (!context) return false;
       return lifecycle.withProjects([context.project.id], async () => {
-        const session = await findDeletableSession(registry, await projects.list(), context.chat);
-        const installationRoot = sessionDirectoryRootForChat(config, context.chat);
-        const sessionOptions = session && installationRoot
-          ? { sessionsDir: path.dirname(session.file), allowedRoot: installationRoot }
-          : { sessionsDir: sessionDirectoryForChat(config, context.chat, context.project) };
-        // A transcript outside this installation (written by another checkout)
-        // is not Conduit's to remove, but the chat that names it still is:
-        // the file is left where it is and the chat goes.
-        let family = [];
-        let foreign = false;
-        try { family = session ? await sessionFamilyFiles(session.file, context.project, sessionOptions) : []; }
-        catch (error) {
-          if (error?.reason !== "outside-installation") throw error;
-          foreign = true;
-          console.warn("Chat deleted; its transcript is outside this installation and was left in place", { chatId: context.chat.id, file: session.file });
-        }
         await discardSession(backends, context.chat, registry);
-        if (session && !foreign) await removeSessionFamily(session.file, context.project, sessionOptions);
-        // A converted chat's classic session goes too: left behind, startup
-        // recovers it as a lost session and the chat comes back.
-        const convertedFrom = context.chat.backend?.convertedFrom;
-        if (convertedFrom && installationRoot) {
-          await removeSessionFamily(convertedFrom, context.project, { sessionsDir: path.dirname(convertedFrom), allowedRoot: installationRoot })
-            .catch((error) => console.warn("Chat deleted; its classic session was left in place", { chatId: context.chat.id, file: convertedFrom, error: error.message }));
-        }
-        const familyFiles = new Set(family.map((file) => path.resolve(file)));
-        const relatedChats = registry.listProject(context.project.id, { includeHidden: true })
-          .filter((chat) => chat.id === context.chat.id
-            || (conduitPiSessionFile(chat) && familyFiles.has(path.resolve(conduitPiSessionFile(chat)))));
-        await Promise.all(relatedChats.map((chat) => registry.remove(chat.id, context.project)));
+        await registry.remove(context.chat.id, context.project);
         // The draft goes with the chat. Nothing else ever removes one, so a
         // chat deleted with something unsent left its text and its
         // attachments held for as long as the store kept them.
-        await Promise.all(relatedChats.map((chat) => drafts.dropChat(chat.id)));
-        await Promise.all(relatedChats.map((chat) => chatLogs?.timings?.forget(chat.id)));
+        await drafts.dropChat(context.chat.id);
+        await chatLogs?.timings?.forget(context.chat.id);
         return true;
       });
     });

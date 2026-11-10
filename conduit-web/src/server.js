@@ -2,7 +2,6 @@ import { writePerson } from "./agent/routine-files.js";
 import { registerAccountRoutes } from "./server/routes/account.js";
 import { capabilitiesOf, hubIds } from "./place.js";
 import { projectWorkspace } from "./workspace-host.js";
-import { convertClassicChats } from "./server/convert-classic-chats.js";
 import http from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -146,14 +145,7 @@ const stopPruningRoutes = serverIdentity.followObserved();
 // The hub's own device and node (decision 24), known before anything reads a project.
 const hub = hubIds(serverIdentity.id);
 projects.hubNodeId = hub.nodeId;
-const registry = new ChatStore(config.sessionRegistryFile, {
-  defaultRuntime: {
-    kind: "conduit_profile",
-    installationId: "conduit-runtime",
-    profileId: config.piTemplate.id,
-    profileVersion: config.piTemplate.version,
-  },
-});
+const registry = new ChatStore(config.sessionRegistryFile);
 await registry.initialize(await projects.list());
 await registry.migrateTemplateIds(normalizeTemplateId);
 const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachmentBytes });
@@ -307,9 +299,6 @@ nodeHub.adoptHub({ ...hub, name: () => serverIdentity.name,
   roots: async () => (await projects.list()).filter((project) => project.local)
     .map((project) => ({ id: project.place.root, label: project.workingRoot, read: true, write: true, shell: true, allow: [] })),
   harnesses: () => [...(backends.local || backends.adapters.keys())] });
-// Conduit's own chats run on the durable agent (milestone 5): any still on
-// classic Pi are converted once, before anything can open them.
-await convertClassicChats({ registry, projects, backends, config });
 
 // A watched workspace changed: the clients showing it ask what, now, instead of on their next poll.
 onWorkspaceChange((projectIds) => runtimeHub.publish({ type: "workspace_changed", projectIds }));
@@ -396,7 +385,7 @@ async function chatModelView(context) {
     };
   }
   const template = templateForChat(context.chat, context.project);
-  const runtime = context.chat.runtime || runtimeFor({ runtimeKind: "conduit_profile", template });
+  const runtime = runtimeFor({ runtimeKind: "conduit_profile", template });
   const catalog = catalogFor(runtime, template);
   const catalogView = await catalog.list(context.project.workingRoot);
   let model = context.chat.backend?.model || catalogView.defaultModel;
@@ -807,7 +796,6 @@ registerChatRoutes(app, {
   preferences,
   projects,
   registry,
-  runtimeFor,
   templateForChat,
 });
 registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry });
@@ -880,7 +868,6 @@ registerSessionRoutes(app, {
   attachments,
   backends,
   chatLogs,
-  config,
   drafts,
   findChatContext,
   lifecycle,

@@ -8,7 +8,6 @@ import fs from "node:fs/promises";
 import express from "express";
 import { resolveTemplate } from "../../config.js";
 import { chatView } from "../../chat-store.js";
-import { removeProjectSessions, removeSession } from "../../session-store.js";
 import {
   createWorkspaceDirectory,
   deleteWorkspaceDirectory,
@@ -19,7 +18,6 @@ import {
   writeWorkspaceFile,
 } from "../../workspace-inspector.js";
 import {
-  findDeletableSession,
   stopProjectProcesses,
   discardSession,
   moveDurableChat,
@@ -606,7 +604,6 @@ export function registerProjectRoutes(app, {
         } else if (project.kind === "workspace" && project.externalPath) skipWorkingTree = true;
         else throw error;
       }
-      const projectList = await projects.list();
       const chats = registry.listProject(project.id, { includeHidden: true });
       for (const { id } of chats) {
         await lifecycle.run(id, async () => {
@@ -616,10 +613,6 @@ export function registerProjectRoutes(app, {
       }
       await stopProjectProcesses(backends, project.id);
       await terminals.removeProject(project.id);
-      const sessions = (await Promise.all(chats
-        .map((chat) => findDeletableSession(registry, projectList, chat)))).filter(Boolean);
-      await Promise.all(sessions.map(removeSession));
-      await removeProjectSessions(project);
       for (const chat of chats) {
         await registry.remove(chat.id, skipWorkingTree ? null : project);
       }
