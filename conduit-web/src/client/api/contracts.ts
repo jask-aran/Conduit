@@ -867,6 +867,8 @@ export interface PersonBrowserEnvironment {
   browsers: Array<{ id: string; name: string; connected: boolean }>;
   /** A one-time code out for a browser's extension to redeem. */
   pairing: { code: string; expiresAt: string } | null;
+  /** Browse's relay answers there; false when it could not be started (its port taken). */
+  relay?: boolean;
   /** A browser there has the extension and can be started from here. */
   launchable?: boolean;
   extensionUrl: string;

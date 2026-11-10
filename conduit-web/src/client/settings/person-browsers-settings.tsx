@@ -68,6 +68,10 @@ export function PersonBrowsersSettings(props: {
     <Show when={environments()} fallback={<Show when={!error()}><Note>Loading…</Note></Show>}>{(list) =>
       <Show when={list().length} fallback={<Note>{props.device === undefined ? "No device on this network can offer a browser yet" : "This device cannot offer a browser yet"}: it needs a folder shared with commands.</Note>}>
         <For each={list()}>{(environment) => <>
+          {/* Its relay did not start: nothing can pair or connect until it does. Port 19988 is the one it listens on. */}
+          <Show when={environment.available && environment.relay === false}>
+            <Note tone="error">OpenCode Browse could not start on {environment.name}: port 19988 is taken there. On a computer running WSL, restarting WSL frees it.</Note>
+          </Show>
           <For each={environment.browsers}>{(browser) =>
             <SettingLine label={browser.name} state={`OpenCode Browse · ${through(environment)}`}>
               <StatusDot label={browser.connected ? "Connected" : "Not running"} tone={browser.connected ? "success" : "muted"} />
