@@ -1,5 +1,5 @@
 declare module "virtual:settings-index" {
-  /** Every setting with a literal label, by section and group (scripts/settings-index.mjs). */
-  const index: { section: string; group: string | null; label: string }[];
+  /** Every setting and group, by section (scripts/settings-index.mjs). words: what else the row says (its title, state, options, buttons). */
+  const index: { section: string; group: string | null; label: string; words?: string }[];
   export default index;
 }

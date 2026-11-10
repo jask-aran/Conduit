@@ -36,6 +36,7 @@ import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { COMMAND_IDS } from "../commands/command-registry";
+import { SETTINGS_SECTIONS } from "../palette/command-registry";
 import { parseUiScale, UI_SCALE_OPTIONS, type UiScale } from "../preferences/ui-scale";
 import {
   CODE_BLOCK_COLLAPSE_LINE_CHOICES,
@@ -300,20 +301,39 @@ export function Settings(props: {
   const [query, setQuery] = createSignal("");
   const [cursor, setCursor] = createSignal(0);
   createEffect(on(query, () => setCursor(0)));
+  // The first search fetches what only the hub knows (accounts, search providers, documents), so they can be found
+  // before their sections were ever opened.
+  let searched = false;
+  createEffect(() => { if (!query().trim() || searched) return; searched = true; void loadPiAuth(); void loadSearchSettings(); if (!context.data()) void context.load(); });
   const results = createMemo(() => {
     const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
-    const sections = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null as string | null, label: label(item.id as Section) })));
+    type Entry = { section: Section; group: string | null; label: string; words?: string };
+    // A section answers to its name and to the words the command palette knows it by.
+    const sections: Entry[] = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null, label: label(item.id as Section),
+      words: SETTINGS_SECTIONS.find((known) => known.id === item.id)?.keywords.join(" ") })));
     const known = new Set(sections.map((item) => item.section));
-    const entries = [...sections, ...settingsIndex.filter((entry) => known.has(entry.section as Section)).map((entry) => ({ ...entry, section: entry.section as Section }))];
+    // What only the running app knows: each command with a shortcut, each provider account, each document and block.
+    const live: Entry[] = [
+      ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" ") })),
+      ...authProviders().map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account api key sign in" })),
+      ...(searchSettings()?.providers ?? []).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label, words: "api key" })),
+      ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
+      ...(context.data()?.blocks ?? []).map((block) => ({ section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" })),
+    ];
+    const entries: Entry[] = [...sections, ...[...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live].filter((entry) => known.has(entry.section))];
     const scored = entries.map((entry) => {
       const name = entry.label.toLowerCase();
       const where = `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase();
-      if (!words.every((word) => name.includes(word) || where.includes(word))) return null;
-      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : 2) + (entry.group === null && entry.label === label(entry.section) ? -0.5 : 0);
+      const said = (entry.words ?? "").toLowerCase();
+      if (!words.every((word) => name.includes(word) || where.includes(word) || said.includes(word))) return null;
+      // By name first (from its start, then anywhere), then by where it is, then by what it says.
+      const score = (name.startsWith(words[0]!) ? 0 : words.every((word) => name.includes(word)) ? 1 : words.every((word) => name.includes(word) || where.includes(word)) ? 2 : 3)
+        + (entry.group === null && entry.label === label(entry.section) ? -0.5 : 0);
       return { ...entry, score };
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-    return scored.sort((a, b) => a.score - b.score).slice(0, 30);
+    const seen = new Set<string>();
+    return scored.sort((a, b) => a.score - b.score).filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 40);
   });
   // Each opened result's lookup is its own: a newer one, another section or closing Settings ends an older one's retries.
   let lookup = 0;
@@ -328,7 +348,7 @@ export function Settings(props: {
     const find = () => {
       if (mine !== lookup || !props.open || section() !== result.section) return;
       const dialog = document.querySelector('[role="dialog"][aria-label="Settings"] main');
-      const line = [...(dialog?.querySelectorAll<HTMLElement>(".ui-setting-line, .ui-switch, .ui-group-title, .ui-title") ?? [])]
+      const line = [...(dialog?.querySelectorAll<HTMLElement>(".ui-setting-line, .ui-switch, .ui-nav-label, .ui-group-title, .ui-title, summary, .ui-chain-line") ?? [])]
         .find((element) => element.textContent?.trim().startsWith(result.label));
       const target = line?.closest<HTMLElement>(".ui-setting-line") ?? line;
       if (target) {
