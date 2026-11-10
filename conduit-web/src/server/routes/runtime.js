@@ -180,7 +180,7 @@ export function registerRuntimeRoutes(app, {
   app.patch("/v0/preferences", async (request, response) => {
     const requested = request.body?.defaultTemplateId;
     const template = requested == null ? null : resolveTemplate(config, requested);
-    if (requested != null && !template) return response.status(400).json({ error: "unknown_template", templateId: requested });
+    if (requested != null && !template) return response.status(400).json({ error: "unknown_template", templateId: requested, message: `Unknown profile: ${requested}` });
     if (template?.defaultable === false) return response.status(400).json({ error: "special_template", templateId: requested });
     const model = request.body?.sessionNameModel;
     const thinkingLevel = request.body?.sessionNameThinkingLevel;

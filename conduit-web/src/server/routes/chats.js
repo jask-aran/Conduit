@@ -358,7 +358,7 @@ export function registerChatRoutes(app, {
       const template = requestedTemplateId
         ? resolveTemplate(config, requestedTemplateId)
         : defaultTemplate();
-      if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId });
+      if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId, message: `Unknown profile: ${requestedTemplateId}` });
       if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
       // The durable agent runs in process: there is no process to warm.
       // `roaming`: a chat with no home device, whose tools pick one per call
@@ -557,7 +557,7 @@ export function registerChatRoutes(app, {
       }
       const template = resolveTemplate(config, request.body.templateId);
       if (!template) {
-        return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId });
+        return response.status(400).json({ error: "unknown_template", templateId: request.body.templateId, message: `Unknown profile: ${request.body.templateId}` });
       }
       if (template.defaultable === false) {
         return response.status(400).json({ error: "special_template", templateId: template.id });
