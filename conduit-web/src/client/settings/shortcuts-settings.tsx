@@ -250,7 +250,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
 
   return <>
     <Group title="Keyboard" scope="This device">
-      <SettingLine plain label="Keys for" state="its browser and system decide which keys Conduit can take"><SettingValue>{shortcutEnvironmentLabel(props.manager.environment)}</SettingValue></SettingLine>
+      <SettingLine plain label="Keys for"><SettingValue>{shortcutEnvironmentLabel(props.manager.environment)}</SettingValue></SettingLine>
       <Show when={keyboardTourAvailable()}><SettingLine plain label="Keyboard tour" state="learn the keys by pressing them">
         <Button variant="ghost" size="sm" onClick={startKeyboardTour}><Icons.Keyboard /> Take the keyboard tour</Button></SettingLine></Show>
     </Group>
@@ -260,7 +260,7 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
           <For each={LEADER_MENU_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
         </Select>
       </SettingLine>
-      <SettingLine plain label="Your changes" state={hasOverrides() ? "kept on the hub" : "none: every key is its default"}>
+      <SettingLine plain label="Your changes" state={hasOverrides() ? undefined : "none"}>
         <Button variant="ghost" size="sm" onClick={resetAll} disabled={!hasOverrides()}><Icons.Reset /> Reset all</Button></SettingLine>
       <SettingLine label="Find"><Input type="search" aria-label="Search shortcuts" placeholder="Commands, contexts or keys" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} /></SettingLine>
       <SettingLine label="Assigned only"><Switch label="Assigned only" checked={assignedOnly()} onChange={setAssignedOnly} /></SettingLine>

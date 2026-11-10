@@ -1742,7 +1742,7 @@ export function Settings(props: {
                       onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
                   <SettingLine plain label="Cloudflare Workers AI" state={settings().cloudflare ? "connected" : "not set"}
-                    title="Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. Its key and account ID are kept with the other model providers.">
+                    title="Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account.">
                     <Button variant="ghost" size="sm" onClick={() => openSection("models")}>Set in Models</Button>
                   </SettingLine>
                   <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
@@ -1819,12 +1819,11 @@ export function Settings(props: {
                     <SettingStep step={1} label="Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
                       <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingStep>
                     <SettingStep step={2} label="Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingStep>
-                    <Note tone="quiet">This finishes by itself once the provider accepts the code.</Note>
                   </>}</Show>
                   <Show when={!current().deviceCode && current().authUrl}>
                     <SettingStep step={1} label="Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingStep>
                     <Show when={current().prompt && current().prompt!.type !== "select"}>
-                      <Note tone="quiet">On the hub's own machine this finishes by itself. Anywhere else the last page will not load: that is expected. Copy its address (it starts with http://localhost) and paste it below.</Note>
+                      <Note tone="quiet">If the last page does not load, copy its address and paste it here.</Note>
                     </Show>
                   </Show>
                   <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>

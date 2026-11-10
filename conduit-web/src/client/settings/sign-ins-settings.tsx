@@ -55,7 +55,7 @@ export function SignInsGroup() {
   return <Group title="Signed in">
     <For each={people().filter(recent)}>{line}</For>
     <Show when={older().length}><SettingDetails summary={`${older().length} not used in the last day`}><For each={older()}>{line}</For></SettingDetails></Show>
-    <Show when={others().length > 1}><SettingLine plain label="Every other device" state={`${others().length} sign-ins`}>
+    <Show when={others().length > 1}><SettingLine plain label="Other devices" state={`${others().length} sign-ins`}>
       <Button size="sm" variant="destructive" outline onClick={() => void endOthers()}>Sign out all others</Button>
     </SettingLine></Show>
     <Show when={scripts()}><SettingLine plain label="Scripts" state={`${scripts()} short sessions`} title="Sessions scripts and probes made for themselves; each ends an hour after its last use." /></Show>

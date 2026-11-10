@@ -48,7 +48,7 @@ export function PersonBrowsersSettings(props: {
   const copy = async (code: string) => { try { await navigator.clipboard.writeText(code); setCopied(code); } catch { setCopied(""); } };
 
   return <Group title={props.device === undefined ? "Your browsers" : "Your browser"}>
-    <Note>Agents can work in your own signed-in browser on a device, through the browse extension (OpenCode Browse). A sign-in, a code or a CAPTCHA is handed back to you there.</Note>
+    <Note>Agents can work in your signed-in browser on a device. Each thread asks first.</Note>
     <Show when={environments()} fallback={<Show when={!error()}><Note>Loading…</Note></Show>}>{(list) =>
       <Show when={list().length} fallback={<Note>{props.device === undefined ? "No device on this network can offer a browser yet" : "This device cannot offer a browser yet"}: it needs a folder shared with commands.</Note>}>
         <For each={list()}>{(environment) => <>
