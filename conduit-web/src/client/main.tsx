@@ -17,7 +17,7 @@ import { focusSplitSection, splitSections } from "./dashboard/primitives/split-c
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ItemActions } from "./navigation/item-menus";
 import type { ComputerLocation, ComputerPrefetchPayload, RuntimeProcess } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
@@ -1855,6 +1855,39 @@ function App() {
     </>;
   };
   /*
+   * A harness page's composer, before and after its draft chat exists (the
+   * main harness page and a pane's both): the page's pickers stand in until
+   * the draft is made on first use, then the draft's chat chooses.
+   * serviceLevels and modelSelectorShortcut are the main page's only.
+   */
+  const HarnessDraftComposer = (props: {
+    harnessId: () => string;
+    session: ChatSession;
+    input: Parameters<NonNullable<ComponentProps<typeof HarnessDashboard>["composer"]>>[0];
+    drafted: () => boolean;
+    ensure: (cwd: string, choices: HarnessChoices) => Promise<void>;
+    send: (cwd: string, choices: HarnessChoices, prompt: string) => Promise<void>;
+    setTyped: (text: string) => void;
+    serviceLevels?: boolean;
+    modelSelectorShortcut?: boolean;
+  }) => {
+    // Once there is a draft it is a chat, and chooses as one; the
+    // page's pickers stand in before that, and hand their choice on.
+    const choices = (): HarnessChoices => props.drafted()
+      ? { model: props.session.models.model(), thinkingLevel: props.session.models.effort(), permissionMode: props.session.permissions.selected() }
+      : props.input.choices;
+    // A draft already made follows the folder.
+    createEffect(on(() => props.input.folder.current, (cwd) => {
+      if (untrack(props.drafted)) void props.ensure(cwd, untrack(choices));
+    }, { defer: true }));
+    const manifest = () => harnessCapabilities()[harnessProfile(props.harnessId())?.implementation || props.harnessId()] || null;
+    const use = () => props.ensure(props.input.folder.current, choices());
+    return <div style={{ display: "contents" }}
+      onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) props.setTyped(event.target.value); void use(); }}>
+      <Composer shortcuts={shortcutManager} chat={props.session.chat} launches supports={(name) => resolveCapability(manifest(), props.session.chat.capabilities(), name, false)} attachments={props.session.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={props.drafted() ? props.session.models : props.input.models} modelsLoading={props.drafted() ? undefined : props.input.loading} folder={props.input.folder} permissions={manifest()?.permissionModes ? (props.drafted() ? props.session.permissions : props.input.permissions) : undefined} serviceLevels={props.serviceLevels && manifest()?.serviceLevels?.length ? props.session.serviceLevels : undefined} profiles={harnessProfile(props.harnessId()) ? [harnessProfile(props.harnessId())!] : []} activeProfile={harnessProfile(props.harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={props.modelSelectorShortcut ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => props.session.openAttachments())} onSendDraft={(prompt) => props.send(props.input.folder.current, choices(), prompt)} />
+    </div>;
+  };
+  /*
    * A harness page in a pane beside pane A: its composer's draft is a hidden
    * chat on that pane's session, as pane A's is on its own; sending runs the
    * thread in the same pane, and the pane letting go of it ends that chat.
@@ -1894,19 +1927,9 @@ function App() {
     };
     onCleanup(() => { const left = draft(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); drop(left.chatId); } });
     return <>{<ChatHeader title={harnessLabelFor(harnessId) || harnessId} tabActions={paneTabActions(pane.index)} tabs={documentTab(pane.index)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}<HarnessDashboard harnessId={harnessId} projects={catalogue.projects()} runtime={runtime} scope={scope()} onScope={setScope} home={computerLocation()?.home || ""}
-      composer={(input) => {
-        const drafted = () => Boolean(draft() && side.chat.loadedId() === draft()!.chatId);
-        const choices = (): HarnessChoices => drafted()
-          ? { model: side.models.model(), thinkingLevel: side.models.effort(), permissionMode: side.permissions.selected() }
-          : input.choices;
-        createEffect(on(() => input.folder.current, (cwd) => { if (untrack(drafted)) void ensure(cwd, untrack(choices)); }, { defer: true }));
-        const manifest = () => harnessCapabilities()[harnessProfile(harnessId)?.implementation || harnessId] || null;
-        const use = () => ensure(input.folder.current, choices());
-        return <div style={{ display: "contents" }}
-          onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) typed = event.target.value; void use(); }}>
-          <Composer shortcuts={shortcutManager} chat={side.chat} launches supports={(name) => resolveCapability(manifest(), side.chat.capabilities(), name, false)} attachments={side.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? side.models : input.models} modelsLoading={drafted() ? undefined : input.loading} folder={input.folder} permissions={manifest()?.permissionModes ? (drafted() ? side.permissions : input.permissions) : undefined} profiles={harnessProfile(harnessId) ? [harnessProfile(harnessId)!] : []} activeProfile={harnessProfile(harnessId)} onOpenModelSelector={openModelSelector} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => side.openAttachments())} onSendDraft={(prompt) => send(input.folder.current, choices(), prompt)} />
-        </div>;
-      }}
+      composer={(input) => <HarnessDraftComposer harnessId={() => harnessId} session={side} input={input}
+        drafted={() => Boolean(draft() && side.chat.loadedId() === draft()!.chatId)}
+        ensure={ensure} send={send} setTyped={(text) => { typed = text; }} />}
       onStartThread={(launch) => send(launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChatFromPage(target, project)} /></>;
   };
   // Threads started in a pane beside A run as hidden chats that end when the
@@ -6395,24 +6418,10 @@ function App() {
           </>}>{(nodeId) => renderEnvironment(nodeId(), "main")}</Show>}>{(harnessId) => <>
             <ChatHeader title={harnessLabelFor(harnessId()) || harnessId()} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
             <HarnessDashboard harnessId={harnessId()} projects={catalogue.projects()} runtime={runtime} scope={harnessScope()} onScope={scopeHarness} home={computerLocation()?.home || ""}
-              composer={(input) => {
-                const drafted = () => { const draft = harnessDraft(); return Boolean(draft && draft.harnessId === harnessId() && chat.loadedId() === draft.chatId); };
-                // Once there is a draft it is a chat, and chooses as one; the
-                // page's pickers stand in before that, and hand their choice on.
-                const choices = (): HarnessChoices => drafted()
-                  ? { model: models.model(), thinkingLevel: models.effort(), permissionMode: permissions.selected() }
-                  : input.choices;
-                // A draft already made follows the folder.
-                createEffect(on(() => input.folder.current, (cwd) => {
-                  if (untrack(drafted)) void ensureHarnessDraft(harnessId(), cwd, untrack(choices));
-                }, { defer: true }));
-                const manifest = () => harnessCapabilities()[harnessProfile(harnessId())?.implementation || harnessId()] || null;
-                const use = () => ensureHarnessDraft(harnessId(), input.folder.current, choices());
-                return <div style={{ display: "contents" }}
-                  onInput={(event) => { if (event.target instanceof HTMLTextAreaElement) typedBeforeDraft = event.target.value; void use(); }}>
-                  <Composer shortcuts={shortcutManager} chat={chat} launches supports={(name) => resolveCapability(manifest(), chat.capabilities(), name, false)} attachments={attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? models : input.models} modelsLoading={drafted() ? undefined : input.loading} folder={input.folder} permissions={manifest()?.permissionModes ? (drafted() ? permissions : input.permissions) : undefined} serviceLevels={manifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={harnessProfile(harnessId()) ? [harnessProfile(harnessId())!] : []} activeProfile={harnessProfile(harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => session.openAttachments())} onSendDraft={(prompt) => sendHarnessDraft(harnessId(), input.folder.current, choices(), prompt)} />
-                </div>;
-              }}
+              composer={(input) => <HarnessDraftComposer harnessId={harnessId} session={session} input={input}
+                drafted={() => { const draft = harnessDraft(); return Boolean(draft && draft.harnessId === harnessId() && chat.loadedId() === draft.chatId); }}
+                ensure={(cwd, choices) => ensureHarnessDraft(harnessId(), cwd, choices)} send={(cwd, choices, prompt) => sendHarnessDraft(harnessId(), cwd, choices, prompt)}
+                setTyped={(text) => { typedBeforeDraft = text; }} serviceLevels modelSelectorShortcut />}
               onStartThread={(launch) => sendHarnessDraft(launch.harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChat(target, project)} />
           </>}</Show>}>{(thread) => {
             const workspace = () => catalogue.projects().find((project) => !isConduitManagedProject(project) && project.workingRoot === thread().path);
