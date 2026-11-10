@@ -120,7 +120,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     // What it is about: the piece an arrow's head is on, the pieces a pen line runs over, what a box would gather.
     const head = points[points.length - 1]!;
     const over = kind === "arrow" ? [pieceRoot(under(head[0], head[1]))] : kind === "pen" ? points.map((point) => pieceRoot(under(point[0], point[1]))) : piecesWithin(around);
-    const found = [...new Set(over.filter((element): element is Element => Boolean(element)))];
+    // A piece that holds another of them (the list a line's rows are in) is only where the line passed between them.
+    const found = [...new Set(over.filter((element): element is Element => Boolean(element)))].filter((element, _, all) => !all.some((other) => other !== element && element.contains(other)));
     const elements = found.length ? found : [under(around.left + around.width / 2, around.top + around.height / 2) ?? document.body];
     const from = boxOf(elements), id = nextId++;
     setSelections(selections.length, { id, elements, comment: "", drawing: { kind, points, from: { left: from.left, top: from.top } } });

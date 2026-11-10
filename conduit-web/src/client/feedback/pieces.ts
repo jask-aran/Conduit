@@ -27,8 +27,17 @@ export function pieceRoot(element: Element | null): Element | null {
   return null;
 }
 
+const shown = (element: Element) => element.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false;
+/** Down from what the pointer hits to what is drawn there: a control that ignores the pointer (a disabled button) is passed over by the hit test, and is still what is on the page. */
+const drawnAt = (element: Element, x: number, y: number): Element => {
+  for (const child of [...element.children].reverse()) {
+    const bounds = child.getBoundingClientRect();
+    if (bounds.width && bounds.height && x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom && shown(child)) return drawnAt(child, x, y);
+  }
+  return element;
+};
 /** What is under a point, the tool's own layer aside. */
-export const under = (x: number, y: number) => document.elementsFromPoint(x, y).find((element) => !element.closest(OWN)) ?? null;
+export const under = (x: number, y: number) => { const hit = document.elementsFromPoint(x, y).find((element) => !element.closest(OWN)); return hit ? drawnAt(hit, x, y) : null; };
 
 type Box = { left: number; top: number; width: number; height: number };
 type Edges = { left: number; top: number; right: number; bottom: number };
@@ -42,7 +51,6 @@ const ACROSS = 0.25;
 const HAIRLINE = 4;
 const meet = (a: Edges, b: Edges): Edges => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
 const area = (edges: Edges) => Math.max(0, edges.right - edges.left) * Math.max(0, edges.bottom - edges.top);
-const shown = (element: Element) => element.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false;
 
 /**
  * What a drag locks onto. A piece wholly inside the box is taken as it is. A piece partly inside is looked into
