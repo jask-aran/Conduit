@@ -328,8 +328,6 @@ export interface StatusEvent extends EventBase {
    * one. The transcript shows a continued answer as the one message it is, so
    * the browser needs the text being continued at the moment the turn opens.
    */
-  continuation?: boolean;
-  continuationBase?: string;
 }
 
 /** A runtime failure names one of a fixed set of causes. */

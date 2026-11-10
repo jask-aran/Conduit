@@ -164,10 +164,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
 
     if (event.type === "status" && event.phase === "started") {
       if (state?.id === event.generationId) return result(previous, true);
-      const started = createActiveGeneration(event.generationId, {
-        continuation: Boolean(event.continuation),
-        continuationBase: String(event.continuationBase || ""),
-      });
+      const started = createActiveGeneration(event.generationId);
       started.lastSeq = event.seq;
       install(started);
       return result(previous, true);

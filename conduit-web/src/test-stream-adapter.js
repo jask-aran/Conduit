@@ -348,8 +348,7 @@ export class TestStreamAdapter extends EventEmitter {
       content: message, timestamp: new Date().toISOString(),
       ...(options?.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
     this.publish(record, { type: "status", generationId, phase: "started", seq: ++record.generationSeq,
-      status: "working", activity: "working", detail: null,
-      ...(options?.continuationBase ? { continuation: true, continuationBase: String(options.continuationBase) } : {}) });
+      status: "working", activity: "working", detail: null });
     record.turn = {
       generationId,
       answers: userMessageId,

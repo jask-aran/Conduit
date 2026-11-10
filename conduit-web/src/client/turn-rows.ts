@@ -1,5 +1,4 @@
 import { textBlockClassifications } from "../active-generation.js";
-import { mergeContinuation } from "../continuation.js";
 import type { Message, ToolItem, ToolKind } from "./api/contracts";
 
 /**
@@ -32,8 +31,6 @@ export interface ActiveGenerationView {
   id: string;
   status: string;
   lastSeq: number;
-  continuation?: boolean;
-  continuationBase?: string;
   assistantMessages: Array<{
     id: string;
     stopReason?: string | null;
@@ -224,7 +221,6 @@ export interface LiveProjectionIndex {
   toolLocations: Map<string, { rowKey: string; segmentIndex: number }>;
   answerBlockIdentities: Map<string, Set<string>>;
   answerRowKeys: Map<string, string>;
-  firstAnswerAssistantId: string | null;
 }
 
 // Returns the index as well as the message: the caller needs both, and asking
@@ -395,7 +391,6 @@ export function buildLiveProjectionIndex(
   const toolLocations = new Map<string, { rowKey: string; segmentIndex: number }>();
   const answerBlockIdentities = new Map<string, Set<string>>();
   const answerRowKeys = new Map<string, string>();
-  let firstAnswerAssistantId: string | null = null;
   let group = 0;
   let answers = 0;
   let segmentIndex = 0;
@@ -408,7 +403,6 @@ export function buildLiveProjectionIndex(
       answered = true;
       const rowKey = answerDisplayKey(owner, answers, `live:${generation.id}`, show);
       answerRowKeys.set(assistant.id, rowKey);
-      if (!firstAnswerAssistantId) firstAnswerAssistantId = assistant.id;
       answerBlockIdentities.set(assistant.id, new Set(said.map((block) => block.identity)));
       for (const block of said) blockLocations.set(block.identity, { kind: "answer", rowKey, assistantId: assistant.id });
       answers += 1;
@@ -428,7 +422,7 @@ export function buildLiveProjectionIndex(
   }
   segmentIndex += contexts.get(null)?.length || 0;
   return { generationId: generation.id, traceRowKey: segmentIndex ? traceGroupKey(base, group) : null, blockLocations, toolLocations,
-    answerBlockIdentities, answerRowKeys, firstAnswerAssistantId };
+    answerBlockIdentities, answerRowKeys };
 }
 
 export function buildLiveAnswerRow(
@@ -446,9 +440,7 @@ export function buildLiveAnswerRow(
     && assistant.stopReason === "error"
     && generation.assistantMessages.at(-1) === assistant;
   if (!answer && !terminalError) return null;
-  const content = generation.continuation && index.firstAnswerAssistantId === assistantId
-    ? mergeContinuation(generation.continuationBase || "", answer)
-    : answer;
+  const content = answer;
   return {
     key: index.answerRowKeys.get(assistantId) || `message:live:${generation.id}:${assistantId}`,
     displayKey: index.answerRowKeys.get(assistantId),
@@ -607,7 +599,7 @@ function liveRows(generation: ActiveGenerationView, owner: Message | null, tools
     const answer = () => {
       if (answered || !(text || terminalError)) return;
       answered = true;
-      const content = generation.continuation && count === 0 ? mergeContinuation(generation.continuationBase || "", text) : text;
+      const content = text;
       const key = answerDisplayKey(owner, count, `live:${generation.id}`, show);
       const row = (traced: boolean): TurnRow => ({ key, displayKey: key, type: "message", traced, live: running,
         streamVersion: generation.lastSeq, precedingUserId: owner?.id, value: liveAnswerMessage(generation, assistant, content, terminalError, interimText(said, classifications)) });

@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
-import { CONTINUE_PROMPT } from "./continuation.js";
 import { isPathInside } from "./workspace-paths.js";
+
+// What "Continue response" once sent as a user message: old Pi sessions hold it, and it is no first message.
+const CONTINUE_PROMPT = "Continue the immediately preceding assistant response from exactly where it stopped. Do not repeat completed text.";
 
 
 export function sessionDirectoryFor(cwd, agentDir) {

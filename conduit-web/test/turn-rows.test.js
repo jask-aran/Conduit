@@ -184,29 +184,6 @@ test("reports an executing tool and a persisted interrupted trace", () => {
   assert.equal(persistedTrace?.type === "trace" && persistedTrace.value.status, "interrupted");
 });
 
-test("projects partial continuation through Active Generation without a flattened stream", () => {
-  const rows = buildTurnRows([
-    { id: "u1", role: "user", content: "Write a long answer" },
-    { id: "partial", role: "assistant", content: "The answer continues", stopped: true, answers: "u1", interim: false },
-  ], [], {
-    activeGeneration: {
-      id: "g_continue",
-      status: "running",
-      lastSeq: 3,
-      continuation: true,
-      continuationBase: "The answer continues",
-      toolExecutions: {},
-      assistantMessages: [{
-        id: "m1",
-        blocks: [{ kind: "text", identity: "g_continue:m1:0", contentIndex: 0, text: " continues here.", status: "streaming" }],
-      }],
-    },
-  });
-
-  assert.deepEqual(rows.map((row) => row.key), ["message:u1", "trace:u1", "answer:u1:0"]);
-  assert.equal(rows[2]?.type === "message" && rows[2].value.content, "The answer continues here.");
-});
-
 test("keeps the answer display key across live and persisted projections", () => {
   const user = { id: "u1", role: "user", content: "Write a long answer" };
   const liveRows = buildTurnRows([user], [], {
