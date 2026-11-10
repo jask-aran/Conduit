@@ -14,7 +14,7 @@ import { headlineOf } from "./agent/inbox.js";
 import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
@@ -1356,8 +1356,10 @@ export class DurableAdapter extends EventEmitter {
       }
       if (tool.opened) this.publish(record, toolClose({ toolCallId, output: tool.output || "", cancelled: true, generationId: turn.generationId, ...agentFields(tool.name, tool.input, tool.details) }));
     }
-    const stopped = record.stopping || turn.last?.stopReason === "aborted";
-    const outcome = stopped ? "interrupted" : turn.last?.stopReason === "error" || !turn.last ? "failed" : "complete";
+    // What the run said of its last message; one that stopped to call a tool says nothing about the turn.
+    const said = turn.last?.stopReason;
+    const outcome = outcomeOf(said === "aborted" ? "interrupted" : !turn.last || said === "error" ? "failed" : said === "toolUse" ? null : "complete",
+      record.stopping) || "complete";
     // A question the turn was waiting on goes with it.
     for (const request of [...record.hostUiRequests]) this.settleAsk(record, request.id, { id: request.id, cancelled: true });
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome, generationId: turn.generationId }));

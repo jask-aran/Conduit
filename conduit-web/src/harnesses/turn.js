@@ -56,6 +56,18 @@ export const turnStarted = (record, generationId = record.generation.id) => ({
 });
 
 /**
+ * How a turn ended, when the person asked it to stop: the harness's word stands. A turn it says completed did, even
+ * if the stop was already on its way, and one it says was interrupted was. The stop decides only where the harness
+ * says the turn failed or says nothing (a timer gave up on it, the request was aborted): a turn that errors as it
+ * is stopped was stopped. Adapters each ruled on this themselves and three ways.
+ *
+ * @param {"complete" | "interrupted" | "failed" | null | undefined} reported what the harness said
+ * @returns {"complete" | "interrupted" | "failed" | null} null when nobody said and nobody stopped it
+ */
+export const outcomeOf = (reported, stopping) => reported === "complete" || reported === "interrupted" ? reported
+  : stopping ? "interrupted" : reported || null;
+
+/**
  * A turn ends, the same way on every harness.
  *
  * Each adapter used to clear these by hand and word the last status itself,

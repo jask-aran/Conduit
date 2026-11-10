@@ -8,7 +8,7 @@ import { wasDiscarded } from "./abort-signature.js";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
@@ -1103,13 +1103,13 @@ export class CodexAppServerAdapter extends EventEmitter {
         this.settleApproval(record, requestId, pending.generationId);
       }
     } else if (method === "turn/completed") {
-      const failed = params.turn?.status === "failed";
-      // Captured before the flag resets below: a turn the user stopped settles
-      // the same way a finished one does, and only one of them is readable.
-      const stopped = Boolean(record.stopping);
+      // The one exception to the harness's word standing: Codex ends a turn it was told to interrupt as "completed",
+      // with what it had written so far, so its "completed" says nothing once a stop was asked for.
+      const said = { completed: record.stopping ? null : "complete", interrupted: "interrupted", failed: "failed" }[params.turn?.status];
+      const outcome = outcomeOf(said, record.stopping) || "complete";
+      const failed = outcome === "failed";
       // Stopped by us, or by Codex's own TUI or another client -- as the turn's status rather than through our stop.
-      const interrupted = stopped || params.turn?.status === "interrupted";
-      const outcome = failed ? "failed" : interrupted ? "interrupted" : "complete";
+      const interrupted = outcome === "interrupted";
       endTurn(record, outcome);
       record.compacting = false;
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
@@ -1137,7 +1137,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.answering = null;
       if (failed) this.publish(record, { type: "error", generationId: turnId, error: { code: "backend_unavailable", message: params.turn?.error?.message || "Codex turn failed" } });
       this.publish(record, turnEnded(record, outcome, turnId));
-      this.emit("settled", { record, completed: !failed && !stopped });
+      this.emit("settled", { record, completed: outcome === "complete" });
       if (record.status !== "stopped" && record.followUp.length) void this.flushFollowUp(record);
     }
   }

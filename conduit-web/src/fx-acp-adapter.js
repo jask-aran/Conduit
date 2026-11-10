@@ -459,6 +459,8 @@ export class FxAcpAdapter extends EventEmitter {
     // Claim the turn before reading history; process exit can fail it again.
     record.generation.finishing = true;
     let stopReason = FX_STOP_REASONS[acpStopReason] || "stop";
+    // A turn that errors as it is stopped was stopped (turn.js outcomeOf).
+    if (stopReason === "error" && record.stopping) stopReason = "aborted";
     const stopped = stopReason === "aborted" || stopReason === "error";
     let error = null;
     let saved = null;

@@ -779,6 +779,8 @@ export class OpenCodeAdapter extends EventEmitter {
 
   settle(record, outcome) {
     if (!record.generation || record.generation.settled) return;
+    // A turn that errors as it is stopped was stopped (turn.js outcomeOf).
+    if (outcome === "failed" && record.stopping) outcome = "interrupted";
     // An interrupted or failed turn leaves its last message and tools open;
     // OpenCode never completes them, so they are closed here.
     const stopReason = outcome === "succeeded" ? "stop" : outcome === "failed" ? "error" : "aborted";

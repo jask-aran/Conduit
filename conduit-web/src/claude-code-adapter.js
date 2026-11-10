@@ -8,7 +8,7 @@ import * as claudeAgentSdk from "@anthropic-ai/claude-agent-sdk";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
-import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
@@ -1044,8 +1044,10 @@ export class ClaudeCodeAdapter extends EventEmitter {
 
   finish(record, result = {}) {
     if (!record.active) return;
-    const stopped = record.stopping;
-    const failed = !stopped && (result.is_error || (result.subtype && result.subtype !== "success"));
+    const reported = result.is_error || (result.subtype && result.subtype !== "success") ? "failed" : result.subtype ? "complete" : null;
+    const ended = outcomeOf(reported, record.stopping);
+    const stopped = ended === "interrupted";
+    const failed = ended === "failed";
     const last = record.stepOrder.at(-1);
     const reason = STOP_REASONS[last?.stopReason || result.stop_reason];
     const stopReason = stopped ? "aborted" : failed ? "error" : reason && reason !== "toolUse" ? reason : "stop";

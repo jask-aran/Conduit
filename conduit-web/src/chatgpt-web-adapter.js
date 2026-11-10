@@ -203,10 +203,11 @@ export class ChatGptWebAdapter extends EventEmitter {
         }
       }
       this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
-        messageId, stopReason: record.stopping ? "aborted" : "stop", errorMessage: null,
+        messageId, stopReason: "stop", errorMessage: null,
         blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
-      this.closeTurn(record, record.stopping ? "aborted" : "stop", fullText);
-      this.settle(record, record.stopping ? "stopped" : "settled");
+      // The whole reply arrived: it completed, even with a stop on its way (turn.js outcomeOf).
+      this.closeTurn(record, "stop", fullText);
+      this.settle(record, "settled");
     } catch (cause) {
       if (cause.name === "AbortError") {
         this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
