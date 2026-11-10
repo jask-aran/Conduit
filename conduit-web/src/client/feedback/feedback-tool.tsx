@@ -20,7 +20,8 @@ import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pi
  * press adds a piece to the open selection or takes it out; Up and Down widen to the piece around and back.
  *
  * Pen, Arrow, Box: a drag draws on the page. A drawing is a selection too: it has a number and a comment, names the
- * pieces under it, moves with them, and is in the screenshot as drawn. V, P, A and B pick the pointer.
+ * pieces it is about (an arrow's head, a pen line's path, a box's inside), moves with them, and is in the screenshot as
+ * drawn. V, P, A and B pick the pointer.
  */
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
 type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing };
@@ -116,7 +117,10 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const draw = (kind: FeedbackDrawingKind, points: FeedbackPoint[]) => {
     const around = drawingBox(points);
     if (Math.hypot(around.width, around.height) <= DRAG_SLOP) return;
-    const found = piecesWithin(around);
+    // What it is about: the piece an arrow's head is on, the pieces a pen line runs over, what a box would gather.
+    const head = points[points.length - 1]!;
+    const over = kind === "arrow" ? [pieceRoot(under(head[0], head[1]))] : kind === "pen" ? points.map((point) => pieceRoot(under(point[0], point[1]))) : piecesWithin(around);
+    const found = [...new Set(over.filter((element): element is Element => Boolean(element)))];
     const elements = found.length ? found : [under(around.left + around.width / 2, around.top + around.height / 2) ?? document.body];
     const from = boxOf(elements), id = nextId++;
     setSelections(selections.length, { id, elements, comment: "", drawing: { kind, points, from: { left: from.left, top: from.top } } });
