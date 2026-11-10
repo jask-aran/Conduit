@@ -16,7 +16,7 @@ Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 | Change | Check |
 | --- | --- |
 | Types, routes, isolated logic | `npm run typecheck`, `node --test test/<file>.test.js` |
-| WebSocket, streaming, rendering | `npm run test:harness`, `npm run bench:renderer` |
+| Streaming display, rendering | `npm run bench:renderer` |
 | A component or styling | `npm run gallery`, then Agent Browser |
 | A release | `npm test` (release only) |
 

@@ -1,19 +1,21 @@
 # Testing Conduit
 
-Run `npm` commands and scripts from `conduit-web/`, against the local server at
-`http://127.0.0.1:4310` (`bash .devcontainer/start-conduit.sh restart` after a
+Run `npm` commands and web scripts from `conduit-web/` unless marked otherwise.
+Checks that need the app use the local server at `http://127.0.0.1:4310`
+(`bash .devcontainer/start-conduit.sh restart` from the repository root after a
 change). Pick the cheapest check that can prove the change; don't escalate
 during iterative work.
 
 | Tier | Cost | Commands | For |
 | :--- | :--- | :--- | :--- |
 | **1: Static** | seconds | `npm run typecheck`, `node --test test/<file>.test.js` | types, contracts, server routes, isolated logic |
-| **2: Harnesses** | seconds | `npm run test:harness`, `npm run bench:renderer`, `curl` with a minted session | WebSocket lifecycles, streaming backpressure, Markdown/KaTeX rendering, live server HTTP headers |
+| **2: Harnesses** | seconds | `npm run bench:renderer`, `curl` with a minted session | streaming display scheduling, live server HTTP headers |
 | **3: Gallery** | seconds | `npm run gallery` | any component or styling change, before the app |
 | **3: Browser** | 10–60s | Agent Browser, a probe, `npm run smoke:panes` | real DOM, focus and keyboard, layout, motion, panes |
 | **4: Full suite** | minutes | `npm test` | release verification only |
 
-**The tests only shrink.** Their count and their lines (everything under `test/`) may not rise above
+**The tests only shrink.** Their count (`test()`/`it()` call sites) and their
+lines (JS/TS files under `test/`) may not rise above
 `test/budget.json`; `npm test` checks it first (`npm run test:budget`). A change that needs a new test cuts more
 than it adds: tests that pin wording, source text or a stub's shape rather than durable behaviour go first. Record a
 lower budget with `node scripts/test-budget.mjs --record` (it refuses a higher one).
@@ -29,17 +31,19 @@ node scripts/conduit-auth.mjs mint-session --user-agent <label> \
 `token` is the raw session token, `cookie` a `conduit_session=...` header,
 `json` the token and its metadata, `playwright` a `storageState` for external
 automation. Output files are mode `0600`; omit `--output` for stdout. Agent
-Browser, Windows Chrome and the probes mint their own. In a sandbox, put
-`CONDUIT_DATA_ROOT` on the same command, or it touches the real password.
+Browser, Windows Chrome and the headless probes mint their own. Match
+`CONDUIT_DATA_ROOT` to the server; it defaults to `~/.conduit/data`, shared
+across checkouts. In a sandbox, put it on the same command, or it touches the
+real auth store. Minting requires an existing password and preserves it.
 
 ## Components v2 and the gallery
 
 `npm run gallery` builds the gallery like the app (into `dist-gallery/`) and
 serves `http://localhost:5180/gallery.html` (`gallery:dev` hot-reloads but
 loads slowly). It needs no server, sign-in or fixtures and is never built into
-`dist`. The rail lists the families (Foundations, Frosted, Transcript;
-DESIGN.md Components v2), each cell tagged with its source. The right side
-draws the app's real screens with v2 (`LibraryContext`): Phone
+`dist`. The rail groups the families under Foundations, Components and Blocks
+(DESIGN.md Components v2), each cell tagged with its source. The right side
+draws the app's real screens with v2: Phone
 (`?frame=phone`, 412px and passing for a phone, so a headless screenshot needs
 no touch emulation, `src/gallery/phone-emulation.ts`), Phone sidebar, Desktop
 with its overlays, and `?live=<chat>`, a real chat from the server opened from
@@ -47,7 +51,7 @@ with its overlays, and `?live=<chat>`, a real chat from the server opened from
 the real one is never opened. The bar's speed control slows every animation;
 Tune CSS applies CSS everywhere without writing source.
 
-Toast → **Live engine** in the gallery uses the app's real Sonner adapter,
+Toast → **Live notifications** in the gallery uses the app's real Sonner adapter,
 with its own notification ID scope. Use Show success/error, Repeat same toast,
 Count action and Dismiss demo toasts to check entrance, stacking, replacement,
 actions and exit. The animated `[data-sonner-toast]` must itself be the
@@ -78,7 +82,7 @@ still tested but the v2 markup is not; build first to cover the page itself. For
 Chrome CLI `emulate --viewport '412x860x2.625,mobile,touch'`; window resizing
 alone does not set the coarse-pointer layout. Check opening-tap consumption,
 Escape back to the parent, disabled choices, keyboard focus and selection.
-Desktop and phone use the same `MenuSub` adapter in `components/ui/menus.tsx`;
+Desktop and phone use the same `MenuSub` adapter in `src/components/ui/menus.tsx`;
 `phone` changes panel placement and Back handling. Keyboard opening must focus
 the first available child. Pointer opening must focus inside the child without
 selecting a choice. Tapping the dimmed parent must return without acting on a
@@ -94,11 +98,11 @@ stay as it was. Make one pass: don't stack repeat runs or A/Bs.
    current build.
 2. Make the swap; look at the piece's gallery family (every form and density),
    and grep new class names for collisions.
-3. Restart, `style-snapshot.mjs save /tmp/after.json`, then
-   `style-snapshot.mjs diff /tmp/before.json /tmp/after.json`: every changed
+3. Restart, `node scripts/probes/style-snapshot.mjs save /tmp/after.json`, then
+   `node scripts/probes/style-snapshot.mjs diff /tmp/before.json /tmp/after.json`: every changed
    property should be one the swap meant. It covers a real chat and home at
    1280x900, and each control's focus ring; two saves with nothing changed do
-   not differ.
+   not differ. Both saves attach to the signed-in Windows Chrome on :9222.
 4. A cut-over piece has no classic path (DESIGN.md, Components v2). To compare
    it with the old one, build the previous commit; don't keep a fallback in
    the app.
@@ -118,7 +122,7 @@ invariant it broke (DESIGN.md Motion).
 - `node scripts/motion-check/components.mjs` -- Disclosure, CodeBlock,
   DesktopComposer.
 - `node scripts/motion-check/trace-record.mjs save <file> [--phone]`, then
-  `diff <before> <after>` -- one scripted Render test profile conversation (thinking,
+  `node scripts/motion-check/trace-record.mjs diff <before> <after>` -- one scripted Render test profile conversation (thinking,
   narration, tools, stopped while writing, a tool denied, stopped at an
   approval, a plain answer): each turn's states, where its main thread's time
   went, and every trace settled with each step opened. Two recordings of one
@@ -138,13 +142,14 @@ invariant it broke (DESIGN.md Motion).
 ## Panes smoke
 
 `npm run smoke:panes [-- --project <name>]` drives the panes and file viewer
-in headless Chromium and prints `ok`/`FAIL` per scenario, exiting 1 on any
+in headless Chromium and prints `ok`/`FAIL`/`skip` per scenario, exiting 1 on any
 failure. It is read-only, each scenario in a fresh context so the saved layout
 starts empty; it picks the first project with six visible top-level files
 (Files hides dotfiles), and a
 project whose page lists files also covers the project page. Playwright comes
 from `conduit-web` or is installed once into `.smoke-tools/`. Run it from the
-checkout the server serves (its session goes into that checkout's data), after
+checkout the server serves, with its `CONDUIT_DATA_ROOT` (the session goes into
+that auth store), after
 any change to panes, tabs, drag, header folding or the dock -- performance
 work included. The tab rules are unit tests in `test/file-tabs.test.js`.
 
@@ -163,19 +168,17 @@ npm run agent-browser:local -- --session <id> --restore screenshot /tmp/conduit.
 npm run agent-browser:local -- --session <id> close
 ```
 
-Commands: navigate (`open`, `back`, `forward`, `reload`, `wait`), inspect
-(`snapshot`, `read`, `get`, `is`, `find`, `a11y`, `console`, `errors`),
-interact (`click`, `dblclick`, `fill`, `type`, `press`, `keyboard`, `hover`,
-`focus`, `check`, `uncheck`, `select`, `drag`, `scroll`, `scrollintoview`),
-evidence (`screenshot`, `diff snapshot`). Reference: `agent-browser skills get
-core --full`. Its policy withholds `eval`, so it gives a view, not
-instrumentation, and it is not a performance surface.
+The local wrapper permits navigation, inspection, interaction and screenshot
+or snapshot evidence. Reference: `agent-browser skills get core --full`;
+the wrapper's allowed commands are in `scripts/agent-browser-command-policy.mjs`.
+Its policy withholds `eval`, so it gives a view, not instrumentation, and it
+is not a performance surface.
 
 ### Windows Chrome DevTools
 
 The headed native frame: compositor, GPU, paint, layout, console, network and
 memory, at the user's display scaling. Persistent profile
-`C:\Users\jaska\AppData\Local\Conduit\chrome-agent`, CDP `:9222` (reachable
+`%LOCALAPPDATA%\Conduit\chrome-agent`, CDP `:9222` (reachable
 from WSL at `http://127.0.0.1:9222`).
 
 ```bash
@@ -186,13 +189,8 @@ node ../scripts/run-windows-chrome-devtools.mjs cli take_snapshot
 node ../scripts/run-windows-chrome-devtools.mjs stop-cli   # leaves Chrome running
 ```
 
-`cli` takes pages (`list_pages`, `new_page`, `select_page`, `navigate_page`,
-`close_page`, `resize_page`), inspect (`take_snapshot`, `take_screenshot`,
-`evaluate_script`, console and network requests), interact (`click`,
-`click_at`, `hover`, `drag`, `fill`, `type_text`, `press_key`,
-`handle_dialog`, `upload_file`), performance (`performance_start_trace`,
-`performance_analyze_insight`, `lighthouse_audit`) and memory
-(`take_heapsnapshot`, `compare_heapsnapshots` and details). Reference:
+`cli` forwards page, inspection, interaction, performance and memory commands
+to the external `chrome-devtools` tool. Reference:
 `chrome-devtools <command> --help`.
 
 The server serves a production build with a service worker that keeps the old
@@ -208,16 +206,20 @@ location.reload();
 
 ## Probes
 
-`scripts/probes/`, run from the checkout the server serves. Each opens its own
-page in headless Chromium with a minted session; `--windows` uses the headed
-Chrome on :9222 instead, the only place display scaling and frame cost are
-real. A probe killed mid-run leaves its page open there -- close it before the
-next run, or the next load can hang.
+`scripts/probes/`, run from the checkout the server serves, with its
+`CONDUIT_DATA_ROOT`. Most open their own page in headless Chromium with a minted
+session; `--windows` uses the signed-in headed Chrome on :9222 instead, where
+the user's display scaling and frame cost are real. `style-snapshot.mjs`,
+`turn-profile.mjs` and `call-counts.mjs` always attach to that Chrome.
+`gallery-style-diff.mjs` instead serves two gallery builds locally in headless
+Chromium; it needs no running Conduit server or session. A probe killed mid-run
+leaves its page open in Windows Chrome -- close it before the next run, or the
+next load can hang.
 
 | Probe | Answers |
 | --- | --- |
 | `style-snapshot.mjs save <file>` / `diff <a> <b>` | Did a change move anything the app draws? |
-| `gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]` | Did a library change move anything in the gallery? Every element's computed style, every family at both densities and the previews, between two `npx vite build --mode gallery --outDir <dir>` builds; no server. A refactor is done when it prints IDENTICAL (or only the custom properties it renamed). |
+| `gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]` | Did a library change move anything in the gallery? Every element's computed style, every family at both densities and the previews, between two `npx vite build --mode gallery --outDir <dir>` builds; no running Conduit server. A refactor is done when it prints IDENTICAL (or only the custom properties it renamed). |
 | `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message? Asserted, no model call; the gate for transcript live/settle changes. A turn a harness ends without stating its outcome is logged in the server journal as `transcript contract: ...`. |
 | `fast-check.mjs [prompt] [out]` | The quick look at a renderer change, in about 4s: one `rich 2000t` loop at 1000 tokens/s, recording the answer's DOM churn (added/removed by kind), every code card shape seen while streaming, and the settled answer (`<out>.html`, `<out>.cards`). Run before and after and `cmp` the files; motion still needs `visibility-guard.mjs`. |
 | `visibility-guard.mjs [prompt] [--phone] [--examples]` | What the transcript's virtualization shows each frame through a long streamed answer scrolled every way a reader and the app do: blank frames, unexplained moves, placeholders back at a different height, any move down while following. Before and after a virtualization or layout change; no count may rise. It reads layout every frame, so it times nothing. |
@@ -229,8 +231,8 @@ next run, or the next load can hang.
 | `dock-layer-frames.mjs` | Does the dock hold still switching between beside and over the panes? |
 | `dictation-row.mjs` | How the phone composer's row moves as dictation starts and stops, empty and with a draft (synthetic mic). |
 | `send-motion.mjs` | What moves when a message is sent from the phone composer; saves a frame strip. |
-| `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call. |
-| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Render test profile turn's main-thread time goes, by trace state: % busy, frames the compositor drew and dropped (the frame rate; main-thread paints a second are not it), tasks against 6.94ms, rendering by phase, JS self time by function. `--phone` is 412x860 at 2.625x with touch. A run of slow frames whose element counts match their neighbours' is the machine, not the page. Build with source maps for names. |
+| `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call by default; `MODEL=<spec>` selects the Render test profile instead. |
+| `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Render test profile turn's main-thread time goes, by trace state: % busy, compositor frames drawn and dropped, tasks against 6.94ms, rendering by phase, JS self time by function. Defaults to the gallery's live phone; `--app` uses the app, `--phone` the app at 412x860 and 2.625x with touch. Build with source maps for names. |
 | `call-counts.mjs [prompt] [--phone] [--match <text>] [--top N]` | How many times each function ran in one streamed turn, per socket message and frame. Counts don't vary run to run, so they state exactly what a change removed. Build with source maps first. |
 | `load-waterfall.mjs [--rtt <ms>] [--cpu 4] [--runs <n>]` | How long the first open takes to its fade, and what it waits on. |
 | `load-profile.mjs [--cpu 4] [--slices]` | What the first open spends its main thread on. Names after `npx vite build --sourcemap`; rebuild without it afterwards. |
@@ -338,8 +340,6 @@ What a transcript ends up looking like is owned by tests that describe the rows
 a reader sees, so a bug that makes a transcript wrong without making a unit
 test wrong fails here. A transcript bug gets a failing test here first.
 
-- `test/transcript-pipeline.test.js` -- Pi, faked at its stdio, through the
-  real manager, command handling, normalizers and client projection.
 - `test/codex-transcript-pipeline.test.js` -- Codex, faked at its JSON-RPC
   wire.
 - `test/opencode-transcript-pipeline.test.js` -- OpenCode, faked at its HTTP
@@ -351,27 +351,20 @@ test wrong fails here. A transcript bug gets a failing test here first.
   against the fake app-server in `test/helpers/conduit-harness.js`; slower and
   cannot hold a turn mid-flight.
 
-Encode the order a harness really says things in, captured, not guessed:
-
-```bash
-CONDUIT_PI_TRACE=/tmp/pi-trace.jsonl bash .devcontainer/start-conduit.sh restart
-```
+Encode the order a harness really says things in, captured, not guessed.
 
 ## Harnesses and live timing
 
 ```bash
-npm run test:harness -- --help
-npm run test:harness -- --profile high-tps --scenario local-high-tps
 npm run bench:renderer
 npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id>
 ```
 
-Transport profiles `steady`, `burst`, `stall`, `high-tps`, `jitter`; controls
-`--text`, `--chunk-size`, `--interval-ms`, `--burst-size`, `--stall-after`,
-`--stall-ms`, `--client-pause-after`, `--client-pause-ms`, `--seed`.
-`startConduitHarness()` (`test/helpers/conduit-harness.js`) gives isolated
-HTTP, WebSocket, SSE, persistence, PTY and Pi lifecycle tests. `perf:live`
-makes real provider calls and costs money.
+`startConduitHarness()` (`test/helpers/conduit-harness.js`) starts a Conduit
+process with a fake Codex app-server for HTTP, WebSocket and restart checks.
+`perf:live` requires `CONDUIT_PERF_PASSWORD` and `CONDUIT_PERF_PROMPT` (or
+`--prompt-file`); see its `--help` for limits. It makes real provider calls and
+costs money; use a dedicated performance chat.
 
 ## Which client build you are testing
 
@@ -389,7 +382,8 @@ land.
 - **Testing a Windows update:** build and install a dev baseline, restart the
   server, build a newer dev installer; the server finds the output and serves
   `/desktop-updates`. Use the client's Restart once its download completes.
-- **The Android dev APK cannot test an update.** It reports `0.0.0-dev`, so
+- **The Android dev APK cannot test a release update in place.** By default it
+  reports `0.0.0-dev-dev`, so
   Check for updates offers the latest release, which installs *beside* it.
   Native changes need a new APK, sideloaded.
 - `npm run build`, `android:build` and `desktop:build:win` all write
@@ -445,18 +439,18 @@ adb reverse tcp:4310 tcp:4310   # then "Use the server on this computer" and the
   honoured only on 133). Check before concluding anything about browser
   behaviour.
 - Sign the shell in with the password. A minted session can't: `mint-session`
-  issues browser-kind sessions and `validateNativeSession`
+  issues `script` sessions and `validateNativeSession`
   (`src/auth-middleware.js`) accepts only `native` ones (issue #69).
 - Use a server with real chats long enough to scroll: a transcript that cannot
   scroll can't tell following the tail from being scrolled away, which are
-  different code paths. A throwaway server without model credentials can't be
-  seeded at all.
+  different code paths. The Test and Render test profiles can seed a throwaway
+  server without model credentials.
 - It renders in software at ~30fps, so smoothness is the emulator describing
   itself. Measure cost: CDP `Performance.getMetrics` either side of an
   interaction, `LayoutDuration` and `RecalcStyleDuration` per frame.
-- `scripts/android-keyboard-trace.mjs` records every frame of a keyboard
-  travel (height, `scrollTop`, client and scroll height, distance from the
-  bottom) with no limit.
+- `scripts/android-keyboard-trace.mjs` samples keyboard travel (height,
+  `scrollTop`, client and scroll height, distance from the bottom), printing
+  changed frames over 2.5 seconds for each open and close.
 - `screenrecord` manages ~7fps here; stretch animations instead with
   `settings put global animator_duration_scale 10` and
   `window_animation_scale` (app and system alike, so compare shapes, not
@@ -487,7 +481,7 @@ frame looked like; drive it from WSL with the Windows `adb.exe`
   nodaemon server start` in the background (started from WSL it often fails
   to daemonize).
 - `screenrecord` there is variable-rate (~37fps across a travel). To measure
-  the composer against the keyboard: give `.composer-surface-shell` a flat red
+  the composer against the keyboard: give `.ui-phone-row` a flat red
   background over CDP, record, take real timestamps with `ffprobe` (the
   container's rate is wrong), split frames with `ffmpeg -fps_mode
   passthrough`, then per frame the keyboard's top edge against the red band is
@@ -513,8 +507,9 @@ frame looked like; drive it from WSL with the Windows `adb.exe`
 
 `npm test` before tagging a release. Test installer changes with this
 checkout's installer against this checkout, never by pushing `main` (read
-DEPLOYMENT.md Development and Release first; a sandbox still shares the
-tailnet and, without `CONDUIT_DATA_ROOT`, the password):
+docs/DEPLOYMENT.md Development and Release first; a sandbox still shares the
+tailnet, and auth commands without its `CONDUIT_DATA_ROOT` touch the real auth
+store):
 
 ```bash
 # repository root
