@@ -1,6 +1,7 @@
 import { createEffect, onCleanup } from "solid-js";
 import { api } from "./api/client";
 import { connectionId } from "./state/runtime";
+import { UI_ACTIONS } from "../ui-api.js";
 
 /*
  * What this tab shows, told to the server, and what an agent asks of it, done here (roadmap #11; the server side is
@@ -9,7 +10,10 @@ import { connectionId } from "./state/runtime";
  * each has an id of its own) and is answered with what came of it.
  */
 export type AgentUiPane = { pane: "main" | number; view: string | null; title: string; focused: boolean };
-export type AgentUiCommand = { action: "open" | "close" | "focus"; view?: string; pane?: "main" | number; beside?: boolean };
+/** The actions a client does, from the UI API's declaration (ui-api.js): a handler for each, and no other. */
+export type ClientUiAction = { [K in keyof typeof UI_ACTIONS]: (typeof UI_ACTIONS)[K]["by"] extends "client" ? K : never }[keyof typeof UI_ACTIONS];
+export type AgentUiCommand = { action: ClientUiAction; view?: string; pane?: "main" | number; beside?: boolean };
+export type AgentUiHandlers = { [K in ClientUiAction]: (command: AgentUiCommand) => Promise<string> | string };
 
 const TAB = (() => { try { return crypto.randomUUID().slice(0, 8); } catch { return Math.random().toString(36).slice(2, 10); } })();
 
@@ -20,7 +24,7 @@ export function createAgentUiBridge(deps: {
   connection: () => string;
   panes: () => AgentUiPane[];
   route: () => string;
-  run: (command: AgentUiCommand) => Promise<string>;
+  actions: AgentUiHandlers;
 }) {
   let timer = 0;
   let sent = "";
@@ -49,7 +53,9 @@ export function createAgentUiBridge(deps: {
     const answer = (body: { ok: boolean; result?: string; error?: string }) => api(`/v0/runtime/clients/${encodeURIComponent(deps.connection())}/commands/${encodeURIComponent(detail.id)}`,
       { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
     // What came of it is told with the view it left, so a look straight after sees it.
-    void deps.run(detail.command)
+    const handler = Object.hasOwn(deps.actions, detail.command?.action) ? deps.actions[detail.command.action] : null;
+    if (!handler) return void answer({ ok: false, error: `Not something this client does: ${String(detail.command?.action)}` });
+    void Promise.resolve().then(() => handler(detail.command))
       .then(async (result) => { await new Promise((resolve) => window.setTimeout(resolve, 250)); await report(true); await answer({ ok: true, result }); })
       .catch((error) => answer({ ok: false, error: error instanceof Error ? error.message : String(error) }));
   };

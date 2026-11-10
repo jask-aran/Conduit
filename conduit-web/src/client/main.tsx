@@ -125,7 +125,8 @@ import { applyUiScale, followZoomGestures, selectedUiScale, stepUiScale } from "
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { applyMotionScale } from "./preferences/motion-scale";
 import { harnessLabelFor } from "./harness-brand";
-import { createAgentUiBridge } from "./agent-ui";
+import { createAgentUiBridge, type AgentUiCommand } from "./agent-ui";
+import { agentUiViews, declaredUiView } from "../ui-api.js";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -4669,30 +4670,40 @@ function App() {
     connection: connectionId,
     route: () => routeKind(),
     panes: () => panesShown().map((pane) => { const view = viewOf(pane); return { pane, view, title: view ? viewName(view) : "Empty pane", focused: keyboardPane() === pane }; }),
-    run: async (command) => {
-      const shown = panesShown();
-      const pane = command.pane ?? keyboardPane();
-      if (command.action !== "open" && !shown.includes(pane)) throw new Error(`No pane ${String(pane)} is open; open ones: ${shown.map(String).join(", ")}`);
-      if (command.action === "focus") { focusAnyPane(pane); return `Focused pane ${String(pane)}.`; }
-      if (command.action === "close") {
-        if (command.pane === undefined) throw new Error("Say which pane to close (main or its number, from look).");
-        await closeDocument(pane); return `Closed what pane ${String(pane)} showed.`;
-      }
-      const view = command.view;
-      if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use chat:<id>, page:dashboard, page:agent, page:jbot, page:project:<id>, browser:hub, terminal or files.`);
-      if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
-        const slot = await openBeside(view, true);
-        // Where it landed: a pane in the row, or the dock when the window has no room for another beside.
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        const at = panesShown().find((candidate) => viewOf(candidate) === view);
-        if (at !== undefined) return `Opened ${viewName(view)} in pane ${String(at)}.`;
-        return typeof slot === "number" ? `Opened ${viewName(view)} in the dock: the window has no room for another pane beside.` : `Could not open ${viewName(view)} beside.`;
-      }
-      if (pane === "main" || !shown.includes(pane)) { await openInPaneA(view); focusAnyPane("main"); return `Opened ${viewName(view)} in pane main.`; }
-      await setSlotView(pane as number, view);
-      focusAnyPane(pane);
-      return `Opened ${viewName(view)} in pane ${String(pane)}.`;
-    },
+    actions: (() => {
+      // The pane a command means: the one it names, else the one with the keyboard; it must be open unless it is to be.
+      const paneOf = (command: AgentUiCommand, mustShow = true) => {
+        const shown = panesShown();
+        const pane = command.pane ?? keyboardPane();
+        if (mustShow && !shown.includes(pane)) throw new Error(`No pane ${String(pane)} is open; open ones: ${shown.map(String).join(", ")}`);
+        return { shown, pane };
+      };
+      return {
+        focus: (command) => { const { pane } = paneOf(command); focusAnyPane(pane); return `Focused pane ${String(pane)}.`; },
+        close: async (command) => {
+          const { pane } = paneOf(command);
+          if (command.pane === undefined) throw new Error("Say which pane to close (main or its number, from look).");
+          await closeDocument(pane); return `Closed what pane ${String(pane)} showed.`;
+        },
+        open: async (command) => {
+          const { shown, pane } = paneOf(command, false);
+          const view = command.view;
+          if (!view || !declaredUiView(view) || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}. Use ${agentUiViews()}.`);
+          if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
+            const slot = await openBeside(view, true);
+            // Where it landed: a pane in the row, or the dock when the window has no room for another beside.
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            const at = panesShown().find((candidate) => viewOf(candidate) === view);
+            if (at !== undefined) return `Opened ${viewName(view)} in pane ${String(at)}.`;
+            return typeof slot === "number" ? `Opened ${viewName(view)} in the dock: the window has no room for another pane beside.` : `Could not open ${viewName(view)} beside.`;
+          }
+          if (pane === "main" || !shown.includes(pane)) { await openInPaneA(view); focusAnyPane("main"); return `Opened ${viewName(view)} in pane main.`; }
+          await setSlotView(pane as number, view);
+          focusAnyPane(pane);
+          return `Opened ${viewName(view)} in pane ${String(pane)}.`;
+        },
+      };
+    })(),
   });
   // A pane beside A, in the row or (docked) in the dock.
   const renderSlot = (slot: number, position: () => number, docked: boolean) => {

@@ -34,6 +34,10 @@ watching or taking over helps.
 1. **One MCP server.** Conduit's tools for agents (its UI, the inbox, screens as they come) are defined once, in the
    `conduit` MCP server. Other harnesses reach it over Streamable HTTP; Conduit's own agents mount the same server
    in-process. No tool of this kind is defined anywhere else.
+   What the UI can be told to do is declared once (`conduit-web/src/ui-api.js`): each action and each view says
+   whether an agent may use it, and `conduit_ui` is built from those that do. The client's handlers and its view
+   kinds are typed by the same declaration, so either side changing alone fails the typecheck. A screen kind is added
+   there.
 2. **Calls know their chat.** Each chat's harness is handed the server scoped to that chat (its own token or path); an
    in-process call carries the conversation. An unscoped call (a server added by hand) behaves as today.
 3. **Turn origin.** Every send carries its client; the turn records it. `conduit_ui` aims, in order, at the origin, a
@@ -84,5 +88,7 @@ Findings behind the last two (source read 2026-11-10):
 
 ## Open
 
-- May an agent drive a device's screen with no client showing it? Proposed: the hub's browser yes (as today); a
-  device's desktop or phone only while a client shows it, until grants say otherwise.
+- When nobody has a device's screen open in any pane, may an agent still act on it (click on your PC's desktop, tap on
+  your phone)? It can be done either way: actions do not need the picture. Proposed: the hub's browser yes, as today
+  (it is the agents' own); a device's desktop or phone only while some client is showing that screen, so nothing moves
+  on a machine without a person able to see it and take the input back. A grant per device could lift that later.

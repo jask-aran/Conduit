@@ -2,6 +2,10 @@ import { randomBytes } from "node:crypto";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
+import { agentUiActions, agentUiViews, declaredUiView, UI_ACTIONS, UI_ARGS } from "../ui-api.js";
+
+const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options) => Type.Boolean(options),
+  pane: (options) => Type.Union([Type.Literal("main"), Type.Number()], options) };
 
 /*
  * Agents drive Conduit's UI (roadmap #11): what each open tab of Conduit shows, as it tells us (client agent-ui.ts),
@@ -110,19 +114,18 @@ export function describeLook(tabs, yours = null) {
  * chats have it; a subagent's child does not (no one is watching it work).
  */
 export function UiTool(runtime) {
+  const actions = agentUiActions();
+  const args = Object.keys(UI_ARGS).filter((name) => actions.some((action) => UI_ACTIONS[action].args.includes(name)));
   const text = (value, isError = false) => ({ output: [{ type: "text", text: value }], ...(isError ? { isError: true } : {}) });
   return defineTool({
     name: "conduit_ui",
-    description: "See and arrange what the person has open in Conduit. look: each open Conduit tab or app (the one in use first) "
-      + "with its panes, what each shows and which has the keyboard. open: show something -- chat:<id>, page:dashboard, "
-      + "page:agent, page:project:<id>, browser:hub (the hub's browser, which you work through the agent_browser tools), terminal or files -- in a pane (pane: main or a number; default the one with the "
-      + "keyboard) or beside it (beside: true). close: empty a pane (pane required). focus: give a pane the keyboard. Commands go to the tab "
-      + "the person is talking to you from (look marks it Yours; else the one in use) unless client names another. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
+    // Built from the UI API (ui-api.js): the actions and views declared for agents, and only those.
+    description: `See and arrange what the person has open in Conduit. ${actions.map((name) => `${name}: ${UI_ACTIONS[name].says}.`).join(" ")} `
+      + `Views: ${agentUiViews()}. Commands go to the tab the person is talking to you from (look marks it Yours; else the one in use) `
+      + "unless client names another. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
     parameters: Type.Object({
-      action: Type.Union(["look", "open", "close", "focus"].map((value) => Type.Literal(value))),
-      view: Type.Optional(Type.String({ description: "For open: what to show, such as chat:<id> or page:dashboard." })),
-      pane: Type.Optional(Type.Union([Type.Literal("main"), Type.Number()], { description: "Which pane: main, or a pane's number from look." })),
-      beside: Type.Optional(Type.Boolean({ description: "For open: in a new pane beside the one with the keyboard." })),
+      action: Type.Union(actions.map((value) => Type.Literal(value))),
+      ...Object.fromEntries(args.map((name) => [name, Type.Optional(ARG_TYPES[UI_ARGS[name].type]({ description: UI_ARGS[name].says }))])),
       client: Type.Optional(Type.String({ description: "Another tab from look (connection/tab); default yours." })),
     }),
     replay: "unsafe",
@@ -130,6 +133,8 @@ export function UiTool(runtime) {
       const control = runtime.uiControl;
       if (!control) return text("Conduit's UI cannot be reached from here.", true);
       const chatId = await callingChat(runtime, api, context);
+      if (!actions.includes(action)) return text(`Not an action: ${action}.`, true);
+      if (view !== undefined && !declaredUiView(view, { agent: true })) return text(`Not a view you can open: ${view}. Views: ${agentUiViews()}.`, true);
       if (action === "look") { const tabs = control.look(); return text(describeLook(tabs, chatId ? control.targetFor(chatId, tabs)?.client : null)); }
       try {
         const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null, chatId);

@@ -1,3 +1,4 @@
+import { UI_VIEWS } from "../../ui-api.js";
 // Shapes the workspace views share: the tree and file endpoints, Git state,
 // and a chat's history tree.
 
@@ -23,6 +24,11 @@ export type PanelTab = "files" | "diff" | "chat" | "terminal" | "jbot";
  * or nothing yet ("home": an empty pane, showing what can be opened in it).
  */
 export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}`;
+/** SplitView's kinds are the UI API's declared views' (ui-api.js), each way: a kind on one side only fails here. */
+type SplitViewKind = SplitView extends infer V ? V extends `${infer K}:${string}` ? K : V : never;
+type DeclaredViewKind = (typeof UI_VIEWS)[number]["kind"];
+const viewKindsAgree: [SplitViewKind] extends [DeclaredViewKind] ? [DeclaredViewKind] extends [SplitViewKind] ? true : never : never = true;
+void viewKindsAgree;
 export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot";
 export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser):./.test(value));
 export type ChatMode = "history" | "changes";

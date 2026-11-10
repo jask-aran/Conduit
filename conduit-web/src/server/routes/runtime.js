@@ -1,3 +1,4 @@
+import { clientUiActions, declaredUiView } from "../../ui-api.js";
 import { normalizeKnownServers, validKnownServers, validSidebarPins, validTerminalShortcuts, validUiPreferencePatch } from "../../preferences-store.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 import { clientAddress, isTailnetOrLoopback } from "../../nodes/node-hub.js";
@@ -269,7 +270,8 @@ export function registerRuntimeRoutes(app, {
   app.get("/v0/ui", (_request, response) => response.json({ tabs: uiControl.look() }));
   app.post("/v0/ui/commands", async (request, response) => {
     const { action, view, pane, beside, client } = request.body || {};
-    if (!["open", "close", "focus"].includes(action)) return response.status(400).json({ error: "invalid_action" });
+    if (!clientUiActions().includes(action)) return response.status(400).json({ error: "invalid_action" });
+    if (view !== undefined && !declaredUiView(String(view))) return response.status(400).json({ error: "invalid_view" });
     try { response.json(await uiControl.command({ action, ...(view ? { view: String(view) } : {}), ...(pane !== undefined ? { pane: pane === "main" ? "main" : Number(pane) } : {}), ...(beside ? { beside: true } : {}) }, client || null)); }
     catch (error) { response.status(error.status || 500).json({ error: error.message }); }
   });
