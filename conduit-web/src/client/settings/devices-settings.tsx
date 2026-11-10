@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, Index, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
 import { activeOrigin } from "../platform/servers.ts";
 import type { Project } from "../api/contracts";
@@ -13,7 +13,7 @@ import { desktopShell, type CompanionStatus, type DesktopShellSettings } from ".
 import { pairingWith, pairThisComputer, keepThisComputerConnected } from "../platform/this-computer.ts";
 import { NetworkSettings } from "./network-settings.tsx";
 import { PersonBrowsersSettings } from "./person-browsers-settings.tsx";
-import { DesktopAppLines } from "./desktop-settings";
+import { createShellSettings } from "./desktop-settings";
 import { MachineReadout } from "./machine-readout.tsx";
 import { createNetwork, DeviceHarnesses, mountedOn, together, type Device, type Node, type Shown, type ShownDevice } from "./network-state.tsx";
 import { createPushControl } from "../platform/push.ts";
@@ -56,6 +56,8 @@ export function DevicesSettingsTile(props: {
   // This app's own client: its companion, paired with this server or not.
   companion = desktopShell ? createCompanion(devices, () => refresh()) : null;
   companion?.read();
+  // How the desktop app runs (tray, sign-in), read from its shell; nothing anywhere else.
+  const shell = desktopShell ? createShellSettings() : null;
   const [open, setOpen] = createSignal<Set<string>>(new Set());
 
   const fail = (fallback: string) => (cause: unknown) => setError(cause instanceof Error ? cause.message : fallback);
@@ -109,8 +111,10 @@ export function DevicesSettingsTile(props: {
    * This device: what the app or tab it is seen from does here (its own switches, set only here) beside what the app
    * lets the hub do with this computer's folders; then its environments, each with a terminal and the workspaces it
    * mounts. Mounting a folder is done in the app, not here.
+   * Each takes the device as it is now, not once: the network is read again every few seconds, and a page drawn from
+   * one reading would be drawn again with each (its switches blinked).
    */
-  const here = (device: ShownDevice) => {
+  const here = (device: () => ShownDevice) => {
     const paired = () => companion?.pairing() ?? null;
     const grants = () => paired()?.newFolders ?? { write: true, shell: false };
     return <>
@@ -125,10 +129,23 @@ export function DevicesSettingsTile(props: {
                   <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.test()}>Send a test</Button>
                 </Show>
                 <Switch id="device-notifications" label="Notifications" disabled={notifications.busy()} checked={notifications.on()}
-                  onChange={(on) => void (on ? notifications.enable(device.name) : notifications.disable())} />
+                  onChange={(on) => void (on ? notifications.enable(device().name) : notifications.disable())} />
               </SettingLine>
             </Show>
-            <DesktopAppLines />
+            <Show when={shell?.settings()}>{(current) => <>
+              <SettingLine label="Keep running in tray">
+                <Switch id="desktop-tray" label="Keep running in tray" checked={current().keepRunningInTray} onChange={(on) => shell!.update({ keepRunningInTray: on })} />
+              </SettingLine>
+              <SettingLine label="Launch at sign-in">
+                <Switch id="desktop-autostart" label="Launch at sign-in" checked={current().launchAtLogin}
+                  onChange={(on) => shell!.update({ launchAtLogin: on, startHidden: on ? current().startHidden : false })} />
+              </SettingLine>
+              {/* Starting hidden is only a question for a launch nobody asked for. */}
+              <SettingLine label="Start hidden">
+                <Switch id="desktop-start-hidden" label="Start hidden" disabled={!current().launchAtLogin} checked={current().startHidden} onChange={(on) => shell!.update({ startHidden: on })} />
+              </SettingLine>
+            </>}</Show>
+            <Show when={shell?.error()}><Note tone="error">{shell!.error()}</Note></Show>
           </Group>
         </Show>
         <Show when={companion && paired()}>
@@ -151,42 +168,54 @@ export function DevicesSettingsTile(props: {
       <Show when={notifications.problem()?.distributors?.length}>
         <Actions kind="setting">
           <For each={notifications.problem()!.distributors}>{(distributor) =>
-            <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.choose(distributor.id, device.name)}>Use {distributor.label}</Button>}</For>
+            <Button variant="ghost" size="sm" disabled={notifications.busy()} onClick={() => void notifications.choose(distributor.id, device().name)}>Use {distributor.label}</Button>}</For>
         </Actions>
       </Show>
     </>;
   };
-  /** What an environment's line says: what it mounts while it is connected (its own app left out: the title says it), else since when it is away. */
+  /** What an environment's line says: that this app is on it, and what it mounts while it is connected, else since when it is away. */
   const says = (shown: Shown) => {
-    if (!shown.node?.online) return status(shown);
+    if (!shown.node?.online) return [shown.mine ? "this app" : "", status(shown)].filter(Boolean).join(" · ");
     const meta = shown.part.meta ?? "";
-    return (shown.app && meta.startsWith(`${shown.app} · `) ? meta.slice(shown.app.length + 3) : meta) || "No workspaces";
+    const app = shown.app?.split(" · ")[0];
+    return (app && meta.startsWith(`${app} · `) ? meta.slice(app.length + 3) : meta) || "No workspaces";
   };
-  /** This device's environments side by side: each one's line (a terminal there), then the workspaces it mounts; under them what else is open on the device, and bringing another environment in. */
-  const environments = (device: ShownDevice) => {
-    const own = () => device.clients.filter((shown) => shown.node);
-    const rest = () => together(device.clients.filter((shown) => !shown.node && !shown.mine));
+  /** This device's environments side by side, the one this app is on first: each one's line (a terminal there), then the workspaces it mounts; under them what else is open on the device, and bringing another environment in. */
+  const environments = (device: () => ShownDevice) => {
+    const own = () => device().clients.filter((shown) => shown.node).sort((a, b) => Number(b.mine) - Number(a.mine));
+    // By id: a reading makes each client anew, and a column drawn from the client itself would be drawn again with it.
+    const ids = createMemo(() => own().map((shown) => shown.node!.id), [], { equals: (a, b) => a.join() === b.join() });
+    const rest = () => together(device().clients.filter((shown) => !shown.node && !shown.mine));
     return <Group title="Environments">
       <Show when={own().length} fallback={<Note>None on this device</Note>}>
         <Columns>
-          <For each={own()}>{(shown) => <Group kind="column">
-            <SettingLine label={shown.node!.name} state={says(shown)}>
-              <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
-              <Show when={shown.node!.online && (shown.node!.local || shown.node!.terminal)}>
-                <Button variant="ghost" outline size="sm" aria-label={`Terminal on ${shown.node!.name}`} onClick={() => props.onOpenTerminal(shown.node!)}><Icons.Terminal /> Terminal</Button>
-              </Show>
-            </SettingLine>
-            <For each={mounted(shown.node!)}>{(project) =>
-              <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
-          </Group>}</For>
+          <For each={ids()}>{(id) => {
+            const shown = () => own().find((item) => item.node!.id === id)!;
+            const node = () => shown().node!;
+            return <Group kind="column">
+              <SettingLine label={node().name} state={says(shown())}>
+                <StatusDot label={status(shown())} tone={shown().part.online ? "success" : "muted"} />
+                <Show when={node().online && (node().local || node().terminal)}>
+                  <Button variant="ghost" outline size="sm" aria-label={`Terminal on ${node().name}`} onClick={() => props.onOpenTerminal(node())}><Icons.Terminal /> Terminal</Button>
+                </Show>
+              </SettingLine>
+              <For each={mounted(node())}>{(project) =>
+                <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
+            </Group>;
+          }}</For>
         </Columns>
       </Show>
-      <For each={rest()}>{(shown) => <SettingLine label={shown.part.name} state={shown.part.meta}>
-        <StatusDot label={status(shown)} tone={shown.part.online ? "success" : "muted"} />
-      </SettingLine>}</For>
+      <Index each={rest()}>{(shown) => <SettingLine label={shown().part.name} state={shown().part.meta}>
+        <StatusDot label={status(shown())} tone={shown().part.online ? "success" : "muted"} />
+      </SettingLine>}</Index>
       {/* The app can bring another environment of this machine in (a WSL distro); not where the hub already runs. */}
-      <Show when={companion && device.paired && !device.clients.some((shown) => shown.node?.local)}><PairEnvironment device={device} onPaired={refresh} /></Show>
+      <Show when={companion && device().paired && !device().clients.some((shown) => shown.node?.local)}><PairEnvironment device={device()} onPaired={refresh} /></Show>
     </Group>;
+  };
+  /** What the device is seen from, beside its name: the app and the environment it runs on ("Conduit Dev on Windows"), or the browser. */
+  const seenFrom = (device: ShownDevice) => {
+    const mine = device.clients.find((shown) => shown.mine);
+    return mine?.node && mine.app ? `${mine.app.split(" · ")[0]} on ${mine.node.name}` : mine?.app;
   };
   /** This app's own pairing with the server, last: taking it off the network, or bringing it on. */
   const pairing = () => <Show when={companion}>
@@ -209,12 +238,12 @@ export function DevicesSettingsTile(props: {
     <Show when={props.part === "device" && active() && thisDevice()}>{(device) => <>
       <Group>
         {/* Its name, large: what the network calls this device, renamed here only; beside it, what it is seen from. */}
-        <SettingTitle label="This device's name" value={device().name} detail={device().clients.find((shown) => shown.mine)?.app}
+        <SettingTitle label="This device's name" value={device().name} detail={seenFrom(device())}
           editable={device().paired} onChange={(name) => rename(device(), name)} />
-        {here(device())}
+        {here(device)}
         <Show when={notifications.problem()}>{(problem) => <Note tone={problem().distributors ? "quiet" : "error"}>{problem().text}</Note>}</Show>
       </Group>
-      {environments(device())}
+      {environments(device)}
     </>}</Show>
 
     {/* The network's own settings, the server in use's: another is switched to first. */}

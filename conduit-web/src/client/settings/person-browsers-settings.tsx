@@ -50,6 +50,10 @@ export function PersonBrowsersSettings(props: {
     api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/browsers/${encodeURIComponent(browser)}`, { method: "DELETE" }), "The browser was not unpaired.");
   // Which code was just copied, for as long as any copy says so: it used to say so until the next one.
   let copiedTimer = 0;
+  // Where a browser is paired: on This device its environment alone ("through Ubuntu": the one that carries the
+  // agent's commands to it, which need not be the one the browser runs on); on the network, the whole name.
+  const through = (environment: PersonBrowserEnvironment) => props.device !== undefined && environment.name.startsWith(`${props.device} · `)
+    ? `through ${environment.name.slice(props.device.length + 3)}` : environment.name;
   const copy = async (code: string) => {
     window.clearTimeout(copiedTimer);
     try { await navigator.clipboard.writeText(code); setCopied(code); copiedTimer = window.setTimeout(() => setCopied(""), COPY_FEEDBACK_MS); } catch { setCopied(""); }
@@ -61,12 +65,12 @@ export function PersonBrowsersSettings(props: {
       <Show when={list().length} fallback={<Note>{props.device === undefined ? "No device on this network can offer a browser yet" : "This device cannot offer a browser yet"}: it needs a folder shared with commands.</Note>}>
         <For each={list()}>{(environment) => <>
           <For each={environment.browsers}>{(browser) =>
-            <SettingLine label={browser.name} state={`OpenCode Browse · ${environment.name}`}>
+            <SettingLine label={browser.name} state={`OpenCode Browse · ${through(environment)}`}>
               <StatusDot label={browser.connected ? "Connected" : "Not running"} tone={browser.connected ? "success" : "muted"} />
               <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Unpair ${browser.name}`} onClick={() => void unpair(environment, browser.id)}>Unpair</Button>
             </SettingLine>}</For>
           <Show when={environment.pairing} fallback={
-            <SettingLine label={environment.browsers.length ? "Pair another browser" : "Pair a browser"} state={environment.name}
+            <SettingLine label={environment.browsers.length ? "Pair another browser" : "Pair a browser"} state={through(environment)}
               title={`Pairs a Chrome, Edge, Brave or other Chromium browser on ${environment.name} with Conduit: install OpenCode Browse in it, then enter the code there.`}>
               <Show when={environment.available} fallback={<StatusDot label={environment.error || "Not available"} tone="muted" />}>
                 <SettingLink href={environment.extensionUrl}>Get the extension</SettingLink>
