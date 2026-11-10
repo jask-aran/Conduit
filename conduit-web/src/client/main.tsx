@@ -1412,7 +1412,7 @@ function App() {
   const sendFromDashboard = async () => {
     const sending = chat.send().catch(() => undefined);
     const from = await leaveDashboard();
-    setRouteKind("chat");
+    showRoute({ kind: "chat" });
     arriveInChat(from);
     await sending;
   };
@@ -1583,7 +1583,7 @@ function App() {
     chat.reset(profileId);
     attachments.clear({ discard: false });
     catalogue.selectProject(project);
-    setRouteKind("chat");
+    showRoute({ kind: "chat" });
     try {
       const created = await createProfileChat(project, profileId);
       if (requestEpoch !== newChatRequestEpoch) {
@@ -1678,9 +1678,7 @@ function App() {
     const chatRoot = catalogue.projects().find((project) => project.slug === "chat");
     if (chatRoot) catalogue.selectProject(chatRoot);
     setMobileSidebarOpen(false);
-    setRouteKind("dashboard");
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: "dashboard" });
     if (historyMode === "push") history.pushState({}, "", "/");
     else if (historyMode === "replace") history.replaceState({}, "", "/");
   };
@@ -1700,9 +1698,7 @@ function App() {
     // under a press on its row (previewJbot), it stays open until the tap.
     if (!preview) shutDrawerOnto(Promise.resolve());
     setWorkspaceViewRequest(null);
-    setRouteKind(kind);
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: kind });
     if (historyMode === "push") history.pushState({}, "", kind === "agent" ? "/jbot/page" : "/jbot");
   };
   const openAgent = (historyMode: "push" | "none" = "push") => openJbotPage("agent", historyMode);
@@ -1924,9 +1920,7 @@ function App() {
     if (chatRoot) catalogue.selectProject(chatRoot);
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
-    batch(() => { setRouteKind("computer"); setComputerHarness(""); setComputerEnvironment(environment); });
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: "computer", environment });
     if (!environment && !computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", environment ? `/computer/environment/${encodeURIComponent(environment)}` : "/computer");
   };
@@ -1942,6 +1936,22 @@ function App() {
   const [harnessScope, setHarnessScope] = createSignal<string | null>(null);
   const [harnessThread, setHarnessThread] = createSignal<HarnessThreadTarget | null>(null);
   const [trackingThread, setTrackingThread] = createSignal(false);
+  // Where the page is, written in one step: the kind and only the parts that kind has. Each way in used to set
+  // these one by one, so a part of the last place was left standing beside the new one (a harness page once
+  // opened kept the Hub row lit from a chat). An open thread is its own (setHarnessThread, leaveHarnessThread).
+  type Place = { kind: "chat" | "project" | "dashboard" | "agent" | "jbot" }
+    | { kind: "terminal"; terminalId?: string }
+    | { kind: "computer"; harness?: string; environment?: string; scope?: string | null };
+  const showRoute = (place: Place) => batch(() => {
+    const computer = place.kind === "computer" ? place : null;
+    setRouteKind(place.kind);
+    setComputerHarness(computer?.harness || "");
+    setComputerEnvironment(computer?.environment || "");
+    setHarnessScope(computer?.scope ?? null);
+    if (place.kind === "terminal") setTerminalRouteId(place.terminalId);
+    setRouteBootstrapError("");
+    setRouteBootstrap("ready");
+  });
   // An untracked thread runs as a Conduit chat that no list shows, on the same
   // store and the same page parts as any chat. A reload or a closed tab asks
   // first while a turn is running.
@@ -1968,12 +1978,7 @@ function App() {
     chat.reset();
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
-    setRouteKind("computer");
-    setComputerHarness(id);
-    setComputerEnvironment("");
-    setHarnessScope(cwd || null);
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: "computer", harness: id, scope: cwd || null });
     if (cwd) void browseComputer(cwd);
     else if (!computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", harnessPath(id, cwd));
@@ -1990,12 +1995,7 @@ function App() {
     chat.reset();
     setMobileSidebarOpen(false);
     setWorkspaceViewRequest(null);
-    setRouteKind("computer");
-    setComputerHarness(target.harnessId);
-    setHarnessScope(target.path);
-    setHarnessThread(target);
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    batch(() => { showRoute({ kind: "computer", harness: target.harnessId, scope: target.path }); setHarnessThread(target); });
     void browseComputer(target.path);
     if (historyMode === "push") history.pushState({}, "", threadPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", threadPath(target));
@@ -2019,7 +2019,7 @@ function App() {
       if (opened.tracked) {
         const owner = catalogue.projects().find((item) => item.id === opened.chat.projectId) || opened.project;
         await chat.select(opened.chat, owner, { history: "replace", onCommit: () => {
-          batch(() => { setHarnessThread(null); setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); });
+          batch(() => { setHarnessThread(null); showRoute({ kind: "chat" }); });
         } });
         return;
       }
@@ -2119,7 +2119,7 @@ function App() {
       await chat.select(tracked, owner, {
         history: "replace",
         onCommit: () => {
-          batch(() => { setHarnessThread(null); setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); });
+          batch(() => { setHarnessThread(null); showRoute({ kind: "chat" }); });
         },
       });
     } catch (error) { showError(error); }
@@ -2150,10 +2150,7 @@ function App() {
     leaveChat(historyMode === "none");
     if (historyMode !== "none" && routeKind() !== "terminal") setTerminalCanReturn(true);
     setMobileSidebarOpen(false);
-    setRouteKind("terminal");
-    setTerminalRouteId(terminalId);
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: "terminal", terminalId });
     if (historyMode === "push") history.pushState({}, "", "/terminal");
     else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
   };
@@ -2228,7 +2225,7 @@ function App() {
       const from = previewFrom;
       previewFrom = null;
       if (from?.jbot && (routeKind() === "jbot")) void chat.select(from.chat, from.project, { history: "none",
-        onCommit: () => { setRouteKind("chat"); setRouteBootstrapError(""); setRouteBootstrap("ready"); } }).catch(showError);
+        onCommit: () => showRoute({ kind: "chat" }) }).catch(showError);
       else if (from && chat.previewing()) void chat.select(from.chat, from.project, { history: "none" }).catch(showError);
     }, cancelled ? 0 : 350);
   };
@@ -2250,17 +2247,13 @@ function App() {
       await chat.select(target, project, {
         history: "push",
         onCommit: () => {
-          setRouteKind("chat");
-          setRouteBootstrapError("");
-          setRouteBootstrap("ready");
+          showRoute({ kind: "chat" });
         },
       });
       // A select already under way for this chat (jbot's page loading its thread for the composer) settled without
       // this one's commit: the chat is loaded, so only the route is left to follow.
       if (routeKind() !== "chat" && chat.loadedId() === target.id) {
-        setRouteKind("chat");
-        setRouteBootstrapError("");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "chat" });
         if (location.pathname !== chatPath(target.id)) history.pushState({}, "", chatPath(target.id));
       }
     }
@@ -2277,9 +2270,7 @@ function App() {
     if (historyMode !== "none") discardDraftImmediately(abandonedDraftId);
     chat.reset();
     catalogue.selectProject(target);
-    setRouteKind("project");
-    setRouteBootstrapError("");
-    setRouteBootstrap("ready");
+    showRoute({ kind: "project" });
     if (historyMode === "push") history.pushState({}, "", projectPath(target));
     else if (historyMode === "replace") history.replaceState({}, "", projectPath(target));
   };
@@ -5883,9 +5874,7 @@ function App() {
         await chat.select(resolvedTarget, owner, {
           history: "none",
           onCommit: () => {
-            setRouteKind("chat");
-            setRouteBootstrapError("");
-            setRouteBootstrap("ready");
+            showRoute({ kind: "chat" });
           },
         });
       })().catch(async (error) => {
@@ -5965,8 +5954,7 @@ function App() {
       if (offlineTarget) {
         await chat.openOffline(offlineTarget.session, offlineTarget.project);
         if (navigated()) return;
-        setRouteKind("chat");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "chat" });
         return;
       }
       // Not in the catalogue this device saw: only the hub can say which chat it is.
@@ -5983,25 +5971,20 @@ function App() {
         if (!project) throw new Error("Conduit has no chat project");
         await chat.initialize(target, project, detail);
         if (navigated()) return;
-        setRouteKind("chat");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "chat" });
       } else if (initialProjectRouteId) {
         const project = projects.find((item) => projectMatchesPath(item, initialProjectRouteId));
         if (!project) throw new Error("Project not found");
         catalogue.selectProject(project);
-        setRouteKind("project");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "project" });
       } else if (initialAgentRoute || initialJbotRoute) {
-        setRouteKind(initialJbotRoute ? "jbot" : "agent");
-        setRouteBootstrap("ready");
+        showRoute({ kind: initialJbotRoute ? "jbot" : "agent" });
       } else if (initialComputerRoute) {
         await openComputerRoute();
       } else if (initialTerminalRoute) {
-        setRouteKind("terminal");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "terminal" });
       } else if (initialDashboardRoute) {
-        setRouteKind("dashboard");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "dashboard" });
       } else {
         const templatePayload = await templateRequest;
         const project = projects.find((item) => item.slug === "chat") || projects[0];
@@ -6010,8 +5993,7 @@ function App() {
         if (navigated()) return;
         history.replaceState({}, "", chatPath(created.id));
         await chat.initialize(created, project);
-        setRouteKind("chat");
-        setRouteBootstrap("ready");
+        showRoute({ kind: "chat" });
       }
     })().catch((error) => {
       if (initialRouteId && (error as { error?: string }).error === "chat_not_found") {
