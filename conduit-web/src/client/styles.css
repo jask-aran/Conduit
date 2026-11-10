@@ -51,10 +51,8 @@ svg.lucide { stroke-width: 2.4; }
 
 
 .terminal-pane { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: color-mix(in oklch, var(--background), black 9%); }
-.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; background: #000; padding: var(--space-md); }
+.terminal-canvas { position: relative; min-width: 0; min-height: 0; flex: 1; overflow: hidden; padding: var(--space-md); }
 .terminal-canvas > div { width: 100%; height: 100%; }
-.terminal-canvas[data-terminal-ready="false"] > canvas { opacity: 0; }
-.terminal-canvas > canvas { display: block; max-width: 100%; max-height: 100%; transition: opacity 80ms linear; }
 
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
@@ -97,7 +95,6 @@ svg.lucide { stroke-width: 2.4; }
 
 /* The phone's overrides of the rules above: what differs on a phone. */
 @media (--conduit-phone-layout) {
-  html { font-size: calc(16px * var(--ui-scale)); }
 .markdown-skeleton { min-height: 5em; }
 }
 
@@ -135,9 +132,9 @@ svg.lucide { stroke-width: 2.4; }
 .overlay-scrollbar-thumb:hover, .overlay-scrollbar-thumb:active { opacity: 1; }
 @media (--conduit-phone-layout) {
   .overlay-scrollbar-thumb {
+    /* conventions-ok: a scrollbar thumb, not a surface: the frost's fill and blur without its lift or highlight */
+    backdrop-filter: var(--frost-blur); -webkit-backdrop-filter: var(--frost-blur);
     background: var(--frost-fill);
-    backdrop-filter: var(--frost-blur);
-    -webkit-backdrop-filter: var(--frost-blur);
     box-shadow: inset 0 0 0 var(--hairline) var(--frost-stroke);
   }
 }
@@ -154,7 +151,6 @@ svg.lucide { stroke-width: 2.4; }
    and the Conduit mark, as the Android and PWA splashes show -- and fades as
    the regions arrive, rather than an empty pane showing in between. */
 :root[data-arrival="arriving"] .launch-mark { animation: ui-leave var(--duration-quick) var(--ease-leave) forwards; }
-@media (prefers-reduced-motion: reduce) { :root[data-arrival="arriving"] .launch-mark { animation-duration: 1ms; } }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-leave { to { opacity: 0; } }
 

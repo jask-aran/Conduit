@@ -294,36 +294,24 @@ export function registerChatRoutes(app, {
     await projects.validate(project);
     return project;
   };
-  app.get("/v0/models", async (request, response, next) => {
-    try {
-      const project = await placeFor(request.query.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      if (request.query.refresh === "true") await modelCatalog.refreshFromNetwork();
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.workingRoot) });
-    } catch (error) {
-      next(error);
-    }
+  app.get("/v0/models", async (request, response) => {
+    const project = await placeFor(request.query.projectId);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    if (request.query.refresh === "true") await modelCatalog.refreshFromNetwork();
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.list(project.workingRoot) });
   });
 
-  app.get("/v0/settings", async (request, response, next) => {
-    try {
-      const project = await placeFor(request.query.projectId);
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.workingRoot) });
-    } catch (error) {
-      next(error);
-    }
+  app.get("/v0/settings", async (request, response) => {
+    const project = await placeFor(request.query.projectId);
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.getSettings(project.workingRoot) });
   });
 
-  app.patch("/v0/settings", async (request, response, next) => {
-    try {
-      const project = await projects.get(request.body?.projectId || "chat");
-      if (!project) return response.status(404).json({ error: "project_not_found" });
-      await projects.validate(project);
-      response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.workingRoot, request.body) });
-    } catch (error) {
-      next(error);
-    }
+  app.patch("/v0/settings", async (request, response) => {
+    const project = await projects.get(request.body?.projectId || "chat");
+    if (!project) return response.status(404).json({ error: "project_not_found" });
+    await projects.validate(project);
+    response.json({ installationId: "conduit-pinned", runtimeKind: "conduit_profile", ...await modelCatalog.updateSettings(project.workingRoot, request.body) });
   });
 
   app.post("/v0/chats", async (request, response) => {

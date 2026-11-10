@@ -101,34 +101,26 @@ export function registerSessionRoutes(app, {
    * The context a chat last had, for one with no live process to ask: read
    * from the harness's stored history. A live process answers for itself.
    */
-  app.get("/v0/sessions/:id/context", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const live = backends.getByChatId?.(context.chat.id);
-      if (live?.contextUsage?.tokens != null) {
-        return response.json({ contextUsage: live.contextUsage, sessionStats: live.sessionStats || null, cacheStats: live.cacheStats || live.cache?.stats || null });
-      }
-      const adapter = backends.forChat(context.chat);
-      const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,
-        opaqueSession: context.chat.backend?.opaqueSession, project: context.project }).catch(() => null);
-      response.json(usage || {});
-    } catch (error) {
-      next(error);
+  app.get("/v0/sessions/:id/context", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const live = backends.getByChatId?.(context.chat.id);
+    if (live?.contextUsage?.tokens != null) {
+      return response.json({ contextUsage: live.contextUsage, sessionStats: live.sessionStats || null, cacheStats: live.cacheStats || live.cache?.stats || null });
     }
+    const adapter = backends.forChat(context.chat);
+    const usage = await adapter.contextFromHistory?.({ chatId: context.chat.id,
+      opaqueSession: context.chat.backend?.opaqueSession, project: context.project }).catch(() => null);
+    response.json(usage || {});
   });
 
   // The full breakdown for a thread whose harness can only give it running.
-  app.post("/v0/sessions/:id/context/breakdown", async (request, response, next) => {
-    try {
-      const context = await findChatContext(request.params.id);
-      if (!context) return response.status(404).json({ error: "chat_not_found" });
-      const adapter = backends.forChat(context.chat);
-      if (!adapter.contextBreakdown) return response.status(409).json({ error: "breakdown_unavailable" });
-      response.json(await adapter.contextBreakdown({ opaqueSession: context.chat.backend?.opaqueSession, project: context.project }) || {});
-    } catch (error) {
-      next(error);
-    }
+  app.post("/v0/sessions/:id/context/breakdown", async (request, response) => {
+    const context = await findChatContext(request.params.id);
+    if (!context) return response.status(404).json({ error: "chat_not_found" });
+    const adapter = backends.forChat(context.chat);
+    if (!adapter.contextBreakdown) return response.status(409).json({ error: "breakdown_unavailable" });
+    response.json(await adapter.contextBreakdown({ opaqueSession: context.chat.backend?.opaqueSession, project: context.project }) || {});
   });
 
   app.get("/v0/sessions/:id", async (request, response) => {

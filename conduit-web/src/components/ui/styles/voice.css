@@ -14,7 +14,7 @@
 .ui-voice-waveform-scale { justify-content: space-between; color: color-mix(in oklch, var(--muted-foreground), transparent 12%); font: var(--text-label)/var(--leading-none) var(--font-data); }
 .ui-voice-waveform[data-state="connecting"] { border-color: color-mix(in oklch, var(--muted-foreground), var(--border) 52%); }
 :where(.ui-voice-waveform[data-state="connecting"]) .ui-voice-waveform-dot { background: var(--muted-foreground); animation: ui-voice-pulse var(--duration-pulse) ease-in-out infinite; }
-.ui-voice-waveform[data-state="listening"] .ui-voice-waveform-dot { background: var(--live); box-shadow: 0 0 0 3px color-mix(in oklch, var(--live), transparent 82%); }
+.ui-voice-waveform[data-state="listening"] .ui-voice-waveform-dot { background: var(--live); box-shadow: 0 0 0 var(--stroke) color-mix(in oklch, var(--live), transparent 82%); }
 .ui-voice-waveform[data-state="error"] { border-color: color-mix(in oklch, var(--destructive), var(--border) 48%); }
 .ui-voice-waveform[data-state="error"] .ui-voice-waveform-dot { background: var(--destructive); }
 @keyframes ui-voice-pulse { 0%, 100% { opacity: var(--opacity-faint); transform: scaleY(0.65); } 50% { opacity: 1; transform: scaleY(1); } }

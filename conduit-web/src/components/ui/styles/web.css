@@ -20,7 +20,7 @@
   transition: transform var(--duration-travel) var(--ease-room), opacity var(--duration-gentle) var(--ease-change); will-change: transform; }
 .ui-agent-pointer[data-resting] { opacity: 0; }
 .ui-agent-pointer-mark { width: var(--icon-xl); height: var(--icon-xl); margin: calc(-0.1 * var(--icon-xl)) 0 0 calc(-0.1 * var(--icon-xl));
-  color: var(--background); fill: var(--foreground); stroke-width: 1.5; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
+  color: var(--background); fill: var(--foreground); stroke-width: 1.5; filter: var(--glyph-shadow); }
 .ui-agent-pointer-label { margin-top: var(--icon-sm); border-radius: var(--radius-control); padding: 0 var(--space-xs); background: var(--foreground); color: var(--background);
   font: var(--weight-strong) var(--text-caption)/var(--leading-text) var(--font-sans); white-space: nowrap; }
 .ui-agent-pointer-ring { position: absolute; top: 0; left: 0; width: var(--icon-xl); height: var(--icon-xl);

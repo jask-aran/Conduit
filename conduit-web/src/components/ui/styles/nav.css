@@ -126,7 +126,8 @@
    (data-drawer-settle), it lands from there on the arrive curve. No foot; the server is the list's first line
    (NavLead), so what it says never moves the head. */
 @property --drawer { syntax: "<number>"; inherits: false; initial-value: 0; }
-/* Off screen at rest shut, so it is not drawn under the page; there at once to open, and put away once the page is back. */
+/* Off screen at rest shut, so it is not drawn under the page; there at once to open, and put away once the page is back.
+   conventions-ok: black, the dark the sidebar comes forward out of; no colour token is black */
 .ui-nav-pane[data-drawer] { position: fixed; inset-block: 0; left: 0; z-index: 0; width: var(--drawer-width); background: #000; transform: translateX(-100%);
   transition: transform 0s linear var(--duration-gentle); }
 .ui-nav-pane:is([data-drawer="open"], [data-drawer-drag]) { transform: none; transition: none; }

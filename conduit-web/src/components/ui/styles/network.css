@@ -39,9 +39,8 @@
 .ui-chain-box { gap: 0; padding-block: var(--space-xs); }
 .ui-chain-line { min-width: 0; flex: 1; }
 .ui-chain-line > .ui-row-title { display: inline-flex; align-items: center; gap: var(--space-xs); }
-/* A link is chosen by a click: no wash when pointed at (the chosen one is the only wash), a ring on keyboard focus. */
+/* A link is chosen by a click: no wash when pointed at (the chosen one is the only wash). */
 button.ui-chain-open { cursor: pointer; }
-button.ui-chain-open:focus-visible { outline: var(--stroke-thin) solid var(--muted-foreground); outline-offset: calc(-1 * var(--stroke-thin)); }
 .ui-chain-index { flex: none; min-width: var(--icon-sm); color: var(--muted-foreground); font: var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-chain-link { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
 .ui-chain-link[data-live] { border-style: dashed; }

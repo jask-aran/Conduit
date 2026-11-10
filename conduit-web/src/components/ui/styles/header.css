@@ -3,6 +3,7 @@
 :root { --header-height: calc(var(--control-lg) + 2 * var(--space-md)); }
 .ui-pane-header:where([data-header="pane"]) { position: relative; z-index: 2; display: flex; height: var(--header-height); flex: none; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg);
   background: linear-gradient(to bottom, var(--background) 0 50%, transparent 100%); }
+/* conventions-ok: not the Frost material: the pane's own ground, thinned, blurring what scrolls under the strip */
 .ui-pane-header:where([data-header="pane"])[data-frost] { background: color-mix(in oklch, var(--background), transparent 30%); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); }
 .ui-header-title { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; overflow: hidden; }
 .ui-header-title:has(> nav[aria-label="Tabs"]) { flex: 1 1 auto; align-self: stretch; }
@@ -47,10 +48,9 @@ button.ui-header-place { cursor: pointer; }
 [data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
 /* Pressed, or what it opens open: the frost takes the wash over it. */
 [data-presentation="phone"] :is(button.ui-header-pill, .ui-header-count):is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
-/* The groups are frost capsules round capsule buttons; the lead group (sidebar, new chat) is a phone's own. */
-[data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); }
-[data-presentation="phone"] .ui-header-group:not([data-lead]) { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
-  background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
+/* The groups are frost capsules round capsule buttons (frost.css gives them the material); the lead group (sidebar,
+   new chat) is a phone's own. */
+[data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
 [data-presentation="phone"] .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
 [data-presentation="phone"] .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }
 
@@ -58,8 +58,6 @@ button.ui-header-place { cursor: pointer; }
 @media (--conduit-phone-layout) {
   [data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
   [data-presentation="phone"] .ui-pane-header:where([data-header="pane"]) { padding-top: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
-  [data-presentation="phone"] .ui-header-group[data-lead] { border: var(--hairline) solid var(--frost-stroke); border-radius: var(--radius-round);
-    background: var(--frost-fill); -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur); box-shadow: var(--frost-lift-rest), var(--frost-highlight); color: var(--foreground); }
   .ui-header-group[data-lead]:not(:empty) { display: flex; }
   .ui-header-group > .ui-button svg { width: var(--pill-icon); height: var(--pill-icon); }
   .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: inline-grid; }

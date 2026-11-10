@@ -1,4 +1,6 @@
-.ui-frost {
+/* A phone header's groups are frost only in the phone presentation, which no class can say. .ui-frost stays last:
+   check-bundle.mjs finds the material by it. */
+[data-presentation="phone"] .ui-header-group, .ui-frost {
   border: var(--hairline) solid var(--frost-stroke);
   background: var(--frost-fill);
   -webkit-backdrop-filter: var(--frost-blur);
