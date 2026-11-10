@@ -8,8 +8,8 @@ import path from "node:path";
  *   - every row (SettingLine, Switch, SettingCredential, SettingLink, SettingDetails, RuleList) is an entry
  *     under the Group whose title came last, named by its label: a literal, or every string a label expression can be;
  *   - every Group is an entry too, named by its title;
- *   - an entry's words are what else it says (its title, state, placeholder, its options and its buttons), so a search
- *     for "H.265" or "Clear data" finds the row that holds it;
+ *   - an entry's acts are its buttons' words ("Clear data"), and its words what else it says (its title, state,
+ *     placeholder and options): search falls back on the words only until the row's own value has been read;
  *   - a table of rows declared outside the markup (`const TOOLS = [{ key, label, title }]`) is entered where it is used.
  * A component a section draws from another settings file (<UsageSettings />, agentSettings.Page) brings that file's
  * entries into the section; one drawn in parts (`<DevicesSettingsTile part="device" />`) brings only the rows under its
@@ -58,13 +58,13 @@ function attribute(tag, name) {
 // A name a person would look for: it starts as a name does (a capital, or one word like skills.sh), and is not a state ("Listening…").
 const readable = (text) => text.length >= 2 && text.length <= 80 && (/^[A-Z]/.test(text) || /^[a-z]\w*\.\w+$/.test(text)) && !/[…:]$/.test(text);
 /** What a stretch of markup says besides its rows' names: option and button text, option tables written in place. */
+/** What a stretch of markup does: its buttons' words, whatever stands before them inside one (a spinner). */
+const actsIn = (markup) => [...markup.matchAll(/([A-Z][^<>{}]{2,40})<\/Button>/g)].map((match) => match[1].trim());
 function saidIn(markup, maps) {
   const said = [];
-  // A button's words, whatever stands before them inside it (a spinner).
-  for (const match of markup.matchAll(/([A-Z][^<>{}]{2,40})<\/Button>/g)) said.push(match[1].trim());
   // A table of what its options are called (`const CODEC_LABELS = { h265: "H.265" }`), used here.
   for (const [name, values] of maps ?? []) if (new RegExp(`\\b${name}\\b`).test(markup)) said.push(...values);
-  for (const match of markup.matchAll(/<(?:option|Button|SettingValue|MenuRadioItem)\b[^>]*>([^<>{}]{2,60})<\//g)) said.push(match[1].trim());
+  for (const match of markup.matchAll(/<(?:option|SettingValue|MenuRadioItem)\b[^>]*>([^<>{}]{2,60})<\//g)) said.push(match[1].trim());
   for (const match of markup.matchAll(/\blabel: "([^"]{2,60})"/g)) said.push(match[1]);
   return said;
 }
@@ -143,13 +143,14 @@ function entriesOf(source, section, group = null, locals = null, tables = null, 
       const titles = attribute(tag, "title").filter(readable);
       if (!titles.length) return;
       group = titles[0];
-      for (const title of titles) entries.push(last = { section, group: null, label: title, words: [...attribute(tag, "scope"), ...saidIn(after, maps)].join(" ") });
+      for (const title of titles) entries.push(last = { section, group: null, label: title, words: [...attribute(tag, "scope"), ...saidIn(after, maps)].join(" "), acts: "" });
       return;
     }
     const names = [...attribute(tag, "label"), ...attribute(tag, "name"), ...attribute(tag, "summary")].filter(readable);
     const words = [...attribute(tag, "title"), ...attribute(tag, "state"), ...attribute(tag, "placeholder"), ...saidIn(tag, maps), ...saidIn(after, maps)].join(" ");
-    if (!names.length) { if (last && words) last.words = `${last.words} ${words}`.trim(); return; }
-    for (const name of new Set(names)) entries.push(last = { section, group, label: name, words });
+    const acts = [...actsIn(tag), ...actsIn(after)].join(" ");
+    if (!names.length) { if (last) { last.words = `${last.words ?? ""} ${words}`.trim(); last.acts = `${last.acts ?? ""} ${acts}`.trim(); } return; }
+    for (const name of new Set(names)) entries.push(last = { section, group, label: name, words, acts });
   });
   return entries;
 }
@@ -210,5 +211,5 @@ export function buildSettingsIndex(root) {
   });
   const seen = new Set();
   return entries.filter((entry) => { const key = `${entry.section}\0${entry.group}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; })
-    .map((entry) => entry.words ? entry : { section: entry.section, group: entry.group, label: entry.label });
+    .map((entry) => ({ section: entry.section, group: entry.group, label: entry.label, ...(entry.words ? { words: entry.words } : {}), ...(entry.acts ? { acts: entry.acts } : {}) }));
 }

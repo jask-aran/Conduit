@@ -309,7 +309,9 @@ export function Settings(props: {
   // before their sections were ever opened.
   let searched = false;
   createEffect(() => { if (!query().trim() || searched) return; searched = true; void loadPiAuth(); void loadSearchSettings(); if (!context.data()) void context.load(); });
-  type Entry = { section: Section; group: string | null; label: string; words?: string; value?: string };
+  type Entry = { section: Section; group: string | null; label: string; words?: string; acts?: string; value?: string };
+  // Text as search reads it: lowered, in words (letters and digits), so a key matches from a word's start.
+  const wordsOf = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   // Everything search can find, each with its text lowered once: built when searching starts and again only when what
   // it is made of changes (a value read, an account added), never per keystroke.
   const [searchable, setSearchable] = createSignal(false);
@@ -343,24 +345,31 @@ export function Settings(props: {
     const all: Entry[] = [...sections, ...[...named.map((entry) => ({ ...entry, value: (entry as Entry).value ?? values.get(`${entry.section}\0${entry.label}`)?.value })),
       ...[...values.values()].filter((seen) => !have.has(`${seen.section}\0${seen.label}`)).map((seen) => ({ ...seen, section: seen.section as Section }))].filter((entry) => known.has(entry.section))];
     const once = new Set<string>();
+    // A setting is found by its name, its group, its page, what it is set to and what its buttons do. What else it says
+    // (its description, its other options) stands in only until its value has been read, or "medium" would find every
+    // setting that could be Medium.
     return all.filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (once.has(key)) return false; once.add(key); return true; }).map((entry) => ({
-      entry, whole: entry.group === null && entry.label === label(entry.section),
-      name: entry.label.toLowerCase(), where: `${label(entry.section)} ${entry.group ?? ""}`.toLowerCase(), set: (entry.value ?? "").toLowerCase(), said: (entry.words ?? "").toLowerCase(),
+      entry, whole: entry.group === null && entry.label === label(entry.section), plain: entry.label.toLowerCase(),
+      name: wordsOf(entry.label), where: wordsOf(`${label(entry.section)} ${entry.group ?? ""}`), set: wordsOf(entry.value ?? ""),
+      said: wordsOf(`${entry.acts ?? ""} ${entry.value === undefined || entry.group === null ? entry.words ?? "" : ""}`),
     }));
   });
   const results = createMemo(() => {
-    const words = query().trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const typed = query().trim().toLowerCase();
+    const words = wordsOf(typed);
     if (!words.length) return [];
+    const begins = (list: string[], word: string) => list.some((item) => item.startsWith(word));
     const scored: Array<Entry & { score: number }> = [];
-    for (const { entry, whole, name, where, set, said } of entries()) {
-      // By name first (from its start, then anywhere), then by where it is, then by what it is set to, then by what else it says.
-      let score = name.startsWith(words[0]!) ? 0 : 1;
+    for (const { entry, whole, plain, name, where, set, said } of entries()) {
+      // Every word typed begins a word of the setting. Ranked by the weakest place one was found: its name (best the
+      // name itself, then a name starting so), then where it is, then what it is set to, then what it does.
+      let score = plain === typed ? 0 : plain.startsWith(typed) ? 0.5 : 1;
       for (const word of words) {
-        const at = name.includes(word) ? 1 : where.includes(word) ? 2 : set.includes(word) ? 2.5 : said.includes(word) ? 3 : -1;
+        const at = begins(name, word) ? 1 : begins(where, word) ? 2 : begins(set, word) ? 2.5 : begins(said, word) ? 3 : -1;
         if (at < 0) { score = -1; break; }
         if (at > score) score = at;
       }
-      if (score >= 0) scored.push({ ...entry, score: score - (whole ? 0.5 : 0) });
+      if (score >= 0) scored.push({ ...entry, score: score - (whole ? 0.25 : 0) });
     }
     return scored.sort((a, b) => a.score - b.score);
   });
@@ -399,7 +408,8 @@ export function Settings(props: {
   // when the section's own name did. Lines arrive after their data, so the page is filtered again as it changes.
   const filterPage = (body: Element, found: ReturnType<typeof results> | null) => {
     for (const element of body.querySelectorAll("[data-filtered-out], [data-filter-first]")) { element.removeAttribute("data-filtered-out"); element.removeAttribute("data-filter-first"); }
-    if (!found || found.some((result) => result.group === null && result.label === label(result.section))) return;
+    // The whole page only when the section was found by its own name, not by a word it also answers to.
+    if (!found || found.some((result) => result.group === null && result.label === label(result.section) && result.score <= 1)) return;
     const groups = [...body.querySelectorAll<HTMLElement>('.ui-group[data-group="setting"]')];
     if (!groups.length) return;
     const names = found.filter((result) => result.group !== null).map((result) => result.label);

@@ -91,7 +91,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-columns:where([data-group="setting"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
 .ui-group:where([data-group="column"]) { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
 .ui-group:where([data-group="column"]) + .ui-group:where([data-group="column"])::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
-.ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
+/* A group's actions start where its lines' names do: the first button is set back by its own padding. */
+.ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); margin-inline-start: calc(var(--space-md) - var(--space-lg)); }
 .ui-actions:where([data-actions="setting"]) > .ui-button { white-space: nowrap; }
 .ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* A Reading among a page's groups is parted from the group before it as a group is. */
@@ -229,9 +230,12 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* Settings search: the rail's field under its title, and the line a result led to, marked for a moment. */
 .ui-overlay-rail > .ui-lead-input { flex: none; margin-bottom: var(--space-sm); }
 .ui-setting-line[data-found] { border-radius: var(--radius-control); background: var(--tint); transition: background var(--duration-gentle) var(--ease-arrive); }
-/* A value read at the line's end is inset as a button's words are, so the control column's words end on one edge.
+/* The control column ends on one edge: a field's box, a switch, a select's chevron and a read value all end there, so
+   a ghost button at the line's end, which has no box at rest, is set out by its own padding until its words (or its
+   icon) end there too. Its wash, when it shows, reaches past the edge into the line's own room.
    (A ghost button's weight is the surface's: --weight-action, foundations.css.) */
-.ui-setting-control > .ui-setting-value:last-child { padding-inline-end: var(--space-lg); }
+.ui-setting-control > .ui-button:where([data-variant="ghost"]):last-child { margin-inline-end: calc(-1 * var(--space-lg)); }
+.ui-setting-control > .ui-button:where([data-variant="ghost"][data-size^="icon"]):last-child { margin-inline-end: calc(-1 * var(--space-sm)); }
 /* A step's number, before its name: data, muted, a fixed width so the names line up. */
 .ui-setting-step { display: inline-block; min-width: var(--space-2xl); flex: none; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 /* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
