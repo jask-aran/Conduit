@@ -372,7 +372,7 @@ public class ConduitFloatPlugin extends Plugin {
     private void openSettingsFrom(Intent intent) {
         if (intent == null || !intent.getBooleanExtra(OPEN_SETTINGS, false)) return;
         intent.removeExtra(OPEN_SETTINGS);
-        settingsWanted = "phone";
+        settingsWanted = "device";
         notifyListeners("openSettings", new com.getcapacitor.JSObject());
     }
 

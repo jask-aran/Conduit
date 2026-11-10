@@ -73,11 +73,12 @@ export const conduitFloat = {
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
-// Float's notification to set up screen context opens Settings › Phone. The section waits natively until the app
-// asks for it: on a cold start the intent arrives before the page is listening.
+// Float's notification to set up screen context opens Settings › This device, where Float is. The request waits
+// natively until the app asks for it: on a cold start the intent arrives before the page is listening. Whatever the
+// installed app calls the section (an older one says "phone"), it means this one.
 export function onFloatOpensSettings(open: (section: string) => void) {
   if (installedClientKind !== "android") return;
-  const take = () => void nativeFloat.takeOpenSettings().then(({ section }) => { if (section) open(section); }).catch(() => {});
+  const take = () => void nativeFloat.takeOpenSettings().then(({ section }) => { if (section) open("device"); }).catch(() => {});
   void nativeFloat.addListener("openSettings", take).catch(() => {});
   take();
 }

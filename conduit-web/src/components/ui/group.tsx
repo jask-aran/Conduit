@@ -5,7 +5,8 @@ import { Count } from "./controls";
 
 /**
  * Group: a titled run of rows or lines; the kind sets how its title reads and what it holds:
- *   setting, column   the quiet label over lines (a column is one of several side by side, in Columns)
+ *   setting, column   the quiet label over lines (a column is one of several side by side, in Columns); scope: whose
+ *                     the settings are ("This device", "Every device", "The hub"), said where a view holds more than one
  *   nav               the sidebar's label, or none; away: what the rows are on is not there now ("Offline since …")
  *   workbench         a side section's title
  *   card, agent       a small heading over one side of a card, over a rider's list
@@ -28,6 +29,8 @@ export function Group(props: {
   /** After the rows (a dash group's "Show more"). */
   more?: JSX.Element;
   away?: string;
+  /** A setting group's: whose its settings are, after the title. Only where one view mixes scopes. */
+  scope?: string;
   /** A change group's: open shows its rows; onToggle folds it. */
   open?: boolean;
   onToggle?: () => void;
@@ -63,7 +66,7 @@ export function Group(props: {
       <header class="ui-group-head"><GroupToggle open={Boolean(props.open)} count={props.count} onClick={() => props.onToggle?.()}>{props.title}</GroupToggle>{props.actions}</header>
       <Expand open={Boolean(props.open)}>{props.children}</Expand>
     </section>;
-    default: return <section class="ui-group" data-group={kind} aria-label={name()}><div class="ui-nav-label">{props.title}</div>{props.children}</section>;
+    default: return <section class="ui-group" data-group={kind} aria-label={name()}><div class="ui-nav-label">{props.title}<Show when={props.scope}><span class="ui-nav-away">{props.scope}</span></Show></div>{props.children}</section>;
   }
 }
 

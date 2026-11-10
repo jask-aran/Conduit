@@ -1,6 +1,6 @@
 import { Icons } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
-import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
+import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { DesktopSettingsTile } from "./desktop-settings";
@@ -71,15 +71,13 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 import { conduitFloat, type FloatHoldTarget, type FloatStatus } from "../platform/float";
 
 const allSectionGroups = [
-  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }, { id: "phone", label: "Phone", icon: SmartphoneIcon }] },
+  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
-  { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "devices", label: "Devices", icon: LaptopIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
+  { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
-/** Phone holds what only the Android app has (Float), so only the Android app lists it. */
-const sectionGroups = allSectionGroups.map((group) => ({ ...group,
-  sections: group.sections.filter((item) => item.id !== "phone" || installedClientKind === "android") }));
+const sectionGroups = allSectionGroups;
 type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
@@ -88,7 +86,6 @@ const sectionLabels: Record<Section, string> = {
   account: "Account",
   ui: "Appearance",
   shortcuts: "Shortcuts",
-  phone: "Phone",
   models: "Models",
   prompts: "Prompts",
   blocks: "Blocks",
@@ -96,7 +93,8 @@ const sectionLabels: Record<Section, string> = {
   skills: "Skills",
   server: "Server",
   runtime: "Runtime",
-  devices: "Devices",
+  device: "This device",
+  devices: "Network",
   usage: "Usage",
   agent: "Agent",
   workspaces: "Workspace profile",
@@ -446,7 +444,7 @@ export function Settings(props: {
     void conduitFloat.status().then(setFloatStatus).catch(floatFailure);
   };
   createEffect(() => {
-    if (!props.open || section() !== "phone" || installedClientKind !== "android") return;
+    if (!props.open || section() !== "device" || installedClientKind !== "android") return;
     refreshFloat();
     const visible = () => { if (document.visibilityState === "visible") refreshFloat(); };
     window.addEventListener("focus", refreshFloat);
@@ -1339,12 +1337,36 @@ export function Settings(props: {
           <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "ui"}>
             <>
-              <Group title="Interface">
+              {/* This device's own: its screen and hand differ from the next one's. The other groups are taste. */}
+              <Group title="Display" scope="This device">
                   <SettingLine label="Interface size">
                     <Select id="interface-scale" aria-label="Interface size" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
                       <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
                     </Select>
                   </SettingLine>
+                  <SettingLine label="Animation speed" title="Slows every animation on this device, to look at one closely.">
+                    <Select id="motion-scale" aria-label="Animation speed" value={String(motionScaleChoice())} onChange={(event) => setMotionScaleChoice(saveMotionScale(Number(event.currentTarget.value) as MotionScale))}>
+                      <For each={MOTION_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "Normal" : `${scale}× slower`}</option>}</For>
+                    </Select>
+                  </SettingLine>
+                <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
+                <Show when={gpuRendering() === false}><Note>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</Note></Show>
+              </Group>
+              <Show when={touchOnly()}>
+                <Group title="Touch" scope="This device">
+                    <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android. This choice applies to this device.">
+                      <Select id="composer-kind" aria-label="Composer" value={composerChoice()} onChange={(event) => setComposerChoice(saveComposerKind(event.currentTarget.value === "native" ? "native" : "web"))}>
+                        <For each={COMPOSER_KINDS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                      </Select>
+                    </SettingLine>
+                    <SettingLine label="Haptics" title="How strongly this device answers a touch. Off is silent; each choice plays a press as you pick it.">
+                      <Select id="haptic-strength" aria-label="Haptics" value={hapticChoice()} onChange={(event) => setHapticChoice(saveHapticStrength(event.currentTarget.value as HapticStrength))}>
+                        <For each={HAPTIC_STRENGTHS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                      </Select>
+                    </SettingLine>
+                </Group>
+              </Show>
+              <Group title="Interface">
                   <SettingLine label="Terminal font">
                     <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
                       <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -1363,28 +1385,10 @@ export function Settings(props: {
                       <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
-                  <Show when={touchOnly()}>
-                    <SettingLine label="Composer" title="Use the web composer, or a native typing row on Android. This choice applies to this device.">
-                      <Select id="composer-kind" aria-label="Composer" value={composerChoice()} onChange={(event) => setComposerChoice(saveComposerKind(event.currentTarget.value === "native" ? "native" : "web"))}>
-                        <For each={COMPOSER_KINDS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </Select>
-                    </SettingLine>
-                    <SettingLine label="Haptics" title="How strongly this device answers a touch. Off is silent; each choice plays a press as you pick it.">
-                      <Select id="haptic-strength" aria-label="Haptics" value={hapticChoice()} onChange={(event) => setHapticChoice(saveHapticStrength(event.currentTarget.value as HapticStrength))}>
-                        <For each={HAPTIC_STRENGTHS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </Select>
-                    </SettingLine>
-                  </Show>
                   <SettingLine label="Meteor field">
                     <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
                   </SettingLine>
-                  <SettingLine label="Animation speed" title="Slows every animation on this device, to look at one closely.">
-                    <Select id="motion-scale" aria-label="Animation speed" value={String(motionScaleChoice())} onChange={(event) => setMotionScaleChoice(saveMotionScale(Number(event.currentTarget.value) as MotionScale))}>
-                      <For each={MOTION_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "Normal" : `${scale}× slower`}</option>}</For>
-                    </Select>
-                  </SettingLine>
               </Group>
-              <DesktopSettingsTile />
               <Group title="Reading">
                   <SettingLine label="Transcript size" title="Messages and answers, on top of the Interface size; the chrome around them keeps its size.">
                     <Select id="transcript-scale" aria-label="Transcript size" value={String(transcriptScaleChoice())} onChange={(event) => setTranscriptScaleChoice(saveTranscriptScale(Number(event.currentTarget.value) as TranscriptScale))}>
@@ -1449,10 +1453,6 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
               </Group>
-              <Group title="Graphics">
-                <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
-                <Show when={gpuRendering() === false}><Note>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</Note></Show>
-              </Group>
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
@@ -1462,7 +1462,7 @@ export function Settings(props: {
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "server"}><ServerSettings projects={props.projects} /></Show>
-          <Show when={section() === "devices"}><DevicesSettingsTile projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile part="network" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "runtime"}>
             <>
@@ -1492,7 +1492,10 @@ export function Settings(props: {
                 <For each={props.templates.filter((item) => item.defaultable !== false)}>{(item) => <option value={item.id}>{item.label}</option>}</For>
               </Select></SettingLine></Group>}</Show></Show>
           </Show>
-          <Show when={section() === "phone"}>
+          <Show when={section() === "device"}>
+            <DevicesSettingsTile part="device" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} />
+            <DesktopSettingsTile />
+            <Show when={installedClientKind === "android"}>
               <Group title="Float">
                     <SettingLine label="Float" title="Conduit at the edge of your screen, over any app: tap it to choose where to send.">
                       <Show when={floatStatus() && !floatStatus()!.overlayPermission}>
@@ -1558,11 +1561,12 @@ export function Settings(props: {
                     </Show>
                     <Show when={floatError()}>{(message) => <Note tone="error">{message()}</Note>}</Show>
               </Group>
+            </Show>
           </Show>
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<Loading>Loading voice settings…</Loading>}><Note tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></Note></Show>}>
               <>
-                <Group title="Transcription">
+                <Group title="Transcription" scope="The hub">
                   <SettingLine plain label="Source">
                     <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
@@ -1628,7 +1632,7 @@ export function Settings(props: {
                   </Show>
                 </Group>
 
-                <Group title="Input">
+                <Group title="Input" scope="This device">
 
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">
@@ -1668,6 +1672,13 @@ export function Settings(props: {
                       </SettingLine>
                     </Show>
                   </Show>
+                  <SettingLine plain label="Keep mic warm" state={<><Show when={warmMicrophoneActive()}>live</Show></>}>
+                      <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
+                      <Switch label="Keep mic warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
+                  </SettingLine>
+                </Group>
+
+                <Group title="Dictation" scope="Every device">
                   <SettingLine plain label="Capture">
                     <Segmented arrows label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
                       { value: "raw", label: "Raw" },
@@ -1698,10 +1709,6 @@ export function Settings(props: {
                     ]} />
                   </SettingLine>
                   <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
-                  <SettingLine plain label="Keep mic warm" state={<><Show when={warmMicrophoneActive()}>live</Show></>}>
-                      <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
-                      <Switch label="Keep mic warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
-                  </SettingLine>
                 </Group>
 
                 <Show when={voiceError()}><Note tone="error">{voiceError()}</Note></Show>

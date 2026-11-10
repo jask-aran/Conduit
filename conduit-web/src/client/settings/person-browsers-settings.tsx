@@ -13,7 +13,9 @@ import { Note } from "@/components/ui/state";
  * paired there, and pairing another -- the hub gives a one-time code, entered in the browse extension of the browser
  * on that environment. Agents then drive that browser with conduit_browser (server/person-browser-tool.js).
  */
-export function PersonBrowsersSettings() {
+export function PersonBrowsersSettings(props: {
+  /** Only this device's environments (Settings › This device); not said: every environment on the network. */
+  device?: string }) {
   const [environments, setEnvironments] = createSignal<PersonBrowserEnvironment[] | null>(null);
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -24,7 +26,9 @@ export function PersonBrowsersSettings() {
   const read = async () => {
     try {
       const before = environments();
-      const next = (await api<PersonBrowsersPayload>("/v0/person-browsers")).environments;
+      const all = (await api<PersonBrowsersPayload>("/v0/person-browsers")).environments;
+      // An environment is named after its device ("Desktop · Ubuntu").
+      const next = props.device === undefined ? all : all.filter((item) => item.name === props.device || item.name.startsWith(`${props.device} · `));
       if (before?.some((item) => item.pairing) && count(next) > count(before)) setSaid("Browser connected");
       setEnvironments(next);
       // A code is out: watch for the browser that redeems it.
@@ -43,10 +47,10 @@ export function PersonBrowsersSettings() {
     api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/browsers/${encodeURIComponent(browser)}`, { method: "DELETE" }), "The browser was not unpaired.");
   const copy = async (code: string) => { try { await navigator.clipboard.writeText(code); setCopied(code); } catch { setCopied(""); } };
 
-  return <Group title="Your browsers">
+  return <Group title={props.device === undefined ? "Your browsers" : "Your browser"}>
     <Note>Agents can work in your own signed-in browser on a device, through the browse extension (OpenCode Browse). A sign-in, a code or a CAPTCHA is handed back to you there.</Note>
     <Show when={environments()} fallback={<Show when={!error()}><Note>Loading…</Note></Show>}>{(list) =>
-      <Show when={list().length} fallback={<Note>No device on this network can offer a browser yet: it needs a folder shared with commands.</Note>}>
+      <Show when={list().length} fallback={<Note>{props.device === undefined ? "No device on this network can offer a browser yet" : "This device cannot offer a browser yet"}: it needs a folder shared with commands.</Note>}>
         <For each={list()}>{(environment) => <>
           <For each={environment.browsers}>{(browser) =>
             <SettingLine label={browser.name} state={environment.name}>

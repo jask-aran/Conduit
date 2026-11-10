@@ -34,7 +34,10 @@ const folderName = (label: string) => label.split(/[\\/]/).filter(Boolean).at(-1
  * folders on the network as workspaces, and apps or browsers driving Conduit; Windows with the app open on it is one
  * client. The hub's environment mounts the server's own workspaces. A browser is a device of its own.
  */
-export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace: AddWorkspace;
+export function DevicesSettingsTile(props: {
+  /** Which section it draws: "device", this device alone (Settings › This device); "network", the network and the others on it. */
+  part: "device" | "network";
+  projects: Project[]; onAddWorkspace: AddWorkspace;
   /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
   onOpenTerminal: (node: { id: string; local?: boolean }) => void;
   /** Its browser, in a pane beside (roadmap #9): a device that offers one. */
@@ -164,10 +167,10 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
   };
 
   return <>
-    <Show when={devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
+    <Show when={props.part === "network" && devices()}><NetworkMap hub={{ name: server(), device: hubDevice()?.name, meta: hubNode() ? `on ${hubNode()!.name}` : undefined }}
       devices={network().map((device) => ({ id: device.id, name: device.name, clients: together(device.clients).map((shown) => shown.part) }))} /></Show>
 
-    <Show when={active() && thisDevice()}>{(device) => <Group title="This device">
+    <Show when={props.part === "device" && active() && thisDevice()}>{(device) => <Group>
       {/* Its name, large: what the network calls this device, renamed here only. */}
       <SettingTitle label="This device's name" value={device().name} editable={device().paired} onChange={(name) => rename(device(), name)} />
       {here(device())}
@@ -176,12 +179,12 @@ export function DevicesSettingsTile(props: { projects: Project[]; onAddWorkspace
     </Group>}</Show>
 
     {/* The network's own settings, the server in use's: another is switched to first. */}
-    <Show when={active()}><NetworkSettings /></Show>
+    <Show when={props.part === "network" && active()}><NetworkSettings /></Show>
 
     {/* Each environment's own browser, paired for agents to work in. */}
-    <Show when={active()}><PersonBrowsersSettings /></Show>
+    <Show when={active()}><PersonBrowsersSettings device={props.part === "device" ? thisDevice()?.name ?? "" : undefined} /></Show>
 
-    <Show when={others().length}>
+    <Show when={props.part === "network" && others().length}>
       <Group title="Devices">
         <For each={others()}>{(device) => <NavFolder open={open().has(device.id)} row={
           <NavFolderRow open={open().has(device.id)} icon={device.clients.every((shown) => shown.part.headed === "browser") ? <Icons.Browser /> : <Icons.Monitor />}

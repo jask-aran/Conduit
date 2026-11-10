@@ -4,7 +4,7 @@ import { reachableDevices } from "./device-tools.js";
 /*
  * The person's own browsers across the network (nodes/person-browser.js), as the hub reaches them: its own
  * environment's directly, another's through its node (`personBrowser`, device-api.js). One way in for the agents'
- * tool (person-browser-tool.js) and for Settings › Devices (routes/person-browsers.js).
+ * tool (person-browser-tool.js) and for Settings › This device and Network (routes/person-browsers.js).
  */
 export function createPersonBrowsers({ own, nodeHub }) {
   const offers = (environment) => (environment.local ? Boolean(own?.available) : Boolean(nodeHub?.live.get(environment.nodeId)?.personBrowser));
