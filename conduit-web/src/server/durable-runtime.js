@@ -600,11 +600,11 @@ export class DurableRuntime {
       ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])
-      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && (tool.name.startsWith("pi.codemode.") || tool.name.startsWith("agent_browser_"))) || (connects && tool.name.startsWith("mcp__")));
+      .filter((tool) => wanted.has(tool.name) || (wanted.has("codemode") && (tool.name.startsWith("pi.codemode.") || tool.name.startsWith("agent_browser_") || tool.name === "conduit_browser")) || (connects && tool.name.startsWith("mcp__")));
     // Pi's "codemode only": the model is offered codemode (and the question card); scripts call the rest.
     const codemodeOnly = template.extensions.some((file) => CODEMODE_ONLY.test(file));
     // A connector's tools and the browser's are many and large: codemode reaches them (its namespaces), the model does not.
-    const behindCodemode = (tool) => tool.name.startsWith("mcp__") || tool.name.startsWith("agent_browser_");
+    const behindCodemode = (tool) => tool.name.startsWith("mcp__") || tool.name.startsWith("agent_browser_") || tool.name === "conduit_browser";
     const ordered = this.inToolOrder(tools);
     const modelTools = codemodeOnly ? ordered.filter((tool) => tool.name === "codemode" || ALWAYS.includes(tool.name))
       : codes ? ordered.filter((tool) => !behindCodemode(tool)) : null;
