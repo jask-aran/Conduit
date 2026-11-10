@@ -1,3 +1,4 @@
+import { Group } from "@/components/ui/group";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import { Icons, Note } from "@/components/ui";
 import { buildHttpUrl } from "../api/transport";
@@ -113,7 +114,9 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
     // The token outlives the address unless it is dropped with it.
     if (isInstalledClient()) await clearNativeBearerToken(props.entry.origin);
   };
+  // What the server is, the same from every client; then how this client reaches it.
   return <>
+    <Group title="Server" scope="The hub">
     <Show when={props.health.of(props.entry)}>{(answer) =>
       <SettingLine label="Runs" plain><SettingValue mono>{shortBuild(answer().release)}{answer().startedAt ? ` · ${props.health.uptime(answer().startedAt)}` : ""}</SettingValue></SettingLine>}</Show>
     <Show when={active()} fallback={
@@ -131,7 +134,9 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
         <SettingValue mono>{props.entry.id?.slice(0, 8)}{props.entry.tls ? " · TLS verified" : ""}</SettingValue>
       </SettingLine>
     </Show>
+    </Group>
     {/* How this client reaches it; chosen in the server switcher, which proves the identity first. */}
+    <Group title="Connection" scope="This device">
     <For each={pathsOf(props.entry)}>{(path) => <SettingLine label={serverPathLabel(path)} state={path.origin.replace(/^https?:\/\//, "")} plain>
       <SettingValue>{props.health.route(props.entry, path)}</SettingValue>
     </SettingLine>}</For>
@@ -140,5 +145,6 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
         <Button variant="ghost" size="sm" aria-label={`Forget ${props.entry.name}`} onClick={() => void forget()}><Icons.Delete /> Forget</Button>
       </SettingLine>
     </Show>
+    </Group>
   </>;
 }

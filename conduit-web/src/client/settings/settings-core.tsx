@@ -74,7 +74,7 @@ const allSectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
-  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Browser", icon: Icons.Browser }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
 const sectionGroups = allSectionGroups;
@@ -82,26 +82,8 @@ type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
 const WIDE_SECTIONS = new Set<string>(["prompts", "blocks"]);
-const sectionLabels: Record<Section, string> = {
-  account: "Account",
-  ui: "Appearance",
-  shortcuts: "Shortcuts",
-  models: "Models",
-  prompts: "Prompts",
-  blocks: "Blocks",
-  tools: "Tools",
-  skills: "Skills",
-  server: "Server",
-  runtime: "Runtime",
-  device: "This device",
-  devices: "Network",
-  usage: "Usage",
-  agent: "Agent",
-  workspaces: "Workspace profile",
-  voice: "Voice",
-  search: "Web search",
-  browser: "Browser",
-};
+// A section's name is said once, in the rail's list above; Workspace profile is reached from a workspace, not the rail.
+const sectionLabels = { ...Object.fromEntries(sectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
 interface RuntimeSettings {
   maxLiveProcesses: number;
