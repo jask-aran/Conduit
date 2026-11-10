@@ -47,7 +47,7 @@ function harness() {
   const record = adapter.sessions.add({
     id: "live-1", chatId: "chat-1", sessionId: "thread-1", status: "running", activity: "idle",
     active: false, stopping: false, generation: null, clients: new Set(), events: [],
-    pending: new Map(), approvals: new Map(), steering: [], followUp: [], hostUiRequests: [],
+    pending: new Map(), steering: [], followUp: [],
     rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
     child: { stdin: { writable: true, write: (line) => {
       const message = JSON.parse(line);

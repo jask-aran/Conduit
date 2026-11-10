@@ -4,6 +4,7 @@ import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { ServerConcurrency } from "./effect-concurrency.js";
 import { liveCommandIs } from "../live-session-api.js";
+import { hostsOf } from "../harnesses/host-requests.js";
 
 /**
  * An id a client chose for the message it is sending.
@@ -444,7 +445,7 @@ export function createLiveSessionStream({
     send({
       type: "runtime_state",
       session: adapter.view(record),
-      hostUiRequests: record.hostUiRequests || [],
+      hostUiRequests: hostsOf(record),
       queue: record.queue || { steering: [], followUp: [] },
       contextUsage: record.contextUsage || null,
       sessionStats: record.sessionStats || null,

@@ -9,6 +9,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask as askHost, asked, hostsOf, take } from "./harnesses/host-requests.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, planWindowLabel, usageFromRequests } from "./cache-stats.js";
 import { codexPlanUsage, declarePlan } from "./plan-usage.js";
@@ -624,7 +625,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = {
       id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
-      clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
+      clients: new Set(), events: [], pending: new Map(),
       steering: [], followUp: [],
       permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "", serviceLevel: "",
       // Two counters that both used to be called a sequence. `rpcRequestId` is
@@ -758,8 +759,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     const generationId = params.turnId || record.generation?.id || null;
     const host = { id: requestId, kind: "select", title: descriptor.title(params), message: descriptor.message(params),
       options: [...APPROVAL_OPTIONS], placeholder: "", prefill: "", timeoutMs: null };
-    record.approvals.set(requestId, { requestId: message.id, decisions: descriptor.decisions, generationId, host });
-    this.ask(record, host, generationId);
+    this.ask(record, host, { rpcId: message.id, decisions: descriptor.decisions, generationId });
   }
 
   /** A question the model asked with request_user_input, asked as one. */
@@ -767,12 +767,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     const params = message.params || {};
     const generationId = params.turnId || record.generation?.id || null;
     const host = userInputRequest(params.itemId || `question-${message.id}`, params);
-    record.approvals.set(host.id, { requestId: message.id, generationId, host });
-    this.ask(record, host, generationId);
+    this.ask(record, host, { rpcId: message.id, generationId });
   }
 
-  ask(record, host, generationId) {
-    this.publish(record, { type: "permission_request", generationId, requestId: host.id, ...host });
+  ask(record, host, held) {
+    const { generationId } = held;
+    this.publish(record, askHost(record, host.id, host, held));
     // What the session is busy with, not a transition the turn made. It used to
     // be published as a `status` with no phase, which is a shape neither fold
     // has a case for: it took a place in the turn's sequence and then changed
@@ -786,25 +786,28 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
     const requestId = response?.id;
-    const pending = record.approvals.get(requestId);
+    const pending = take(record, requestId);
     // Resolved already - answered in the Codex TUI, or a duplicate click.
     if (!pending) return null;
-    record.approvals.delete(requestId);
     if (pending.host.kind === "question") {
-      this.write(record, { id: pending.requestId, result: { answers: userInputAnswers(pending.host, response) } });
-      this.settleApproval(record, requestId, pending.generationId);
+      this.write(record, { id: pending.rpcId, result: { answers: userInputAnswers(pending.host, response) } });
+      this.settled(record, pending);
       return null;
     }
     const decision = pending.decisions[approvalChoice(response)];
-    this.write(record, { id: pending.requestId, result: { decision } });
-    this.settleApproval(record, requestId, pending.generationId);
+    this.write(record, { id: pending.rpcId, result: { decision } });
+    this.settled(record, pending);
     return decision;
   }
 
-  settleApproval(record, requestId, generationId) {
-    record.approvals.delete(requestId);
-    this.publish(record, { type: "permission_resolved", generationId, requestId });
-    this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
+  settleApproval(record, requestId) {
+    const pending = take(record, requestId);
+    if (pending) this.settled(record, pending);
+  }
+
+  settled(record, pending) {
+    this.publish(record, pending.event);
+    this.publish(record, { type: "runtime_state", generationId: pending.generationId, session: this.view(record) });
   }
 
   /**
@@ -1098,9 +1101,9 @@ export class CodexAppServerAdapter extends EventEmitter {
     } else if (method === "serverRequest/resolved") {
       // The prompt was answered somewhere else - the Codex TUI, or another
       // client on the same thread. Clear ours rather than leave it hanging.
-      for (const [requestId, pending] of record.approvals) {
-        if (params.requestId != null && pending.requestId !== params.requestId) continue;
-        this.settleApproval(record, requestId, pending.generationId);
+      for (const pending of asked(record)) {
+        if (params.requestId != null && pending.rpcId !== params.requestId) continue;
+        this.settleApproval(record, pending.id);
       }
     } else if (method === "turn/completed") {
       // The one exception to the harness's word standing: Codex ends a turn it was told to interrupt as "completed",
@@ -1112,7 +1115,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       const interrupted = outcome === "interrupted";
       endTurn(record, outcome);
       record.compacting = false;
-      for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
+      for (const { id } of asked(record)) this.settleApproval(record, id);
       // A turn nobody stopped, whose last message Codex never labelled, ends by
       // saying that message was the answer. A turn that was interrupted says no
       // such thing: what it had written is where it got to, not what it meant
@@ -1565,7 +1568,7 @@ export class CodexAppServerAdapter extends EventEmitter {
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
   view(record) {
-    return { ...this.sessions.view(record), hostUiRequests: [...(record?.approvals?.values() || [])].map((pending) => pending.host) };
+    return { ...this.sessions.view(record), hostUiRequests: hostsOf(record) };
   }
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) {

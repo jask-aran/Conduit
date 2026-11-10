@@ -20,6 +20,7 @@ import { emailView, setupEmail, patchEmail, removeEmail } from "../../agent/emai
 import { backgroundSubagents } from "../subagents.js";
 import { closeWork, listWork, noteWork, openWork, WorkLog } from "../../agent/work-log.js";
 import { workOps } from "../../durable-adapter.js";
+import { hostsOf } from "../../harnesses/host-requests.js";
 
 /**
  * The hub's persistent agent over HTTP (docs/plans/persistent-agent.md).
@@ -132,7 +133,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     // The home thread's own turn, in the turn digest's words (the adapter keeps them on its live session).
     const home = view.home?.chatId ? backends.getByChatId(view.home.chatId) : null;
     const threads = [view.home?.chatId, ...view.sides.map((side) => side.chatId)].filter(Boolean);
-    const waiting = threads.flatMap((chatId) => (backends.getByChatId(chatId)?.hostUiRequests || [])
+    const waiting = threads.flatMap((chatId) => hostsOf(backends.getByChatId(chatId))
       .map((request) => ({ kind: "question", chatId, requestId: request.id, title: request.title || "A question" })));
     // A run waits on no one (it cannot ask); a thread whose chat is not live may still have a question pending.
     for (const thread of await Promise.all([...agent.runtime.askerWaits?.keys() || []].map((conversationId) => agent.describe(conversationId)))) {

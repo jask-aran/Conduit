@@ -10,6 +10,7 @@ import { formatHistoryTool } from "./harnesses/history-tool.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, stopTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask, asked, heldOf, hostsOf, take } from "./harnesses/host-requests.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { unsupported } from "./harnesses/unsupported.js";
@@ -325,7 +326,7 @@ export class OpenCodeAdapter extends EventEmitter {
       cwd: session.location?.directory || project?.workingRoot, sessionId: session.id,
       status: "running", ready: true, active: false, stopping: false,
       model: spec, thinkingLevel: session.model?.variant || "", generation: null, generationSeq: 0,
-      clients: new Set(), events: [], hostUiRequests: [], requests: new Map(),
+      clients: new Set(), events: [],
       liveMessages: new Map(), promptStartedAt: 0,
     });
   }
@@ -749,32 +750,29 @@ export class OpenCodeAdapter extends EventEmitter {
       const id = request.id;
       if (!id) continue;
       current.add(id);
-      if (record.requests.has(id)) continue;
+      if (heldOf(record, id)) continue;
       if (kind === "permission" && record.permissionMode === "autoaccept") {
         this.autoAccept(record, id);
         continue;
       }
       const pending = kind === "permission" ? permissionPrompt(request) : formPrompt(request);
-      record.requests.set(id, pending);
-      record.hostUiRequests.push(pending.host);
-      this.publish(record, { type: "permission_request", generationId: record.generation?.id || null,
-        requestId: id, ...pending.host });
+      this.publish(record, ask(record, id, pending.host, pending));
     }
-    for (const id of record.requests.keys()) {
+    for (const { id } of asked(record)) {
       if (!current.has(id)) this.resolveRequest(record, id);
     }
   }
 
+  /** One answered here, auto accepted, or gone from OpenCode's lists; only one that was shown is said to be resolved. */
   resolveRequest(record, id) {
-    if (!record.requests.delete(id)) return;
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== id);
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId: id });
+    const pending = take(record, id);
+    if (pending?.event) this.publish(record, pending.event);
   }
 
   autoAccept(record, id) {
-    record.requests.set(id, { kind: "permission", host: null, auto: true });
+    ask(record, id, null, { kind: "permission", auto: true });
     void this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/permission/${encodeURIComponent(id)}/reply`,
-      { body: { decision: "once" } }).catch(() => record.requests.delete(id));
+      { body: { decision: "once" } }).catch(() => take(record, id));
   }
 
   settle(record, outcome) {
@@ -785,7 +783,7 @@ export class OpenCodeAdapter extends EventEmitter {
     // OpenCode never completes them, so they are closed here.
     const stopReason = outcome === "succeeded" ? "stop" : outcome === "failed" ? "error" : "aborted";
     // A prompt left on screen from an ended turn would hide the next turn's.
-    for (const id of [...record.requests.keys()]) this.resolveRequest(record, id);
+    for (const { id } of asked(record)) this.resolveRequest(record, id);
     for (const state of record.liveMessages.values()) {
       for (const tool of state.tools.values()) {
         if (tool.closed) continue;
@@ -817,7 +815,7 @@ export class OpenCodeAdapter extends EventEmitter {
   async respondHostUi(id, response) {
     const record = this.get(id);
     const requestId = String(response?.id || response?.requestId || "");
-    const pending = record?.requests.get(requestId);
+    const pending = heldOf(record, requestId);
     if (!pending?.host) throw failure("OpenCode request is no longer pending", "host_ui_request_missing", 404);
     const dismissed = isDismissal(response);
     const session = `/session/${encodeURIComponent(record.sessionId)}`;
@@ -847,10 +845,10 @@ export class OpenCodeAdapter extends EventEmitter {
     record.permissionMode = mode?.id || String(mode || "");
     // Switching to auto accept answers what is already waiting, too.
     if (record.permissionMode === "autoaccept") {
-      for (const [requestId, pending] of record.requests) {
+      for (const pending of asked(record)) {
         if (pending.kind !== "permission" || pending.auto) continue;
-        this.resolveRequest(record, requestId);
-        this.autoAccept(record, requestId);
+        this.resolveRequest(record, pending.id);
+        this.autoAccept(record, pending.id);
       }
     }
     return record.permissionMode;
@@ -1142,7 +1140,7 @@ export class OpenCodeAdapter extends EventEmitter {
   replay(id) { return this.sessions.runtimeState(this.get(id)); }
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
-  view(record) { return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])] }; }
+  view(record) { return { ...this.sessions.view(record), hostUiRequests: hostsOf(record) }; }
   publish(record, event) { return this.sessions.publish(record, event); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }

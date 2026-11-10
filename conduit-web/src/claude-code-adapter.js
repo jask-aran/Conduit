@@ -9,6 +9,7 @@ import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { answerTo, isDismissal, questionRequest } from "./harnesses/questions.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, outcomeOf, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask, hostsOf, take, takeAll } from "./harnesses/host-requests.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { countCacheRequest, usageFromRequests } from "./cache-stats.js";
 import { conduitCategories } from "./context-categories.js";
@@ -436,8 +437,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
       nodeId: remoteNode(project), place: project?.place || null,
       cwd: project?.workingRoot, sessionId, status: "starting", ready: false,
       active: false, stopping: false, model, thinkingLevel, permissionMode,
-      generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
-      requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
+      generation: null, generationSeq: 0, clients: new Set(), events: [],
+      steps: new Map(), stepOrder: [], step: null, tools: new Map(),
       commands: [], models: [], settings: {}, notices: [], stderr: "",
       steering: [], followUp: [], compacting: false, contextUsage: null, sessionStats: null,
       counts: { userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0 },
@@ -856,12 +857,9 @@ export class ClaudeCodeAdapter extends EventEmitter {
       placeholder: "", prefill: "", timeoutMs: null,
     };
     return new Promise((resolve) => {
-      record.requests.set(requestId, { host, input, suggestions, resolve });
-      record.hostUiRequests.push(host);
-      this.publish(record, { type: "permission_request", generationId: record.generation?.id || null, requestId, ...host });
+      this.publish(record, ask(record, requestId, host, { input, suggestions, resolve }));
       signal?.addEventListener("abort", () => {
-        if (!record.requests.has(requestId)) return;
-        this.resolveRequest(record, requestId);
+        if (!this.resolveRequest(record, requestId)) return;
         resolve({ behavior: "deny", message: "The request was cancelled." });
       }, { once: true });
     });
@@ -870,22 +868,22 @@ export class ClaudeCodeAdapter extends EventEmitter {
   async respondHostUi(id, response) {
     const record = this.get(id);
     const requestId = String(response?.id || response?.requestId || "");
-    const pending = record?.requests.get(requestId);
+    const pending = record && this.resolveRequest(record, requestId);
     if (!pending) throw failure("Claude Code request is no longer pending", "host_ui_request_missing", 404);
-    this.resolveRequest(record, requestId);
     pending.resolve(pending.host.kind === "question" ? askAnswer(pending, response) : approvalAnswer(pending, response));
     return null;
   }
 
+  /** The request, taken and said to be resolved; null when it is no longer open. */
   resolveRequest(record, requestId) {
-    record.requests.delete(requestId);
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    const pending = take(record, requestId);
+    if (pending) this.publish(record, pending.event);
+    return pending;
   }
 
   cancelRequests(record) {
-    for (const [requestId, pending] of [...record.requests]) {
-      this.resolveRequest(record, requestId);
+    for (const pending of takeAll(record)) {
+      this.publish(record, pending.event);
       pending.resolve({ behavior: "deny", message: "The turn was stopped.", interrupt: true });
     }
   }
@@ -1386,7 +1384,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
-  view(record) { return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])] }; }
+  view(record) { return { ...this.sessions.view(record), hostUiRequests: hostsOf(record) }; }
   publish(record, event) { return this.sessions.publish(record, event); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }

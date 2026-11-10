@@ -6,7 +6,7 @@ function record() {
   return {
     id: "live", chatId: "chat", status: "running", activity: "idle", active: false, stopping: false,
     sessionId: "thread-1", generation: null, clients: new Set(), events: [], pending: new Map(),
-    approvals: new Map(), steering: [], followUp: [], rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
+    steering: [], followUp: [], rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
   };
 }
 
@@ -461,7 +461,7 @@ test("a turn that completes with a prompt outstanding does not strand it", () =>
   adapter.receive(live, JSON.stringify({ id: 5, method: "item/commandExecution/requestApproval",
     params: { approvalId: "ap-3", command: "make" } }));
   adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
-  assert.equal(live.approvals.size, 0);
+  assert.equal(live.hostRequests.size, 0);
   assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ap-3"));
 });
 

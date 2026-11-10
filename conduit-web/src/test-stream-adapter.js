@@ -4,6 +4,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask, asked, hostsOf, take, takeAll } from "./harnesses/host-requests.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
 import { messageClose, messageDrop, messageOpen, toolClose, toolOpen, turnSettle } from "./harnesses/transcript-ops.js";
 import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-generation.js";
@@ -319,8 +320,6 @@ export class TestStreamAdapter extends EventEmitter {
       // Everything a real harness holds between turns: what is waiting to be
       // said, what it is waiting to be told, and what it has spent.
       queue: { steering: [], followUp: [] },
-      hostUiRequests: [],
-      pendingApproval: null,
       streamed: 0,
       messages: 0,
       activeGeneration: null,
@@ -536,16 +535,10 @@ export class TestStreamAdapter extends EventEmitter {
   /** Ask before running, and stop until the answer comes back. */
   askApproval(record, step) {
     const requestId = `approval-${step.toolCallId}`;
-    record.hostUiRequests.push({ id: requestId, kind: "confirm",
+    this.publish(record, ask(record, requestId, { id: requestId, kind: "confirm",
       title: `Run ${TEST_STREAM_TOOL.name}?`,
       message: `${TEST_STREAM_TOOL.name}(${JSON.stringify(TEST_STREAM_TOOL.input)})`,
-      options: [], placeholder: "", prefill: "", timeoutMs: null });
-    record.pendingApproval = { requestId, step };
-    this.publish(record, { type: "permission_request", generationId: record.turn.generationId,
-      requestId, kind: "confirm",
-      title: `Run ${TEST_STREAM_TOOL.name}?`,
-      message: `${TEST_STREAM_TOOL.name}(${JSON.stringify(TEST_STREAM_TOOL.input)})`,
-      options: [], placeholder: "", prefill: "", timeoutMs: null });
+      options: [], placeholder: "", prefill: "", timeoutMs: null }, { step, generationId: record.turn.generationId }));
     this.publishState(record);
   }
 
@@ -554,12 +547,10 @@ export class TestStreamAdapter extends EventEmitter {
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
     const requestId = response?.id || response?.requestId;
     if (!requestId) throw adapterError("Host UI response requires id", "host_ui_id_required", 400);
-    const pending = record.pendingApproval;
     // An answer to a prompt that is no longer up leaves the one that is alone.
-    if (pending?.requestId !== requestId) return null;
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    record.pendingApproval = null;
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
+    const pending = take(record, requestId);
+    if (!pending) return null;
+    this.publish(record, pending.event);
     this.publishState(record);
     if (!record.turn) return null;
     // A permission prompt fails closed, the same as the real harnesses: only an
@@ -657,7 +648,7 @@ export class TestStreamAdapter extends EventEmitter {
 
   publishState(record) {
     this.publish(record, { type: "runtime_state", generationId: record.generation?.id || null,
-      session: this.view(record), hostUiRequests: [...record.hostUiRequests],
+      session: this.view(record), hostUiRequests: hostsOf(record),
       queue: { steering: record.queue.steering.map((item) => item.message),
         followUp: record.queue.followUp.map((item) => item.message) },
       contextUsage: this.contextUsage(record) });
@@ -686,7 +677,7 @@ export class TestStreamAdapter extends EventEmitter {
     if (!turn) return;
     if (record.timer) { clearTimeout(record.timer); record.timer = null; }
     // Stopped while a call waited for approval: the call goes with the turn.
-    const waiting = record.pendingApproval?.step;
+    const waiting = asked(record)[0]?.step;
     if (waiting?.called) this.publish(record, toolClose({ toolCallId: waiting.toolCallId, output: "", cancelled: true, generationId: turn.generationId }));
     this.closeAnswer(record, stopReason);
     record.turn = null;
@@ -696,8 +687,7 @@ export class TestStreamAdapter extends EventEmitter {
     // and one assistant message per answer opened -- a turn that called a tool
     // opened more than one.
     record.messages += (turn.userMessages || 1) + (turn.messages || 1);
-    record.pendingApproval = null;
-    record.hostUiRequests = [];
+    for (const pending of takeAll(record)) this.publish(record, pending.event);
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, generationId: turn.generationId, outcome }));
     this.publish(record, turnEnded(record, outcome, turn.generationId));
     this.publishUsage(record);
@@ -801,7 +791,7 @@ export class TestStreamAdapter extends EventEmitter {
   view(record) {
     return {
       ...this.sessions.view(record),
-      hostUiRequests: [...(record?.hostUiRequests || [])],
+      hostUiRequests: hostsOf(record),
       queue: { steering: (record?.queue?.steering || []).map((item) => item.message),
         followUp: (record?.queue?.followUp || []).map((item) => item.message) },
       contextUsage: this.contextUsage(record),

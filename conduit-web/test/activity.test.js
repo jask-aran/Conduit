@@ -4,13 +4,13 @@ import { deriveFineActivity, activityLabel } from "../src/activity.js";
 import { activityOf } from "../src/harnesses/turn.js";
 
 test("a session's activity: starting > failed > stopping > waiting > compacting > working", () => {
-  const all = { status: "running", failed: true, stopping: true, hostUiRequests: [{ id: "1" }], compacting: true, active: true };
+  const all = { status: "running", failed: true, stopping: true, hostRequests: new Map([["1", { host: { id: "1" } }]]), compacting: true, active: true };
   assert.equal(activityOf({ ...all, status: "starting" }), "starting");
   assert.equal(activityOf(all), "failed");
   assert.equal(activityOf({ ...all, failed: false }), "stopping");
   // A stop with a prompt still up is stopping; one of two prompts answered is still waiting.
   assert.equal(activityOf({ ...all, failed: false, stopping: false }), "waiting_for_user");
-  assert.equal(activityOf({ status: "running", active: true, approvals: new Map([["a", {}]]) }), "waiting_for_user");
+  assert.equal(activityOf({ status: "running", active: true, hostRequests: new Map([["a", { host: {} }]]) }), "waiting_for_user");
   assert.equal(activityOf({ status: "running", active: true, compacting: true }), "compacting");
   assert.equal(activityOf({ status: "running", turnStarting: true }), "working");
   assert.equal(activityOf({ status: "running" }), "idle");

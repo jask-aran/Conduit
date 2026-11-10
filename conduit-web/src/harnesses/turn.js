@@ -1,3 +1,5 @@
+import { shownCount } from "./host-requests.js";
+
 /**
  * What a session is doing, read from the facts its adapter keeps.
  *
@@ -11,12 +13,12 @@
  *   status         "starting" until the harness can answer
  *   failed         the last turn ended in an error; cleared when the next begins
  *   stopping       a stop was asked for and the turn has not ended yet
- *   approvals / hostUiRequests   what the person has been asked and not answered
+ *   hostRequests   what the person has been asked and not answered (host-requests.js)
  *   compacting     the harness is compacting its context
  *   active         a turn is running
  *   turnStarting   a turn was sent and the harness has not said it began
  */
-export const openRequests = (record) => record?.approvals?.size ?? record?.hostUiRequests?.length ?? 0;
+export const openRequests = shownCount;
 
 /** @returns {import("../chat-backend-contract.js").ChatActivity} */
 export function activityOf(record) {

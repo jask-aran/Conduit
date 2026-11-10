@@ -15,6 +15,7 @@ import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubag
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, outcomeOf, stopTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask, asked, hostsOf, take } from "./harnesses/host-requests.js";
 import { DIFF_LINES, lineChanges, messageClose, messageOpen, toolCalls, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { callsSubject, createScriptCalls, settledCalls } from "./harnesses/script-calls.js";
 import { applyTranscriptOps } from "./transcript-fold.js";
@@ -783,7 +784,7 @@ export class DurableAdapter extends EventEmitter {
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, readOnly, parentChatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation, templateId,
       status: "running", active: false, stopping: false, generation: null, generationSeq: 0,
-      clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
+      clients: new Set(), events: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
       // What the turn in progress has named: its prompts by submission, the
       // answer being written, and the tools it has open.
@@ -1361,7 +1362,7 @@ export class DurableAdapter extends EventEmitter {
     const outcome = outcomeOf(said === "aborted" ? "interrupted" : !turn.last || said === "error" ? "failed" : said === "toolUse" ? null : "complete",
       record.stopping) || "complete";
     // A question the turn was waiting on goes with it.
-    for (const request of [...record.hostUiRequests]) this.settleAsk(record, request.id, { id: request.id, cancelled: true });
+    for (const { id } of asked(record)) this.settleAsk(record, id, { id, cancelled: true });
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome, generationId: turn.generationId }));
     record.turn = null;
     endTurn(record, outcome);
@@ -1413,12 +1414,7 @@ export class DurableAdapter extends EventEmitter {
 
   /** Put a question card up and wait for the answer (see the runtime's ask_user tool). */
   askUser(record, request) {
-    return new Promise((resolve) => {
-      record.asks ||= new Map();
-      record.asks.set(request.id, resolve);
-      record.hostUiRequests = [...record.hostUiRequests.filter((item) => item.id !== request.id), request];
-      this.publish(record, { type: "permission_request", generationId: record.generation?.id || null, requestId: request.id, ...request });
-    });
+    return new Promise((resolve) => this.publish(record, ask(record, request.id, request, { resolve })));
   }
 
   async respondHostUi(id, response) {
@@ -1432,12 +1428,10 @@ export class DurableAdapter extends EventEmitter {
   }
 
   settleAsk(record, requestId, response) {
-    const resolve = record.asks?.get(requestId);
-    record.asks?.delete(requestId);
-    if (!record.hostUiRequests.some((item) => item.id === requestId)) return;
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
-    resolve?.(response);
+    const pending = take(record, requestId);
+    if (!pending) return;
+    this.publish(record, pending.event);
+    pending.resolve(response);
   }
 
   /** A prompt refused before any run took it -- a model error before the first request, say. */
@@ -2017,7 +2011,7 @@ export class DurableAdapter extends EventEmitter {
   }
 
   view(record) {
-    return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])], queue: this.queueView(record || { queue: [] }),
+    return { ...this.sessions.view(record), hostUiRequests: hostsOf(record), queue: this.queueView(record || { queue: [] }),
       ...(record?.waitingFor ? { retry: { waitingFor: record.waitingForName } } : {}),
       contextUsage: this.contextUsage(record), sessionStats: record?.history?.sessionStats || null,
       cacheStats: record?.history?.cacheStats || null };

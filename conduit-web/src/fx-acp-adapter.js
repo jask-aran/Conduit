@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { parseAttachmentEnvelope } from "./attachment-envelope.js";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
+import { ask, heldOf, hostsOf, take, takeAll } from "./harnesses/host-requests.js";
 import { messageClose, messageOpen, toolClose, toolKind, toolOpen, toolSubject, turnSettle } from "./harnesses/transcript-ops.js";
 import { unsupported } from "./harnesses/unsupported.js";
 import { terminate } from "./server/effect-process.js";
@@ -232,7 +233,7 @@ export class FxAcpAdapter extends EventEmitter {
       cwd: project?.workingRoot, sessionId: null, status: "starting", ready: false,
       active: false, stopping: false, model: "", thinkingLevel: "",
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],
-      hostUiRequests: [], requests: new Map(), steps: [], tools: new Map(), loading: true,
+      steps: [], tools: new Map(), loading: true,
     });
     record.scope.defer(() => record.client?.close());
     record.client = new AcpClient(this.command, record.cwd,
@@ -419,13 +420,10 @@ export class FxAcpAdapter extends EventEmitter {
     }
     const params = message.params || {};
     const requestId = String(message.id);
-    record.requests.set(requestId, message.id);
     const options = (params.options || []).map((item) => ({ id: item.optionId, label: item.name || item.optionId }));
     const request = { id: requestId, kind: "select", title: params.toolCall?.title || "fx permission",
       message: params.toolCall?.title || "Allow this tool call?", options, placeholder: "", prefill: "", timeoutMs: null };
-    record.hostUiRequests.push(request);
-    this.publish(record, { type: "permission_request", generationId: record.generation?.id || null,
-      requestId, ...request });
+    this.publish(record, ask(record, requestId, request, { rpcId: message.id }));
   }
 
   async prompt(id, message, options = {}) {
@@ -545,16 +543,10 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   cancelRequests(record) {
-    for (const [requestId, rpcId] of record.requests) {
-      try { record.client.respond(rpcId, { outcome: { outcome: "cancelled" } }); } catch { /* fx has gone. */ }
-      this.resolveRequest(record, requestId);
+    for (const pending of takeAll(record)) {
+      try { record.client.respond(pending.rpcId, { outcome: { outcome: "cancelled" } }); } catch { /* fx has gone. */ }
+      this.publish(record, pending.event);
     }
-  }
-
-  resolveRequest(record, requestId) {
-    record.requests.delete(requestId);
-    record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
   }
 
   /**
@@ -587,12 +579,12 @@ export class FxAcpAdapter extends EventEmitter {
   async respondHostUi(id, response) {
     const record = this.get(id);
     const requestId = String(response?.id || response?.requestId || "");
-    const rpcId = record?.requests.get(requestId);
-    if (rpcId == null) throw failure("fx permission request is no longer pending", "host_ui_request_missing", 404);
+    const pending = heldOf(record, requestId);
+    if (!pending) throw failure("fx permission request is no longer pending", "host_ui_request_missing", 404);
     const selected = response.cancelled || response.dismissed ? "reject_once"
       : String(response.value || response.optionId || "reject_once");
-    record.client.respond(rpcId, { outcome: { outcome: "selected", optionId: selected } });
-    this.resolveRequest(record, requestId);
+    record.client.respond(pending.rpcId, { outcome: { outcome: "selected", optionId: selected } });
+    this.publish(record, take(record, requestId).event);
     return null;
   }
 
@@ -737,7 +729,7 @@ export class FxAcpAdapter extends EventEmitter {
   replay(id) { return this.sessions.runtimeState(this.get(id)); }
   attach(id, socket) { return this.sessions.attach(id, socket); }
   setFrameInterval(_id, socket, ms) { return this.sessions.setFrameInterval(socket, ms); }
-  view(record) { return { ...this.sessions.view(record), hostUiRequests: [...(record?.hostUiRequests || [])] }; }
+  view(record) { return { ...this.sessions.view(record), hostUiRequests: hostsOf(record) }; }
   publish(record, event) { return this.sessions.publish(record, event); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }
