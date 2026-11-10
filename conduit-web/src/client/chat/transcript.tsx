@@ -11,7 +11,7 @@ import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
 import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
-import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
+import { jumpToSpawn, openAgentChat, openRun, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
 import { createLeavingRows } from "./composer-cards";
 import { isAgentReport, isRun, type TurnRow, type TurnTraceData } from "../turn-rows";
@@ -978,7 +978,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
             return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value.id} flow={flow()}><Turn><AgentRows>
               <RunLine icon={<RoutineIcon routine={run().routine} />} label={run().label} number={run().number} id={item.value.agent?.id || undefined} trigger={run().trigger || undefined} time={time()} woke={run().woke}
                 outcome={props.profileLabel ? `Woke ${props.profileLabel}` : undefined} status={run().status === "finished" ? undefined : run().status[0]!.toUpperCase() + run().status.slice(1)}
-                summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : undefined}>
+                summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : run().conversationId != null ? () => openRun(String(run().conversationId)) : undefined}>
                 {/* What the agent was given, all of it: the report, then what Conduit added to it (nothing hidden). */}
                 {run().woke ? <><ChatText text={item.value.content || ""} /><Show when={item.value.appended}><ConduitAdded text={item.value.appended!} /></Show></> : undefined}
               </RunLine>

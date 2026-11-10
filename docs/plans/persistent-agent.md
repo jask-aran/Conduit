@@ -284,11 +284,12 @@ reader. Beside it: Needs you (asks), Working on (runs), context inbox counts. Th
   composer; the message goes to jbot ("reply saying Thursday") and jbot sends into the room. Because the person asked,
   that send needs no further approval. The app never sends into a room directly.
 - **Agent ids and labels** (every thread, not only jbot's): an agent's key is its child conversation's id (global,
-  never reused). `bg-N`, `fg-N` and a run's `Heartbeat #N` are labels only, restarting at 1 each local day, skipping
-  a label still running so the model never has two agents of one name to address. The roster, report matching and
+  never reused). `bg-N` and `fg-N` are labels only, restarting at 1 each local day, skipping a label still running
+  so the model never has two agents of one name to address. A run's `Heartbeat #N` is its work-log item's number,
+  the same in the home thread and the jbot chat. A run leaves the roster once it has ended. The roster, report matching and
   the UI key by the conversation id. (Today `bg-N` is the roster key and what reports are matched by: changing that
   comes first.)
-- **Retention**: keep everything for now: roster entries, run conversations, finished tasks, the log. pi-durable
+- **Retention**: keep everything for now except ended runs' roster entries: run conversations, finished tasks, the log. pi-durable
   has no delete API; what is really wanted is archival or compression of finished work, asked of upstream rather
   than written against its storage.
 

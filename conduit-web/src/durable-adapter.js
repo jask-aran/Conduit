@@ -11,7 +11,7 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getCurrentTools } from "@earendil-works/pi-ai/utils/transcript";
 import { AgentDoc as DurableAgentDoc, UsageDoc, LiveDoc, DEFAULT_COMPACTION_POLICY, watchEvents } from "@earendil-works/pi-durable";
 import { headlineOf } from "./agent/inbox.js";
-import { backgroundSubagents, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
+import { backgroundSubagents, endedUsage, findSubagent, nestedSubagents, stopBackgroundSubagent, stopBackgroundSubagents, subagentTitle } from "./server/subagents.js";
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { SessionRecords } from "./harnesses/session-records.js";
 import { beginTurn, endTurn, outcomeOf, stopTurn, turnEnded, turnStarted } from "./harnesses/turn.js";
@@ -1696,7 +1696,8 @@ export class DurableAdapter extends EventEmitter {
     // background subagents'; a foreground subagent's is already the chat's, as its call's usage.
     const ledgers = [await harness.snapshot(UsageDoc, held.id, this.context)];
     for (const item of await backgroundSubagents(harness, held.id, this.context)) ledgers.push(await harness.snapshot(UsageDoc, item.child, this.context));
-    const spent = ledgers.flatMap((ledger) => [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})]);
+    const ended = await endedUsage(harness, held.id, this.context);
+    const spent = [...ledgers.flatMap((ledger) => [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})]), ...(ended ? [ended] : [])];
     const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
     let cost = 0;
     for (const usage of spent) {

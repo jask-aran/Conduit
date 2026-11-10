@@ -10,6 +10,7 @@ import { filedText, InboxText, listInbox } from "./inbox.js";
 import { inboxFile, syncInboxFiles } from "./inbox-files.js";
 import { promptVars, runInstructions } from "./routines.js";
 import { startRoutine } from "./routine-task.js";
+import { stopBackgroundSubagents } from "../server/subagents.js";
 import { listRoutines, readRoutine, seedRoutines, settingRule, updateTrigger, writeRoutine } from "./routine-files.js";
 
 const SEED = fileURLToPath(new URL("../../../templates/agent/seed/", import.meta.url));
@@ -292,7 +293,11 @@ export class PersistentAgent {
     await fs.writeFile(path.join(this.folder, "agent.json"), `${JSON.stringify(next, null, 2)}\n`);
     // Old clock checkpoints must stay skipped while settings listeners move the clocks forward.
     if (this.settings().on === false && next.on !== false) this.resumedAt = Date.now();
+    const off = this.settings().on !== false && next.on === false;
     this.cached = next;
+    // Off stops what was admitted as well as what would come: its runs under way and routine firings end as stopped.
+    // Not waited for: a run slow to end must not hold the setting.
+    if (off) void this.state().then((state) => this.stopRuns(state.home?.conversationId)).catch(() => {});
     // The brief's and heartbeat's clocks are their routine files' now: Settings writes through to them.
     if (patch.brief) await this.adjustRoutine("morning-brief", (routine) => ({ ...routine, enabled: next.brief.enabled !== false,
       trigger: next.brief.at ? updateTrigger(routine.trigger, "at", { time: next.brief.at }) : routine.trigger }));
@@ -436,6 +441,19 @@ export class PersistentAgent {
     const harness = await this.runtime.open();
     const conversation = await harness.conversation(conversationId, this.context);
     return conversation.commit((tx) => this.active() ? this.spawnRun(tx, conversationId, { key, kind, title, task, log }) : null, this.context);
+  }
+
+  /**
+   * Abort the work it has admitted, each piece ending as stopped (no failure, no notice): every routine firing, and the
+   * runs under way of its home thread `conversationId` -- with `all`, the thread's background agents too.
+   */
+  async stopRuns(conversationId, all = false) {
+    const harness = await this.runtime.open();
+    for (const { taskId } of Object.values((await this.state()).routineRuns || {})) {
+      await harness.abortTask(taskId, this.context).catch(() => {});
+      await harness.waitForTask(taskId, this.context).catch(() => {});
+    }
+    if (conversationId) await stopBackgroundSubagents(harness, conversationId, this.context, (item) => all || Boolean(item.origin));
   }
 
   /**

@@ -6,7 +6,7 @@ import { completeRoutine } from "../agent/routines.js";
 import { AgentDoc } from "../agent/agent-doc.js";
 import { fileEntry, headlineOf, RunEnd } from "../agent/inbox.js";
 import { inboxFile, writeInboxFile } from "../agent/inbox-files.js";
-import { closeWork, noteWork, openWork, phaseWork, WorkLog } from "../agent/work-log.js";
+import { closeWork, listWork, noteWork, openWork, phaseWork, WorkLog } from "../agent/work-log.js";
 
 const SubagentRoster = defineDoc({
   checkpointWhen: () => false, kind: "conduit.subagents", version: 1, scope: "conversation", history: "latest", fork: "initial",
@@ -15,9 +15,9 @@ const SubagentRoster = defineDoc({
 const runLabel = (kind) => ({ heartbeat: "Heartbeat", brief: "Morning brief", "morning-brief": "Morning brief",
   "check-back": "Check-back", checkback: "Check-back", webhook: "Webhook", manual: "Run" })[kind]
   || kind.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-// An agent's key is its own and never reused (`key`; older agents' were their label); its label -- bg-3, fg-2, a run's
-// Heartbeat #4 -- is a name only, counted from 1 each local day. A label still running is skipped, so the model never
-// has two agents of one name to address.
+// An agent's key is its own and never reused (`key`; older agents' were their label); its label -- bg-3, fg-2 -- is a
+// name only, counted from 1 each local day. A label still running is skipped, so the model never has two agents of one
+// name to address. A run's number (Heartbeat #312) is its work-log item's (work-log.js), wherever it is shown.
 const today = () => { const at = new Date(); return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`; };
 const nextNumber = (roster, counter, taken = () => false) => {
   if (roster.day !== today()) { roster.day = today(); roster.counts = {}; }
@@ -36,11 +36,12 @@ export const findSubagent = (items, id) => {
   const named = items.filter((item) => item.id === id);
   return items.find((item) => item.key === id) || named.find((item) => item.status === "running") || named.at(-1);
 };
-const nextRun = (roster, origin, trigger = null) => {
+/** A run's unit of work in the log: its routine's item, else its own (`run:<key>`, opened only in jbot's home thread). */
+const workKeyOf = (origin, id) => origin?.routineTaskId ? `routine:${origin.routineTaskId}` : `run:${id}`;
+const nextRun = (origin, trigger = null) => {
   if (!origin?.kind) return null;
   const kind = origin.kind;
-  const number = nextNumber(roster, `run:${kind}`);
-  return { routine: kind, label: runLabel(kind), number, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null),
+  return { routine: kind, label: runLabel(kind), number: null, trigger: trigger ?? origin.trigger ?? (kind === "webhook" ? "Webhook" : null),
     ...(origin.log === false ? { log: false } : {}) };
 };
 const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
@@ -55,6 +56,11 @@ const addUsage = (total, usage) => {
 export const subagentTitle = (task) => String(task || "").trim().split(/\r?\n/)[0].trim().replace(/\s+/g, " ").slice(0, 80);
 const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.values(state?.tools || {})]
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
+/** A run that has ended leaves the roster (its work-log item stays); what it spent stays in the chat's totals (`ended`). */
+const leave = (roster, key, usage) => {
+  roster.ended = addUsage(roster.ended || emptyUsage(), totalUsage(usage));
+  delete roster.children[key];
+};
 const textResult = (text) => ({ output: [{ type: "text", text }] });
 /**
  * What the `subagent` tool lets one conversation start (roadmap #28), generous so that only a runaway meets them:
@@ -103,9 +109,17 @@ export async function nestedSubagents(harness, conversationId, context) {
   return Object.values((await harness.snapshot(SubagentRoster, conversationId, context))?.nested || {});
 }
 
-/** Stop a conversation's background subagents: its chat is going, and a late report would start a turn no one sees. */
-export async function stopBackgroundSubagents(harness, conversationId, context) {
-  for (const item of await backgroundSubagents(harness, conversationId, context)) {
+/** What the runs that have left the roster spent, kept for the chat's totals (their ledgers are no longer read). */
+export async function endedUsage(harness, conversationId, context) {
+  return (await harness.snapshot(SubagentRoster, conversationId, context))?.ended || null;
+}
+
+/**
+ * Stop a conversation's background subagents (those `which` picks): its chat is going, and a late report would start a
+ * turn no one sees; or jbot is reset or switched off, and its runs under way end as stopped.
+ */
+export async function stopBackgroundSubagents(harness, conversationId, context, which = () => true) {
+  for (const item of (await backgroundSubagents(harness, conversationId, context)).filter(which)) {
     await harness.abortTask(item.anchor, context).catch(() => {});
     await harness.waitForTask(item.anchor, context).catch(() => {});
   }
@@ -251,26 +265,49 @@ export function Subagents(runtime) {
       try {
         const parent = await harness.conversation(api.conversationId, context);
         if (await resetSince(parent, task.input.sinceEntry || 0, context)) stop();
+        // A run (one with an origin: its report is weighed) is over once its latest reporter is: the anchor ends there.
+        // A reporter aborted is this anchor's abort under way (it runs bottom-up), which ends the anchor itself.
+        const item = (await api.snapshot(SubagentRoster, api.conversationId, context))?.children[task.input.id];
+        const never = () => new Promise(() => {});
+        const reported = item?.origin && item.reporter != null ? api.waitForTask(item.reporter, context)
+          .then((done) => done.state.outcome?.status === "aborted" ? never() : item.reporter, never) : null;
         // Held, not asleep: a durable sleep would end the phase and with it the watch for a reset. A day, then again.
-        await new Promise((resolve) => {
-          const disarm = api.setTimer(resolve, 86400000);
-          api.signal.addEventListener("abort", () => { disarm(); resolve(undefined); }, { once: true });
-        });
+        let disarm = () => {};
+        const ended = await Promise.race([new Promise((resolve) => {
+          disarm = api.setTimer(() => resolve(null), 86400000);
+          api.signal.addEventListener("abort", () => resolve(null), { once: true });
+        }), ...(reported ? [reported] : [])]);
+        disarm();
         if (api.signal.aborted) return;
-        await api.commit(() => ({ status: "pending", checkpoint: { phase: "hold" } }), context);
+        const usage = ended != null ? await api.snapshot(UsageDoc, item.child, context) : null;
+        let gone = false;
+        await api.commit(async (tx) => {
+          const roster = await tx.doc(SubagentRoster, api.conversationId);
+          // A message since gave it another reporter: held for that one.
+          if (ended == null || roster.children[task.input.id]?.reporter !== ended) return { status: "pending", checkpoint: { phase: "hold" } };
+          leave(roster, task.input.id, usage);
+          gone = true;
+          return { status: "terminal", outcome: { status: "completed" } };
+        }, context);
+        if (gone) runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: "ended" });
       } finally { unsubscribe(); }
     } },
     abort: async (task, api, context) => {
+      const held = (await api.snapshot(SubagentRoster, api.conversationId, context))?.children[task.input.id];
+      const usage = held?.origin ? await api.snapshot(UsageDoc, held.child, context) : null;
       await api.commit(async (tx) => {
-        const item = (await tx.doc(SubagentRoster, api.conversationId)).children[task.input.id];
-        item.status = "stopped";
-        item.endedAt = new Date().toISOString();
+        const roster = await tx.doc(SubagentRoster, api.conversationId);
+        const item = roster.children[task.input.id];
+        if (item) {
+          item.status = "stopped";
+          item.endedAt = new Date().toISOString();
+          if (item.origin) leave(roster, task.input.id, usage);
+        }
         // Its reporter, aborted first (abort runs bottom-up), closes nothing: a home-thread agent's work item ends here.
         if (String((await tx.doc(AgentDoc)).home?.conversationId) === String(api.conversationId)) await closeWork(tx, `run:${task.input.id}`, "stopped", Date.now());
         return { status: "terminal", outcome: { status: "aborted" } };
       }, context);
-      const item = (await backgroundSubagents(runtime.harness, api.conversationId, context)).find((item) => (item.key || item.id) === task.input.id);
-      if (item) runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: "stopped" });
+      if (held) runtime.subagentsChanged?.(api.conversationId, { conversationId: held.child, status: "stopped" });
     },
   });
   const reporter = defineTask({
@@ -312,7 +349,6 @@ export function Subagents(runtime) {
         await api.commit(async (tx) => {
           const roster = await tx.doc(SubagentRoster, api.conversationId);
           const item = roster.children[id];
-          if (task.input.gate && !item.run) item.run = nextRun(roster, task.input.origin);
           stopped = item.status === "stopped";
           if (!stopped && item.number === number) {
             changed = item.status !== report.status;
@@ -354,7 +390,7 @@ export function Subagents(runtime) {
           .filter((ask) => statusAt(ask) === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || await api.memo("heard", level !== "none" && (asked || waiting > 0 || level === "urgent"), context);
         // Its unit of work in the log (work-log.js) says where the report is going as it goes.
-        const workKey = task.input.origin?.routineTaskId ? `routine:${task.input.origin.routineTaskId}` : `run:${id}`;
+        const workKey = workKeyOf(task.input.origin, id);
         const working = (label) => task.input.gate && !task.input.origin?.test ? api.commit((tx) => phaseWork(tx, workKey, label), context) : null;
         // When it reported, for its item in the work log: before jbot's turn on it, which it sits above.
         const workAt = await api.memo("workAt", new Date().toISOString(), context);
@@ -660,7 +696,9 @@ export function Subagents(runtime) {
         // The model names an agent by its label; the roster holds it by its key.
         else id = (findSubagent(Object.values(roster.children), id)?.key) || id;
         const held = Object.hasOwn(roster.children, id) ? roster.children[id] : null;
-        if (!held) throw new Error(`Unknown background subagent: ${id}`);
+        if (!held) return null;
+        // A run is over once it has reported (it leaves the roster as its last reporter ends): it takes no more work.
+        if (action === "message" && held.origin && held.status !== "running") return { ended: held.id };
         if (action === "stop") { held.status = "stopped"; held.endedAt = new Date().toISOString(); }
         if (action === "spawn" || action === "message") {
           if (held.status === "stopped") throw new Error(`Subagent ${id} is stopped.`);
@@ -677,6 +715,12 @@ export function Subagents(runtime) {
         }
         return JSON.parse(JSON.stringify(held));
       }, context);
+      // Not in the roster: a run that has ended, which the work log still has by its label.
+      if (!item || item.ended) {
+        const named = item?.ended ?? id;
+        if (!item && !listWork(await api.snapshot(WorkLog, context)).some((work) => work.endedAt && work.label === named)) throw new Error(`Unknown background subagent: ${named}`);
+        return { ...textResult(`Run ${named} has finished; its report comes to this thread.`), ...(action === "message" ? { isError: true } : {}) };
+      }
       if (["spawn", "message", "stop"].includes(action)) {
         runtime.subagentsChanged?.(api.conversationId, { conversationId: item.child, status: item.status });
       }
@@ -713,7 +757,7 @@ export function Subagents(runtime) {
       doc.notices.push({ id: `n-${doc.next++}`, kind: "connector", text: `${title}: Executor isn't connected`, at: new Date().toISOString() });
       doc.notices.splice(0, Math.max(0, doc.notices.length - 20));
     }
-    const run = nextRun(roster, origin, trigger);
+    const run = nextRun(origin, trigger);
     const label = nextLabel(roster, "bg");
     const id = nextKey(roster);
     const sinceEntry = (await tx.scanEntries({ conversationId }, 1)).items[0]?.id || 0;
@@ -729,14 +773,15 @@ export function Subagents(runtime) {
     }
     const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
       gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
-    roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
-      status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
-      ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
     // A run of jbot's home thread is a unit of its work (work-log.js); a routine's is its routine's item (routine-task.js).
     if (origin && !origin.routineTaskId && String((await tx.doc(AgentDoc)).home?.conversationId) === String(conversationId)) {
       await openWork(tx, { id: `run:${id}`, kind: origin.kind, title, origin: { kind: origin.kind }, trigger: run?.trigger ?? null,
-        conversationId: child.id, phase: "Working", log: origin.log !== false });
+        conversationId: child.id, phase: "Working", log: origin.log !== false, label });
     }
+    if (run) run.number = (await tx.doc(WorkLog)).items[workKeyOf(origin, id)]?.number ?? null;
+    roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: key, number: 1,
+      status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: { [key]: delivery }, reporter: delivery,
+      ...(origin ? { origin } : {}), ...(run ? { run } : {}) };
     return JSON.parse(JSON.stringify(roster.children[id]));
   };
   const extension = defineExtension({ name: "subagents", tools: [subagent], tasks: [anchor, reporter] });

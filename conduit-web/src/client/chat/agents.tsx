@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, ty
 
 import type { AgentSummary, Message, ToolItem } from "../api/contracts";
 import { createLeaving, createLeavingList, riderMotion } from "./composer-cards";
+import { api } from "../api/client";
 import { elapsed } from "./tool-card";
 
 /*
@@ -13,6 +14,9 @@ import { elapsed } from "./tool-card";
  */
 export const OPEN_AGENT_EVENT = "conduit:open-agent";
 export const openAgentChat = (chatId: string) => window.dispatchEvent(new CustomEvent(OPEN_AGENT_EVENT, { detail: { chatId } }));
+/** Open a run of jbot's by its work-log item, or by its conversation once it has left the agents (its chat, made the first time). */
+export const openRun = (id: string) => void api<{ chatId: string }>(`/v0/agent/runs/${encodeURIComponent(id)}/open`, { method: "POST" })
+  .then(({ chatId }) => openAgentChat(chatId)).catch(() => {});
 
 /** A clock that ticks each second while something runs. */
 export function useNow(running: () => boolean) {
@@ -162,7 +166,7 @@ export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: str
         <AgentRiderGroup label={mode === "foreground" ? "Foreground" : mode === "background" ? "Background" : "Runs"} going={keysOf(mode).every(list.leaving)}>
           <For each={keysOf(mode)}>{(key) => {
             const agent = () => list.get(key)!;
-            return <AgentRow line id={agent().id || undefined} title={agent().run ? `${agent().run!.label} #${agent().run!.number}` : agent().title} state={agent().status} activity={agent().activity || undefined}
+            return <AgentRow line id={agent().id || undefined} title={agent().run ? (agent().run!.number ? `${agent().run!.label} #${agent().run!.number}` : agent().run!.label) : agent().title} state={agent().status} activity={agent().activity || undefined}
               motion={list.leaving(key) ? "leaving" : undefined} time={span(agent().startedAt, agent().endedAt, now())}
               onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
               onStop={mode !== "foreground" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;

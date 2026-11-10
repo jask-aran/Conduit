@@ -88,7 +88,7 @@ const startedChild = (state, record) => {
   const key = state?.routineRuns?.[record?.childId]?.key || "";
   return key.startsWith(`${record.key}:`) && /^(before|after):\d+$/.test(key.slice(record.key.length + 1));
 };
-/** A run stopped by the person (or a reset) ends the routine as stopped, not as failing. */
+/** A routine aborted, or its run stopped (by the person, a reset, jbot switched off), ends as stopped, not as failing. */
 const STOPPED = "Routine run was stopped.";
 
 async function beforeDeadline(api, startedAt, pending) {
@@ -268,7 +268,7 @@ export function routineTask(runtime) {
             current.run = await runtime.agent.spawnRun(tx, task.input.homeId, { key: record.key, kind: routine.name,
               title: routine.title, task: outcome.message, instructions: outcome.instructions, output: routine.output,
               raw: true, routineTaskId: task.id, model: routine.model, thinkingLevel: routine.effort, log: routine.log !== false });
-            await noteWork(tx, workId(task.id), {}, { conversationId: current.run.child, ran: true,
+            await noteWork(tx, workId(task.id), {}, { conversationId: current.run.child, ran: true, label: current.run.id,
               ...(current.run.run?.trigger ? { trigger: current.run.run.trigger } : {}) });
             await phaseWork(tx, workId(task.id), routine.working || "Working");
           }
@@ -405,7 +405,7 @@ export function routineTask(runtime) {
       },
       done: async (task, api, context) => finish(task, api, context),
     },
-    abort: async (task, api, context) => { await stop(task, api, context); await finish(task, api, context, "Routine aborted."); },
+    abort: async (task, api, context) => { await stop(task, api, context); await finish(task, api, context, STOPPED); },
   };
   for (const [phase, run] of Object.entries(definition.phases)) definition.phases[phase] = async (task, api, context) => {
     try { await run(task, api, context); }

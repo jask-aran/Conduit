@@ -478,10 +478,12 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.json({ ok: true });
   });
 
-  // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }.
+  // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }. By its work-log item, or
+  // by its conversation (the home thread's run rows, once the run has left the roster).
   app.post("/v0/agent/runs/:id/open", async (request, response) => {
     const harness = await agent.runtime.open();
-    const run = (await harness.snapshot(WorkLog, agent.context).catch(() => null))?.items?.[request.params.id];
+    const doc = await harness.snapshot(WorkLog, agent.context).catch(() => null);
+    const run = doc?.items?.[request.params.id] ?? listWork(doc).find((item) => String(item.conversationId) === request.params.id);
     const home = (await agent.state().catch(() => null))?.home?.conversationId;
     if (run?.conversationId == null || !home) return response.status(404).json({ error: "run_not_found" });
     const child = await agent.runtime.ensureSubagent?.(home, { conversationId: run.conversationId, id: run.label ?? null, title: run.title });
@@ -662,6 +664,8 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   app.post("/v0/agent/reset", async (request, response) => {
     if (!enabled(response)) return;
     const previous = (await agent.state()).home;
+    // What is under way ends as stopped first: left going, it stays bound to the old thread and holds its routine's slot.
+    await agent.stopRuns(previous?.conversationId, true);
     await agent.update((doc) => {
       // Side threads outlive the reset, and what they read stays in them: only the old home thread's taint goes.
       const tainted = { ...doc.tainted };

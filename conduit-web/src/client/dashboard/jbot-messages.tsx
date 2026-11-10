@@ -1,7 +1,7 @@
 import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
 import { clockTime, AgentRow, AgentRows, Answer, Button, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
-import { openAgentChat, span, useNow } from "../chat/agents";
+import { openAgentChat, openRun, span, useNow } from "../chat/agents";
 import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
 import { createLeavingRows } from "../chat/composer-cards";
@@ -50,9 +50,6 @@ const runTime = (run: LogRun) => {
   const start = run.startedAt ? Date.parse(run.startedAt) : NaN, end = run.endedAt ? Date.parse(run.endedAt) : NaN;
   return Number.isFinite(start) && Number.isFinite(end) && end >= start ? elapsed(end - start) : undefined;
 };
-/** Open a run's transcript (its chat, made the first time). */
-const openRun = (run: LogRun) => void api<{ chatId: string }>(`/v0/agent/runs/${encodeURIComponent(run.id)}/open`, { method: "POST" })
-  .then(({ chatId }) => openAgentChat(chatId)).catch(() => {});
 const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="true" /> } } as Record<string, { word: string; icon: () => any }>;
 
 const clock = (at: string) => clockTime(at) ?? "";
@@ -304,7 +301,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     const activity = () => run.live ? agentView()?.attention?.working.runs.find((unit) => unit.id === run.id)?.activity ?? undefined : undefined;
     const state = () => run.live ? "running" : run.status === "failed" || run.status === "stopped" ? run.status : "finished";
     return <AgentRow line id={run.subagentId ?? undefined} title={run.title} state={state()} activity={activity()} at={run.live ? undefined : clock(run.at) || undefined}
-      time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run)} />;
+      time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run.id)} />;
   };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<p class="ui-empty" data-empty="dash">Nothing said yet. Say something to {props.name}.</p>}>
         {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
@@ -320,9 +317,9 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
             ? <TranscriptRow flow={flowAt(index())} data-agent=""><Turn><AgentRows>{agentRow(row.run)}</AgentRows></Turn></TranscriptRow>
             : row.kind === "run"
             ? <TranscriptRow flow={flowAt(index())} {...motionOf(arriving(row.run.id) ? "entering" : undefined)}><Turn><AgentRows>
-                <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number ?? 0} trigger={row.run.trigger ?? undefined}
+                <RunLine line icon={<RoutineIcon routine={row.run.routine ?? undefined} />} label={row.run.label} number={row.run.number} trigger={row.run.trigger ?? undefined}
                   time={runTime(row.run)} woke={row.run.woke} outcome={`Woke ${props.name}`} status={!row.run.status || row.run.status === "finished" ? undefined : row.run.status[0]!.toUpperCase() + row.run.status.slice(1)}
-                  summary={row.run.did ? capitalised(row.run.did) : row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run) : undefined} />
+                  summary={row.run.did ? capitalised(row.run.did) : row.run.summary ?? (row.run.woke ? `Reported to ${props.name}` : undefined)} at={clock(row.run.at)} onOpen={row.run.conversationId != null ? () => openRun(row.run.id) : undefined} />
               </AgentRows></Turn></TranscriptRow>
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>
