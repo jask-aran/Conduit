@@ -74,7 +74,8 @@
 .ui-overlay-facts > dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-xs) var(--space-md); margin: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
 .ui-overlay-facts > dl > div { display: contents; }
 .ui-overlay-facts dt { color: var(--muted-foreground); white-space: nowrap; }
-.ui-overlay-facts dd { min-width: 0; margin: 0; overflow: hidden; color: var(--foreground); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+/* A value is never cut short: one too long for the rail breaks at a space onto a second line. */
+.ui-overlay-facts dd { min-width: 0; margin: 0; color: var(--foreground); text-align: right; overflow-wrap: anywhere; }
 .ui-overlay-page { --page-inset: var(--space-4xl); --page-top: var(--space-2xl); --page-bottom: var(--space-4xl); display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 /* Its head holds still and its body scrolls, so the section's name and the way back are always there. */
 .ui-overlay-page > .ui-overlay-page-head { flex: none; margin: 0; padding: var(--page-top) var(--page-inset) var(--space-lg) calc(var(--page-inset) + var(--space-md)); }

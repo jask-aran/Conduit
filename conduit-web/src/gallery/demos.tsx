@@ -3,7 +3,7 @@ import { Icons } from "@/components/ui";
 import { ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
 import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { SquarePenIcon } from "lucide-solid";
-import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, OverlayFact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
+import { type Motion, Meter, Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, SettingRecorder, Crumbs, Match, OverlayBar, OverlayHints, OverlayList, OverlayPage, OverlayRail, OverlayFacts, Fact, OverlaySplit, Glance, GlanceHead, GlancePrompt, GlanceTurn, GlanceAnswer, Overlay, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, Progress, Keycap, Segmented, SelectTrigger, Button, Chip, Line, TextArea, Rider, RiderMark, Input, Item, Section, Slider, Switch, Chips, Lines, Read, Row } from "@/components/ui";
 import { scaleOf, setScale } from "./foundations";
 import { NotebookTextIcon } from "lucide-solid";
 import { px } from "./specs";
@@ -170,7 +170,7 @@ export function ScaleSetting() {
 /** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
 export function Settings(props: { close: () => void; phone?: boolean; start?: SettingsSection | null }) {
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
-  const rail = () => <OverlayRail title="Settings" foot={<OverlayFacts title="About"><OverlayFact label="Interface" value="0.8.1-dev.20261020063706.abb9a10" /><OverlayFact label="Running as" value="Browser tab" /><OverlayFact label="Server" value="0.8.1-dev.20261020063706.abb9a10 · modified" /></OverlayFacts>} onClose={props.phone ? props.close : undefined}>
+  const rail = () => <OverlayRail title="Settings" foot={<OverlayFacts title="About"><Fact label="Interface" value="0.8.1-dev.20261020063706.abb9a10" /><Fact label="Running as" value="Browser tab" /><Fact label="Server" value="0.8.1-dev.20261020063706.abb9a10 · modified" /></OverlayFacts>} onClose={props.phone ? props.close : undefined}>
     <For each={SETTINGS}>{(group) => <Group kind="nav" title={group.label}><For each={group.sections}>{([id, label, glyph]) =>
       <Row density="nav" element="button" lead={glyph()} current={!props.phone && section() === id} onClick={() => setSection(id)}>{label}</Row>}</For></Group>}</For>
   </OverlayRail>;

@@ -11,6 +11,8 @@ import { pairingFragment } from "../platform/pairing";
 import { Columns, Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { Actions } from "@/components/ui/actions";
+import { Fact } from "@/components/ui/overlay";
+import { ServerFacts } from "../platform/server-facts.tsx";
 
 /*
  * Pair a device from a client that is already signed in: the same one-time,
@@ -28,7 +30,6 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   const [link, setLink] = createSignal("");
   const [expiresAt, setExpiresAt] = createSignal(0);
   const [now, setNow] = createSignal(Date.now());
-  const [version, setVersion] = createSignal("");
   const [error, setError] = createSignal("");
   const route = () => {
     const entry = activeServer();
@@ -64,7 +65,6 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   createEffect(on(() => props.open, (open) => {
     if (!open) return;
     void fresh();
-    void fetch(httpUrl("/healthz"), { cache: "no-store" }).then((r) => r.json()).then((h: { release?: string }) => setVersion(h.release || "")).catch(() => {});
   }));
   const tick = setInterval(() => setNow(Date.now()), 1000);
   onCleanup(() => clearInterval(tick));
@@ -81,10 +81,9 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
       {/* The route in the words the menus use; the app takes the nearest
           route that proves it is this server. */}
       <CardDetails>
-        <dt>Server</dt><dd title={activeServer()?.name}>{activeServer()?.name}</dd>
-        <dt>Opens on</dt><dd>{serverPathLabel(route()!)}</dd>
-        <Show when={version()}><dt>Version</dt><dd title={version()}>{version().replace(/\.\d{14}\./, " · ")}</dd></Show>
-        <dt>Code</dt><dd>{expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"}</dd>
+        <ServerFacts via={route()!} viaLabel="Opens on">
+          <Fact label="Code" value={expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"} />
+        </ServerFacts>
       </CardDetails>
       <Actions>
         <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>

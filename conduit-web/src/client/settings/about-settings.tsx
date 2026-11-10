@@ -1,9 +1,8 @@
 import { createSignal, onMount, Show } from "solid-js";
-import { OverlayFact, OverlayFacts } from "@/components/ui/overlay";
-import { httpUrl } from "../api/transport.js";
-import { authorizedFetch } from "../api/native-auth-client.ts";
+import { Fact, OverlayFacts } from "@/components/ui/overlay";
+import { ServerFacts, shortBuild } from "../platform/server-facts.tsx";
 import {
-  buildLabel, clientBuild, serverBuild, shellVersion, type ServerBuild,
+  buildLabel, clientBuild, shellVersion,
 } from "../platform/build-info.ts";
 import { installedClientKind, isStandaloneBrowser } from "../platform/installed-client.ts";
 
@@ -16,9 +15,9 @@ const formatBuiltAt = (value: string) => {
 };
 
 /**
- * Which Conduit this is. The interface, the server and the shell are released
- * separately, so each is named on its own line rather than collapsed into one
- * version that would be true of none of them.
+ * Which Conduit this is: the server's block (ServerFacts: its name, how it is reached, its build, and the interface's
+ * when that differs), then this client: how it runs and the shell's build. They are released separately, so each
+ * build that differs has its own line.
  *
  * It is also the only way to see that an update took: the shell's version
  * changes, and the interface's commit changes with it.
@@ -32,28 +31,19 @@ const formatBuiltAt = (value: string) => {
  * the rail, as the connection does at the foot of the app sidebar.
  */
 export function AboutSettingsFooter() {
-  const [server, setServer] = createSignal<ServerBuild | null | "pending">("pending");
   const [shell, setShell] = createSignal<string | null>(null);
-
-  onMount(() => {
-    void serverBuild(() => authorizedFetch(httpUrl("/healthz"))).then(setServer);
-    void shellVersion().then(setShell);
-  });
+  onMount(() => void shellVersion().then(setShell));
 
   const runningAs = () => SHELL_LABELS[installedClientKind]
     || (isStandaloneBrowser() ? "Installed to the home screen" : "Browser tab");
-
-  const row = (label: string, value: string, detail?: string) =>
-    <OverlayFact label={label} value={value} title={detail ? `${value} · ${detail}` : value} />;
+  const built = () => formatBuiltAt(clientBuild.builtAt);
 
   return <OverlayFacts title="About">
-    {row("Interface", buildLabel(clientBuild), formatBuiltAt(clientBuild.builtAt))}
-    {row("Running as", runningAs())}
-    <Show when={installedClientKind !== "browser"}>
-      {row(SHELL_LABELS[installedClientKind] || "App shell", shell() || "Not reported")}
-    </Show>
-    <Show when={server() !== "pending"} fallback={row("Server", "Asking…")}>
-      {row("Server", (server() as ServerBuild | null)?.release || "Unreachable")}
-    </Show>
+    <ServerFacts interfaceBuild={buildLabel(clientBuild)}>
+      <Fact label="Running as" value={runningAs()} title={built() ? `${runningAs()} · interface built ${built()}` : runningAs()} />
+      <Show when={installedClientKind !== "browser"}>
+        <Fact label="App" value={shell() ? shortBuild(shell()!) : "Not reported"} title={shell() ?? undefined} />
+      </Show>
+    </ServerFacts>
   </OverlayFacts>;
 }

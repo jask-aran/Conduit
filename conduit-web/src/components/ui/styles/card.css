@@ -56,6 +56,7 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-card-read mark { border-radius: var(--radius-inset); background: var(--tint); color: var(--foreground); }
 .ui-card-read { display: block; max-height: var(--measure-xs); overflow: auto; padding: var(--space-md); border-radius: var(--radius-inset); background: var(--tint); font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-card-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm) var(--space-lg); font-size: var(--text-caption); }
+.ui-card-details > div { display: contents; }
 .ui-card-details dt { color: var(--muted-foreground); }
 .ui-card-details dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-data); font-weight: var(--weight-light); }
 .ui-card-qr { width: min(100%, var(--measure-sm)); aspect-ratio: 1; align-self: center; overflow: hidden; border-radius: var(--radius-control); background: var(--primary); transition: opacity var(--duration-quick) var(--ease-change); }
