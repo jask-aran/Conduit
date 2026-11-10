@@ -220,7 +220,7 @@
   /* Type sizes by role (Type · Scale): label (section labels, keycaps); caption (details, hints, data); row (rows,
      controls); body (messages, typing, titles); heading (a page's title); display (the dashboard's). */
   --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type)); --label-size: var(--text-label);
-  --text-row: var(--row-text); --text-body: var(--u-type); --text-heading: calc(1.40625 * var(--u-type)); --text-display: calc(1.71875 * var(--u-type));
+  --text-row: var(--row-text); --text-body: var(--u-type); --text-title: calc(1.1875 * var(--u-type)); --text-heading: calc(1.40625 * var(--u-type)); --text-display: calc(1.71875 * var(--u-type));
   --pill-icon: var(--icon-lg);
 }
 [data-density] { font-family: var(--font-sans); font-size: var(--text-row); }

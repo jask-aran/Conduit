@@ -85,7 +85,7 @@
 .ui-overlay[data-settling] > .ui-overlay-page { width: var(--overlay-page-width, auto); flex: none; }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
 .ui-group:where([data-group="setting"]) { display: flex; flex-direction: column; gap: var(--hairline); }
-.ui-setting-title { box-sizing: border-box; width: 100%; margin: 0 0 var(--space-sm); padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-heading)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
+.ui-setting-title { box-sizing: border-box; width: 100%; margin: 0 0 var(--space-sm); padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
 input.ui-setting-title { outline: none; }
 input.ui-setting-title:focus-visible { border-color: var(--ring); background: var(--tint); }
 @media (hover: hover) { input.ui-setting-title:hover { background: var(--tint); } }
