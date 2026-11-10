@@ -83,8 +83,13 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachments[data-form="tray"] { display: flex; flex-flow: row wrap; align-items: center; justify-content: flex-end; gap: var(--space-sm); width: 100%; margin: 0 0 var(--space-md); }
 .ui-attachment-tile { display: flex; height: calc(1lh + 2 * var(--space-md) + 2 * var(--hairline)); min-width: 0; }
 .ui-attachment-tile > button { display: flex; height: 100%; min-width: 0; max-width: var(--measure-xs); align-items: center; gap: var(--space-sm); margin: 0; padding: 0 var(--space-lg) 0 var(--space-md); border-radius: var(--radius-message); color: inherit; cursor: pointer; }
-.ui-attachment-tile > button > span { min-width: 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.ui-attachment-tile > button > span { min-width: 0; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 .ui-attachment-tile > button > :is(svg, .ui-file-icon, .ui-file-icon-generic) { display: block; width: var(--icon); height: var(--icon); flex: none; }
 .ui-attachment-tile[data-image] > button { overflow: hidden; padding: 0; border: var(--hairline) solid var(--border); background: var(--card); }
 .ui-attachment-tile[data-image] img { display: block; width: auto; height: 100%; min-width: calc(1lh + 2 * var(--space-md)); max-width: var(--measure-xs); object-fit: cover; }
+.ui-attachment-tile > button[aria-current] { outline: var(--stroke) solid var(--foreground); outline-offset: calc(-1 * var(--stroke)); }
+/* Stage: the one thing a card is showing, whole. A picture is fitted, never cropped; text reads from its start. */
+.ui-card-stage { display: grid; min-height: var(--measure-xs); max-height: min(70dvh, var(--measure-3xl)); place-items: center; overflow: auto; border-radius: var(--radius-control); background: var(--tint); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-card-stage img { display: block; max-width: 100%; max-height: min(70dvh, var(--measure-3xl)); object-fit: contain; }
+.ui-card-stage > .ui-card-read { box-sizing: border-box; width: 100%; max-height: none; align-self: start; overflow: visible; background: none; color: var(--foreground); }
 .ui-attachment-tile > button:focus-visible { outline: none; filter: brightness(var(--brighten)); }
