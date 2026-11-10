@@ -376,7 +376,11 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     let connection: WebSocket;
     if (direct) connection = direct.socket;
     else {
-      const url = new URL(await terminalSocketUrl(record.id));
+      let url: URL;
+      // No address for the socket (an installed client's ticket timed out): tried again as a dropped connection is,
+      // where it used to leave the pane on "connecting" with nothing set to retry.
+      try { url = new URL(await terminalSocketUrl(record.id)); }
+      catch { if (generation === connectionGeneration && !scheduleReconnect(record, 0)) setConnectionState("offline"); return; }
       if (generation !== connectionGeneration) return;
       url.searchParams.set("cols", String(initialCols));
       url.searchParams.set("rows", String(initialRows));

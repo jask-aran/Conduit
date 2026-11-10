@@ -227,7 +227,11 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
         setState({ text: "Reconnecting to the hub's browser…" });
         window.setTimeout(() => { if (socket === next) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
       };
-    } catch (error) { setState({ text: error instanceof Error ? error.message : String(error), tone: "error" }); }
+    } catch (error) {
+      setState({ text: error instanceof Error ? error.message : String(error), tone: "error" });
+      // Said, and tried again as a dropped stream is: only a close used to retry, so this was where it stopped.
+      window.setTimeout(() => { if (!closed && connecting === attempt) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
+    }
   };
 
   /** A point on the screen as the page's: the frame is drawn whole, centred across and from the top. */

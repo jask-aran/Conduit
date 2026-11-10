@@ -49,7 +49,8 @@ let heardOnce = false;
 export function createRuntimeStore() {
   const [processes, setProcesses] = createSignal(new Map<string, RuntimeProcess>());
   const [connectivity, setConnectivity] = createSignal<Connectivity>("connecting");
-  const [stale, setStale] = createSignal(false);
+  // What is shown may be out of date while the stream is away: it is that, said once, not a flag kept beside it.
+  const stale = () => connectivity() === "reconnecting" || connectivity() === "offline";
   let source: { close: () => void } | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let watchdog: ReturnType<typeof setInterval> | undefined;
@@ -127,7 +128,6 @@ export function createRuntimeStore() {
       const event = JSON.parse(data) as RuntimeEvent;
       if (event.type === "ping") {
         if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); replayHeldWrites(); }
-        setStale(false);
       } else if (event.type === "runtime_global_snapshot") {
         // Back after time away (not the first hearing): what changed meanwhile was not heard, so the app reads it again.
         if (heardOnce) window.dispatchEvent(new Event("conduit:runtime-resynced"));
@@ -143,7 +143,6 @@ export function createRuntimeStore() {
         // Back (or first heard from): the writes waiting for it go now rather than at their next retry.
         if (connectivity() !== "online") replayHeldWrites();
         setConnectivity("online");
-        setStale(false);
       } else if (event.type === "runtime_process" && event.process) {
         upsert(event.process as RuntimeProcess);
       } else if (event.type === "runtime_process_removed") {
@@ -181,7 +180,6 @@ export function createRuntimeStore() {
   };
   // The stream has gone (the server restarting, or a blip): said by the tab holding it to every other.
   const lost = () => {
-    setStale(true);
     if (restartPrepared) {
       restartPrepared = false;
       void finishPwaRestart();
@@ -207,14 +205,12 @@ export function createRuntimeStore() {
     if (!watchdog) {
       watchdog = setInterval(() => {
         if ((leading && !source) || Date.now() - lastFrameAt < SILENCE_MS) return;
-        setStale(true);
         attempts += 1;
         connect();
       }, 5000);
       (watchdog as unknown as { unref?: () => void }).unref?.();
     }
     setConnectivity(attempts ? "reconnecting" : "connecting");
-    setStale(attempts > 0);
     // Another tab streams: ask it for where things stand rather than opening a stream of our own.
     if (!leading) {
       channel!.postMessage({ type: "hello" });
@@ -231,7 +227,6 @@ export function createRuntimeStore() {
       const offline = attempts >= 8;
       channel?.postMessage({ type: "lost", offline });
       setConnectivity(offline ? "offline" : "reconnecting");
-      setStale(true);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, offline ? 10_000 : Math.min(250 * 2 ** (attempts - 1), 8000));
     };
