@@ -78,13 +78,14 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment .ui-chip-copy { flex: 1; gap: var(--space-xs); overflow-wrap: anywhere; }
 .ui-attachment[data-error] .ui-chip-copy small { color: var(--destructive); }
 /* Tray: the files a message was sent with, under it at the person's side, wrapping. */
-.ui-attachments[data-form="tray"] { display: flex; flex-flow: row wrap; justify-content: flex-end; width: 100%; max-height: min(var(--measure-md), 40dvh); margin: 0 0 var(--space-md); overflow-y: auto;
+/* Each is its own height (a file is one line, never stretched to a picture beside it), their feet on one line. */
+.ui-attachments[data-form="tray"] { display: flex; flex-flow: row wrap; align-items: flex-end; justify-content: flex-end; width: 100%; max-height: min(var(--measure-md), 40dvh); margin: 0 0 var(--space-md); overflow-y: auto;
   scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 /* A file is a framed line as wide as its name; a picture is the picture, at the message's corner, its name its hint. */
 .ui-attachments[data-form="tray"] > .ui-attachment:not([data-image]) { max-width: min(var(--measure-lg), 100%); padding: var(--space-sm) var(--space-lg) var(--space-sm) var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--card); }
 .ui-attachments[data-form="tray"] > .ui-attachment:not([data-image]) .ui-attachment-media { width: var(--control-lg); height: var(--control-lg); background: var(--border); }
-.ui-attachments[data-form="tray"] > .ui-attachment[data-image] { max-width: min(var(--measure-sm), 100%); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: var(--radius-message); background: var(--card); }
+.ui-attachments[data-form="tray"] > .ui-attachment[data-image] { max-width: min(var(--measure-xs), 100%); overflow: hidden; border: var(--hairline) solid var(--border); border-radius: var(--radius-message); background: var(--card); }
 .ui-attachments[data-form="tray"] > .ui-attachment[data-image] .ui-attachment-media { width: auto; border-radius: 0; }
-.ui-attachments[data-form="tray"] > .ui-attachment[data-image] img { max-height: var(--measure-xs); }
+.ui-attachments[data-form="tray"] > .ui-attachment[data-image] img { max-height: var(--measure-2xs); }
 .ui-attachments[data-form="tray"] > .ui-attachment[data-image] .ui-chip-copy { display: none; }
 .ui-attachments[data-form="tray"] .ui-chip-copy { flex: 0 1 auto; gap: 0; }
