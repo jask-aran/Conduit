@@ -1,11 +1,10 @@
 import { createEffect, createMemo, createSignal, For, lazy, onMount, Show } from "solid-js";
-import { Button, LiveNote, Group, Loading, Note, Segmented } from "@/components/ui";
+import { Button, Group, Loading, Note, Segmented } from "@/components/ui";
 import { Heading } from "@/components/ui/header";
 import { StatusText } from "@/components/ui/file";
-import { Workbench, WorkbenchFact, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { Workbench, WorkbenchFact, WorkbenchFold, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { api } from "../api/client";
 import { agentName } from "../state/agent";
-import { ConnectorsGroup } from "./connectors-settings";
 import { tokens } from "./context-settings";
 // The editor brings CodeMirror: loaded when the page opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
@@ -14,7 +13,7 @@ const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module
  *  the model is told of it (text, parameters: its JSON schema). */
 type Schema = { type?: string | string[]; description?: string; properties?: Record<string, Schema>; required?: string[]; enum?: unknown[]; const?: unknown; items?: Schema; anyOf?: Schema[] };
 type ProfileTool = {
-  name: string; description: string; text?: string; parameters?: Schema | null; source: "built-in" | "extension" | "connector" | "codemode"; extension?: string;
+  name: string; description: string; text?: string; parameters?: Schema | null; group?: string; source: "built-in" | "extension" | "connector" | "codemode"; extension?: string;
   reach: "model" | "codemode"; asks: "never" | "always" | "sometimes"; when?: string;
 };
 type ProfileTools = { id: string; label: string; internal: boolean; agent: boolean; tools: ProfileTool[] };
@@ -41,96 +40,86 @@ function told(tool: ProfileTool): string {
   return [(tool.text || tool.description).trim(), takes.length ? ["## Takes", "", ...takes.map(([name, schema]) =>
     `- \`${name}\` (${typeOf(schema)}${required.has(name) ? "" : ", optional"})${schema.description ? `: ${schema.description}` : ""}`)].join("\n") : "Takes nothing."].join("\n\n");
 }
-/** Where a tool sits in the side column: the model's own, or the codemode namespace its name puts it in. */
-function groupOf(tool: ProfileTool): string {
-  if (tool.reach === "model") return "Called by the model";
-  const connector = /^mcp__([^_]+(?:_[^_]+)*)__/.exec(tool.name)?.[1];
-  return connector ? `From codemode · ${connector}` : tool.name.startsWith("agent_browser_") ? "From codemode · hub browser" : "From codemode";
-}
-const shortName = (tool: ProfileTool) => tool.reach === "model" ? tool.name : tool.name.replace(/^mcp__.+?__|^agent_browser_|^pi\.codemode\./, "");
+const shortName = (tool: ProfileTool) => tool.name.replace(/^mcp__.+?__|^agent_browser_|^pi\.codemode\.models\./, "");
 
 /**
- * AI › Tools, read-only: a profile's tools as its chats get them, on the workbench layout (workbench.tsx). The title's
- * switch picks the profile; the side column is its tools, by who calls them, each saying when it asks; the chosen
- * one's pane is what the model is told of it. Conduit decides the tools from the profile's template
- * (durable-runtime.js, `selectionFor`); what asks is the agent policy's (policy.js, `askOf`). Nothing here is set,
- * but for the connectors, which are signed in to from here.
+ * AI › Tools, read-only: every tool the hub's agents have, on the workbench layout (workbench.tsx). A tool is one
+ * thing whichever profiles have it: the side column files them by what they are for (the hub says: durable-runtime.js
+ * `toolsView`), each group folded but the chosen tool's; the pane is the tool's own definition, the description and
+ * parameters sent to the model with every request (not a skill, not a prompt block); under the list, which profiles
+ * have it, who calls it and when it asks. Where a profile's version differs (jbot's file tools take a device), the
+ * pane's switch shows each. Nothing here is set: connecting an account is Settings › Integrations.
  */
+type Entry = { name: string; group: string; in: { profile: ProfileTools; tool: ProfileTool }[] };
+const same = (a: ProfileTool, b: ProfileTool) => (a.text ?? a.description) === (b.text ?? b.description) && JSON.stringify(a.parameters ?? null) === JSON.stringify(b.parameters ?? null);
+
 export function ToolsSettings() {
   const [profiles, setProfiles] = createSignal<ProfileTools[] | null>(null);
   const [error, setError] = createSignal("");
-  const [selected, setSelected] = createSignal("");
   const [chosen, setChosen] = createSignal("");
+  const [openGroup, setOpenGroup] = createSignal("");
+  // Which profile's version the pane shows, where they differ.
+  const [version, setVersion] = createSignal("");
   // A phone's: the tool's pane is a screen of its own, opened from the list.
   const [reading, setReading] = createSignal(false);
   const load = () => {
     setError("");
-    return api<{ profiles: ProfileTools[] }>("/v0/profiles/tools").then(({ profiles }) => {
-      setProfiles(profiles);
-      if (!profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
-    }).catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
+    return api<{ profiles: ProfileTools[] }>("/v0/profiles/tools").then(({ profiles }) => setProfiles(profiles))
+      .catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
   onMount(() => void load());
-  const profile = createMemo(() => profiles()?.find((item) => item.id === selected()) || null);
-  const tool = createMemo(() => profile()?.tools.find((item) => item.name === chosen()) || null);
-  createEffect(() => { if (profile() && !tool()) setChosen(profile()!.tools[0]?.name ?? ""); });
+  const nameOf = (item: ProfileTools) => item.agent ? agentName() : item.label;
+  const entries = createMemo(() => {
+    const found = new Map<string, Entry>();
+    for (const profile of profiles() ?? []) for (const tool of profile.tools) {
+      const entry = found.get(tool.name) ?? { name: tool.name, group: tool.group || "Other", in: [] };
+      entry.in.push({ profile, tool }); found.set(tool.name, entry);
+    }
+    return [...found.values()];
+  });
   const groups = createMemo(() => {
-    const found = new Map<string, ProfileTool[]>();
-    for (const item of profile()?.tools ?? []) found.set(groupOf(item), [...(found.get(groupOf(item)) ?? []), item]);
+    const found = new Map<string, Entry[]>();
+    for (const entry of entries()) found.set(entry.group, [...(found.get(entry.group) ?? []), entry]);
     return [...found].map(([title, items]) => ({ title, items }));
   });
-  const asking = createMemo(() => profile()?.tools.filter((item) => item.asks !== "never").length || 0);
-  const nameOf = (item: ProfileTools) => item.agent ? agentName() : item.label;
-  const alsoIn = () => (profiles() ?? []).filter((item) => item.id !== selected() && item.tools.some((other) => other.name === chosen())).map(nameOf);
+  const entry = createMemo(() => entries().find((item) => item.name === chosen()) || null);
+  createEffect(() => { if (entries().length && !entry()) { setChosen(entries()[0]!.name); setOpenGroup(entries()[0]!.group); } });
+  // The versions of the chosen tool: profiles told the same thing are one.
+  const versions = createMemo(() => {
+    const out: { tool: ProfileTool; profiles: ProfileTools[] }[] = [];
+    for (const { profile, tool } of entry()?.in ?? []) { const match = out.find((item) => same(item.tool, tool)); if (match) match.profiles.push(profile); else out.push({ tool, profiles: [profile] }); }
+    return out;
+  });
+  const shown = createMemo(() => versions().find((item) => item.profiles[0]!.id === version()) ?? versions()[0] ?? null);
+  const asks = (item: Entry) => { const kinds = new Set(item.in.map(({ tool }) => tool.asks)); return kinds.has("always") ? "asks first" : kinds.has("sometimes") ? "sometimes asks" : undefined; };
 
   return <Show when={profiles()} fallback={<Show when={error()} fallback={<Loading>Loading tools…</Loading>}>
     <Note tone="error"><span>{error() || "Tools could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
   </Show>}>
-    {(list) => <Workbench label="Tools">
-      <WorkbenchTitle title={tool()?.name ?? "Tools"}
-        meta={profile() ? `${nameOf(profile()!)} has ${profile()!.tools.length} tools; ${asking() ? `${asking()} can ask you first` : "none asks you first"}` : undefined}
-        actions={<Segmented size="sm" label="Profile" value={selected()} onChange={setSelected} options={list().map((item) => ({ value: item.id, label: nameOf(item) }))} />} />
-      <WorkbenchSplit open={reading()} onOpenChange={setReading} mainLabel={tool()?.name ?? "Tool"}
-        side={<>
-          <ConnectorsGroup />
-          <For each={groups()}>{(group) => <Group kind="workbench" title={group.title}>
-            <For each={group.items}>{(item) => <WorkbenchPick name={shortName(item)} title={item.description} current={item.name === chosen()}
-              context={item.asks === "never" ? undefined : ASKS[item.asks].toLowerCase()} onSelect={() => { setChosen(item.name); setReading(true); }} />}</For>
-          </Group>}</For>
-          <McpAccess />
-        </>}
-        facts={<Show when={tool()}>{(current) => <Group kind="workbench" title="About it">
-          <WorkbenchFact name="From" value={current().extension && current().source === "extension" ? `${SOURCE.extension} (${current().extension})` : SOURCE[current().source]} title={SOURCE_SAYS[current().source]} />
-          <WorkbenchFact name="Called by" value={current().reach === "model" ? "the model" : "a codemode script"} />
-          <WorkbenchFact name="When called" value={ASKS[current().asks]} title={current().when} />
-          <Show when={current().when}><Note kind="workbench">{current().when}</Note></Show>
-          <Show when={alsoIn().length}><WorkbenchFact name="Also in" value={alsoIn().join(", ")} /></Show>
+    <Workbench label="Tools">
+      <WorkbenchTitle title={entry()?.name ?? "Tools"} meta={entry() ? `${entry()!.group} · one of ${entries().length} tools` : undefined} />
+      <WorkbenchSplit open={reading()} onOpenChange={setReading} mainLabel={entry()?.name ?? "Tool"}
+        side={<For each={groups()}>{(group) => <WorkbenchFold title={group.title} count={group.items.length} open={openGroup() === group.title} onToggle={() => setOpenGroup(openGroup() === group.title ? "" : group.title)}>
+          <For each={group.items}>{(item) => <WorkbenchPick name={shortName(item.in[0]!.tool)} title={item.in[0]!.tool.description} current={item.name === chosen()}
+            context={asks(item)} onSelect={() => { setChosen(item.name); setVersion(""); setReading(true); }} />}</For>
+        </WorkbenchFold>}</For>}
+        facts={<Show when={shown()}>{(current) => <Group kind="workbench" title="About it">
+          <WorkbenchFact name="Given to" value={(entry()?.in ?? []).map(({ profile }) => nameOf(profile)).join(", ")} title="The profiles whose chats have it; their subagents and runs have it too" />
+          <WorkbenchFact name="From" value={current().tool.extension && current().tool.source === "extension" ? `${SOURCE.extension} (${current().tool.extension})` : SOURCE[current().tool.source]} title={SOURCE_SAYS[current().tool.source]} />
+          <WorkbenchFact name="Called by" value={current().tool.reach === "model" ? "the model" : "a codemode script"} />
+          <WorkbenchFact name="When called" value={ASKS[current().tool.asks]} title={current().tool.when} />
+          <Show when={current().tool.when}><Note kind="workbench">{current().tool.when}</Note></Show>
         </Group>}</Show>}
-        main={<Show when={tool()} fallback={<Note kind="workbench">This profile has no tools.</Note>}>{(current) =>
-          <TextEditor fill readOnly label={`What the model is told of ${current().name}`} value={told(current())}
-            head={<Heading kind="editor">What the model is told</Heading>}
-            status={<><StatusText>{tokens(told(current()).length)}</StatusText><StatusText>{SOURCE_SAYS[current().source]}</StatusText></>} />}</Show>} />
-    </Workbench>}
+        main={<Show when={shown()} fallback={<Note kind="workbench">No tools.</Note>}>{(current) =>
+          <TextEditor fill readOnly label={`${current().tool.name}'s definition`} value={told(current().tool)}
+            head={<>
+              <Heading kind="editor">Definition</Heading>
+              <Show when={versions().length > 1}>
+                <Segmented size="sm" label="Whose version" value={current().profiles[0]!.id} onChange={setVersion}
+                  options={versions().map((item) => ({ value: item.profiles[0]!.id, label: item.profiles.map(nameOf).join(", ") }))} />
+              </Show>
+            </>}
+            status={<><StatusText>{tokens(told(current().tool).length)}</StatusText><StatusText>sent to the model as the tool's definition</StatusText></>} />}</Show>} />
+    </Workbench>
   </Show>;
-}
-
-/**
- * Conduit's tools for other harnesses: the hub's MCP endpoint (conduit_ui, conduit_inbox and browser). Claude Code started by Conduit on the
- * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
- * the entry, never shown.
- */
-function McpAccess() {
-  const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
-  const [copied, setCopied] = createSignal("");
-  onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/access").then(setAccess).catch(() => {}));
-  const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
-    .catch(() => setCopied("Copying was not allowed here"));
-  return <Show when={access()}>{(found) => <Group kind="workbench" title="For other harnesses">
-    <WorkbenchFact code name="conduit" value={found().url} title="Conduit's MCP server: another harness can arrange your tabs and edit the hub's shared inbox. It needs a signed-in session or the hub's token." />
-    <WorkbenchFact name="Codex" value="~/.codex/config.toml" title="Paste the entry into ~/.codex/config.toml">
-      <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
-    </WorkbenchFact>
-    <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
-    <Note kind="workbench">Claude Code chats started on the hub have these already.{found().browser ? "" : " The hub browser is not installed on this hub."}</Note>
-  </Group>}</Show>;
 }

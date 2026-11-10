@@ -1,6 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Button } from "@/components/ui/controls";
-import { SettingLine, SettingStateLink } from "@/components/ui/overlay";
+import { SettingLine, SettingValue } from "@/components/ui/overlay";
+import { LiveNote, Note } from "@/components/ui";
 import { api } from "../api/client";
 import { Group } from "@/components/ui/group";
 
@@ -9,9 +10,35 @@ import { Group } from "@/components/ui/group";
 type Connector = { id: string; label: string; url: string; status: "off" | "connecting" | "on" | "error"; tools: number; error?: string };
 const CONNECTOR_STATE = { off: "Not connected", connecting: "Connecting…", on: "Connected", error: "Not working" } as const;
 
-/** Tools' Connectors group: Connect signs in in another tab (the system browser in the apps).
- *  onOpenTools: its tool count shows its toolset (its tools, and the profiles that take them up). */
-export function ConnectorsGroup(props: { onOpenTools?: (connector: string) => void } = {}) {
+/** Services › Integrations: what the hub is connected to, each way. Accounts the agents act in (connectors), and
+ *  the hub's own tools handed to other harnesses (its MCP server). The tools themselves are listed in AI › Tools. */
+export const IntegrationsSettings = () => <><ConnectorsGroup /><McpAccess /></>;
+
+/**
+ * Conduit's tools for other harnesses: the hub's MCP endpoint (conduit_ui, conduit_inbox and browser). Claude Code started by Conduit on the
+ * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
+ * the entry, never shown.
+ */
+function McpAccess() {
+  const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
+  const [copied, setCopied] = createSignal("");
+  onMount(() => void api<{ url: string; codex: string; browser: boolean }>("/v0/mcp/access").then(setAccess).catch(() => {}));
+  const copy = (what: string, text: string) => void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(""), 2000); })
+    .catch(() => setCopied("Copying was not allowed here"));
+  return <Show when={access()}>{(found) => <Group title="Conduit's tools in other harnesses">
+    <SettingLine plain label="conduit" mono title="Conduit's MCP server: another harness can arrange your tabs and edit the hub's shared inbox. It needs a signed-in session or the hub's token.">
+      <SettingValue mono>{found().url}</SettingValue>
+    </SettingLine>
+    <SettingLine plain label="Codex" state="paste into ~/.codex/config.toml">
+      <Button variant="ghost" size="sm" onClick={() => copy("Codex entry copied", found().codex)}>Copy entry</Button>
+    </SettingLine>
+    <Show when={copied()}><LiveNote>{copied()}</LiveNote></Show>
+    <Note>Claude Code chats started on the hub have both already.{found().browser ? "" : " The hub browser is not installed on this hub."}</Note>
+  </Group>}</Show>;
+}
+
+/** Connected accounts: Connect signs in in another tab (the system browser in the apps). */
+function ConnectorsGroup() {
   const [connectors, setConnectors] = createSignal<Connector[]>([]);
   const [connecting, setConnecting] = createSignal<string | null>(null);
   // What went wrong last, by connector ("" for the list itself): said in the row until the next try.
@@ -42,11 +69,11 @@ export function ConnectorsGroup(props: { onOpenTools?: (connector: string) => vo
 
   onMount(() => void loadConnectors());
   // A hub without its agent has nothing to call them yet: the group waits for one.
-  return <Show when={connectors().length}><Group title="Connectors">
+  return <Show when={connectors().length}><Group title="Connected accounts">
     <For each={connectors()}>{(connector) =>
       <SettingLine label={connector.label} title={`${connector.url}: signed in once for this hub. Anything that is not a read asks you first.`}
         state={<>{failure()[connector.id] || (connector.status === "on"
-          ? <Show when={props.onOpenTools} fallback={`${connector.tools} tools`}><SettingStateLink onClick={() => props.onOpenTools?.(connector.id)}>{connector.tools} tools</SettingStateLink></Show>
+          ? `Connected · ${connector.tools} tools`
           : connector.status === "error" ? connector.error || CONNECTOR_STATE.error : CONNECTOR_STATE[connector.status])}</>}>
         <Show when={connector.status === "off" || connector.status === "error"} fallback={
           <Button size="sm" variant="destructive" outline disabled={connecting() === connector.id || connector.status === "connecting"} onClick={() => void disconnect(connector)}>Disconnect</Button>}>

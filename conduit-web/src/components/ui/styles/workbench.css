@@ -45,6 +45,10 @@
 .ui-workbench-picks { min-height: var(--measure-xs); flex: 0 1 auto; }
 .ui-workbench-facts { max-height: 50%; flex: none; border-top: var(--hairline) solid var(--tint); padding-top: var(--space-md); }
 @media (--conduit-phone-layout) { .ui-workbench-side-parts, .ui-workbench-picks, .ui-workbench-facts { max-height: none; overflow: visible; } }
+/* WorkbenchFold: a group's row, and its picks under it, set in a step. */
+.ui-workbench-fold, .ui-workbench-fold-body { display: flex; flex-direction: column; }
+.ui-workbench-fold-body { padding-left: var(--space-md); }
+.ui-workbench-picks:has(> .ui-workbench-fold) { gap: 0; }
 /* WorkbenchPair: the main pane's own two columns, a list as wide as its names and the chosen one's pane taking the rest. */
 .ui-workbench-pair { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-lg); }
 .ui-workbench-pair-list { display: flex; min-width: var(--measure-xs); flex: 0 1 var(--measure-sm); flex-direction: column; gap: var(--space-sm); overflow: auto; scrollbar-width: none; }

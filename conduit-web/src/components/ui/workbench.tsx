@@ -14,6 +14,7 @@ import * as Icons from "./icons";
  *   - WorkbenchTitle: the chosen thing's name, as words. What changes the set (new, find) is its actions.
  *   - side: every thing, in titled Groups, each a WorkbenchPick -- its name, what is known at a glance, a control of
  *     its own (a switch) -- so choosing another is a click on what is already in view, never a popover.
+ *     Where there are more than fit a look, the groups fold (WorkbenchFold), the chosen thing's open.
  *   - facts: what is known of the chosen one (Used in, Slots), under the picks and scrolling apart from them.
  *   - main: its pane, alone.
  * A page on one thing made of parts (Prompts: a document's chain) keeps a Select look="title" to choose the thing.
@@ -62,6 +63,13 @@ export const WorkbenchPick = (props: { name: string; context?: string; title?: s
   <div class="ui-workbench-pick">
     <Row density="nav" element="button" current={props.current} aria-pressed={Boolean(props.current)} title={props.title} context={props.context} onClick={() => props.onSelect()}>{props.name}</Row>
     {props.children}
+  </div>;
+/** A group of picks that folds, where a side column holds more than fits a look (Settings › Tools): its name, how
+ *  many it holds, and its picks when open. One is open at a time by the caller's rule (the chosen thing's). */
+export const WorkbenchFold = (props: { title: string; count?: number; open: boolean; onToggle: () => void; children: JSX.Element }) =>
+  <div class="ui-workbench-fold">
+    <Row density="nav" element="button" fold="quarter" aria-expanded={props.open} meta={props.count} onClick={() => props.onToggle()}>{props.title}</Row>
+    <Show when={props.open}><div class="ui-workbench-fold-body">{props.children}</div></Show>
   </div>;
 /** A titled group in the side column (Used in, Slots). */
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */

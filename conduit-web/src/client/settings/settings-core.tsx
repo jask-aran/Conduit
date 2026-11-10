@@ -14,6 +14,7 @@ import { ToolsSettings } from "./tools-settings";
 import { AccountSettings } from "./account-settings";
 import { BrowserSettings } from "./browser-settings";
 import { SkillsSettings } from "./skills-settings";
+import { IntegrationsSettings } from "./connectors-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/ui/notifications";
@@ -79,7 +80,7 @@ const allSectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
-  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }, { id: "integrations", label: "Integrations", icon: Icons.ExternalLink }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
 // A device with no keyboard (a phone) has no keys to set: Shortcuts is not listed there.
@@ -1550,6 +1551,7 @@ export function Settings(props: {
           <Show when={section() === "skills"}><SkillsSettings context={context} skillId={openSkill()} onSkill={setOpenSkill} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
+          <Show when={section() === "integrations"}><IntegrationsSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
           <Show when={section() === "server"}><ServerSettings projects={props.projects} runtime={<>
               <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<Loading>Loading runtime settings…</Loading>}><Note tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></Note></Show>}>
@@ -2001,7 +2003,7 @@ export function Settings(props: {
   });
   // ...and the rest are swept once Settings is open and idle: a second Settings, out of sight, draws each section in
   // turn until its lines settle, reads them, and is gone. Again when what it read is five minutes old.
-  const SWEPT: Section[] = ["ui", "account", "models", "agent", "tools", "skills", "server", "device", "devices", "voice", "search", "browser"];
+  const SWEPT: Section[] = ["ui", "account", "models", "agent", "server", "device", "devices", "voice", "search", "browser", "integrations"];
   const [sweeping, setSweeping] = createSignal(false);
   createEffect(() => {
     if (props.harvest || !props.open || sweeping() || Date.now() - sweptAt < 5 * 60_000) return;

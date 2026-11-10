@@ -652,6 +652,9 @@ export class DurableRuntime {
     await this.open();
     const SOURCES = { web: "extension", browser: "extension", codemode: "codemode", connectors: "connector" };
     const first = (text) => String(text || "").split(/(?<=[.!?])\s/)[0].trim();
+    // What a tool is for, by the extension that brings it: how Settings › Tools files it.
+    const GROUPS = { "coding-tools": "Files and shell", "device-tools": "Files and shell", web: "Web", "conduit-mcp": "Conduit", agent: "jbot's own", browser: "Hub browser" };
+    const groupOf = (name, extension) => name.startsWith("pi.codemode.models.") ? "Models" : /^mcp__(.+?)__/.test(name) ? /^mcp__(.+?)__/.exec(name)[1].replace(/^./, (letter) => letter.toUpperCase()) : GROUPS[extension] || "The thread";
     return this.templates.map((template) => {
       const selection = this.selectionFor(template.id, { roaming: template.internal && template.id === "agent" });
       const sourceOf = new Map(selection.extensions.flatMap((extension) => (extension.tools || []).map((tool) => [tool.name, extension.name])));
@@ -662,7 +665,7 @@ export class DurableRuntime {
           const extension = sourceOf.get(tool.name);
           const source = tool.name.startsWith("pi.codemode.") ? "codemode" : tool.name === "approved" ? "built-in" : SOURCES[extension] || "built-in";
           // text and parameters: what the model is told of it, whole (Settings › Tools shows it as the tool's pane).
-          return { name: tool.name, description: first(tool.description), text: String(tool.description || ""), parameters: tool.parameters ?? null, source, extension,
+          return { name: tool.name, description: first(tool.description), text: String(tool.description || ""), parameters: tool.parameters ?? null, source, extension, group: groupOf(tool.name, extension),
             reach: (!direct || direct.has(tool.name)) && (!tool.callers || tool.callers.includes("model")) ? "model" : "codemode", ...askOf(tool, { guarded: selection.isAgent }) };
         }),
       };
