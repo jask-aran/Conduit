@@ -531,7 +531,7 @@ export interface Template {
 }
 
 export type ProcessState = "absent" | "starting" | "ready" | "failed";
-export type GenerationState = "idle" | "submitting" | "active" | "running" | "stopping" | "interrupted" | "failed";
+export type GenerationState = "idle" | "submitting" | "active" | "stopping" | "failed";
 
 export interface UsageCost {
   input?: number | null;

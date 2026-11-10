@@ -572,7 +572,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       const selected = ptys.find((item) => item.id === current?.id);
       if (selected?.status === "running") {
         setPty(selected);
-      } else if (current && (!selected || ["conflict", "offline", "reconnecting"].includes(connectionState()))) {
+      } else if (current && (!selected || ["conflict", "offline", "detached", "reconnecting"].includes(connectionState()))) {
         discardSelectedTerminal(selected ? "The terminal ended in another Conduit client." : "The terminal is no longer available.");
       } else if (selected?.status === "exited" && connectionState() !== "stopped") {
         connectionGeneration += 1;
@@ -808,7 +808,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     closeConnection();
     disposeRenderer();
     setError("");
-    setConnectionState("offline");
+    setConnectionState("detached");
   };
 
   const requestRename = (record: Pty) => {
@@ -934,7 +934,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     const state = connectionState();
     if (state === "connecting") return { tone: "busy", label: "Connecting", title: "Connecting to the terminal" };
     if (state === "reconnecting") return { tone: "busy", label: "Reconnecting", title: "Reconnecting to the terminal" };
-    if (state === "offline") return { tone: "danger", label: "Offline", title: "Terminal offline" };
+    if (state === "offline" || state === "detached") return { tone: "danger", label: "Offline", title: "Terminal offline" };
     if (state === "conflict") return { tone: "warn", label: "In use", title: "Attached in another Conduit client" };
     if (state === "stopped") return { tone: "muted", label: "Exited", title: "Terminal exited" };
     if (state === "live" && !writable()) return { tone: "warn", label: "Read only", title: "Read only" };
@@ -1023,14 +1023,15 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
       wasInactive = true;
       closeConnection();
       disposeRenderer();
-      if (pty()?.status === "running") setConnectionState("offline");
+      // A detached terminal stays detached, so showing the pane again leaves it be.
+      if (pty()?.status === "running" && connectionState() !== "detached") setConnectionState("offline");
       return;
     }
     const reattach = wasInactive;
     wasInactive = false;
     queueMicrotask(() => {
       const record = pty();
-      if (reattach && record?.status === "running" && !socket) {
+      if (reattach && record?.status === "running" && !socket && connectionState() !== "detached") {
         void connect(record, { freshRenderer: true }).catch((cause) => setError((cause as Error).message));
       } else if (!record && !starting()) {
         void attachExisting(activeProjectId);

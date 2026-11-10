@@ -4,6 +4,8 @@ export type TerminalConnectionState =
   | "live"
   | "reconnecting"
   | "offline"
+  // Let go of on purpose (Detach). Nothing reattaches it but the person.
+  | "detached"
   | "stopped"
   | "conflict";
 
@@ -26,6 +28,7 @@ export function terminalRecoveryView(state: TerminalConnectionState, detail = ""
         action: null,
       };
     case "offline":
+    case "detached":
       return {
         state,
         title: "Terminal offline",

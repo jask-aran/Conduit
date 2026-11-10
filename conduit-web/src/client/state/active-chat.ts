@@ -394,6 +394,13 @@ export function createActiveChat(options: ActiveChatOptions) {
   });
   const ensureAgent = session.ensure;
   const requireAgent = session.require;
+  // Whether the chat open now is still the one open when this was taken. Anything that awaits the agent checks it
+  // after, since the person can switch chats while it starts, and the session then belongs to the other chat.
+  const stillSelected = () => {
+    const chatId = selectedId();
+    const selection = selectionToken;
+    return () => selectionToken === selection && selectedId() === chatId;
+  };
   const projectId = catalogue.projectId;
   const streaming = createMemo(() => generation() === "active" || generation() === "submitting");
   const stopping = createMemo(() => generation() === "stopping");
@@ -1326,8 +1333,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (flushingOutbox || !chatId || selectedId() !== chatId || !outboxOf(chatId).length) return;
     if (options.runtime.connectivity() !== "online" || presentation().kind !== "ready") return;
     if (generation() === "stopping" || generation() === "submitting") return;
-    const selection = selectionToken;
-    const current = () => selectionToken === selection && selectedId() === chatId;
+    const current = stillSelected();
     flushingOutbox = true;
     try {
       if (!live() || live()!.chatId !== chatId || !session.isOpen()) {
@@ -1392,8 +1398,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (generation() === "stopping") return;
     const prepared = prepareOutboundMessage();
     const chatId = selectedId();
-    const selection = selectionToken;
-    const current = () => selectedId() === chatId && selectionToken === selection;
+    const current = stillSelected();
     const online = options.runtime.connectivity() === "online";
     if (!prepared.hasContent) return;
     const compactCommand = /^\/compact\s+\S/.test(prepared.text) && supports("compaction");
@@ -1405,7 +1410,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     // Behind anything already waiting, so they go in the order they were sent.
     if (keepable && (!online || outboxOf(chatId!).length)) return keepForLater(prepared, chatId!);
     if (compactCommand) {
-      if (!streaming() && !compacting()) try { await requireAgent("compact"); if (selectedId() !== prepared.chatId) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { onError(error); } return; }
+      if (!streaming() && !compacting()) try { await requireAgent("compact"); if (!current()) return; session.send({ type: "compact", instructions: prepared.text.slice(8).trim().slice(0, 2000).trim() }); if (draft().trim() === prepared.text) setDraft(""); } catch (error) { if (current()) onError(error); } return; }
     const busy = streaming();
     const messageId = newMessageId();
     const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
@@ -1519,14 +1524,18 @@ export function createActiveChat(options: ActiveChatOptions) {
     // regenerate re-asks it, and the server restates it under the name this row
     // already has, so there is nothing here to take away and put back.
     const cut = previous.slice(previous.findIndex((message) => message.id === entryId) + 1);
+    const current = stillSelected();
     setMessages(truncateAt(previous, entryId, { inclusive: false }));
     try {
       await requireAgent("regenerate");
+      // Left while the agent started: the transcript and the session now belong to the other chat.
+      if (!current()) return;
       // Again: a snapshot taken while the agent started still holds them.
       setMessages((current) => truncateAt(current, entryId, { inclusive: false }));
       setGeneration("active");
       session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
     } catch (error) {
+      if (!current()) return;
       // Put back only what was cut, so anything stated meanwhile stands.
       setMessages((current) => {
         const at = current.findIndex((message) => message.id === entryId);
@@ -1541,8 +1550,9 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const compact = async () => {
     if (streaming() || compacting() || !supports("compaction")) return;
-    try { await requireAgent("compact"); session.send({ type: "compact" }); }
-    catch (error) { onError(error); }
+    const current = stillSelected();
+    try { await requireAgent("compact"); if (current()) session.send({ type: "compact" }); }
+    catch (error) { if (current()) onError(error); }
   };
 
   const loadHarnessCommands = async () => {

@@ -422,11 +422,15 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
    * is, the person settles by signing in to it.
    */
   const chooseFound = async (server: FoundServer) => {
+    // A check like any other: typing while the proofs run, or another pick, supersedes it.
+    clearTimeout(checkTimer);
+    const run = ++checkRun;
     setError("");
     setAddress(server.origin);
     // Every address it was found at, asked at once; the first that proves
     // itself is the one kept. An unreachable interface costs nothing then.
     const proofs = await Promise.all(server.candidates.map((origin) => proveServer(origin, server.id, server.publicKey)));
+    if (run !== checkRun) return;
     const proved = server.candidates.find((_, index) => proofs[index]?.ok);
     if (proved) {
       setAddress(proved);
