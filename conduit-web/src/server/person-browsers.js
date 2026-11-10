@@ -17,7 +17,7 @@ export function createPersonBrowsers({ own, nodeHub }) {
       if (!result?.ok) throw Object.assign(new Error(result?.error?.message || "The device did not answer"), { status: 502 });
       return result.value;
     };
-    return { status: () => ask("status"), pair: () => ask("pair"), unpair: (browser) => ask("unpair", [browser]), tools: () => ask("tools"), call: (name, args) => ask("call", [name, args]) };
+    return { status: () => ask("status"), pair: () => ask("pair"), unpair: (browser) => ask("unpair", [browser]), launch: () => ask("launch"), tools: () => ask("tools"), call: (name, args) => ask("call", [name, args]) };
   };
   /** By node id, for a route: the environment's browser, or a 404. */
   const byId = async (id) => {

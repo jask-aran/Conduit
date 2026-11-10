@@ -50,7 +50,7 @@ export const NODE_TARGETS = /** @type {const} */ ({
   harness: { for: ["harnesses"], methods: ["claudeSession", "codexRollout", "opencodeService"], says: "What a harness saved there, for the sessions the hub runs on it" },
   computer: { for: ["browse"], methods: ["list", "share"], says: "Its disk, to pick a folder to share" },
   browser: { for: ["browser"], methods: ["status", "describe", "configure", "act", "stream"], says: "Its browser: what it shows, input, and the port its picture streams from" },
-  personBrowser: { for: ["personBrowser"], methods: ["status", "pair", "unpair", "tools", "call"], says: "The person's own browser: its pairing, and OpenCode Browse's tools, listed and called" },
+  personBrowser: { for: ["personBrowser"], methods: ["status", "pair", "unpair", "launch", "tools", "call"], says: "The person's own browser: its pairing, starting it, and OpenCode Browse's tools, listed and called" },
   tunnel: { for: ["browser", "harnesses"], methods: ["open"], says: "A stream to a port on it, through the hub" },
   machine: { for: [], methods: ["read"], says: "Its readout: CPU, memory, disk, network, processes" },
 });

@@ -54,6 +54,10 @@ export function PersonBrowsersSettings(props: {
   // agent's commands to it, which need not be the one the browser runs on); on the network, the whole name.
   const through = (environment: PersonBrowserEnvironment) => props.device !== undefined && environment.name.startsWith(`${props.device} · `)
     ? `through ${environment.name.slice(props.device.length + 3)}` : environment.name;
+  const launch = (environment: PersonBrowserEnvironment) => act(async () => {
+    const { launched } = await api<{ launched: string }>(`/v0/person-browsers/${encodeURIComponent(environment.id)}/launch`, { method: "POST" });
+    setSaid(`Started ${launched}`);
+  }, "The browser was not started.");
   const copy = async (code: string) => {
     window.clearTimeout(copiedTimer);
     try { await navigator.clipboard.writeText(code); setCopied(code); copiedTimer = window.setTimeout(() => setCopied(""), COPY_FEEDBACK_MS); } catch { setCopied(""); }
@@ -67,6 +71,9 @@ export function PersonBrowsersSettings(props: {
           <For each={environment.browsers}>{(browser) =>
             <SettingLine label={browser.name} state={`OpenCode Browse · ${through(environment)}`}>
               <StatusDot label={browser.connected ? "Connected" : "Not running"} tone={browser.connected ? "success" : "muted"} />
+              <Show when={!browser.connected && environment.launchable}>
+                <Button variant="ghost" outline size="sm" disabled={busy() || !environment.online} aria-label={`Launch ${browser.name}`} onClick={() => void launch(environment)}>Launch</Button>
+              </Show>
               <Button variant="ghost" size="sm" disabled={busy()} aria-label={`Unpair ${browser.name}`} onClick={() => void unpair(environment, browser.id)}>Unpair</Button>
             </SettingLine>}</For>
           <Show when={environment.pairing} fallback={

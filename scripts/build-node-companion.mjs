@@ -52,6 +52,24 @@ fs.cpSync(path.join(pty, "prebuilds", `${platform}-${arch}`), path.join(ptyOut, 
   recursive: true, filter: (source) => !source.endsWith(".pdb"),
 });
 
+// OpenCode Browse, run by this bundle's Node as its own process (nodes/person-browser.js): its built files and the
+// packages they load, each from where the checkout resolves it.
+const browse = path.join(web, "node_modules", "@opencode", "browse");
+const browseOut = path.join(out, "node_modules", "@opencode", "browse");
+const browsePackage = JSON.parse(fs.readFileSync(path.join(browse, "package.json"), "utf8"));
+fs.cpSync(path.join(browse, "dist"), path.join(browseOut, "dist"), { recursive: true });
+for (const file of ["package.json", "LICENSE"]) fs.copyFileSync(path.join(browse, file), path.join(browseOut, file));
+const copied = new Set();
+const carry = (name, from) => {
+  if (copied.has(name)) return;
+  copied.add(name);
+  const found = [path.join(from, "node_modules", name), path.join(browse, "node_modules", name), path.join(web, "node_modules", name)].find((dir) => fs.existsSync(dir));
+  if (!found) throw new Error(`OpenCode Browse needs ${name}, which is not installed`);
+  fs.cpSync(found, path.join(browseOut, "node_modules", name), { recursive: true, dereference: true });
+  for (const next of Object.keys(JSON.parse(fs.readFileSync(path.join(found, "package.json"), "utf8")).dependencies ?? {})) carry(next, found);
+};
+for (const name of Object.keys(browsePackage.dependencies ?? {})) carry(name, browse);
+
 fs.copyFileSync(runtime, path.join(out, platform === "win32" ? "node.exe" : "node"));
 fs.writeFileSync(path.join(out, ".gitignore"), "*\n");
 console.log(`Node companion for ${platform}-${arch} in ${path.relative(root, out)}`);
