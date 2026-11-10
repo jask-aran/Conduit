@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AgentDoc } from "../src/agent/agent-doc.js";
-import { appendEntry, entryText, InboxTools, listInbox } from "../src/agent/inbox.js";
+import { appendEntry, ConduitInboxTool, entryText, listInbox } from "../src/agent/inbox.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 
 const day = 86400_000;
@@ -35,7 +35,7 @@ test("addressing and kind filters leave the person's full inbox visible", async 
   assert.deepEqual(keys({ for: "review", kinds: ["task"] }), ["other", "empty-address", "mail"]);
   const correction = listInbox(state).find((item) => item.key === "correction");
   assert.match(entryText(correction, "UTC"), /for: reflect, review/);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const tool = ConduitInboxTool(agent.runtime);
   const listed = await tool.execute({ action: "list" }, api);
   assert.match(listed.output[0].text, /for: reflect, review/);
   for (const key of keys()) assert.ok(listed.output[0].text.includes(key));
@@ -63,7 +63,7 @@ test("handled context stays seven days while unhandled context does not expire",
 test("handling context removes it from waiting without deleting its outcome", async (t) => {
   const { agent, api } = await agentFixture(t);
   const id = await agent.update((doc) => appendEntry(doc, entry("news"), now).id);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const tool = ConduitInboxTool(agent.runtime);
   await tool.execute({ action: "handle", ids: [id], outcome: "Added to brief" }, api);
   const state = await agent.state();
   assert.deepEqual(listInbox(state, { unhandled: true }), []);
@@ -76,7 +76,7 @@ test("handling context removes it from waiting without deleting its outcome", as
 
 test("native inbox edits keep caller identity and support filters, addressing, reopening and dismissal", async (t) => {
   const { agent, api } = await agentFixture(t);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const tool = ConduitInboxTool(agent.runtime);
   const call = async (args) => {
     const response = await tool.execute(args, api);
     assert.ok(!response.isError, response.output[0].text);
@@ -136,7 +136,7 @@ test("person inbox routes share edits, return current entries and reject invalid
   assert.equal(added.body.handledBy, undefined);
   assert.ok((await agent.view()).inbox.some((entry) => entry.id === id));
   assert.deepEqual((await personWords(agent, api.conversationId)).messages, []);
-  const tool = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const tool = ConduitInboxTool(agent.runtime);
   await tool.execute({ action: "add", title: "Agent note", headline: "Not intent", level: "fyi", author: "person" }, api);
   assert.deepEqual((await personWords(agent, api.conversationId)).messages, []);
   for (const body of [undefined, {}, { title: "", headline: "x", level: "fyi" }, { title: "x", headline: "x", level: "failed" },

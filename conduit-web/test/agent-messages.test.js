@@ -6,7 +6,7 @@ import { MessageLog, MessageTools } from "../src/agent/messages.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 import { registerAgentRoutes } from "../src/server/routes/agent.js";
 import { personWords } from "../src/agent/person-words.js";
-import { entryText, InboxTools } from "../src/agent/inbox.js";
+import { ConduitInboxTool, entryText } from "../src/agent/inbox.js";
 
 async function mailbox(t) {
   const fixture = await agentFixture(t);
@@ -95,7 +95,7 @@ test("feedback keeps the person's words separate from the quoted jbot message", 
   assert.equal(item.body, undefined);
   assert.equal(await agent.entryText(item), `${text}\n\nAbout jbot message jbot-message at ${at}:\n${`${original.slice(0, 599)}…`.split("\n").map((line) => `> ${line}`).join("\n")}`);
   assert.match(entryText(item, "UTC"), /author: person, via: feedback/);
-  const read = InboxTools(agent.runtime).tools.find((tool) => tool.name === "conduit_inbox");
+  const read = ConduitInboxTool(agent.runtime);
   assert.ok((await read.execute({ action: "read", id: item.id }, api)).output[0].text.includes(await agent.entryText(item)));
   // Feedback is for Reflection only: never the person's intent for the approval judge.
   assert.ok(!(await personWords(agent, api.conversationId)).messages.some((message) => message.via === "feedback"));
