@@ -73,10 +73,25 @@ function trimmed(detail: TranscriptDetail): TranscriptDetail {
   return JSON.parse(JSON.stringify({ ...rest, messages: kept, tools, ...(from ? { page: { before: null } } : {}) })) as TranscriptDetail;
 }
 
+/** Chats deleted here: a copy still waiting to be written for one of them is not written. */
+const forgotten = new Set<string>();
+
+/** Drop this chat's copy, for a chat deleted: it is not readable on this device afterwards. */
+export async function forgetDeviceTranscript(chatId: string): Promise<void> {
+  forgotten.add(keyOf(chatId));
+  const db = await database();
+  if (!db) return;
+  try {
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).delete(keyOf(chatId));
+    await done(transaction);
+  } catch { /* no copy to drop */ }
+}
+
 /** Keep this chat's transcript (replacing the copy), and let the oldest copies beyond KEEP_CHATS go. */
 export async function saveDeviceTranscript(chatId: string, detail: TranscriptDetail): Promise<void> {
   const db = await database();
-  if (!db) return;
+  if (!db || forgotten.has(keyOf(chatId))) return;
   try {
     const record: Held = { key: keyOf(chatId), openedAt: Date.now(), detail: trimmed(detail) };
     const transaction = db.transaction(STORE, "readwrite");

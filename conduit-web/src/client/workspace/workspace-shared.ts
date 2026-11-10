@@ -32,6 +32,8 @@ export function createRequestScope(projectId: Accessor<string>) {
   }, request);
   const finish = (request: WorkspaceRequest) => {
     if (requests.get(request.operation)?.version === request.version) requests.delete(request.operation);
+    // Settled, so aborting it changes nothing but taking its listener off the scope's controller.
+    requestControllers.get(request.version)?.abort();
     requestControllers.delete(request.version);
     setPending((current) => {
       const next = new Map(current);
@@ -42,7 +44,7 @@ export function createRequestScope(projectId: Accessor<string>) {
   const start = (operation: string, foreground: boolean) => {
     requests.get(operation) && requestControllers.get(requests.get(operation)!.version)?.abort();
     const requestController = new AbortController();
-    controller.signal.addEventListener("abort", () => requestController.abort(), { once: true });
+    controller.signal.addEventListener("abort", () => requestController.abort(), { once: true, signal: requestController.signal });
     const request: WorkspaceRequest = { projectId: projectId(), generation, operation, version: ++requestVersion };
     requests.set(operation, request);
     requestControllers.set(request.version, requestController);

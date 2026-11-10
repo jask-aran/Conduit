@@ -219,8 +219,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   let commandsLoading: Promise<void> | null = null;
   const [thinking, setThinking] = createSignal(false);
   const [responding, setResponding] = createSignal(false);
-  const [activeToolName, setActiveToolName] = createSignal<string | null>(null);
-  const [activeToolKind, setActiveToolKind] = createSignal<string | null>(null);
+  const [activeTool, setActiveTool] = createSignal<{ name: string | null; kind: string | null } | null>(null);
   const [retry, setRetry] = createSignal<RetryState | null>(null);
   const [activeGenerationRoot, setActiveGenerationRoot] = createSignal<ActiveGenerationView | null>(null);
   const [activeGenerationRevision, setActiveGenerationRevision] = createSignal(0);
@@ -386,6 +385,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       setActiveGeneration(null);
       setActiveGenerationChange(null);
       resetLiveFlags();
+      // No process asks or holds anything; a reconnect that finds one is given both again by its snapshot.
+      setHostUiRequests([]);
+      setQueue({ steering: [], followUp: [] });
       setGeneration("idle");
       void api<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(chatId)}`).then((detail) => {
         if (selectedId() === chatId && !live() && generation() === "idle") applyDetail(detail, true);
@@ -409,7 +411,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   const resetLiveFlags = () => {
     setThinking(false);
     setResponding(false);
-    setActiveToolName(null);
+    setActiveTool(null);
     setRetry(null);
     setCompacting(false);
   };
@@ -553,8 +555,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       setThinking(latest?.kind === "thinking" && latest.status === "streaming");
       setResponding(latest?.kind === "text" && latest.status === "streaming");
       const runningTool = Object.values(next.toolExecutions).find((tool) => tool.status === "running");
-      setActiveToolName(runningTool?.name || null);
-      setActiveToolKind(runningTool?.kind || null);
+      setActiveTool(runningTool ? { name: runningTool.name || null, kind: runningTool.kind || null } : null);
       setRetry((next as { retry?: RetryState | null }).retry || null);
     }
     // Stop can precede the turn's identity. Install the turn before cancelling it.
@@ -669,6 +670,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (session.retry !== undefined) setRetry(session.retry);
     if (session.capabilities) setCapabilities(session.capabilities);
     const turnOpen = Boolean(session.generation && !session.generation.settled);
+    if (!session.stopping && (turnOpen || session.active)) sendOwedStop(turnOpen ? session.generation!.id : null);
     if (session.stopping || (stopRequest && (turnOpen || session.active))) setGeneration("stopping");
     else if (turnOpen || session.active) setGeneration("active");
     else {
@@ -787,6 +789,8 @@ export function createActiveChat(options: ActiveChatOptions) {
           stopRequest = null;
           setGeneration("failed");
           resetLiveFlags();
+          // A failed turn asks nothing more, as a stopped one does. Its queue is the process's, which goes on.
+          setHostUiRequests([]);
         } else if (generation() === "submitting" || (stopRequest && !stopRequest.generationId)) {
           // The request failed before a turn began. An error from a steer or
           // another command during an active turn must leave that turn alone.
@@ -1500,6 +1504,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
+  /** A stop pressed while the session was closing or closed, and so not sent: the snapshot that opens it finds the turn. */
+  const sendOwedStop = (generationId: string | null) => {
+    if (!stopRequest || stopRequest.generationId || stopRequest.sent) return;
+    if (generationId) stopRequest.generationId = generationId;
+    else stopRequest.sent = true;
+    try { session.send(generationId ? { type: "stop_generation", generationId } : { type: "stop_generation" }); }
+    catch (error) { onError(error); }
+  };
+
   const stop = () => {
     if (!streaming()) return;
     const active = generation() === "active";
@@ -1523,16 +1536,19 @@ export function createActiveChat(options: ActiveChatOptions) {
     const cut = previous.slice(previous.findIndex((message) => message.id === entryId) + 1);
     const current = stillSelected();
     setMessages(truncateAt(previous, entryId, { inclusive: false }));
+    // The turn is claimed before the agent starts, as a send's is, so a second press meanwhile does nothing.
+    setGeneration("submitting");
     try {
       await requireAgent("regenerate");
       // Left while the agent started: the transcript and the session now belong to the other chat.
       if (!current()) return;
       // Again: a snapshot taken while the agent started still holds them.
       setMessages((current) => truncateAt(current, entryId, { inclusive: false }));
-      setGeneration("active");
+      setGeneration(stopRequest ? "stopping" : "active");
       session.send({ type: "regenerate", entryId, model: models.model(), thinkingLevel: models.effort() });
     } catch (error) {
       if (!current()) return;
+      stopRequest = null;
       // Put back only what was cut, so anything stated meanwhile stands.
       setMessages((current) => {
         const at = current.findIndex((message) => message.id === entryId);
@@ -1545,11 +1561,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
+  // A compact asked for while the agent starts: the harness says it is compacting only once it is sent.
+  let compactAsked = false;
   const compact = async () => {
-    if (streaming() || compacting() || !supports("compaction")) return;
+    if (streaming() || compacting() || compactAsked || !supports("compaction")) return;
     const current = stillSelected();
+    compactAsked = true;
     try { await requireAgent("compact"); if (current()) session.send({ type: "compact" }); }
     catch (error) { if (current()) onError(error); }
+    finally { compactAsked = false; }
   };
 
   const loadHarnessCommands = async () => {
@@ -1708,8 +1728,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       coarse: typeof process?.activity === "string" ? process.activity : process?.activity?.kind || "idle",
       thinking: thinking(),
       responding: responding(),
-      toolName: activeToolName(),
-      toolKind: activeToolKind(),
+      toolName: activeTool()?.name ?? null,
+      toolKind: activeTool()?.kind ?? null,
       retry: retry(),
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user",

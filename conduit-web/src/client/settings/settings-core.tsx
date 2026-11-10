@@ -516,6 +516,9 @@ export function Settings(props: {
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
   const [authProviders, setAuthProviders] = createSignal<PiAuthProvider[]>([]);
   const [authAttempt, setAuthAttempt] = createSignal<PiAuthAttempt | null>(null);
+  // Load, poll, start and answer each write the attempt; the last one asked wins, so an older answer cannot bring
+  // back a prompt already answered.
+  const attemptWrites = createLatest();
   // The provider chosen to add (not connected yet), and the search provider chosen to add.
   const [addingAccount, setAddingAccount] = createSignal("");
   const [addingSearch, setAddingSearch] = createSignal("");
@@ -863,13 +866,14 @@ export function Settings(props: {
   };
   const loadPiAuth = async () => {
     setAuthLoading(true);
+    const latest = attemptWrites.next();
     try {
       const [status, attempt] = await Promise.all([
         api<PiAuthProvidersPayload>("/v0/pi-auth"),
         api<PiAuthAttemptPayload>("/v0/pi-auth/attempt"),
       ]);
       applyAuthProviders(status.providers);
-      setAuthAttempt(attempt.attempt);
+      if (latest()) setAuthAttempt(attempt.attempt);
       if (status.providers.some((provider) => provider.id === addingAccount() && provider.auth.configured)) setAddingAccount("");
       setAuthError("");
       setAuthUnavailable(false);
@@ -912,35 +916,40 @@ export function Settings(props: {
     void held.url.then((url) => { if (over) return; setCatching(false); if (url) void answerAuthPrompt(url); });
     onCleanup(() => { over = true; held.stop(); });
   });
+  // The sign-in dialog lives in Integrations and the providers in Models, so the poll follows the attempt, not the section.
+  const pollAttempt = createSingleFlight(async () => {
+    const latest = attemptWrites.next();
+    try {
+      const result = await api<PiAuthAttemptPayload>("/v0/pi-auth/attempt");
+      if (!latest()) return;
+      setAuthAttempt(result.attempt);
+      if (!result.attempt?.active) applyAuthProviders((await api<PiAuthProvidersPayload>("/v0/pi-auth")).providers);
+    } catch (error) { setAuthError((error as Error).message); }
+  });
   createEffect(() => {
-    if (!props.open || section() !== "models" || !authAttempt()?.active) return;
-    const timer = window.setInterval(() => {
-      api<PiAuthAttemptPayload>("/v0/pi-auth/attempt")
-        .then((result) => {
-          setAuthAttempt(result.attempt);
-          if (!result.attempt?.active) return api<PiAuthProvidersPayload>("/v0/pi-auth")
-            .then((status) => applyAuthProviders(status.providers));
-        })
-        .catch((error) => setAuthError((error as Error).message));
-    }, 1000);
+    if (!props.open || !authAttempt()?.active) return;
+    // A tick while a load or an answer is out leaves the attempt to it, so the poll never retires the answer.
+    const timer = window.setInterval(() => { if (!authLoading()) void pollAttempt(); }, 1000);
     onCleanup(() => window.clearInterval(timer));
   });
 
   const startOAuth = async (providerId: string) => {
     setAuthLoading(true);
     setAuthError("");
+    const latest = attemptWrites.next();
     try {
       const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/oauth", { method: "POST", body: JSON.stringify({ providerId }) });
-      setAuthAttempt(result.attempt);
+      if (latest()) setAuthAttempt(result.attempt);
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
   };
   const answerAuthPrompt = async (value: string) => {
     setAuthLoading(true);
     setAuthError("");
+    const latest = attemptWrites.next();
     try {
       const result = await api<{ attempt: PiAuthAttempt }>("/v0/pi-auth/attempt/respond", { method: "POST", body: JSON.stringify({ value }) });
-      setAuthAttempt(result.attempt);
+      if (latest()) setAuthAttempt(result.attempt);
       setAuthResponse("");
     } catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
@@ -1558,7 +1567,7 @@ export function Settings(props: {
           <Show when={section() === "integrations"}><>
             <Group title="Model providers">
               {/* A sign-in under way is a dialog of its steps: open the provider's page, then hand back what it ends on. */}
-              <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else setAuthAttempt(null); } }}
+              <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else { attemptWrites.drop(); setAuthAttempt(null); } } }}
                 title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
                 <Show when={authAttempt()}>{(current) => <>
                   <Show when={current().deviceCode}>{(device) => <>

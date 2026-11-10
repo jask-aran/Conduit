@@ -147,12 +147,13 @@ export function createPushControl() {
     const instance = hubKey();
     // The distributor answers on its own time; the endpoint event is the answer, the saved list a fallback.
     const arrived = new Promise<Endpoint | null>((resolve) => {
-      let listener: Listener | null = null;
-      const timer = setTimeout(() => { void listener?.remove(); resolve(null); }, 30_000);
+      // Settled before addListener hands back its handle, the handle is removed as it arrives.
+      let listener: Listener | null = null, settled = false;
+      const timer = setTimeout(() => { settled = true; void listener?.remove(); resolve(null); }, 30_000);
       void push.addListener("endpoint", (endpoint: Endpoint) => {
         if (endpoint.instance !== instance) return;
-        clearTimeout(timer); void listener?.remove(); resolve(endpoint);
-      }).then((handle) => { listener = handle; });
+        settled = true; clearTimeout(timer); void listener?.remove(); resolve(endpoint);
+      }).then((handle) => { if (settled) void handle.remove(); else listener = handle; });
     });
     try {
       await within("registering with the push service", push.register({ instance, vapid: publicKey, origin: new URL(httpUrl("/")).origin, label: `Conduit · ${activeServer()?.name || location.host}` }));

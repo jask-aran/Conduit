@@ -303,6 +303,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     live: () => liveTail(),
     empty: () => empty(),
     holding: () => Boolean(transcriptVisibility?.refreshing() || transcriptVisibility?.moving()),
+    finding: () => find.open(),
     onStep: () => loadEarlier(),
   });
   const { following, setFollowing, latestDistance, latestAway } = follow;

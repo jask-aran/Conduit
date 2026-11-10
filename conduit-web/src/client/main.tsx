@@ -91,6 +91,7 @@ import { applyPwaUpdate, checkForPwaUpdate, arrivedByNewBuild, claimPwaUpdateArr
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
+import { forgetDeviceTranscript } from "./state/device-transcripts";
 import { createSingleFlight } from "./state/single-flight";
 import { createLatest } from "./state/latest";
 import { outboxChats, outboxIsOpen, outboxOf, takeFromOutbox } from "./state/outbox";
@@ -1009,14 +1010,16 @@ function App() {
     }
   };
   const setPwaUpdating = (busy: boolean) => setUpdateState(busy ? { kind: "checking" } : { kind: "idle" });
-  let quietCheck = false;
+  // A manual check can start while a quiet one runs (the quiet one shows nothing until it downloads); the quiet one
+  // then leaves the row to it: neither its progress nor its failure is said over the manual check's.
+  let quietCheck = false, manualCheck = false;
   const prepareDesktopUpdate = async (quiet: boolean) => {
     const shell = updateShell;
     if (!shell || pwaUpdating() || (quiet && quietCheck)) return;
     // A background check says nothing until it has something: on Android it
     // waits for Wi-Fi, which can be hours, and a spinner that long is a lie.
     if (quiet) quietCheck = true;
-    else setPwaUpdating(true);
+    else { manualCheck = true; setPwaUpdating(true); }
     // A step that never answers would leave the spinner up for good: each gets half a minute (a download, half a
     // minute without progress), then the check gives up and says where it stopped.
     let step = "updating the interface";
@@ -1060,6 +1063,7 @@ function App() {
       const result = await bounded(shell.prepareUpdate((progress) => {
         // A background check that found one says so while it downloads, quietly: no spinner over the page, no Cancel.
         if (quiet) {
+          if (manualCheck) return;
           const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
           sayProgress(`Update available · downloading ${share}%`);
           return;
@@ -1073,10 +1077,11 @@ function App() {
       else if (!quiet) sayUpToDate();
     } catch (error) {
       if (!quiet) { setUpdateState({ kind: "idle" }); if (!cancelled) showError(error); }
-      else if (updateState().kind === "working") setUpdateState({ kind: "idle" });
+      else if (!manualCheck && updateState().kind === "working") setUpdateState({ kind: "idle" });
     } finally {
       clearTimeout(timer);
       if (quiet) quietCheck = false;
+      else manualCheck = false;
     }
   };
   const [addingServer, setAddingServer] = createSignal(false);
@@ -1633,14 +1638,19 @@ function App() {
   };
 
   let dashboardDraftRequest: Promise<void> | null = null;
+  // The page whose draft could not be made: not asked again on every catalogue change, only once the page is left.
+  let draftFailedFor: string | null = null;
   const ensureDashboardDraft = () => {
     const route = routeKind();
+    if (!["dashboard", "project"].includes(route)) draftFailedFor = null;
     if (dashboardDraftRequest || !["dashboard", "project"].includes(route)
       || chat.loadedId() || catalogue.selectedId() || templatesLoading()) return;
     const project = route === "project"
       ? selectedProject()
       : catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project || project.state === "cloning") return;
+    const failedKey = `${route}:${project.id}`;
+    if (draftFailedFor === failedKey) return;
     const templateId = projectProfile(project);
     const expectedRoute = route;
     const expectedProjectId = project.id;
@@ -1653,7 +1663,7 @@ function App() {
         return;
       }
       await activateCreatedChat(created, project, templateId);
-    }).catch(showDraftError).finally(() => {
+    }).catch((error) => { draftFailedFor = failedKey; showDraftError(error); }).finally(() => {
       dashboardDraftRequest = null;
       if (scopeChanged) ensureDashboardDraft();
     });
@@ -2488,7 +2498,8 @@ function App() {
     if (!id) return;
     try {
       const saved = await api<ChatSummary>(`/v0/sessions/${id}/auto-name`, { method: "POST", timeout: false });
-      target.setTitle(saved.title);
+      // The pane may have moved to another chat while the name was made: that chat's header keeps its own.
+      if (target.loadedId() === id) target.setTitle(saved.title);
       await refresh();
       toast.success(`Renamed chat to ${saved.title}`);
     } catch (error) { showError(error); }
@@ -2573,6 +2584,7 @@ function App() {
       // Local copy too: the server drops its own with the chat, but this one
       // lives in storage on every device that ever opened it.
       drafts.forget(target.id);
+      void forgetDeviceTranscript(target.id);
       dropScope(target.id);
       if (catalogue.selectedId() === target.id) await createChat(project);
       await refresh();
@@ -2586,6 +2598,7 @@ function App() {
       try {
         await api(`/v0/sessions/${target.chat.id}`, { method: "DELETE" });
         drafts.forget(target.chat.id);
+        void forgetDeviceTranscript(target.chat.id);
         dropScope(target.chat.id);
         return null;
       } catch (error) {
@@ -3161,7 +3174,9 @@ function App() {
     if (current?.pane === pane && current.zone === zone) return;
     setDocDrop({ pane, zone, rect: { ...rect, top: box.top, height: box.height } });
   };
-  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); setDragHint(null); };
+  // Any drag's end, wherever it ended: the attach overlay and the split wash it raised go with it (a route change
+  // mid-drag sends its leaves nowhere that counts them).
+  const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); setDragHint(null); dragDepth = 0; setDropActive(false); setSplitDropActive(false); };
   /*
    * A pane's document moved by its header, among the panes already open: onto
    * another pane's middle the two swap; onto its far edge the document moves
@@ -6025,7 +6040,7 @@ function App() {
   const dropHandlers = {
     onDragEnter: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth += 1; setDropActive(true); },
     onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes("Files")) event.preventDefault(); },
-    onDragLeave: (event: DragEvent) => { event.preventDefault(); dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) setDropActive(false); },
+    onDragLeave: (event: DragEvent) => { if (!event.dataTransfer?.types.includes("Files")) return; event.preventDefault(); dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) setDropActive(false); },
     onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); const files = filesFromDataTransfer(event.dataTransfer); if (files.length) attachments.addFiles(files); },
   };
 

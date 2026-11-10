@@ -24,6 +24,7 @@ import {
  * - The keyboard takes height from the bottom, so the transcript gives it back from the top.
  * - The docked composer is cleared by its measured height (dock-inset.ts).
  * holding: something else is moving the content (a panel reflow, a virtualizer refresh): its resizes are not chased.
+ * finding: the page's own find is open; without it, Find is guessed from its keys (the browser's own, which says nothing).
  * onStep: after each follow step or reader scroll (a chat pages in its history there).
  */
 export function createTranscriptFollow(options: {
@@ -31,6 +32,7 @@ export function createTranscriptFollow(options: {
   live?: () => boolean;
   empty?: () => boolean;
   holding?: () => boolean;
+  finding?: () => boolean;
   onStep?: () => void;
   viewport?: () => HTMLElement | undefined;
 } = {}) {
@@ -228,7 +230,7 @@ export function createTranscriptFollow(options: {
     // Whether it laid out again since the last scroll: a move up the page made itself follows a layout change.
     let laidOut = false;
     const reading = (ms: number) => { readerUntil = Math.max(readerUntil, performance.now() + ms); };
-    const byReader = () => finding || performance.now() <= readerUntil;
+    const byReader = () => (options.finding ? options.finding() : finding) || performance.now() <= readerUntil;
     const claimUserScroll = () => {
       if (empty() || !spring()) return;
       programmaticScrollTop = null;
@@ -280,6 +282,7 @@ export function createTranscriptFollow(options: {
     const onKeyDown = (event: KeyboardEvent) => {
       // Find is the page's wherever pressed; other keys only from the transcript (or nothing focused), not the composer.
       if ((event.key === "f" || event.key === "g") && (event.ctrlKey || event.metaKey) || event.key === "F3") { finding = true; return; }
+      if (event.key === "Escape") finding = false;
       const from = event.target as Node | null;
       if (from !== document.body && !(from && viewport.contains(from))) return;
       reading(800);
