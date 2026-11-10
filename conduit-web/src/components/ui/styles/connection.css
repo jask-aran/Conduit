@@ -11,7 +11,9 @@
 .ui-connection-screen { display: grid; min-height: var(--app-height, 100dvh); width: 100%; align-content: center; justify-items: center; box-sizing: border-box; overflow: auto; padding: calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-xl) calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); background: var(--frame); color: var(--foreground); font: var(--text-body)/var(--leading-text) var(--font-sans); }
 .ui-connection-screen[data-embedded] { min-height: var(--measure-lg); }
 .ui-connection-password { display: flex; gap: var(--space-sm); align-items: center; }
-.ui-connection-password > .ui-input { min-width: 0; flex: 1; }
+.ui-connection-password > :is(.ui-input, .ui-connection-address) { min-width: 0; flex: 1; }
+/* A list of servers under the address has its name over it, set off from the rows above by a step more room. */
+.ui-connection-steps > .ui-connection-group { margin-top: var(--space-sm); }
 .ui-connection-error { margin: 0; color: var(--destructive); font-size: var(--text-caption); line-height: var(--leading-row); overflow-wrap: anywhere; }
 .ui-row.ui-server-control { min-height: var(--control); }
 /* The server control's state: its dot, then its words. */
@@ -20,21 +22,25 @@
 .ui-heading:where([data-heading="connection"]) h1, .ui-connection-recovery h1 { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
 .ui-connection-recovery p { margin: 0; overflow-wrap: anywhere; font-size: var(--text-body); line-height: var(--leading-text); }
 
-/* Signing in: the address's mark sits inside its trailing edge; the status line and the password rise in beneath. */
+/* Signing in: the address's mark sits inside its trailing edge; the status line and the password come in beneath (ConnectionSteps). */
 .ui-connection-address { position: relative; display: grid; }
 .ui-connection-address > .ui-input { padding-right: calc(var(--control) - var(--space-xs)); }
 .ui-connection-address-mark { position: absolute; top: 0; right: var(--space-md); bottom: 0; display: grid; place-items: center; color: var(--muted-foreground); pointer-events: none; }
 .ui-connection-address[data-state="found"] .ui-connection-address-mark { color: var(--status-success); }
-.ui-connection-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); margin: 0; font-size: var(--text-caption); line-height: var(--leading-row); white-space: nowrap;
-  animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; --rise: calc(-1 * var(--space-xs)); }
+.ui-connection-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); margin: 0; font-size: var(--text-caption); line-height: var(--leading-row); white-space: nowrap; }
 .ui-connection-status-mark { display: grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-connection-status[data-state="missing"] .ui-connection-status-mark { color: var(--destructive); }
 .ui-connection-status > strong { flex: none; color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-connection-status[data-state="checking"] > strong { color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-connection-status > small { min-width: 0; overflow: hidden; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; }
+/* Steps: the room under the address. Its gap from what is above is its own padding (it takes back the form's), so with
+   nothing in it it is no height at all and the gap opens with it; clipped only while it moves. */
+.ui-connection-steps { display: grid; box-sizing: border-box; grid-template-columns: minmax(0, 1fr); gap: var(--space-md); margin-top: calc(-1 * var(--space-md)); padding-top: var(--space-md); }
+.ui-connection-steps:where([data-step=""]) { padding-top: 0; }
+
 .ui-connection-password-step { display: grid; gap: var(--space-sm); }
 .ui-connection-password-step[data-reveal] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
-@media (prefers-reduced-motion: reduce) { .ui-connection-status, .ui-connection-password-step[data-reveal] { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ui-connection-password-step[data-reveal] { animation: none; } }
 
 /* Avatar: a person's initials on the surface's tint, round; sm fills a menu row's icon slot, md a control's height,
    lg a large control's. The letters are the strong weight at the size's own text step. */

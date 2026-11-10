@@ -286,6 +286,8 @@
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
 /* Expand: what opens and shuts in place under its row; only its height moves (expand.tsx). */
 .ui-expand { overflow: hidden; overflow-anchor: none; }
+.ui-steps { box-sizing: border-box; }
+.ui-steps[data-moving] { overflow: hidden; }
 /* A fold's chevron turns a quarter as its control opens, or a half with data-turn=half. */
 .ui-fold-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open]) { rotate: 90deg; }

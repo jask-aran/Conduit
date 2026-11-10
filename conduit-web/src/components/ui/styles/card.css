@@ -43,7 +43,7 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-group:where([data-group="card"]) { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair); }
 .ui-group:where([data-group="card"]) + .ui-group:where([data-group="card"]) { position: relative; }
 .ui-group:where([data-group="card"]) + .ui-group:where([data-group="card"])::before { position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
-.ui-group:where([data-group="card"]) > .ui-card-qr { width: 100%; }
+.ui-group:where([data-group="card"]) > .ui-card-qr-room > .ui-card-qr { width: 100%; }
 /* One QR wide, a detail keeps to its line: the value truncates, its whole in its title. */
 .ui-group:where([data-group="card"]) > h4 { margin: 0 0 var(--space-2xs); color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
@@ -63,12 +63,9 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-card-qr svg { display: block; width: 100%; height: 100%; }
 /* What a QR opens, under it: one line of data, light, truncating with its whole in the title. */
 .ui-card-caption { margin: 0; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
-:is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) .ui-card-qr-reveal { display: inline-flex; }
-.ui-card-qr-reveal, :is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) .ui-card-qr[data-reveal]:not([data-shown]) { display: none; }
-@media (--conduit-phone-layout) {
-  .ui-card:not([data-density="desktop"]) .ui-card-qr-reveal { display: inline-flex; }
-  .ui-card:not([data-density="desktop"]) .ui-card-qr[data-reveal]:not([data-shown]) { display: none; }
-}
+.ui-card-qr-room { display: grid; justify-items: center; }
+/* Shut, it is no height, and takes back the gap the column gave it. */
+.ui-card-qr-room:where([data-step=""]) { margin-top: calc(-1 * var(--card-pair)); }
 .ui-card-qr[data-expired] { opacity: var(--opacity-disabled); }
 .ui-card-preview { max-height: var(--measure-lg); overflow: auto; }
 .ui-card .ui-textarea { width: 100%; max-height: var(--measure-md); resize: vertical; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); padding: var(--space-md); }

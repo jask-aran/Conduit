@@ -12,6 +12,8 @@ import { Columns, Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { Actions } from "@/components/ui/actions";
 import { Fact } from "@/components/ui/overlay";
+import * as Icons from "@/components/ui/icons";
+import { isMobileLayout } from "./mobile-layout";
 import { ServerFacts } from "../platform/server-facts.tsx";
 
 /*
@@ -31,6 +33,8 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
   const [expiresAt, setExpiresAt] = createSignal(0);
   const [now, setNow] = createSignal(Date.now());
   const [error, setError] = createSignal("");
+  const phone = isMobileLayout();
+  const [qrShown, setQrShown] = createSignal(false);
   const route = () => {
     const entry = activeServer();
     const best = entry ? [...pathsOf(entry)].sort((a, b) => reach(b) - reach(a))[0] : undefined;
@@ -75,7 +79,7 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
     <Columns kind="card">
       <Group kind="card" title="Pair a device">
     <Show when={route()} fallback={<Note kind="card">Only this machine reaches {activeServer()?.name || "this server"}. Run <code>conduit-server connect</code> on it to add your network, Tailscale or a tunnel, then pair from here.</Note>}>
-      <CardQR svg={svg()} expired={expired()} reveal />
+      <Show when={!phone}><CardQR svg={svg()} expired={expired()} /></Show>
       <CardCaption title={route()!.origin}>{shortOrigin(route()!.origin)}</CardCaption>
       <Show when={error()}><Note kind="card" tone="error">{error()}</Note></Show>
       {/* The route in the words the menus use; the app takes the nearest
@@ -86,9 +90,12 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
         </ServerFacts>
       </CardDetails>
       <Actions>
+        <Show when={phone}><DialogButton variant="ghost" size="sm" aria-expanded={qrShown()} onClick={() => setQrShown(!qrShown())}><Icons.QrCode />{qrShown() ? "Hide QR" : "Show QR"}</DialogButton></Show>
         <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>
         <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
       </Actions>
+      {/* A phone is likelier the one scanning than the one scanned: its code opens under the action that asks for it. */}
+      <Show when={phone}><CardQR svg={svg()} expired={expired()} open={qrShown()} /></Show>
     </Show>
       </Group>
       <Group kind="card" title="Add server">{props.addServer}</Group>

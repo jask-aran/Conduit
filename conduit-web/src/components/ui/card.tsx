@@ -1,4 +1,5 @@
 import { Frost } from "./frost";
+import { Steps } from "./steps";
 import * as Icons from "./icons";
 import { createSignal, Show, type JSX } from "solid-js";
 
@@ -25,14 +26,10 @@ export const CardForm = (props: JSX.FormHTMLAttributes<HTMLFormElement>) => <for
 export const CardBody = (props: { children: JSX.Element }) => <div class="ui-card-body">{props.children}</div>;
 export const CardRead = (props: { children: JSX.Element }) => <code class="ui-card-read">{props.children}</code>;
 export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-card-details">{props.children}</dl>;
-/** reveal: on a phone the code waits behind Show QR code -- a phone is likelier the one scanning than the one scanned. */
-export function CardQR(props: { svg: string; expired?: boolean; reveal?: boolean }) {
-  const [shown, setShown] = createSignal(false);
-  return <>
-    <Show when={props.reveal}><Button variant="ghost" outline class="ui-card-qr-reveal" aria-expanded={shown()} onClick={() => setShown(!shown())}><Icons.QrCode />{shown() ? "Hide QR code" : "Show QR code"}</Button></Show>
-    <div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} data-reveal={props.reveal ? "" : undefined} data-shown={shown() ? "" : undefined} aria-label="Pairing QR code" role="img" />
-  </>;
-}
+/** open: false keeps the code shut until asked for (a phone is likelier the one scanning than the one scanned); it
+ *  opens and shuts as Steps, the card growing with it. */
+export const CardQR = (props: { svg: string; expired?: boolean; open?: boolean }) =>
+  <Steps class="ui-card-qr-room" step={props.open ?? true ? "code" : ""}><Show when={props.open ?? true}><div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} aria-label="Pairing QR code" role="img" /></Show></Steps>;
 /** Under a QR: what it opens, one line. */
 export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption ui-truncate" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;

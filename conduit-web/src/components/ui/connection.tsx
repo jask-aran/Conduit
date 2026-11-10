@@ -1,5 +1,6 @@
 import * as Icons from "./icons";
 import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
+import { Steps } from "./steps";
 import { CircleAlertIcon } from "lucide-solid";
 import { Dot, StatusDot } from "./nav";
 import { Button, Input, Spinner } from "./controls";
@@ -39,6 +40,17 @@ export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElemen
   </div>;
 }
 
+/** The address and what acts on it, one row, as the password and its arrow are: the field, then its buttons (scan a
+ *  code into it, go). */
+export const ConnectionEntry = (props: { children: JSX.Element }) => <div class="ui-connection-password">{props.children}</div>;
+/** A row's go button: the arrow, a spinner while it is busy. */
+export const ConnectionGo = (props: { label: string; busy?: boolean; disabled?: boolean }) =>
+  <Button type="submit" variant="ghost" size="icon" aria-label={props.label} title={props.label} disabled={props.busy || props.disabled}><Show when={props.busy} fallback={<Icons.Proceed />}><Spinner /></Show></Button>;
+
+/** A row's scan button: reads a pairing code into the address. */
+export const ConnectionScan = (props: { onClick: () => void; disabled?: boolean }) =>
+  <Button type="button" variant="ghost" size="icon" aria-label="Scan QR code" title="Scan QR code" disabled={props.disabled} onClick={() => props.onClick()}><Icons.QrCode /></Button>;
+
 /** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
 export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {
   return <p class="ui-connection-status" data-state={props.state} role={props.state === "missing" ? "alert" : "status"}>
@@ -47,6 +59,11 @@ export function ConnectionStatus(props: { state: AddressState; title: string; de
   </p>;
 }
 
+/** What follows the address, a step at a time (nothing, the look's status, the ways to find a server, the password),
+ *  as Steps: the form, and a card around it, grows and shrinks rather than jumping. */
+export const ConnectionSteps = (props: { step: string; size?: string | number; children: JSX.Element }) =>
+  <Steps class="ui-connection-steps" step={props.step} size={props.size}>{props.children}</Steps>;
+
 /** The password and its arrow, one row; busy while it signs in, its error beneath. Rises in when it follows an address. */
 export function ConnectionPassword(props: JSX.InputHTMLAttributes<HTMLInputElement> & { busy?: boolean; error?: string | null; reveal?: boolean }) {
   const [local, rest] = splitProps(props, ["busy", "error", "reveal", "id"]);
@@ -54,7 +71,7 @@ export function ConnectionPassword(props: JSX.InputHTMLAttributes<HTMLInputEleme
   return <div class="ui-connection-password-step" data-reveal={local.reveal ? "" : undefined}>
     <div class="ui-connection-password">
       <Input {...rest} id={id} type="password" autocomplete="current-password" aria-label="Password" placeholder="Password" aria-invalid={local.error ? "true" : undefined} aria-describedby={local.error ? `${id}-error` : undefined} />
-      <Button type="submit" variant="ghost" size="icon" aria-label="Sign in" title="Sign in" disabled={local.busy || rest.disabled}><Show when={local.busy} fallback={<Icons.Proceed />}><Spinner /></Show></Button>
+      <ConnectionGo label="Sign in" busy={local.busy} disabled={Boolean(rest.disabled)} />
     </div>
     <Show when={local.error}><p id={`${id}-error`} class="ui-connection-error" role="alert">{local.error}</p></Show>
   </div>;

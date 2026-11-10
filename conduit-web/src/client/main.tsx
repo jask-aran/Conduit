@@ -6,7 +6,7 @@ import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild } from "./platform/build-info.ts";
 import { liveTrace } from "./turn-rows";
-import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, type AddressState } from "@/components/ui/connection";
+import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, ConnectionSteps, ConnectionEntry, ConnectionGo, ConnectionScan, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
 import { createDecisionScope, DecisionDialogs } from "@/components/ui/decision-dialog";
 import { Dialog } from "@/components/ui/dialog";
@@ -447,79 +447,79 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     setVerifiedOrigin(origin);
   };
 
+  // What the look found; a server already confirmed (signing in again) is found without one.
+  const status = () => check() ?? (verifiedOrigin() ? { state: "found" as const, title: hostOf(verifiedOrigin()!) } : null);
+  const step = () => !verifiedOrigin() ? "find" : recordOnly ? "open" : "password";
+  const plainAddress = () => { try { return normalizeServerOrigin(address()); } catch { return ""; } };
+
+  /*
+   * The address first, as it is what every way in ends at; under it, a step at a time (ConnectionSteps): what the
+   * look found, then either the ways to find a server (Connect, a QR, this computer, this network) or, once one
+   * answered, its password. The steps trade places in the same room, which eases to the size each needs.
+   */
   return <ConnectionForm onSubmit={submit}>
     <Show when={!props.adding}><Heading kind="connection" mark={<HarnessMark id="conduit" />}>Connect to your server</Heading></Show>
-    {/* One line, and in the dialog only when it says something the title
-        and the fields do not (DESIGN.md: a dialog is the title and the choice). */}
-    <Show when={!props.adding && !verifiedOrigin()}>
-      <Note kind="card">{recordOnly ? "A browser opens another server in a tab of its own."
-        : "HTTPS, unless the server is on this machine or this network."}</Note>
-    </Show>
-
-    {/*
-      * What is on this network, offered before the address field rather than
-      * beside it: a server found is the answer to the question the field asks,
-      * and the field is what is left when there is no answer.
-      *
-      * A browser is told plainly that this needs the app. There is no mDNS in
-      * a page and an HTTPS document cannot reach a plaintext LAN address, so
-      * the alternative is a search that spins forever over something that was
-      * never going to work.
-      */}
-    <Show when={!verifiedOrigin() && ((!recordOnly && canScanQr()) || localServer())}>
-      <ConnectionChoices>
-        <Show when={!recordOnly && canScanQr()}><ConnectionChoice type="button" onClick={() => setScanning(true)} disabled={submitting()} icon={<Icons.QrCode />} detail="conduit-server pair">Scan QR code</ConnectionChoice></Show>
-        <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<Icons.Monitor />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
-      </ConnectionChoices>
-    </Show>
-    <Show when={!verifiedOrigin()}>
-      <Show when={canDiscoverServers()} fallback={props.adding ? null : <Note kind="card">Finding servers on this network needs the Conduit app.</Note>}>
-        <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
-        <Show when={found().length} fallback={<Show when={!searching()}><Note kind="card">Nothing here yet.</Note></Show>}>
-          <ConnectionChoices>
-            <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
-          </ConnectionChoices>
-        </Show>
-      </Show>
-    </Show>
-    <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
     {/* In the Connect card the column is titled Add server: the field needs no label of its own. */}
     {(() => { const field = <ConnectionAddress id="native-server-address" aria-label="Server address" state={check()?.state}
       placeholder={props.adding ? (recordOnly ? "Server address" : "Address or pair link") : recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => typeAddress(event.currentTarget.value)}
       disabled={submitting() || (!props.adding && Boolean(verifiedOrigin()))} />;
-      return props.adding ? field : <ConnectionField label="Server address">{field}</ConnectionField>; })()}
-    {/* What the look found; a server already confirmed (signing in again) is found without one. */}
-    <Show when={check() ?? (verifiedOrigin() ? { state: "found" as const, title: hostOf(verifiedOrigin()!) } : null)} keyed>{(status) =>
-      <ConnectionStatus state={status.state} title={status.title} detail={status.detail} />}</Show>
-    <Show when={verifiedOrigin() && !recordOnly}>
-      <ConnectionPassword reveal={props.adding} value={password()} onInput={(event) => setPassword(event.currentTarget.value)} busy={submitting()} error={error() || null}
-        ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} />
-    </Show>
-    <Show when={error() && !(verifiedOrigin() && !recordOnly)}><Note kind="card" tone="error">{error()}</Note></Show>
-    <Show when={!verifiedOrigin()}>
-      <ConnectionButton type="submit" disabled={submitting() || !address().trim() || check()?.state === "checking"}>
-        {submitting() ? "Pairing…" : "Connect"}
-      </ConnectionButton>
-      {/* A browser on HTTPS cannot look at a plain-HTTP address on this network, though a tab of its own can open it. */}
-      <Show when={recordOnly && check()?.state === "missing" && /^http:/.test((() => { try { return normalizeServerOrigin(address()); } catch { return ""; } })())}>
-        <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><Icons.ExternalLink />Open anyway</ConnectionButton>
+      // One row: the field, a code scanned into it, go. Once a server answered, the password's own arrow is the go.
+      const entry = <ConnectionEntry>{field}
+        <Show when={step() === "find"}>
+          <Show when={!recordOnly && canScanQr()}><ConnectionScan onClick={() => setScanning(true)} disabled={submitting()} /></Show>
+          <ConnectionGo label="Connect" busy={submitting() || check()?.state === "checking"} disabled={!address().trim()} />
+        </Show>
+      </ConnectionEntry>;
+      return props.adding ? entry : <ConnectionField label="Server address">{entry}</ConnectionField>; })()}
+    <ConnectionSteps step={status()?.state ?? ""}>
+      <Show when={status()}>{(found) => <ConnectionStatus state={found().state} title={found().title} detail={found().detail} />}</Show>
+    </ConnectionSteps>
+    <ConnectionSteps step={step()} size={`${found().length} ${searching()} ${localServer()} ${error()}`}>
+      <Show when={step() === "password"}>
+        <ConnectionPassword value={password()} onInput={(event) => setPassword(event.currentTarget.value)} busy={submitting()} error={error() || null}
+          ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus({ preventScroll: true }))} />
       </Show>
-    </Show>
-    <Show when={verifiedOrigin() && recordOnly}>
-      <ConnectionButton type="submit"><Icons.ExternalLink />Open in new tab</ConnectionButton>
-    </Show>
-    <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
-      const previous = activeOrigin();
-      void clearNativeBearerToken().finally(() => {
-        if (previous) forgetServer(previous);
-        setVerifiedOrigin(null);
-        setCheck(null);
-        setAddress("");
-        setPassword("");
-        setError("");
-        look();
-      });
-    }}>Change server</ConnectionButton></Show>
+      <Show when={error() && step() !== "password"}><Note kind="card" tone="error">{error()}</Note></Show>
+      <Show when={step() === "find"}>
+        {/* A browser on HTTPS cannot look at a plain-HTTP address on this network, though a tab of its own can open it. */}
+        <Show when={recordOnly && check()?.state === "missing" && /^http:/.test(plainAddress())}>
+          <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><Icons.ExternalLink />Open anyway</ConnectionButton>
+        </Show>
+        {/*
+          * One list of what can be had without typing: this computer's server, then what is on this network. A
+          * browser, which cannot look (no mDNS in a page, no plaintext LAN address from an HTTPS document), is told
+          * so on the sign-in screen rather than shown a search that never ends.
+          */}
+        <Show when={canDiscoverServers() || localServer()} fallback={props.adding ? null : <Note kind="card">Finding servers on this network needs the Conduit app.</Note>}>
+          <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
+          <Show when={found().length || localServer()} fallback={<Show when={!searching()}><Note kind="card">No servers found.</Note></Show>}>
+            <ConnectionChoices>
+              <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<Icons.Monitor />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
+              <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>
+            </ConnectionChoices>
+          </Show>
+        </Show>
+        <Show when={!props.adding}>
+          <Note kind="card">{recordOnly ? "A browser opens another server in a tab of its own." : "HTTPS, unless the server is on this machine or this network."}</Note>
+        </Show>
+      </Show>
+      <Show when={step() === "open"}>
+        <ConnectionButton type="submit"><Icons.ExternalLink />Open in new tab</ConnectionButton>
+      </Show>
+      <Show when={verifiedOrigin() && !props.adding}><ConnectionButton type="button" variant="ghost" onClick={() => {
+        const previous = activeOrigin();
+        void clearNativeBearerToken().finally(() => {
+          if (previous) forgetServer(previous);
+          setVerifiedOrigin(null);
+          setCheck(null);
+          setAddress("");
+          setPassword("");
+          setError("");
+          look();
+        });
+      }}>Change server</ConnectionButton></Show>
+    </ConnectionSteps>
+    <Show when={scanning()}><QrScanner onLink={(link) => void pair(link)} onClose={() => setScanning(false)} /></Show>
   </ConnectionForm>;
 }
 
