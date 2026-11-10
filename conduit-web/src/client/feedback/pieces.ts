@@ -32,8 +32,10 @@ export const under = (x: number, y: number) => document.elementsFromPoint(x, y).
 
 type Box = { left: number; top: number; width: number; height: number };
 type Edges = { left: number; top: number; right: number; bottom: number };
-/** A drag takes a piece when this much of what shows of it is inside the box, so a drag need not be exact. */
-const MOSTLY = 0.6;
+/** A drag takes a piece when this much of what shows of it is inside the box, so a drag need not be exact (half: a box 6px short of a 36px button on two sides still has it). */
+const MOSTLY = 0.5;
+/** A piece thinner than this (px) is a rule between pieces: a drag across several does not mean it. */
+const HAIRLINE = 4;
 const meet = (a: Edges, b: Edges): Edges => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
 const area = (edges: Edges) => Math.max(0, edges.right - edges.left) * Math.max(0, edges.bottom - edges.top);
 const shown = (element: Element) => element.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false;
@@ -66,7 +68,8 @@ export function piecesWithin(box: Box): Element[] {
     const top = under((inside.left + inside.right) / 2, (inside.top + inside.bottom) / 2);
     return !top || element.contains(top) || top.contains(element);
   };
-  const gathered = walk(document.body, view, drag, (showing) => area(meet(showing, drag)) >= MOSTLY * area(showing), []).filter((element) => uncovered(element, meet(element.getBoundingClientRect(), view)));
+  const solid = (found: Element[]) => { const kept = found.filter((element) => { const bounds = element.getBoundingClientRect(); return Math.min(bounds.width, bounds.height) >= HAIRLINE; }); return kept.length ? kept : found; };
+  const gathered = solid(walk(document.body, view, drag, (showing) => area(meet(showing, drag)) >= MOSTLY * area(showing), []).filter((element) => uncovered(element, meet(element.getBoundingClientRect(), view))));
   if (!gathered.length) {
     // A drag inside a piece: outward from the piece at its middle to the first that holds most of the box.
     let holder = pieceRoot(under((drag.left + drag.right) / 2, (drag.top + drag.bottom) / 2));
@@ -78,7 +81,7 @@ export function piecesWithin(box: Box): Element[] {
   let around = pieceRoot(gathered[0]!.parentElement);
   while (around && !gathered.every((element) => around!.contains(element))) around = pieceRoot(around.parentElement);
   if (!around) return gathered;
-  const all = walk(around, view, view, () => true, []);
+  const all = solid(walk(around, view, view, () => true, []));
   return all.length === gathered.length && all.every((element) => gathered.includes(element)) ? [around] : gathered;
 }
 
