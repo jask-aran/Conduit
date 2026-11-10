@@ -261,8 +261,10 @@
 /* What a surface gives its controls: --tint, its washes and lines; --well, the fill under an input or outline button
    (none over frost, its own fill); --field, a tool field's fill (a search LeadInput), never frost on frost;
    `initial` lets a ground inside frost take its tint again. */
-:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); --field: initial; }
-[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; --field: transparent; }
+/* --weight-action: a ghost button's words. On the ground its wash and place make it a button, so it is strong; over
+   frost, where it has no fill at rest, strong words read as headings, so it is the lifted weight. */
+:root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); --field: initial; --weight-action: var(--weight-strong); }
+[data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; --field: transparent; --weight-action: var(--weight-lift); }
 
 /* A scroller's native bar: the standard properties win over WebKit's painting when not auto, so Firefox keeps a thin
    bar and Chrome/Safari the shared thumb each piece draws. */

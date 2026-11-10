@@ -62,7 +62,7 @@ import { Button, Input, TextArea, Spinner, Segmented, Slider, Switch } from "@/c
 import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { Dialog, OverlayDialog } from "@/components/ui/dialog";
-import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
+import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
 import { COMPOSER_KINDS, composerKind, saveComposerKind } from "../platform/native-composer";
@@ -1816,23 +1816,28 @@ export function Settings(props: {
                 title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
                 <Show when={authAttempt()}>{(current) => <>
                   <Show when={current().deviceCode}>{(device) => <>
-                    <SettingLine plain label="1 · Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
-                      <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingLine>
-                    <SettingLine plain label="2 · Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingLine>
+                    <SettingStep step={1} label="Copy this code"><SettingValue mono>{device().userCode}</SettingValue>
+                      <Button variant="ghost" size="icon-sm" aria-label="Copy the code" title="Copy" onClick={() => void navigator.clipboard.writeText(device().userCode).catch(() => {})}><Icons.Copy /></Button></SettingStep>
+                    <SettingStep step={2} label="Enter it on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(device().verificationUri, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open page</Button></SettingStep>
                     <Note tone="quiet">This finishes by itself once the provider accepts the code.</Note>
                   </>}</Show>
                   <Show when={!current().deviceCode && current().authUrl}>
-                    <SettingLine plain label="1 · Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingLine>
+                    <SettingStep step={1} label="Sign in on the provider's page"><Button variant="secondary" size="sm" onClick={() => window.open(current().authUrl!, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open sign-in</Button></SettingStep>
                     <Show when={current().prompt && current().prompt!.type !== "select"}>
                       <Note tone="quiet">On the hub's own machine this finishes by itself. Anywhere else the last page will not load: that is expected. Copy its address (it starts with http://localhost) and paste it below.</Note>
                     </Show>
                   </Show>
                   <Show when={current().prompt?.type === "select"}><SettingLine plain label={current().prompt!.message}><For each={current().prompt!.options || []}>{(option) => <Button variant="secondary" size="sm" disabled={authLoading()} onClick={() => void answerAuthPrompt(option.id)}>{option.label}</Button>}</For></SettingLine></Show>
                   <Show when={current().prompt && current().prompt!.type !== "select"}>
-                    <SettingLine label={current().authUrl ? "2 · Paste the address" : current().prompt!.message}>
+                    <Show when={current().authUrl} fallback={<SettingLine label={current().prompt!.message}>
                       <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
                       <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
-                    </SettingLine>
+                    </SettingLine>}>
+                      <SettingStep field step={2} label="Paste the address">
+                      <Input id="pi-auth-response" aria-label={current().prompt!.message} type="text" autocomplete="off" value={authResponse()} onInput={(event) => setAuthResponse(event.currentTarget.value)} placeholder={current().prompt!.placeholder || ""} onKeyDown={(event) => { if (event.key === "Enter" && authResponse().trim()) void answerAuthPrompt(authResponse()); }} />
+                      <Button variant="ghost" size="icon-sm" aria-label="Paste" title="Paste" onClick={() => void navigator.clipboard.readText().then((text) => setAuthResponse(text.trim())).catch(() => {})}><Icons.Paste /></Button>
+                      </SettingStep>
+                    </Show>
                     <SettingLine plain label=""><Button size="sm" disabled={authLoading() || !authResponse().trim()} onClick={() => void answerAuthPrompt(authResponse())}>Continue</Button></SettingLine>
                   </Show>
                   <Show when={current().error}><Note tone="error">{current().error}</Note></Show>

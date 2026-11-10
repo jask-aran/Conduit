@@ -219,6 +219,10 @@ export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; pl
   };
   return <Row element={props.plain ? "div" : "label"} density="line" bare haptic={false} class="ui-setting-line" title={props.title} onClick={props.plain ? undefined : guard}>{inner()}</Row>;
 };
+/** A step of something done in order (a sign-in: open the page, paste what it ends on): its number, what to do, and
+ *  the control that does it. Steps are lines of one Dialog or Group, numbered by the caller. */
+export const SettingStep = (props: { step: number; label: JSX.Element; state?: JSX.Element; title?: string; field?: boolean; children?: JSX.Element }) =>
+  <SettingLine plain={!props.field} label={<><span class="ui-setting-step">{props.step}</span>{props.label}</>} state={props.state} title={props.title}>{props.children}</SettingLine>;
 /** A credential: its name and state, then the caller's actions, Add or Replace, and Remove. Add or Replace opens the
  *  secret's field with Save and Cancel (Esc), fields (an account ID) a line each under it; a throwing onSave keeps it open
  *  beside what was typed. editable false: held elsewhere (the server's environment). */

@@ -229,11 +229,11 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* Settings search: the rail's field under its title, and the line a result led to, marked for a moment. */
 .ui-overlay-rail > .ui-lead-input { flex: none; margin-bottom: var(--space-sm); }
 .ui-setting-line[data-found] { border-radius: var(--radius-control); background: var(--tint); transition: background var(--duration-gentle) var(--ease-arrive); }
-/* A line's acting button is quieter than a title (the lifted weight, not the strong one): with no wash at rest, a
-   column of strong buttons read as headings. A value read at the line's end is inset as a button's words are, so
-   the column's words end on one edge. */
-:is(.ui-setting-control, .ui-actions:where([data-actions="setting"])) > .ui-button:where([data-variant="ghost"]) { font-weight: var(--weight-lift); }
+/* A value read at the line's end is inset as a button's words are, so the control column's words end on one edge.
+   (A ghost button's weight is the surface's: --weight-action, foundations.css.) */
 .ui-setting-control > .ui-setting-value:last-child { padding-inline-end: var(--space-lg); }
+/* A step's number, before its name: data, muted, a fixed width so the names line up. */
+.ui-setting-step { display: inline-block; min-width: var(--space-2xl); flex: none; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
 /* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
 .ui-setting-line > span:first-child[data-mono] { display: block; min-width: 0; flex-basis: var(--measure-2xs); text-overflow: ellipsis; }
 .ui-setting-line > span:first-child[data-mono] > small { display: inline; width: auto; }
