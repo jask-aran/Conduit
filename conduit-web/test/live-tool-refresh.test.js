@@ -33,6 +33,7 @@ async function fixture(t) {
   runtime.extensions = new Map();
   runtime.install = (extension) => { registry.install(extension); runtime.extensions.set(extension.name, extension); };
   runtime.install(defineExtension({ name: "conduit", tools: [tool("read"), tool("ask_user"), tool("codemode")] }));
+  runtime.install(defineExtension({ name: "conduit-mcp", tools: [] }));
   runtime.install(defineExtension({ name: "device-tools", tools: [] }));
   runtime.install(defineExtension({ name: "browser", tools: [] }));
   runtime.install(Subagents(runtime));
@@ -120,7 +121,7 @@ test("Executor readiness is bounded, and routine gathering records a missing con
   assert.equal(outcome.run, false);
 });
 
-test("GET /v0/agent exposes connector status and the existing attention notice contract", async (t) => {
+test("GET /v0/agent raises the attention notice while Executor is down", async (t) => {
   const { agent } = await agentFixture(t);
   agent.view = async () => ({ enabled: true, home: null, sides: [], asks: [] });
   agent.runtime.harness = await agent.runtime.open();
@@ -131,7 +132,6 @@ test("GET /v0/agent exposes connector status and the existing attention notice c
     Object.assign(agent.connectors, { bootAt: 0 }).entry("executor").status = status; // down past the settle window
     let view;
     await routes.get("get /v0/agent")({}, { json: (value) => { view = value; } }, (error) => { throw error; });
-    assert.equal(view.connectors[0].status, status);
     assert.equal(view.attention.needsYou.notices.some((item) => item.text === "Executor isn't connected"), status !== "on");
   }
 });

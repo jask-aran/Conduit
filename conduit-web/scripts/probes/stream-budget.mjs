@@ -10,7 +10,7 @@
  *
  * The default model is Muse Spark on the Assistant profile -- real streaming,
  * ad hoc, never a fixture. MODEL=<spec> uses the test-stream profile instead.
- * Env: RENDERERS=marked,incremark,incremark-fade  PROMPT=...  MATHFADE=1  SHOT=1
+ * Env: RENDERERS=incremark,incremark-fade  PROMPT=...  MATHFADE=1  SHOT=1
  *
  *   node scripts/probes/stream-budget.mjs --windows
  */
@@ -20,7 +20,7 @@ const { page: p, cdp, close } = await open();
 const api = (url, method, body) => p.evaluate(async ([url, method, body]) => { const r = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => null) }; }, [url, method, body]);
 await p.goto(origin); await p.evaluate(async () => { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for (const k of await caches.keys()) await caches.delete(k); });  await p.reload();
 const PROMPT = process.env.PROMPT || "Explain how TCP congestion control works in about 450 words: a short intro paragraph, a bulleted list with **bold** terms, a small markdown table comparing Reno and CUBIC, and an inline formula such as $cwnd = cwnd + 1/cwnd$. No code blocks, no headings.";
-for (const renderer of (process.env.RENDERERS || "marked,incremark,incremark-fade").split(",")) {
+for (const renderer of (process.env.RENDERERS || "incremark,incremark-fade").split(",")) {
   const muse = !process.env.MODEL; const c = await api("/v0/chats", "POST", { projectId: "test", profileId: muse ? "assistant" : "test-stream" }); const id = c.json?.id ?? c.json?.chat?.id;
   await api(`/v0/chats/${id}/models`, "PATCH", muse ? { model: "openrouter/meta/muse-spark-1.3-contributor", thinkingLevel: "minimal" } : { model: process.env.MODEL });
   await p.evaluate((v) => v ? localStorage.setItem("conduit:stream-math-fade", v) : localStorage.removeItem("conduit:stream-math-fade"), process.env.MATHFADE || ""); await p.goto(`${origin}/chat/${id}?incremarkPacing=${renderer === "incremark-fade" ? "fade" : "buffered"}`); await p.waitForTimeout(3000);

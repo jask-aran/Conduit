@@ -520,7 +520,6 @@ export class PersistentAgent {
       enabled: true,
       settings,
       projectId: this.project.id,
-      folder: this.folder,
       home: state.home,
       sides: this.registry.list({ includeHidden: true })
         .filter((chat) => chat.backend?.agentThread === "side" && chat.projectId === this.project.id)

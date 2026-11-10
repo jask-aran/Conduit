@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { acceptSeedTemplate, seedTemplateUpdate, listRoutines, parseRoutine, readFolderFile, renderVars, splitFrontMatter, writeRoutine, writeFolderFile } from "../agent/routine-files.js";
-import { block, promptVars, routineContext } from "../agent/routines.js";
+import { block, promptVars } from "../agent/routines.js";
 import { render as renderMemory } from "../agent/memory.js";
 import { renderWaitingInbox } from "../agent/inbox.js";
 import { readPolicy, renderRules } from "../agent/approval-policy.js";
@@ -378,22 +378,4 @@ export class ContextStore {
   }
   async assemble(id, options = {}) { return (await this.textSections(id, options)).sections.map((item) => item.text).join("\n\n"); }
   async approvalInstructions() { return this.assemble("service:approval"); }
-  async preview(id) {
-    const agent = this.agent();
-    const [vars, catalog] = await Promise.all([
-      agent && (id === "agent" || id.startsWith("run:")) ? promptVars(agent) : null,
-      this.catalog(),
-    ]);
-    const { doc, sections } = await this.textSections(id, { vars, catalog });
-    for (const [part, ids] of [["system", doc.live], ["first", doc.first], ["notice", doc.notices]]) for (const blockId of ids) {
-      if (blockId === "live-skills") continue; // Already placed in the system instructions.
-      const routine = blockId === "live-routine-context" ? catalog.get(`routine-${doc.role.id}`)?.routine : null;
-      const item = catalog.get(blockId);
-      if (item?.kind === "notice") { const sample = { ...(vars || {}), now: vars?.now || new Date().toLocaleString(), task: "The task", reason: "The person asked for this run", event: "An event", routine: { title: "Routine", name: "routine" }, report: "The report", title: "Run", ask: { title: "Approval", id: "a-1" }, assistant: { name: "jbot" }, message: "Message", changes: "the person is now Sam" }; sections.push({ blockId, label: item.label, kind: "notice", part, text: renderVars(await this.content(item), sample) }); continue; }
-      if (item?.kind === "text") { sections.push({ blockId, label: item.label, kind: "text", part, placed: true, text: (await this.content(item)).trim() }); continue; }
-      const text = routine && agent?.folder ? await routineContext(agent, routine) : await this.previewLive(blockId);
-      sections.push({ blockId, label: live[blockId].label, kind: "live", part, text });
-    }
-    return { sections, chars: sections.reduce((sum, section) => sum + section.text.length, 0) };
-  }
 }

@@ -531,7 +531,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   app.get("/v0/agent", async (request, response) => {
     const state = agent.enabled() ? await agent.state() : null;
     const view = await agent.view(state);
-    response.json({ ...view, connectors: agent.connectors.list(), ...(view.enabled ? { attention: await attention(view, state) } : {}) });
+    response.json({ ...view, ...(view.enabled ? { attention: await attention(view, state) } : {}) });
   });
 
   app.post("/v0/agent", async (request, response) => {

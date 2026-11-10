@@ -80,8 +80,6 @@ test("all shipped documents preserve the old prompt bytes and skill order", asyn
       if (doc.live.includes("live-codemode-tools")) assert.equal(doc.live[doc.live.indexOf("live-codemode-tools") + 1], "live-connector-instructions");
     }
   }
-  const preview = await store.preview("profile:assistant");
-  assert.equal(preview.sections.filter((section) => section.blockId === "live-skills").length, 1);
   assert.ok(!(await store.assemble("subagent")).includes("**routines**"));
   const available = await store.skillsAvailable();
   assert.equal(available.find((skill) => skill.name === "executor").load, "auto");
