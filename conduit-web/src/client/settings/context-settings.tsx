@@ -4,7 +4,7 @@ import { Select } from "@/components/ui/menus";
 import { Button, Input, Segmented } from "@/components/ui/controls";
 import * as Icons from "@/components/ui/icons";
 import { ChainBreak, ChainGap, ChainLink, ChainMap } from "@/components/ui/network";
-import { Workbench, WorkbenchFact, WorkbenchPair, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { Workbench, WorkbenchFact, WorkbenchPair, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { StatusText } from "@/components/ui/file";
 import { Group } from "@/components/ui/group";
 import { Loading, Note } from "@/components/ui/state";
@@ -243,9 +243,10 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   </Show>;
 }
 
-/** Settings › Blocks: a workbench on one block -- its name the page's title (choosing another), its text in an editor
- *  pane filling the height (save, reset, delete in the pane's bar; tokens and where it comes from in its foot), and
- *  beside it the documents it is in (each opening in Prompts) and the slots it can use. */
+/** Settings › Blocks: a workbench on one block -- every block in the side column by where it comes from (a click
+ *  chooses one), the chosen one's name the page's title, its text in an editor pane filling the height (save, reset,
+ *  delete in the pane's bar; tokens and where it comes from in its foot), and under the list the documents it is in
+ *  (each opening in Prompts) and the slots it can use. */
 export function BlocksSettings(props: { context: ContextData; blockId: string; onBlock: (id: string) => void; onOpenDocument: (id: string) => void }) {
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [draft, setDraft] = createSignal("");
@@ -290,11 +291,11 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   });
   const remove = () => run(async () => { await api(`/v0/context/blocks/${encodeURIComponent(current()!.id)}`, { method: "DELETE" }); props.onBlock(""); });
   const groups = (): { title: string; items: BlockSummary[] }[] => [
-    { title: "yours", items: blocks().filter((block) => block.source === "custom") },
-    { title: "shipped", items: blocks().filter((block) => block.source === "shipped" && block.kind === "text") },
-    { title: "jbot's file", items: blocks().filter((block) => block.source === "jbot") },
-    { title: "filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
-    { title: "notice", items: blocks().filter((block) => block.kind === "notice") },
+    { title: "Yours", items: blocks().filter((block) => block.source === "custom") },
+    { title: "Shipped", items: blocks().filter((block) => block.source === "shipped" && block.kind === "text") },
+    { title: "jbot's files", items: blocks().filter((block) => block.source === "jbot") },
+    { title: "Filled in by Conduit", items: blocks().filter((block) => block.kind === "live") },
+    { title: "Notices", items: blocks().filter((block) => block.kind === "notice") },
   ].filter((group) => group.items.length);
   const documentLabel = (id: string) => props.context.document(id)?.role.label ?? id;
   // The slots a block can use: a notice declares its own; a jbot or run block gets the fixed slots (the current time
@@ -330,13 +331,16 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
       </>} />; }}</Show>;
   return <Show when={props.context.data()} fallback={<Show when={props.context.error()} fallback={<Loading>Loading blocks…</Loading>}><Note tone="error">{props.context.error()}</Note></Show>}>
     <Show when={current()}>{(block) => <Workbench label="Blocks">
-      <WorkbenchTitle meta={`${block().kind === "live" || block().kind === "notice" ? block().description ?? SOURCE.conduit : SOURCE[block().source]}${block().modified ? " · changed" : ""}`}
-        title={<Select look="title" id="context-block" search="Search blocks" aria-label="Block" title="Choose a block" value={block().id} onChange={(event) => props.onBlock(event.currentTarget.value)}>
-          <For each={groups()}>{(group) => <For each={group.items}>{(item) => <option value={item.id}>{item.label}</option>}</For>}</For>
-        </Select>}
+      <WorkbenchTitle title={block().label} meta={[block().kind === "live" || block().kind === "notice" ? block().description : "", block().modified ? "changed" : ""].filter(Boolean).join(" · ") || undefined}
         actions={<Button variant="ghost" size="icon-sm" aria-label="New block" title="New block" disabled={state() === "saving"} onClick={() => void create()}><Icons.Add /></Button>} />
       <Show when={failure()}><Note tone="error">{failure()}</Note></Show>
-      <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={block().label} opens="Text" main={<Main />} side={<>
+      <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={block().label} main={<Main />}
+        side={<For each={groups()}>{(group) => <Group kind="workbench" title={group.title}>
+          <For each={group.items}>{(item) => <WorkbenchPick name={item.label} title={item.description} current={item.id === block().id}
+            context={[tokens(item.chars), item.modified ? "changed" : "", item.kind === "live" || item.usedBy.length ? "" : "unused"].filter(Boolean).join(" · ")}
+            onSelect={() => { props.onBlock(item.id); setEditing(true); }} />}</For>
+        </Group>}</For>}
+        facts={<>
         <Show when={block().source === "custom"}>
           <Group kind="workbench" title="Name"><Input aria-label="Block name" value={label()} onInput={(event) => { setLabel(event.currentTarget.value); setState("idle"); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /></Group>
         </Show>

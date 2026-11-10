@@ -182,8 +182,8 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
           <Group kind="workbench" title="Installed"><For each={list().filter((skill) => skill.origin === "installed")}>{pick}</For></Group>
         </Show>
         <Group kind="workbench" title="Shipped"><For each={list().filter((skill) => skill.origin === "shipped")}>{pick}</For></Group>
-        <Show when={opened()}>{(skill) => <Facts skill={skill()} />}</Show>
       </>}
+      facts={<Show when={opened()}>{(skill) => <Facts skill={skill()} />}</Show>}
       main={<Show when={opened()} fallback={<Note kind="workbench">No skills yet: find one on skills.sh with the + above.</Note>}>{(skill) => <Text skill={skill()} />}</Show>} />
   </Workbench>}</Show>;
 }

@@ -39,6 +39,12 @@
 .ui-workbench-pick { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-workbench-pick > .ui-row { min-width: 0; flex: 1; }
 .ui-workbench-pick > :not(.ui-row) { flex: none; }
+/* A side column in two parts (WorkbenchSplit facts): the picks give way and scroll, the chosen one's facts under them. */
+.ui-workbench-side-parts { overflow: hidden; }
+.ui-workbench-picks, .ui-workbench-facts { display: flex; min-height: 0; flex-direction: column; gap: var(--space-lg); overflow: auto; scrollbar-width: none; }
+.ui-workbench-picks { min-height: var(--measure-xs); flex: 0 1 auto; }
+.ui-workbench-facts { max-height: 50%; flex: none; border-top: var(--hairline) solid var(--tint); padding-top: var(--space-md); }
+@media (--conduit-phone-layout) { .ui-workbench-side-parts, .ui-workbench-picks, .ui-workbench-facts { max-height: none; overflow: visible; } }
 /* WorkbenchPair: the main pane's own two columns, a list as wide as its names and the chosen one's pane taking the rest. */
 .ui-workbench-pair { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-lg); }
 .ui-workbench-pair-list { display: flex; min-width: var(--measure-xs); flex: 0 1 var(--measure-sm); flex-direction: column; gap: var(--space-sm); overflow: auto; scrollbar-width: none; }
