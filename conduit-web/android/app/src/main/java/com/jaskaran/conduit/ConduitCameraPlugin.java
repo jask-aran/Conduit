@@ -58,7 +58,7 @@ public class ConduitCameraPlugin extends Plugin {
     private PluginCall pending;
     private ProcessCameraProvider provider;
     private ImageCapture capture;
-    private boolean front, leaving;
+    private boolean front, leaving, taking;
     private View flash;
     private OnBackPressedCallback back;
     private org.json.JSONArray pressSteps;
@@ -82,7 +82,7 @@ public class ConduitCameraPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             if (card != null) { call.reject("The camera is already open"); return; }
             pending = call;
-            leaving = false;
+            leaving = taking = false;
             front = false;
             JSObject press = call.getObject("press");
             pressSteps = press == null ? null : press.optJSONArray("steps");
@@ -213,7 +213,9 @@ public class ConduitCameraPlugin extends Plugin {
     }
 
     private void take() {
-        if (capture == null || leaving) return;
+        // One picture a card: a second tap would start another, whose clearing of the folder can take the first's file.
+        if (capture == null || leaving || taking) return;
+        taking = true;
         ConduitHapticsPlugin.play(getContext(), pressSteps, pressWeight, card);
         flash.setAlpha(.7f);
         flash.animate().alpha(0).setDuration(250).start();

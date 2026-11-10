@@ -2,6 +2,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { api } from "../api/client.ts";
 import type { PersonBrowserEnvironment, PersonBrowsersPayload } from "../api/contracts";
 import { Button } from "@/components/ui/controls";
+import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
 import * as Icons from "@/components/ui/icons";
 import { StatusDot } from "@/components/ui/nav";
 import { LiveNote, SettingLine, SettingLink, SettingValue } from "@/components/ui/overlay";
@@ -39,7 +40,7 @@ export function PersonBrowsersSettings(props: {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The browsers could not be read."); }
   };
   onMount(() => void read());
-  onCleanup(() => { disposed = true; window.clearTimeout(timer); });
+  onCleanup(() => { disposed = true; window.clearTimeout(timer); window.clearTimeout(copiedTimer); });
   const act = async (work: () => Promise<unknown>, fallback: string) => {
     setBusy(true); setError(""); setSaid("");
     try { await work(); await read(); } catch (cause) { setError(cause instanceof Error ? cause.message : fallback); } finally { setBusy(false); }
@@ -47,7 +48,12 @@ export function PersonBrowsersSettings(props: {
   const pair = (environment: PersonBrowserEnvironment) => act(() => api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/pair`, { method: "POST" }), "No pairing code was given.");
   const unpair = (environment: PersonBrowserEnvironment, browser: string) => act(() =>
     api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/browsers/${encodeURIComponent(browser)}`, { method: "DELETE" }), "The browser was not unpaired.");
-  const copy = async (code: string) => { try { await navigator.clipboard.writeText(code); setCopied(code); } catch { setCopied(""); } };
+  // Which code was just copied, for as long as any copy says so: it used to say so until the next one.
+  let copiedTimer = 0;
+  const copy = async (code: string) => {
+    window.clearTimeout(copiedTimer);
+    try { await navigator.clipboard.writeText(code); setCopied(code); copiedTimer = window.setTimeout(() => setCopied(""), COPY_FEEDBACK_MS); } catch { setCopied(""); }
+  };
 
   return <Group title={props.device === undefined ? "Your browsers" : "Your browser"}>
     <Note>Agents can work in your signed-in browser on a device. Each thread asks first.</Note>

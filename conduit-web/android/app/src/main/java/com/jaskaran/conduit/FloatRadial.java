@@ -453,6 +453,12 @@ final class FloatRadial {
         closing = false;
         shown = 0;
         chosen = pressed = null;
+        // A touch still down on the handle goes with it: its lift will not come here, so a hold it began is ended
+        // now (cancelled), where it used to stay open until the pill's Send.
+        main.removeCallbacks(holdStart);
+        boolean held = handleHeld;
+        handleDown = handleHeld = shrinkPending = false;
+        if (held) listener.handleReleased(true);
         if (dialog.isShowing()) dialog.dismiss();
         dismissRows();
         surface.setVisibility(View.VISIBLE);
@@ -460,7 +466,7 @@ final class FloatRadial {
         setBackdrop(null);
     }
 
-    void destroy() { hideNow(); }
+    void destroy() { handleHeld = false; hideNow(); }
 
     private void cancelMotion() {
         if (motion != null) { motion.cancel(); motion = null; }
