@@ -17,6 +17,7 @@ import { directAvailable, workspaceFileJson, workspaceFileResponse } from "./dir
 import type { WorkspaceEditorHandle } from "./workspace-editor";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
+import { createLatest } from "../state/latest";
 
 let workspaceEditorPromise: Promise<typeof import("./workspace-editor")> | undefined;
 export const preloadWorkspaceEditor = () => {
@@ -200,7 +201,7 @@ export default function WorkspaceFileSlot(props: {
 
   let controller: AbortController | null = null;
   let editor: WorkspaceEditorHandle | undefined;
-  let loadToken = 0;
+  const loadToken = createLatest();
   const releaseAsset = () => {
     const current = asset();
     if (current?.url.startsWith("blob:")) URL.revokeObjectURL(current.url);
@@ -297,13 +298,13 @@ export default function WorkspaceFileSlot(props: {
     const path = props.path;
     const projectId = props.projectId;
     controller?.abort();
-    const token = ++loadToken;
+    const latest = loadToken.next();
     if (!path) {
       clear();
       return;
     }
     controller = new AbortController();
-    const owns = () => token === loadToken && props.path === path && props.projectId === projectId;
+    const owns = () => latest() && props.path === path && props.projectId === projectId;
     if (fallbackKind(path) === "text") void loadWorkspaceEditor().catch(() => undefined);
     // A matching path in another project is a different document. The editor
     // keeps the one it leaves (unsaved edits included) under its own project.
@@ -394,7 +395,7 @@ export default function WorkspaceFileSlot(props: {
     const submittedEditor = editor;
     const submittedContent = content ?? submittedEditor?.getValue() ?? file.content;
     // A read started before this write must not replace its content or revision.
-    loadToken += 1;
+    loadToken.drop();
     setSaving(true);
     try {
       const written = await api<FileWriteResult>(

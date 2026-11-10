@@ -18,6 +18,7 @@ import { DashDay, GroupAction, GroupSwitches } from "@/components/ui/dashboard";
 import { CardPreview, CardRead } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
+import { createLatest } from "../state/latest";
 import { notifyModelFallback } from "../state/model-settings";
 import type { RuntimeStore } from "../state/runtime";
 import { timestampOf } from "./outside-threads";
@@ -106,21 +107,21 @@ export function HarnessDashboard(props: {
 
   // Every folder's threads once, for the Folders list; the folder in scope's
   // own as well, since the machine-wide list stops at the newest threads.
-  let loadRequest = 0;
+  const loadRequest = createLatest();
   const load = async () => {
-    const request = ++loadRequest;
+    const current = loadRequest.next();
     if (!discovers()) { setGroups([]); setKnown([]); setLoading(false); return; }
     setLoading(true); setError("");
     const target = scope();
     const discover = (path?: string | null) => api<HarnessThreadDiscovery>(`/v0/harnesses/${encodeURIComponent(props.harnessId)}/threads${path ? `?path=${encodeURIComponent(path)}` : ""}`);
     try {
       const [everywhere, here] = await Promise.all([discover(), target ? discover(target) : null]);
-      if (request !== loadRequest) return;
+      if (!current()) return;
       setKnown(everywhere.groups);
       setGroups((here || everywhere).groups);
       setTruncated((here || everywhere).truncated);
-    } catch (cause) { if (request === loadRequest) setError(cause instanceof Error ? cause.message : "Threads could not be loaded"); }
-    finally { if (request === loadRequest) setLoading(false); }
+    } catch (cause) { if (current()) setError(cause instanceof Error ? cause.message : "Threads could not be loaded"); }
+    finally { if (current()) setLoading(false); }
   };
   createEffect(() => { harness(); scope(); setLimit(CHAT_PAGE); void load(); });
 
@@ -170,13 +171,13 @@ export function HarnessDashboard(props: {
 
   // The harness keeps the catalogue; the dashboard holds the choice until the
   // first message starts a thread with it.
-  let catalogRequest = 0;
+  const catalogRequest = createLatest();
   const loadModels = async (cwd: string) => {
-    const request = ++catalogRequest;
+    const current = catalogRequest.next();
     setCatalogLoading(true); setCatalogModels([]); setCatalogModel(""); setCatalogEffort(""); setCatalogNotice("");
     try {
       const state = await api<ModelState>(`/v0/harnesses/${encodeURIComponent(props.harnessId)}/models?path=${encodeURIComponent(cwd)}`);
-      if (request !== catalogRequest) return;
+      if (!current()) return;
       setCatalogModels(state.models);
       setCatalogModel(state.model || state.models[0]?.spec || "");
       setCatalogEffort(state.thinkingLevel || state.defaultThinkingLevel || "");
@@ -184,23 +185,23 @@ export function HarnessDashboard(props: {
       // stand-in either way; it does not do it quietly.
       if (state.modelFallback?.from && state.modelFallback.to) notifyModelFallback(state.modelFallback);
     } catch (cause) {
-      if (request === catalogRequest) setCatalogNotice(cause instanceof Error ? cause.message : "Models could not be loaded");
+      if (current()) setCatalogNotice(cause instanceof Error ? cause.message : "Models could not be loaded");
     } finally {
-      if (request === catalogRequest) setCatalogLoading(false);
+      if (current()) setCatalogLoading(false);
     }
   };
-  let permissionRequest = 0;
+  const permissionRequest = createLatest();
   const loadPermissionModes = async (cwd: string) => {
-    const request = ++permissionRequest;
+    const current = permissionRequest.next();
     setPermissionModes([]); setPermissionMode("");
     try {
       const state = await api<PermissionModeState>(`/v0/harnesses/${encodeURIComponent(props.harnessId)}/permission-modes?path=${encodeURIComponent(cwd)}`);
-      if (request !== permissionRequest) return;
+      if (!current()) return;
       setPermissionModes(state.modes);
       setPermissionMode(state.selected || state.modes[0]?.id || "");
     } catch {
       // A harness that cannot say costs the selector, not the launch.
-      if (request === permissionRequest) setPermissionModes([]);
+      if (current()) setPermissionModes([]);
     }
   };
   createEffect(() => {

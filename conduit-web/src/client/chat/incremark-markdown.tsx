@@ -1,4 +1,4 @@
-import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { createFlash } from "@/components/ui/motion";
 import { CodeBlock } from "@/components/ui/code";
 import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import { createComputed, createEffect, createMemo, createSelector, createRenderEffect, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
@@ -739,7 +739,7 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   // Expanding by hand is a decision about this block, so it outlives later
   // preference changes and any re-evaluation of the collapse default.
   const [userExpanded, setUserExpanded] = createSignal(false);
-  const [copied, setCopied] = createSignal(false);
+  const { on: copied, flash: flashCopied } = createFlash();
   const lines = createMemo(() => countCodeLines(props.text()));
   let code = document.createElement("code");
   const [element, setElement] = createSignal(code);
@@ -776,8 +776,7 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
   const copy = async () => {
     if (!navigator.clipboard) return;
     try { await navigator.clipboard.writeText(props.text()); } catch { return; }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+    flashCopied();
   };
   // The lines are morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the
   // highlighting, and so a growing block keeps its finished lines: rewritten, every line of a long fence was built

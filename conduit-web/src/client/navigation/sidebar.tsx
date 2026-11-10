@@ -1,4 +1,4 @@
-import { reducedMotion } from "@/components/ui/motion";
+import { reducedMotion, whenMotionEnds } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { AgentAvatar, HarnessMark, PaneMark, ThreadHarnessMark } from "@/components/ui";
 import { Icons } from "@/components/ui";
@@ -216,7 +216,7 @@ export function Sidebar(props: {
   let sidebarMotionId = 0;
   let sidebarEdgeMotionId: number | null = null;
   let sidebarEdgeRaf = 0;
-  let finishSidebarMotion: (() => void) | null = null;
+  let stopSidebarMotionWait: (() => void) | null = null;
   let publishingSidebarPreference = false;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
@@ -224,9 +224,8 @@ export function Sidebar(props: {
   // (~1200 elements), which cost the slide its first frames on a phone. drawerSettled is the drawer's state at rest: it
   // stays inert while opening until it has landed (then takes touches and focus), and live while shutting until off screen.
   const [drawerSettled, setDrawerSettled] = createSignal(false);
-  let settleTimer = 0;
+  let stopDrawerWait = () => {};
   const settleDrawer = () => {
-    window.clearTimeout(settleTimer);
     const open = props.mobileOpen;
     if (drawerSettled() === open) return;
     setDrawerSettled(open);
@@ -264,7 +263,8 @@ export function Sidebar(props: {
     }
     const id = sidebarEdgeMotionId;
     sidebarEdgeMotionId = null;
-    finishSidebarMotion = null;
+    stopSidebarMotionWait?.();
+    stopSidebarMotionWait = null;
     setInstant(false);
     if (id != null) dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: paneWidth() });
   };
@@ -323,21 +323,23 @@ export function Sidebar(props: {
       });
       sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
     };
-    finishSidebarMotion = () => {
+    // Its width transition's end, or the token's time if it never runs (a width that does not change).
+    stopSidebarMotionWait = whenMotionEnds(sidebarRoot, "width", "--duration-quick", () => {
       if (sidebarEdgeMotionId !== id) return;
       if (sidebarEdgeRaf) cancelAnimationFrame(sidebarEdgeRaf);
       const finalWidth = paneWidth();
       dispatchPanelGeometryMotion({ phase: "change", id, source: "sidebar", size: finalWidth });
       sidebarEdgeRaf = 0;
       sidebarEdgeMotionId = null;
-      finishSidebarMotion = null;
+      stopSidebarMotionWait = null;
       setVisualCollapsed(nextCollapsed);
       dispatchPanelGeometryMotion({ phase: "end", id, source: "sidebar", size: finalWidth });
-    };
+    });
     sidebarEdgeRaf = requestAnimationFrame(sampleEdge);
   };
   onCleanup(() => {
     cancelSidebarEdgeMotion();
+    stopDrawerWait();
   });
   onMount(() => {
     const syncPreferences = (event: Event) => {
@@ -520,9 +522,10 @@ export function Sidebar(props: {
   createEffect(() => {
     const open = props.mobileOpen;
     if (open !== mobileWasOpen) {
-      window.clearTimeout(settleTimer);
-      // The drawer's transitionend settles it; this catches reduced motion and an interrupted slide.
-      settleTimer = window.setTimeout(settleDrawer, 400);
+      stopDrawerWait();
+      // The drawer has landed when its body has (the pane itself only steps off screen once shut); the wait's own
+      // timer catches reduced motion and an interrupted slide.
+      stopDrawerWait = whenMotionEnds(sidebarRoot?.firstElementChild, "transform", "--duration-gentle", settleDrawer);
     }
     if (open && !mobileWasOpen) {
       warmed = new Set();
@@ -1169,12 +1172,6 @@ export function Sidebar(props: {
       data-state={phoneLayout() ? "expanded" : collapsed() ? "collapsed" : "expanded"}
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
       aria-hidden={phoneLayout() && !drawerSettled() ? true : undefined} inert={phoneLayout() && !drawerSettled() ? true : undefined}
-      onTransitionEnd={(event) => {
-        // The drawer has landed when its body has (the pane itself only steps off screen once shut).
-        if (event.target === sidebarRoot?.firstElementChild && event.propertyName === "transform") settleDrawer();
-        if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.();
-      }}
-      onTransitionCancel={(event) => { if (event.target === sidebarRoot && event.propertyName === "width") finishSidebarMotion?.(); }}
       head={<>
         {/* A phone's open sidebar has no toggle: a swipe or the backdrop closes it. */}
         <Show when={!phoneLayout()}><Button variant="ghost" size="icon-sm" aria-label="Toggle Sidebar" aria-expanded={!collapsed()} onClick={toggleSidebar}><Icons.Sidebar /></Button></Show>

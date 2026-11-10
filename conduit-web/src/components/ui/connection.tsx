@@ -1,11 +1,12 @@
 import * as Icons from "./icons";
-import { Show, createSignal, createUniqueId, onCleanup, splitProps, type JSX } from "solid-js";
+import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
 import { Steps } from "./steps";
 import { CircleAlertIcon } from "lucide-solid";
 import { Dot, StatusDot } from "./nav";
 import { Button, Input, Spinner } from "./controls";
 import { IconButton } from "./actions";
 import { Row, type RowProps } from "./row";
+import { createFlash } from "./motion";
 
 export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
   return <form {...props} class="ui-connection" />;
@@ -53,10 +54,8 @@ export const ConnectionScan = (props: { onClick: () => void; disabled?: boolean 
 
 /** Something to copy, shown whole in a field that scrolls (a pairing link), with its copy button; ticked for a moment once copied. */
 export function ConnectionCopy(props: { value: string; label: string; disabled?: boolean }) {
-  const [copied, setCopied] = createSignal(false);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(timer));
-  const copy = () => void navigator.clipboard.writeText(props.value).then(() => { setCopied(true); clearTimeout(timer); timer = setTimeout(() => setCopied(false), 1600); });
+  const { on: copied, flash: flashCopied } = createFlash(1600);
+  const copy = () => void navigator.clipboard.writeText(props.value).then(flashCopied);
   return <div class="ui-connection-password ui-connection-copy">
     <Input type="text" readOnly value={props.value} aria-label={props.label} disabled={props.disabled} spellcheck={false} onFocus={(event) => event.currentTarget.select()} />
     <Button type="button" variant="ghost" size="icon" aria-label={`Copy ${props.label.toLowerCase()}`} title={`Copy ${props.label.toLowerCase()}`} disabled={props.disabled || !props.value} onClick={copy}><Show when={copied()} fallback={<Icons.Copy />}><Icons.Check /></Show></Button>

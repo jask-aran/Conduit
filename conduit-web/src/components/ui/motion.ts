@@ -1,4 +1,4 @@
-import { createContext, useContext, type Accessor } from "solid-js";
+import { createContext, createSignal, onCleanup, useContext, type Accessor } from "solid-js";
 import { cssTime } from "./shared";
 
 /** The media query for the reader's reduced-motion preference. */
@@ -15,10 +15,37 @@ export function reducedMotion(): boolean {
 }
 /** How long a "Copied" confirmation holds before the copy control returns to rest. A hold, not a motion. */
 export const COPY_FEEDBACK_MS = 1200;
+/** A flag on for ms after each flash (a copy's tick): a second flash holds it from then, not from the first. */
+export function createFlash(ms = COPY_FEEDBACK_MS): { on: Accessor<boolean>; flash: () => void } {
+  const [on, setOn] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  return { on, flash: () => { setOn(true); clearTimeout(timer); timer = setTimeout(() => setOn(false), ms); } };
+}
 
 /** Read a duration token in milliseconds. */
 export function duration(token: `--duration-${string}`, element: Element = document.documentElement): number {
   return cssTime(element, token, 0);
+}
+
+/** Call then once, when element's transition of property ends or is cancelled, or once the token's duration (and a
+ *  beat) has passed, since a transition that never runs (reduced motion, nothing to change) sends neither. Returns its
+ *  cancel. Without an element it only waits. */
+export function whenMotionEnds(element: Element | null | undefined, property: string, token: `--duration-${string}`, then: () => void): () => void {
+  let timer = 0;
+  const heard = (event: Event) => { if (event.target === element && (event as TransitionEvent).propertyName === property) done(); };
+  const cancel = () => {
+    clearTimeout(timer);
+    cancelAnimationFrame(frame);
+    element?.removeEventListener("transitionend", heard);
+    element?.removeEventListener("transitioncancel", heard);
+  };
+  const done = () => { cancel(); then(); };
+  element?.addEventListener("transitionend", heard);
+  // A cancel is heard from the next frame: one sent in this frame is the motion this one turned back, not this one.
+  const frame = requestAnimationFrame(() => element?.addEventListener("transitioncancel", heard));
+  timer = window.setTimeout(done, duration(token, element ?? undefined) + 100);
+  return cancel;
 }
 
 /* Animation speed: multiplies the duration tokens (foundations.css --duration-*), which CSS transitions and duration()

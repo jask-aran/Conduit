@@ -1,5 +1,6 @@
 import { batch, createSignal, onCleanup } from "solid-js";
 import { foldFindOf } from "@/components/ui/transcript";
+import { createLatest } from "../state/latest";
 
 /*
  * Find in chat (docs/plans/keyboard-model.md, gap 6): the pane's own find, in place of the browser's.
@@ -157,17 +158,17 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   };
   // Stepping onto a closed fold's hit opens the fold; once it has drawn, the hit is that same nth match inside it (or,
   // further in, a fold of its own to open). A fold that will not open, or a hit its drawing lacks, moves on past it.
-  let opening = 0;
+  const opening = createLatest();
   const go = (next: number, reveal = true, depth = 0) => {
     const entry = matches[next];
     setIndex(next);
     paint();
     if (!reveal || !entry) return;
     if (!inFold(entry)) return options.reveal(entry);
-    const run = ++opening;
+    const current = opening.next();
     foldFindOf(entry.fold)?.open();
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (run !== opening || !open()) return;
+      if (!current() || !open()) return;
       matches = findMatches(options.thread(), query());
       setTotal(matches.length);
       const inside = matches.flatMap((match, at) => entry.fold.contains(inFold(match) ? match.fold : match.range.startContainer) ? [at] : []);
@@ -182,7 +183,7 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   const search = (keep = false) => {
     if (searchTimer != null) { clearTimeout(searchTimer); searchTimer = null; }
     // A fold still opening for the last search's step is not this one's to finish.
-    opening += 1;
+    opening.drop();
     const previous = matches[index()];
     matches = findMatches(options.thread(), query());
     setTotal(matches.length);

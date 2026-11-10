@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Button, TextArea } from "./controls";
 import { Aura, PillWave } from "./pill";
 import { Rider } from "./rider";
-import { reducedMotion } from "./motion";
+import { reducedMotion, whenMotionEnds } from "./motion";
 import type { Motion } from "./shared";
 
 /** DesktopComposer: resting frost holding a ComposerField above a Toolbar, desktop only (a phone's is Pills). Geometry
@@ -40,10 +40,7 @@ export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Eleme
         void slot.offsetHeight;
         slot.style.transition = "grid-template-rows var(--duration-gentle) var(--ease-room)";
         slot.style.gridTemplateRows = `${to}px`;
-        const done = () => { slot.style.gridTemplateRows = ""; slot.style.transition = ""; slot.removeEventListener("transitionend", ended); };
-        const ended = (event: TransitionEvent) => { if (event.target === slot) done(); };
-        slot.addEventListener("transitionend", ended);
-        setTimeout(done, 600);
+        whenMotionEnds(slot, "grid-template-rows", "--duration-gentle", () => { slot.style.gridTemplateRows = ""; slot.style.transition = ""; });
       }
       held = 0;
     }

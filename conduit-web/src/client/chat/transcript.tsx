@@ -1,6 +1,6 @@
 import { AgentRows, clockTime, createTranscriptFollow, Icons, onScrollRest, rideBottom, RoutineIcon, RunLine } from "@/components/ui";
 import { dropLatestScroller, setLatestScroller, tellLatestAway } from "./latest-away";
-import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { createFlash } from "@/components/ui/motion";
 import { createComputed, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
 import type { BooleanCapability, Message, ToolItem } from "../api/contracts";
@@ -1046,11 +1046,10 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               </Show></TranscriptRow>;
           }
           // Copied: Copy turns to a check, and the answer takes the copied wash, for a moment.
-          const [copied, setCopied] = createSignal(false);
+          const { on: copied, flash: flashCopied } = createFlash();
           const copy = async () => {
             if (!await copyWithFeedback(message().content || message().errorMessage || "")) return;
-            setCopied(true);
-            setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+            flashCopied();
           };
           // Its menu: what its foot offers -- an answer's Copy, Regenerate and changes, the person's Edit from here.
           const rowActions = (): TurnAction[] => {

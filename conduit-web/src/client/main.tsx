@@ -92,6 +92,7 @@ import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
 import { createSingleFlight } from "./state/single-flight";
+import { createLatest } from "./state/latest";
 import { outboxChats, outboxIsOpen, outboxOf, takeFromOutbox } from "./state/outbox";
 import { parseReviewComments } from "./chat/review-comments";
 import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from "./state/catalogue-cache";
@@ -256,7 +257,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
    * so it can only learn that something answered there; what it offers then
    * is to open it in a tab of its own, where that server signs you in.
    */
-  let checkRun = 0;
+  const checkRun = createLatest();
   let checkTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(checkTimer));
   const checkAddress = async () => {
@@ -266,7 +267,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     let origin: string;
     try { origin = normalizeServerOrigin(text); }
     catch (cause) { return setCheck({ state: "missing", title: "Not an address", detail: (cause as Error).message }); }
-    const run = ++checkRun;
+    const current = checkRun.next();
     setError("");
     setVerifiedOrigin(null);
     setCheck({ state: "checking", title: `Looking for ${hostOf(origin)}…` });
@@ -276,7 +277,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
       : fetch(buildHttpUrl("/healthz", origin), { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ ok?: boolean; name?: string; release?: string }> : null)
     ).catch(() => null);
     await pause;
-    if (run !== checkRun) return;
+    if (!current()) return;
     if (!health?.ok) return setCheck({ state: "missing", title: "Nothing answered", detail: hostOf(origin) });
     const release = health.release?.replace(/\.\d{14}\..*$/, "");
     setCheck({ state: "found", title: health.name || hostOf(origin), detail: [health.name ? hostOf(origin) : "", release].filter(Boolean).join(" · ") || undefined });
@@ -285,7 +286,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const typeAddress = (value: string) => {
     setAddress(value);
     clearTimeout(checkTimer);
-    checkRun++;
+    checkRun.drop();
     setCheck(null);
     setVerifiedOrigin(null);
     setError("");
@@ -359,17 +360,17 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
    * one, and while it is held it is neither offered nor listed, so a look
    * taken only then finds nothing once it has been let go.
    */
-  let lookRun = 0;
+  const lookRun = createLatest();
   const look = () => {
-    const run = ++lookRun;
+    const current = lookRun.next();
     setLocalServer(null);
     setFound([]);
-    lookForLocalServer(run);
-    lookOnNetwork(run);
+    lookForLocalServer(current);
+    lookOnNetwork(current);
   };
   onMount(look);
 
-  const lookForLocalServer = (run: number) => {
+  const lookForLocalServer = (current: () => boolean) => {
     if (verifiedOrigin() || servers().some((entry) => entry.origin === LOCAL_SERVER_ORIGIN)) return;
     // A browser cannot ask: Conduit answers a cross-origin request only for
     // the two shells it ships, so the probe would be refused rather than
@@ -380,7 +381,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     if (recordOnly) return setLocalServer(LOCAL_SERVER_ORIGIN);
     void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
-      .then((health) => { if (health?.ok && run === lookRun) setLocalServer(LOCAL_SERVER_ORIGIN); })
+      .then((health) => { if (health?.ok && current()) setLocalServer(LOCAL_SERVER_ORIGIN); })
       .catch(() => { /* nothing is listening, so nothing is offered */ });
   };
 
@@ -392,7 +393,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
    * 192.168.0.128 having been added by its tunnel name is a route this client
    * already has, not a server it is missing.
    */
-  const lookOnNetwork = (run: number) => {
+  const lookOnNetwork = (current: () => boolean) => {
     if (!canDiscoverServers()) return;
     const heldOrigins = new Set(servers().map((entry) => entry.origin));
     const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
@@ -403,13 +404,13 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     // again at another address updates its row rather than moving it.
     void discoverServers({
       onFound: (server) => {
-        if (run !== lookRun) return;
+        if (!current()) return;
         if (heldIds.has(server.id) || server.candidates.some((origin) => heldOrigins.has(origin))) return;
         setFound((list) => list.some((item) => item.id === server.id)
           ? list.map((item) => item.id === server.id ? server : item)
           : [...list, server]);
       },
-    }).finally(() => beat).then(() => { if (run === lookRun) setSearching(false); });
+    }).finally(() => beat).then(() => { if (current()) setSearching(false); });
   };
 
   /*
@@ -425,13 +426,13 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const chooseFound = async (server: FoundServer) => {
     // A check like any other: typing while the proofs run, or another pick, supersedes it.
     clearTimeout(checkTimer);
-    const run = ++checkRun;
+    const latest = checkRun.next();
     setError("");
     setAddress(server.origin);
     // Every address it was found at, asked at once; the first that proves
     // itself is the one kept. An unreachable interface costs nothing then.
     const proofs = await Promise.all(server.candidates.map((origin) => proveServer(origin, server.id, server.publicKey)));
-    if (run !== checkRun) return;
+    if (!latest()) return;
     const proved = server.candidates.find((_, index) => proofs[index]?.ok);
     if (proved) {
       setAddress(proved);
@@ -1535,8 +1536,8 @@ function App() {
 
   const abandonCurrentDraft = () => discardDraftImmediately(currentDraftId());
 
-  let newChatRequestEpoch = 0;
-  const abandonPendingNewChat = () => { newChatRequestEpoch += 1; };
+  const newChatRequest = createLatest();
+  const abandonPendingNewChat = newChatRequest.drop;
   const leaveChat = (preserveDraft: boolean) => {
     abandonPendingNewChat();
     if (!preserveDraft) abandonCurrentDraft();
@@ -1572,7 +1573,7 @@ function App() {
     if (!(await leaveHarnessThread())) return null;
     const project = target || selectedProject() || catalogue.projects().find((item) => item.slug === "chat") || catalogue.projects()[0];
     if (!project) return null;
-    const requestEpoch = ++newChatRequestEpoch;
+    const current = newChatRequest.next();
     const replacedDraftId = currentDraftId();
     const fromDashboard = routeKind() === "project" || routeKind() === "dashboard" || routeKind() === "computer" || (routeKind() === "agent" || routeKind() === "jbot");
     const profileId = launch.templateId || projectProfile(project);
@@ -1583,7 +1584,7 @@ function App() {
     showRoute({ kind: "chat" });
     try {
       const created = await createProfileChat(project, profileId);
-      if (requestEpoch !== newChatRequestEpoch) {
+      if (!current()) {
         discardDraftImmediately(created.id);
         return null;
       }
@@ -1709,7 +1710,7 @@ function App() {
   };
   onMount(() => { if (location.pathname === JBOT_THREAD_PATH && !initialRouteId) void openJbotThread().catch(showError); });
 
-  let computerRequest = 0;
+  const computerRequest = createLatest();
   let computerController: AbortController | undefined;
   let computerPrefetchController: AbortController | undefined;
   const computerFolders = new Map<string, ComputerLocation>();
@@ -1751,7 +1752,7 @@ function App() {
     }).then((payload) => payload.locations.forEach(cacheComputerFolder)).catch(() => {}).finally(() => computerPrefetching.delete(absolutePath));
   };
   const browseComputer = async (path?: string) => {
-    const request = ++computerRequest;
+    const current = computerRequest.next();
     computerController?.abort();
     computerController = new AbortController();
     const cached = computerFolders.get(path || computerLocation()?.home || "");
@@ -1762,7 +1763,7 @@ function App() {
     setComputerError("");
     try {
       const location = await api<ComputerLocation>(`/v0/computer${path ? `?path=${encodeURIComponent(path)}` : ""}`, { signal: computerController.signal });
-      if (request !== computerRequest) return;
+      if (!current()) return;
       cacheComputerFolder(location);
       batch(() => { setComputerFile(null); setComputerLocation(location); });
       prefetchComputerFolders(location);
@@ -1775,9 +1776,9 @@ function App() {
         });
       }
     } catch (error) {
-      if (request === computerRequest) setComputerError(error instanceof Error ? error.message : "Folder could not be opened");
+      if (current()) setComputerError(error instanceof Error ? error.message : "Folder could not be opened");
     } finally {
-      if (request === computerRequest) setComputerLoading(false);
+      if (current()) setComputerLoading(false);
     }
   };
   const designateComputerWorkspace = async () => {
@@ -1825,23 +1826,23 @@ function App() {
     const [location, setLocation] = createSignal<ComputerLocation | null>(computerLocation());
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal("");
-    let request = 0;
+    const request = createLatest();
     const browse = async (path?: string) => {
-      const mine = ++request;
+      const current = request.next();
       const cached = computerFolders.get(path || location()?.home || "");
       if (cached) setLocation(cached);
       setLoading(!cached);
       setError("");
       try {
         const next = await api<ComputerLocation>(`/v0/computer${path ? `?path=${encodeURIComponent(path)}` : ""}`);
-        if (mine !== request) return;
+        if (!current()) return;
         cacheComputerFolder(next);
         setLocation(next);
         prefetchComputerFolders(next);
       } catch (failure) {
-        if (mine === request) setError(failure instanceof Error ? failure.message : "Folder could not be opened");
+        if (current()) setError(failure instanceof Error ? failure.message : "Folder could not be opened");
       } finally {
-        if (mine === request) setLoading(false);
+        if (current()) setLoading(false);
       }
     };
     if (!location()) void browse();

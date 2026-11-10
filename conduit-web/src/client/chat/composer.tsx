@@ -18,6 +18,7 @@ import { DropdownMenu, MenuContent } from "@/components/ui/menus";
 import type { BooleanCapability, Project, Template } from "../api/contracts";
 import type { ActiveChatStore } from "../state/active-chat";
 import { filesFromDataTransfer } from "../state/attachments";
+import { createLatest } from "../state/latest";
 import type { ComposerAttachments } from "./composer-attachments";
 import type { ComposerModels } from "./composer-models";
 import type { ComposerPermissions } from "./composer-permissions";
@@ -350,7 +351,7 @@ export function Composer(props: {
   let restoringDraft = false;
   // The slash menu's lookups: each typed change is one; Escape ends the current one, so a lookup that finishes after the
   // menu was dismissed cannot open it again (Codex review).
-  let slashLookup = 0;
+  const slashLookup = createLatest();
   const change = (value: string, manual = true) => {
     if (manual && !restoringDraft) snapshot();
     if (manual) {
@@ -360,9 +361,9 @@ export function Composer(props: {
       if (dictatedRange() || [...takes.values()].some((take) => take.range)) cancelTakes();
     }
     props.chat.setDraft(value);
-    const lookup = ++slashLookup;
+    const current = slashLookup.next();
     if (value.startsWith("/")) void props.chat.loadHarnessCommands().then(() => {
-      if (lookup === slashLookup && props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
+      if (current() && props.chat.draft() === value) setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     });
     setSlashOpen(composerSlashCommands(value, slashCommandOptions()).length > 0);
     scheduleResize();
@@ -666,7 +667,7 @@ export function Composer(props: {
   const keydown = (event: KeyboardEvent) => {
     // An input method composing text owns its keys: its Enter confirms a candidate, never sends.
     if (event.isComposing || event.keyCode === 229) return;
-    if (event.key === "Escape" && slashOpen()) { event.preventDefault(); slashLookup++; setSlashOpen(false); return; }
+    if (event.key === "Escape" && slashOpen()) { event.preventDefault(); slashLookup.drop(); setSlashOpen(false); return; }
     // Escape never stops a turn: it steps back (keyboard-model.md › Leave); stopping is Ctrl+Shift+Backspace or the button.
     if (event.key === "Tab" && slashOpen()) {
       event.preventDefault();

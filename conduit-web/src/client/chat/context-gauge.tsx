@@ -1,4 +1,4 @@
-import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { createFlash } from "@/components/ui/motion";
 import { Button, Gauge, Meter, Reading, ReadingFoot, ReadingPart, ReadingParts, ReadingStat, ReadingStats, ReadingTotal } from "@/components/ui";
 import { ShrinkIcon } from "lucide-solid";
 import { Popover, PopoverContent } from "@/components/ui/menus";
@@ -116,8 +116,8 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
     setLoading(true); setFailed(false);
     props.chat.loadBreakdown().catch(() => setFailed(true)).finally(() => setLoading(false));
   };
-  const [copied, setCopied] = createSignal(false);
-  const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(() => { setCopied(true); setTimeout(() => setCopied(false), COPY_FEEDBACK_MS); });
+  const { on: copied, flash: flashCopied } = createFlash();
+  const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(flashCopied);
   // A row that does something: a keyboard reaches it and Enter or Space runs it, as a button.
   const act = (run: () => void, disabled?: boolean) => ({ role: "button" as const, tabIndex: disabled ? -1 : 0, onClick: () => { if (!disabled) run(); },
     onKeyDown: (event: KeyboardEvent) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); run(); } } });

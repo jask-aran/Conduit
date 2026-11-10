@@ -10,6 +10,7 @@ import { ROLE_ICON, type BlockDetail, type ContextData } from "./context-setting
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
+import { createLatest } from "../state/latest";
 
 /** GET /v0/skills (skill-store.js `list`). */
 type Skill = {
@@ -106,20 +107,20 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
 
   // The registry is searched as you type, a moment after the last key.
   let timer: number | undefined;
-  let asked = 0;
+  const asked = createLatest();
   const search = (value: string) => {
     setQuery(value);
     clearTimeout(timer);
     // Every keystroke retires the search in flight, so it cannot land on a changed or emptied box.
-    const ask = ++asked;
+    const current = asked.next();
     if (value.trim().length < 2) { setFound(null); setSearchError(""); setSearching(false); return; }
     timer = window.setTimeout(async () => {
       setSearching(true);
       try {
         const { results } = await api<{ results: Found[] }>(`/v0/skills/search?${new URLSearchParams({ q: value.trim(), limit: "12" })}`);
-        if (ask === asked) { setFound(results); setSearchError(""); }
-      } catch (failure) { if (ask === asked) setSearchError(failed(failure)); }
-      finally { if (ask === asked) setSearching(false); }
+        if (current()) { setFound(results); setSearchError(""); }
+      } catch (failure) { if (current()) setSearchError(failed(failure)); }
+      finally { if (current()) setSearching(false); }
     }, 300);
   };
   onCleanup(() => clearTimeout(timer));

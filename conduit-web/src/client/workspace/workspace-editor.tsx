@@ -16,6 +16,7 @@ import { DropdownMenu, MenuContent, MenuSection, MenuRadioGroup, MenuRadioItem, 
 import { csvLanguage, isCsvFile } from "./csv-language";
 import { workspaceLanguageForFilename, workspaceLanguageForName, workspaceLanguages } from "./workspace-languages";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
+import { createLatest } from "../state/latest";
 
 
 export function isVisualMarkdownFile(path: string) {
@@ -119,7 +120,7 @@ export default function WorkspaceEditor(props: {
   let activeKey = JSON.stringify([props.projectId, activePath]);
   let revealedNonce = 0;
   let savedDocument = Text.of(props.value.split("\n"));
-  let languageLoadToken = 0;
+  const languageLoadToken = createLatest();
   let lastDirty = false;
   const [indentation, setIndentation] = createSignal<Indentation>(detectIndentation(savedDocument));
   const [selectedLanguage, setSelectedLanguage] = createSignal(languageNameForPath(activePath));
@@ -153,7 +154,7 @@ export default function WorkspaceEditor(props: {
   };
 
   const installLanguage = async (name: string) => {
-    const token = ++languageLoadToken;
+    const current = languageLoadToken.next();
     const path = activePath;
     if (!view) return;
     if (name === "Plain Text") {
@@ -168,7 +169,7 @@ export default function WorkspaceEditor(props: {
       : name === "CSV"
         ? csvLanguage
         : await workspaceLanguageForName(name)?.load();
-    if (token !== languageLoadToken || path !== activePath || !view || !extensions) return;
+    if (!current() || path !== activePath || !view || !extensions) return;
     view.dispatch({ effects: languageCompartment.reconfigure(extensions) });
     host?.setAttribute("data-markdown", String(name === "Markdown"));
     view.contentDOM.spellcheck = name === "Markdown";
@@ -241,7 +242,7 @@ export default function WorkspaceEditor(props: {
       return;
     }
     cacheActiveDocument();
-    languageLoadToken += 1;
+    languageLoadToken.drop();
     activePath = path;
     activeKey = key;
     const incomingDocument = Text.of(value.split("\n"));
@@ -361,7 +362,7 @@ export default function WorkspaceEditor(props: {
     const languageName = languageNameForPath(activePath);
     if (languageName !== "Plain Text" && languageName !== "CSV") void installLanguage(languageName).catch(() => undefined);
     onCleanup(() => {
-      languageLoadToken += 1;
+      languageLoadToken.drop();
       view?.destroy();
       view = undefined;
     });

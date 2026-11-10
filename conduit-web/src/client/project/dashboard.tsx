@@ -1,4 +1,4 @@
-import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
+import { createFlash } from "@/components/ui/motion";
 import { harnessMarkLabelFor } from "../harness-brand";
 import { ThreadHarnessMark } from "@/components/ui";
 import { FileTypeIcon } from "@/components/ui/file-marks";
@@ -115,7 +115,7 @@ export function ProjectDashboard(props: {
   const [terminals, setTerminals] = createSignal<Pty[]>([]);
   const [terminalsLoading, setTerminalsLoading] = createSignal(true);
   const [error, setError] = createSignal("");
-  const [copied, setCopied] = createSignal(false);
+  const { on: copied, flash: flashCopied } = createFlash();
   const [refreshVersion, setRefreshVersion] = createSignal(0);
   // Its machine back: what could not be read while it was away (files, threads there) is read again.
   onMount(() => {
@@ -274,8 +274,7 @@ export function ProjectDashboard(props: {
     if (!path) return;
     try {
       await navigator.clipboard.writeText(path);
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+      flashCopied();
     } catch (copyError) {
       props.onError((copyError as Error).message);
     }

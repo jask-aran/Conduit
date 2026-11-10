@@ -17,6 +17,7 @@ import { SkillsSettings } from "./skills-settings";
 import { IntegrationsSettings } from "./connectors-settings";
 import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
+import { createLatest } from "../state/latest";
 import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
@@ -614,8 +615,8 @@ export function Settings(props: {
   const audioInputWaveform = createVoiceWaveformController();
   let audioInputSession: AudioInputTestSession | null = null;
   let playbackAudio: HTMLAudioElement | null = null;
-  let runtimeRequest = 0;
-  let searchRequest = 0;
+  const runtimeRequest = createLatest();
+  const searchRequest = createLatest();
   let voiceInputSelect!: HTMLSelectElement;
   let returnFocus: HTMLElement | null = null;
   let wasOpen = false;
@@ -797,19 +798,19 @@ export function Settings(props: {
   });
 
   const loadRuntime = async () => {
-    const request = ++runtimeRequest;
+    const current = runtimeRequest.next();
     setRuntimeStatus("loading");
     setRuntimeError("");
     try {
       // A save sent on leaving lands first, so coming back shows it.
       await runtimeAutosave.flush();
       const loaded = await api<RuntimeSettings>("/v0/runtime/settings");
-      if (request !== runtimeRequest) return;
+      if (!current()) return;
       setRuntime(loaded);
       if (!runtimeAutosave.busy()) setRuntimeDraft(runtimeDraftOf(loaded));
       setRuntimeStatus("ready");
     } catch (error) {
-      if (request !== runtimeRequest) return;
+      if (!current()) return;
       setRuntimeError((error as Error).message);
       setRuntimeStatus("error");
     }
@@ -990,16 +991,16 @@ export function Settings(props: {
   };
 
   const loadSearchSettings = async () => {
-    const request = ++searchRequest;
+    const current = searchRequest.next();
     setSearchStatus("loading");
     setSearchError("");
     try {
       const loaded = await api<SearchSettings>("/v0/search/settings");
-      if (request !== searchRequest) return;
+      if (!current()) return;
       setSearchSettings(loaded);
       setSearchStatus("ready");
     } catch (error) {
-      if (request !== searchRequest) return;
+      if (!current()) return;
       setSearchError((error as Error).message);
       setSearchStatus("error");
     }

@@ -7,6 +7,7 @@ import * as Icons from "@/components/ui/icons";
 import { NavFolder, NavFolderRow, StatusDot } from "@/components/ui/nav";
 import { ClientCard, ClientCards, ClientPlaces, NetworkMap } from "@/components/ui/network";
 import { LiveNote, SettingLine, SettingTitle, SettingValue } from "@/components/ui/overlay";
+import { createFlash } from "@/components/ui/motion";
 import { WorkspaceGlyph } from "../project/workspace-appearance.tsx";
 import { desktopShell, type CompanionStatus, type DesktopShellSettings } from "../platform/installed-client.ts";
 import { pairingWith, pairThisComputer, keepThisComputerConnected } from "../platform/this-computer.ts";
@@ -209,7 +210,7 @@ export function DevicesSettingsTile(props: {
 function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
   const [name, setName] = createSignal("");
   const [command, setCommand] = createSignal("");
-  const [copied, setCopied] = createSignal(false);
+  const { on: copied, flash: flashCopied } = createFlash();
   const [error, setError] = createSignal("");
   const pair = async () => {
     setError("");
@@ -217,12 +218,11 @@ function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
       const paired = await api<{ command: string }>("/v0/nodes", { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: name().trim() || undefined, deviceId: props.device.id }) });
       setCommand(paired.command);
-      setCopied(false);
       setName("");
       props.onPaired();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The environment was not paired."); }
   };
-  const copy = async () => { try { await navigator.clipboard.writeText(command()); setCopied(true); } catch { setCopied(false); } };
+  const copy = async () => { try { await navigator.clipboard.writeText(command()); flashCopied(); } catch { /* the command stays shown, to copy by hand */ } };
   return <>
     <SettingLine label="Pair an environment" title="A WSL distro or a container here, with no app of its own: it pairs with the command shown, run there.">
       <Input aria-label="Environment name" placeholder="Ubuntu" value={name()} onInput={(event) => setName(event.currentTarget.value)} />
