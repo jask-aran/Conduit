@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackPointer } from "@/components/ui/feedback";
@@ -22,6 +22,9 @@ import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pi
  * Pen, Arrow, Box: a drag draws on the page. A drawing is a selection too: it has a number and a comment, names the
  * pieces it is about (an arrow's head, a pen line's path, a box's inside), moves with them, and is in the screenshot as
  * drawn. V, P, A and B pick the pointer.
+ *
+ * Handing over: the bar names a session that is waiting for feedback (`conduit-feedback wait`), and Send hands the
+ * item to it, so the agent the person is working with starts on it with nothing typed. Switched off, the item is held.
  */
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
 type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing };
@@ -32,6 +35,10 @@ const DRAWN: Record<FeedbackDrawingKind, string> = { pen: "Pen", arrow: "Arrow",
 /** A pen's line keeps a point each time the pointer has gone this far (px); an item is sent at most this many. */
 const PEN_STEP = 2;
 const SENT_POINTS = 64;
+/** The sessions waiting are asked for this often (ms) while the tool is open. */
+const WAITING_EVERY_MS = 3000;
+const HAND_KEY = "conduit.feedback.hand";
+type Waiter = { id: string; name: string };
 type Mode = "select" | "use";
 /** A press that moves further than this (px) is a drag. */
 const DRAG_SLOP = 5;
@@ -58,6 +65,14 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   // What the drag would lock onto if let go now, shown as it is dragged.
   const aimed = createMemo(() => { const drag = marquee(); return drag ? piecesWithin(drag) : []; });
   const [screenshot, setScreenshot] = createSignal(true);
+  // Handed to a waiting session unless switched off; the choice is kept on this client.
+  const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
+  const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
+  const [waiters, { refetch: askWaiters }] = createResource(() => api<{ waiting: Waiter[] }>("/v0/feedback/waiting").then((answer) => answer.waiting, () => [] as Waiter[]));
+  const [agentId, setAgentId] = createSignal<string | null>(null);
+  /** The session the item goes to: the one chosen while it still waits, else the one that began waiting last. */
+  const agent = () => waiters.latest?.find((waiter) => waiter.id === agentId()) ?? waiters.latest?.[0] ?? null;
+  const nextAgent = () => { const all = waiters.latest ?? []; setAgentId(all[(all.findIndex((waiter) => waiter.id === agent()?.id) + 1) % all.length]?.id ?? null); };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
   // Boxes are read once a frame: what is marked scrolls, resizes and animates under the marks.
@@ -244,6 +259,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
+    const asking = setInterval(() => void askWaiters(), WAITING_EVERY_MS);
+    onCleanup(() => clearInterval(asking));
   });
   onCleanup(() => {
     for (const type of POINTER_EVENTS) window.removeEventListener(type, swallow, { capture: true });
@@ -295,8 +312,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
           for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.area))).entries()) if (blob) await api(`/v0/feedback/marks/${mark.id}/areas/${index + 1}`, { ...png, body: blob });
         }
       }
-      const result = await api<{ id: string; path: string }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
-        comments,
+      const result = await api<{ id: string; path: string; handed: { held: boolean; to: Waiter | null } }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
+        comments, hand: hand(), to: agent()?.id ?? null,
         screenshot: capture ? { width: capture.width, height: capture.height, surface: capture.surface, outlined: true } : { missing: screenshot() ? captureError ?? "capture failed" : "switched off" },
         client: {
           id: props.client(), kind: installedClientKind, build: clientBuild, shell: await shellVersion(), userAgent: navigator.userAgent,
@@ -304,8 +321,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
         },
       }) });
       sent = true;
-      toast.success(captureError ? `Feedback sent without a screenshot: ${captureError}` : "Feedback sent");
-      void result;
+      const where = result.handed.to ? `Feedback sent to ${result.handed.to.name}` : result.handed.held ? "Feedback sent and held" : "Feedback sent: no session is waiting, the next to wait takes it";
+      toast.success(captureError ? `${where}, without a screenshot: ${captureError}` : where);
       props.onClose();
     } catch (error) {
       toast.error(`Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
@@ -338,7 +355,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
           onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
       </Show>
       <Show when={!capturing()}>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={props.keys()} screenshot={screenshot()} onScreenshot={setScreenshot}
+        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={props.keys()} screenshot={screenshot()} onScreenshot={setScreenshot} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

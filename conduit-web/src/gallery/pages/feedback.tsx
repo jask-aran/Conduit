@@ -60,6 +60,8 @@ export const feedbackPage: Page = {
     row("note", "a piece's comment; a group's has no source line", scene(() => <>{note({ style: { left: "24px", top: "24px" } })}</>), { surfaces: ["ground"] }),
     row("bar", "selecting with nothing to send yet; using the app; sending", scene(() => <>{bar({ status: "Press a piece, or drag across several.", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw on the page.", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar, handing over", "the session the item goes to; with several waiting its name is a button to the next; none waiting", scene(() => <>{bar({ hand: true, onHand: noop, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
+    row("bar, nobody waiting", "the item goes to the next session to wait", scene(() => <>{bar({ hand: true, onHand: noop })}</>), { surfaces: ["ground"] }),
     row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", status: "Using the app." })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],

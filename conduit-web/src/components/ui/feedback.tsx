@@ -74,13 +74,18 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
 export type FeedbackPointer = "select" | FeedbackDrawingKind | "use";
 const POINTERS: ReadonlyArray<{ value: FeedbackPointer; label: string }> = [{ value: "select", label: "Select" }, { value: "pen", label: "Pen" }, { value: "arrow", label: "Arrow" }, { value: "box", label: "Box" }, { value: "use", label: "Use app" }];
 
-/** The tool's bar, at the foot: what the pointer does, what is marked so far, whether a screenshot goes with it, Send. */
-export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: FeedbackPointer) => void; status: string; keys?: string[]; screenshot: boolean; onScreenshot: (on: boolean) => void;
+/** The tool's bar, at the foot: what the pointer does, what is marked so far, whether a screenshot goes with it, who it
+ *  is handed to (`agent`: the waiting session's name, none when nobody waits; `onNextAgent` when there are several), Send. */
+export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: FeedbackPointer) => void; status: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot: boolean; onScreenshot: (on: boolean) => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
     <Segmented label="Pointer" value={props.mode} onChange={props.onMode} options={POINTERS} />
     <span class="ui-feedback-status">{props.status}<Show when={props.keys?.length}><Keycap>{props.keys!.join(" ")}</Keycap></Show></span>
     <label class="ui-feedback-switch"><span>Screenshot</span><Switch label="Include screenshot" checked={props.screenshot} onChange={props.onScreenshot} /></label>
+    <Show when={props.onHand}><span class="ui-feedback-switch">
+      <Show when={props.onNextAgent} fallback={<span>{props.agent ? `Hand to ${props.agent}` : "Hand to a session"}</span>}><span>Hand to</span><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show>
+      <Switch label="Hand to a waiting agent session" checked={Boolean(props.hand)} onChange={props.onHand!} />
+    </span></Show>
     <Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />
   </Frost>;

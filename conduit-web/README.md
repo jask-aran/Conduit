@@ -1104,13 +1104,18 @@ under it (`drawing` on the comment: its kind and points).
 | `PUT /v0/feedback/marks/:id/areas/:n` | selection `n`'s own picture: a PNG, `image/png`, up to 32 MB | 204 |
 | `POST /v0/feedback/marks/:id/send` | `{ comments, screenshot, client }`, up to 4 MB | 201, `{ id, path }` |
 | `DELETE /v0/feedback/marks/:id` | None | 204 |
+| `GET /v0/feedback/waiting` | None | 200, `{ waiting: [{ id, name, cwd, since }] }`: the agent sessions waiting now, newest first |
 
 A mark is kept in memory (twelve at most, six hours); sending to one that has gone returns 404
 `feedback_mark_gone`. Send writes `<data>/feedback/<id>/item.json`, `screenshot.png` and a `selection-<n>.png` for each selection (the area dragged round, or the piece with a margin, cut from the screenshot), built in a dot-named
 folder and renamed into place. The item's `read` field says how to read it. `src/server/feedback.js` keeps the
 last 200 log lines and the last 200 events (every record a chat log numbers, every runtime event) for the mark.
-An agent session takes items with `node scripts/conduit-feedback.mjs wait` (repository root; it blocks, takes the
-oldest item nobody has taken and prints its path), marks one handled with `done <id>`, and lists them with `list`.
+An agent session takes items with `node scripts/conduit-feedback.mjs wait [name]` (repository root; it blocks, takes
+the oldest item it may have and prints its path), marks one handled with `done <id>`, and lists them with `list`.
+While it waits it is a file in `<data>/feedback/.waiting` (its process id, the name, its folder), which the tool's
+bar lists as a session to hand to. Send carries `{ hand, to }`: the item's `handed.to` is that waiter, whose `wait`
+ends with it; with no waiter named the next session to wait takes it, and with `hand: false` the item is held
+(`handed.held`) until `conduit-feedback.mjs take <id>`. A waiter whose process has gone holds nothing.
 
 ### Conduit MCP and context inbox
 

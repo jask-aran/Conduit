@@ -17,11 +17,17 @@ import express from "express";
  * into place, so a reader never sees half of one. `node scripts/conduit-feedback.mjs wait` hands the next item to
  * an agent session; `done <id>` marks it handled.
  *
+ * Handing over: a session that is waiting says so with a file in <data>/feedback/.waiting (its process id, a name).
+ * The tool lists those, and Send names the one the item is for (`handed.to`); that session's `wait` ends with it.
+ * With nobody named the next session to wait takes it; an item the person chose not to hand over is held until
+ * `conduit-feedback take <id>`.
+ *
  *   POST   /v0/feedback/marks                  { client }            -> { id }
  *   PUT    /v0/feedback/marks/:id/screenshot   image/png
  *   PUT    /v0/feedback/marks/:id/areas/:n     image/png: selection n's own area, cut from the screenshot
  *   POST   /v0/feedback/marks/:id/send         { comments, screenshot, client } -> { id, path }
  *   DELETE /v0/feedback/marks/:id              a mark nothing was sent to
+ *   GET    /v0/feedback/waiting                -> { waiting: [{ id, name, cwd, since }] }, the sessions waiting now
  */
 const RING = 200;
 const CHAT_TAIL = 40;
@@ -61,6 +67,20 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
   runtimeHub.tap = (event) => keep(events, { at: new Date().toISOString(), runtime: event.type,
     ...Object.fromEntries(Object.entries(event).filter(([key, value]) => key !== "type" && key !== "at" && ["string", "number", "boolean"].includes(typeof value)).slice(0, 8).map(([key, value]) => [key, short(value, 120)])),
     ...(event.process ? { chatId: event.process.chatId, status: event.process.status, activity: event.process.activity } : {}) });
+
+  /** The sessions waiting for an item now: each one's file, while its process lives. A file left by one that was killed goes. */
+  async function waiting() {
+    const dir = path.join(folder, ".waiting");
+    const found = [];
+    for (const name of await fs.readdir(dir).catch(() => [])) {
+      const waiter = await fs.readFile(path.join(dir, name), "utf8").then(JSON.parse).catch(() => null);
+      let alive = false;
+      try { alive = Boolean(waiter?.id) && (process.kill(Number(waiter.id), 0), true); } catch (error) { alive = error.code === "EPERM"; }
+      if (alive) found.push({ id: String(waiter.id), name: short(String(waiter.name ?? ""), 80), cwd: String(waiter.cwd ?? ""), since: String(waiter.since ?? "") });
+      else await fs.rm(path.join(dir, name), { force: true });
+    }
+    return found.sort((a, b) => b.since.localeCompare(a.since));
+  }
 
   async function mark({ client } = {}) {
     for (const [id, kept] of marks) if (Date.now() - kept.time > MARK_MS) marks.delete(id);
@@ -115,6 +135,9 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const exact = Boolean(shot && viewport.width && Math.abs(shot.width / shot.height - viewport.width / viewport.height) < 0.01);
     const scale = exact ? shot.width / viewport.width : null;
     const sentAt = new Date().toISOString();
+    // Who it is for: the waiting session the person named, anyone when that one has gone, nobody when it is not handed over.
+    const to = body.hand === false ? null : (await waiting()).find((waiter) => waiter.id === String(body.to ?? "")) ?? null;
+    const handed = { held: body.hand === false, to: to && { id: to.id, name: to.name } };
     const item = {
       schema: "conduit.feedback/1",
       id,
@@ -130,6 +153,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
       ],
       markedAt: kept.snapshot.markedAt,
       sentAt,
+      handed,
       comments: body.comments.slice(0, 50).map((entry) => comment(entry, scale, shot ? kept.areas : new Map())),
       screenshot: shot ? { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) }
         : { file: null, missing: String(body.screenshot?.missing ?? "not sent") },
@@ -145,7 +169,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     await fs.rename(staging, final);
     marks.delete(id);
     console.log(JSON.stringify({ type: "conduit.feedback", id, comments: item.comments.length, screenshot: Boolean(shot) }));
-    return { id, path: path.join(final, "item.json") };
+    return { id, path: path.join(final, "item.json"), handed };
   }
 
   /** A picture for a mark: the whole screenshot, or selection `n`'s area of it. */
@@ -160,7 +184,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
   }
 
   return {
-    mark, send, picture,
+    mark, send, picture, waiting,
     drop: (id) => marks.delete(id),
     close() { for (const undo of restore) undo(); chatLogs.tap = null; runtimeHub.tap = null; },
   };
@@ -173,5 +197,6 @@ export function registerFeedbackRoutes(app, feedback) {
   app.put("/v0/feedback/marks/:id/screenshot", png, (request, response) => { feedback.picture(request.params.id, request.body); response.status(204).end(); });
   app.put("/v0/feedback/marks/:id/areas/:n", png, (request, response) => { feedback.picture(request.params.id, request.body, Number(request.params.n)); response.status(204).end(); });
   app.post("/v0/feedback/marks/:id/send", async (request, response) => response.status(201).json(await feedback.send(request.params.id, request.body)));
+  app.get("/v0/feedback/waiting", async (_request, response) => response.json({ waiting: await feedback.waiting() }));
   app.delete("/v0/feedback/marks/:id", (request, response) => { feedback.drop(request.params.id); response.status(204).end(); });
 }
