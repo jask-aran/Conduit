@@ -168,9 +168,19 @@ pub fn supervise<R: Runtime>(app: &AppHandle<R>, wanted: bool) {
                         thread::sleep(pause);
                         continue;
                     }
-                    if let Ok(child) = spawn_node(&app) {
-                        *slot = Some(child);
-                        since = Instant::now();
+                    match spawn_node(&app) {
+                        Ok(child) => {
+                            *slot = Some(child);
+                            since = Instant::now();
+                        }
+                        // It could not be started at all (its files are not there yet): tried again with the same
+                        // growing pauses as one that starts and fails, where it was tried every second.
+                        Err(_) => {
+                            pause = (pause * 2).min(Duration::from_secs(30));
+                            drop(slot);
+                            thread::sleep(pause);
+                            continue;
+                        }
                     }
                 }
             }
