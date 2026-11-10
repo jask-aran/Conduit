@@ -2,6 +2,7 @@ import { defineExtension } from "@earendil-works/pi-durable";
 import { ConduitInboxTool } from "../agent/inbox.js";
 import { UiTool } from "./ui-control.js";
 import { PersonBrowserTool } from "./person-browser-tool.js";
+import { browserWraps } from "../agent/policy.js";
 
 /*
  * The conduit MCP server's tools (docs/plans/screens-and-device-control.md, decision 1): Conduit as an agent reaches
@@ -14,7 +15,11 @@ import { PersonBrowserTool } from "./person-browser-tool.js";
  */
 export const conduitTools = (runtime) => [UiTool(runtime), ConduitInboxTool(runtime), PersonBrowserTool(runtime)];
 
-export const ConduitMcp = (runtime) => defineExtension({ name: "conduit-mcp", tools: conduitTools(runtime) });
+export const ConduitMcp = (runtime) => {
+  const tools = conduitTools(runtime);
+  // Driving a device's browser asks the person first (agent/policy.js).
+  return defineExtension({ name: "conduit-mcp", tools, wraps: browserWraps(runtime, tools) });
+};
 
 /** The chat a call was made from, or null. */
 export async function callingChat(runtime, api, context) {

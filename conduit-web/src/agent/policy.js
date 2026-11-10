@@ -10,6 +10,7 @@ import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 import { createApprover, executorHolder, jsonlAudit } from "pi-durable-approver";
 import { readPolicy } from "./approval-policy.js";
 import { personWords } from "./person-words.js";
+import { browserFor } from "../server/person-browser-tool.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 /** Tools that leave the folder only when given a device; and tools that always leave it. */
@@ -176,7 +177,16 @@ const summary = (name, args) => {
   if (name === "bash") return `run on ${target}: ${String(args.command || "").slice(0, 200)}`;
   return `${name} ${args.path || ""} on ${target}`;
 };
-const outward = (name, args) => Boolean((ALWAYS_OUTWARD[name] && (!OUTWARD_ACTIONS[name] || OUTWARD_ACTIONS[name].includes(args?.action)))
+/*
+ * The person's own browser on a device (conduit_browser, server/person-browser-tool.js): driving it is acting as
+ * them, signed in, so it is theirs to allow. One decision a device, not a call: Allow lets this thread drive it for a
+ * day, Always lets every thread. Listing its tools (no `tool`) asks nothing. Watching it or not is theirs: it is their
+ * own browser window.
+ */
+const BROWSER = "conduit_browser";
+const BROWSER_MS = 86400_000;
+const drivesBrowser = (name, args) => name === BROWSER && Boolean(args?.tool);
+const outward = (name, args) => drivesBrowser(name, args) || Boolean((ALWAYS_OUTWARD[name] && (!OUTWARD_ACTIONS[name] || OUTWARD_ACTIONS[name].includes(args?.action)))
   || (PLACED.includes(name) && args?.device));
 /**
  * Whether a tool asks the person before it runs, said of the tool rather than of one call (Settings › AI › Tools):
@@ -191,6 +201,7 @@ export function askOf(tool, { guarded = false } = {}) {
         ? { asks: "sometimes", when: "Connected tools decide: reads run, and what they hold for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
         : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
   }
+  if (name === BROWSER) return { asks: "sometimes", when: "Asks before it drives a device's browser: Allow covers this thread for a day, Always every thread. Listing its tools goes ahead." };
   if (!guarded) return { asks: "never" };
   if (ALWAYS_OUTWARD[name] && OUTWARD_ACTIONS[name]) return { asks: "sometimes", when: `Asks to ${OUTWARD_ACTIONS[name].join(" or ")}; its other actions go ahead.` };
   if (ALWAYS_OUTWARD[name]) return { asks: "always", when: "Unless a standing rule you set allows it." };
@@ -207,6 +218,7 @@ async function ruleTarget(runtime, name, args) {
     const paths = connectorCalls(name, args);
     return paths ? JSON.stringify([...new Set(paths)].sort()) : connectorTool(name) === "execute" ? null : name;
   }
+  if (name === BROWSER) return String(args.device);
   // Each feed and routine change is its own decision: no lasting rule.
   if (name === "feed" || name === "routine") return null;
   if (name === "start_chat") {
@@ -223,6 +235,7 @@ async function ruleTarget(runtime, name, args) {
 
 const ruleLabel = (name, args) => {
   if (name.startsWith("mcp__")) return `${[...new Set(connectorActions(name, args) || [])].map(actionWords).join(", ") || mcpLabel(name, args)}, any input`;
+  if (name === BROWSER) return `drive your browser on ${args.device}`;
   if (name === "feed") return "add a feed";
   if (name === "routine") return "change a routine";
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
@@ -260,6 +273,11 @@ function presentation(name, args) {
     else if (!calls) { const fields = fieldsOf(args); if (fields.length) lines.push({ fields }); }
     const label = mcpLabel(name, args);
     return { title: label[0].toUpperCase() + label.slice(1), service, lines };
+  }
+  if (name === BROWSER) {
+    const code = args.tool === "execute" ? args.arguments?.code : null;
+    return { title: `Drive your browser on ${args.device}`, service: null,
+      lines: ["Your own signed-in browser there. Allow covers this thread for a day; Always, every thread.", ...code ? [{ text: "First", code: codeOf(code) }] : []] };
   }
   if (name === "feed") {
     const source = args.source || {};
@@ -308,7 +326,7 @@ function tellPerson(runtime, ask, send) {
 async function approve(runtime, api, name, args, context, thread, shown = null) {
   const target = await ruleTarget(runtime, name, args);
   // Resuming one of Executor's held requests is the same decision however the answer is worded: keyed by the request.
-  const argsKey = createHash("sha256").update(JSON.stringify(canonical(resumeTool(name) && args?.requestId ? [name, args.requestId] : [name, args]))).digest("hex");
+  const argsKey = createHash("sha256").update(JSON.stringify(canonical(resumeTool(name) && args?.requestId ? [name, args.requestId] : name === BROWSER ? [name, args.device] : [name, args]))).digest("hex");
   const task = await api.getTask(api.taskId, context);
   const parentCallId = task?.input?.kind === "nested" ? task.input.parentCallId : null;
   const info = shown || presentation(name, args);
@@ -326,6 +344,8 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
     // A replay after consuming a grant must not execute the external call a second time.
     const consumed = asks.find((ask) => ask.usedCallId === api.callId && ask.chatId === thread.chatId);
     if (consumed) return { ask: plain(consumed), consumed: true };
+    // A browser allowed in this thread stays allowed for a day: one decision, not one a call.
+    if (name === BROWSER && asks.some((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "used" && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS)) return { allowed: true };
     const grant = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "allowed");
     const rule = !doc.tainted?.[api.conversationId] && target != null && Object.values(doc.rules || {}).some((item) => item.tool === name && item.target === target);
     if (grant) { grant.status = "used"; grant.usedCallId = api.callId; return { allowed: true }; }
@@ -395,6 +415,15 @@ export function policyWraps(runtime, tools) {
 /** A connector's tools in any chat that selects them (the agent's threads, the Assistant): a write asks first. */
 export function connectorWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => tool.name.startsWith("mcp__") && !tool.connectorReadOnly), false);
+}
+/** conduit_browser wherever a chat selects it: driving a device's browser asks first, with the device it would drive named. */
+export function browserWraps(runtime, tools) {
+  return guard(runtime, tools.filter((tool) => tool.name === BROWSER), false);
+}
+/** Whether a caller with no thread to ask from (another harness, over MCP) may drive a device's browser: the person said Always. */
+export async function browserAlwaysAllowed(agent, device) {
+  const rules = agent ? (await agent.state().catch(() => null))?.rules : null;
+  return Object.values(rules || {}).some((rule) => rule.tool === BROWSER && rule.target === device);
 }
 /** The thread an ask belongs to: a run's goes to the home thread, which outlives it. */
 async function threadFor(runtime, api) {
@@ -468,6 +497,11 @@ function guard(runtime, tools, confine) {
     wrapTool(target, (tool) => ({ ...tool, execute: async (args, api, context) => {
       if (confine && routineFile(runtime.agent.folder, tool.name, args)) {
         return { output: [{ type: "text", text: "Routines change through the routine tool (save), which the person approves." }], isError: true };
+      }
+      // The browser's ask names its device: the one the call would reach, worked out before the person is asked.
+      if (drivesBrowser(tool.name, args) && !args.device) {
+        const picked = await browserFor(runtime, null, api, context).catch(() => null);
+        if (picked) args = { ...args, device: picked.name };
       }
       // The connector's own gate decides what is held, and the approval model judges it (approverOf, below).
       const judged = connectorGates(runtime, tool.name) || connectorResume(runtime, tool.name);

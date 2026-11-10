@@ -25,5 +25,10 @@ export function createPersonBrowsers({ own, nodeHub }) {
     if (!environment) throw Object.assign(new Error("That environment does not offer the person's browser"), { status: 404 });
     return reach(environment);
   };
-  return { environments, reach, byId, offers };
+  /** The environment a call means: the one named, else the person's (their client's device), else the first that offers one. */
+  const pick = async (named, tab = null) => {
+    const list = await environments();
+    return (named ? list.find((item) => item.name === named) : list.find((item) => tab?.devices.includes(item.name)) || list[0]) || null;
+  };
+  return { environments, reach, byId, offers, pick };
 }
