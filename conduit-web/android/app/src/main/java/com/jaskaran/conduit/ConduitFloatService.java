@@ -67,6 +67,13 @@ public class ConduitFloatService extends Service {
     private FloatShot shot;
     /** The pill's ✕ stopped a dictation: back to the radial with the captures still held. */
     private boolean reopenAfterCancel;
+    /**
+     * The microphone takes a moment to open (FloatRecorder.begin), and until it has the machine still reads HANDLE.
+     * What was asked of the recording in that moment is kept here and done as it starts: a hold let go then used to
+     * go unheard and the recording ran on, and a cancel then was undone by the start that followed it.
+     */
+    private enum Opening { NONE, OPENING, RELEASED, CANCELLED }
+    private Opening opening = Opening.NONE;
 
     private boolean radialUp() { return radial != null && (radial.isOpen() || radial.isDictating()); }
 
@@ -211,6 +218,7 @@ public class ConduitFloatService extends Service {
                 else { discard(); show(State.ERROR); }
             }
             @Override public void onFailure() {
+                opening = Opening.NONE;
                 errorText = "Microphone is unavailable";
                 show(State.ERROR);
             }
@@ -644,6 +652,7 @@ public class ConduitFloatService extends Service {
     }
 
     private void holdEnded(boolean cancelled) {
+        if (opening == Opening.OPENING) { opening = cancelled ? Opening.CANCELLED : Opening.RELEASED; return; }
         if (machine.state() != State.RECORDING) return;
         if (cancelled) cancel();
         else stopRecording(false);
@@ -652,6 +661,7 @@ public class ConduitFloatService extends Service {
     private void beginRecording() {
         if (!microphoneReady) { openApp(true); return; }
         liveText = "";
+        if (opening == Opening.NONE) opening = Opening.OPENING;
         recorder.begin(generation + 1);
     }
 
@@ -661,8 +671,12 @@ public class ConduitFloatService extends Service {
     }
 
     private void recordingStarted(FloatRecorder.Capture next) {
+        Opening asked = opening;
+        opening = Opening.NONE;
         generation = next.generation;
         capture = next;
+        // Cancelled while it opened: it ends as a cancelled capture does, without ever showing.
+        if (asked == Opening.CANCELLED) { recorder.stop(next, true); return; }
         prefs().edit().putBoolean("recordingComplete", false)
             .putString("recordingTarget", target.toJson())
             .putBoolean("recordingRetried", false).putString("recordingId", java.util.UUID.randomUUID().toString())
@@ -684,6 +698,7 @@ public class ConduitFloatService extends Service {
             live = next.live = client[0];
             client[0].start();
         } catch (Exception ignored) { /* Live preview is optional. */ }
+        if (asked == Opening.RELEASED) stopRecording(false);
     }
 
     private void stopRecording(boolean cancel) {
@@ -709,6 +724,7 @@ public class ConduitFloatService extends Service {
     private void cancel() {
         if (live != null) { live.close(); live = null; }
         if (capture != null) { reopenAfterCancel = true; stopRecording(true); return; }
+        if (opening != Opening.NONE) opening = Opening.CANCELLED;
         generation++;
         sender.cancel();
         discard();
