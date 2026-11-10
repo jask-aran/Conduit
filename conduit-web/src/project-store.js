@@ -134,7 +134,8 @@ export class ProjectStore {
     this.cloneReservationRoot = path.join(path.dirname(this.catalogFile), "clone-reservations");
     this.cloneReservations = new Map();
     this.cloneOperations = new Map();
-    this.completedCloneOperationIds = new Set();
+    // How each clone that has ended, ended: what a page following one reads when it asks after the end.
+    this.finishedCloneOperations = new Map();
     this.reservedSlugs = new Set();
     // Serialize only catalogue transitions; clone network work executes between
     // its reservation and commit transitions.
@@ -649,13 +650,13 @@ export class ProjectStore {
 
   getCloneOperation(id) {
     const operation = this.cloneOperations.get(id);
-    return operation ? this.cloneOperationView(operation) : null;
+    return operation ? this.cloneOperationView(operation) : this.finishedCloneOperations.get(id) || null;
   }
 
   async cancelCloneOperation(id) {
     const operation = this.cloneOperations.get(id);
     if (!operation) {
-      if (this.completedCloneOperationIds.has(id)) return { id, state: "complete" };
+      if (this.finishedCloneOperations.has(id)) return { id, state: "complete" };
       return null;
     }
     if (operation.state === "cloning") {
@@ -731,9 +732,11 @@ export class ProjectStore {
       operation.state = error.code === "clone_aborted" ? "cancelled" : "failed";
       if (reservation.phase === "published") this.logger.error(`Clone published but could not be finalized: ${reservation.target}`, error);
     } finally {
+      // Kept as it ended: it used to go the moment it ended, so the page following it was answered 404 and never
+      // shown that the clone had failed, or why.
       this.cloneOperations.delete(operation.id);
-      this.completedCloneOperationIds.add(operation.id);
-      if (this.completedCloneOperationIds.size > 100) this.completedCloneOperationIds.delete(this.completedCloneOperationIds.values().next().value);
+      this.finishedCloneOperations.set(operation.id, this.cloneOperationView(operation));
+      if (this.finishedCloneOperations.size > 100) this.finishedCloneOperations.delete(this.finishedCloneOperations.keys().next().value);
     }
   }
 

@@ -546,7 +546,7 @@ test("a published clone retains its durable recovery marker when catalogue publi
   const target = path.join(workspaceRoot, "published");
 
   const started = await store.create({ mode: "cloned", name: "Published", cloneUrl: source, path: target });
-  for (let attempt = 0; attempt < 100 && store.getCloneOperation(started.operation.id); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  for (let attempt = 0; attempt < 100 && store.getCloneOperation(started.operation.id)?.state === "cloning"; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
 
   assert.ok(await fs.stat(target));
   assert.equal((await store.get(started.project.id))?.state, "cloning");
