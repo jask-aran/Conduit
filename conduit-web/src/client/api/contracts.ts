@@ -5,19 +5,9 @@ export type BooleanCapability = {
   [K in keyof ChatCapabilities]: ChatCapabilities[K] extends boolean ? K : never
 }[keyof ChatCapabilities];
 
-export interface ChatCapabilities {
-  history: "none" | "linear" | "tree";
-  fork: boolean;
-  regenerate: boolean;
-  steer: boolean; followUpQueue: boolean; cancel: boolean; compaction: boolean;
-  thinkingLevels: boolean; modelSwitch: boolean; toolUse: boolean;
-  /** Answers host-UI approval requests. Distinct from offering modes to pick. */
-  approvals: boolean;
-  /** Offers selectable permission profiles. Distinct from answering approvals. */
-  permissionModes: boolean;
-  usage: boolean; replay: boolean;
-  attachments: boolean;
-}
+/** What a chat's backend can do, as the hub declares it (chat-backend-contract.d.ts). */
+import type { ChatCapabilities } from "../../chat-backend-contract.js";
+export type { ChatCapabilities };
 
 export interface HarnessCommand {
   name: string;

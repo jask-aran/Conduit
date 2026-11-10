@@ -5,6 +5,7 @@ import type { LiveRecord, TranscriptDetail } from "../api/contracts";
 import type { RuntimeStore } from "./runtime";
 import { frameIntervalMs } from "../frame-interval";
 import { clientId } from "../agent-ui";
+import { liveCommandIs, type LIVE_COMMANDS } from "../../live-session-api.js";
 import { onPathChange } from "../platform/servers";
 
 
@@ -321,15 +322,15 @@ export function createAgentSession(deps: {
     deps.onLost();
   };
 
-  const send = (command: UnknownCommand) => {
+  const send = (command: LiveCommand) => {
     if (!isOpen()) throw new Error("Not connected to the live session");
     // A message says which client sent it: its chat's origin, where the agent shows things (server ui-control.js).
-    const origin = ["prompt", "follow_up", "steer", "fork_and_prompt"].includes(String(command.type)) ? clientId() : "";
+    const origin = liveCommandIs(command.type, "origin") ? clientId() : "";
     socket!.send(JSON.stringify(origin ? { ...command, client: origin } : command));
   };
 
   /** Send if the stream is up, otherwise get an agent first. */
-  const sendWhenReady = (command: UnknownCommand, intent = "open") => {
+  const sendWhenReady = (command: LiveCommand, intent = "open") => {
     if (isOpen()) return send(command);
     void require(intent).then(() => send(command)).catch(deps.onError);
   };
@@ -395,5 +396,6 @@ export function createAgentSession(deps: {
   return { ensure, require, send, sendWhenReady, isOpen, launching, detach, reset, dispose, cancelReconnect };
 }
 
-type UnknownCommand = Record<string, unknown>;
+/** A command for the live stream: one the hub declares (live-session-api.js), with that command's own fields. */
+type LiveCommand = { type: keyof typeof LIVE_COMMANDS } & Record<string, unknown>;
 

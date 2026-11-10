@@ -3,6 +3,7 @@ import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { manifestForImplementation } from "../harnesses/index.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 import { ServerConcurrency } from "./effect-concurrency.js";
+import { liveCommandIs } from "../live-session-api.js";
 
 /**
  * An id a client chose for the message it is sending.
@@ -304,7 +305,7 @@ export function createLiveSessionStream({
 
   const assertChildCommand = (record, command) => {
     if ((record.readOnly || registry.metadata(record.chatId)?.status === "subagent")
-      && !["frame_interval", "resume_log", "refresh_context"].includes(command?.type)) {
+      && !liveCommandIs(command?.type, "child")) {
       throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
     }
   };
@@ -312,7 +313,7 @@ export function createLiveSessionStream({
   async function handleClientCommand(record, command) {
     assertChildCommand(record, command);
     const adapter = adapterFor(record);
-    if (command.client && ["prompt", "follow_up", "steer", "fork_and_prompt"].includes(command.type)) sentFrom(record.chatId, command.client);
+    if (command.client && liveCommandIs(command.type, "origin")) sentFrom(record.chatId, command.client);
     if (command.type === "prompt") {
       if (record.ephemeral) return startGeneration(record,
         () => adapter.prompt(record.id, String(command.message || "")));
@@ -364,7 +365,7 @@ export function createLiveSessionStream({
       }, interrupted.message));
       return sendPrompt(record, prepared, { messageId: offeredMessageId(command.messageId), author: "person" });
     }
-    if (command.type === "stop_generation" || command.type === "abort") {
+    if (command.type === "stop_generation") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
       // A stop clears the queue before it cancels the turn. The client puts
       // the reader's own queued words back in the composer.
@@ -401,7 +402,7 @@ export function createLiveSessionStream({
       const messageId = CLIENT_MESSAGE_ID.test(String(command.entryId || "")) ? command.entryId : null;
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
     }
-    if (command.type === "extension_ui_response" || command.type === "host_ui_response") {
+    if (command.type === "extension_ui_response") {
       // Awaited: a harness that answers over the network can refuse, and a
       // refusal belongs to this command, not to the process.
       await adapter.respondHostUi(record.id, command);
@@ -517,7 +518,7 @@ export function createLiveSessionStream({
         void publishSnapshot(record);
         return;
       }
-      const bypassLifecycle = record.ephemeral || command.type === "stop_generation" || command.type === "abort";
+      const bypassLifecycle = record.ephemeral || liveCommandIs(command.type, "urgent");
       const run = () => bypassLifecycle ? handleClientCommand(record, command) : lifecycle.run(record.chatId, async () => {
         const context = await findChatContext(record.chatId);
         if (!context) throw Object.assign(new Error("Chat no longer exists"), { code: "chat_not_found" });
@@ -526,7 +527,7 @@ export function createLiveSessionStream({
       });
       // Stop bypasses the ordered command chain so it can interrupt work that
       // an earlier command started. Prompt acceptance normally resolves fast.
-      if (command.type === "stop_generation" || command.type === "abort") {
+      if (command.type === "stop_generation") {
         void run().catch(report);
         return;
       }

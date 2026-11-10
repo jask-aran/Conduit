@@ -708,10 +708,10 @@ Client commands:
 |---|---|---|
 | `prompt` | `message`, `attachmentIds[]`, optional `streamingBehavior` (`steer` \| `followUp`) | Send a user prompt in the strict attachment envelope through the selected backend |
 | `follow_up` / `steer` | `message`, `attachmentIds[]` | Queue mid-run follow-up or steering input |
-| `stop_generation` / `abort` | `generationId` | Close the generation gate, then cancel the active backend turn |
+| `stop_generation` | `generationId` | Close the generation gate, then cancel the active backend turn |
 | `fork_and_prompt` | `entryId`, `message`, `attachmentIds[]`, optional `model`, `thinkingLevel` | Fork history at an entry, apply the composer selection, then prompt |
 | `regenerate` | `entryId`, optional `model`, `thinkingLevel` | Fork at an entry, apply the composer selection, then resend its recorded prompt |
-| `extension_ui_response` / `host_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
+| `extension_ui_response` | `id`, `confirmed` \| `value` \| `cancelled` | Answer a blocking extension UI request |
 | `refresh_context` | — | Request a context-usage refresh from the backend |
 | `compact` | — | Ask the backend to compact its context |
 | `clear_queue` | — | Discard queued steering and follow-up messages |
