@@ -4,7 +4,7 @@ import { Row } from "@/components/ui/row";
 import { Actions, IconButton } from "@/components/ui/actions";
 import { Heading } from "@/components/ui/header";
 import { StatusText } from "@/components/ui/file";
-import { Workbench, WorkbenchFact, WorkbenchPair, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { Workbench, WorkbenchFact, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { ROLE_ICON, type BlockDetail, type ContextData } from "./context-settings";
 // The editor brings CodeMirror: loaded when a skill is opened, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
@@ -57,6 +57,8 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   const [draft, setDraft] = createSignal("");
   const [saving, setSaving] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
+  // The registry's search, shown at the head of the side column once asked for (the title's +).
+  const [finding, setFinding] = createSignal(false);
   const blockPath = () => `/v0/context/blocks/${encodeURIComponent(`skill-${props.skillId}`)}`;
   createEffect(() => {
     const id = opened()?.id;
@@ -147,7 +149,7 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
     <Show when={one.skill.origin === "installed"}><Group kind="workbench" title="From"><WorkbenchFact name="skills.sh" value={one.skill.source} /></Group></Show>
   </>;
   const Find = () => <Group kind="workbench" title="Find on skills.sh">
-    <Input type="search" aria-label="Search skills.sh" placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
+    <Input type="search" aria-label="Search skills.sh" ref={(element: HTMLInputElement) => queueMicrotask(() => element.focus())} placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
     <Show when={searching()}><Note kind="workbench">Searching…</Note></Show>
     <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
     <Show when={found()}>{(results) =>
@@ -170,17 +172,18 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   return <Show when={skills()} fallback={<Show when={error()} fallback={<Loading>Loading skills…</Loading>}>
     <Note tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
   </Show>}>{(list) => <Workbench label="Skills">
-    <WorkbenchTitle title={opened()?.name ?? "Skills"} meta={opened() ? [opened()!.origin === "installed" ? `installed from ${opened()!.source}` : "shipped", opened()!.enabled ? "" : "off", detail()?.modified ? "changed" : ""].filter(Boolean).join(" · ") : undefined} />
+    <WorkbenchTitle title={opened()?.name ?? "Skills"} meta={opened() ? [opened()!.enabled ? "" : "off", detail()?.modified ? "changed" : ""].filter(Boolean).join(" · ") || undefined : undefined}
+      actions={<Button variant="ghost" size="icon-sm" aria-label="Find a skill on skills.sh" title="Find a skill on skills.sh" aria-pressed={finding()} onClick={() => { const next = !finding(); setFinding(next); if (!next) search(""); }}><Show when={finding()} fallback={<Icons.Add />}><Icons.Close /></Show></Button>} />
     <Show when={error()}><Note tone="error">{error()}</Note></Show>
     <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={opened()?.name ?? "Skill"}
       side={<>
+        <Show when={finding()}><Find /></Show>
         <Show when={list().some((skill) => skill.origin === "installed")}>
           <Group kind="workbench" title="Installed"><For each={list().filter((skill) => skill.origin === "installed")}>{pick}</For></Group>
         </Show>
         <Group kind="workbench" title="Shipped"><For each={list().filter((skill) => skill.origin === "shipped")}>{pick}</For></Group>
-        <Find />
+        <Show when={opened()}>{(skill) => <Facts skill={skill()} />}</Show>
       </>}
-      main={<Show when={opened()} fallback={<Note kind="workbench">No skills yet: find one on skills.sh.</Note>}>{(skill) =>
-        <WorkbenchPair list={<Facts skill={skill()} />} pane={<Text skill={skill()} />} />}</Show>} />
+      main={<Show when={opened()} fallback={<Note kind="workbench">No skills yet: find one on skills.sh with the + above.</Note>}>{(skill) => <Text skill={skill()} />}</Show>} />
   </Workbench>}</Show>;
 }
