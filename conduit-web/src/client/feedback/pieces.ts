@@ -36,6 +36,8 @@ type Edges = { left: number; top: number; right: number; bottom: number };
 const MOSTLY = 0.5;
 /** A piece with this much of it inside the box is wholly inside, near enough. */
 const WHOLLY = 0.9;
+/** A box that runs the height or width of a piece is across it when it has this much of it. */
+const ACROSS = 0.25;
 /** A piece thinner than this (px) is a rule between pieces: a drag across several does not mean it. */
 const HAIRLINE = 4;
 const meet = (a: Edges, b: Edges): Edges => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
@@ -47,7 +49,8 @@ const shown = (element: Element) => element.checkVisibility?.({ checkOpacity: tr
  * first: it is taken itself when it is mostly inside and the box has every piece in it (or it has none), and gives
  * the pieces of it the box has otherwise, so a drag round two of three tiles is the two tiles and a drag a little
  * short of a button is the button. Only what shows counts: what a scroller clips or another layer covers is not
- * there. A box that holds no piece (a drag inside one) is the smallest piece that holds the box.
+ * there. A box that holds no piece (a drag inside one) is the smallest piece that holds the box, or the pieces of
+ * that one it runs across when there are several.
  */
 export function piecesWithin(box: Box): Element[] {
   const drag: Edges = { left: box.left, top: box.top, right: box.left + box.width, bottom: box.top + box.height };
@@ -82,7 +85,13 @@ export function piecesWithin(box: Box): Element[] {
   // A drag inside a piece: outward from the piece at its middle to the first that holds the box.
   let holder = pieceRoot(under((drag.left + drag.right) / 2, (drag.top + drag.bottom) / 2));
   while (holder && area(meet(holder.getBoundingClientRect(), drag)) < WHOLLY * area(drag)) holder = pieceRoot(holder.parentElement);
-  return holder ? [holder] : [];
+  if (!holder) return [];
+  // A box across part of several of its pieces (the right half of three rows) means those: each one the box runs the height or the width of.
+  const crossed = solid(walk(holder, view, drag, (inside, showing) => {
+    const within = meet(showing, drag);
+    return Math.max((within.right - within.left) / (showing.right - showing.left), (within.bottom - within.top) / (showing.bottom - showing.top)) >= WHOLLY && area(within) >= ACROSS * area(showing) && uncovered(inside, showing) ? [inside] : [];
+  }));
+  return crossed.length > 1 ? crossed : [holder];
 }
 
 const short = (text: string, length: number) => text.length > length ? `${text.slice(0, length - 1)}…` : text;
