@@ -17,10 +17,8 @@ import type { MarkdownRendererId } from "../chat/markdown-settings";
 
 /**
  * jbot's messages on its page (docs/plans/persistent-agent.md › Talking to the person): the message log's app room,
- * newest at the foot, held there while you read (DashConversation), over the page's composer. What the person says
+ * newest at the foot, held there while you read, over the page's composer. What the person says
  * is a bubble; what jbot says is a bubble too, a hairline one (Turn bubble), times always shown; a report (a message with a title) is a card opening in a reader.
- * Each row is a stop of the page's cursor ([data-dash-row], dashboard/primitives/split-cursor.ts): ↑/↓ between
- * messages, Enter opens a report or a folded room.
  */
 export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
@@ -329,13 +327,13 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
             : row.kind === "work"
             ? <Show when={workOf(row.message)}>{(data) => <TranscriptRow flow={flowAt(index())}>{trace(data, row.message)}</TranscriptRow>}</Show>
             : row.kind === "room"
-            ? <TranscriptRow flow={flowAt(index())} tabIndex={-1} data-dash-row="">
+            ? <TranscriptRow flow={flowAt(index())} tabIndex={-1}>
               <RoomRow icon={(CHANNEL[row.channel]?.icon || (() => <Icons.Chat aria-hidden="true" />))()} channel={CHANNEL[row.channel]?.word || row.channel}
                 room={roomName(row.room)} count={row.messages.length} last={firstLine(splitQuoted(row.messages.at(-1)!.body).own || row.messages.at(-1)!.body)} time={clock(row.messages.at(-1)!.at)}>
                 <For each={row.messages}>{(message) => row.channel === "email" ? email(message) : one(message)}</For>
               </RoomRow>
             </TranscriptRow>
-            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1} data-dash-row=""
+            : (() => { const message = row.message; return <TranscriptRow flow={flowAt(index())} data-message-id={message.id} tabIndex={-1}
               data-held={leavingTrace()?.reply === message.id ? "" : undefined}
               {...motionOf(message.direction === "out" && arriving(message.id) ? "entering" : undefined)}>
               <Switch>

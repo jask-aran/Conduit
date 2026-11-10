@@ -14,7 +14,7 @@ export const KEYBOARD_TRAVEL_EVENT = "conduit:keyboard-travel";
  * as the scroller grows, which is put on the travel too. The animation starts in phase from the shell's wall-clock stamp.
  */
 const RIDERS = ".ui-composer-dock";
-const SCROLLERS = ".ui-chat-scroller, .ui-dash-conversation-scroll";
+const SCROLLERS = ".ui-chat-scroller";
 const shown = (element: Element) => element.getClientRects().length > 0;
 
 /** Whether a travel should be drawn this way now: the native composer is mirroring the web one. */
@@ -48,7 +48,7 @@ export function travelWithoutLayout(travel: Travel, setKeyboard: (height: number
   const scrollers = away ? [] : [...document.querySelectorAll(SCROLLERS)].filter(shown);
   // Scrolled up: marked, so the transcript's hold leaves it be, and its scroll read so a clamp can be carried.
   // The element that scrolls: a thread's viewport inside its scroller, a room's scroller itself.
-  const still = away ? [...document.querySelectorAll<HTMLElement>(".ui-chat-viewport, .ui-dash-conversation-scroll")].filter(shown) : [];
+  const still = away ? [...document.querySelectorAll<HTMLElement>(".ui-chat-viewport")].filter(shown) : [];
   for (const scroller of still) scroller.setAttribute("data-keyboard-away", "");
   const scrolls = still.map((scroller) => scroller.scrollTop);
   // Where the composer's top sits at each end, measured, not computed: it moves by the keyboard's travel (less the

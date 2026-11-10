@@ -879,9 +879,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     onCleanup(() => dropLatestScroller(followLatest));
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
-    // In a page's conversation (DashConversation) the composer is under the transcript, not over it: nothing to clear.
-    const composerStack = transcriptRoot.closest(".ui-dash-conversation") ? null
-      : transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
+    const composerStack = transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
     // The thread reserves the composer's measured height (components/ui/dock-inset.ts, as a room's messages do).
     const stopClearingDock = composerStack ? clearDock(transcriptRoot, composerStack, () => {
       // Reserve and follow in the same resize delivery, before paint, through the field's room glide.

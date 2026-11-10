@@ -5715,7 +5715,6 @@ function App() {
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewChat, "sidebar", () => { setMobileSidebarOpen(false); void startNewChat(); }),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewFolder, "sidebar", () => runSidebar("new-folder")),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarSearchChats, "sidebar", toggleSearchPalette),
-          shortcutManager.registerHandler(COMMAND_IDS.dashboardMessages, "dashboard", () => { focusSplitSection("messages"); }, { when: () => splitSections().has("messages") }),
         ];
       })(),
       // Find in chat (keyboard model, gap 6): Ctrl+F opens the find bar of the transcript in the pane with the keyboard.

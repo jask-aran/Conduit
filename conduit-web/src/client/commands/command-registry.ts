@@ -61,7 +61,6 @@ export const COMMAND_IDS = {
   dashboardTerminals: "dashboard.terminals",
   dashboardChanges: "dashboard.changes",
   dashboardFiles: "dashboard.files",
-  dashboardMessages: "dashboard.messages",
   toggleChatWorkspaceFocus: "toggle-chat-workspace-focus",
   workspaceFiles: "workspace-panel.files",
   workspaceSourceControl: "workspace-panel.source-control",
@@ -517,18 +516,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["dashboard", "section", "focus", "files"],
     contexts: ["dashboard"],
     defaultBindings: [scopedBinding("KeyF", "F")],
-    allowInExclusiveTarget: true,
-  }),
-  command({
-    id: COMMAND_IDS.dashboardMessages,
-    label: "Go to messages",
-    description: "Move the page's cursor to its messages, over the composer",
-    group: "navigation",
-    icon: "chat",
-    keywords: ["dashboard", "section", "focus", "messages", "conversation", "agent"],
-    contexts: ["dashboard"],
-    // Shift+C: the conversation over the composer (C).
-    defaultBindings: [scopedBinding("KeyC", "C", ["shift"])],
     allowInExclusiveTarget: true,
   }),
   command({

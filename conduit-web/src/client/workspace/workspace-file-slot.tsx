@@ -158,7 +158,6 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
-  headerPrefix?: JSX.Element;
   /** Before the close button: the file viewer's split. */
   headerSuffix?: JSX.Element;
   /** A file viewer's tabs for this side (6c): they name the file, and close it. */
@@ -509,7 +508,6 @@ export default function WorkspaceFileSlot(props: {
     <FileGit status={file().status === "??" ? "U" : file().status.trim()} />
   }</Show>;
   const textHeader = () => <>
-    <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
     <Show when={props.headerTabs} fallback={<FileName path={props.path ?? ""} icon={<FileTypeIcon name={props.path ?? ""} />} />}>{props.headerTabs}</Show>
     {gitControls()}
     <Show when={!props.headerTabs}><FileDirty dirty={hasUnsavedChanges()} /></Show>
@@ -548,7 +546,6 @@ export default function WorkspaceFileSlot(props: {
     >
       <Show when={asset()}>{(file) => <>
         <PaneHeader kind="file">
-          <Show when={props.headerPrefix}>{props.headerPrefix}</Show>
           <Show when={props.headerTabs} fallback={<FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />}>{props.headerTabs}</Show>
           {gitControls()}
           <IconButton kind="file" type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><Icons.Download /></IconButton>
@@ -610,7 +607,6 @@ export default function WorkspaceFileSlot(props: {
       </>}</Show>
       <Show when={!asset()}>
         <Show when={preview()} fallback={<>
-          <Show when={props.headerPrefix}><PaneHeader kind="file">{props.headerPrefix}</PaneHeader></Show>
           <Empty>{props.empty ?? "Select a file to preview it."}</Empty>
         </>}>{(file) => <>
           <Show when={file().readOnly && !file().truncated}>

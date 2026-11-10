@@ -53,9 +53,9 @@ function panelTab(value: string): PanelTab | null {
 const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
 export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
-  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session), and its header's modes.
+  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session).
    *  It stays in the dock: no Maximise, no moving to a pane. */
-  jbotView?: () => JSX.Element; jbotModes?: () => JSX.Element }) {
+  jbotView?: () => JSX.Element }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
   let panelMotionId = 0;
@@ -570,7 +570,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       modes={<>
         <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
         <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
-        <Show when={tool() === "jbot"}>{props.jbotModes?.()}</Show>
       </>}
       views={where === "dock" ? tabStrip() : undefined}
       actions={<Show when={where === "dock"} fallback={<>

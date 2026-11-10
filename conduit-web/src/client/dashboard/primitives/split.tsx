@@ -99,7 +99,6 @@ export function SplitDashboard(props: {
   quickActions?: JSX.Element;
   notice?: JSX.Element;
   band?: JSX.Element;
-  conversation?: JSX.Element;
   composer?: JSX.Element;
   list?: JSX.Element;
   /** Dashboard's `stacked`: several groups in the left column. */
@@ -158,7 +157,7 @@ export function SplitDashboard(props: {
   });
   // A phone docks the composer at the foot, as a chat does (ComposerDock, as the chat's).
   return <Phone.Provider value={phone}><Dashboard ref={(element) => { root = element; }} label={props.label} page={props.page} compact={phone()} oneColumn={oneColumn()} stacked={props.stacked} room={props.room}
-    head={props.header} actions={props.quickActions} notice={props.notice} band={props.band} conversation={props.conversation} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
+    head={props.header} actions={props.quickActions} notice={props.notice} band={props.band} composer={!phone() ? props.composer : undefined} list={props.list} aside={props.aside}
     dock={<Show when={phone() && props.composer}><ComposerDock data-dash-dock="">{props.composer}</ComposerDock></Show>} /></Phone.Provider>;
 }
 

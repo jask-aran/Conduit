@@ -105,7 +105,6 @@ function fieldColours(input: HTMLTextAreaElement) {
   return { selection: selected.a ? selected : colour(systemHighlight),
     caret: colour(style.caretColor === "auto" ? style.color : style.caretColor) };
 }
-export type NativeComposerPart = ReturnType<typeof describe>["parts"][number];
 type Description = ReturnType<typeof describe>;
 type BlurStates = { empty: PhoneState; text: PhoneState };
 export type NativePhoneComposerPlugin = {

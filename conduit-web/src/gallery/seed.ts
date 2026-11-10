@@ -45,11 +45,6 @@ export function seededModels() {
   };
 }
 
-export function seededPlace() {
-  const [current, setCurrent] = createSignal<Project | null>(null);
-  return { get projects() { return PROJECTS; }, get current() { return current(); }, onChoose: (project: Project) => setCurrent((now) => now?.id === project.id ? null : project) };
-}
-
 export function seededProfile() {
   const [active, setActive] = createSignal(PROFILES[0]!);
   return { profiles: PROFILES, active, choose: (id: string) => setActive(PROFILES.find((profile) => profile.id === id) ?? PROFILES[0]!) };
