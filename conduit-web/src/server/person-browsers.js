@@ -1,0 +1,29 @@
+import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
+import { reachableDevices } from "./device-tools.js";
+
+/*
+ * The person's own browsers across the network (nodes/person-browser.js), as the hub reaches them: its own
+ * environment's directly, another's through its node (`personBrowser`, device-api.js). One way in for the agents'
+ * tool (person-browser-tool.js) and for Settings › Devices (routes/person-browsers.js).
+ */
+export function createPersonBrowsers({ own, nodeHub }) {
+  const offers = (environment) => (environment.local ? Boolean(own?.available) : Boolean(nodeHub?.live.get(environment.nodeId)?.personBrowser));
+  /** Every environment that can run Browse, as agents and Settings name it. */
+  const environments = async () => (await reachableDevices(nodeHub)).filter(offers);
+  const reach = (environment) => {
+    if (environment.local) return own;
+    const ask = async (method, args = []) => {
+      const result = await nodeHub.call(environment.nodeId, { target: "personBrowser", method, args, cwd: null }, withAbortSignal(AbortSignal.timeout(150_000), BACKGROUND_CONTEXT));
+      if (!result?.ok) throw Object.assign(new Error(result?.error?.message || "The device did not answer"), { status: 502 });
+      return result.value;
+    };
+    return { status: () => ask("status"), pair: () => ask("pair"), unpair: (browser) => ask("unpair", [browser]), tools: () => ask("tools"), call: (name, args) => ask("call", [name, args]) };
+  };
+  /** By node id, for a route: the environment's browser, or a 404. */
+  const byId = async (id) => {
+    const environment = (await environments()).find((item) => item.nodeId === id);
+    if (!environment) throw Object.assign(new Error("That environment does not offer the person's browser"), { status: 404 });
+    return reach(environment);
+  };
+  return { environments, reach, byId, offers };
+}

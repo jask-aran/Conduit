@@ -539,6 +539,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
 
       if (target === "personBrowser") {
         if (!offersPersonBrowser()) return err(new FileError("permission_denied", "This device does not offer the person's browser to Conduit"));
+        if (method === "status") return { ok: true, value: await personBrowser.status() };
+        if (method === "pair") return { ok: true, value: await personBrowser.pair() };
+        if (method === "unpair") return { ok: true, value: await personBrowser.unpair(decoded[0]) };
         if (method === "tools") return { ok: true, value: await personBrowser.tools() };
         if (method === "call") return { ok: true, value: await personBrowser.call(decoded[0], decoded[1]) };
         return err(new FileError("not_supported", `${method} is not served by this node`));

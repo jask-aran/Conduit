@@ -1,8 +1,6 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
-import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { callingChat } from "./conduit-mcp.js";
-import { reachableDevices } from "./device-tools.js";
 
 /*
  * `conduit_browser`: the person's own browser on any device of the network, for agents (a spike). The engine is
@@ -13,20 +11,6 @@ import { reachableDevices } from "./device-tools.js";
 const text = (value, isError = false) => ({ output: [{ type: "text", text: value }], ...(isError ? { isError: true } : {}) });
 
 export function PersonBrowserTool(runtime) {
-  const reach = async (device) => {
-    if (device.local) {
-      const own = runtime.personBrowser;
-      if (!own?.available) throw new Error("OpenCode Browse is not installed on the hub.");
-      return { tools: () => own.tools(), call: (name, args) => own.call(name, args) };
-    }
-    if (!runtime.nodeHub?.live.get(device.nodeId)?.personBrowser) throw new Error(`${device.name} does not offer the person's browser (OpenCode Browse is not installed there, or it is offline).`);
-    const ask = async (method, args) => {
-      const result = await runtime.nodeHub.call(device.nodeId, { target: "personBrowser", method, args, cwd: null }, withAbortSignal(AbortSignal.timeout(150_000), BACKGROUND_CONTEXT));
-      if (!result?.ok) throw new Error(result?.error?.message || "The device did not answer");
-      return result.value;
-    };
-    return { tools: () => ask("tools", []), call: (name, args) => ask("call", [name, args]) };
-  };
   return defineTool({
     name: "conduit_browser",
     description: "Drive the person's own browser on a device: their real, signed-in Chromium, through OpenCode Browse there. "
@@ -42,14 +26,14 @@ export function PersonBrowserTool(runtime) {
     replay: "unsafe",
     execute: async ({ device: named, tool, arguments: args }, api, context) => {
       try {
-        const devices = await reachableDevices(runtime.nodeHub);
+        const browsers = runtime.personBrowsers;
+        if (!browsers) return text("The person's browsers cannot be reached from here.", true);
+        const devices = await browsers.environments();
         // The person's device: the one their client (this chat's origin, ui-control.js) says it is on.
         const tab = !named && runtime.uiControl ? await runtime.uiControl.targetFor(await callingChat(runtime, api, context)).catch(() => null) : null;
-        const offers = (item) => (item.local ? runtime.personBrowser?.available : runtime.nodeHub?.live.get(item.nodeId)?.personBrowser);
-        const device = named ? devices.find((item) => item.name === named)
-          : devices.find((item) => tab?.devices.includes(item.name) && offers(item)) || devices.find(offers);
-        if (!device) return text(named ? `No device named ${named}. See devices.` : "No device on the network offers the person's browser (OpenCode Browse is installed on none).", true);
-        const browser = await reach(device);
+        const device = named ? devices.find((item) => item.name === named) : devices.find((item) => tab?.devices.includes(item.name)) || devices[0];
+        if (!device) return text(named ? `${named} does not offer the person's browser. See devices.` : "No device on the network offers the person's browser.", true);
+        const browser = browsers.reach(device);
         if (!tool) return text(`${device.name}'s browser, through OpenCode Browse. Tools:\n${JSON.stringify(await browser.tools(), null, 1)}`);
         const result = await browser.call(tool, args || {});
         return { output: result.output, ...(result.isError ? { isError: true } : {}) };
