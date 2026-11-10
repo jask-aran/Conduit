@@ -396,6 +396,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const heldOrigins = new Set(servers().map((entry) => entry.origin));
     const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
     setSearching(true);
+    // The look lasts at least a beat, so one that ends at once still reads as a look rather than a flicker.
+    const beat = new Promise((resolve) => setTimeout(resolve, 1200));
     // Rows arrive as servers resolve and keep their place: a server seen
     // again at another address updates its row rather than moving it.
     void discoverServers({
@@ -406,7 +408,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
           ? list.map((item) => item.id === server.id ? server : item)
           : [...list, server]);
       },
-    }).finally(() => { if (run === lookRun) setSearching(false); });
+    }).finally(() => beat).then(() => { if (run === lookRun) setSearching(false); });
   };
 
   /*
@@ -491,8 +493,10 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
           * so on the sign-in screen rather than shown a search that never ends.
           */}
         <Show when={canDiscoverServers() || localServer()} fallback={props.adding ? null : <Note kind="card">Finding servers on this network needs the Conduit app.</Note>}>
-          <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show></ConnectionGroup>
-          <Show when={found().length || localServer()} fallback={<Show when={!searching()}><Note kind="card">No servers found.</Note></Show>}>
+          {/* The look plays on the list's own line, and says there what it came to when that is nothing. */}
+          <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show>
+            <Show when={!searching() && !found().length && !localServer()}><small>No servers found</small></Show></ConnectionGroup>
+          <Show when={found().length || localServer()}>
             <ConnectionChoices>
               <Show when={localServer()}><ConnectionChoice type="button" onClick={useLocalServer} disabled={submitting()} icon={<Icons.Monitor />} detail={localServer()!.replace(/^https?:\/\//, "")}>This computer</ConnectionChoice></Show>
               <For each={found()}>{(server) => <ConnectionChoice type="button" onClick={() => void chooseFound(server)} disabled={submitting()} icon={<Icons.Server />} detail={server.origin.replace(/^https?:\/\//, "")}>{server.name}</ConnectionChoice>}</For>

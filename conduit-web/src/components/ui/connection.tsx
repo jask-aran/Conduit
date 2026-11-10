@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { Show, createUniqueId, splitProps, type JSX } from "solid-js";
+import { Show, createSignal, createUniqueId, onCleanup, splitProps, type JSX } from "solid-js";
 import { Steps } from "./steps";
 import { CircleAlertIcon } from "lucide-solid";
 import { Dot, StatusDot } from "./nav";
@@ -50,6 +50,18 @@ export const ConnectionGo = (props: { label: string; busy?: boolean; disabled?: 
 /** A row's scan button: reads a pairing code into the address. */
 export const ConnectionScan = (props: { onClick: () => void; disabled?: boolean }) =>
   <Button type="button" variant="ghost" size="icon" aria-label="Scan QR code" title="Scan QR code" disabled={props.disabled} onClick={() => props.onClick()}><Icons.QrCode /></Button>;
+
+/** Something to copy, shown whole in a field that scrolls (a pairing link), with its copy button; ticked for a moment once copied. */
+export function ConnectionCopy(props: { value: string; label: string; disabled?: boolean }) {
+  const [copied, setCopied] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const copy = () => void navigator.clipboard.writeText(props.value).then(() => { setCopied(true); clearTimeout(timer); timer = setTimeout(() => setCopied(false), 1600); });
+  return <div class="ui-connection-password ui-connection-copy">
+    <Input type="text" readOnly value={props.value} aria-label={props.label} disabled={props.disabled} spellcheck={false} onFocus={(event) => event.currentTarget.select()} />
+    <Button type="button" variant="ghost" size="icon" aria-label={`Copy ${props.label.toLowerCase()}`} title={`Copy ${props.label.toLowerCase()}`} disabled={props.disabled || !props.value} onClick={copy}><Show when={copied()} fallback={<Icons.Copy />}><Icons.Check /></Show></Button>
+  </div>;
+}
 
 /** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
 export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {

@@ -12,6 +12,7 @@ import { Columns, Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { Actions } from "@/components/ui/actions";
 import { Fact } from "@/components/ui/overlay";
+import { ConnectionCopy } from "@/components/ui/connection";
 import * as Icons from "@/components/ui/icons";
 import { isMobileLayout } from "./mobile-layout";
 import { ServerFacts } from "../platform/server-facts.tsx";
@@ -89,9 +90,10 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
           <Fact label="Code" value={expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"} />
         </ServerFacts>
       </CardDetails>
+      {/* The link itself, to read or copy: what the QR holds, for a device that cannot scan it. */}
+      <ConnectionCopy label="Pair link" value={link()} disabled={expired()} />
       <Actions>
         <Show when={phone}><DialogButton variant="ghost" size="sm" aria-expanded={qrShown()} onClick={() => setQrShown(!qrShown())}><Icons.QrCode />{qrShown() ? "Hide QR" : "Show QR"}</DialogButton></Show>
-        <DialogButton variant="ghost" size="sm" onClick={() => void navigator.clipboard.writeText(link())} disabled={!link() || expired()}>Copy link</DialogButton>
         <DialogButton variant="ghost" outline size="sm" onClick={() => void fresh()}>New code</DialogButton>
       </Actions>
       {/* A phone is likelier the one scanning than the one scanned: its code opens under the action that asks for it. */}

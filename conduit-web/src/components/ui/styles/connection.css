@@ -12,6 +12,8 @@
 .ui-connection-screen[data-embedded] { min-height: var(--measure-lg); }
 .ui-connection-password { display: flex; gap: var(--space-sm); align-items: center; }
 .ui-connection-password > :is(.ui-input, .ui-connection-address) { min-width: 0; flex: 1; }
+.ui-connection-copy > .ui-input { font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-overflow: ellipsis; }
+.ui-connection-group > small { font-size: inherit; font-weight: var(--weight-rest); }
 /* A list of servers under the address has its name over it, set off from the rows above by a step more room. */
 .ui-connection-steps > .ui-connection-group { margin-top: var(--space-sm); }
 .ui-connection-error { margin: 0; color: var(--destructive); font-size: var(--text-caption); line-height: var(--leading-row); overflow-wrap: anywhere; }
