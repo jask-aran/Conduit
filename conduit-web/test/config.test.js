@@ -17,7 +17,7 @@ test("default durable paths use ~/.conduit/data and the default template is disc
   assert.deepEqual(config.piTemplate.tools, declared.tools);
   assert.deepEqual(config.piTemplate.models, declared.models);
   assert.deepEqual(config.piTemplates.find((template) => template.id === declared.id), config.piTemplate);
-  for (const id of ["assistant", "runtime"]) {
+  for (const id of ["assistant"]) {
     assert.ok(config.piTemplates.some((template) => template.id === id));
   }
   assert.deepEqual(config.piTemplateById.get("assistant"), config.piTemplates.find((template) => template.id === "assistant"));

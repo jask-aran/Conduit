@@ -16,8 +16,8 @@ Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 | Change | Check |
 | --- | --- |
 | Types, routes, isolated logic | `npm run typecheck`, `node --test test/<file>.test.js` |
-| Streaming display, rendering | `npm run bench:renderer` |
-| A component or styling | `npm run gallery`, then Agent Browser |
+| Server behaviour | `curl` against `/v0/...` with a cookie from `node ../scripts/conduit-auth.mjs mint-session --format cookie` |
+| A component or styling | `npm run gallery`, then the Windows Chrome DevTools CLI (`node ../scripts/run-windows-chrome-devtools.mjs`) |
 | A release | `npm test` (release only) |
 
 For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. The test count only

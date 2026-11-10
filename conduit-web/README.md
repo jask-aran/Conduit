@@ -1006,7 +1006,8 @@ no automated coverage. The Playwright suite that used to assert it was removed
 first: it took over twelve minutes, most of it was failing, and none of the
 failures told us anything about the app. The remaining specs went the same way
 for the same reason, and the repository now has no headless browser suite at
-all. Browser-level checking is Agent Browser, driven rather than asserted.
+all. Browser-level checking is the Windows Chrome DevTools CLI, driven rather than
+asserted (`docs/TESTING.md`).
 Rebuild a suite deliberately if it earns its place.
 
 ## Installed shells

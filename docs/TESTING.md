@@ -3,15 +3,16 @@
 Run `npm` commands and web scripts from `conduit-web/` unless marked otherwise.
 Checks that need the app use the local server at `http://127.0.0.1:4310`
 (`bash .devcontainer/start-conduit.sh restart` from the repository root after a
-change). Pick the cheapest check that can prove the change; don't escalate
-during iterative work.
+change). Most checking is done by driving the running server over its HTTP API
+or the app through Windows Chrome DevTools. Pick the cheapest check that can
+prove the change; don't escalate during iterative work.
 
 | Tier | Cost | Commands | For |
 | :--- | :--- | :--- | :--- |
 | **1: Static** | seconds | `npm run typecheck`, `node --test test/<file>.test.js` | types, contracts, server routes, isolated logic |
-| **2: Harnesses** | seconds | `npm run bench:renderer`, `curl` with a minted session | streaming display scheduling, live server HTTP headers |
+| **2: Server** | seconds | `curl` against `/v0/...` with a minted cookie | routes, state, what the server returns |
 | **3: Gallery** | seconds | `npm run gallery` | any component or styling change, before the app |
-| **3: Browser** | 10–60s | Agent Browser, a probe, `npm run smoke:panes` | real DOM, focus and keyboard, layout, motion, panes |
+| **3: App** | 10–60s | Windows Chrome DevTools CLI, a probe, `npm run smoke:panes` | real DOM, focus and keyboard, layout, motion, panes |
 | **4: Full suite** | minutes | `npm test` | release verification only |
 
 **The tests only shrink.** Their count (`test()`/`it()` call sites) and their
@@ -28,10 +29,18 @@ node scripts/conduit-auth.mjs mint-session --user-agent <label> \
   --format <token|cookie|json|playwright> [--output /tmp/conduit-auth]
 ```
 
+Drive the server with the cookie (repository root):
+
+```bash
+C=$(node scripts/conduit-auth.mjs mint-session --user-agent probe --format cookie)
+curl -s -H "Cookie: $C" -H "Origin: http://127.0.0.1:4310" http://127.0.0.1:4310/v0/agent
+curl -s http://127.0.0.1:4310/healthz
+```
+
 `token` is the raw session token, `cookie` a `conduit_session=...` header,
 `json` the token and its metadata, `playwright` a `storageState` for external
-automation. Output files are mode `0600`; omit `--output` for stdout. Agent
-Browser, Windows Chrome and the headless probes mint their own. Match
+automation. Output files are mode `0600`; omit `--output` for stdout. Windows
+Chrome and the headless probes mint their own. Match
 `CONDUIT_DATA_ROOT` to the server; it defaults to `~/.conduit/data`, shared
 across checkouts. In a sandbox, put it on the same command, or it touches the
 real auth store. Minting requires an existing password and preserves it.
@@ -90,23 +99,16 @@ parent row. Selection must close both menus and restore the trigger.
 
 ### Swapping a piece to v2
 
-The bar is no visual change the swap didn't intend. Start with
-`fast-check.mjs` (~4s); steps 1-3 are for a piece whose look is meant to
-stay as it was. Make one pass: don't stack repeat runs or A/Bs.
+The bar is no visual change the swap didn't intend. Make one pass: don't
+stack repeat runs or A/Bs.
 
-1. `node scripts/probes/style-snapshot.mjs save /tmp/before.json` on the
-   current build.
-2. Make the swap; look at the piece's gallery family (every form and density),
-   and grep new class names for collisions.
-3. Restart, `node scripts/probes/style-snapshot.mjs save /tmp/after.json`, then
-   `node scripts/probes/style-snapshot.mjs diff /tmp/before.json /tmp/after.json`: every changed
-   property should be one the swap meant. It covers a real chat and home at
-   1280x900, and each control's focus ring; two saves with nothing changed do
-   not differ. Both saves attach to the signed-in Windows Chrome on :9222.
-4. A cut-over piece has no classic path (DESIGN.md, Components v2). To compare
+1. Run `fast-check.mjs` (~4s) before and after the swap and `cmp` the output.
+2. Look at the piece's gallery family (every form and density), and grep new
+   class names for collisions.
+3. A cut-over piece has no classic path (DESIGN.md, Components v2). To compare
    it with the old one, build the previous commit; don't keep a fallback in
    the app.
-5. Only where the swap touches them: the motion checks below if a piece's
+4. Only where the swap touches them: the motion checks below if a piece's
    moves changed; `visibility-guard.mjs` and `screen-shift.mjs` if transcript
    layout changed; the panes smoke if panes changed.
 
@@ -121,23 +123,6 @@ invariant it broke (DESIGN.md Motion).
   transitions and every pair of its states (~2 min).
 - `node scripts/motion-check/components.mjs` -- Disclosure, CodeBlock,
   DesktopComposer.
-- `node scripts/motion-check/trace-record.mjs save <file> [--phone]`, then
-  `node scripts/motion-check/trace-record.mjs diff <before> <after>` -- one scripted Render test profile conversation (thinking,
-  narration, tools, stopped while writing, a tool denied, stopped at an
-  approval, a plain answer): each turn's states, where its main thread's time
-  went, and every trace settled with each step opened. Two recordings of one
-  build do not differ. Before and after a change to what draws the trace.
-- `node scripts/motion-check/trace-parity.mjs [--chat <id>]` -- with the
-  gallery served and :4310 signed in in that Chrome: makes a Render test profile chat
-  (or checks an existing one), loads it into the gallery's phone preview and
-  walks both traces, printing each line that differs. Settled turns only.
-- `node scripts/motion-check/trace-stream.mjs ["<prompt>"] [stop]` -- the same
-  prompt streamed in the app and in the gallery's live phone, each on a fresh
-  chat, comparing the states each passes through: one shown 150ms or more must
-  show on both, in order. It also lists answers drawn and then taken away.
-  `--model <spec>` runs a real model on the Assistant profile; `--budget` traces each side and prints every
-  task over 6.94ms with what ran. Other pages in that Chrome share its CPU, so
-  counts vary several-fold: read the slow tasks, don't compare counts.
 
 ## Panes smoke
 
@@ -155,25 +140,6 @@ work included. The tab rules are unit tests in `test/file-tabs.test.js`.
 
 ## Browsers
 
-### Agent Browser
-
-Authenticated navigation, accessibility, screenshots and ordinary UI QA:
-
-```bash
-curl -fsS http://127.0.0.1:4310/healthz
-npm run qa:agent-browser                       # prints a session id
-npm run agent-browser:local -- --session <id> --restore snapshot -i -c
-npm run agent-browser:local -- --session <id> --restore a11y
-npm run agent-browser:local -- --session <id> --restore screenshot /tmp/conduit.png
-npm run agent-browser:local -- --session <id> close
-```
-
-The local wrapper permits navigation, inspection, interaction and screenshot
-or snapshot evidence. Reference: `agent-browser skills get core --full`;
-the wrapper's allowed commands are in `scripts/agent-browser-command-policy.mjs`.
-Its policy withholds `eval`, so it gives a view, not instrumentation, and it
-is not a performance surface.
-
 ### Windows Chrome DevTools
 
 The headed native frame: compositor, GPU, paint, layout, console, network and
@@ -186,6 +152,9 @@ node ../scripts/run-windows-chrome-devtools.mjs start
 node ../scripts/run-windows-chrome-devtools.mjs cli list_pages
 node ../scripts/run-windows-chrome-devtools.mjs cli new_page http://127.0.0.1:4310/
 node ../scripts/run-windows-chrome-devtools.mjs cli take_snapshot
+node ../scripts/run-windows-chrome-devtools.mjs cli take_screenshot
+node ../scripts/run-windows-chrome-devtools.mjs cli evaluate_script '() => document.title'
+node ../scripts/run-windows-chrome-devtools.mjs cli emulate --viewport '412x860x2.625,mobile,touch'
 node ../scripts/run-windows-chrome-devtools.mjs stop-cli   # leaves Chrome running
 ```
 
@@ -209,8 +178,8 @@ location.reload();
 `scripts/probes/`, run from the checkout the server serves, with its
 `CONDUIT_DATA_ROOT`. Most open their own page in headless Chromium with a minted
 session; `--windows` uses the signed-in headed Chrome on :9222 instead, where
-the user's display scaling and frame cost are real. `style-snapshot.mjs`,
-`turn-profile.mjs` and `call-counts.mjs` always attach to that Chrome.
+the user's display scaling and frame cost are real. `turn-profile.mjs`
+always attaches to that Chrome.
 `gallery-style-diff.mjs` instead serves two gallery builds locally in headless
 Chromium; it needs no running Conduit server or session. A probe killed mid-run
 leaves its page open in Windows Chrome -- close it before the next run, or the
@@ -218,24 +187,16 @@ next load can hang.
 
 | Probe | Answers |
 | --- | --- |
-| `style-snapshot.mjs save <file>` / `diff <a> <b>` | Did a change move anything the app draws? |
 | `gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]` | Did a library change move anything in the gallery? Every element's computed style, every family at both densities and the previews, between two `npx vite build --mode gallery --outDir <dir>` builds; no running Conduit server. A refactor is done when it prints IDENTICAL (or only the custom properties it renamed). |
 | `settle-stability.mjs` | Does a turn hold still as it settles, stops (also from an approval) or takes a steered message? Asserted, no model call; the gate for transcript live/settle changes. A turn a harness ends without stating its outcome is logged in the server journal as `transcript contract: ...`. |
 | `fast-check.mjs [prompt] [out]` | The quick look at a renderer change, in about 4s: one `rich 2000t` loop at 1000 tokens/s, recording the answer's DOM churn (added/removed by kind), every code card shape seen while streaming, and the settled answer (`<out>.html`, `<out>.cards`). Run before and after and `cmp` the files; motion still needs `visibility-guard.mjs`. |
 | `visibility-guard.mjs [prompt] [--phone] [--examples]` | What the transcript's virtualization shows each frame through a long streamed answer scrolled every way a reader and the app do: blank frames, unexplained moves, placeholders back at a different height, any move down while following. Before and after a virtualization or layout change; no count may rise. It reads layout every frame, so it times nothing. |
 | `screen-shift.mjs [prompt] [--phone]` | How the transcript moves on screen while streaming, from the screencast's pixels; nothing runs in the page. Lists every frame that moved down while following, with the time since the last code block opened. |
-| `placeholder-heights.mjs` | Do off-screen blocks hold their real height? |
-| `press-shift.mjs` | Does pressing and holding a resize handle move any formula, table or block, or change a pixel? |
 | `reload-settle.mjs --out <dir>` | What moves after the first open's fade starts? Saves a frame series and an attribute and animation timeline. |
-| `motion-rules.mjs` | Which loaded rules set containment, `will-change`, transforms or `content-visibility`, and which apply only under an interaction state? |
-| `dock-layer-frames.mjs` | Does the dock hold still switching between beside and over the panes? |
 | `dictation-row.mjs` | How the phone composer's row moves as dictation starts and stops, empty and with a draft (synthetic mic). |
 | `send-motion.mjs` | What moves when a message is sent from the phone composer; saves a frame strip. |
 | `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call by default; `MODEL=<spec>` selects the Render test profile instead. |
 | `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Render test profile turn's main-thread time goes, by trace state: % busy, compositor frames drawn and dropped, tasks against 6.94ms, rendering by phase, JS self time by function. Defaults to the gallery's live phone; `--app` uses the app, `--phone` the app at 412x860 and 2.625x with touch. Build with source maps for names. |
-| `call-counts.mjs [prompt] [--phone] [--match <text>] [--top N]` | How many times each function ran in one streamed turn, per socket message and frame. Counts don't vary run to run, so they state exactly what a change removed. Build with source maps first. |
-| `load-waterfall.mjs [--rtt <ms>] [--cpu 4] [--runs <n>]` | How long the first open takes to its fade, and what it waits on. |
-| `load-profile.mjs [--cpu 4] [--slices]` | What the first open spends its main thread on. Names after `npx vite build --sourcemap`; rebuild without it afterwards. |
 | `resume-reconnect.mjs [--away <ms>]` | How long a page takes to be live again after time in the background. |
 
 ### Frame budget
@@ -262,8 +223,8 @@ delays.
   anything on its own layer (`contain: paint`, `will-change`, a transform)
   snaps to whole device pixels, so text jumps when such a rule switches on.
   Headless at DPR 1 cannot show this.
-- **Read the stylesheet first** (`motion-rules.mjs`): a rule that applies only
-  while a handle is held is the first suspect for a shift on press.
+- **Read the stylesheet first**: a rule that applies only while a handle is
+  held is the first suspect for a shift on press.
 - **Diff screenshots around the interaction.** Press, hold and release with
   CDP `Input.dispatchMouseEvent`, screenshotting each step; zero changed pixels
   between rest and press is the bar.
@@ -353,18 +314,11 @@ test wrong fails here. A transcript bug gets a failing test here first.
 
 Encode the order a harness really says things in, captured, not guessed.
 
-## Harnesses and live timing
+## Renderer benchmark and the Conduit harness
 
-```bash
-npm run bench:renderer
-npm run perf:live -- --target local --origin http://127.0.0.1:4310 --chat-id <id>
-```
-
+`npm run bench:renderer` times the transcript renderer without a server.
 `startConduitHarness()` (`test/helpers/conduit-harness.js`) starts a Conduit
 process with a fake Codex app-server for HTTP, WebSocket and restart checks.
-`perf:live` requires `CONDUIT_PERF_PASSWORD` and `CONDUIT_PERF_PROMPT` (or
-`--prompt-file`); see its `--help` for limits. It makes real provider calls and
-costs money; use a dedicated performance chat.
 
 ## Which client build you are testing
 
@@ -448,9 +402,6 @@ adb reverse tcp:4310 tcp:4310   # then "Use the server on this computer" and the
 - It renders in software at ~30fps, so smoothness is the emulator describing
   itself. Measure cost: CDP `Performance.getMetrics` either side of an
   interaction, `LayoutDuration` and `RecalcStyleDuration` per frame.
-- `scripts/android-keyboard-trace.mjs` samples keyboard travel (height,
-  `scrollTop`, client and scroll height, distance from the bottom), printing
-  changed frames over 2.5 seconds for each open and close.
 - `screenrecord` manages ~7fps here; stretch animations instead with
   `settings put global animator_duration_scale 10` and
   `window_animation_scale` (app and system alike, so compare shapes, not

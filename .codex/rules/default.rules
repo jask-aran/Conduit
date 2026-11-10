@@ -51,26 +51,6 @@ prefix_rule(
 # assignments or substitutions are evaluated as one opaque command and do not
 # inherit this prefix match.
 prefix_rule(
-    pattern=["npm", "run", "qa:agent-browser"],
-    decision="allow",
-    justification="Run Conduit's authenticated local agent-browser QA entry point",
-)
-prefix_rule(
-    pattern=["npm", "run", "test:harness"],
-    decision="allow",
-    justification="Run Conduit's deterministic local transport harness",
-)
-prefix_rule(
-    pattern=["npm", "run", "test:harness:browser"],
-    decision="allow",
-    justification="Run Conduit's deterministic local browser harness",
-)
-prefix_rule(
-    pattern=["npm", "run", "test:browser:setpieces"],
-    decision="allow",
-    justification="Run Conduit's named local browser release canaries",
-)
-prefix_rule(
     pattern=["node", "--test"],
     decision="allow",
     justification="Run Conduit node:test contract and harness suites",

@@ -133,7 +133,7 @@ Keep Git history intentional and reviewable.
 
 When checks already run produce useful quantitative data, preserve the headline
 values in the commit body. This is a recording convention, not a testing
-requirement: never run extra builds or harnesses solely to populate metrics, and
+requirement: never run extra builds or probes solely to populate metrics, and
 omit `Metrics:` when the work produced none.
 
 `npm run build` yields three standard bundle observations:
@@ -141,11 +141,6 @@ omit `Metrics:` when the work produced none.
 - `bundle.initial_js_gzip_bytes`
 - `bundle.initial_css_gzip_bytes`
 - `bundle.largest_lazy_js_gzip_bytes`
-
-A harness run yields its scenario plus one to three observations relevant to the
-changed boundary: first-delta latency, gap percentiles or coalescing ratio for
-transport work; recovery time, socket count or duplicate characters for
-reconnect work. Keep any parity observation that qualifies the result.
 
 Use lowercase dotted names with explicit units. Record absolute observations
 rather than hand-calculated deltas, and do not call a number a regression or an
@@ -156,14 +151,10 @@ A typical non-trivial commit body may therefore end with:
 ```text
 Checks:
 - npm run typecheck
-- npm test
-- npm run test:harness -- --scenario streaming-burst
+- node --test test/live-session-stream.test.js
 
 Metrics:
 - bundle.initial_js_gzip_bytes=143281
-- transport.scenario=streaming-burst
-- transport.first_delta_ms=48
-- transport.gap_p95_ms=18.4
 ```
 
 Detailed reports remain testing evidence rather than Git-history payloads: the
