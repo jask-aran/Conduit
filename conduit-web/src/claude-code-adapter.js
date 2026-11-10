@@ -434,7 +434,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: remoteNode(project), place: project?.place || null,
       cwd: project?.workingRoot, sessionId, status: "starting", ready: false,
-      activity: "starting", active: false, stopping: false, model, thinkingLevel, permissionMode,
+      active: false, stopping: false, model, thinkingLevel, permissionMode,
       generation: null, generationSeq: 0, clients: new Set(), events: [], hostUiRequests: [],
       requests: new Map(), steps: new Map(), stepOrder: [], step: null, tools: new Map(),
       commands: [], models: [], settings: {}, notices: [], stderr: "",
@@ -470,7 +470,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
       record.permissionMode = init.current_permission_mode || startMode || "default";
       record.ready = true;
       record.status = "running";
-      record.activity = "idle";
       this.emit("changed", { record, reason: "ready" });
       return record;
     } catch (cause) {
@@ -606,7 +605,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
   beginTurn(record, prompt) {
     const generationId = crypto.randomUUID();
     record.counts.userMessages += 1;
-    Object.assign(record, { active: true, activity: "working", stopping: false,
+    Object.assign(record, { active: true, failed: false, stopping: false,
       generation: { id: generationId, closed: false, settled: false }, answering: prompt.id,
       steps: new Map(), stepOrder: [], step: null });
     record.tools.clear();
@@ -640,7 +639,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     if (record.compacting === compacting) return;
     record.compacting = compacting;
     if (!compacting) record.compactions = (record.compactions || 0) + 1;
-    record.activity = compacting ? "compacting" : record.active ? "working" : "idle";
     this.publish(record, { type: "compaction", generationId: record.generation?.id || null, active: compacting });
     // Its quick count goes by the last response, which a compaction outdates.
     if (!compacting) void this.publishUsage(record, null, "full");
@@ -861,7 +859,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return new Promise((resolve) => {
       record.requests.set(requestId, { host, input, suggestions, resolve });
       record.hostUiRequests.push(host);
-      record.activity = "waiting_for_user";
       this.publish(record, { type: "permission_request", generationId: record.generation?.id || null, requestId, ...host });
       signal?.addEventListener("abort", () => {
         if (!record.requests.has(requestId)) return;
@@ -884,7 +881,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
   resolveRequest(record, requestId) {
     record.requests.delete(requestId);
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    record.activity = record.active ? "working" : "idle";
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
   }
 
@@ -903,7 +899,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const uuid = uuidOf(options.clientUserMessageId);
     const userMessageId = options.clientUserMessageId || promptId(uuid);
     record.active = true;
-    record.activity = "working";
+    record.failed = false;
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.answering = userMessageId;
@@ -1074,7 +1070,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.publish(record, turnSettle({ promptId: record.answering, generationId: record.generation.id, outcome }));
     record.active = false;
     record.stopping = false;
-    record.activity = stopReason === "error" ? "failed" : "idle";
+    record.failed = stopReason === "error";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
       seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
@@ -1094,7 +1090,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     if (!record?.active) return false;
     const generation = record.generation;
     record.stopping = true;
-    record.activity = "stopping";
     this.cancelRequests(record);
     try { await record.query.interrupt({ cancelQueued: true }); } catch { /* settled below either way */ }
     setTimeout(() => { if (record.active && record.generation === generation) this.finish(record); }, INTERRUPT_SETTLE_MS).unref?.();

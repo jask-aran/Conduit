@@ -138,7 +138,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     await this.ensureSidecar();
     const cursor = typeof opaqueSession === "object" && opaqueSession ? opaqueSession : {};
     const record = {
-      id: crypto.randomUUID(), chatId, projectId: project?.id, status: "running", activity: "idle",
+      id: crypto.randomUUID(), chatId, projectId: project?.id, status: "running",
       active: false, stopping: false, sessionId: { conversationId: cursor.conversationId || "", parentMessageId: cursor.parentMessageId || "" },
       model: model || cursor.model || "", thinkingLevel: thinkingLevel || cursor.thinkingLevel || "medium",
       generation: null, clients: new Set(), events: [], generationSeq: 0,
@@ -159,7 +159,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     const messageId = `assistant-${generationId}`;
     const userMessageId = crypto.randomUUID();
     record.active = true;
-    record.activity = "working";
+    record.failed = false;
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false, prompt: userMessageId };
     record.abortController = new AbortController();
@@ -257,7 +257,6 @@ export class ChatGptWebAdapter extends EventEmitter {
     this.settleTurn(record, detail === "stopped" ? "interrupted" : "complete");
     record.active = false;
     record.stopping = false;
-    record.activity = "idle";
     record.abortController = null;
     this.publish(record, { type: "status", generationId: record.generation.id, phase: detail, seq: ++record.generationSeq,
       status: "idle", activity: "idle", detail: null });
@@ -271,7 +270,7 @@ export class ChatGptWebAdapter extends EventEmitter {
     this.settleTurn(record, "failed");
     record.active = false;
     record.stopping = false;
-    record.activity = "failed";
+    record.failed = true;
     record.abortController = null;
     const code = ["auth_expired", "rate_limited", "backend_unavailable"].includes(cause.code) ? cause.code : "backend_unavailable";
     this.publish(record, { type: "error", generationId: record.generation?.id || null,
@@ -283,7 +282,6 @@ export class ChatGptWebAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.active) return false;
     record.stopping = true;
-    record.activity = "stopping";
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "stopping", seq: ++record.generationSeq,
       status: "stopping", activity: "stopping", detail: null });
     record.abortController.abort();

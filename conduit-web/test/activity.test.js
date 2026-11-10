@@ -1,43 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  deriveCoarseActivity,
-  deriveFineActivity,
-  activityLabel,
-  pickHigherActivity,
-} from "../src/activity.js";
-function record(overrides = {}) {
-  return {
-    status: "running",
-    active: false,
-    stopping: false,
-    compacting: false,
-    retrying: false,
-    hostUiRequests: [],
-    activityDetail: null,
-    generation: null,
-    ...overrides,
-  };
-}
+import { deriveFineActivity, activityLabel } from "../src/activity.js";
+import { activityOf } from "../src/harnesses/turn.js";
 
-test("coarse activity precedence: failed > stopping > waiting > compacting > retrying > working", () => {
-  assert.equal(deriveCoarseActivity(record({ status: "failed" })), "failed");
-  assert.equal(deriveCoarseActivity(record({ stopping: true })), "stopping");
-  assert.equal(deriveCoarseActivity(record({ hostUiRequests: [{ id: "1" }] })), "waiting_for_user");
-  assert.equal(deriveCoarseActivity(record({ compacting: true })), "compacting");
-  assert.equal(deriveCoarseActivity(record({ retrying: true })), "retrying");
-  assert.equal(deriveCoarseActivity(record({ active: true })), "working");
-  assert.equal(deriveCoarseActivity(record({ status: "starting" })), "starting");
-  assert.equal(deriveCoarseActivity(record()), "idle");
-});
-
-test("settled generation is idle even when the generation handle remains open", () => {
-  assert.equal(deriveCoarseActivity(record({
-    generation: { id: "g1", closed: false, settled: false },
-  })), "working");
-  assert.equal(deriveCoarseActivity(record({
-    generation: { id: "g1", closed: false, settled: true },
-  })), "idle");
+test("a session's activity: starting > failed > stopping > waiting > compacting > working", () => {
+  const all = { status: "running", failed: true, stopping: true, hostUiRequests: [{ id: "1" }], compacting: true, active: true };
+  assert.equal(activityOf({ ...all, status: "starting" }), "starting");
+  assert.equal(activityOf(all), "failed");
+  assert.equal(activityOf({ ...all, failed: false }), "stopping");
+  // A stop with a prompt still up is stopping; one of two prompts answered is still waiting.
+  assert.equal(activityOf({ ...all, failed: false, stopping: false }), "waiting_for_user");
+  assert.equal(activityOf({ status: "running", active: true, approvals: new Map([["a", {}]]) }), "waiting_for_user");
+  assert.equal(activityOf({ status: "running", active: true, compacting: true }), "compacting");
+  assert.equal(activityOf({ status: "running", turnStarting: true }), "working");
+  assert.equal(activityOf({ status: "running" }), "idle");
 });
 
 test("fine activity prefers tools and stop over generic working", () => {
@@ -54,11 +30,9 @@ test("fine activity prefers tools and stop over generic working", () => {
   assert.deepEqual(deriveFineActivity({ generation: "interrupted", toolName: "bash", thinking: true, responding: true, coarse: "working" }), { kind: "interrupted", label: "Interrupted · Ready" });
 });
 
-test("activity labels and ranking", () => {
+test("activity labels", () => {
   // The indicator is given a record with no harness name, so its label is
   // shared across adapters.
   assert.equal(activityLabel("working", "using read"), "Working — using read");
   assert.equal(activityLabel("idle"), "Ready (idle)");
-  assert.ok(pickHigherActivity("failed", "working") === "failed");
-  assert.ok(pickHigherActivity("working", "idle") === "working");
 });

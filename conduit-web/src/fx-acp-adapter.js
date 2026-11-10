@@ -229,7 +229,7 @@ export class FxAcpAdapter extends EventEmitter {
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: remoteNode(project), place: project?.place || null,
       cwd: project?.workingRoot, sessionId: null, status: "starting", ready: false,
-      activity: "starting", active: false, stopping: false, model: "", thinkingLevel: "",
+      active: false, stopping: false, model: "", thinkingLevel: "",
       permissionMode: "", generation: null, generationSeq: 0, clients: new Set(), events: [],
       hostUiRequests: [], requests: new Map(), steps: [], tools: new Map(), loading: true,
     });
@@ -262,7 +262,6 @@ export class FxAcpAdapter extends EventEmitter {
     record.loading = false;
     record.ready = true;
     record.status = "running";
-    record.activity = "idle";
     this.emit("changed", { record, reason: "ready" });
   }
 
@@ -424,7 +423,6 @@ export class FxAcpAdapter extends EventEmitter {
     const request = { id: requestId, kind: "select", title: params.toolCall?.title || "fx permission",
       message: params.toolCall?.title || "Allow this tool call?", options, placeholder: "", prefill: "", timeoutMs: null };
     record.hostUiRequests.push(request);
-    record.activity = "waiting_for_user";
     this.publish(record, { type: "permission_request", generationId: record.generation?.id || null,
       requestId, ...request });
   }
@@ -436,7 +434,7 @@ export class FxAcpAdapter extends EventEmitter {
     const generationId = crypto.randomUUID();
     const userMessageId = options.clientUserMessageId || crypto.randomUUID();
     record.active = true;
-    record.activity = "working";
+    record.failed = false;
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.answering = userMessageId;
@@ -527,7 +525,7 @@ export class FxAcpAdapter extends EventEmitter {
     }
     record.active = false;
     record.stopping = false;
-    record.activity = stopReason === "error" ? "failed" : "idle";
+    record.failed = stopReason === "error";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
       seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
@@ -545,7 +543,6 @@ export class FxAcpAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.active) return false;
     record.stopping = true;
-    record.activity = "stopping";
     record.client.notify("session/cancel", { sessionId: record.sessionId });
     // ACP has a cancelled turn's open permission requests answered `cancelled`.
     this.cancelRequests(record);
@@ -562,7 +559,6 @@ export class FxAcpAdapter extends EventEmitter {
   resolveRequest(record, requestId) {
     record.requests.delete(requestId);
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
-    record.activity = record.stopping ? "stopping" : record.active ? "working" : "idle";
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
   }
 

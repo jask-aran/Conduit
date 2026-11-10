@@ -79,7 +79,7 @@ test("Codex context-compaction items drive neutral compaction state", () => {
   adapter.notification(live, "turn/started", { turn: { id: "compact-turn" } });
   adapter.notification(live, "item/started", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
   assert.equal(live.compacting, true);
-  assert.equal(live.activity, "compacting");
+  assert.equal(adapter.view(live).activity, "compacting");
   adapter.notification(live, "item/completed", { turnId: "compact-turn", item: { id: "compact-1", type: "contextCompaction" } });
   assert.equal(live.compacting, false);
   assert.deepEqual(live.events.filter((event) => event.type === "compaction").map((event) => event.active), [true, false]);
@@ -381,13 +381,13 @@ test("a command approval becomes a permission prompt and its answer reaches Code
   assert.match(prompt.message, /rm -rf build/);
   assert.match(prompt.message, /Cleaning the tree/);
   assert.deepEqual(prompt.options, ["Approve", "Approve for session", "Deny"]);
-  assert.equal(live.activity, "waiting_for_user");
+  assert.equal(adapter.view(live).activity, "waiting_for_user");
   assert.equal(written.length, 0, "nothing is sent back until the user answers");
 
   assert.equal(adapter.respondHostUi(live.id, { id: "ap-1", value: "Approve for session" }), "acceptForSession");
   assert.deepEqual(written, [{ id: 7, result: { decision: "acceptForSession" } }]);
   assert.ok(live.events.some((event) => event.type === "permission_resolved" && event.requestId === "ap-1"));
-  assert.equal(live.activity, "working", "the turn resumes once the prompt clears");
+  assert.equal(adapter.view(live).activity, "working", "the turn resumes once the prompt clears");
 });
 
 test("request_user_input is asked as questions, and the labels chosen or typed reach Codex", () => {

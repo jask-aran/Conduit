@@ -305,7 +305,6 @@ export class TestStreamAdapter extends EventEmitter {
       chatId,
       projectId: project?.id,
       status: "running",
-      activity: "idle",
       active: false,
       stopping: false,
       model: REPLAY_ALIASES.has(model) ? model : speedFor(model).id,
@@ -339,7 +338,6 @@ export class TestStreamAdapter extends EventEmitter {
     const replay = REPLAY_ALIASES.get(record.model)?.replay || replayFromPrompt(message);
     record.tokens = replay ? replayTokens(replay).length : amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     record.active = true;
-    record.activity = "working";
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     // Both rows are named before a byte of the answer exists, so nothing
@@ -545,7 +543,6 @@ export class TestStreamAdapter extends EventEmitter {
       message: `${TEST_STREAM_TOOL.name}(${JSON.stringify(TEST_STREAM_TOOL.input)})`,
       options: [], placeholder: "", prefill: "", timeoutMs: null });
     record.pendingApproval = { requestId, step };
-    record.activity = "waiting_for_user";
     this.publish(record, { type: "permission_request", generationId: record.turn.generationId,
       requestId, kind: "confirm",
       title: `Run ${TEST_STREAM_TOOL.name}?`,
@@ -560,12 +557,13 @@ export class TestStreamAdapter extends EventEmitter {
     const requestId = response?.id || response?.requestId;
     if (!requestId) throw adapterError("Host UI response requires id", "host_ui_id_required", 400);
     const pending = record.pendingApproval;
+    // An answer to a prompt that is no longer up leaves the one that is alone.
+    if (pending?.requestId !== requestId) return null;
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
     record.pendingApproval = null;
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
-    record.activity = record.active ? "working" : "idle";
     this.publishState(record);
-    if (!pending || pending.requestId !== requestId || !record.turn) return null;
+    if (!record.turn) return null;
     // A permission prompt fails closed, the same as the real harnesses: only an
     // explicit approval runs the step, so an ambiguous or unrecognised response
     // refuses rather than letting this backend vouch for behaviour the real one
@@ -696,7 +694,6 @@ export class TestStreamAdapter extends EventEmitter {
     record.turn = null;
     record.active = false;
     record.stopping = false;
-    record.activity = "idle";
     // One user message for the prompt, one more for every steer taken mid-turn,
     // and one assistant message per answer opened -- a turn that called a tool
     // opened more than one.

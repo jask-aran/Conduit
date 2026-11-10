@@ -1,15 +1,9 @@
 import { assertChatBackendAdapter } from "./chat-backend-contract.js";
 import { detect } from "./harnesses/probe.js";
+import { turnInFlight } from "./harnesses/turn.js";
 
 export function isGeneratingRecord(record) {
-  if (!record || !["starting", "running"].includes(record.status)) return false;
-  // Most adapters claim a turn by setting active. Codex waits for the
-  // app-server's turn/started, so between sending turn/start and hearing it
-  // the turn is `turnStarting`. (Not `answering`: several adapters keep the
-  // prompt they last answered there, and it read as a turn that never ended.)
-  if (record.active || record.stopping || record.compacting || record.retrying || record.turnStarting) return true;
-  if ((record.hostUiRequests || []).length) return true;
-  return Boolean(record.generation && !record.generation.closed && !record.generation.settled);
+  return Boolean(record) && ["starting", "running"].includes(record.status) && turnInFlight(record);
 }
 
 export class ChatBackendRegistry {

@@ -322,7 +322,7 @@ export class OpenCodeAdapter extends EventEmitter {
       id: crypto.randomUUID(), chatId, projectId: project?.id || null,
       nodeId: remoteNode(project), place: project?.place || null,
       cwd: session.location?.directory || project?.workingRoot, sessionId: session.id,
-      status: "running", ready: true, activity: "idle", active: false, stopping: false,
+      status: "running", ready: true, active: false, stopping: false,
       model: spec, thinkingLevel: session.model?.variant || "", generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], requests: new Map(),
       liveMessages: new Map(), promptStartedAt: 0,
@@ -362,7 +362,7 @@ export class OpenCodeAdapter extends EventEmitter {
     const generationId = crypto.randomUUID();
     const clientUserMessageId = options.clientUserMessageId || `m_${crypto.randomUUID()}`;
     record.active = true;
-    record.activity = "working";
+    record.failed = false;
     record.stopping = false;
     record.generation = { id: generationId, closed: false, settled: false };
     record.promptStartedAt = Date.now();
@@ -760,7 +760,6 @@ export class OpenCodeAdapter extends EventEmitter {
       const pending = kind === "permission" ? permissionPrompt(request) : formPrompt(request);
       record.requests.set(id, pending);
       record.hostUiRequests.push(pending.host);
-      record.activity = "waiting_for_user";
       this.publish(record, { type: "permission_request", generationId: record.generation?.id || null,
         requestId: id, ...pending.host });
     }
@@ -772,7 +771,6 @@ export class OpenCodeAdapter extends EventEmitter {
   resolveRequest(record, id) {
     if (!record.requests.delete(id)) return;
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== id);
-    if (!record.requests.size && record.active) record.activity = "working";
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId: id });
   }
 
@@ -804,7 +802,7 @@ export class OpenCodeAdapter extends EventEmitter {
     }
     record.active = false;
     record.stopping = false;
-    record.activity = outcome === "failed" ? "failed" : "idle";
+    record.failed = outcome === "failed";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: record.generation.id, phase: "settled",
       seq: ++record.generationSeq, status: record.activity, activity: record.activity, detail: null });
@@ -818,7 +816,6 @@ export class OpenCodeAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.active) return false;
     record.stopping = true;
-    record.activity = "stopping";
     await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} });
     return true;
   }

@@ -2,6 +2,7 @@ import { isLoggedEvent, LOGGED_STATUS_PHASES } from "../server/chat-log.js";
 import { SessionScope } from "../server/session-scope.js";
 import { isLiveEvent } from "../live-session-api.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
+import { activityOf } from "./turn.js";
 
 // The live-record store adapters share: the id and chat indexes, the attached
 // browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
@@ -119,6 +120,8 @@ export class SessionRecords {
     // What the session holds is handed to its scope by the adapter as it is
     // taken; removing the record ends it, however the session ended.
     record.scope = new SessionScope();
+    // Derived, never written: see turn.js.
+    Object.defineProperty(record, "activity", { get() { return activityOf(this); }, enumerable: true, configurable: true });
     record.scope.defer(() => { record.status = "stopped"; record.active = false; });
     this.records.set(record.id, record);
     this.byChatId.set(record.chatId, record.id);
@@ -159,7 +162,7 @@ export class SessionRecords {
       // Alive but unable to answer is starting, whoever is running it. Without
       // this a harness that reports readiness would still show as idle while it
       // came up, and two backends would tell the same story differently.
-      activity: ready ? record.activity : "starting",
+      activity: ready ? activityOf(record) : "starting",
       active: record.active, stopping: record.stopping, generation: record.generation,
       model: record.model, capabilities: this.capabilities, backend: this.backend,
       createdAt: record.createdAt || null, updatedAt: record.updatedAt || record.createdAt || null,
@@ -172,9 +175,9 @@ export class SessionRecords {
       type: "runtime_state", generationId: record?.generation?.id || null,
       lifecycle: record?.status === "stopped" ? "closed" : record?.status === "starting" ? "creating"
         : record?.active ? "working" : "idle",
-      status: record?.stopping ? "stopping" : record?.activity === "failed" ? "failed"
+      status: record?.stopping ? "stopping" : record?.failed ? "failed"
         : record?.active ? "working" : "idle",
-      activity: record?.activity || "idle", capabilities: this.capabilities,
+      activity: activityOf(record), capabilities: this.capabilities,
     };
   }
 

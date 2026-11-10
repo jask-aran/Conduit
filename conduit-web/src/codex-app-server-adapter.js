@@ -105,11 +105,6 @@ const userInputAnswers = (host, response) => Object.fromEntries(isDismissal(resp
 }));
 
 const error = (message, code = "backend_unavailable", status = 409) => Object.assign(new Error(message), { code, status });
-const activityOf = (record) => record.failedAtSettle ? "failed"
-  : record.stopping ? "stopping"
-  : record.approvals.size ? "waiting_for_user"
-  : record.compacting ? "compacting"
-  : record.active || record.turnStarting ? "working" : "idle";
 const waitForClose = (socket, timeoutMs = 2_000) => {
   if (!socket || socket.readyState === WebSocket.CLOSED) return Promise.resolve();
   return new Promise((resolve) => {
@@ -626,7 +621,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (existing) return existing;
     this.processes({ nodeId }).require("codex", "Codex");
     const record = {
-      id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting", activity: "starting",
+      id: crypto.randomUUID(), chatId, projectId, cwd, nodeId, place, status: "starting",
       active: false, stopping: false, sessionId: null, model: "", thinkingLevel: "", generation: null,
       clients: new Set(), events: [], pending: new Map(), approvals: new Map(),
       steering: [], followUp: [],
@@ -679,7 +674,6 @@ export class CodexAppServerAdapter extends EventEmitter {
       });
       this.write(record, { method: "initialized" });
       record.status = "running";
-      record.activity = "idle";
       record.ready = true;
       // The handshake is done: this is the moment the agent is warm, and the
       // one moment anyone can honestly say so.
@@ -777,7 +771,6 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   ask(record, host, generationId) {
-    record.activity = activityOf(record);
     this.publish(record, { type: "permission_request", generationId, requestId: host.id, ...host });
     // What the session is busy with, not a transition the turn made. It used to
     // be published as a `status` with no phase, which is a shape neither fold
@@ -809,7 +802,6 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   settleApproval(record, requestId, generationId) {
     record.approvals.delete(requestId);
-    record.activity = activityOf(record);
     this.publish(record, { type: "permission_resolved", generationId, requestId });
     this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
   }
@@ -960,8 +952,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.active = true;
       record.turnStarting = false;
       record.stopping = Boolean(stopOwed);
-      record.failedAtSettle = false;
-      record.activity = activityOf(record);
+      record.failed = false;
       record.generation = { id: turnId, closed: false, settled: false };
       record.turn = null;
       this.publish(record, { type: "status", generationId: turnId, phase: "started", seq: ++record.generationSeq, status: "working", activity: "working", detail: null });
@@ -992,7 +983,6 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.publish(record, { type: "usage", generationId: turnId, contextUsage: record.contextUsage, sessionStats: record.sessionStats, cacheStats: record.cache.stats || null });
     } else if (method === "item/started" && params.item?.type === "contextCompaction") {
       record.compacting = true;
-      record.activity = activityOf(record);
       this.publish(record, { type: "compaction", generationId: turnId, active: true });
     } else if (method === "account/rateLimits/updated" && params.rateLimits) {
       CodexAppServerAdapter.plan = { at: Date.now(), value: declarePlan("codex", codexPlan(params.rateLimits, null)) };
@@ -1003,7 +993,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     } else if ((method === "item/completed" && params.item?.type === "contextCompaction") || method === "thread/compacted") {
       if (record.compacting || method === "thread/compacted") record.compactions = (record.compactions || 0) + 1;
       record.compacting = false;
-      record.activity = activityOf(record);
       this.publish(record, { type: "compaction", generationId: turnId, active: false });
     } else if (method === "item/started" && params.item?.type === "userMessage") {
       const messageId = params.item.clientId || params.item.id;
@@ -1125,8 +1114,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.turnStarting = false;
       record.stopping = false;
       record.compacting = false;
-      record.failedAtSettle = failed;
-      record.activity = activityOf(record);
+      record.failed = failed;
       if (record.generation) Object.assign(record.generation, { closed: true, settled: true });
       for (const [requestId, pending] of record.approvals) this.settleApproval(record, requestId, pending.generationId);
       // A turn nobody stopped, whose last message Codex never labelled, ends by
@@ -1274,8 +1262,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     record.turnStarting = true;
     record.generation = null;
     record.stopping = false;
-    record.failedAtSettle = false;
-    record.activity = activityOf(record);
+    record.failed = false;
     const prompts = new Set([clientUserMessageId]);
     record.prompts = prompts;
     this.openMessage(record, clientUserMessageId, "user", {
@@ -1303,7 +1290,6 @@ export class CodexAppServerAdapter extends EventEmitter {
       record.answering = null;
       record.turnStarting = false;
       record.stopping = false;
-      record.activity = activityOf(record);
       if (this.states(record)) {
         this.publish(record, messageDrop({ messageId: clientUserMessageId }));
       }
@@ -1323,7 +1309,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     if (generationId && generationId !== turnId) return false;
     if (!record.turnStarting && !turnId) return false;
     record.stopping = true;
-    record.activity = activityOf(record);
     // The starting turn has no id yet; turn/started sends its owed interrupt.
     if (record.turnStarting) return true;
     try {
@@ -1331,7 +1316,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     } catch (cause) {
       if (record.generation === generation) {
         record.stopping = false;
-        record.activity = activityOf(record);
       }
       throw cause;
     }

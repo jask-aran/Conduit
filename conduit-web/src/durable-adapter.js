@@ -781,7 +781,7 @@ export class DurableAdapter extends EventEmitter {
     }
     const record = this.sessions.add({
       id: crypto.randomUUID(), chatId, readOnly, parentChatId, projectId: project?.id || null, nodeId: remoteNode(project), conversationId: conversation.id, conversation, templateId,
-      status: "running", activity: "idle", active: false, stopping: false, generation: null, generationSeq: 0,
+      status: "running", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], hostUiRequests: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
       // What the turn in progress has named: its prompts by submission, the
@@ -938,7 +938,6 @@ export class DurableAdapter extends EventEmitter {
     record.active = true;
     record.doing = null;
     if (record.templateId === "agent") this.runtime.agentChanged?.();
-    record.activity = "working";
     record.generation = { id: generationId, closed: false, settled: false };
     record.turn = { generationId, inputs: [...(inputs || [])], prompts: [], answers: null, messageId: null, tools: new Map(), last: null };
     return record.turn;
@@ -1368,7 +1367,6 @@ export class DurableAdapter extends EventEmitter {
     record.active = false;
     if (record.templateId === "agent") this.runtime.agentChanged?.();
     record.stopping = false;
-    record.activity = "idle";
     Object.assign(record.generation, { closed: true, settled: true });
     this.publish(record, { type: "status", generationId: turn.generationId, seq: ++record.generationSeq,
       phase: stopped ? "stopped" : "settled", status: "idle", activity: "idle", detail: null });
@@ -1419,7 +1417,6 @@ export class DurableAdapter extends EventEmitter {
       record.asks ||= new Map();
       record.asks.set(request.id, resolve);
       record.hostUiRequests = [...record.hostUiRequests.filter((item) => item.id !== request.id), request];
-      record.activity = "waiting_for_user";
       this.publish(record, { type: "permission_request", generationId: record.generation?.id || null, requestId: request.id, ...request });
     });
   }
@@ -1440,7 +1437,6 @@ export class DurableAdapter extends EventEmitter {
     if (!record.hostUiRequests.some((item) => item.id === requestId)) return;
     record.hostUiRequests = record.hostUiRequests.filter((item) => item.id !== requestId);
     this.publish(record, { type: "permission_resolved", generationId: record.generation?.id || null, requestId });
-    record.activity = record.active ? "working" : "idle";
     resolve?.(response);
   }
 
@@ -1460,12 +1456,14 @@ export class DurableAdapter extends EventEmitter {
     if (!record?.active) return null;
     // A Stop for a turn that has already ended (from another tab, say) leaves the next one alone.
     if (generationId && record.generation?.id && generationId !== record.generation.id) return null;
+    const generation = record.generation;
     record.stopping = true;
     await record.conversation.commit(async (tx) => {
       const state = await tx.doc(ConduitNotices, record.conversationId);
       state.pending = [{ name: "stop", id: record.generation?.id || crypto.randomUUID() }];
     }, this.context);
-    record.activity = "stopping";
+    // The turn ended while the stop was being written: there is nothing left to stop.
+    if (!record.active || record.generation !== generation) return null;
     this.publish(record, { type: "status", generationId: record.generation?.id || null, phase: "stopping", seq: ++record.generationSeq,
       status: "stopping", activity: "stopping", detail: null });
     await record.conversation.abort(this.context);
