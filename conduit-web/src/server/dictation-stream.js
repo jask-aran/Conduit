@@ -1734,8 +1734,13 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let pendingStreamChunks = [];
     let settleAdapter;
     const adapterAvailable = new Promise((resolve) => { settleAdapter = resolve; });
-    let completed = false;
-    let stopping = false;
+    // The session's phase: "open" while it takes audio, "stopping" once the
+    // audio is closed and it waits for the runtime and then its final, and
+    // "ended" once end() has run. Which adapter is attached (none while the
+    // runtime loads, the live stream, or the batch fallback) is separate from
+    // the phase and lives in adapter/adapterReady.
+    /** @type {"open" | "stopping" | "ended"} */
+    let phase = "open";
     let stoppedAt = 0;
     let finalText = "";
     let hasFinal = false;
@@ -2203,8 +2208,31 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       });
       return vadObservationPromise;
     };
+    // Every way a session finishes (completed, failed, client gone) comes
+    // through here, so the teardown, the recording and its saved metadata
+    // happen once. The caller passes what differs: what goes to the archive,
+    // the events to send (none once the client has gone), and the metadata
+    // the saved recording is updated with once the archive and the silence
+    // observation settle. Returns that update's promise, or null when the
+    // session had already ended.
+    const end = (reason, { error = null, transcript = "", updates = {}, events = null, savedUpdates }) => {
+      if (phase === "ended") return null;
+      phase = "ended";
+      diagnostics.sessionFinalAt ||= performance.now();
+      cleanup();
+      startVadObservation();
+      const archive = archiveRecording(reason, error, transcript, updates);
+      if (events) {
+        diagnostics.completionSentAt = performance.now();
+        for (const event of events()) send(event);
+      }
+      return Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
+        ...savedUpdates(),
+        diagnostics: diagnosticsPayload(),
+      }));
+    };
     const complete = (reason, upstream = {}) => {
-      if (completed) return;
+      if (phase === "ended") return;
       let sessionFinal;
       try {
         sessionFinal = transcriptTruth.acceptSessionFinal({
@@ -2215,10 +2243,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         fail(error);
         return;
       }
-      completed = true;
       const completedAt = Date.now();
-      diagnostics.sessionFinalAt ||= performance.now();
-      cleanup();
       const transcript = sessionFinal.text;
       finalText = transcript;
       noteWatermark("committedThroughSample", sessionFinal.committedThroughSample);
@@ -2236,28 +2261,24 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         transcriptionStatus: "completed",
         ...runtimeMetadata,
       };
-      startVadObservation();
-      const archive = archiveRecording(reason, null, transcript, finalUpdates);
-      diagnostics.completionSentAt = performance.now();
-      const finalDiagnostics = diagnosticsPayload();
-      send(sessionFinal);
-      send({
-        type: "completed",
-        text: transcript,
-        final: upstream.final ?? (hasFinal || Boolean(transcript)),
-        reason,
-        settlementMs: stoppedAt ? completedAt - stoppedAt : null,
-        finalWithinDeadline: Boolean((hasFinal || transcript) && stoppedAt && !deadlinePassed),
-        audioBytes,
-        audioDurationMs: Math.round(audioBytes / 32),
-        speech: speechDecision(diagnostics),
-        diagnostics: finalDiagnostics,
-        ...runtimeMetadata,
-      });
-      void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
-        ...finalUpdates,
-        diagnostics: diagnosticsPayload(),
-      })).then(() => {
+      void end(reason, {
+        transcript,
+        updates: finalUpdates,
+        events: () => [sessionFinal, {
+          type: "completed",
+          text: transcript,
+          final: upstream.final ?? (hasFinal || Boolean(transcript)),
+          reason,
+          settlementMs: stoppedAt ? completedAt - stoppedAt : null,
+          finalWithinDeadline: Boolean((hasFinal || transcript) && stoppedAt && !deadlinePassed),
+          audioBytes,
+          audioDurationMs: Math.round(audioBytes / 32),
+          speech: speechDecision(diagnostics),
+          diagnostics: diagnosticsPayload(),
+          ...runtimeMetadata,
+        }],
+        savedUpdates: () => finalUpdates,
+      })?.then(() => {
         console.info(JSON.stringify({ type: "conduit.voice-dictation-diagnostic", diagnostics: diagnosticsPayload() }));
       });
     };
@@ -2269,7 +2290,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       }
       diagnostics.client = clientDiagnostics;
       diagnostics.transport.clientAudioBytes = clientAudioBytes ?? clientDiagnostics.transport.pcmBytes ?? null;
-      if (completed && archivePromise) {
+      if (phase === "ended" && archivePromise) {
         void archivePromise.then(() => updateSavedRecording({ diagnostics: diagnosticsPayload() })).catch((error) => {
           console.error(`Voice diagnostic completion metadata update failed: ${error.message}`);
         });
@@ -2278,22 +2299,17 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       send({ type: "client_diagnostics_ack", accepted: true });
     };
     const fail = (error) => {
-      if (completed) return;
-      completed = true;
-      diagnostics.sessionFinalAt ||= performance.now();
-      cleanup();
       const failure = error instanceof Error ? error : new Error(String(error || "Voice dictation failed"));
-      startVadObservation();
-      const archive = archiveRecording("failed", failure);
-      diagnostics.completionSentAt = performance.now();
-      send({ type: "error", code: failure.code || "dictation_failed", message: failure.message });
-      void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
-        transcriptionStatus: "failed",
-        transcriptionError: failure.message,
-        completionReason: "failed",
-        diagnostics: diagnosticsPayload(),
-        ...runtimeMetadata,
-      }));
+      void end("failed", {
+        error: failure,
+        events: () => [{ type: "error", code: failure.code || "dictation_failed", message: failure.message }],
+        savedUpdates: () => ({
+          transcriptionStatus: "failed",
+          transcriptionError: failure.message,
+          completionReason: "failed",
+          ...runtimeMetadata,
+        }),
+      });
     };
     const acceptAudio = (data) => {
       if (data.length > limits.maxFrameBytes) throw dictationError("dictation_frame_too_large", "Audio frame is too large", 413);
@@ -2312,18 +2328,30 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       queueProgressivePcm(chunk);
     };
     const stop = (reason) => {
-      if (stopping || completed) return;
-      stopping = true;
+      if (phase !== "open") return;
+      phase = "stopping";
       stopReason = reason;
       stoppedAt = Date.now();
       diagnostics.stopAt = performance.now();
       const vadPromise = startVadObservation();
+      const armFinalTimer = (timeoutMs) => {
+        clearTimeout(finalTimer);
+        finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), timeoutMs);
+        finalTimer.unref?.();
+      };
       void (async () => {
         try {
-          if (!adapter) send({ type: "waiting_for_transcription" });
+          // A runtime that never resolves (or a fallback that never opens)
+          // would otherwise leave a stopped session open until the client
+          // goes, so the wait for it has its own bound. Once the adapter is
+          // there the finalization window starts afresh at "finalizing".
+          if (!adapter) {
+            send({ type: "waiting_for_transcription" });
+            armFinalTimer(calculateFinalizationTimeoutMs({ audioBytes, adapter: runtimeMetadata.adapter, model: runtimeMetadata.model, limits }));
+          }
           if (liveFallbackPromise) await liveFallbackPromise;
           const current = adapter || await adapterAvailable;
-          if (!current || completed) return;
+          if (!current || phase === "ended") return;
           const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
             audioBytes,
             adapter: runtimeMetadata.adapter,
@@ -2336,12 +2364,11 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             audioDurationMs: Math.round(audioBytes / 32),
             ...runtimeMetadata,
           });
-          finalTimer = setTimeout(() => fail(dictationError("dictation_final_timeout", "Voice dictation did not finalize in time", 504)), finalizationTimeoutMs);
-          finalTimer.unref?.();
+          armFinalTimer(finalizationTimeoutMs);
           deadlineTimer = setTimeout(() => { deadlinePassed = true; send({ type: "settlement_deadline", deadlineMs: limits.finalDeadlineMs }); }, limits.finalDeadlineMs);
           deadlineTimer.unref?.();
           await vadPromise;
-          if (completed) return;
+          if (phase === "ended") return;
           const segmentation = {
             mode: diagnostics.analysis?.source === "heuristic"
               ? "heuristic"
@@ -2359,7 +2386,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           } catch (error) {
             if (!liveFallbackPromise) throw error;
             await liveFallbackPromise;
-            if (!completed && adapter && adapter !== current) {
+            if (phase !== "ended" && adapter && adapter !== current) {
               await adapter.stop({
                 segmentation,
                 progressive: progressiveEnabled,
@@ -2371,7 +2398,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       })();
     };
     const emit = (event) => {
-      if (completed) return;
+      if (phase === "ended") return;
       // Session already advertised readiness so the browser can stream PCM while
       // the local model cold-starts; ignore the adapter's own ready event.
       if (event.type === "ready") return;
@@ -2444,7 +2471,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           // Completion waits for adapter_closed: segmented transcriptions emit
           // one final per utterance, so completing on the first final would drop
           // every later segment.
-        } else if (event.type === "adapter_closed") complete(stopping ? stopReason || "stopped" : "upstream_closed", event);
+        } else if (event.type === "adapter_closed") complete(phase === "stopping" ? stopReason || "stopped" : "upstream_closed", event);
         else if (event.type === "error") {
           const truth = transcriptTruth.snapshot();
           const exactStableCheckpoint = truth.stableSegments.some((segment) => segment.throughSample === truth.committedThroughSample && segment.throughSample > 0);
@@ -2462,7 +2489,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     durationTimer.unref?.();
     (async () => {
       const config = await voiceRuntime.resolve();
-      if (completed) {
+      if (phase === "ended") {
         settleAdapter(null);
         if (!runtimeConfigSettled) {
           runtimeConfigSettled = true;
@@ -2605,7 +2632,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       }
       if (config.adapter === "transcribe_cpp_stream_v1" && typeof config.transcribe === "function" && runtimeMetadata.adapter === "transcribe_cpp_stream_v1") {
         const startLiveFallback = async (event) => {
-          if (completed || runtimeMetadata.adapter !== "transcribe_cpp_stream_v1") return;
+          if (phase === "ended" || runtimeMetadata.adapter !== "transcribe_cpp_stream_v1") return;
           const truthBeforeFallback = transcriptTruth.snapshot();
           const stableCheckpoint = truthBeforeFallback.committedThroughSample;
           const stableSegment = truthBeforeFallback.stableSegments.at(-1) || null;
@@ -2683,7 +2710,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             },
           );
           await fallbackAdapter.opened;
-          if (completed) {
+          if (phase === "ended") {
             fallbackAdapter.close();
             return;
           }
@@ -2691,6 +2718,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           if (pcmAccumulator.byteLength > replaySample * 2) {
             adapter.write(pcmAccumulator.view().subarray(replaySample * 2));
           }
+          // The replay above already carries the chunks that arrived while the
+          // fallback opened, so the ones held for it are dropped, not drained.
+          pendingStreamChunks = [];
           adapterReady = true;
           activateProgressiveBatch({ ...config, inferenceMode: "batch", execution: hasStableCheckpoint ? "stop" : config.execution }, fallbackAdapter);
           send({
@@ -2713,7 +2743,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         fallbackLiveToBatch = (event) => {
           if (!liveFallbackPromise) {
             liveFallbackPromise = startLiveFallback(event).catch((error) => {
-              if (!completed) fail(error);
+              if (phase !== "ended") fail(error);
               throw error;
             });
           }
@@ -2721,7 +2751,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         };
       }
       await next.opened;
-      if (completed) {
+      if (phase === "ended") {
         next.close();
         settleAdapter(null);
         return;
@@ -2759,19 +2789,19 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     client.on("message", (data, isBinary) => {
       try {
         if (isBinary) {
-          if (completed || stopping) return;
+          if (phase !== "open") return;
           acceptAudio(data);
           return;
         }
         const command = JSON.parse(String(data));
         if (command.type === "client_diagnostics") {
-          if (completed) void updateClientDiagnostics(command.clientDiagnostics ?? command.diagnostics).catch((error) => {
+          if (phase === "ended") void updateClientDiagnostics(command.clientDiagnostics ?? command.diagnostics).catch((error) => {
             console.error(`Voice diagnostic completion metadata update failed: ${error.message}`);
             send({ type: "client_diagnostics_ack", accepted: false });
           });
           return;
         }
-        if (completed || stopping) return;
+        if (phase !== "open") return;
         if (command.type !== "stop") throw dictationError("dictation_control_invalid", "Unknown dictation control frame");
         const reportedAudioBytes = Number(command.audioBytesSent);
         clientAudioBytes = Number.isFinite(reportedAudioBytes) && reportedAudioBytes >= 0
@@ -2783,18 +2813,9 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       } catch (error) { fail(error); }
     });
     client.once("close", () => {
-      if (!completed) {
-        completed = true;
-        diagnostics.sessionFinalAt ||= performance.now();
-        cleanup();
-        startVadObservation();
-        const archive = archiveRecording("client_disconnected");
-        void Promise.all([archive, vadObservationPromise]).then(() => updateSavedRecording({
-          completionReason: "client_disconnected",
-          diagnostics: diagnosticsPayload(),
-          ...runtimeMetadata,
-        }));
-      }
+      void end("client_disconnected", {
+        savedUpdates: () => ({ completionReason: "client_disconnected", ...runtimeMetadata }),
+      });
       settleAdapter(null);
       activeSessions = Math.max(0, activeSessions - 1);
       dictationClients.delete(client);
