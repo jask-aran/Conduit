@@ -79,10 +79,17 @@ const read = () => {
   settings.pairings = settings.pairings.map((pairing) => ({ ...pairing, roots: withIds(pairing.roots) }));
   return settings;
 };
+// Whole or not at all: a reader meeting a half-written file would take it for no pairings (read, above).
 const write = (settings) => {
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(file, `${JSON.stringify({ ...settings, version: 2 }, null, 2)}\n`, { mode: 0o600 });
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify({ ...settings, version: 2 }, null, 2)}\n`, { mode: 0o600 });
+  try { fs.renameSync(temp, file); } catch (error) { fs.rmSync(temp, { force: true }); throw error; }
 };
+/** One change to the file as it is now: the running node writes routes and shares into it too (keepRoutes, keepShare). */
+const save = (change) => { const now = read(); change(now); write(now); };
+/** The same pairing in a fresh read. */
+const fresh = (now, pairing) => now.pairings.find((item) => item.mainUrl === pairing.mainUrl);
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -181,16 +188,19 @@ if (command === "pair") {
   if (!mainUrl || !key) { printHelp(); process.exit(2); }
   const at = origin(mainUrl);
   // Pairing a server again replaces its key and keeps what it was shared.
-  const previous = settings.pairings.find((item) => item.mainUrl === at);
-  // The server's id for this pairing, when known: how an app pointed at that server finds it here.
-  const pairing = { mainUrl: at, key, ...(given.node ? { nodeId: given.node } : {}),
-    ...(given.via.length ? { routes: given.via.map(origin) } : {}), roots: previous?.roots || [] };
-  const pairings = [...settings.pairings.filter((item) => item.mainUrl !== at), pairing];
-  write({ ...settings, name: name.join(" ") || settings.name || os.hostname(), pairings });
+  let pairings;
+  save((now) => {
+    const previous = now.pairings.find((item) => item.mainUrl === at);
+    // The server's id for this pairing, when known: how an app pointed at that server finds it here.
+    const pairing = { mainUrl: at, key, ...(given.node ? { nodeId: given.node } : {}),
+      ...(given.via.length ? { routes: given.via.map(origin) } : {}), roots: previous?.roots || [] };
+    pairings = now.pairings = [...now.pairings.filter((item) => item.mainUrl !== at), pairing];
+    now.name = name.join(" ") || now.name || os.hostname();
+  });
   console.log(`Paired with ${at}${pairings.length > 1 ? ` (${pairings.length} servers now)` : ""}. Share a folder with it, then run \`conduit-node run\`.`);
 } else if (command === "unpair") {
   const at = origin(args[0] || "");
-  write({ ...settings, pairings: settings.pairings.filter((item) => item.mainUrl !== at) });
+  save((now) => { now.pairings = now.pairings.filter((item) => item.mainUrl !== at); });
   console.log(`No longer paired with ${at}.`);
 } else if (command === "relay") {
   const split = args.indexOf("--");
@@ -198,21 +208,21 @@ if (command === "pair") {
   const [action, env] = given.bare;
   const pairing = pairingFor(given.server);
   if (!env || !["add", "remove"].includes(action) || (action === "add" && split < 0)) { printHelp(); process.exit(2); }
-  pairing.relays = (pairing.relays || []).filter((item) => item.env !== env);
-  if (action === "add") {
-    const relayed = args.slice(split + 1);
-    if (!relayed.length) { console.error("Name the command that starts it after --."); process.exit(2); }
-    pairing.relays.push({ env, command: relayed });
-  }
-  write(settings);
+  const relayed = args.slice(split + 1);
+  if (action === "add" && !relayed.length) { console.error("Name the command that starts it after --."); process.exit(2); }
+  save((now) => {
+    const current = fresh(now, pairing);
+    if (!current) return;
+    current.relays = (current.relays || []).filter((item) => item.env !== env);
+    if (action === "add") current.relays.push({ env, command: relayed });
+  });
   console.log(`${action === "add" ? "Relaying" : "No longer relaying"} ${env} to ${pairing.mainUrl}. Restart \`conduit-node run\` to apply.`);
 } else if (command === "relayed") {
   const given = options(args, [], ["server"]);
   const value = given.bare[0];
   if (value !== "on" && value !== "off") { printHelp(); process.exit(2); }
   const pairing = pairingFor(given.server);
-  pairing.relayed = value === "on";
-  write(settings);
+  save((now) => { const current = fresh(now, pairing); if (current) current.relayed = value === "on"; });
   console.log(value === "on" ? `${pairing.mainUrl} is reached only through a relay now; \`conduit-node run\` leaves it to that.`
     : `${pairing.mainUrl} is dialled directly again by \`conduit-node run\`.`);
 } else if (command === "share") {
@@ -222,15 +232,20 @@ if (command === "pair") {
   if (!target || !fs.statSync(target, { throwIfNoEntry: false })?.isDirectory()) { console.error("Share an existing folder."); process.exit(2); }
   const pairing = pairingFor(given.server);
   const resolved = path.resolve(target);
-  const previous = pairing.roots.find((item) => item.path === resolved);
-  // Sharing a folder again changes its grants, not its id: workspaces on it keep working.
-  const root = { id: previous?.id || rootId(), path: resolved,
-    read: true, write: Boolean(given.write), shell: Boolean(given.shell),
-    // Given patterns replace the folder's own; none given keeps them.
-    allow: given.allow.length ? given.allow : previous?.allow || [],
-    deny: given.deny.length ? given.deny : previous?.deny || [] };
-  pairing.roots = [...pairing.roots.filter((item) => item.path !== root.path), root];
-  write(settings);
+  let root;
+  save((now) => {
+    const current = fresh(now, pairing);
+    if (!current) return;
+    const previous = current.roots.find((item) => item.path === resolved);
+    // Sharing a folder again changes its grants, not its id: workspaces on it keep working.
+    root = { id: previous?.id || rootId(), path: resolved,
+      read: true, write: Boolean(given.write), shell: Boolean(given.shell),
+      // Given patterns replace the folder's own; none given keeps them.
+      allow: given.allow.length ? given.allow : previous?.allow || [],
+      deny: given.deny.length ? given.deny : previous?.deny || [] };
+    current.roots = [...current.roots.filter((item) => item.path !== root.path), root];
+  });
+  if (!root) { console.error(`Not paired with ${pairing.mainUrl}.`); process.exit(2); }
   if (root.shell) console.warn(`--shell: commands start in ${root.path} but run as ${os.userInfo().username}, with everything that user can reach.`);
   console.log(`Sharing ${root.path} with ${pairing.mainUrl}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}. Restart \`conduit-node run\` to offer it.`);
   console.log(`Kept back from file access: ${[...DEFAULT_DENY, ...root.deny].join(" ")}${root.allow.length ? `, except ${root.allow.join(" ")}` : ""}.`);
@@ -239,23 +254,23 @@ if (command === "pair") {
   const value = given.bare[0];
   if (value !== "on" && value !== "off") { printHelp(); process.exit(2); }
   const pairing = pairingFor(given.server);
-  pairing.browse = value === "on";
-  write(settings);
+  save((now) => { const current = fresh(now, pairing); if (current) current.browse = value === "on"; });
   console.log(value === "on" ? `${pairing.mainUrl} may browse this computer and share folders it picks. Restart \`conduit-node run\` to apply.`
     : `${pairing.mainUrl} sees only the folders shared with it. Restart \`conduit-node run\` to apply.`);
 } else if (command === "new-folders") {
   const given = options(args, [], ["server"]);
   const pairing = pairingFor(given.server);
-  pairing.newFolders = { write: Boolean(given.write), shell: Boolean(given.shell) };
-  write(settings);
+  save((now) => { const current = fresh(now, pairing); if (current) current.newFolders = { write: Boolean(given.write), shell: Boolean(given.shell) }; });
   console.log(`New folders shared with ${pairing.mainUrl}: ${["read", given.write && "write", given.shell && "shell"].filter(Boolean).join(", ")}.`);
 } else if (command === "unshare") {
   const given = options(args, [], ["server"]);
   const target = path.resolve(given.bare[0] || "");
-  for (const pairing of given.server ? [pairingFor(given.server)] : settings.pairings) {
-    pairing.roots = pairing.roots.filter((item) => item.path !== target);
-  }
-  write(settings);
+  const named = given.server ? pairingFor(given.server) : null;
+  save((now) => {
+    for (const pairing of named ? [fresh(now, named)].filter(Boolean) : now.pairings) {
+      pairing.roots = pairing.roots.filter((item) => item.path !== target);
+    }
+  });
   console.log(`No longer sharing ${target}${given.server ? ` with ${origin(given.server)}` : ""}.`);
 } else if (command === "status") {
   console.log(JSON.stringify({ name: settings.name || null, host: os.hostname(),

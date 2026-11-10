@@ -165,7 +165,7 @@ public class ConduitComposerPlugin extends Plugin {
                 // Live from the first frame, riding the keyboard up and down with the composer.
                 root.post(() -> { if (frost != null) frost.show(); });
                 ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
-                    if (!animating) { if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
+                    if (!animating) { if ((seenIme || hideRequested) && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
                     return insets;
                 });
                 ViewCompat.setWindowInsetsAnimationCallback(root, new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
@@ -193,8 +193,12 @@ public class ConduitComposerPlugin extends Plugin {
                         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
                         if (insets != null) {
                             move(insets);
-                            // As at onStart: the end of a hide that ran before this composer's keyboard came up is not its close.
-                            if (seenIme && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
+                            // As at onStart: the end of a hide that ran before this composer's keyboard came up is not its close,
+                            // unless the person asked for it.
+                            boolean visible = insets.isVisible(WindowInsetsCompat.Type.ime());
+                            if ((seenIme || hideRequested) && !visible) atRest();
+                            // The keyboard came up past an asked-for hide: the parts held for that hide catch up.
+                            else if (visible && hideRequested) { hideRequested = false; if (describedParts != null) setParts(describedParts, describedRow); }
                         }
                     }
                 });
@@ -227,7 +231,8 @@ public class ConduitComposerPlugin extends Plugin {
         if (imeBottom > navBottom) seenIme = true;
         // The resting margin includes the navigation bar. The IME covers that bar as it rises.
         root.setTranslationY(-Math.max(0, imeBottom - navBottom));
-        if (seenIme && !animating && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
+        // A hide asked for before the keyboard was ever seen still closes: nothing else would.
+        if ((seenIme || hideRequested) && !animating && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest();
     }
     private void announceClosing() {
         if (root == null || closingSent) return;
@@ -241,9 +246,10 @@ public class ConduitComposerPlugin extends Plugin {
         hideRequested = true;
         ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0);
     }
+    /** A part held unseen for the keyboard's travel (ConduitMoves, waiting) is still there to touch. */
     private boolean hitsPart(float x, float y) {
         for (ConduitMoves.Part part : parts.values()) {
-            if (part.state == null || part.state.optBoolean("out") || part.state.optBoolean("hidden") || !part.view.isEnabled() || part.opacity == 0) continue;
+            if (part.state == null || part.state.optBoolean("out") || part.state.optBoolean("hidden") || !part.view.isEnabled() || part.opacity == 0 && !part.waiting) continue;
             if (!"pill".equals(part.state.optString("kind")) && !"field".equals(part.state.optString("kind"))) continue;
             if (x >= part.x && x < part.x + part.width && y >= part.y && y < part.y + part.height) return true;
         }
@@ -415,13 +421,19 @@ public class ConduitComposerPlugin extends Plugin {
                     // The web drew its pills before saying end, a few frames before its visual state callback: the frost
                     // goes now, in one frame with the app's (ComposerFrost.handOver).
                     if (frost != null) { frost.handOver(getBridge().getWebView()); frost = null; }
+                    boolean[] done = { false };
+                    Runnable finish = () -> {
+                        if (done[0]) return;
+                        done[0] = true;
+                        if (root == ending) remove();
+                        call.resolve();
+                    };
                     // Wait for the WebView's restored row to be drawable before removing its native cover.
                     getBridge().getWebView().postVisualStateCallback(0, new android.webkit.WebView.VisualStateCallback() {
-                        @Override public void onComplete(long requestId) {
-                            if (root == ending) remove();
-                            call.resolve();
-                        }
+                        @Override public void onComplete(long requestId) { finish.run(); }
                     });
+                    // A page that never answers is not left handing back (as MainActivity's return cover).
+                    getBridge().getWebView().postDelayed(finish, 800);
                     return;
                 } else {
                     closing = true;
@@ -473,6 +485,8 @@ public class ConduitComposerPlugin extends Plugin {
         root = field = null; input = null; describedParts = null; describedRow = states = blurStates = null;
     }
     @Override protected void handleOnDestroy() { getActivity().runOnUiThread(this::remove); }
+    /** Only Bridge.reset calls this, as a page starts: the composer's page is gone, and its "ended" would reach no one. */
+    @Override public void removeAllListeners() { super.removeAllListeners(); getActivity().runOnUiThread(this::remove); }
 
     /** The library's waiting ring. It is an effect on --duration-spin, separate from the named moves. */
     private class Spinner extends Drawable implements Runnable {

@@ -101,7 +101,7 @@ public class ConduitFloatService extends Service {
         appForeground = foreground;
         if (active != null) {
             // Conduit in front: the radial and any panel over it close (an assist from inside the app opened them).
-            if (foreground) { if (active.radial != null) active.radial.hideNow(); active.window.lift(false); active.closePanel(); }
+            if (foreground) { if (active.radial != null) active.radial.hideNow(); if (active.window != null) active.window.lift(false); active.closePanel(); }
             active.updateVisibility();
             active.updateDiscard();
         }
@@ -231,13 +231,11 @@ public class ConduitFloatService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && OFF.equals(intent.getAction())) {
             prefs().edit().putBoolean("enabled", false).apply();
-            stopSelf();
-            return START_NOT_STICKY;
+            return stopEarly();
         }
         if (!prefs().getBoolean("enabled", false) || !Settings.canDrawOverlays(this)
             || !ConduitFloatPlugin.microphoneGranted(this)) {
-            stopSelf();
-            return START_NOT_STICKY;
+            return stopEarly();
         }
         boolean visibleStart = intent != null && VISIBLE.equals(intent.getAction());
         try {
@@ -283,9 +281,15 @@ public class ConduitFloatService extends Service {
         } catch (RuntimeException error) {
             recorder.restoreVolume();
             prefs().edit().putBoolean("enabled", false).apply();
-            stopSelf();
-            return START_NOT_STICKY;
+            return stopEarly();
         }
+    }
+
+    /** A service started with startForegroundService that stops before startForeground crashes the app (Android 9+). */
+    private int stopEarly() {
+        try { foreground(notification()); } catch (RuntimeException refused) {}
+        stopSelf();
+        return START_NOT_STICKY;
     }
 
     private void foreground(Notification notification) {

@@ -84,9 +84,14 @@ pub fn keep_running_in_tray<R: Runtime>(app: &AppHandle<R>) -> bool {
         .unwrap_or(true)
 }
 
+/// Launch-at-login as the OS has it (turned off in Task Manager, say), the stored value only when it cannot say.
 #[tauri::command]
-pub fn desktop_settings(state: State<'_, Store>) -> DesktopSettings {
-    *state.0.lock().expect("desktop settings lock")
+pub fn desktop_settings<R: Runtime>(app: AppHandle<R>, state: State<'_, Store>) -> DesktopSettings {
+    let mut settings = *state.0.lock().expect("desktop settings lock");
+    if let Ok(enabled) = app.autolaunch().is_enabled() {
+        settings.launch_at_login = enabled;
+    }
+    settings
 }
 
 #[tauri::command]

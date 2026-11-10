@@ -531,11 +531,16 @@ public abstract class FloatPanel {
     /** The last answer for key, or null (another panel's list: Recent reads the places for their glyphs). */
     static Object last(String key) { return LAST.get(key); }
     /** Another hub: its lists are not this one's, so none of them may show (or be chosen) while it loads. */
-    static void forget() { LAST.clear(); }
+    static void forget() { synchronized (LAST) { generation++; LAST.clear(); } }
+    /** Bumped by forget: an answer fetched for an earlier hub is not kept. */
+    private static int generation;
+    private static int generation() { synchronized (LAST) { return generation; } }
+    private static void remember(int asked, String key, Object value) { synchronized (LAST) { if (asked == generation) LAST.put(key, value); } }
 
     /** Fetches a list ahead of its panel (as the radial opens), so even a first open has its rows. */
     static <T> void warm(String key, HubCall<T> call) {
-        HUB.execute(() -> { try { LAST.put(key, call.run()); } catch (ConduitHubClient.Failure | RuntimeException ignored) {} });
+        int asked = generation();
+        HUB.execute(() -> { try { remember(asked, key, call.run()); } catch (ConduitHubClient.Failure | RuntimeException ignored) {} });
     }
 
     /** The last list at once when there is one (else Loading…), then the fresh one in its place. */
@@ -545,10 +550,11 @@ public abstract class FloatPanel {
         body.removeAllViews();
         Object last = LAST.get(key);
         if (last != null) result.accept((T) last); else line("Loading…", SECONDARY);
+        int asked = generation();
         HUB.execute(() -> {
             try {
                 T value = call.run();
-                LAST.put(key, value);
+                remember(asked, key, value);
                 // Over a shown list, the fresh one waits for the rise to end: rebuilding rows mid-curve drops frames.
                 long wait = last == null ? 0 : Math.min(700, Math.max(0, settledAt - android.os.SystemClock.uptimeMillis()));
                 main.postDelayed(() -> { if (isOpen() && request == ticket) result.accept(value); }, wait);

@@ -147,7 +147,9 @@ public final class ConduitScreenReader extends AccessibilityService {
         } catch (RuntimeException e) { done.accept(null); }
     }
 
-    void capture(String id) {
+    void capture(String id) { capture(id, true); }
+
+    private void capture(String id, boolean retry) {
         if (Build.VERSION.SDK_INT < 30) return;
         try {
             takeScreenshot(Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
@@ -168,7 +170,10 @@ public final class ConduitScreenReader extends AccessibilityService {
                     ConduitContext.save(getApplicationContext(), id, "screenshot", bitmap, at);
                 }
                 @Override public void onFailure(int errorCode) {
-                    ConduitContext.fail(id, "screenshot", "Cannot capture this screen");
+                    // As the backdrop: a capture just after the radial's own backdrop is refused once.
+                    if (retry && errorCode == ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT)
+                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> capture(id, false), 340);
+                    else ConduitContext.fail(id, "screenshot", "Cannot capture this screen");
                 }
             });
         } catch (RuntimeException e) {

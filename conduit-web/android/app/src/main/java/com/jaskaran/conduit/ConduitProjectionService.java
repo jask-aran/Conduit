@@ -44,12 +44,11 @@ public final class ConduitProjectionService extends Service {
             if (next != null && !next.equals(id)) ConduitContext.fail(next, "screenshot", "A screenshot is already in progress");
             return START_NOT_STICKY;
         }
-        if (!ConduitContext.pending(next)) { stopSelf(); return START_NOT_STICKY; }
+        // Started with startForegroundService: stopping before startForeground crashes the app (Android 9+).
+        if (!ConduitContext.pending(next)) { try { foreground(); } catch (RuntimeException refused) {} stopSelf(); return START_NOT_STICKY; }
         id = next;
         try {
-            Notification notification = notification();
-            if (Build.VERSION.SDK_INT >= 29) startForeground(72, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-            else startForeground(72, notification);
+            foreground();
             MediaProjectionManager manager = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
             Intent consent = intent.getParcelableExtra("consent");
             projection = manager.getMediaProjection(intent.getIntExtra("resultCode", 0), consent);
@@ -64,6 +63,12 @@ public final class ConduitProjectionService extends Service {
             });
         } catch (RuntimeException e) { fail("Screenshot unavailable"); }
         return START_NOT_STICKY;
+    }
+
+    private void foreground() {
+        Notification notification = notification();
+        if (Build.VERSION.SDK_INT >= 29) startForeground(72, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+        else startForeground(72, notification);
     }
 
     private Notification notification() {
