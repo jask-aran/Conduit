@@ -184,7 +184,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 /* The app's phone: an overlay's dialog (the palette, chat search, Settings: pinned to the top or centred) fills the
    screen inside the safe area, every one at the same inset; a small centred Dialog keeps its own. */
 @media (--conduit-phone-layout) {
-  .ui-scrim[data-dialog]:is([data-placement="top"], :has(> .ui-overlay)) { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
+  .ui-scrim[data-dialog]:is([data-placement="top"], [data-placement="middle"], :has(> .ui-overlay)) { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
   .ui-scrim > .ui-frost.ui-overlay { width: 100%; height: 100%; max-height: none; }
   .ui-scrim .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
   .ui-scrim :is(.ui-overlay-aside, .ui-overlay-hints) { display: none; }
@@ -225,6 +225,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
    keyboard overlays. A dialog taller than what is left scrolls within it, and a centred one never centres past the top. */
 .ui-scrim[data-dialog] { inset: var(--vv-offset-top, 0px) 0 auto 0; height: var(--app-height, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
 .ui-scrim[data-dialog][data-placement="center"] { align-items: safe center; }
+/* Middle: the top edge sits where the overlay at its full height would be centred, and stays there as it shrinks. */
+.ui-scrim[data-dialog][data-placement="middle"] { padding-top: max(calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))), calc((var(--app-height, 100dvh) - var(--overlay-height, 0px)) / 2)); }
 .ui-scrim[data-dialog][data-state="closed"] { animation: ui-dialog-close var(--duration-quick) var(--ease-leave); pointer-events: none; }
 /* Keep the behavior host mounted for Card's exit, including in reduced motion. */
 @keyframes ui-dialog-close { from { visibility: visible; } to { visibility: visible; } }

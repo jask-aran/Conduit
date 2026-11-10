@@ -69,12 +69,14 @@ export function Dialog(props: {
 }
 
 /** A large overlay (a palette, chat search): Kobalte owns modality and focus; Scrim and Overlay own the surface.
- *  Pinned near the top so filtering shrinks it from the bottom (placement="center" for one that does not filter). */
+ *  Pinned near the top so filtering shrinks it from the bottom; placement="center" for one that does not filter;
+ *  "middle" for one that filters and has a full height (--overlay-height): it sits where that height is centred and
+ *  its top edge stays there as it shrinks. */
 export function OverlayDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   label: string;
-  placement?: "top" | "center";
+  placement?: "top" | "center" | "middle";
   layout?: "rail";
   style?: JSX.CSSProperties;
   onOpenAutoFocus?: (event: Event) => void;
@@ -86,7 +88,7 @@ export function OverlayDialog(props: {
   overlayHaptics(() => props.open);
   return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange(open); }}>
     <KDialog.Portal mount={mount()}>
-      <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"}
+      <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
         <Overlay embedded label={props.label} layout={props.layout} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>

@@ -90,8 +90,11 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment-tile > button[aria-current] { outline: var(--stroke) solid var(--foreground); outline-offset: calc(-1 * var(--stroke)); }
 /* Stage: the one thing a card is showing, whole, on the card itself (no ground of its own). It is one size whatever
    it shows, so stepping from a picture to a file never moves the card: a picture is fitted in it, never cropped; a
-   file's text (a CodeBlock) starts at its top and scrolls in it. */
-.ui-card-stage { display: grid; height: min(70dvh, var(--measure-3xl)); place-items: center; overflow: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-card-stage img { display: block; max-width: 100%; max-height: min(70dvh, var(--measure-3xl)); border-radius: var(--radius-control); object-fit: contain; }
-.ui-card-stage > .ui-code { box-sizing: border-box; width: 100%; margin: 0; align-self: start; }
+   file's text is a TextEditor that fills it. */
+.ui-card-stage { display: flex; height: min(var(--measure-lg), 50dvh); flex-direction: column; align-items: center; justify-content: center; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-card-stage img { display: block; max-width: 100%; max-height: 100%; min-height: 0; border-radius: var(--radius-control); object-fit: contain; }
+.ui-card-stage > .ui-text-editor { width: 100%; box-sizing: border-box; }
+/* Steps: before, the tiles, after, centred. */
+.ui-card-steps { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); }
+.ui-card-steps > .ui-attachments[data-form="tray"] { width: auto; margin: 0; justify-content: center; }
 .ui-attachment-tile > button:focus-visible { outline: none; filter: brightness(var(--brighten)); }

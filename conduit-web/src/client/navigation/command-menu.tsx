@@ -1010,6 +1010,7 @@ export function CommandMenu(props: {
       open={props.open}
       onOpenChange={changeOpen}
       label={label()}
+      placement="middle"
       style={{ "--overlay-width": withPreview() ? "calc(81.25 * var(--u-space))" : chatPage() || modelSelectorPage() ? "calc(56.25 * var(--u-space))" : undefined, "--overlay-height": chatPage() ? "calc(45 * var(--u-space))" : "calc(37.5 * var(--u-space))" }}
       onOpenAutoFocus={(event) => { event.preventDefault(); focusInput(); }}
       onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}

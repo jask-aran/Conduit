@@ -12,8 +12,9 @@ import { duration, easing, reducedMotion } from "./motion";
 import { DropdownMenu, MenuContent, MenuRow, MenuSection } from "./menus";
 import { Row } from "./row";
 
-/** Scrim: the dimmed page an Overlay rises over (placement: under the top edge, or centred). */
-export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: "top" | "center"; dialog?: boolean; motion?: Motion }) {
+/** Scrim: the dimmed page an Overlay rises over (placement: under the top edge, centred, or middle: its top edge
+ *  where its full height, --overlay-height, would be centred). */
+export function Scrim(props: JSX.HTMLAttributes<HTMLDivElement> & { placement?: "top" | "center" | "middle"; dialog?: boolean; motion?: Motion }) {
   const [local, rest] = splitProps(props, ["class", "placement", "dialog", "motion"]);
   return <div {...rest} class={cn("ui-scrim", local.class)} data-placement={local.placement ?? "top"} data-dialog={local.dialog ? "" : undefined} {...motionOf(local.motion)} />;
 }

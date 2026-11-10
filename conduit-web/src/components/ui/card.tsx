@@ -37,9 +37,17 @@ export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-
  *  a picture drawn as the picture, scrolling past its cap). label: what the group is, for a screen reader. */
 export const Attachments = (props: { form?: "list" | "tray"; label?: string; children: JSX.Element }) =>
   <ul class="ui-attachments" data-form={props.form ?? "list"} aria-label={props.label}>{props.children}</ul>;
-/** One thing shown whole in a card (a picture uncropped, a file's text as a CodeBlock): the card's width and one
- *  height whatever it shows, scrolling inside. */
+/** One thing shown whole in a card (a picture uncropped, a file's text in a TextEditor fill): the card's width and
+ *  one height whatever it shows. */
 export const CardStage = (props: { children: JSX.Element }) => <div class="ui-card-stage">{props.children}</div>;
+/** Stepping through a card's things: the one before, what there is (tiles, the one shown marked), the one after,
+ *  centred under the stage. */
+export const CardSteps = (props: { onPrevious: () => void; onNext: () => void; children: JSX.Element }) =>
+  <div class="ui-card-steps">
+    <Button variant="ghost" size="icon-sm" aria-label="Previous" title="Previous" onClick={() => props.onPrevious()}><Icons.ChevronLeft /></Button>
+    {props.children}
+    <Button variant="ghost" size="icon-sm" aria-label="Next" title="Next" onClick={() => props.onNext()}><Icons.ChevronRight /></Button>
+  </div>;
 /** One file of a tray (a sent message's), as small as it reads: a picture as the picture, a file as a frost pill of
  *  its mark and name; each one line of a message tall, and a press shows it whole (onOpen). */
 export const AttachmentTile = (props: { name: string; image?: JSX.Element; icon: JSX.Element; current?: boolean; onOpen?: () => void }) =>
