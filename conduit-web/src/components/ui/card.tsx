@@ -37,6 +37,14 @@ export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-
  *  a picture drawn as the picture, scrolling past its cap). label: what the group is, for a screen reader. */
 export const Attachments = (props: { form?: "list" | "tray"; label?: string; children: JSX.Element }) =>
   <ul class="ui-attachments" data-form={props.form ?? "list"} aria-label={props.label}>{props.children}</ul>;
+/** One file of a tray (a sent message's), as small as it reads: a picture as the picture, a file as a frost pill of
+ *  its mark and name; each one line of a message tall, and a press shows it whole (onOpen). */
+export const AttachmentTile = (props: { name: string; image?: JSX.Element; icon: JSX.Element; onOpen?: () => void }) =>
+  <li class="ui-attachment-tile" data-image={props.image ? "" : undefined}>
+    <button type="button" class={props.image ? undefined : "ui-frost"} aria-label={`Show ${props.name}`} title={props.name} onClick={() => props.onOpen?.()}>
+      <Show when={props.image} fallback={<>{props.icon}<span>{props.name}</span></>}>{props.image}</Show>
+    </button>
+  </li>;
 /** One file: its image or an icon, its name and a detail (its size and type, or why it failed). onRemove: a remove
  *  button at its end. */
 export function Attachment(props: { name: string; detail: string; image?: JSX.Element; icon: JSX.Element; failed?: boolean; onRemove?: () => void }) {

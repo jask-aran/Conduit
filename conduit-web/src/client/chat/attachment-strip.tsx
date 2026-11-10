@@ -9,16 +9,12 @@ import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMou
 import { Button as LibraryButton, Chip, Chips, Rider, Actions } from "@/components/ui";
 import type { UploadAttachment } from "../state/attachments";
 import { attachmentUrl } from "../api/transport";
-import { AttachmentImage, sizeLabel } from "./attachments";
+import { AttachmentImage, FileMark, sizeLabel } from "./attachments";
 import { createLeaving, fadeOut, riderMotion, type CardExit } from "./composer-cards";
 
 const isImage = (item: UploadAttachment) => Boolean(item.type?.startsWith("image/"));
 const previewOf = (item: UploadAttachment, chatId?: string | null) =>
   item.objectUrl || (isImage(item) && chatId ? attachmentUrl(chatId, item.id, "?preview=1") : null);
-// The file viewer's icons. Its icon theme lives in the workspace's lazy chunk,
-// so it is fetched on the first file chip rather than carried by the composer.
-const WorkspaceFileIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
-const FileMark = (props: { name: string }) => <Suspense fallback={<Icons.File />}><WorkspaceFileIcon name={props.name} /></Suspense>;
 
 /** One attachment as a Chip: a press shows it (or retries a failed upload that can be), its remove button removes it. */
 function AttachmentChip(props: { item: UploadAttachment; chatId?: string | null; entering: boolean; onOpen: () => void; onRemove: (chip: HTMLElement) => void; onRetry: () => void }) {
