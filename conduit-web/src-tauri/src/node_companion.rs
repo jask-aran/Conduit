@@ -6,8 +6,10 @@
 //! child of this process while "Serve this computer" is on and restarted if it
 //! stops. Because the shell keeps running in the tray with the window closed
 //! and can start at login, so does the node. Pairing and sharing go through
-//! the same CLI, so its settings file is the one truth; the shell only owns
-//! the process and the folder picker.
+//! the same CLI, so its settings file is the one truth; the running node takes
+//! each change to it as it is made, on the connections it has, so nothing here
+//! restarts it (which would end its terminals and commands). The shell only
+//! owns the process and the folder picker.
 
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
@@ -189,11 +191,6 @@ pub fn supervise<R: Runtime>(app: &AppHandle<R>, wanted: bool) {
     });
 }
 
-/// After pairing or sharing: the running node reads its settings at start.
-fn restart<R: Runtime>(app: &AppHandle<R>) {
-    stop_child(&app.state::<Companion>());
-}
-
 /// The app is going away; the node goes with it.
 pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
     if let Some(companion) = app.try_state::<Companion>() {
@@ -261,9 +258,7 @@ pub async fn device_companion_pair<R: Runtime>(app: AppHandle<R>, main_url: Stri
         args.push("--via");
         args.push(route.as_str());
     }
-    let said = run_cli(&app, &args)?;
-    restart(&app);
-    Ok(said)
+    run_cli(&app, &args)
 }
 
 /// Share a folder this person picks with one server.
@@ -282,14 +277,12 @@ pub async fn device_companion_share<R: Runtime>(app: AppHandle<R>, main_url: Str
         args.push("--shell");
     }
     run_cli(&app, &args)?;
-    restart(&app);
     Ok(Some(folder))
 }
 
 #[tauri::command]
 pub async fn device_companion_unshare<R: Runtime>(app: AppHandle<R>, main_url: String, path: String) -> Result<(), String> {
     run_cli(&app, &["unshare", &path, "--server", &main_url])?;
-    restart(&app);
     Ok(())
 }
 
@@ -297,12 +290,10 @@ pub async fn device_companion_unshare<R: Runtime>(app: AppHandle<R>, main_url: S
 #[tauri::command]
 pub async fn device_companion_browse<R: Runtime>(app: AppHandle<R>, main_url: String, on: bool) -> Result<(), String> {
     run_cli(&app, &["browse", if on { "on" } else { "off" }, "--server", &main_url])?;
-    restart(&app);
     Ok(())
 }
 
-/// What folders shared with one server may do: those mounted from the app, and those it shares by browsing. The node
-/// reads it as it shares one, so it needs no restart.
+/// What folders shared with one server may do: those mounted from the app, and those it shares by browsing.
 #[tauri::command]
 pub async fn device_companion_new_folders<R: Runtime>(app: AppHandle<R>, main_url: String, write: bool, shell: bool) -> Result<(), String> {
     let mut args = vec!["new-folders", "--server", main_url.as_str()];
@@ -319,6 +310,5 @@ pub async fn device_companion_new_folders<R: Runtime>(app: AppHandle<R>, main_ur
 #[tauri::command]
 pub async fn device_companion_unpair<R: Runtime>(app: AppHandle<R>, main_url: String) -> Result<(), String> {
     run_cli(&app, &["unpair", &main_url])?;
-    restart(&app);
     Ok(())
 }

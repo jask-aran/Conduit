@@ -49,6 +49,9 @@ const HEARTBEAT_MS = 30_000;
  * set here, on the device, never by main; a folder shared so gets the grants
  * the device gives new folders (`newFolders`), and `onShare` keeps it, as
  * `conduit-node share` would have.
+ *
+ * `update` takes what the owner shares now (their settings changed) on the connection as it is: a folder no longer
+ * shared, or shared with other grants, is nothing from the next call, and what was opened in it is closed.
  */
 export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
   // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
@@ -136,7 +139,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     },
   };
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
-  const harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
+  let harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
   // This device's browser, made on first use; offered where harnesses are (a folder shared with commands).
   let browserHost = null;
   const deviceBrowser = () => browserHost ??= new BrowserHost({ session: "conduit-device",
@@ -145,6 +148,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   // The person's own browser here (person-browser.js), offered as harnesses are: driving it is acting as them.
   const personBrowser = new PersonBrowser();
   const offersPersonBrowser = () => roots.some((root) => root.shell) && personBrowser.available;
+  // What a hello says this node offers. Roots go by id; the path is for people to read, main never sends it back.
+  const capabilities = () => helloCapabilities({ harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(),
+    personBrowser: offersPersonBrowser(), roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
   let socket = null;
   let served = null;
   let directPort = null;
@@ -254,7 +260,13 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     // Byte streams main opened to endpoints here (remote-tunnel.js): tunnel id -> socket.
     const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
-    const here = { send, following };
+    const here = { send, following, features: [],
+      // Main told what this node offers now: by itself where it takes that, else by connecting again (processes stay).
+      tell: () => (here.features.includes("capabilities") ? send({ type: "capabilities", ...capabilities() }) : ws.close()),
+      // What was opened in folders no longer shared as they were.
+      close: (gone) => {
+        for (const [id, handle] of handles) if (gone.has(handle.root)) { handles.delete(id); void handle.object.close?.(BACKGROUND_CONTEXT); }
+      } };
     const relayFor = (env) => relays.find((relay) => relay.env === env);
 
     let opened = false;
@@ -278,10 +290,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       link = here;
       granting = confidential(url, ws);
       for (const [procId, held] of holders) if (held === HUB) holders.delete(procId);
-      // Roots go by id; the path is for people to read, main never sends it back.
-      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot,
-        ...helloCapabilities({ harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(), personBrowser: offersPersonBrowser(),
-          roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) }),
+      send({ type: "hello", version: NODE_PROTOCOL_VERSION, name, platform: process.platform, boot: receipts.boot, ...capabilities(),
         ...(directPort ? { direct: JSON.parse(toldDirect = JSON.stringify(directInfo())) } : {}) });
       log.info?.(`[conduit-node] connected to ${mainUrl}${via === mainUrl ? "" : ` via ${via}`}`);
     });
@@ -297,7 +306,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }
       // What main offers (decision 30): environments are carried only where it relays them.
       if (message.type === "welcome") {
-        const features = Array.isArray(message.features) ? message.features : [];
+        const features = here.features = Array.isArray(message.features) ? message.features : [];
         if (features.includes("relay")) for (const relay of relays) relay.attach(send, { confidential: granting });
         else if (relays.length) log.warn?.(`[conduit-node] ${mainUrl} does not relay; ${relays.map((relay) => relay.env).join(", ")} not carried`);
         return;
@@ -356,7 +365,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         const value = await run(message, context, (event) => send({ ...event, type: "event", id: message.id }));
         // Something with methods of its own stays here; main gets its name.
         const result = value?.ok && value.value && typeof value.value.close === "function"
-          ? { ok: true, value: keep(value.value) } : value;
+          ? { ok: true, value: keep(value.value, message.cwd?.root) } : value;
         send({ type: "result", id: message.id, value: encode(result) });
       } catch (error) {
         send({ type: "failure", id: message.id, message: error?.message || String(error) });
@@ -376,7 +385,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       tunnels.clear();
       // An action keeps running for main to ask after again; any other call stops.
       for (const call of calls.values()) (call.drop || call.abort).call(call);
-      for (const handle of handles.values()) void handle.close?.(BACKGROUND_CONTEXT);
+      for (const handle of handles.values()) void handle.object.close?.(BACKGROUND_CONTEXT);
       handles.clear();
       if (socket === ws) socket = null;
       if (ended) return;
@@ -402,9 +411,10 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     });
     ws.on("error", (error) => { if (attempt === 0) log.warn?.(`[conduit-node] ${error.message}`); });
 
-    function keep(object) {
+    // By the root it was opened in, to close it when that is no longer shared.
+    function keep(object, root) {
       const id = `h_${crypto.randomUUID()}`;
-      handles.set(id, object);
+      handles.set(id, { object, root });
       return { $handle: id, ...(object.mode ? { mode: object.mode } : {}) };
     }
 
@@ -571,7 +581,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         return err(new FileError("not_supported", `${method} is not served by this node`));
       }
       if (target !== "env") {
-        const handle = handles.get(target);
+        const handle = handles.get(target)?.object;
         if (!handle || !HANDLE_METHODS.includes(method)) return err(new FileError("invalid", `No open handle ${target}`));
         const value = await handle[method](...decoded, context);
         if (method === "close") handles.delete(target);
@@ -596,6 +606,17 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   } else connect();
   return {
     stop() { end("stopped"); },
+    update({ roots: next, browse: browsing }) {
+      const now = next.map(view);
+      const same = new Set(now.map((root) => JSON.stringify(root)));
+      const gone = new Set(roots.filter((root) => !same.has(JSON.stringify(root))).map((root) => root.id));
+      const said = JSON.stringify(capabilities());
+      roots.splice(0, roots.length, ...now);
+      browse = Boolean(browsing);
+      harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
+      link?.close(gone);
+      if (JSON.stringify(capabilities()) !== said) link?.tell();
+    },
   };
 }
 

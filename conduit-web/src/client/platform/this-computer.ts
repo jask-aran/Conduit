@@ -38,7 +38,7 @@ export async function keepThisComputerConnected() {
   if (paired !== settings.serveAsDevice) await shell.saveSettings({ ...settings, serveAsDevice: paired });
 }
 
-/** The node restarts to take a change; its hello says when it has. Asked until `ready` says so, for a while. */
+/** The node tells the hub a change as it takes it. Asked until `ready` says so, for a while. */
 async function until(nodeId: string, ready: (node: ListedNode) => boolean, failure: string) {
   const end = Date.now() + 20_000;
   while (Date.now() < end) {

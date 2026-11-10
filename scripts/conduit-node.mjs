@@ -61,17 +61,19 @@ function printHelp() {
   conduit-node run --stdio [--server <url>]   Serve a relayed pairing over stdin/stdout.
 
 Each server is paired on its own: its own key, its own folders and grants.
-Settings live in ${file} (CONDUIT_NODE_HOME moves them).`);
+Settings live in ${file} (CONDUIT_NODE_HOME moves them);
+a running \`conduit-node run\` takes a change to them as it is made.`);
 }
 
 // Each shared folder has an id its server knows it by; the path stays on this device.
 const rootId = () => `r_${crypto.randomBytes(9).toString("base64url")}`;
 const withIds = (roots) => (roots || []).map((root) => (root.id ? root : { id: rootId(), ...root }));
 
+/** The settings file as written, or null where it is missing or does not parse. */
+const parsed = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
 /** Settings, as version 2: `{ name, pairings: [{ mainUrl, key, roots }] }`; version 1 had one server at the top. */
-const read = () => {
-  let settings;
-  try { settings = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return { version: 2, name: null, pairings: [] }; }
+const read = (settings = parsed()) => {
+  if (!settings) return { version: 2, name: null, pairings: [] };
   if (!settings.pairings) {
     settings = { version: 2, name: settings.name || null,
       pairings: settings.mainUrl ? [{ mainUrl: settings.mainUrl, key: settings.key, roots: settings.roots || [] }] : [] };
@@ -90,6 +92,14 @@ const write = (settings) => {
 const save = (change) => { const now = read(); change(now); write(now); };
 /** The same pairing in a fresh read. */
 const fresh = (now, pairing) => now.pairings.find((item) => item.mainUrl === pairing.mainUrl);
+/**
+ * Every change to the settings, whoever made it (the CLI, the app, this run's own keepRoutes and keepShare), polled:
+ * the file is replaced by rename, which a watch on it would lose. One that does not parse is passed over.
+ */
+const followSettings = (apply) => fs.watchFile(file, { interval: 1000 }, () => {
+  const found = parsed();
+  if (found) apply(read(found));
+});
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -216,7 +226,7 @@ if (command === "pair") {
     current.relays = (current.relays || []).filter((item) => item.env !== env);
     if (action === "add") current.relays.push({ env, command: relayed });
   });
-  console.log(`${action === "add" ? "Relaying" : "No longer relaying"} ${env} to ${pairing.mainUrl}. Restart \`conduit-node run\` to apply.`);
+  console.log(`${action === "add" ? "Relaying" : "No longer relaying"} ${env} to ${pairing.mainUrl}.`);
 } else if (command === "relayed") {
   const given = options(args, [], ["server"]);
   const value = given.bare[0];
@@ -247,7 +257,7 @@ if (command === "pair") {
   });
   if (!root) { console.error(`Not paired with ${pairing.mainUrl}.`); process.exit(2); }
   if (root.shell) console.warn(`--shell: commands start in ${root.path} but run as ${os.userInfo().username}, with everything that user can reach.`);
-  console.log(`Sharing ${root.path} with ${pairing.mainUrl}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}. Restart \`conduit-node run\` to offer it.`);
+  console.log(`Sharing ${root.path} with ${pairing.mainUrl}: ${["read", root.write && "write", root.shell && "shell"].filter(Boolean).join(", ")}.`);
   console.log(`Kept back from file access: ${[...DEFAULT_DENY, ...root.deny].join(" ")}${root.allow.length ? `, except ${root.allow.join(" ")}` : ""}.`);
 } else if (command === "browse") {
   const given = options(args, [], ["server"]);
@@ -255,8 +265,8 @@ if (command === "pair") {
   if (value !== "on" && value !== "off") { printHelp(); process.exit(2); }
   const pairing = pairingFor(given.server);
   save((now) => { const current = fresh(now, pairing); if (current) current.browse = value === "on"; });
-  console.log(value === "on" ? `${pairing.mainUrl} may browse this computer and share folders it picks. Restart \`conduit-node run\` to apply.`
-    : `${pairing.mainUrl} sees only the folders shared with it. Restart \`conduit-node run\` to apply.`);
+  console.log(value === "on" ? `${pairing.mainUrl} may browse this computer and share folders it picks.`
+    : `${pairing.mainUrl} sees only the folders shared with it.`);
 } else if (command === "new-folders") {
   const given = options(args, [], ["server"]);
   const pairing = pairingFor(given.server);
@@ -283,23 +293,41 @@ if (command === "pair") {
   const agent = startNodeAgent({ mainUrl: pairing.mainUrl, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots,
     shellEnv: buildManagedToolEnvironment(process.env), dial: stdioDialer(), attest: null, confidential: (_url, socket) => socket.confidential === true, direct: true, browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl) });
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { agent.stop(); process.exit(0); });
+  followSettings((now) => { const changed = now.pairings.find((item) => item.mainUrl === pairing.mainUrl); if (changed) agent.update(changed); });
 } else if (command === "run") {
   write(settings);
   takeOver();
-  if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
+  if (!settings.pairings.length) console.warn("Not paired yet: waiting for `conduit-node pair <main-url> <key>`.");
   const shellEnv = buildManagedToolEnvironment(process.env);
   // One connection per server, each with only what was shared with it, and
   // the environments relayed on it; one reached through a relay is left to it.
   // Taken over on one pairing means another run has them all: this one ends.
-  const replaced = () => { for (const agent of agents) agent.stop(); process.exit(0); };
-  const agents = settings.pairings.filter((pairing) => !pairing.relayed).map((pairing) => {
+  const agents = new Map();
+  const stopAll = () => { for (const { agent } of agents.values()) agent.stop(); };
+  const replaced = () => { stopAll(); process.exit(0); };
+  // What a connection is made with: a pairing whose key or relays change is connected again, its processes ended.
+  const madeWith = (pairing) => JSON.stringify([pairing.key, pairing.relays || []]);
+  const start = (pairing, name) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
-    return startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key, name: settings.name || os.hostname(), roots: pairing.roots, shellEnv,
+    agents.set(pairing.mainUrl, { madeWith: madeWith(pairing), agent: startNodeAgent({ mainUrl: pairing.mainUrl, routes: pairing.routes, key: pairing.key,
+      name: name || os.hostname(), roots: pairing.roots, shellEnv,
       browse: Boolean(pairing.browse), onShare: keepShare(pairing.mainUrl), newFolders: newFoldersFor(pairing.mainUrl), onReplaced: replaced, direct: true, certificate: () => tailnetCert(home),
       hub: pairing.hub || null, onRoutes: keepRoutes(pairing.mainUrl), findHub,
-      relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) });
+      relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) }) });
+  };
+  for (const pairing of settings.pairings) if (!pairing.relayed) start(pairing, settings.name);
+  // A change to the settings, on the connections running: what each pairing shares, on its own connection as it is;
+  // a pairing made, forgotten or changed in how it connects, started, stopped or started again.
+  followSettings((now) => {
+    const wanted = new Map(now.pairings.filter((pairing) => !pairing.relayed).map((pairing) => [pairing.mainUrl, pairing]));
+    for (const [mainUrl, running] of agents) {
+      const pairing = wanted.get(mainUrl);
+      if (pairing && madeWith(pairing) === running.madeWith) running.agent.update(pairing);
+      else { running.agent.stop(); agents.delete(mainUrl); }
+    }
+    for (const pairing of wanted.values()) if (!agents.has(pairing.mainUrl)) start(pairing, now.name);
   });
-  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { for (const agent of agents) agent.stop(); process.exit(0); });
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { stopAll(); process.exit(0); });
 } else {
   printHelp();
   process.exit(command ? 2 : 0);

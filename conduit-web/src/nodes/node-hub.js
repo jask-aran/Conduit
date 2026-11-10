@@ -486,6 +486,15 @@ export class NodeHub extends EventEmitter {
         }
         return;
       }
+      // What it offers, again: its owner shared a folder, stopped sharing one, or let it be browsed or not.
+      if (message.type === "capabilities") {
+        if (this.live.get(record.id) !== node) return;
+        Object.assign(node, helloCapabilities(message));
+        Object.assign(record, keptCapabilities(node));
+        void this.save().catch(() => {});
+        this.emit("changed");
+        return;
+      }
       // Where it answers reads, again: an https route found after its hello (a certificate takes a moment).
       if (message.type === "direct") {
         if (node.ready) { node.direct = directOf(message.direct, this.lanNameOf.get(record.id)); void this.offerLanName(node, record); }

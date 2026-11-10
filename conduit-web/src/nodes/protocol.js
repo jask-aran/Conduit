@@ -10,6 +10,7 @@ import { NODE_TARGETS } from "../device-api.js";
  * pi-durable's environment API: main adapts it, the wire does not move.
  *
  * node -> main   { type: "hello", version, name, platform, boot, ...capabilities (device-api.js DEVICE_CAPABILITIES) }
+ *                { type: "capabilities", ...capabilities }   what it offers now (its owner changed what it shares)
  * main -> node   { type: "call", id, target: <a NODE_TARGETS key, device-api.js> | <handle id>, method, args, cwd: { root, path },
  *                  action?, from? }
  *                { type: "abort", id } | { type: "abort", action }
@@ -34,7 +35,7 @@ import { NODE_TARGETS } from "../device-api.js";
  * reply to hello (decision 30): a node uses only what is listed, so adding a
  * feature never refuses an older node. The version is for breaking changes.
  */
-export const NODE_FEATURES = ["relay"];
+export const NODE_FEATURES = ["relay", "capabilities"];
 
 export const NODE_PROTOCOL_VERSION = 1;
 
