@@ -239,3 +239,5 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-line > span:first-child[data-mono] > small { display: inline; width: auto; }
 /* A read value alone in a line (a path, an address) shortens rather than dropping under its name. */
 .ui-setting-control:has(> .ui-setting-value:only-child) { min-width: 0; }
+/* A page filtered by Settings search: what did not match is not drawn, and the first group shown has no rule over it. */
+.ui-overlay-page-body [data-filtered-out] { display: none; }

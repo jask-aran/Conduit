@@ -313,11 +313,12 @@ export function Settings(props: {
     const sections: Entry[] = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null, label: label(item.id as Section),
       words: SETTINGS_SECTIONS.find((known) => known.id === item.id)?.keywords.join(" ") })));
     const known = new Set(sections.map((item) => item.section));
-    // What only the running app knows: each command with a shortcut, each provider account, each document and block.
+    // What only the running app knows: each command with a shortcut, each account and search provider in use (the rest
+    // are behind Add an account), each document and block.
     const live: Entry[] = [
       ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" ") })),
-      ...authProviders().map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account api key sign in" })),
-      ...(searchSettings()?.providers ?? []).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label, words: "api key" })),
+      ...authProviders().filter((provider) => provider.auth.configured).map((provider) => ({ section: "models" as Section, group: "Provider accounts", label: provider.label, words: "account" })),
+      ...(searchSettings()?.providers ?? []).filter((provider) => provider.ready).map((provider) => ({ section: "search" as Section, group: "Providers", label: provider.label })),
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
       ...(context.data()?.blocks ?? []).map((block) => ({ section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" })),
     ];
@@ -333,12 +334,61 @@ export function Settings(props: {
       return { ...entry, score };
     }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const seen = new Set<string>();
-    return scored.sort((a, b) => a.score - b.score).filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; }).slice(0, 40);
+    return scored.sort((a, b) => a.score - b.score).filter((entry) => { const key = `${entry.section}\0${entry.label}`; if (seen.has(key)) return false; seen.add(key); return true; });
+  });
+  // What matched, under the section it is in, in the rail's order: a wide Settings filters its tabs and the open
+  // page to these; a phone, whose rail is a screen of its own, lists them under their sections.
+  const matches = createMemo(() => {
+    const found = new Map<Section, ReturnType<typeof results>>();
+    for (const group of sectionGroups) for (const item of group.sections) {
+      const mine = results().filter((result) => result.section === item.id);
+      if (mine.length) found.set(item.id as Section, mine);
+    }
+    return found;
+  });
+  const flat = createMemo(() => [...matches().values()].flat());
+  // A wide Settings, searching: the open section is one that matched, the first if the one open did not.
+  createEffect(() => {
+    if (narrow() || !query().trim() || !matches().size || matches().has(section())) return;
+    setSection([...matches().keys()][0]!);
+  });
+  // ...and its page shows only what matched: the lines by name, a group whole when its title matched, the page whole
+  // when the section's own name did. Lines arrive after their data, so the page is filtered again as it changes.
+  const filterPage = (body: Element, found: ReturnType<typeof results> | null) => {
+    for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out");
+    if (!found || found.some((result) => result.group === null && result.label === label(result.section))) return;
+    const groups = [...body.querySelectorAll<HTMLElement>('.ui-group[data-group="setting"]')];
+    if (!groups.length) return;
+    const names = found.filter((result) => result.group !== null).map((result) => result.label);
+    const titles = found.filter((result) => result.group === null).map((result) => result.label);
+    const out: Element[] = [];
+    let shown = 0;
+    for (const group of groups) {
+      const title = group.querySelector(":scope > .ui-nav-label")?.textContent?.trim() ?? "";
+      if (title && titles.some((name) => title.startsWith(name))) { shown++; continue; }
+      const kept = [...group.querySelectorAll<HTMLElement>(".ui-setting-line")].filter((line) => names.some((name) => line.textContent?.trim().startsWith(name)));
+      if (!kept.length) { out.push(group); continue; }
+      shown++;
+      for (const child of group.children) if (!child.matches(".ui-nav-label") && !kept.some((line) => child === line || child.contains(line))) out.push(child);
+    }
+    if (!shown) return;
+    for (const child of body.children) if (!groups.some((group) => child === group || child.contains(group))) out.push(child);
+    for (const element of out) element.setAttribute("data-filtered-out", "");
+  };
+  createEffect(() => {
+    const found = !narrow() && query().trim() ? matches().get(section()) ?? null : null;
+    const body = dialogEl()?.querySelector(".ui-overlay-page-body");
+    if (!body) return;
+    filterPage(body, found);
+    if (!found) return;
+    let frame = 0;
+    const watcher = new MutationObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => filterPage(body, found)); });
+    watcher.observe(body, { childList: true, subtree: true });
+    onCleanup(() => { watcher.disconnect(); cancelAnimationFrame(frame); for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out"); });
   });
   // Each opened result's lookup is its own: a newer one, another section or closing Settings ends an older one's retries.
   let lookup = 0;
   const openResult = (result: { section: Section; label: string; group: string | null }) => {
-    setQuery("");
     openSection(result.section);
     // A section: into its page. A setting: its line, in view and marked, with focus on its control.
     if (result.group === null && result.label === label(result.section)) { requestAnimationFrame(focusPage); return; }
@@ -1314,23 +1364,26 @@ export function Settings(props: {
       <OverlayRail title="Settings" role="tablist" aria-label="Settings sections" aria-orientation="vertical" foot={<AboutSettingsFooter />} onClose={narrow() ? close : undefined}>
         <LeadInput placeholder="Search settings" aria-label="Search settings" value={query()} onInput={(event) => setQuery(event.currentTarget.value)} onClear={() => setQuery("")}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && results()[cursor()]) { event.preventDefault(); openResult(results()[cursor()]!); }
-            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && results().length) {
+            if (event.key === "Enter" && flat()[cursor()]) { event.preventDefault(); if (narrow()) openResult(flat()[cursor()]!); else focusPage(); }
+            if ((event.key === "ArrowDown" || event.key === "ArrowUp") && narrow() && flat().length) {
               event.preventDefault();
-              setCursor((cursor() + (event.key === "ArrowDown" ? 1 : -1) + results().length) % results().length);
+              setCursor((cursor() + (event.key === "ArrowDown" ? 1 : -1) + flat().length) % flat().length);
               dialogEl()?.querySelector(`[data-result="${cursor()}"]`)?.scrollIntoView({ block: "nearest" });
-            } else if (event.key === "ArrowDown" && !query()) { event.preventDefault(); focusRail(); }
+            } else if (event.key === "ArrowDown") { event.preventDefault(); focusRail(); }
             if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
           }} />
-        <Show when={query().trim()}>
-          <Group kind="nav" title={results().length ? "Results" : "No setting matches"}>
-            <For each={results()}>{(result, index) => <Row density="nav" element="button" data-result={index()} data-focus-shown={index() === cursor() ? "" : undefined} tabIndex={-1} detail={result.group === null && result.label === label(result.section) ? undefined : [label(result.section), result.group].filter(Boolean).join(" › ")}
-              onClick={() => openResult(result)}>{result.label}</Row>}</For>
-          </Group>
+        <Show when={query().trim() && !flat().length}><Group kind="nav" title="No setting matches" /></Show>
+        {/* A phone: what matched, under the section it is in; a row opens the section on its line. */}
+        <Show when={query().trim() && narrow()}>
+          <For each={[...matches()]}>{([id, found]) => <Group kind="nav" title={label(id)}>
+            <For each={found}>{(result) => <Row density="nav" element="button" data-result={flat().indexOf(result)} data-focus-shown={flat().indexOf(result) === cursor() ? "" : undefined} tabIndex={-1}
+              detail={result.group ?? undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? "Open" : result.label}</Row>}</For>
+          </Group>}</For>
         </Show>
-        <For each={query().trim() ? [] : sectionGroups}>{(group) => <Group kind="nav" title={group.label}>
+        {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
+        <For each={!query().trim() ? sectionGroups : narrow() ? [] : sectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => matches().has(item.id as Section)) })).filter((group) => group.sections.length)}>{(group) => <Group kind="nav" title={group.label}>
           <For each={group.sections}>{(item) => <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}
-            lead={<item.icon />} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
+            lead={<item.icon />} meta={query().trim() ? String(matches().get(item.id as Section)?.length ?? "") : undefined} end={narrow() ? <Icons.ChevronRight /> : undefined} onClick={() => openSection(item.id)} onKeyDown={navigateSettingsTabs}>{item.id === "agent" ? agentView()?.settings?.name || item.label : item.label}</Row>}</For>
         </Group>}</For>
       </OverlayRail>
     </Show>
