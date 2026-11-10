@@ -205,7 +205,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass \
   ${passthrough[@]+"${passthrough[@]}"}
 
 bundle=$(wslpath -u "$target_dir")/release/bundle/nsis
-installer=$(ls -1t "$bundle"/*.exe 2>/dev/null | head -1)
+# sed, not head: head leaves early, and under pipefail a long listing then ends the build with SIGPIPE (141).
+installer=$(ls -1t "$bundle"/*.exe 2>/dev/null | sed -n 1p)
 if [ -z "$installer" ]; then
   echo "No installer produced." >&2
   exit 1

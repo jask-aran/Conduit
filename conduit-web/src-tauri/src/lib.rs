@@ -4,6 +4,7 @@
 //! of the interface, and it reaches the same HTTPS and WebSocket endpoints the
 //! Android client does.
 
+mod capture;
 mod certificate_trust;
 mod desktop_settings;
 mod dev_update;
@@ -90,6 +91,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            capture::capture_page,
             secrets::secret_get,
             secrets::secret_set,
             secrets::secret_remove,
