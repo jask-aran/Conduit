@@ -13,6 +13,7 @@ import { parseReviewComments } from "./review-comments";
 import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
 import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
+import { createLeavingRows } from "./composer-cards";
 import { isAgentReport, isRun, type TurnRow, type TurnTraceData } from "../turn-rows";
 import { runForm } from "../preferences/run-form";
 import { motionOf } from "@/components/ui/shared";
@@ -376,8 +377,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
    * turn's starting row ("Waiting for model") does the same when the turn's first rows take its place. The rows drawn
    * are the timeline's with those leaving rows put back where they were. A header new in a turn fades in (entering).
    */
-  const LEAVE_MS = 150;
-  const [leaving, setLeaving] = createSignal<{ row: TurnRow; after: string; turn: string; shown: Set<string> }[]>([]);
+  const leaving = createLeavingRows<{ row: TurnRow; after: string; turn: string; shown: Set<string> }>((a, b) => a.row.key === b.row.key);
   let headers = new Map<string, { row: TurnRow; after?: string }>();
   let shownKeys = new Set<string>();
   // The keys drawn before this timeline, and whether there was one: a header new since then fades in; on opening a
@@ -386,10 +386,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   let drawnOnce = false;
   let drawnChat: string | null | undefined;
   let pendings = new Map<string, { row: TurnRow; after?: string }>();
-  const leave = (ghost: TurnRow, after: string, turn: string) => {
-    setLeaving((list) => [...list.filter((item) => item.row.key !== ghost.key), { row: ghost, after, turn, shown: shownKeys }]);
-    setTimeout(() => setLeaving((list) => list.filter((item) => item.row !== ghost)), LEAVE_MS);
-  };
+  const leave = (ghost: TurnRow, after: string, turn: string) => leaving.leave({ row: ghost, after, turn, shown: shownKeys });
   createComputed(() => {
     const next = new Map<string, { row: TurnRow; after?: string }>();
     const nextPending = new Map<string, { row: TurnRow; after?: string }>();
@@ -421,7 +418,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     shownKeys = new Set(timeline.map((row) => row.key));
   });
   const rows = createMemo((): TurnRow[] => {
-    const list = leaving();
+    const list = leaving.list();
     if (!list.length) return timeline;
     const out = [...timeline];
     for (const item of list) { const at = out.findIndex((row) => row.key === item.after); if (at >= 0) out.splice(at + 1, 0, item.row); }
@@ -430,7 +427,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   // What arrived in a turn after its leaving header (not shown before it left), held until it has gone.
   const held = createMemo(() => {
     const keys = new Set<string>();
-    for (const item of leaving()) {
+    for (const item of leaving.list()) {
       const at = rows().indexOf(item.row);
       for (let index = at + 1; at >= 0 && index < rows().length; index += 1) {
         const row = rows()[index]!;

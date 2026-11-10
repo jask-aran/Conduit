@@ -40,6 +40,7 @@ import { clearReviewComments, parseReviewComments, projectReviewComments, restor
 import { toast } from "@/components/ui/notifications";
 import { addToOutbox, holdOutboxOpen, outboxOf, returnToOutbox, takeFromOutbox, type OutboxEntry } from "./outbox";
 import { readDeviceTranscript, saveDeviceTranscript } from "./device-transcripts";
+import { createSingleFlight } from "./single-flight";
 
 type UnknownRecord = Record<string, unknown>;
 type ErrorHandler = (error: unknown) => void;
@@ -869,19 +870,15 @@ export function createActiveChat(options: ActiveChatOptions) {
   // server says they changed (agents_changed). One request at a time; a change during it reads once more after.
   const [agents, setAgents] = createSignal<AgentSummary[]>([]);
   let agentsAsked: string | null = null;
-  let agentsRequest: Promise<void> | null = null;
-  let agentsAgain = false;
-  const refreshAgents = (): Promise<void> => {
+  const readAgents = createSingleFlight(async () => {
     const chatId = loadedId();
-    if (!chatId) return Promise.resolve();
-    if (agentsRequest) { agentsAgain = true; return agentsRequest; }
+    if (!chatId) return;
     agentsAsked = chatId;
-    agentsRequest = api<AgentsPayload>(`/v0/chats/${encodeURIComponent(chatId)}/agents`)
+    await api<AgentsPayload>(`/v0/chats/${encodeURIComponent(chatId)}/agents`)
       .then((body) => { if (loadedId() === chatId) setAgents(body.agents || []); })
-      .catch(() => {})
-      .finally(() => { agentsRequest = null; if (agentsAgain) { agentsAgain = false; void refreshAgents(); } });
-    return agentsRequest;
-  };
+      .catch(() => {});
+  });
+  const refreshAgents = (): Promise<void> => loadedId() ? readAgents() : Promise.resolve();
   createEffect(on(loadedId, () => { agentsAsked = null; setAgents([]); }));
   createEffect(() => {
     const chatId = loadedId();

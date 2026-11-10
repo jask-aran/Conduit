@@ -1,5 +1,6 @@
 import { createRoot, createSignal } from "solid-js";
 import { api, setJbotHome } from "../api/client";
+import { createSingleFlight } from "./single-flight";
 import type { AgentNotice, AgentView } from "../../agent/agent-view.js";
 
 /**
@@ -13,8 +14,6 @@ export type { AgentDial, AgentWork, AgentWorkKind, AgentRunKind, AgentRun, Agent
 
 const store = createRoot(() => {
   const [view, setView] = createSignal<AgentView | null>(null);
-  let asking: Promise<AgentView | null> | null = null;
-  let again = false;
   let shown = "";
   const read = () => api<AgentView>("/v0/agent")
     // Unchanged, the same object stays: a new one each poll redrew everything drawn from it.
@@ -22,10 +21,7 @@ const store = createRoot(() => {
     .catch(() => {});
   // One read at a time. Asked for while one is under way (after an action, a change the hub pushed), it is read once
   // more after it: whoever waits gets the view as it is after their ask, never the answer to an earlier one.
-  const refresh = (): Promise<AgentView | null> => {
-    if (asking) { again = true; return asking; }
-    return asking = (async () => { do { again = false; await read(); } while (again); return view(); })().finally(() => { asking = null; });
-  };
+  const refresh = createSingleFlight(async () => { await read(); return view(); });
   // Quiet enough to leave running: what waits on the person shows in the sidebar within a minute, and at once on return.
   // A change the hub pushes is read only by a page in sight; one out of sight reads on its return.
   if (typeof window !== "undefined") {

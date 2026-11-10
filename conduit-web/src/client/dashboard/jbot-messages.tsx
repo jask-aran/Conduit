@@ -4,6 +4,7 @@ import { clockTime, AgentRow, AgentRows, Answer, Button, EmailItem, Icons, Messa
 import { openAgentChat, span, useNow } from "../chat/agents";
 import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
+import { createLeavingRows } from "../chat/composer-cards";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "../api/client";
 import { setAgentPageLaidOut } from "../state/arrival";
@@ -223,7 +224,8 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
   // The live row making way: a turn with no work to show ends with its reply where the live row was, so the row fades
   // out there first (removing, --duration-quick) and the reply waits for it (held), as a thread's provisional rows
   // do. A turn with work keeps the row: it becomes the reply's header in place.
-  const [leavingTrace, setLeavingTrace] = createSignal<{ trace: TurnTraceData; reply?: string } | null>(null);
+  const leaving = createLeavingRows<{ trace: TurnTraceData; reply?: string }>(() => true);
+  const leavingTrace = () => leaving.list().at(-1);
   let lastLive: TurnTraceData | null = null;
   createComputed(on(live, (now) => {
     if (now) { lastLive = now; return; }
@@ -233,8 +235,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     const ghost = { trace: lastLive, reply: reply?.direction === "out" ? reply.id : undefined };
     lastLive = null;
     if (worked) return;
-    setLeavingTrace(ghost);
-    setTimeout(() => setLeavingTrace((current) => current === ghost ? null : current), 150);
+    leaving.leave(ghost);
   }));
   // The person's message, until the log has it: the same words, in from them, since a minute before it was sent.
   const unsent = createMemo(() => {

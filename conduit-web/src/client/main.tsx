@@ -91,6 +91,7 @@ import { applyPwaUpdate, checkForPwaUpdate, arrivedByNewBuild, claimPwaUpdateArr
 import { createChatSession, type ChatSession } from "./state/chat-session";
 import { DEFAULT_MAX_ATTACHMENT_BYTES, filesFromDataTransfer } from "./state/attachments";
 import { createDrafts } from "./state/drafts";
+import { createSingleFlight } from "./state/single-flight";
 import { outboxChats, outboxIsOpen, outboxOf, takeFromOutbox } from "./state/outbox";
 import { parseReviewComments } from "./chat/review-comments";
 import { clearCachedCatalogue, readCachedCatalogue, writeCachedCatalogue } from "./state/catalogue-cache";
@@ -1142,40 +1143,36 @@ function App() {
    * into the chat's draft instead, for the person to send or not.
    */
   const sentElsewhere = new Map<string, { at: number; seen: boolean }>();
-  let sendingElsewhere = false;
-  const sendWaitingElsewhere = async () => {
-    if (sendingElsewhere || runtime.connectivity() !== "online") return;
-    sendingElsewhere = true;
-    try {
-      for (const chatId of outboxChats()) {
-        if (outboxIsOpen(chatId)) continue;
-        const active = Boolean(runtime.getProcess(chatId)?.active);
-        const last = sentElsewhere.get(chatId);
-        if (last) {
-          if (active) { last.seen = true; continue; }
-          if (!last.seen && Date.now() - last.at < 60_000) continue;
-          sentElsewhere.delete(chatId);
-        }
-        if (active) continue;
-        const next = outboxOf(chatId)[0];
-        const entry = next ? takeFromOutbox(chatId, next.messageId) : null;
-        if (!entry) continue;
-        const projectId = catalogue.projects().find((project) => project.sessions.some((session) => session.id === chatId))?.id || "";
-        try {
-          await api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", timeout: false,
-            body: JSON.stringify({ messageId: entry.messageId, message: entry.message, attachmentIds: [], projectId }) });
-          sentElsewhere.set(chatId, { at: Date.now(), seen: false });
-        } catch (error) {
-          if ((error as { apiRequest?: ApiRequestMetadata }).apiRequest?.status === 404) continue;
-          const text = parseReviewComments(entry.message).text;
-          const held = drafts.draftFor(chatId)?.text || "";
-          drafts.save(chatId, held ? `${held}\n${text}` : text, []);
-        }
+  // One pass at a time; a process change during one (its POST waits as long as the agent takes to start) makes one
+  // more pass after it, so a chat that went quiet meanwhile is not left waiting for the next unrelated change.
+  const sendWaitingElsewhere = createSingleFlight(async () => {
+    if (runtime.connectivity() !== "online") return;
+    for (const chatId of outboxChats()) {
+      if (outboxIsOpen(chatId)) continue;
+      const active = Boolean(runtime.getProcess(chatId)?.active);
+      const last = sentElsewhere.get(chatId);
+      if (last) {
+        if (active) { last.seen = true; continue; }
+        if (!last.seen && Date.now() - last.at < 60_000) continue;
+        sentElsewhere.delete(chatId);
       }
-    } finally {
-      sendingElsewhere = false;
+      if (active) continue;
+      const next = outboxOf(chatId)[0];
+      const entry = next ? takeFromOutbox(chatId, next.messageId) : null;
+      if (!entry) continue;
+      const projectId = catalogue.projects().find((project) => project.sessions.some((session) => session.id === chatId))?.id || "";
+      try {
+        await api(`/v0/chats/${encodeURIComponent(chatId)}/prompt`, { method: "POST", timeout: false,
+          body: JSON.stringify({ messageId: entry.messageId, message: entry.message, attachmentIds: [], projectId }) });
+        sentElsewhere.set(chatId, { at: Date.now(), seen: false });
+      } catch (error) {
+        if ((error as { apiRequest?: ApiRequestMetadata }).apiRequest?.status === 404) continue;
+        const text = parseReviewComments(entry.message).text;
+        const held = drafts.draftFor(chatId)?.text || "";
+        drafts.save(chatId, held ? `${held}\n${text}` : text, []);
+      }
     }
-  };
+  });
   createEffect(() => {
     if (runtime.connectivity() !== "online") return;
     runtime.processes();

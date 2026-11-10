@@ -70,6 +70,23 @@ export function createLeavingList<T>(source: () => T[], key: (item: T) => string
   return { keys, get: (k: string) => values().get(k), leaving: (k: string) => going().has(k) };
 }
 
+/**
+ * Rows gone from the data but still drawn while they fade: `leave(ghost)` puts one in `list` for the length of its
+ * exit (`hold`, so a slowed Animation speed waits as long as the fade takes). A ghost replaces any already leaving
+ * that is the `same` as it.
+ */
+export function createLeavingRows<T>(same: (a: T, b: T) => boolean = (a, b) => a === b, hold: `--duration-${string}` = "--duration-quick") {
+  const [list, setList] = createSignal<T[]>([]);
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const leave = (ghost: T) => {
+    setList((rows) => [...rows.filter((row) => !same(row, ghost)), ghost]);
+    const timer = setTimeout(() => { timers.delete(timer); setList((rows) => rows.filter((row) => row !== ghost)); }, duration(hold));
+    timers.add(timer);
+  };
+  onCleanup(() => { for (const timer of timers) clearTimeout(timer); });
+  return { list, leave };
+}
+
 /** A leaving card's Rider motion: dropping back into the composer, or removed (faded in place); else it rises in. */
 export const riderMotion = (leaving: Exclude<CardExit, "none"> | null): Motion => leaving === "drop" ? "leaving" : leaving === "fade" ? "removing" : "entering";
 
