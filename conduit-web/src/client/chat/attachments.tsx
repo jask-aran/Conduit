@@ -1,5 +1,6 @@
 import { Icons } from "@/components/ui";
-import { AttachmentTile, Attachments, CardRead, CardStage } from "@/components/ui/card";
+import { AttachmentTile, Attachments, CardStage } from "@/components/ui/card";
+import { CodeBlock } from "@/components/ui/code";
 import { Dialog } from "@/components/ui/dialog";
 import { Note } from "@/components/ui/state";
 import { createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
@@ -39,14 +40,19 @@ const isText = (item: Sent) => (item.size ?? 0) <= 262_144 && (/^text\/|json|xml
   || /\.(txt|md|log|csv|tsv|json|ya?ml|toml|ini|conf|xml|html?|css|[cm]?[jt]sx?|py|rb|go|rs|java|kt|c|h|cpp|sh|sql|diff|patch)$/i.test(item.name));
 
 /** A file's text, fetched when it is first shown. */
-function AttachmentText(props: { src: string }) {
+function AttachmentText(props: { src: string; lang: string }) {
   const [text, setText] = createSignal<string | null>(null);
   const [failed, setFailed] = createSignal(false);
   onMount(() => void authorizedFetch(props.src).then(async (response) => {
     if (!response.ok) throw new Error("Could not load the attachment");
     setText(await response.text());
   }).catch(() => setFailed(true)));
-  return <Show when={text() !== null} fallback={failed() ? "Could not be read" : "Reading…"}><CardRead>{text()}</CardRead></Show>;
+  const [copied, setCopied] = createSignal(false);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const copy = () => void navigator.clipboard.writeText(text() ?? "").then(() => { setCopied(true); clearTimeout(timer); timer = setTimeout(() => setCopied(false), 1600); });
+  // The transcript's own code block: its caption, line numbers and Copy.
+  return <Show when={text() !== null} fallback={failed() ? "Could not be read" : "Reading…"}><CodeBlock lang={props.lang} code={text()!.replace(/\n$/, "")} copied={copied()} onCopy={copy} /></Show>;
 }
 
 /** Attachments already sent, under their prompt in the transcript: a tray of tiles. A press on one shows it whole (a
@@ -71,7 +77,7 @@ export function AttachmentCards(props: {
       const source = sourceOf(current);
       return <Dialog open onOpenChange={(open) => { if (!open) setShown(null); }} size="large" close title={current.name}>
         <CardStage>
-          <Show when={source} fallback={<Show when={isText(current) && props.chatId} fallback="No preview"><AttachmentText src={attachmentUrl(props.chatId!, current.id)} /></Show>}>
+          <Show when={source} fallback={<Show when={isText(current) && props.chatId} fallback="No preview"><AttachmentText src={attachmentUrl(props.chatId!, current.id)} lang={/\.([a-z0-9]+)$/i.exec(current.name)?.[1]?.toLowerCase() ?? "text"} /></Show>}>
             <AttachmentImage src={source!} />
           </Show>
         </CardStage>

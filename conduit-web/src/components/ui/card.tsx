@@ -37,8 +37,8 @@ export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-
  *  a picture drawn as the picture, scrolling past its cap). label: what the group is, for a screen reader. */
 export const Attachments = (props: { form?: "list" | "tray"; label?: string; children: JSX.Element }) =>
   <ul class="ui-attachments" data-form={props.form ?? "list"} aria-label={props.label}>{props.children}</ul>;
-/** One thing shown whole in a card (a picture uncropped, a file's text): it takes the card's width and what height it
- *  needs up to most of the screen, scrolling past that. empty: what to say when there is nothing to show of it. */
+/** One thing shown whole in a card (a picture uncropped, a file's text as a CodeBlock): the card's width and one
+ *  height whatever it shows, scrolling inside. */
 export const CardStage = (props: { children: JSX.Element }) => <div class="ui-card-stage">{props.children}</div>;
 /** One file of a tray (a sent message's), as small as it reads: a picture as the picture, a file as a frost pill of
  *  its mark and name; each one line of a message tall, and a press shows it whole (onOpen). */

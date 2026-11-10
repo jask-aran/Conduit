@@ -88,8 +88,10 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment-tile[data-image] > button { overflow: hidden; padding: 0; border: var(--hairline) solid var(--border); background: var(--card); }
 .ui-attachment-tile[data-image] img { display: block; width: auto; height: 100%; min-width: calc(1lh + 2 * var(--space-md)); max-width: var(--measure-xs); object-fit: cover; }
 .ui-attachment-tile > button[aria-current] { outline: var(--stroke) solid var(--foreground); outline-offset: calc(-1 * var(--stroke)); }
-/* Stage: the one thing a card is showing, whole. A picture is fitted, never cropped; text reads from its start. */
-.ui-card-stage { display: grid; min-height: var(--measure-xs); max-height: min(70dvh, var(--measure-3xl)); place-items: center; overflow: auto; border-radius: var(--radius-control); background: var(--tint); color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-card-stage img { display: block; max-width: 100%; max-height: min(70dvh, var(--measure-3xl)); object-fit: contain; }
-.ui-card-stage > .ui-card-read { box-sizing: border-box; width: 100%; max-height: none; align-self: start; overflow: visible; background: none; color: var(--foreground); }
+/* Stage: the one thing a card is showing, whole, on the card itself (no ground of its own). It is one size whatever
+   it shows, so stepping from a picture to a file never moves the card: a picture is fitted in it, never cropped; a
+   file's text (a CodeBlock) starts at its top and scrolls in it. */
+.ui-card-stage { display: grid; height: min(70dvh, var(--measure-3xl)); place-items: center; overflow: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-card-stage img { display: block; max-width: 100%; max-height: min(70dvh, var(--measure-3xl)); border-radius: var(--radius-control); object-fit: contain; }
+.ui-card-stage > .ui-code { box-sizing: border-box; width: 100%; margin: 0; align-self: start; }
 .ui-attachment-tile > button:focus-visible { outline: none; filter: brightness(var(--brighten)); }
