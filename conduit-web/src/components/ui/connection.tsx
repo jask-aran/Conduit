@@ -14,7 +14,7 @@ export function ConnectionForm(props: JSX.FormHTMLAttributes<HTMLFormElement>) {
 export const ConnectionChoices = (props: { children: JSX.Element }) => <ul class="ui-connection-choices">{props.children}</ul>;
 export function ConnectionChoice(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { icon: JSX.Element; detail?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["icon", "detail", "children"]);
-  return <li><Row {...(rest as RowProps)} element="button" density="trail" lead={local.icon} label={local.children} meta={local.detail} /></li>;
+  return <li data-piece="ConnectionChoice"><Row {...(rest as RowProps)} element="button" density="trail" lead={local.icon} label={local.children} meta={local.detail} /></li>;
 }
 export const ConnectionGroup = (props: { children: JSX.Element }) => <p class="ui-connection-group">{props.children}</p>;
 export function CameraPreview(props: { videoRef: (element: HTMLVideoElement) => void; message: string; onClose: () => void }) {

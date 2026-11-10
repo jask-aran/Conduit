@@ -71,6 +71,8 @@ export function WorkspaceRail(props: {
   /** jbot, a tool among the others: opened in the dock, current while the dock shows it; it stays in the dock (no Alt
    *  or drag into a pane). */
   jbot?: { name: string; current: boolean; needs: number; onOpen: () => void };
+  /** The UI feedback tool (a development client's): pressed while it is open. */
+  feedback?: { open: boolean; onToggle: () => void };
 }) {
   const foot = () => <>
     <Show when={props.tools}><IconButton kind="rail" tabIndex={-1} aria-pressed={props.dockOverlay} data-open={props.dockOverlay ? "" : undefined}
@@ -119,5 +121,6 @@ export function WorkspaceRail(props: {
     <IconButton kind="rail" tabIndex={-1} aria-label="Browser" title="Browser" onClick={() => props.onOpenBrowser()}><Icons.Browser /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></IconButton>
+    <Show when={props.feedback}>{(feedback) => <IconButton kind="rail" tabIndex={-1} aria-label="UI feedback" title="UI feedback" aria-pressed={feedback().open} data-open={feedback().open ? "" : undefined} onClick={() => feedback().onToggle()}><Icons.Pointer /></IconButton>}</Show>
   </ToolRail>;
 }

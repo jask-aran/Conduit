@@ -94,7 +94,7 @@ export function Dialog(props: {
           if (props.busy) event.preventDefault();
         }}
         onKeyDown={props.onKeyDown}
-        onPointerDown={(event: PointerEvent) => { if (!props.alert && event.target === event.currentTarget) change(false); }}>
+        data-piece="Dialog" onPointerDown={(event: PointerEvent) => { if (!props.alert && event.target === event.currentTarget) change(false); }}>
         <Card embedded size={props.size} title={<K.Title as="span">{props.title}</K.Title>}
           description={<Show when={props.description}><K.Description as="span">{props.description}</K.Description></Show>}
           close={props.close ? () => change(false) : undefined} closeLabel={typeof props.close === "string" ? props.close : "Close"} closeDisabled={props.busy}
@@ -130,7 +130,7 @@ export function OverlayDialog(props: {
   createLeave(() => scrim, () => props.open, () => mount(), () => props.leave !== false);
   return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange(open); }}>
     <KDialog.Portal mount={mount()}>
-      <KDialog.Content as={Scrim} ref={(element: HTMLElement) => { scrim = element; }} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
+      <KDialog.Content as={Scrim} data-piece="OverlayDialog" ref={(element: HTMLElement) => { scrim = element; }} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
         <Overlay embedded label={props.label} layout={props.layout} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>

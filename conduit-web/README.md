@@ -1086,6 +1086,29 @@ their own discovery may still show the enclosing repository. This is a discovery
 boundary, not a restriction on explicit Git paths. Runtime data defaults to
 `~/.conduit/data` and can be moved with `CONDUIT_DATA_ROOT`.
 
+### UI feedback
+
+On a development client (the desktop or Android development app, or a browser on Vite's dev server:
+`isDevClient`, `src/client/platform/build-info.ts`) the workspace rail's UI feedback button and the `feedback.toggle`
+command (Alt+Shift+F) open the feedback tool (`src/client/feedback/`). It locks onto library pieces by name:
+`scripts/ui-pieces.mjs` reads the library's source into `virtual:ui-pieces` (each `ui-*` class's piece, source line
+and stylesheet), and a piece whose root has no class of its own says its name with `data-piece`.
+`node scripts/ui-pieces.mjs` lists any piece with no name in the page.
+
+| Method and path | Input | Success |
+| --- | --- | --- |
+| `POST /v0/feedback/marks` | `{ client }` (the tab, `connection/tab`) | 201, `{ id }`; the hub keeps what it knows now |
+| `PUT /v0/feedback/marks/:id/screenshot` | a PNG, `image/png`, up to 32 MB | 204 |
+| `POST /v0/feedback/marks/:id/send` | `{ comments, screenshot, client }`, up to 4 MB | 201, `{ id, path }` |
+| `DELETE /v0/feedback/marks/:id` | None | 204 |
+
+A mark is kept in memory (twelve at most, six hours); sending to one that has gone returns 404
+`feedback_mark_gone`. Send writes `<data>/feedback/<id>/item.json` and `screenshot.png`, built in a dot-named
+folder and renamed into place. The item's `read` field says how to read it. `src/server/feedback.js` keeps the
+last 200 log lines and the last 200 events (every record a chat log numbers, every runtime event) for the mark.
+An agent session takes items with `node scripts/conduit-feedback.mjs wait` (repository root; it blocks, takes the
+oldest item nobody has taken and prints its path), marks one handled with `done <id>`, and lists them with `list`.
+
 ### Conduit MCP and context inbox
 
 The `conduit` MCP server uses Streamable HTTP at `/v0/mcp`.

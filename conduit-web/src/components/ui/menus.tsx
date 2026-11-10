@@ -108,13 +108,13 @@ type ChoiceProps = RowProps & { value: string };
 export function MenuContent(props: ContentProps) {
   const mount = createFullscreenPortalMount();
   const [local, rest] = splitProps(props, ["keep"]);
-  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-slot="ui-menu-content" style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
+  return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-piece="MenuContent" data-slot="ui-menu-content" style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
     ref={(element: HTMLElement) => { if (local.keep) holdFocus(element, local.keep); }} {...rest}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
 }
 export function ContextMenuContent(props: ParentProps<Caps>) {
   if (useContext(RowMenuDeferred)) return null;
   const mount = createFullscreenPortalMount();
-  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-slot="ui-context-menu-content" width={props.width} height={props.height} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
+  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-piece="ContextMenuContent" data-slot="ui-context-menu-content" width={props.width} height={props.height} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
 }
 type ItemProps = ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void }>;
 export const MenuItem = (props: ItemProps) => <KMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KMenu.Item>;
@@ -137,7 +137,7 @@ export const useMenuBack = () => useContext(SubmenuContext)?.close ?? (() => {})
 export function MenuSubContent(props: ParentProps<Caps>) {
   const mount = createFullscreenPortalMount();
   const submenu = useContext(SubmenuContext);
-  return <KMenu.Portal mount={mount()}><KMenu.SubContent as={submenu?.phone() ? MenuPanel : Surface} ref={submenu?.setContent} data-slot="ui-menu-sub-content" width={props.width} height={props.height}
+  return <KMenu.Portal mount={mount()}><KMenu.SubContent as={submenu?.phone() ? MenuPanel : Surface} ref={submenu?.setContent} data-piece="MenuSubContent" data-slot="ui-menu-sub-content" width={props.width} height={props.height}
     style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
 export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
@@ -227,7 +227,7 @@ export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (ope
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const mount = createFullscreenPortalMount();
-  return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
+  return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-piece="PopoverContent" data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
 }
 
 /** A pick list under its search: typing filters it, arrows move the cursor, Enter picks. Each row is an Item's parts. */

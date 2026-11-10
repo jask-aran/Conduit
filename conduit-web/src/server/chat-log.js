@@ -251,6 +251,8 @@ export class ChatLogs {
   constructor({ timings = null } = {}) {
     this.logs = new Map();
     this.timings = timings;
+    /** Called with each event any chat's log numbers (feedback.js keeps the last of them). */
+    this.tap = null;
   }
 
   /** The chat's log, made on first use. Nothing without a chat has one. */
@@ -259,6 +261,7 @@ export class ChatLogs {
     const existing = this.logs.get(chatId);
     if (existing) return existing;
     const log = new ChatLog();
+    log.follow((event) => this.tap?.(chatId, event));
     this.logs.set(chatId, log);
     return log;
   }

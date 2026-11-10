@@ -4,7 +4,7 @@ import { duration, easing, reducedMotion, whenMotionEnds } from "@/components/ui
 import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
 import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
-import { buildLabel, clientBuild } from "./platform/build-info.ts";
+import { buildLabel, clientBuild, isDevClient } from "./platform/build-info.ts";
 import { liveTrace } from "./turn-rows";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, ConnectionSteps, ConnectionEntry, ConnectionGo, ConnectionScan, type AddressState } from "@/components/ui/connection";
 import { Field as ConnectionField, Button as ConnectionButton, Spinner as ConnectionSpinner } from "@/components/ui/controls";
@@ -17,7 +17,7 @@ import { focusSplitSection, splitSections } from "./dashboard/primitives/split-c
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ItemActions } from "./navigation/item-menus";
 import type { ComputerLocation, ComputerPrefetchPayload, PreferencesPayload, ProjectsPayload, Pty, PtysPayload, RuntimeProcess, ShareOriginPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
@@ -120,7 +120,7 @@ import { applyUiScale, followZoomGestures, selectedUiScale, stepUiScale } from "
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { applyMotionScale } from "./preferences/motion-scale";
 import { harnessLabelFor } from "./harness-brand";
-import { createAgentUiBridge, type AgentUiCommand } from "./agent-ui";
+import { clientId, createAgentUiBridge, type AgentUiCommand } from "./agent-ui";
 import { OutsideThreadChip } from "./chat/outside-thread-chip";
 import { SubagentNote } from "./chat/subagent-note";
 import { OPEN_AGENT_EVENT } from "./chat/agents";
@@ -209,6 +209,7 @@ const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
+const FeedbackTool = lazy(() => import("./feedback/feedback-tool"));
 const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const JbotRoom = lazy(() => import("./dashboard/jbot-room").then((module) => ({ default: module.JbotRoom })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
@@ -4891,6 +4892,10 @@ function App() {
     focusWorkspacePanel();
   };
   const toggleJbot = async () => jbotShownInDock() ? putJbotAway() : showJbot();
+  // The UI feedback tool (feedback/feedback-tool.tsx), a development client's: its chord opens it selecting, then switches between selecting and using the app.
+  const [devClient] = createResource(isDevClient);
+  const [feedbackMode, setFeedbackMode] = createSignal<"select" | "use" | null>(null);
+  const toggleFeedback = () => setFeedbackMode(feedbackMode() === "select" ? "use" : "select");
   const paneTabActions = (pane: PaneKey) => <Show when={inDock(pane)} fallback={paneRowActions(pane)}>
     <Actions kind="pane">
       <Show when={isDocked(pane)}><IconButton kind="pane" label="Move to a pane" onClick={() => void undockPane(pane as number)}><Icons.Split /></IconButton></Show>
@@ -5680,6 +5685,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings()),
       shortcutManager.registerHandler(COMMAND_IDS.biggerInterface, "application", () => void stepUiScale(1)),
       shortcutManager.registerHandler(COMMAND_IDS.toggleJbot, "application", () => void toggleJbot(), { when: () => Boolean(agentView()?.enabled) }),
+      shortcutManager.registerHandler(COMMAND_IDS.toggleFeedback, "application", toggleFeedback, { when: () => Boolean(devClient()) }),
       shortcutManager.registerHandler(COMMAND_IDS.smallerInterface, "application", () => void stepUiScale(-1)),
       shortcutManager.registerHandler(COMMAND_IDS.resetInterfaceSize, "application", () => void stepUiScale(0)),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
@@ -6292,6 +6298,7 @@ function App() {
 
   return <>
     <NotificationToaster />
+    <Show when={feedbackMode()}>{(mode) => <FeedbackTool mode={mode()} onMode={setFeedbackMode} onClose={() => setFeedbackMode(null)} client={clientId} keys={() => shortcutManager.formatEffectiveBinding(COMMAND_IDS.toggleFeedback)?.split(" ") ?? []} />}</Show>
     <DecisionDialogs />
     {/* conventions-ok: a hidden file input the attach control opens; the library has no file-picker piece */}
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
@@ -6514,6 +6521,7 @@ function App() {
       jbot={agentView()?.enabled ? { name: agentName(), needs: agentNeeds(), current: jbotShownInDock(),
         // With something waiting, jbot opens on Needs you (already open: Needs you, rather than putting jbot away).
         onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot"); } } : undefined}
+      feedback={devClient() ? { open: feedbackMode() !== null, onToggle: () => setFeedbackMode(feedbackMode() ? null : "select") } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>

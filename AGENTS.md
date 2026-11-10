@@ -7,6 +7,8 @@
   `conduit-web/README.md`.
 - Client builds, deployment, several servers or data recovery → read `docs/DEPLOYMENT.md`.
 - Any check beyond the table below → read `docs/TESTING.md`.
+- Taking my UI feedback → run `node scripts/conduit-feedback.mjs wait` in the background; it ends when I send an
+  item and prints the item's path. The item says how to read it, and `done <id>` marks it handled.
 
 Read each one once per session.
 

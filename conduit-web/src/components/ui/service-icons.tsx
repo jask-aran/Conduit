@@ -26,6 +26,6 @@ const MARKS: Record<string, string> = {
 
 export function ServiceIcon(props: { service: string; class?: string; fallback?: JSX.Element }) {
   return <Show when={MARKS[props.service]} fallback={props.fallback}>{(mark) =>
-    <svg class={props.class} viewBox="0 0 24 24" fill="currentColor" role="img" aria-label={props.service}><path d={mark()} /></svg>}
+    <svg data-piece="ServiceIcon" class={props.class} viewBox="0 0 24 24" fill="currentColor" role="img" aria-label={props.service}><path d={mark()} /></svg>}
   </Show>;
 }

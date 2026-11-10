@@ -219,7 +219,7 @@ export const Microphone = MicIcon;
 export const Minimize = Minimize2Icon;
 /** This computer or display appearance. */
 export const Monitor = MonitorIcon;
-/** An agent's pointer over a page it drives (AgentPointer). */
+/** An agent's pointer over a page it drives (AgentPointer); the UI feedback tool, which points at pieces (the rail, development clients). */
 export const Pointer = MousePointer2Icon;
 /** Additional actions for this item. */
 export const More = EllipsisIcon;

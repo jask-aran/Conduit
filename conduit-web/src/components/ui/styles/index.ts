@@ -33,6 +33,8 @@
  *   editor          CodeSurface > CodeHost, AnnotationPopup, Comparison, DiffShell
  *   header          Header, HeaderCrumb, HeaderButton
  *   card, toast     Card (frost or .ui-outline); Toast
+ *   feedback        FeedbackLayer > FeedbackMark, FeedbackNote, FeedbackBar (the UI feedback tool, development clients):
+ *                   not imported here; feedback.tsx brings it, so it loads with the tool and not with the app
  *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
  *   network         NetworkMap: devices, their environments and clients, hung from the head's
  *   leader          Leader, Crumbs, Spotlight

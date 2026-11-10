@@ -54,6 +54,7 @@ function WorkspaceSearchControls(props: {
 export function createCodeSearchPanel(view: EditorView): Panel {
   const dom = document.createElement("div");
   dom.className = searchPanelClass;
+  dom.dataset.piece = "CodeSearchPanel";
   const [query, setQuery] = createSignal(getSearchQuery(view.state));
   const [editable, setEditable] = createSignal(!view.state.readOnly);
   const dispose = render(() => <WorkspaceSearchControls view={view} query={query} editable={editable} />, dom);

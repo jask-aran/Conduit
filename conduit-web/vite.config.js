@@ -1,5 +1,6 @@
 import { accessPagePlugin } from "./scripts/access-page-plugin.mjs";
 import { buildSettingsIndex } from "./scripts/settings-index.mjs";
+import { buildUiPieces } from "./scripts/ui-pieces.mjs";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import { VitePWA } from "vite-plugin-pwa";
@@ -50,13 +51,28 @@ function settingsIndexPlugin() {
     resolveId: (source) => source === id ? `\0${id}` : null,
     load(resolved) {
       if (resolved !== `\0${id}`) return null;
-      this.addWatchFile?.(path.resolve(import.meta.dirname, "src/client/settings"));
+      // No addWatchFile on the settings folder: the dev server takes a watched folder for an import it cannot
+      // resolve, and Settings then fails to load there. handleHotUpdate below rebuilds the index.
       return `export default ${JSON.stringify(buildSettingsIndex(import.meta.dirname))};`;
     },
     handleHotUpdate({ file, server }) {
       if (!file.includes(`${path.sep}client${path.sep}settings${path.sep}`)) return;
       const module = server.moduleGraph.getModuleById(`\0${id}`);
       if (module) server.moduleGraph.invalidateModule(module);
+    },
+  };
+}
+
+// The piece names, read from the library (scripts/ui-pieces.mjs): the feedback tool names what is under the pointer with them.
+function uiPiecesPlugin() {
+  const id = "virtual:ui-pieces";
+  return {
+    name: "conduit-ui-pieces",
+    resolveId: (source) => source === id ? `\0${id}` : null,
+    load(resolved) {
+      if (resolved !== `\0${id}`) return null;
+      const { pieces, classes, styles, anchors } = buildUiPieces(import.meta.dirname);
+      return `export default JSON.parse(${JSON.stringify(JSON.stringify({ pieces, classes, styles, anchors }))});`;
     },
   };
 }
@@ -99,6 +115,7 @@ export default defineConfig(({ mode }) => {
       sharedGeometryCssPlugin(),
       materialIconManifestPlugin(),
       settingsIndexPlugin(),
+      uiPiecesPlugin(),
       gallery && galleryApiPlugin(),
       solid({ ssr: access }),
       !gallery && !access && accessPagePlugin(import.meta.filename),

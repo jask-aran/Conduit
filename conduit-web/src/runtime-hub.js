@@ -18,6 +18,8 @@ export class RuntimeHub {
     this.updates = null;
     /** The restart being prepared: who it waits for, and who is ready. */
     this.restart = null;
+    /** Called with each event told to every client (feedback.js keeps the last of them). */
+    this.tap = null;
   }
 
   snapshot() {
@@ -56,6 +58,7 @@ export class RuntimeHub {
   publish(event) {
     if (!event || typeof event !== "object") return;
     if (!isRuntimeEvent(event.type)) throw new TypeError(`Runtime event ${event.type} is not declared (runtime-stream-api.js)`);
+    this.tap?.(event);
     const payload = JSON.stringify(event);
     for (const client of this.clients) this.write(client, payload);
   }

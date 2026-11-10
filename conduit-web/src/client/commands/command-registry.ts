@@ -116,6 +116,7 @@ export const COMMAND_IDS = {
   smallerInterface: "interface.smaller",
   resetInterfaceSize: "interface.reset",
   toggleJbot: "jbot.toggle",
+  toggleFeedback: "feedback.toggle",
 } as const;
 
 const command = (
@@ -207,6 +208,17 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     keywords: ["agent", "assistant", "dock", "show", "hide"],
     contexts: ["application"],
     defaultBindings: [binding(stroke("KeyJ", "J", ["primary"]))],
+    palette: true,
+  }),
+  command({
+    id: COMMAND_IDS.toggleFeedback,
+    label: "UI feedback",
+    description: "Mark up this interface for the agent working on it; again, select or use the app",
+    group: "commands",
+    icon: "chat",
+    keywords: ["select", "comment", "screenshot"],
+    contexts: ["application"],
+    defaultBindings: [binding(stroke("KeyF", "F", ["alt", "shift"]))],
     palette: true,
   }),
   command({

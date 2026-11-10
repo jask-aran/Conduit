@@ -114,6 +114,7 @@ import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ContextStore } from "./context/context-store.js";
 import { registerContextRoutes } from "./server/routes/context.js";
 import { registerClientReportRoutes } from "./server/routes/client-reports.js";
+import { createFeedback, registerFeedbackRoutes } from "./server/feedback.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
@@ -612,6 +613,7 @@ async function findChatContext(chatId) {
 registerAttachmentRoutes(app, { attachments, findChatContext });
 
 app.use("/v0/context", express.json({ limit: "256kb" }));
+app.use("/v0/feedback", express.json({ limit: "4mb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(mcp.afterAuth);
@@ -689,6 +691,9 @@ registerClientReportRoutes(app, { dataRoot: config.dataRoot });
 // Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
 const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
+// UI feedback (feedback.js): what the hub knew when an item was started, and the item written for an agent to pick up.
+const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
+registerFeedbackRoutes(app, feedback);
 // The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   // Its settings changed or it started again: every Browser pane takes its frame rate again and reconnects if it must.

@@ -29,6 +29,7 @@ import { readingPage } from "./pages/reading";
 import { popoverPage } from "./pages/popover";
 import { cardPage } from "./pages/card";
 import { toastPage } from "./pages/toast";
+import { feedbackPage } from "./pages/feedback";
 import { overlayPage } from "./pages/overlay";
 import { networkPage } from "./pages/network";
 import { workbenchPage } from "./pages/workbench";
@@ -81,6 +82,7 @@ const piecePages: Page[] = [
   popoverPage,
   cardPage,
   toastPage,
+  feedbackPage,
   overlayPage,
   networkPage,
   workbenchPage,

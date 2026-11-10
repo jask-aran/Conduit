@@ -23,6 +23,22 @@ export const clientBuild: BuildStamp = typeof __CONDUIT_BUILD__ === "undefined"
   ? { version: "dev", commit: "unknown", release: "", builtAt: "" }
   : __CONDUIT_BUILD__;
 
+let devClient: Promise<boolean> | null = null;
+/**
+ * A development client: the desktop or Android development app (their identifiers end in `.dev`), or a browser
+ * running an unbuilt bundle (Vite's dev server; every built bundle is stamped, a hub's own included). Asked of the
+ * shell once.
+ */
+export const isDevClient = () => devClient ??= (async () => {
+  try {
+    if (installedClientKind === "desktop") return (await (await import("@tauri-apps/api/app")).getIdentifier()).endsWith(".dev");
+    if (installedClientKind === "android") return (await (await import("@capacitor/app")).App.getInfo()).id.endsWith(".dev");
+  } catch {
+    return false;
+  }
+  return clientBuild.version === "dev" || (import.meta as { env?: { DEV?: boolean } }).env?.DEV === true;
+})();
+
 /** How a build is named in one line: the release if it is one, else the commit. */
 export function buildLabel(build: BuildStamp): string {
   const label = build.release || build.version;

@@ -51,5 +51,5 @@ export function PhoneComposer(props: { mode: VoiceMode; riders?: JSX.Element; la
  *  words: each heard word; a new one fades in (colour), a revised one keeps its node so it does not replay. */
 export function Captions(props: { lead?: string; words: string[]; ref?: (element: HTMLElement) => void }) {
   const line = (element: HTMLElement) => { onCleanup(glide(element)); props.ref?.(element); };
-  return <p><span ref={line} class="ui-captions"><Show when={props.lead}><span class="ui-captions-lead">{props.lead}</span></Show><Index each={props.words}>{(word) => <span>{word()}</span>}</Index></span></p>;
+  return <p data-piece="Captions"><span ref={line} class="ui-captions"><Show when={props.lead}><span class="ui-captions-lead">{props.lead}</span></Show><Index each={props.words}>{(word) => <span>{word()}</span>}</Index></span></p>;
 }

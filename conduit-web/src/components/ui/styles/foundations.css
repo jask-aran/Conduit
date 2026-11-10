@@ -61,6 +61,8 @@
   /* A popover (menu, submenu, picker) over everything it opens from, a dialog included. */
   --layer-popover: 105;
   --layer-notification: 110;
+  /* The feedback tool marks anything, a toast included. */
+  --layer-feedback: 120;
   --duration-quick: 150ms;   /* leaving, folding away; a change in place */
   --duration-gentle: 250ms;  /* arriving, opening, settling into place */
   /* Expand: what opens in place under its row slides on its measured height, both ways, on the one curve. */

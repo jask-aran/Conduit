@@ -31,7 +31,7 @@ export function FoldLine(props: { item?: boolean; folds?: boolean; class?: strin
   // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).
   const body = children(() => props.children);
   const folds = () => props.folds || !!body();
-  return <Dynamic component={props.item ? "li" : "div"} class={props.class} data-open={open() ? "" : undefined} {...props.attrs}>
+  return <Dynamic component={props.item ? "li" : "div"} data-piece="FoldLine" class={props.class} data-open={open() ? "" : undefined} {...props.attrs}>
     <div class={props.lineClass} {...props.lineAttrs}>
       <Row density="trail" element="button" class={props.rowClass} disabled={!folds() && !props.onOpen} aria-expanded={folds() ? open() : undefined}
         aria-label={props["aria-label"]} onClick={() => folds() ? setOpen(!open()) : props.onOpen?.()}
