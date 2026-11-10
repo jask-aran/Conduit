@@ -97,6 +97,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const rect = entry.rect ?? null;
     return {
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
+      ...(entry.drawing && ["pen", "arrow", "box"].includes(entry.drawing.kind) && Array.isArray(entry.drawing.points) ? { drawing: { kind: entry.drawing.kind, points: entry.drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) } } : {}),
       ...(areas.has(entry.n) ? { picture: { file: `selection-${entry.n}.png`, area: entry.area ?? null, dragged: Boolean(entry.dragged) } } : {}),
       ...(rect && scale ? { screenshotRect: Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * scale)])) } : {}),
       ...(entry.kind === "group" ? { members: (entry.members ?? []).slice(0, 40).map(where) } : where(entry)),
@@ -121,6 +122,7 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
       read: [
         "Each entry of `comments` is one thing the person asked for, about one selection of the live interface.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search conduit-web/src/client for `label` or an attribute in `attributes`.",
+        "A comment with `drawing` is something the person drew on the page (a pen line, an arrow whose head is its last point, a box), its `points` in the same pixels as `rect`; what it describes is then the pieces under the drawing, and the arrow's head or the box says where among them. It is in the pictures as drawn.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows the page at Send with each selection outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from it: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else the piece with a margin. Look at it first.",
         "`hub` is what the hub knew when the item was started (`markedAt`), not at Send: its last log lines and events, the live processes, and the tail of each chat the client had open.",

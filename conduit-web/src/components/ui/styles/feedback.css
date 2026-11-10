@@ -10,9 +10,14 @@
 .ui-feedback-mark[data-kind="chosen"][data-current] { border-width: var(--stroke); }
 .ui-feedback-mark[data-kind="member"] { border-style: dashed; border-color: var(--primary); }
 .ui-feedback-mark[data-kind="marquee"] { border-style: dashed; background: var(--accent); }
+.ui-feedback-mark[data-kind="drawn"] { border-color: transparent; }
+/* A drawing: the primary line over the whole window, with the glyph shadow so it reads on any ground. */
+.ui-feedback-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--primary); stroke-width: var(--stroke); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
+.ui-feedback-drawing marker > path { fill: var(--primary); stroke: none; }
 /* Its tag hangs above its top left corner (inside the corner when there is no room above, from the right corner at the window's right edge): the number filled, the name beside it. */
 .ui-feedback-tag { position: absolute; bottom: 100%; left: calc(-1 * var(--hairline)); display: flex; max-width: var(--measure-sm); align-items: center; gap: var(--space-xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--frame); color: var(--foreground); font: var(--weight-lift) var(--text-label)/var(--control-2xs) var(--font-data); white-space: nowrap; }
 .ui-feedback-tag[data-inside] { top: 0; bottom: auto; }
+.ui-feedback-layer .ui-feedback-tag[data-press] { pointer-events: auto; cursor: pointer; }
 .ui-feedback-tag[data-end] { right: calc(-1 * var(--hairline)); left: auto; }
 .ui-feedback-tag > b, .ui-feedback-number { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--primary); padding: 0 var(--space-xs); color: var(--primary-foreground); font: var(--weight-strong) var(--text-label)/1 var(--font-data); }
 .ui-feedback-tag > span { overflow: hidden; padding-right: var(--space-xs); text-overflow: ellipsis; }

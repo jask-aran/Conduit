@@ -1093,7 +1093,9 @@ On a development client (the desktop or Android development app, or a browser wh
 command (Alt+Shift+F) open the feedback tool (`src/client/feedback/`). It locks onto library pieces by name:
 `scripts/ui-pieces.mjs` reads the library's source into `virtual:ui-pieces` (each `ui-*` class's piece, source line
 and stylesheet), and a piece whose root has no class of its own says its name with `data-piece`.
-`node scripts/ui-pieces.mjs` lists any piece with no name in the page.
+`node scripts/ui-pieces.mjs` lists any piece with no name in the page. Its bar also picks Pen, Arrow or Box (P, A, B;
+V is Select): a drag then draws on the page, and the drawing is a numbered comment of its own that names the pieces
+under it (`drawing` on the comment: its kind and points).
 
 | Method and path | Input | Success |
 | --- | --- | --- |
