@@ -46,13 +46,13 @@ export const DELIVERY_FLUSH_MS = 8;
  * from pacing the stream down to a crawl -- and costs it little, because the
  * first frame after a quiet moment never waits for the window at all.
  */
-export const MIN_FRAME_MS = 4;
-export const MAX_FRAME_MS = 50;
+const MIN_FRAME_MS = 4;
+const MAX_FRAME_MS = 50;
 
 export const clampFrameMs = (ms) => (Number.isFinite(Number(ms))
   ? Math.min(MAX_FRAME_MS, Math.max(MIN_FRAME_MS, Math.round(Number(ms))))
   : null);
-export const SOCKET_HIGH_WATER_MARK = 256 * 1024;
+const SOCKET_HIGH_WATER_MARK = 256 * 1024;
 
 const isOpen = (socket) => socket?.readyState === 1;
 

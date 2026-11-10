@@ -94,7 +94,7 @@ function mimeFromName(name) {
   })[extension] || "application/octet-stream";
 }
 
-export function enrichAttachment(attachment) {
+function enrichAttachment(attachment) {
   if (!attachment || typeof attachment !== "object") return attachment;
   const path = attachment.path || "";
   const name = attachment.name || "";

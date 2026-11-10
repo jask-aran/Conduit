@@ -12,7 +12,7 @@ export function sessionDirectoryFor(cwd, agentDir) {
   return path.join(path.resolve(agentDir), "sessions", encodedCwd);
 }
 
-export function sessionIdFor(filePath, nativeId = "") {
+function sessionIdFor(filePath, nativeId = "") {
   return nativeId || crypto.createHash("sha256").update(path.resolve(filePath)).digest("hex").slice(0, 24);
 }
 
@@ -211,7 +211,7 @@ export async function readAnnouncedAttachmentIds(file, project) {
   return new Set(index.announcedAttachmentIds);
 }
 
-export async function validateSessionHeader(file, project) {
+async function validateSessionHeader(file, project) {
   const resolved = path.resolve(file);
   const stat = await fs.lstat(resolved);
   if (!stat.isFile() || stat.isSymbolicLink() || path.extname(resolved) !== ".jsonl") {
@@ -242,7 +242,7 @@ export async function validateSessionHeader(file, project) {
   }
 }
 
-export async function parseSession(file, project) {
+async function parseSession(file, project) {
   const raw = await fs.readFile(file, "utf8");
   const entries = [];
   let header = null;
@@ -310,7 +310,7 @@ export async function validateSessionFile(file, project) {
   return session;
 }
 
-export async function discoverProjectSessions(project) {
+async function discoverProjectSessions(project) {
   let entries;
   try { entries = await fs.readdir(project.sessionsDir, { withFileTypes: true }); }
   catch (error) {

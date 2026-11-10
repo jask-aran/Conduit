@@ -28,10 +28,10 @@ const ATTACHMENT_CONVERT_MAX = 15 * 1024 * 1024;
 const GIST_MAX = 220;
 
 const sha = (text) => crypto.createHash("sha256").update(text).digest("hex");
-export const safeName = (name) => String(name || "attachment").replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "attachment";
+const safeName = (name) => String(name || "attachment").replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "attachment";
 export const named = (party) => party?.name ? `${party.name} <${party.address}>` : party?.address || "";
 /** Where an email's files go, relative to jbot's folder. */
-export const mailDir = (messageId, at) => path.join("mail", at.slice(0, 10), sha(messageId).slice(0, 10));
+const mailDir = (messageId, at) => path.join("mail", at.slice(0, 10), sha(messageId).slice(0, 10));
 
 /** What a reader never sees in an email: hidden preheaders, tracking pixels, scripts and styles. */
 const HIDDEN = /display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all|max-height\s*:\s*0(?![.\d])|opacity\s*:\s*0(?![.\d])/i;

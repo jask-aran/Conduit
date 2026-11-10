@@ -56,12 +56,3 @@ export class SessionScope {
     Effect.runSync(Scope.close(this.scope, Exit.void));
   }
 }
-
-/** Reject every request still waiting on a session, and stop its clock. */
-export function rejectPending(pending, error) {
-  for (const entry of pending.values()) {
-    if (entry.timer) clearTimeout(entry.timer);
-    entry.reject?.(error);
-  }
-  pending.clear();
-}

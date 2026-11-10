@@ -23,7 +23,7 @@ export function serviceOf(path) {
 }
 
 /** The action paths a gateway tool's input names: a call's `calls`, or a program's literal `tools.…(` uses. */
-export function connectorPaths(name, args) {
+function connectorPaths(name, args) {
   const tool = String(name).split("__").slice(2).join("__");
   // History keeps a call's arguments as a JSON preview, cut short when long: its paths are read off the text.
   if (typeof args?.preview === "string") return [...args.preview.matchAll(/"path"\s*:\s*"(tools\.[^"]+)"|\btools\s*\[\s*\\?["'`](tools\.[^"'`\\]+)|\btools((?:\.[A-Za-z_$][\w$]*)+)\s*\(/g)]

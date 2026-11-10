@@ -57,7 +57,7 @@ const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, 
  * An encoded mail part as `{ text, links }`: decoded (base64 or base64url); HTML, cleaned of what a reader never sees,
  * through the Markdown engine (its links stay where they are, as Markdown links). Quoted replies and a signature are cut.
  */
-export async function decodeContent(encoded) {
+async function decodeContent(encoded) {
   if (!encoded || typeof encoded.data !== "string") return { text: "", links: [] };
   const raw = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
   const html = /html/i.test(encoded.mimeType || "") || /<\/?(?:p|div|br|table|a|span)\b/i.test(raw);
@@ -70,7 +70,7 @@ const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, 
 
 /** The list a program's or script's output carries, as it printed it: an array, `{ items }`, or Executor's `{ result }`
  *  around either. */
-export function rawItemsOf(output) {
+function rawItemsOf(output) {
   let value = output;
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -95,7 +95,7 @@ export function rawItemsOf(output) {
 }
 
 /** JSON items out of a program's or script's output (`rawItemsOf`), each as a feed item. */
-export async function itemsOf(output) {
+async function itemsOf(output) {
   return Promise.all(rawItemsOf(output).map(async (item) => {
     const raw = item && typeof item === "object" ? item : { title: item };
     const title = text(raw.title ?? raw.subject ?? raw.name ?? raw.summary ?? "", 160);

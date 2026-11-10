@@ -1,4 +1,4 @@
-export const PTY_OUTPUT_BATCH_BYTES = 128 * 1024;
+const PTY_OUTPUT_BATCH_BYTES = 128 * 1024;
 
 export class PtyOutputBatcher {
   constructor(send, { schedule = setImmediate, cancel = clearImmediate, maxBatchBytes = PTY_OUTPUT_BATCH_BYTES } = {}) {

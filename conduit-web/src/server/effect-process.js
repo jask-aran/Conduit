@@ -32,7 +32,7 @@ const exit = (child) => Effect.callback((resume) => {
 
 const within = (effect, ms, orElse) => effect.pipe(Effect.timeoutOrElse({ duration: Math.max(0, ms), orElse }));
 
-export function terminateEffect(child, { graceMs = 3_000, killWaitMs = 2_000, group = false, waitMs = 0 } = {}) {
+function terminateEffect(child, { graceMs = 3_000, killWaitMs = 2_000, group = false, waitMs = 0 } = {}) {
   const escalate = Effect.suspend(() => {
     if (exited(child)) return Effect.succeed(true);
     signal(child, "SIGTERM", group);

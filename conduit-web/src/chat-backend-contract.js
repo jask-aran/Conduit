@@ -3,7 +3,7 @@ export const CHAT_CAPABILITY_KEYS = Object.freeze([
   "modelSwitch", "toolUse", "approvals", "permissionModes", "usage", "replay",
   "attachments", "fork", "regenerate", "interruptKeepsPartial",
 ]);
-export const CHAT_HISTORY_MODES = Object.freeze(["none", "linear", "tree"]);
+const CHAT_HISTORY_MODES = Object.freeze(["none", "linear", "tree"]);
 
 export const REQUIRED_CHAT_BACKEND_METHODS = Object.freeze([
   "launch", "create", "restore", "prompt", "cancel", "close", "respondHostUi", "replay",

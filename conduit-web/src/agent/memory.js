@@ -147,7 +147,7 @@ export async function acceptProposal(agent, id) {
 }
 
 /** How many declined proposals the state doc keeps (`declined`), so a routine does not propose them again. */
-export const DECLINED_KEPT = 100;
+const DECLINED_KEPT = 100;
 
 export async function rejectProposal(agent, id) {
   return locked(`${agent.folder}:proposal:${id}`, () => agent.update((doc) => {

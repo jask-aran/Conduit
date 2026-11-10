@@ -16,7 +16,7 @@ const MAX_FILES = 200;
 const MAX_BYTES = 5 * 1024 * 1024;
 
 /** A SKILL.md's front matter: its name and description. */
-export function skillFrontMatter(text) {
+function skillFrontMatter(text) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text || "");
   const field = (name) => {
     const found = match && new RegExp(`^${name}:\\s*(.+)$`, "m").exec(match[1]);

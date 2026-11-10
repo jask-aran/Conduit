@@ -134,7 +134,7 @@ function pcmFloat32(buffer) {
   return samples;
 }
 
-export const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
   constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeLoader = null, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {

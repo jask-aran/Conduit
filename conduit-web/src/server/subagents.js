@@ -64,11 +64,11 @@ const textResult = (text) => ({ output: [{ type: "text", text }] });
  * limits but never count toward, or are refused by, the two concurrency limits.
  */
 export const SUBAGENT_LIMITS = Object.freeze({ concurrent: 16, background: 10, iterations: 400, outputChars: 100000 });
-export class SubagentLimitError extends Error {
+class SubagentLimitError extends Error {
   constructor(limit, message) { super(message); this.name = "SubagentLimitError"; this.limit = limit; }
 }
 /** An answer cut to `max` characters, saying it was. */
-export const capOutput = (text, max) => {
+const capOutput = (text, max) => {
   const value = String(text ?? "");
   if (!(max > 0) || value.length <= max) return value;
   return `${value.slice(0, max)}\n\n[Subagent output limit: showing ${max} of ${value.length} characters.]`;
@@ -78,7 +78,7 @@ const iterationStop = (max) => `The subagent was stopped: it reached the iterati
  * How much a run's report matters, from its answer's first word (templates/agent/SYSTEM.md): NOTHING (or OpenClaw's
  * HEARTBEAT_OK) is none, then FYI, ATTENTION and URGENT; an answer that says none of them is ATTENTION.
  */
-export const reportLevel = (answer) => {
+const reportLevel = (answer) => {
   const word = String(answer || "").trim().match(/^\W*([A-Z_]+)/)?.[1] || "";
   return word === "NOTHING" || word === "HEARTBEAT_OK" ? "none" : word === "FYI" ? "fyi" : word === "URGENT" ? "urgent" : "attention";
 };

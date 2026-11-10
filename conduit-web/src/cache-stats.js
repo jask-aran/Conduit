@@ -13,7 +13,7 @@ const count = (value, fallback = null) => {
   return Number.isFinite(number) ? number : null;
 };
 
-export function promptTokenParts(usage) {
+function promptTokenParts(usage) {
   if (!usage || typeof usage !== "object") return null;
   const input = count(usage.input ?? usage.inputTokens);
   if (input == null) return null;
@@ -23,11 +23,11 @@ export function promptTokenParts(usage) {
   return { promptTokens: input + cacheRead + cacheWrite, cacheRead };
 }
 
-export function emptyCacheStats() {
+function emptyCacheStats() {
   return { eligibleTokens: 0, cacheHits: 0, cacheMissedTokens: 0, eligibleRequests: 0, eligibleHitRate: null };
 }
 
-export function finishCacheStats(stats) {
+function finishCacheStats(stats) {
   return { ...stats, eligibleHitRate: stats.eligibleTokens > 0 ? stats.cacheHits / stats.eligibleTokens : null };
 }
 
@@ -50,7 +50,7 @@ export function countCacheRequest(tracker, usage) {
 }
 
 /** After a compaction the next prompt repeats nothing. */
-export function resetCachePrefix(tracker) { if (tracker) tracker.previousPromptTokens = null; }
+function resetCachePrefix(tracker) { if (tracker) tracker.previousPromptTokens = null; }
 
 /**
  * What a harness's stored history says about its context, for a thread with

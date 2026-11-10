@@ -22,7 +22,7 @@ export const DEFAULT_DENY = Object.freeze([
 ]);
 
 // Templates of secrets are not secrets: `.env.example` stays readable.
-export const DEFAULT_ALLOW = Object.freeze(["*.example", "*.sample", "*.template", "*.pub"]);
+const DEFAULT_ALLOW = Object.freeze(["*.example", "*.sample", "*.template", "*.pub"]);
 
 const compiled = new Map();
 function matcher(pattern) {

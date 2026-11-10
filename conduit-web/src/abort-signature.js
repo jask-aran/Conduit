@@ -8,7 +8,7 @@
 // streaming and a clean stop after a reload.
 const ABORT_SIGNATURE = /\b(aborted|cancell?ed)\b/i;
 
-export function wasAborted(message) {
+function wasAborted(message) {
   if (message?.stopReason === "aborted") return true;
   return message?.stopReason === "error" && ABORT_SIGNATURE.test(message?.errorMessage || "");
 }

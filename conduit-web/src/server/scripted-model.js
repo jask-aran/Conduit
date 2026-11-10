@@ -64,7 +64,7 @@ function reporter(messages, index) {
   return promptOf(messages[index]).match(/^(?:sa|bg)-\d+\b/)?.[0] || started?.match(/\b(?:sa|bg)-\d+\b/g)?.[word?.[1] ? Number(word[1]) - 1 : 0] || "A subagent";
 }
 
-export function scriptedStep(context) {
+function scriptedStep(context) {
   const messages = context.messages || [];
   const last = messages.findLastIndex((message) => message.role === "user");
   // A report or notice steered into a turn still under way (between its calls) is heard, and the turn goes on with

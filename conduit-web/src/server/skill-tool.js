@@ -25,7 +25,7 @@ const logUse = (runtime, record) => fs.appendFile(path.join(runtime.dataRoot, "r
  * A skill's `nudge` (front matter): the calls that begin its kind of work. Each entry is a tool name, or `tool: text`
  * for a call of that tool whose arguments contain the text (`codemode: executor`, `routine: save`).
  */
-export function nudgeMatches(nudge, toolName, args) {
+function nudgeMatches(nudge, toolName, args) {
   if (!Array.isArray(nudge)) return false;
   let shown;
   return nudge.some((entry) => {

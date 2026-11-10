@@ -13,8 +13,6 @@ export const NAME_GENERATION_MODES = Object.freeze(["conduit", "backend"]);
 // harness is this array plus its module - not seven edits across the server.
 export const MANIFESTS = [conduitRuntime, codex, claudeCode, fx, opencode, chatgptWeb, testStream];
 
-export const manifestFor = (id) => MANIFESTS.find((manifest) => manifest.id === id) || null;
-
 /** Implementation keys a manifest answers to, defaulting to its own id. */
 export const implementationsOf = (manifest) => manifest.implementations || [manifest.id];
 

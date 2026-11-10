@@ -21,5 +21,3 @@ export function startWebSocketKeepalive(ws, intervalMs = KEEPALIVE_INTERVAL_MS) 
   ws.on("error", stop);
   return stop;
 }
-
-export { KEEPALIVE_INTERVAL_MS };

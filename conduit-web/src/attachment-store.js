@@ -13,9 +13,9 @@ import { ensureChatTree } from "./owned-paths.js";
 const ATTACHMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STORED_FILE = /^([0-9a-f-]{36})--(.+)$/i;
 const MAX_NAME_BYTES = 180;
-export const DEFAULT_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+const DEFAULT_MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 
-export function isAttachmentId(value) {
+function isAttachmentId(value) {
   return ATTACHMENT_ID.test(String(value || ""));
 }
 

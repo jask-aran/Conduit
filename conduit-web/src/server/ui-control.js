@@ -111,7 +111,7 @@ export class UiControl {
 const rank = (view) => (view.focused ? 2e13 : 0) + (view.visible ? 1e13 : 0) + view.at;
 
 /** The `conduit_ui` tool's description of a look: one line per tab, then its panes. */
-export function describeLook(tabs, yours = null) {
+function describeLook(tabs, yours = null) {
   if (!tabs.length) return "Conduit is not open anywhere right now.";
   return tabs.map((tab, index) => [
     `${tab.client === yours ? "Yours (where the person is talking to you from; commands go here): " : ""}${index === 0 ? "In use: " : ""}${tab.client} (${[tab.app, tab.platform, tab.machine].filter(Boolean).join(", ")})${tab.devices.length ? ` on device ${tab.devices.join(", ")}` : ""}${tab.inUse ? " has focus" : tab.visible ? " is in view" : " is in the background"}`,

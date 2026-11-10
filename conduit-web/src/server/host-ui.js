@@ -1,7 +1,7 @@
 import { isChatId } from "../chat-store.js";
 
 // How long a headless run waits on an approval or question nobody answers.
-export const RUN_HOST_UI_TIMEOUT_MS = 10 * 60_000;
+const RUN_HOST_UI_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * A harness's questions and approval requests, answerable from anywhere.

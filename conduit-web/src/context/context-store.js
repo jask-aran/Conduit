@@ -76,7 +76,6 @@ const NOTICE_APPENDIX = { "wake-routine": "Conduit appends the routine's task bl
 /** A skill as a block's name: "web-research" reads "Web research skill". */
 const skillLabel = (name) => `${name.replace(/[-_]+/g, " ").replace(/^./, (letter) => letter.toUpperCase())} skill`;
 const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || path.basename(folder);
-const skillBody = (text) => text.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 const skillDescription = (text) => /^description:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || "";
 /** Whether a skill is offered to subagents and runs too: unless its front matter says `subagents: false`. */
 const forSubagents = (text) => { try { return splitFrontMatter(text).data?.subagents !== false; } catch { return true; } };

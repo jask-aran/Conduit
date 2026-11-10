@@ -20,7 +20,7 @@ const FEWEST_GAPS = 5;
  * The model's cache lifetime for a retention tier: declared by its catalogue entry; otherwise how long it reliably
  * lived ("observed", reliableLifetime), or what is assumed for its provider, whichever is longer.
  */
-export function cacheLifetime(model, retention = "long", observedMs = 0) {
+function cacheLifetime(model, retention = "long", observedMs = 0) {
   const declared = model?.promptCache?.[retention] ?? model?.promptCache?.short;
   if (declared > 0) return { ms: declared * 1000, source: "declared" };
   const assumed = (ASSUMED_TTL_SECONDS[model?.provider] || 0) * 1000;
@@ -92,7 +92,7 @@ const FEWEST_PAUSES = 5;
  * from it all arrived after the cache had gone. Pauses under ten minutes say nothing about the lifetime and are left
  * out; with too few, the longest survived is all there is.
  */
-export function reliableLifetime(pauses) {
+function reliableLifetime(pauses) {
   const long = pauses.filter((pause) => pause.ms >= 600_000).sort((a, b) => a.ms - b.ms);
   if (long.length < FEWEST_PAUSES) return Math.max(0, ...long.filter((pause) => pause.hit).map((pause) => pause.ms));
   let hits = 0, lifetime = 0;

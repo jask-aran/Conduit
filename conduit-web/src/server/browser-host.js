@@ -373,7 +373,7 @@ export class BrowserHost {
  * device's node (node-agent.js, its `browser` target), and its stream piped from the device's loopback port through a
  * tunnel on the node's connection -- so any client signed in to the hub sees and drives it.
  */
-export class RemoteBrowser {
+class RemoteBrowser {
   constructor({ nodeHub, nodeId, tunnelTo }) {
     this.nodeHub = nodeHub;
     this.nodeId = nodeId;

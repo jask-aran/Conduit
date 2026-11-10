@@ -38,12 +38,12 @@ export function chatDirectory(project, chatId) {
 const at = (value) => Date.parse(value || "") || 0;
 
 /** The later of two timestamps; the completion clock only ever moves forward. */
-export const laterOf = (left, right) => (at(right) > at(left) ? right : left) || null;
+const laterOf = (left, right) => (at(right) > at(left) ? right : left) || null;
 
 // Unread is a comparison, not a stored flag: has the assistant finished
 // something since this chat was last read. Nothing has to transition it, so a
 // duplicate, late or missing event cannot leave it wrong.
-export const chatIsUnread = (chat) => chat?.status !== "subagent" && at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
+const chatIsUnread = (chat) => chat?.status !== "subagent" && at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
 
 export function chatView(chat) {
   if (!chat) return null;

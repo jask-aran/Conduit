@@ -14,19 +14,19 @@ const MAX_ENDPOINT_LENGTH = 2 * 1024;
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
 export const DEFAULT_LOCAL_VOICE_MODEL = artifactForProfile(resolveVoiceExecutionProfile({ profileId: VOICE_EXECUTION_CATALOG.defaultProfileId })).legacyModelId;
-export const VOICE_CONFIG_VERSION = 2;
+const VOICE_CONFIG_VERSION = 2;
 
 export const OPENAI_LIVE_MODEL = "gpt-live-transcribe";
-export const OPENAI_FILE_MODEL = "gpt-transcribe";
+const OPENAI_FILE_MODEL = "gpt-transcribe";
 export const OPENAI_LIVE_ADAPTER = "openai_realtime_stream_v1";
 
-export const VOICE_ADAPTERS = Object.freeze([
+const VOICE_ADAPTERS = Object.freeze([
   { id: "openai_audio_sse_v1", label: "OpenAI-compatible audio upload", transport: "http", description: "Uploads one in-memory WAV after stop and accepts JSON or transcript SSE events." },
   { id: OPENAI_LIVE_ADAPTER, label: "OpenAI realtime transcription", transport: "ws", description: "Feeds live PCM into gpt-live-transcribe and maps deltas to Conduit partials." },
   { id: "deepgram_audio_v1", label: "Deepgram prerecorded audio", transport: "http", description: "Uploads one in-memory WAV after stop and reads Deepgram channel alternatives." },
 ]);
 
-export const VOICE_PROVIDERS = Object.freeze([
+const VOICE_PROVIDERS = Object.freeze([
   {
     id: "openai", label: "OpenAI", adapter: "openai_audio_sse_v1", endpoint: "https://api.openai.com/v1/audio/transcriptions", authLabel: "OpenAI API key",
     models: [
@@ -78,7 +78,7 @@ function normalizeHeaderName(value) {
   return name;
 }
 
-export function normalizeRemoteVoiceEndpoint(value, { allowInsecure = false } = {}) {
+function normalizeRemoteVoiceEndpoint(value, { allowInsecure = false } = {}) {
   const raw = String(value || "").trim();
   if (!raw || raw.length > MAX_ENDPOINT_LENGTH) throw voiceError("voice_endpoint_invalid", "A voice endpoint URL is required");
   let endpoint;

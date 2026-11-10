@@ -10,8 +10,8 @@ import { terminate } from "./server/effect-process.js";
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const ORIGINS = new Set(["managed", "linked", "created", "cloned", "node"]);
-export const CLONE_COMMAND_TIMEOUT_MS = 120_000;
-export const CLONE_COMMAND_MAX_OUTPUT_BYTES = 64 * 1024;
+const CLONE_COMMAND_TIMEOUT_MS = 120_000;
+const CLONE_COMMAND_MAX_OUTPUT_BYTES = 64 * 1024;
 
 function slugify(value) {
   return String(value || "")
@@ -929,5 +929,3 @@ export class ProjectStore {
     return project;
   }
 }
-
-export { slugify };

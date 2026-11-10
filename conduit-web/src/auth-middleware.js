@@ -230,7 +230,7 @@ export function isNativeRequest(request) {
   return installedClientOrigin(request.headers?.origin) !== null;
 }
 
-export async function validateNativeSession(authStore, request) {
+async function validateNativeSession(authStore, request) {
   if (!isNativeRequest(request)) return null;
   const match = String(request.headers?.authorization || "").match(/^Bearer ([A-Za-z0-9_-]{32,256})$/);
   if (!match) return null;
@@ -359,4 +359,4 @@ export function prepareAuthMiddleware(authStore) {
   };
 }
 
-export { COOKIE_NAME, isSecureRequest, isTrustworthyRequest };
+export { isSecureRequest, isTrustworthyRequest };

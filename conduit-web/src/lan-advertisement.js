@@ -29,8 +29,8 @@ import { PATH_SCOPES, localPaths, scopeForHost } from "./server-identity.js";
  * set of machines, so the record discloses timing rather than substance.
  */
 
-export const SERVICE_TYPE = "conduit";
-export const SERVICE_PROTOCOL = "tcp";
+const SERVICE_TYPE = "conduit";
+const SERVICE_PROTOCOL = "tcp";
 
 // No event for this in Node, so it is polled. Long enough that the cost is
 // nothing, short enough that joining a network and opening the app in the next

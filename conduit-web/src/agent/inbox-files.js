@@ -13,7 +13,7 @@ import { readFolderFile, splitFrontMatter, writeFolderFile } from "./routine-fil
  * the same commit that moves its cursors. A file goes when its entry does (deleted, or pruned a week after it was
  * handled). The agent keeps them in step as its document changes (agent.js).
  */
-export const INBOX_DIR = "inbox";
+const INBOX_DIR = "inbox";
 const FILE = /^\d{4}-\d{2}-\d{2}-i-?\d+-[^/]*\.md$/;
 
 const slug = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "entry";

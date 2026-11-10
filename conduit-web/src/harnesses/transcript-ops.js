@@ -46,7 +46,7 @@ import { wasDiscarded } from "../abort-signature.js";
 
 const ROLES = new Set(["user", "assistant", "system"]);
 const OUTCOMES = new Set(["complete", "interrupted", "failed"]);
-export const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
+const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 const text = (value) => typeof value === "string" && value.length > 0;
 
 /**
@@ -57,7 +57,7 @@ const text = (value) => typeof value === "string" && value.length > 0;
  * names to these, and the browser never guesses from a name. A tool the table
  * does not know is `other`, which is still counted, just not named.
  */
-export const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "script", "agent", "message", "other"]);
+const TOOL_KINDS = new Set(["command", "read", "edit", "search", "fetch", "script", "agent", "message", "other"]);
 export const toolKind = (table, name) => (Object.hasOwn(table, name) ? table[name] : "other");
 
 /**

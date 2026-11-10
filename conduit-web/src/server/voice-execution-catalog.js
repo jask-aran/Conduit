@@ -1,7 +1,7 @@
 import { LOCAL_VOICE_BACKENDS } from "./voice-backends/index.js";
 
-export const VOICE_EXECUTION_CATALOG_SCHEMA_VERSION = 1;
-export const VOICE_EXECUTION_CATALOG_VERSION = "1";
+const VOICE_EXECUTION_CATALOG_SCHEMA_VERSION = 1;
+const VOICE_EXECUTION_CATALOG_VERSION = "1";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -215,7 +215,7 @@ export function validateVoiceExecutionCatalog(catalog = VOICE_EXECUTION_CATALOG)
 
 validateVoiceExecutionCatalog(VOICE_EXECUTION_CATALOG);
 
-export function catalogModelForLegacyId(legacyModelId, catalog = VOICE_EXECUTION_CATALOG) {
+function catalogModelForLegacyId(legacyModelId, catalog = VOICE_EXECUTION_CATALOG) {
   const migration = catalog.migrations.find((candidate) => candidate.legacyLocalModelId === legacyModelId);
   if (!migration) throw catalogueError("voice_profile_recovery_required", `No local voice profile migration exists for ${legacyModelId}`, { legacyLocalModelId: legacyModelId });
   return migration;

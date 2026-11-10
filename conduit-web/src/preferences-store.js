@@ -73,7 +73,7 @@ export function normalizeKnownServers(input) {
   return list.slice(0, 20);
 }
 
-export function normalizeSidebarPins(input) {
+function normalizeSidebarPins(input) {
   if (!Array.isArray(input)) return [];
   return [...new Set(input.filter((item) => typeof item === "string"
     && item.length <= 200

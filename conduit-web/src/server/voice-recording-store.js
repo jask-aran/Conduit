@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
 
-export const MAX_VOICE_DIAGNOSTIC_RECORDINGS = 20;
-export const MAX_SHORT_VOICE_DIAGNOSTIC_RECORDINGS = 4;
+const MAX_VOICE_DIAGNOSTIC_RECORDINGS = 20;
+const MAX_SHORT_VOICE_DIAGNOSTIC_RECORDINGS = 4;
 export const MIN_VOICE_DIAGNOSTIC_AUDIO_BYTES = 16_000 * 2;
 export const VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS = 5_000;
 const MAX_PENDING_ARCHIVE_RECORDS = 2;

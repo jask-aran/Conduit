@@ -17,7 +17,7 @@ import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, re
  */
 
 /** Every run's base prompt, in the agent's folder: what a run is, how it reports, how it ends. */
-export const RUN_FILE = "RUN.md";
+const RUN_FILE = "RUN.md";
 /** How much of the inbox a run's first message carries. */
 const ENTRIES = 25;
 const ENTRY_BODY = 6000;
@@ -119,7 +119,7 @@ function capped(items) {
 }
 
 /** Pending notes are identified by their call provenance, never by their timestamps. */
-export async function notesTask(agent, task, cursor, state) {
+async function notesTask(agent, task, cursor, state) {
   const consumed = new Set(cursor.calls || []);
   const notes = (await folderText(agent, NOTES_FILE)).split(/\r?\n/).map((line) => NOTE_LINE.exec(line)).filter(Boolean)
     .filter((match) => !consumed.has(match[4]))

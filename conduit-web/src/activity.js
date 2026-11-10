@@ -5,7 +5,7 @@
  * Every harness maps its own events onto these shared record flags.
  */
 
-export const COARSE_ACTIVITIES = [
+const COARSE_ACTIVITIES = [
   "idle",
   "starting",
   "working",
@@ -18,7 +18,7 @@ export const COARSE_ACTIVITIES = [
 
 const RANK = Object.fromEntries(COARSE_ACTIVITIES.map((value, index) => [value, index]));
 
-export function rankActivity(activity) {
+function rankActivity(activity) {
   return RANK[activity] ?? 0;
 }
 
@@ -27,7 +27,7 @@ export function pickHigherActivity(left, right) {
 }
 
 /** True while a turn is in flight: agent streaming or prompt accepted but not yet settled. */
-export function isTurnInFlight(record) {
+function isTurnInFlight(record) {
   if (!record) return false;
   if (record.active) return true;
   const generation = record.generation;

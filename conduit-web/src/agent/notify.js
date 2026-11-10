@@ -13,7 +13,7 @@ const line = (text, max) => {
 };
 
 /** One gate for all push paths. Approval transport priority does not make an approval urgent. */
-export const pushAllowed = (agent, level) => level === "urgent" || !agent || !inQuietHours(agent.settings());
+const pushAllowed = (agent, level) => level === "urgent" || !agent || !inQuietHours(agent.settings());
 
 /** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId, hubName = () => null }) {

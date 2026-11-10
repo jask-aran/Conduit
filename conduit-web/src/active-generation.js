@@ -235,10 +235,6 @@ export function reduceActiveGeneration(current, event) {
   return next;
 }
 
-export function reduceGenerationEvents(events, initial = null) {
-  return events.reduce(reduceActiveGeneration, initial);
-}
-
 /**
  * Which of a turn's text is its final answer, and which is commentary (it talking as it works).
  *

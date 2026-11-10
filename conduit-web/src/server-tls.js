@@ -108,7 +108,7 @@ const OIDS = {
  * hash would need every re-issued leaf's attestation delivered, before the TLS
  * route works again, over some route that is not that one.
  */
-export const ATTESTATION_EXTENSION_OID = "2.25.3346790509059223890722535119545092606";
+const ATTESTATION_EXTENSION_OID = "2.25.3346790509059223890722535119545092606";
 
 function extension(id, critical, value) {
   return sequence(oid(id), ...(critical ? [boolTrue] : []), octetString(value));

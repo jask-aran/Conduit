@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 
-export const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory";
-export const LETS_ENCRYPT_STAGING = "https://acme-staging-v02.api.letsencrypt.org/directory";
+const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory";
 const b64 = (value) => Buffer.from(value).toString("base64url");
 const hash = (value) => crypto.createHash("sha256").update(value).digest("base64url");
 const keyPair = () => crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });

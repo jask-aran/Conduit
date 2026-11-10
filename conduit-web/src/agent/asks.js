@@ -3,7 +3,7 @@ import { nextId } from "./agent-doc.js";
 
 const HOUR24 = 86400_000;
 const statusAt = (ask, now) => ask.status === "pending" && Date.parse(ask.expiresAt) <= now ? "expired" : ask.status;
-export function askView(ask, now = Date.now()) {
+function askView(ask, now = Date.now()) {
   const { id, chatId, toolCallId, parentCallId, title, service, lines, createdAt, expiresAt, decidedAt, choice } = ask;
   // A run's ask: the run's conversation, whose report it shows under.
   return { id, chatId, toolCallId, parentCallId, run: ask.run ? String(ask.sourceConversationId) : null, title, service, lines, createdAt, expiresAt,

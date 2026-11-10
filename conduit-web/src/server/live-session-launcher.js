@@ -16,7 +16,7 @@ function launchError(code, message, status = 400) {
  * immediately bringing it back. The policy lives here so every client gets the
  * same lifecycle even if it sends an obsolete intent.
  */
-export const SPAWNING_INTENTS = new Set([
+const SPAWNING_INTENTS = new Set([
   "prompt",
   "compact",
   "regenerate",

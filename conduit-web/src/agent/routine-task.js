@@ -10,7 +10,7 @@ import { completeRoutine, executeRoutine } from "./routines.js";
 import { readRoutine, validateRoutineGraph } from "./routine-files.js";
 import { closeWork, GATHER_WORDS, noteWork, openWork, phaseWork } from "./work-log.js";
 
-export const ROUTINE_WAIT_MS = 30 * 60_000;
+const ROUTINE_WAIT_MS = 30 * 60_000;
 export const ROUTINE_DEPTH = 16;
 const next = (phase, extra = {}) => ({ status: "running", checkpoint: { phase, ...extra } });
 const terminal = (error) => ({ status: "terminal", outcome: error
@@ -79,7 +79,7 @@ export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outc
 }
 
 /** A routine firing's item in the work log, by its task. */
-export const workId = (taskId) => `routine:${taskId}`;
+const workId = (taskId) => `routine:${taskId}`;
 
 async function beforeDeadline(api, startedAt, pending) {
   let disarm;

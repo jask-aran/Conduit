@@ -13,7 +13,7 @@ import { Transform } from "node:stream";
  * The spool is deliberately not chat attachment storage: nothing here belongs
  * to a chat, nothing is announced to a harness, and entries are disposable.
  */
-export const DEFAULT_MAX_PASTE_BYTES = 25 * 1024 * 1024;
+const DEFAULT_MAX_PASTE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 const SIGNATURES = [

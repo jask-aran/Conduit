@@ -161,7 +161,7 @@ export function amountFromPrompt(message, fallback) {
  * produces the same turn, which is what makes this backend worth measuring
  * against.
  */
-export function toolRunsFromPrompt(message) {
+function toolRunsFromPrompt(message) {
   const match = /(\d+)\s*tools?\b/i.exec(String(message || ""));
   if (match) return Math.min(MAX_TOOL_RUNS, Math.max(0, Number(match[1])));
   return /\btools?\b/i.test(String(message || "")) ? 1 : 0;
@@ -171,18 +171,18 @@ export function toolRunsFromPrompt(message) {
  * "think" opens the turn with a thinking block, so a trace has something to
  * fold; "think 900" sets its length. A number ending in t is the answer's.
  */
-export const THINKING_TOKENS = 400;
-export function thinkingFromPrompt(message) {
+const THINKING_TOKENS = 400;
+function thinkingFromPrompt(message) {
   const match = /\bthink(?:ing)?\b(?:\s+(\d+)(?!\d|\s*t\b))?/i.exec(String(message || ""));
   if (!match) return 0;
   return match[1] ? Math.min(MAX_TOKENS, Math.max(1, Number(match[1]))) : THINKING_TOKENS;
 }
 
-export const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
+const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
 /** "rich" streams real-looking text: typographic punctuation, Markdown, formulas, code (test-stream-replays.js). */
-export const richFromPrompt = (message) => /\brich\b/i.test(String(message || ""));
+const richFromPrompt = (message) => /\brich\b/i.test(String(message || ""));
 /** "markdown", "katex", and "katex limits" replay whole recorded replies (test-stream-replays.js). */
-export function replayFromPrompt(message) {
+function replayFromPrompt(message) {
   const text = String(message || "");
   if (/\bkatex(?:\s+|-)limits\b/i.test(text)) return KATEX_LIMITS;
   if (/\bkatex\b/i.test(text)) return KATEX_COMPENDIUM;
@@ -191,7 +191,7 @@ export function replayFromPrompt(message) {
 }
 /** What a refused call returns to the model. */
 export const TEST_STREAM_DENIED = "Denied: the user did not allow this call.";
-export const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
+const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
 /** The tool a run calls, and what it returns. Fixed, like everything else. */
 export const TEST_STREAM_TOOL = Object.freeze({
@@ -211,7 +211,7 @@ export function replayTokens(text) {
 }
 
 /** The nth token of a text played over and over, for a run longer than the text. */
-export const loopedToken = (text, index) => { const tokens = replayTokens(text); return tokens[index % tokens.length]; };
+const loopedToken = (text, index) => { const tokens = replayTokens(text); return tokens[index % tokens.length]; };
 
 /** The nth token of the stream, including the paragraph breaks. */
 export function tokenAt(index) {
@@ -233,8 +233,8 @@ export function tokenAt(index) {
  * repeatable: the same prompt produces the same turn, down to which token the
  * call lands on.
  */
-export const NARRATION = " I'll read docs/testing.md to see what it says first.";
-export function planTurn(tokens, toolRuns, thinking = 0, narrate = false) {
+const NARRATION = " I'll read docs/testing.md to see what it says first.";
+function planTurn(tokens, toolRuns, thinking = 0, narrate = false) {
   const total = Math.max(1, tokens);
   const thought = thinking ? Math.max(20, Math.floor(thinking / (toolRuns + 1))) : 0;
   const steps = [];

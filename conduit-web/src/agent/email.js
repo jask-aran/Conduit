@@ -35,7 +35,7 @@ const header = (value) => /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Bu
  * Authentication-Results, the topmost one (a sender can put forged ones below it, never above), from mx.cloudflare.net,
  * with DMARC passing for the From domain and a DKIM signature of that domain passing.
  */
-export function authenticatedFrom(mail) {
+function authenticatedFrom(mail) {
   const domain = String(mail.from?.address || "").split("@")[1]?.toLowerCase();
   if (!domain) return false;
   const header = (mail.headers || []).find((item) => item.key === "authentication-results");

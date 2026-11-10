@@ -21,8 +21,8 @@ const DEFAULT_LIMITS = Object.freeze({
 
 // Coalesce eight 20 ms transport packets before each native feed. Keep the
 // feed size separate from model decode options and bound the queued audio.
-export const TRANSCRIBE_CPP_FEED_QUANTUM_MS = 160;
-export const TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS = 5_000;
+const TRANSCRIBE_CPP_FEED_QUANTUM_MS = 160;
+const TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS = 5_000;
 const VOICE_SAMPLE_RATE = 16_000;
 
 function finalizationMultiplier(limits) {

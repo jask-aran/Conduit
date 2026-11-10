@@ -12,7 +12,7 @@ const MAX_KEY_LENGTH = 16 * 1024;
  * and Exa without any key. pi-web-access knows ~40 more, set in
  * web-search.json directly.
  */
-export const SEARCH_PROVIDERS = [
+const SEARCH_PROVIDERS = [
   { id: "openai", label: "OpenAI", configKey: "openaiApiKey", environmentKey: "OPENAI_API_KEY", signIn: ["openai", "openai-codex"],
     description: "Hosted web search on the hub's ChatGPT sign-in, or an API key.", docsUrl: "https://platform.openai.com/api-keys" },
   { id: "exa", label: "Exa", configKey: "exaApiKey", environmentKey: "EXA_API_KEY", keyless: true,
@@ -37,7 +37,7 @@ export const SEARCH_PROVIDERS = [
 
 // The agent's web tools (pi-web-access `tools.<key>.enabled`), read when the
 // runtime loads them.
-export const SEARCH_TOOLS = ["webSearch", "fetchContent", "sourceCheck", "getSearchContent"];
+const SEARCH_TOOLS = ["webSearch", "fetchContent", "sourceCheck", "getSearchContent"];
 // What fetching can do beyond a page, each its own config section's `enabled`.
 const FETCHING = { github: ["githubClone"], video: ["youtube", "video"], pdf: ["pdf"] };
 // A route that falls back takes every kind of failure, and an answer with no

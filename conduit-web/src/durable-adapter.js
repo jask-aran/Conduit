@@ -295,7 +295,7 @@ const userMessage = (entry) => {
 };
 
 /** The tools a conversation had been offered before an entry: name -> the definition last sent (pi.system entries). */
-export function toolsBefore(entries, beforeId) {
+function toolsBefore(entries, beforeId) {
   const tools = new Map();
   for (const item of entries) {
     if (item.id >= beforeId) continue;
@@ -314,7 +314,7 @@ function offerTools(tools, entry) {
  * until then (toolsBefore), so a restatement (every tool removed and sent again, as pi-durable does when one changes)
  * names the ones whose definition changed; `restated` is left only when none did.
  */
-export function contextEntry(entry, before = null) {
+function contextEntry(entry, before = null) {
   if (entry.kind === "pi.compaction") return { kind: "compaction", sections: [], summary: modelText(entry) };
   if (entry.kind !== "pi.system") return null;
   const message = entry.model?.[0] || {};

@@ -33,7 +33,7 @@ const changed = () => { try { listener?.(); } catch { /* telling never fails a w
  * Each kind's counter, from the highest number its items carry when it has none: once, for the log as it was before
  * counters (items imported from before the log keep theirs; those numbered after them since come next).
  */
-export function settleNumbers(doc) {
+function settleNumbers(doc) {
   if (doc.counters) return;
   doc.counters = {};
   const items = Object.values(doc.items).sort((a, b) => a.startedAt.localeCompare(b.startedAt));

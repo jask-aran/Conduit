@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export const STARTER_POLICY = Object.freeze({
+const STARTER_POLICY = Object.freeze({
   version: "starter",
   may: Object.freeze([
     "Reply in an email thread I started or have replied in myself (not one a stranger opened).",

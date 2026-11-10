@@ -7,7 +7,7 @@ import YAML from "yaml";
 import { isReadAction, programPaths } from "./policy.js";
 
 export const ROUTINES_DIR = "routines";
-export const PERSON_FIELDS = ["name", "assistant", "timezone", "home"];
+const PERSON_FIELDS = ["name", "assistant", "timezone", "home"];
 
 const namePattern = /^[a-z][a-z0-9-]{0,40}$/;
 const idPattern = /^[a-z][a-z0-9-]{0,30}$/;
@@ -16,7 +16,7 @@ const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.include
 /** Fields a task kind takes besides its id, kind and program. */
 const TASK_FIELDS = { inbox: ["all", "for", "kinds", "except", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
 /** What an `on:` trigger can name: an email to jbot from someone who does not wake it (email.js). */
-export const EVENTS = ["held-mail"];
+const EVENTS = ["held-mail"];
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
 export const settingRule = (trigger, kind) => Array.isArray(trigger)

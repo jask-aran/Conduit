@@ -5,7 +5,7 @@
  * category gathers several of a harness's parts, they become its items, so
  * nothing the harness said is lost (docs/design/conduit-harness-plugins.md).
  */
-export const CONTEXT_CATEGORIES = Object.freeze([
+const CONTEXT_CATEGORIES = Object.freeze([
   { id: "system-prompt", label: "System prompt", kind: "used" },
   { id: "tools", label: "Tools", kind: "used" },
   { id: "instructions", label: "Instructions", kind: "used" },

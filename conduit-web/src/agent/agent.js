@@ -23,7 +23,7 @@ const validZone = (zone) => { try { Intl.DateTimeFormat(undefined, { timeZone: z
 const clock = (value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
 
 /** What the agent does unless the person says otherwise (agent.json in its folder). */
-export const DEFAULT_SETTINGS = Object.freeze({
+const DEFAULT_SETTINGS = Object.freeze({
   name: "Agent",
   on: true,
   // How much reaches the person: quiet (urgent only), normal (attention and up), chatty (FYI too).
@@ -547,7 +547,7 @@ const KIND_WORDS = { manual: "The person asked for this run", checkback: "A chec
   webhook: "A webhook woke this run", feed: "A feed's check" };
 
 /** An ad-hoc run's first message: when and why, then its task. How it reports is RUN.md's (its system prompt). */
-export const runBrief = (kind, task, timeZone, store) => notice(store, "wake-run", {
+const runBrief = (kind, task, timeZone, store) => notice(store, "wake-run", {
   now: new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" }),
   reason: KIND_WORDS[kind] || `A ${kind} run`, task: String(task || "").trim(),
 });

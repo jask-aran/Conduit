@@ -72,7 +72,7 @@ const step = (tools, name, input) => {
  * call is one planned row that repeats, never one row per iteration. Nothing
  * here runs the script; a script that does not parse has no plan.
  */
-export function planScript(code, tools, { object = "tools" } = {}) {
+function planScript(code, tools, { object = "tools" } = {}) {
   if (typeof code !== "string" || !code.includes(object)) return [];
   let program;
   try {

@@ -14,12 +14,12 @@ import { removeUnresponsiveSocket, terminalSocketName } from "../../scripts/term
 
 const execFileAsync = promisify(execFileCallback);
 
-export const PTY_MAX_SESSIONS = 32;
+const PTY_MAX_SESSIONS = 32;
 export const PTY_MAX_INPUT_BYTES = 4 * 1024 * 1024;
 // How long a terminal that ended is still listed, so a tab left open on it can
 // say it exited. Every client lists only running ones.
 const PTY_ENDED_KEPT_MS = 24 * 60 * 60 * 1000;
-export const PTY_TMUX_MIN_VERSION = [3, 3];
+const PTY_TMUX_MIN_VERSION = [3, 3];
 const TMUX_METADATA_SEPARATOR = "__CONDUIT_FIELD__";
 
 const TEMPLATES = {

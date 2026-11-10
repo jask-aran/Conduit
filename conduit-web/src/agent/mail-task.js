@@ -14,7 +14,7 @@ import { INVISIBLE, readMail } from "./mail-pipeline.js";
  * the last two days without promotions or social) and `max` (messages fetched a firing, default 25). Like any stream
  * task, its first firing only learns what is there.
  */
-export const DEFAULT_QUERY = "in:inbox newer_than:2d -category:promotions -category:social";
+const DEFAULT_QUERY = "in:inbox newer_than:2d -category:promotions -category:social";
 const MAX = 25;
 /*
  * What one firing may pull through Executor, whose program has about 30 seconds, in two rounds of calls: the lists
@@ -26,7 +26,7 @@ const MAX = 25;
 const RAW_COUNT = 12;
 
 /** The program: `seen` (the ids already gathered) is handed in by the hub; its last item is `{ accounts }`. */
-export const gmailProgram = ({ query = DEFAULT_QUERY, max = MAX, accounts = [] } = {}) => `
+const gmailProgram = ({ query = DEFAULT_QUERY, max = MAX, accounts = [] } = {}) => `
 const discover = async () => {
   const found = await tools.search({ query: "gmail users messages list", limit: 10 });
   const lister = (found.items ?? []).find((item) => item.path === "tools.gmail.api.users.gmailUsersMessagesList");

@@ -44,7 +44,7 @@ const sameText = (left, right) => String(left ?? "").replace(/\s+/g, " ").trim()
  * every delta was building, so numbering them would make each coalesced frame
  * look like a hole in the order.
  */
-export const LOGGED_EVENT_TYPES = new Set([
+const LOGGED_EVENT_TYPES = new Set([
   // What the server has decided about the transcript's shape, said outright.
   // A cut is `message.drop` and nothing else: `history_truncated` is the older
   // spelling of the same fact, and numbering both spent two places in the

@@ -8,7 +8,7 @@ import { terminate } from "./server/effect-process.js";
 import { localHost } from "./workspace-host.js";
 
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
-export const GIT_COMMAND_TIMEOUT_MS = 10_000;
+const GIT_COMMAND_TIMEOUT_MS = 10_000;
 // One cold inspection alone wants six git processes -- status, three numstat
 // diffs, a rev-parse -- so a cap of four made it queue against itself before
 // anything else on the machine had asked for a thing.
@@ -117,11 +117,11 @@ const EXTENSION_TYPES = new Map([
   ["conf", { kind: "text", mime: "text/plain" }],
 ]);
 
-export function inspectorError(code, message) {
+function inspectorError(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
-export function fileRevision(content) {
+function fileRevision(content) {
   return createHash("sha256").update(content).digest("hex");
 }
 

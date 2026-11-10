@@ -104,7 +104,7 @@ export async function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(derived, expected);
 }
 
-export function newSessionToken() {
+function newSessionToken() {
   return crypto.randomBytes(TOKEN_BYTES).toString("base64url");
 }
 

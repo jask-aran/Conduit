@@ -12,7 +12,7 @@ function clampInt(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.trunc(number)));
 }
 
-export function normalizeRuntimeSettings(input = {}, fallback = DEFAULTS) {
+function normalizeRuntimeSettings(input = {}, fallback = DEFAULTS) {
   return {
     maxLiveProcesses: clampInt(input.maxLiveProcesses, 1, 32, fallback.maxLiveProcesses),
     maxGeneratingProcesses: clampInt(input.maxGeneratingProcesses, 1, 8, fallback.maxGeneratingProcesses),
