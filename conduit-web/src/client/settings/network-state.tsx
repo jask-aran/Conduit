@@ -155,7 +155,7 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
 /** One environment's declared harnesses, a line each with its status; none declared is said so. */
 export function DeviceHarnesses(props: { node: Node; named?: boolean }) {
   const harnesses = () => props.node.harnesses || [];
-  return <Group kind="column" title={props.named ? `Harnesses · ${props.node.name}` : "Harnesses"}>
+  return <Group title={props.named ? `Harnesses · ${props.node.name}` : "Harnesses"}>
     <Show when={harnesses().length} fallback={<Note>{props.node.name} declares none. A device offers its harnesses (Claude Code, Codex, OpenCode) once it shares a folder that may run commands.</Note>}>
       <For each={harnesses()}>{(id) =>
         <SettingLine plain label={harnessLabelFor(id) || id} state={props.node.name} title={`${harnessLabelFor(id) || id}, installed on ${props.node.name}; chats on its folders can run it there.`}>

@@ -49,7 +49,7 @@ export function MachineReadout(props: { open: boolean; url?: string; title?: str
         </ReadingStats>
       </Reading>
       <Show when={now().processes?.length}>
-        <Group kind="column" title="Busiest processes">
+        <Group title="Busiest processes">
           <For each={now().processes!}>{(item) =>
             <SettingLine plain mono label={item.name} state={`pid ${item.pid}`} title={`${item.name} (pid ${item.pid}): ${percent(item.cpu)} of a core, ${bytes(item.memory)} resident`}>
               <SettingValue mono>{percent(item.cpu)} · {bytes(item.memory)}</SettingValue>

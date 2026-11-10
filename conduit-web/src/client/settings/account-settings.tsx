@@ -4,7 +4,6 @@ import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { agentView, refreshAgent } from "../state/agent";
 import { accountHome, accountName, accountPicture, loadAccount, removeAccountPicture, saveAccountHome, saveAccountName, saveAccountPicture } from "../state/account";
-import { ConnectorsGroup } from "./connectors-settings";
 
 const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch { return [] as string[]; } })();
 
@@ -12,10 +11,9 @@ const zones = (() => { try { return Intl.supportedValuesOf("timeZone"); } catch 
  * Personal › Account: who is signed in to this hub. Its picture (one they choose, or the name's initials: v2 Avatar),
  * shown in the server switcher's menu; its name, which their agent calls them by too (its USER.md). The name saves as
  * it is left (Enter or leaving the field), as Settings saves; a picture as it is chosen. Where they are (time zone,
- * home), which their agent counts its day by and knows them by. Then their own integrations (the agent's connectors:
- * Executor, Gmail…), which act as them.
+ * home), which their agent counts its day by and knows them by.
  */
-export function AccountSettings(props: { onOpenTools?: (connector: string) => void } = {}) {
+export function AccountSettings() {
   const [error, setError] = createSignal("");
   onMount(() => void loadAccount());
   let chooser!: HTMLInputElement;
@@ -59,6 +57,5 @@ export function AccountSettings(props: { onOpenTools?: (connector: string) => vo
       <Input aria-label="Home" placeholder="City or suburb" maxLength={120} value={accountHome()}
         onChange={(event) => void saveHome(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} />
     </SettingLine>
-  </Group>
-  <ConnectorsGroup onOpenTools={props.onOpenTools} /></>;
+  </Group></>;
 }

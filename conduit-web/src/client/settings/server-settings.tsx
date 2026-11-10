@@ -1,5 +1,5 @@
 import { PasswordGroup, SignInsGroup } from "./sign-ins-settings";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show, type JSX } from "solid-js";
 import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuSection } from "@/components/ui/menus";
 import { ServerControl } from "@/components/ui/connection";
 import { activeOrigin, servers, switchToServer } from "../platform/servers.ts";
@@ -19,7 +19,7 @@ import { createNetwork, DeviceHarnesses, isWorkspace } from "./network-state.tsx
  * inspected, not changed: the installed apps ask it with the sign-in they keep for it; a browser can only ask its own,
  * and offers Switch to.
  */
-export function ServerSettings(props: { projects: Project[] }) {
+export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Element }) {
   const health = createServerHealth();
   const [inspected, setInspected] = createSignal(activeOrigin() || "");
   const net = createNetwork({ origin: inspected, projects: () => props.projects });
@@ -57,6 +57,8 @@ export function ServerSettings(props: { projects: Project[] }) {
     {/* The machine it runs on, read while the page shows; only the server this client is on can be asked. */}
     <Show when={active()}><MachineReadout open /></Show>
     <Show when={hubNode()}>{(node) => <DeviceHarnesses node={node()} />}</Show>
+    {/* Its agent processes: how many it keeps, and those running now. The server in use's only. */}
+    <Show when={active()}>{props.runtime}</Show>
     <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
     <Show when={net.error()}><Note tone="error">{net.error()}</Note></Show>
     {/* Who is signed in to it, and its password: the server in use's (another is switched to first). */}

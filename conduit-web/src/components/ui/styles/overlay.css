@@ -91,6 +91,8 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); padding-inline: calc(var(--space-md) - var(--space-sm)); }
 .ui-actions:where([data-actions="setting"]) > .ui-button { white-space: nowrap; }
 .ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
+/* A Reading among a page's groups is parted from the group before it as a group is. */
+.ui-group:where([data-group="setting"]) + .ui-reading { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
 /* A settings line (and the recorder under it) is at least a row's height, a finger's on a phone. */
 :root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }
 /* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */

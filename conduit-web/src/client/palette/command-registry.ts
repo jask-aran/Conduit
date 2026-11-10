@@ -172,7 +172,6 @@ export const SETTINGS_SECTIONS = [
   { id: "tools", label: "Tools", keywords: ["tools", "approval", "ask", "codemode", "connector", "extension", "profile"] },
   { id: "agent", label: "Agent", keywords: ["jbot", "agent", "persistent", "routines", "inbox"] },
   { id: "server", label: "Server", keywords: ["server", "hub", "machine", "cpu", "memory", "disk", "processes", "harnesses", "identity", "password", "sessions", "sign in", "sign out", "signed in"] },
-  { id: "runtime", label: "Runtime", keywords: ["processes", "pool", "idle", "generation"] },
   { id: "device", label: "This device", keywords: ["device", "name", "share", "folders", "notifications", "your browser", "pair", "title bar", "float", "side key", "assistant", "screen context", "hold to talk", "overlay", "slot names"] },
   { id: "devices", label: "Network", keywords: ["devices", "network", "nodes", "clients", "lan", "browsers"] },
   { id: "usage", label: "Usage", keywords: ["usage", "cost", "spend", "tokens", "billing", "money"] },

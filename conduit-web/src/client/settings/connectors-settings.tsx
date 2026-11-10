@@ -9,8 +9,8 @@ import { Group } from "@/components/ui/group";
 type Connector = { id: string; label: string; url: string; status: "off" | "connecting" | "on" | "error"; tools: number; error?: string };
 const CONNECTOR_STATE = { off: "Not connected", connecting: "Connecting…", on: "Connected", error: "Not working" } as const;
 
-/** Account's integrations (Connectors): Connect signs in in another tab (the system browser in the apps). */
-/** onOpenTools: its tool count opens Settings › Tools at its toolset (its tools, and the profiles that take them up). */
+/** Tools' Connectors group: Connect signs in in another tab (the system browser in the apps).
+ *  onOpenTools: its tool count shows its toolset (its tools, and the profiles that take them up). */
 export function ConnectorsGroup(props: { onOpenTools?: (connector: string) => void } = {}) {
   const [connectors, setConnectors] = createSignal<Connector[]>([]);
   const [connecting, setConnecting] = createSignal<string | null>(null);

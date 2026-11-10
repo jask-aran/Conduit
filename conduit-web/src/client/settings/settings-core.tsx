@@ -73,7 +73,7 @@ import { conduitFloat, type FloatHoldTarget, type FloatStatus } from "../platfor
 const allSectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
-  { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "runtime", label: "Runtime", icon: Icons.Runtime }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
+  { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
@@ -153,7 +153,7 @@ const ACCOUNT_SOURCES: Record<NonNullable<PiAuthProvider["auth"]["source"]> | "n
 const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
   { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
 ];
-const CLOUDFLARE_NEEDED = "Needs a Cloudflare Workers AI key and account ID: add them under Providers below.";
+const CLOUDFLARE_NEEDED = "Needs a Cloudflare Workers AI key and account ID: add them in Models.";
 
 const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSelection => ({
   modelId: profile.modelId,
@@ -295,9 +295,6 @@ export function Settings(props: {
   };
   // Search: every setting with a literal label (virtual:settings-index, read from this source), and each section by
   // name. A result opens its section and brings its line into view, marked for a moment.
-  // Tools opened from a connector's tool count (Account) starts at that connector's toolset.
-  const [toolsAt, setToolsAt] = createSignal<string | null>(null);
-  createEffect(() => { if (section() !== "tools") setToolsAt(null); });
   const [query, setQuery] = createSignal("");
   const [cursor, setCursor] = createSignal(0);
   createEffect(on(query, () => setCursor(0)));
@@ -673,7 +670,7 @@ export function Settings(props: {
       setRuntimeStatus("error");
     }
   };
-  createEffect(() => { if (props.open && section() === "runtime") void loadRuntime(); });
+  createEffect(() => { if (props.open && section() === "server") void loadRuntime(); });
   // The processes running now, each named by its chat; read again every few seconds while the page is open.
   type LiveProcess = { id: string; chatId: string; status: string; activity?: string; generation?: unknown; model?: string; createdAt?: string };
   const [processes, setProcesses] = createSignal<LiveProcess[]>([]);
@@ -694,7 +691,7 @@ export function Settings(props: {
     } catch { /* the counts above still say how many */ }
   };
   createEffect(() => {
-    if (!props.open || section() !== "runtime") return;
+    if (!props.open || section() !== "server") return;
     void loadProcesses();
     const timer = window.setInterval(() => void loadProcesses(), 5000);
     onCleanup(() => window.clearInterval(timer));
@@ -735,8 +732,7 @@ export function Settings(props: {
       setAuthError(response.message);
     } finally { setAuthLoading(false); }
   };
-  // Search shows Cloudflare Workers AI's account too (its off-topic check and extract mode run on it).
-  createEffect(() => { if (props.open && (section() === "models" || section() === "search")) void loadPiAuth(); });
+  createEffect(() => { if (props.open && section() === "models") void loadPiAuth(); });
   const loadChatGptStatus = async () => {
     try { setChatGptStatus(await api<ChatGptWebStatus>("/v0/chatgpt-web/status")); setChatGptError(""); }
     catch (error) { setChatGptError((error as Error).message); }
@@ -813,8 +809,8 @@ export function Settings(props: {
   };
   /**
    * A provider account's line: how it is connected and its own actions (sign in, a key, remove), its key form in
-   * place of them while open, the fields that go with the key and a sign-in under way below it. One credential,
-   * shown in Models and, for what search runs on, in Web search.
+   * place of them while open, the fields that go with the key and a sign-in under way below it. One credential, set in Models;
+   * Web search points there for what it runs on.
    */
   const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
     const attempt = () => authAttempt()?.owned && authAttempt()!.providerId === provider.id ? authAttempt()! : null;
@@ -1249,7 +1245,7 @@ export function Settings(props: {
   const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector,
     onOpenBlock: (id) => { setContextBlock(id); openSection("blocks"); }, onOpenDocument: (id) => { setContextDocument(id); openSection("prompts"); } });
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
-    runtime: { label: "Runtime settings", saves: [runtimeAutosave] },
+    server: { label: "Agent process settings", saves: [runtimeAutosave] },
     voice: { label: "Voice settings", saves: [voiceAutosave, voiceDraftAutosave] },
     models: { label: "Model defaults", saves: [defaultProfileAutosave, namingAutosave, reviewAutosave] },
     search: { label: "Web search", saves: [searchAutosave] },
@@ -1438,16 +1434,12 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
-          <Show when={section() === "tools"}><ToolsSettings connector={toolsAt() ?? undefined} /></Show>
+          <Show when={section() === "tools"}><ToolsSettings /></Show>
           <Show when={section() === "skills"}><SkillsSettings /></Show>
-          <Show when={section() === "account"}><AccountSettings onOpenTools={(id) => { setToolsAt(id); openSection("tools"); }} /></Show>
+          <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "usage"}><UsageSettings /></Show>
-          <Show when={section() === "server"}><ServerSettings projects={props.projects} /></Show>
-          <Show when={section() === "devices"}><DevicesSettingsTile part="network" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
-          <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
-          <Show when={section() === "runtime"}>
-            <>
+          <Show when={section() === "server"}><ServerSettings projects={props.projects} runtime={<>
               <Show when={runtimeStatus() === "ready" && runtime()} fallback={<Show when={runtimeStatus() === "error"} fallback={<Loading>Loading runtime settings…</Loading>}><Note tone="error"><span>{runtimeError() || "Runtime settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadRuntime()}>Retry</Button></Note></Show>}>
                 <Group title="Agent processes">
                   <SettingLine label="Warm processes" state={<><Show when={runtimeFieldError(runtimeDraft(), "live")} fallback={<>{runtime()!.liveCount || 0} live</>}>{(message) => message()}</Show></>}><Select id="warm-processes" aria-label="Warm processes" value={runtimeDraft().live} onChange={(event) => editRuntime("live", event.currentTarget.value)}>
@@ -1466,8 +1458,9 @@ export function Settings(props: {
                   }</For>
                 </Group>
               </Show>
-            </>
-          </Show>
+            </>} /></Show>
+          <Show when={section() === "devices"}><DevicesSettingsTile part="network" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
+          <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading} fallback={<Loading>Loading workspace settings…</Loading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<Note>This workspace is not available.</Note>}>{(workspace) => <Group title={workspace().name}><Note>{workspace().workingRoot}</Note><Note>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</Note><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
@@ -1758,9 +1751,10 @@ export function Settings(props: {
                       actions={<Show when={!provider.ready}><Button variant="ghost" size="sm" onClick={() => setAddingSearch("")}>Cancel</Button></Show>}
                       onSave={async (key) => { await saveSearchKey(provider.id, key); setAddingSearch(""); }} onRemove={provider.removable ? () => void removeSearchKey(provider.id) : undefined} />
                   }</For>
-                  <Show when={authProviders().find((provider) => provider.id === "cloudflare-workers-ai")}>{(provider) => accountLine(provider(), {
-                    title: "Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. The same account as in Models.",
-                  })}</Show>
+                  <SettingLine plain label="Cloudflare Workers AI" state={settings().cloudflare ? "connected" : "not set"}
+                    title="Checks routed results are on-topic (Clef) and reads values off pages (Clairic), on your Cloudflare account. Its key and account ID are kept with the other model providers.">
+                    <Button variant="ghost" size="sm" onClick={() => openSection("models")}>Set in Models</Button>
+                  </SettingLine>
                   <Show when={settings().providers.some((provider) => !provider.ready && provider.id !== addingSearch())}>
                     <SettingLine label="Add a provider" title="A search provider's API key, kept in pi-web-access's web-search.json on this server.">
                       <Select id="search-add-provider" aria-label="Add a provider" search="Search providers" value="" onChange={(event) => setAddingSearch(event.currentTarget.value)}>

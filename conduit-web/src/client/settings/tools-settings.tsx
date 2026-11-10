@@ -3,6 +3,7 @@ import { Button, LiveNote, SettingDetails, SettingLine, SettingValue, Group, Loa
 import { Select } from "@/components/ui/menus";
 import { api } from "../api/client";
 import { agentName } from "../state/agent";
+import { ConnectorsGroup } from "./connectors-settings";
 
 /** One tool of a profile (GET /v0/profiles/tools): where it comes from, who calls it, and whether it asks first. */
 type ProfileTool = {
@@ -18,12 +19,11 @@ const ASKS = { never: "Runs", always: "Asks first", sometimes: "Sometimes asks" 
  * AI › Tools, read-only: a profile's tools as its chats get them. Conduit decides them from the profile's template
  * (durable-runtime.js, `selectionFor`); what asks is the agent policy's (policy.js, `askOf`). Nothing here is set.
  */
-/** A connector (an integration declared to Conduit, Settings › Account): its toolset, which profiles consume. */
+/** A connector (an integration declared to Conduit, connected in the Connectors group here): its toolset, which profiles consume. */
 type Connector = { id: string; label: string; status: string };
 type ConnectorTool = { name: string; description: string; readOnly?: boolean };
 
-/** connector: start at that connector's toolset (from its tool count in Account). */
-export function ToolsSettings(props: { connector?: string } = {}) {
+export function ToolsSettings() {
   const [profiles, setProfiles] = createSignal<ProfileTools[] | null>(null);
   const [error, setError] = createSignal("");
   const [selected, setSelected] = createSignal("");
@@ -31,8 +31,7 @@ export function ToolsSettings(props: { connector?: string } = {}) {
     setError("");
     return api<{ profiles: ProfileTools[] }>("/v0/profiles/tools").then(({ profiles }) => {
       setProfiles(profiles);
-      if (props.connector) setSelected(`connector:${props.connector}`);
-      else if (!selected().startsWith("connector:") && !profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
+      if (!selected().startsWith("connector:") && !profiles.some((profile) => profile.id === selected())) setSelected(profiles.find((profile) => !profile.internal)?.id || profiles[0]?.id || "");
     }).catch((failure) => setError(failure instanceof Error ? failure.message : String(failure)));
   };
   // Toolsets: what is declared to Conduit, whichever profiles take it up.
@@ -78,6 +77,8 @@ export function ToolsSettings(props: { connector?: string } = {}) {
             {scripted().length ? ` ${scripted().length} are called from codemode scripts, not by the model directly.` : ""}</Note>}
         </Show>
       </Group>
+      {/* A connected connector's tool count shows its toolset above. */}
+      <ConnectorsGroup onOpenTools={(id) => setSelected(`connector:${id}`)} />
       <Show when={connectorId()}>
         <Show when={toolset()} fallback={<Loading>Loading tools…</Loading>}>{(tools) =>
           <Group title="Its tools"><For each={tools()}>{(tool) =>
@@ -93,7 +94,7 @@ export function ToolsSettings(props: { connector?: string } = {}) {
           <Note>Built-in tools are Conduit's own. Extensions are Pi packages a profile loads (web search). Connectors are your
             connected accounts, reached from codemode. Codemode is the code tool and the helpers its scripts call.</Note>
           <Note>jbot's threads work on any device, so their file tools take a device. A chat started on any device gets the same,
-            plus devices and handoff. Connected accounts appear once a connector is connected (Account).</Note>
+            plus devices and handoff. Connected accounts appear once a connector is connected (Connectors, above).</Note>
         </SettingDetails>
       </Group>
     </>}

@@ -1,5 +1,5 @@
 import { createSignal, For, onMount, Show } from "solid-js";
-import { Button, Input, SettingLine, Group, Note } from "@/components/ui";
+import { Button, Input, SettingDetails, SettingLine, Group, Note } from "@/components/ui";
 import { api } from "../api/client";
 
 /*
@@ -38,11 +38,26 @@ export function SignInsGroup() {
   const people = () => (sessions() ?? []).filter((session) => session.kind !== "script")
     .sort((a, b) => Number(b.current) - Number(a.current) || Date.parse(b.lastSeenAt || "0") - Date.parse(a.lastSeenAt || "0"));
   const scripts = () => (sessions() ?? []).filter((session) => session.kind === "script").length;
+  // Those used in the last day are listed; older ones fold away under them.
+  const recent = (session: Session) => session.current || Date.now() - Date.parse(session.lastSeenAt || "0") < 24 * 60 * 60_000;
+  const others = () => people().filter((session) => !session.current);
+  const older = () => people().filter((session) => !recent(session));
+  const endOthers = async () => {
+    setError("");
+    try { await Promise.all(others().map((session) => api(`/v0/auth/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" }))); }
+    catch (failure) { setError((failure as Error).message); }
+    await load();
+  };
+  const line = (session: Session) => <SettingLine plain label={clientName(session)} state={session.current ? "this device" : ago(session.lastSeenAt)}
+    title={session.userAgent || undefined}>
+    <Show when={!session.current}><Button size="sm" variant="ghost" haptic="destructive" onClick={() => void end(session)}>Sign out</Button></Show>
+  </SettingLine>;
   return <Group title="Signed in">
-    <For each={people()}>{(session) => <SettingLine plain label={clientName(session)} state={session.current ? "this device" : ago(session.lastSeenAt)}
-      title={session.userAgent || undefined}>
-      <Show when={!session.current}><Button size="sm" variant="ghost" haptic="destructive" onClick={() => void end(session)}>Sign out</Button></Show>
-    </SettingLine>}</For>
+    <For each={people().filter(recent)}>{line}</For>
+    <Show when={older().length}><SettingDetails summary={`${older().length} not used in the last day`}><For each={older()}>{line}</For></SettingDetails></Show>
+    <Show when={others().length > 1}><SettingLine plain label="Every other device" state={`${others().length} sign-ins`}>
+      <Button size="sm" variant="destructive" outline onClick={() => void endOthers()}>Sign out all others</Button>
+    </SettingLine></Show>
     <Show when={scripts()}><SettingLine plain label="Scripts" state={`${scripts()} short sessions`} title="Sessions scripts and probes made for themselves; each ends an hour after its last use." /></Show>
     <Show when={error()}><Note tone="error">{error()}</Note></Show>
   </Group>;

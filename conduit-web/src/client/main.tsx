@@ -180,7 +180,7 @@ applyTranscriptAppearance({
   userMessageCollapse: selectedUserMessageCollapse(),
 });
 
-type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "runtime" | "device" | "devices" | "workspaces" | "voice" | "search";
+type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "device" | "devices" | "workspaces" | "voice" | "search";
 /**
  * Idle says nothing and shows nothing. "ready" is a build installed and
  * waiting for a quiet moment, which is a state that can last minutes and has
