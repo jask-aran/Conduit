@@ -54,6 +54,11 @@ watching or taking over helps.
 7. **The hub arbitrates.** One holder of a screen's input at a time, the person or an agent; the person takes it by
    touching the pane. Each kind is a typed capability granted per device (the distributed plan's decision 7).
 
+8. **A device's screen moves only in sight.** An agent acts on the hub's browser whenever (it is the agents' own); on
+   a device's desktop or phone only while some client shows that screen, so a person can see it and take the input
+   back. Acting unseen is a grant, later: the per-device grants that workspaces have, widened to say which actions may
+   run headless, with the approval model scaled up to decide them.
+
 ## Kinds
 
 | View | What | Engine |
@@ -81,14 +86,10 @@ Findings behind the last two (source read 2026-11-10):
 - [x] 1. One MCP server, scoped calls, turn origin (`server/conduit-mcp.js`; `/v0/mcp/chat/<id>`; `UiControl.sentFrom`
   and `targetFor`). Left: an origin lasts until the chat's next send, so a routine's turn in a thread a person wrote in
   still has one; Codex's endpoint is the one added by hand, unscoped.
-- [ ] 2. Clients name their device.
+- [x] 2. Clients name their device. The desktop app already told the hub its companion's environments
+  (`RuntimeHub.locate`); `conduit_ui look` now says each client's device and `devices` marks the person's
+  (`person: true`). The name is the client's own word: it aims, it never grants. Left: the Android app has no node, so
+  a phone names none until `phone:<device>` gives it one; a browser tab names none.
 - [ ] 3. The screen contract, `browser:hub` moved onto it unchanged.
 - [ ] 4. `desktop:<device>`: the voxl spike on the Windows app, then the kind.
 - [ ] 5. `phone:<device>`: actions over adb, then a picture.
-
-## Open
-
-- When nobody has a device's screen open in any pane, may an agent still act on it (click on your PC's desktop, tap on
-  your phone)? It can be done either way: actions do not need the picture. Proposed: the hub's browser yes, as today
-  (it is the agents' own); a device's desktop or phone only while some client is showing that screen, so nothing moves
-  on a machine without a person able to see it and take the input back. A grant per device could lift that later.

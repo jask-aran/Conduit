@@ -14,7 +14,7 @@ export const UI_ARGS = /** @type {const} */ ({
 
 /** `by`: who does it, the hub from what clients told it, or the client it is sent to. */
 export const UI_ACTIONS = /** @type {const} */ ({
-  look: { agent: true, by: "hub", args: [], says: "each open Conduit tab or app (the one in use first) with its panes, what each shows and which has the keyboard" },
+  look: { agent: true, by: "hub", args: [], says: "each open Conduit tab or app (the one in use first), the device it is on where it says (a name the devices tool takes), with its panes, what each shows and which has the keyboard" },
   open: { agent: true, by: "client", args: ["view", "pane", "beside"], says: "show a view in a pane (pane: main or a number; default the one with the keyboard) or beside it (beside: true)" },
   close: { agent: true, by: "client", args: ["pane"], says: "empty a pane (pane required)" },
   focus: { agent: true, by: "client", args: ["pane"], says: "give a pane the keyboard" },

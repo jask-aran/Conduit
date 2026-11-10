@@ -700,7 +700,7 @@ registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await fi
 registerContextRoutes(app, { contextStore });
 registerClientReportRoutes(app, { dataRoot: config.dataRoot });
 // Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
-const uiControl = new UiControl({ runtimeHub });
+const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 // The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,

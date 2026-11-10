@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
+import { reachableDevices } from "./device-tools.js";
 import { agentUiActions, agentUiViews, declaredUiView, UI_ACTIONS, UI_ARGS } from "../ui-api.js";
 
 const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options) => Type.Boolean(options),
@@ -19,8 +20,9 @@ const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options
 const ANSWER_MS = 10_000;
 
 export class UiControl {
-  constructor({ runtimeHub }) {
+  constructor({ runtimeHub, nodeHub = null }) {
     this.hub = runtimeHub;
+    this.nodeHub = nodeHub;
     this.views = new Map();
     this.pending = new Map();
     this.origins = new Map();
@@ -36,7 +38,8 @@ export class UiControl {
    * The tab a chat's command goes to with none named: its origin, else a tab showing the chat, else the one in use.
    * A chat whose origin has closed is not left pointing at it.
    */
-  targetFor(chatId, tabs = this.look()) {
+  async targetFor(chatId, tabs = null) {
+    tabs ||= await this.look();
     const origin = chatId && this.origins.get(chatId);
     return (origin && tabs.find((tab) => tab.client === origin))
       || (chatId && tabs.find((tab) => tab.panes.some((pane) => pane.view === `chat:${chatId}`)))
@@ -56,21 +59,27 @@ export class UiControl {
     return true;
   }
 
-  /** Every open tab: its client (which device and app it is) and its panes, the one in use first. */
-  look() {
+  /**
+   * Every open tab: its client (which app it is, and the devices it says it is on: an installed app names its own
+   * companion's environments, runtime-hub.js locate) and its panes, the one in use first. A client's device is its
+   * own word: enough to aim at, never a grant, which a device gives itself.
+   */
+  async look() {
+    const named = new Map((await reachableDevices(this.nodeHub).catch(() => [])).map((device) => [device.nodeId, device.name]));
     const peers = new Map(this.hub.connections().map((peer) => [peer.id, peer]));
     for (const key of this.views.keys()) if (!peers.has(this.views.get(key).connection)) this.views.delete(key);
     return [...this.views.values()].sort((a, b) => rank(b) - rank(a)).map((view) => {
       const peer = peers.get(view.connection);
       return { client: view.client, app: peer.kind, platform: peer.platform || null, machine: peer.machine || null,
+        devices: (peer.nodes || []).map((node) => named.get(node)).filter(Boolean),
         inUse: view.focused, visible: view.visible, route: view.route, panes: view.panes };
     });
   }
 
   /** Send a command to a tab (`client`, or the calling chat's: targetFor) and wait for what came of it. */
   async command(command, client = null, chatId = null) {
-    const tabs = this.look();
-    const target = client ? tabs.find((tab) => tab.client === client) : this.targetFor(chatId, tabs);
+    const tabs = await this.look();
+    const target = client ? tabs.find((tab) => tab.client === client) : await this.targetFor(chatId, tabs);
     if (!target) throw Object.assign(new Error(client ? `No open Conduit tab ${client}` : "Conduit is not open anywhere right now"), { status: 409 });
     const id = randomBytes(6).toString("hex");
     const [connection, tab] = target.client.split("/");
@@ -104,7 +113,7 @@ const rank = (view) => (view.focused ? 2e13 : 0) + (view.visible ? 1e13 : 0) + v
 export function describeLook(tabs, yours = null) {
   if (!tabs.length) return "Conduit is not open anywhere right now.";
   return tabs.map((tab, index) => [
-    `${tab.client === yours ? "Yours (where the person is talking to you from; commands go here): " : ""}${index === 0 ? "In use: " : ""}${tab.client} (${[tab.app, tab.platform, tab.machine].filter(Boolean).join(", ")})${tab.inUse ? " has focus" : tab.visible ? " is in view" : " is in the background"}`,
+    `${tab.client === yours ? "Yours (where the person is talking to you from; commands go here): " : ""}${index === 0 ? "In use: " : ""}${tab.client} (${[tab.app, tab.platform, tab.machine].filter(Boolean).join(", ")})${tab.devices.length ? ` on device ${tab.devices.join(", ")}` : ""}${tab.inUse ? " has focus" : tab.visible ? " is in view" : " is in the background"}`,
     ...tab.panes.map((pane) => `  pane ${pane.pane}${pane.focused ? " (keyboard)" : ""}: ${pane.view ? `${pane.title} [${pane.view}]` : "empty"}`),
   ].join("\n")).join("\n");
 }
@@ -135,7 +144,7 @@ export function UiTool(runtime) {
       const chatId = await callingChat(runtime, api, context);
       if (!actions.includes(action)) return text(`Not an action: ${action}.`, true);
       if (view !== undefined && !declaredUiView(view, { agent: true })) return text(`Not a view you can open: ${view}. Views: ${agentUiViews()}.`, true);
-      if (action === "look") { const tabs = control.look(); return text(describeLook(tabs, chatId ? control.targetFor(chatId, tabs)?.client : null)); }
+      if (action === "look") { const tabs = await control.look(); return text(describeLook(tabs, chatId ? (await control.targetFor(chatId, tabs))?.client : null)); }
       try {
         const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null, chatId);
         return text(`${result} (${tab})`);

@@ -2,6 +2,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
 import { placeProcesses } from "../nodes/place-processes.js";
+import { callingChat } from "./conduit-mcp.js";
 
 /**
  * Tools that pick their device per call (plan decision 21): for a
@@ -14,15 +15,26 @@ import { placeProcesses } from "../nodes/place-processes.js";
  * The same tool names as the coding tools, so a conversation selects one
  * extension or the other, never both.
  */
+/** Every device's environments as agents name them: a device's name, with its environment's when it has several. */
+export async function reachableDevices(nodeHub) {
+  if (!nodeHub) return [];
+  return (await nodeHub.listDevices()).flatMap((device) => device.nodes.map((node) => ({
+    name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name,
+    local: Boolean(node.local), online: Boolean(node.online), nodeId: node.id, roots: node.roots || [] })));
+}
+
 export function DeviceTools(runtime, coding = CodingTools) {
   const devices = defineTool({
     name: "devices",
     description: "List the devices you can work on: each one's name, whether it is online, and the folders it shares "
-      + "(with what each allows). Pass a device's name and a folder to read, write, edit or bash to work there.",
+      + "(with what each allows). person: true marks the device the person is talking to you from, when their client is on one. Pass a device's name and a folder to read, write, edit or bash to work there.",
     parameters: Type.Object({}),
     replay: "safe",
-    execute: async () => {
+    execute: async (_args, api, context) => {
+      // The person's device: the one their client (this chat's origin, ui-control.js) says it is on.
+      const tab = runtime.uiControl ? await runtime.uiControl.targetFor(await callingChat(runtime, api, context)).catch(() => null) : null;
       const listed = (await runtime.reachable()).map((device) => ({ device: device.name, online: device.online, here: device.local,
+        ...(tab?.devices.includes(device.name) ? { person: true } : {}),
         folders: device.roots.map((root) => ({ folder: root.path || root.label, ...(root.label && root.path ? { label: root.label } : {}),
           read: root.read !== false, write: Boolean(root.write), shell: Boolean(root.shell) })) }));
       return { output: [{ type: "text", text: JSON.stringify(listed, null, 2) }] };

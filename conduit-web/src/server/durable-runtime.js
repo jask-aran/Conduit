@@ -9,7 +9,7 @@ import { SKILLS_INTRO } from "../context/context-store.js";
 import { keepWarmPolicy, requestGaps, survivedLifetime } from "./keep-warm.js";
 import { loadPiExtensionTools } from "./pi-extension-bridge.js";
 import { placeProcesses } from "../nodes/place-processes.js";
-import { DeviceTools, deviceEnv } from "./device-tools.js";
+import { DeviceTools, deviceEnv, reachableDevices } from "./device-tools.js";
 import { Handoff, Subagents } from "./subagents.js";
 import { UsageLedger } from "./usage-ledger.js";
 import { ConduitMcp } from "./conduit-mcp.js";
@@ -682,12 +682,7 @@ export class DurableRuntime {
    * environments (Windows and WSL, decision 25) is one entry per environment,
    * "Jask desktop · WSL", since each serves only its own folders.
    */
-  async reachable() {
-    if (!this.nodeHub) return [];
-    return (await this.nodeHub.listDevices()).flatMap((device) => device.nodes.map((node) => ({
-      name: device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name,
-      local: Boolean(node.local), online: Boolean(node.online), nodeId: node.id, roots: node.roots || [] })));
-  }
+  async reachable() { return reachableDevices(this.nodeHub); }
 
   envOn(conversationId, device, folder) { return deviceEnv(this, conversationId, device, folder); }
 
