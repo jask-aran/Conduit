@@ -1,6 +1,5 @@
 import { createEffect, createSignal, getOwner, onCleanup, onMount, runWithOwner, Show, type JSX } from "solid-js";
 import { Button, ChatBeside, ChatScroller, ChatView, ComposerDock, createTranscriptFollow, Icons, Ledge, RiderButton, rideBottom, Segmented, SheetFill, Tray } from "@/components/ui";
-import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentName, agentNeeds, agentView, dismissNotices, dismissableNotices, needsWanted, refreshAgent, takeNeedsWanted } from "../state/agent";
 import { JbotMessages, useJbotMessages } from "./jbot-messages";
 import { JbotDial, JbotPanelControl } from "./jbot-status";
@@ -24,7 +23,6 @@ export function JbotRoom(props: {
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void; needsMount?: () => HTMLElement | undefined }) => JSX.Element;
   /** The panel's ways on (JbotWays), in its head; done: the panel put away first, where it is over the chat. */
   panelActions?: (done: () => void) => JSX.Element;
-  markdownRenderer: MarkdownRendererId;
   composer?: JSX.Element;
   working?: boolean;
   /** The home thread's turn while it runs, as its Folded trace (JbotMessages live). */
@@ -156,7 +154,7 @@ export function JbotRoom(props: {
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} />
+            <JbotMessages messages={log.messages()} name={name()} working={props.working} live={props.live} sent={props.sent} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>

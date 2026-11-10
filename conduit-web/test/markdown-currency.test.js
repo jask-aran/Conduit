@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createIncremarkParser } from "@incremark/core";
-import { Marked } from "marked";
-import markedKatex from "marked-katex-extension";
 import { conduitMathPlugin } from "../src/client/chat/incremark-math-extension.ts";
 import { projectTableMathSource, promoteTableCellDisplayMath, restoreTableMathAst } from "../src/client/chat/table-math.ts";
 import { splitStreamingMarkdown } from "../src/client/chat/streaming-markdown.ts";
@@ -44,24 +42,15 @@ function incremarkMath(source) {
   return found;
 }
 
-function markedMath(source) {
-  const instance = new Marked();
-  instance.use(markedKatex({ throwOnError: false }));
-  const html = instance.parse(source);
-  return [...html.matchAll(/<annotation encoding="application\/x-tex">([\s\S]*?)<\/annotation>/g)].map((match) => match[1]);
-}
-
 test("currency prose is never parsed as math", () => {
   for (const source of CURRENCY_PROSE) {
     assert.deepEqual(incremarkMath(source), [], `incremark: ${source}`);
-    assert.deepEqual(markedMath(source), [], `marked: ${source}`);
   }
 });
 
-test("real formulas still parse as math in both renderers", () => {
+test("real formulas still parse as math", () => {
   for (const [source, expected] of REAL_MATH) {
     assert.deepEqual(incremarkMath(source), [expected], `incremark: ${source}`);
-    assert.deepEqual(markedMath(source), [expected], `marked: ${source}`);
   }
 });
 
@@ -75,8 +64,6 @@ test("formulas a real transcript left as raw TeX parse in incremark", () => {
 });
 
 test("tex delimiters still parse in incremark", () => {
-  // marked reaches \\(...\\) through its own texInlineKatex extension, which lives
-  // in marked-markdown.tsx rather than in marked-katex-extension.
   assert.deepEqual(incremarkMath("inline \\(a \\ne b\\) here"), ["a \\ne b"]);
 });
 

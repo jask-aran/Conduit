@@ -265,15 +265,12 @@ export function applyTranscriptAppearance(options: {
 }
 
 /**
- * Reactive view of the collapse preference for the JSX renderers.
+ * Reactive view of the collapse preference for the renderer.
  *
  * The signals are module-level singletons behind one listener. Code blocks
  * mount and unmount constantly while a message streams, and giving each card
  * its own window listener would churn subscriptions on the hot path for a
  * preference that changes only when someone opens Settings.
- *
- * The marked renderers emit HTML strings and cannot track this, so they read
- * the preference once at render time and rely on syncCodeBlockCollapse.
  */
 const [collapseMode, setCollapseMode] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
 const [collapseThreshold, setCollapseThreshold] = createSignal(selectedCodeBlockCollapseLines());

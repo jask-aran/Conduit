@@ -6,7 +6,6 @@ import { fakeAttachments, fakeChat } from "./fake-chat";
 import { seededModels, seededProfile } from "./seed";
 import { ChatHeader, Conversation } from "../client/chat/chat-screen";
 import { Transcript } from "../client/chat/transcript";
-import { selectedMarkdownRenderer } from "../client/chat/markdown-settings";
 
 /* The previews: the app's own chat screen over a seeded chat. */
 
@@ -22,7 +21,7 @@ export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
     <ChatHeader title="Lorem ipsum file" chat={chat} profile={profile.active()} panelOpen={false} mobileSidebarOpen={false}
       onToggleMobileSidebar={() => {}} onNewChat={() => {}} onOpenPalette={() => {}} onOpenSearch={() => {}} onTogglePanel={() => {}} onShare={() => {}} />
     <Conversation chat={chat}
-      transcript={<Transcript chat={chat} supports={() => true} markdownRenderer={selectedMarkdownRenderer()} profileLabel={profile.active().label} />}
+      transcript={<Transcript chat={chat} supports={() => true} profileLabel={profile.active().label} />}
       composer={<Composer chat={chat} attachments={attachments} models={models} profiles={profile.profiles} activeProfile={profile.active()} serverOnline voiceSettings={loadVoiceDictationSettings()}
         onChooseProfile={profile.choose} onOpenSettings={() => {}} onOpenAttachments={() => {}} />} />
   </Sheet>;

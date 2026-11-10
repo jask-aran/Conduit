@@ -14,8 +14,6 @@ export const UI_PREFERENCES = /** @type {const} */ ({
   sidebarChatLimit: { type: "integer", min: 5, max: 100 },
   collapsedProjectIds: { type: "strings", limit: 200 },
   sidebarCollapsed: { type: "boolean" },
-  // The retired renderer ids are absent: a stored one reads back unset, and the client draws with its default.
-  markdownRenderer: { type: "choice", values: ["incremark", "marked"] },
   meteorField: { type: "boolean" },
   // Reading-surface presets. Free pixel values are deliberately not accepted: the shell scales its geometry by
   // density and container width, so only a named preset stays correct across devices.

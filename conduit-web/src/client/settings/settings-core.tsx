@@ -16,7 +16,6 @@ import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
-import { MARKDOWN_RENDERER_OPTIONS, type MarkdownRendererId } from "../chat/markdown-settings";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { installedClientKind } from "../platform/installed-client";
 import { isPhoneVoice, shortcutFromKeyboardEvent } from "../chat/voice-dictation";
@@ -288,8 +287,6 @@ export function Settings(props: {
   projects: Project[];
   onDefaultTemplateChange: (id: string) => Promise<unknown>;
   onWorkspaceDefaultChange: (id: string, templateId: string | null) => Promise<Project>;
-  markdownRenderer: MarkdownRendererId;
-  onMarkdownRendererChange: (renderer: MarkdownRendererId) => void;
   meteorField: boolean;
   onMeteorFieldChange: (enabled: boolean) => void;
   transcriptWidth: TranscriptWidthMode;
@@ -1471,21 +1468,14 @@ export function Settings(props: {
                       <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
-                  <SettingLine label="Markdown">
-                    <Select id="markdown-renderer" aria-label="Markdown renderer" title={MARKDOWN_RENDERER_OPTIONS.find((option) => option.value === props.markdownRenderer)?.description} value={props.markdownRenderer} onChange={(event) => props.onMarkdownRendererChange(event.currentTarget.value as MarkdownRendererId)}>
-                      <For each={MARKDOWN_RENDERER_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                  <SettingLine label="Word fade">
+                    <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
+                      <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                     </Select>
                   </SettingLine>
-                  <Show when={props.markdownRenderer === "incremark"}>
-                    <SettingLine label="Word fade">
-                      <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
-                        <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                      </Select>
-                    </SettingLine>
-                    <SettingLine label="Fade formulas in when complete">
-                      <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
-                    </SettingLine>
-                  </Show>
+                  <SettingLine label="Fade formulas in when complete">
+                    <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
+                  </SettingLine>
               </Group>
               <Group title="Reasoning & tool use">
                   <SettingLine label="Work between texts" title={RUN_FORMS.find((option) => option.value === runForm())?.description}>

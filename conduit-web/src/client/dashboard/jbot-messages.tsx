@@ -13,7 +13,6 @@ import { buildTurnRows, type TurnTraceData } from "../turn-rows";
 import { applyTranscriptOps, type TranscriptOp } from "../../transcript-fold.js";
 import type { Message as ChatMessage, ToolItem } from "../api/contracts";
 import { agentView } from "../state/agent";
-import type { MarkdownRendererId } from "../chat/markdown-settings";
 
 /**
  * jbot's messages on its page (docs/plans/persistent-agent.md › Talking to the person): the message log's app room,
@@ -112,7 +111,7 @@ export function useJbotMessages(changed: () => unknown) {
   return { messages, loaded, refresh };
 }
 
-export function JbotMessages(props: { messages: LogMessage[]; renderer: MarkdownRendererId; name: string; working?: boolean;
+export function JbotMessages(props: { messages: LogMessage[]; name: string; working?: boolean;
   /** The home thread's turn while it runs (its Folded trace): what jbot is doing now. */
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
@@ -249,7 +248,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   // Every turn header keeps its orb, at rest once settled: the mark of jbot at work, wherever it worked.
   // One line, "jbot is …" or "jbot worked for …" and what it did: the work itself is the raw home thread, which it opens.
   const openHome = () => { const chat = agentView()?.home?.chatId; if (chat) openAgentChat(chat); };
-  const trace = (data: () => TurnTraceData, _message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} renderer={props.renderer} loadContext={loadContext} onOpen={openHome} /></Turn>;
+  const trace = (data: () => TurnTraceData, _message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} loadContext={loadContext} onOpen={openHome} /></Turn>;
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
     : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
@@ -281,7 +280,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   const feedbackField = (message: LogMessage) => <Show when={feedbackOn() === message.id}>
     <MessageFeedback note="For tonight's reflection" onSend={(text) => sendFeedback(message, text)} onCancel={() => setFeedbackOn(null)} />
   </Show>;
-  const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
+  const markdown = (text: string) => <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={false}>{text}</ChatMarkdown></Suspense></Answer>;
   // What jbot says while the chat is open fades in whole, as it arrives (a thread's answer fades in word by word); what
   // was there when it opened, and the person's own words (already drawn as sent), do not.
   const seen = new Set<string>();

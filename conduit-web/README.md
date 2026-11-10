@@ -184,15 +184,13 @@ when workspace creation opens.
 Settings → Workspaces stores global-profile inheritance or an explicit ordinary
 profile for each Workspace.
 
-Assistant messages pass through `src/client/chat/markdown.tsx`. Settings → UI
-exposes two selectable Markdown renderers: Incremark (the default) and Marked
-(the fallback).
+Assistant messages pass through `src/client/chat/markdown.tsx`, which draws
+them with Incremark, the one Markdown renderer.
 The renderer is lazy-loaded, strips remote images and unsafe URLs, requires
 confirmation for external links, and keeps user messages literal. Live deltas
-are coalesced into one Solid signal update per animation frame. The canonical
-Markdown document is parsed and sanitized, then reconciled into the existing
-DOM so semantic nodes remain stable while unfinished syntax takes shape and
-through durable checkpoint reconciliation. Tool calls use one generic
+are coalesced into one Solid signal update per animation frame. It streams
+block by block while unfinished syntax takes shape, then freezes a settled
+message so it is never re-rendered. Tool calls use one generic
 disclosure card with lifecycle status, deterministic summaries, lazy deferred
 results, and bounded previews; tools are data, not component registry keys.
 

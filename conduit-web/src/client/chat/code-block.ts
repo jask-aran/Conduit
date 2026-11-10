@@ -1,8 +1,6 @@
 /**
- * The code block's rules shared by both renderers: its language, its lines, when it folds. The block itself is the
- * library's CodeBlock (Incremark) or codeBlockHtml (marked).
+ * The code block's rules: its language, its lines, when it folds. The block itself is the library's CodeBlock.
  */
-import { codeBlockHtml, fillCodeBlocks, setCodeBlockOpen } from "@/components/ui/code";
 
 export const CODE_BLOCK_COLLAPSE_LINE_OPTIONS = [10, 15, 25, 50] as const;
 export const CODE_BLOCK_COLLAPSE_DEFAULT_LINES = 15;
@@ -70,29 +68,4 @@ export function shouldCollapseCodeBlock(
 export function codeBlockFold(lines: number, mode: CodeBlockCollapseMode, threshold: number) {
   if (!shouldCollapseCodeBlock(lines, mode, threshold)) return undefined;
   return mode === "all" ? Math.min(threshold, lines - 1) : threshold;
-}
-
-/**
- * Re-apply the collapse preference to the marked renderers' blocks (codeBlockHtml), which cannot track it.
- *
- * Emitters decide collapse at render time, so this only runs when the user
- * changes the setting -- exactly when a live update is wanted, and never on the
- * streaming path. Incremark's blocks track the preference themselves.
- */
-export function syncCodeBlockCollapse(root: ParentNode, mode: CodeBlockCollapseMode, threshold: number) {
-  for (const block of root.querySelectorAll<HTMLElement>(".ui-code[data-language]:not([data-streaming])")) {
-    const lines = Number(block.dataset.lines) || 0;
-    const shell = document.createElement("template");
-    shell.innerHTML = codeBlockHtml({ lang: block.dataset.language, code: "", lines, fold: codeBlockFold(lines, mode, threshold) });
-    const fresh = shell.content.firstElementChild as HTMLElement;
-    fillCodeBlocks(fresh.parentNode!);
-    block.querySelector(":scope > figcaption")?.replaceWith(fresh.querySelector(":scope > figcaption")!);
-    block.querySelector(":scope > .ui-show-more")?.remove();
-    const more = fresh.querySelector(":scope > .ui-show-more");
-    if (more) block.append(more);
-    block.setAttribute("style", fresh.getAttribute("style") ?? "");
-    // A block the user opened by hand stays open; the preference sets the default, it does not re-close it.
-    block.toggleAttribute("data-folded", fresh.hasAttribute("data-folded"));
-    if (more && block.hasAttribute("data-user-open")) setCodeBlockOpen(block, true);
-  }
 }

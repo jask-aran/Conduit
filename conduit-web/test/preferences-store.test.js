@@ -37,7 +37,6 @@ test("preferences store persists general settings", async () => {
     sidebarChatLimit: 45,
     collapsedProjectIds: ["project:one"],
     sidebarCollapsed: true,
-    markdownRenderer: "incremark",
     meteorField: false,
     transcriptWidth: "wide",
     transcriptWideBlocks: "wider",

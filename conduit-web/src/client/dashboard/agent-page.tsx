@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, Suspense, type JSX, untrack } from "solid-js";
 import { Portal } from "solid-js/web";
 import { ChatMarkdown } from "../chat/lazy-markdown";
-import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { AgentAvatar, Answer, ApprovalCard, approvalLineText, type ApprovalChoice, Empty, Expand, Dashboard, ClockRow, DayStrip, Icons, LevelMark, levelWord, ServiceIcon, StatusDot, type ClockKind, type DayMark, Note, IconButton } from "@/components/ui";
 import { capitalised } from "../chat/turn-trace";
 import { Button, Spinner, TextArea } from "@/components/ui/controls";
@@ -68,8 +67,6 @@ export function AgentPage(props: {
   panelTop?: JSX.Element;
   /** In the panel: Needs you drawn here, not at the panel's top (a card over the Ledge, a phone's own sheet). */
   needsMount?: () => HTMLElement | undefined;
-  /** How a preview's report is drawn (the chat's markdown renderer). */
-  markdownRenderer?: MarkdownRendererId;
   /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
   onNeed?: (width: number) => void;
   /** The page's header in its pane, titled with the agent's name. */
@@ -157,7 +154,7 @@ export function AgentPage(props: {
         <GlanceHead title={shown.title} facts={[shown.context]} />
         {/* Keyed: the headline first, then the file's whole text once read, each drawn afresh. */}
         <Show when={text()} keyed fallback={<Empty kind="glance">It reported nothing.</Empty>}>{(shownText) =>
-          <GlanceBody><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.markdownRenderer} streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></GlanceBody>}
+          <GlanceBody><Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={false}>{shownText}</ChatMarkdown></Suspense></Answer></GlanceBody>}
         </Show>
       </Glance>
     </DashPeek>;

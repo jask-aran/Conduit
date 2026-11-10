@@ -6,7 +6,6 @@ import { createChatSession } from "../client/state/chat-session";
 import { createDrafts } from "../client/state/drafts";
 import { createRuntimeStore } from "../client/state/runtime";
 import { ChatScreen } from "./stories";
-import { isIncremarkRenderer, selectedMarkdownRenderer } from "../client/chat/markdown-settings";
 
 /*
  * The phone preview on a real chat: the app's own chat store, socket and all, against the server the gallery
@@ -16,7 +15,7 @@ import { isIncremarkRenderer, selectedMarkdownRenderer } from "../client/chat/ma
 export function LiveChatScreen(props: { chatId: string }) {
   // The renderer loaded at once, as the app does opening a chat (main.tsx), so a first line is not drawn while it loads.
   void import("../client/chat/markdown").catch(() => {});
-  void (isIncremarkRenderer(selectedMarkdownRenderer()) ? import("../client/chat/incremark-markdown") : import("../client/chat/marked-markdown")).catch(() => {});
+  void import("../client/chat/incremark-markdown").catch(() => {});
   const catalogue = createCatalogueStore();
   const session = createChatSession({
     catalogue, selectedChat: () => catalogue.selected()?.chat, projects: catalogue.projects, runtime: createRuntimeStore(), drafts: createDrafts(console.error),

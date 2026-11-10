@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { createRoot, For, Show, type JSX } from "solid-js";
+import { For, Show, type JSX } from "solid-js";
 
 import { Button, ShowMore } from "./controls";
 import { CODE_BLOCK } from "./shared";
@@ -35,35 +35,3 @@ export function CodeBlock(props: { lang?: string; code?: string; lines?: number;
   </figure>;
 }
 
-const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-/** The CodeBlock as an HTML string: controls marked for one delegated listener (data-copy-code, data-expand-code),
- *  which folds it with setCodeBlockOpen. A sanitizer keeps no SVG, so fillCodeBlocks adds the icons after parsing. */
-export function codeBlockHtml(props: { lang?: string; code: string; lines: number; fold?: number; streaming?: boolean }) {
-  const folds = props.fold != null && props.lines > props.fold;
-  const lang = escape(props.lang ?? "text");
-  return `<figure class="ui-code" data-language="${lang}" data-lines="${props.lines}"${folds ? " data-folded" : ""}${props.streaming ? " data-streaming" : ""}`
-    + ` style="--code-digits: ${String(props.lines).length}${folds ? `; --code-fold: ${props.fold}` : ""}">`
-    + `<figcaption><span class="ui-code-lang">${lang}</span>`
-    + `<button type="button" data-slot="button" class="ui-button ui-copy" data-variant="ghost" data-size="icon-xs" aria-label="Copy code" data-copy-code></button>`
-    + (folds ? `<button type="button" data-slot="button" class="ui-button ui-code-toggle" data-variant="ghost" data-size="icon-xs" aria-label="Expand code" aria-expanded="false" data-expand-code></button>` : "")
-    + `</figcaption><pre><code>${(props.code.endsWith("\n") ? props.code.slice(0, -1) : props.code).split("\n").map((line) => `<span class="${CODE_BLOCK.line}">${escape(line)}</span>`).join("")}</code></pre>`
-    + (folds ? `<button type="button" class="ui-show-more" data-bar aria-expanded="false" data-expand-code>${moreLabel(props.lines - props.fold!)}</button>` : "")
-    + "</figure>";
-}
-let icons: { copy: Node; check: Node; chevron: Node } | undefined;
-/** Put the icons into the controls of every codeBlockHtml block under root that has none yet. */
-export function fillCodeBlocks(root: ParentNode) {
-  icons ??= createRoot((dispose) => { const made = { copy: <Icons.Copy class="ui-copy-idle" /> as Node, check: <Icons.Check class="ui-copy-done" /> as Node, chevron: <Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /> as Node }; dispose(); return made; });
-  for (const button of root.querySelectorAll(".ui-code > figcaption > .ui-copy:empty")) button.append(icons.copy.cloneNode(true), icons.check.cloneNode(true));
-  for (const button of root.querySelectorAll(".ui-code > figcaption > .ui-code-toggle:empty")) button.append(icons.chevron.cloneNode(true));
-}
-/** Open or fold a codeBlockHtml block, its chevron and foot saying so. */
-export function setCodeBlockOpen(block: HTMLElement, open: boolean) {
-  const fold = Number(block.style.getPropertyValue("--code-fold"));
-  block.toggleAttribute("data-folded", !open);
-  block.querySelector(".ui-code-toggle")?.setAttribute("aria-expanded", String(open));
-  block.querySelector(".ui-code-toggle")?.setAttribute("aria-label", open ? "Collapse code" : "Expand code");
-  const more = block.querySelector(":scope > .ui-show-more");
-  more?.setAttribute("aria-expanded", String(open));
-  if (more) more.textContent = open ? "Show less" : moreLabel((Number(block.dataset.lines) || 0) - fold);
-}

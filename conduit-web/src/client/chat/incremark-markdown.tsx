@@ -458,10 +458,8 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   // The citation test walks the link's inline children. It is read from four
   // attribute positions below, so it is computed once rather than per read.
   const labelText = createMemo(() => inlineText(node()?.children || []));
-  // Same rule as the string renderers: a link whose visible text is its own URL
-  // is a citation and shows its host; anything the model gave a real label to
-  // renders untouched. Keeping the test in one shared helper is what stops the
-  // renderers drifting apart on it.
+  // A link whose visible text is its own URL is a citation and shows its host;
+  // anything the model gave a real label to renders untouched (citationHost).
   const host = createMemo(() => {
     const resolved = target();
     return resolved ? citationHost(resolved.href, labelText()) : null;

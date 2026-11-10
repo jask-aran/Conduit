@@ -10,7 +10,6 @@ import { Dynamic } from "solid-js/web";
 import { ORBITS_TRAILED, PLAIN_SPHERE, SPUTTERING_SPHERE } from "./orb-frames";
 import { type ModeFrame, type OrbState, settledOrbRate } from "./thinking-orb";
 import { extendsText } from "./streaming-markdown";
-import type { MarkdownRendererId } from "./markdown-settings";
 import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 import { digestDoing, digestDone } from "./turn-digest";
@@ -21,7 +20,7 @@ export type ContextText = { kind: string; sections: { name: string; text: string
 type RowProps = {
   loadContext?: (entryId: number) => Promise<ContextText>;
   onRendered?: () => void;
-  renderer?: MarkdownRendererId;
+ 
   profileLabel?: string;
   toolOpen?: (id: string) => boolean;
   onToolOpenChange?: (id: string, open: boolean) => void;
@@ -342,8 +341,8 @@ function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpe
 }
 /* Built once, its text growing in place: passed as a prop's expression it was built again on every read of the prop,
    a fresh renderer (and its link dialog) for each delta of a thought, twice. */
-const inline = (props: Pick<RowProps, "renderer">, text: () => string) =>
-  <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "\u2026"}</ChatMarkdown></Suspense>;
+const inline = (text: () => string) =>
+  <Suspense fallback={text()}><ChatMarkdown inline>{text() || "\u2026"}</ChatMarkdown></Suspense>;
 /* A context piece by the name its block has in Settings › Blocks. */
 const SECTION_LABELS: Record<string, string> = { instructions: "system prompt", cwd: "working folder", web: "web tools", codemode: "codemode tools", "agent-memory": "the agent's files", "agent-inbox": "waiting inbox" };
 const sectionLabel = (name: string) => SECTION_LABELS[name] ?? name.replace(/[-_]+/g, " ");
@@ -411,20 +410,20 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
       const sections = createMemo(() => sectionsOf(segment().text) ?? []);
       return <Index each={sections()}>{(section, index) => {
         const fold = useFold(() => `${segment().id}:${index}`, props);
-        return <Step icon={<Icons.Thinking />} summary={inline(props, () => section().heading)} discarded={segment().discarded} motion={motion()} opens={Boolean(section().body)} open={fold.open()} onToggle={fold.toggle} find={() => `${section().heading}\n${section().body}`}>
-          <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{section().body}</ChatMarkdown></Suspense></StepProse>
+        return <Step icon={<Icons.Thinking />} summary={inline(() => section().heading)} discarded={segment().discarded} motion={motion()} opens={Boolean(section().body)} open={fold.open()} onToggle={fold.toggle} find={() => `${section().heading}\n${section().body}`}>
+          <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} onRendered={props.onRendered}>{section().body}</ChatMarkdown></Suspense></StepProse>
         </Step>;
       }}</Index>;
     }}</Match>
     <Match when={props.item.type === "text" && props.item}>{(item) => {
       const segment = () => item().segment, fold = useFold(() => segment().id, props);
-      const summary = inline(props, () => summaryOf(segment().text));
+      const summary = inline(() => summaryOf(segment().text));
       const thought = createMemo(() => segment().kind === "thinking");
       // A reasoning summary that is only its heading has nothing more to open to.
       const bare = (text: string) => text.replace(/[*_#`]/g, "").replace(/\s+/g, " ").trim();
       const more = createMemo(() => bare(segment().text) !== bare(summaryOf(segment().text)));
       return <Step icon={thought() ? <Icons.Thinking /> : <Icons.Message />} summary={summary} discarded={segment().discarded} motion={motion()} opens={more()} open={fold.open()} onToggle={fold.toggle} find={() => segment().text}>
-        <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} renderer={props.renderer} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
+        <StepProse><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={Boolean(segment().live)} onRendered={props.onRendered}>{segment().text}</ChatMarkdown></Suspense></StepProse>
       </Step>;
     }}</Match>
     <Match when={props.item.type === "error" && props.item}>{(item) => <LibraryTraceError time={fullDateTime(item().message.timestamp) || undefined}
@@ -448,12 +447,10 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
 const LATEST_CHARS = 240;
 /** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
 /** agents: the chat's (its background ones' state); onStopAgent: stops a background one. */
-export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; renderer?: MarkdownRendererId; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number;
+export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number;
   /** One line that goes to the work instead of opening to it (jbot's chat: to the raw home thread): no latest line, no
    *  trail, no agents under it. */
   onOpen?: () => void;
-  /** Whether this trace carries its turn's orb; a narrated turn gives its one orb to one row (turn-rows.ts). */
-  orb?: boolean;
   /** A Narrated turn's work between texts (a run), no orb (Folded's alone has one). */
   narrated?: boolean;
   /** Narrated, how the run is drawn (Settings: Work between texts): its steps (the trail's own lines), its run header
@@ -480,7 +477,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
   // text, replaced each delta, was laid out and painted every frame for the few words it shows.
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
-  const thinking = <Suspense fallback={text()}><ChatMarkdown inline renderer={props.renderer}>{text() || "…"}</ChatMarkdown></Suspense>;
+  const thinking = <Suspense fallback={text()}><ChatMarkdown inline>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
   // Narrated, a run of work between texts is its trail's own lines -- each step its icon, verb, subject and time, as
   // the Folded disclosure lists them -- with no header over them: the text either side says why (DESIGN.md, Turns).
@@ -505,7 +502,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
   const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
   // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
   if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
-      <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>}>
+      <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>}>
     <Switch>
       <Match when={form() === "hidden"}>{props.turn ? null : agentsRow()}</Match>
       <Match when={form() === "header"}>
@@ -516,22 +513,22 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
           opens={Boolean(props.opens) && trail().length > 0} open={open()} onToggle={() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); }}
           find={() => trail().map(trailText).join("\n")}>
           <Trail><Index each={trail()}>{(item) =>
-            <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+            <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
         </Trace>
       </Match>
       <Match when={true}>
         {agentsRow()}
         <Trail><Index each={trail()}>{(item) =>
-          <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+          <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
       </Match>
     </Switch>
   </Show>;
   return <Show when={!single() && !onlyContext()} fallback={<>
       <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />
       <Trail><Index each={trail()}>{(item) =>
-        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
+        <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>
     </>}>
-    <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={props.orb === false || narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
+    <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={narrated() ? undefined : <Orb state={preview().status.orb} frame={preview().status.frame} tint={unfinished() ? "var(--destructive)" : undefined} rate={props.trace.active ? undefined : settledOrbRate(unfinished())} />}
       status={settledRun() ? capital(preview().work) || "Thought" : acting() ? actorStatus() : preview().status.verb}
       time={acting() && !props.trace.active && !unfinished() && !done() ? undefined : time() || undefined}
       work={acting() ? (unfinished() && done() ? done() : undefined) : settledRun() ? undefined : preview().work || undefined}
@@ -540,7 +537,7 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
       opens={!props.onOpen && trail().length > 0} open={open()} goes={Boolean(props.onOpen)} onToggle={props.onOpen ?? (() => { const next = !open(); setOpen(next); props.onOpenChange?.(next); })}
       find={() => trail().map(trailText).join("\n")}>
       {(() => { opened = trail().length; return <Trail><Index each={trail()}>{(item, index) =>
-        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} renderer={props.renderer} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
+        <TrailLine item={item()} arriving={index >= opened} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>; })()}
     </Trace></Show>;
 }
 

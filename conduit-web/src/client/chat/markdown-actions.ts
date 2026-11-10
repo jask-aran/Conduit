@@ -1,8 +1,5 @@
 import { createSignal } from "solid-js";
-import { setCodeBlockOpen } from "@/components/ui/code";
 import { COPY_FEEDBACK_MS } from "@/components/ui/motion";
-import { publishCodeBlockToggle } from "./code-block";
-import { codeElementText } from "./code-highlight";
 
 export function createExternalLinkController() {
   const [url, setUrl] = createSignal<string | null>(null);
@@ -61,37 +58,4 @@ export async function copyWithFeedback(
     window.setTimeout(() => { if (trigger.isConnected && label != null) trigger.setAttribute("aria-label", label); }, COPY_FEEDBACK_MS);
   }
   return true;
-}
-
-export async function handleMarkdownClick(
-  event: MouseEvent,
-  root: HTMLElement,
-  requestExternalLink: (url: string, trigger?: HTMLElement) => void,
-) {
-  const eventTarget = event.target;
-  if (!(eventTarget instanceof Element)) return;
-  const target = eventTarget.closest<HTMLElement>("[data-copy-code], [data-expand-code], [data-external-url]");
-  if (!target || !root.contains(target)) return;
-  if (target.hasAttribute("data-copy-code")) {
-    const card = target.closest<HTMLElement>(".ui-code");
-    const code = card?.querySelector("pre > code");
-    await copyWithFeedback(code ? codeElementText(code) : "", target, card);
-    return;
-  }
-  // Collapse is a pure attribute flip on the card, so it costs no re-render and
-  // survives a settled message being frozen by Incremark Advanced. Both the
-  // pinned header toggle and the footer button carry data-expand-code, so this
-  // one branch serves either.
-  if (target.hasAttribute("data-expand-code")) {
-    const card = target.closest<HTMLElement>(".ui-code");
-    if (!card) return;
-    const previousTop = card.getBoundingClientRect().top;
-    const open = card.hasAttribute("data-folded");
-    setCodeBlockOpen(card, open);
-    card.toggleAttribute("data-user-open", open);
-    publishCodeBlockToggle(card, previousTop);
-    return;
-  }
-  const url = target.dataset.externalUrl;
-  if (url) requestExternalLink(url, target);
 }

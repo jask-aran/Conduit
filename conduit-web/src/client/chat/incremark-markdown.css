@@ -1,6 +1,6 @@
 /* The Answer gives its Markdown a definite width (a Turn is a grid), so an
    inline-size-contained Incremark root cannot collapse it. Only that root is
-   isolated; an inline preview and the Marked renderer never match these. */
+   isolated; an inline preview never matches these. */
 .chat-markdown[data-renderer="incremark"]:not([data-inline]),
 .chat-markdown[data-renderer="incremark"]:not([data-inline]) > .incremark {
   width: 100%;

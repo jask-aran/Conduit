@@ -63,13 +63,6 @@ import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
-import {
-  MARKDOWN_RENDERER_STORAGE_KEY,
-  saveMarkdownRenderer,
-  isIncremarkRenderer,
-  selectedMarkdownRenderer,
-  type MarkdownRendererId,
-} from "./chat/markdown-settings";
 import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
 import { listAudioInputDevices, onMicrophoneOpened, rememberMicrophones } from "./chat/voice-audio";
 import { installedClientKind } from "./platform/installed-client";
@@ -671,7 +664,6 @@ function App() {
   onMount(reconcileMicrophones);
   onCleanup(onMicrophoneOpened(reconcileMicrophones));
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
-  const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
   // One shower behind every pane that shows a chat or a page (each Sheet's backdrop is a window onto it).
   const meteors = createMeteorField();
@@ -800,7 +792,7 @@ function App() {
   // after the transcript itself had arrived. Asked for now, all at once.
   if (initialRouteId) {
     void import("./chat/markdown").catch(() => {});
-    void (isIncremarkRenderer(selectedMarkdownRenderer()) ? import("./chat/incremark-markdown") : import("./chat/marked-markdown")).catch(() => {});
+    void import("./chat/incremark-markdown").catch(() => {});
   }
   const initialProjectRouteId = pathProjectId();
   const initialTerminalRoute = location.pathname === "/terminal";
@@ -2647,7 +2639,6 @@ function App() {
     floatSettingsWired = true;
     onFloatOpensSettings((section) => openSettings(section));
   });
-  const switchMarkdownRenderer = (next: MarkdownRendererId) => setMarkdownRenderer(saveMarkdownRenderer(next));
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
     localStorage.setItem(METEOR_FIELD_STORAGE_KEY, String(enabled));
@@ -5495,7 +5486,6 @@ function App() {
       sidebarChatLimit: selectedSidebarChatLimit(),
       collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
       sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
-      markdownRenderer: selectedMarkdownRenderer(),
       meteorField: selectedMeteorField(),
       transcriptWidth: selectedTranscriptWidth(),
       transcriptWideBlocks: selectedTranscriptWideBlocks(),
@@ -5519,7 +5509,6 @@ function App() {
       sidebarChatLimit: SIDEBAR_CHAT_LIMIT_STORAGE_KEY,
       collapsedProjectIds: "conduit.sidebar.collapsed-projects",
       sidebarCollapsed: "conduit.sidebar",
-      markdownRenderer: MARKDOWN_RENDERER_STORAGE_KEY,
       meteorField: METEOR_FIELD_STORAGE_KEY,
       transcriptWidth: TRANSCRIPT_WIDTH_STORAGE_KEY,
       transcriptWideBlocks: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
@@ -5532,9 +5521,8 @@ function App() {
       chatSort: CHAT_SORT_STORAGE_KEY,
     };
     // A URL override is a deliberate per-tab experiment, and server preferences
-    // arrive after first paint. Applying one here silently undid the override,
-    // which is why only markdownRenderer used to survive a reload with a query
-    // string on it. Storage still mirrors the server; only the applied value is
+    // arrive after first paint. Applying one here would silently undo the
+    // override. Storage still mirrors the server; only the applied value is
     // held back.
     const overrideParams = new URLSearchParams(location.search);
     const overridden = (key: UiPreferenceKey) => overrideParams.has(key);
@@ -5557,7 +5545,6 @@ function App() {
       if (storageKey) localStorage.setItem(storageKey, stored);
       if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
       else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
-      else if (key === "markdownRenderer" && typeof value === "string" && !overridden(key)) setMarkdownRenderer(value as MarkdownRendererId);
       else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
       else if (key === "transcriptWidth" && isTranscriptWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ width: value });
       else if (key === "transcriptWideBlocks" && isTranscriptWideBlocksMode(value) && !overridden(key)) applyTranscriptAppearance({ wideBlocks: value });
@@ -6116,9 +6103,8 @@ function App() {
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
       presentation={tool ? "narrow" : docked() ? "phone" : undefined}
       panelActions={(done) => <JbotWays onOpenSettings={() => openSettings("agent")} onDone={done} />}
-      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} markdownRenderer={markdownRenderer()} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done} needsMount={state.needsMount}
+      panel={(state) => <JbotPanel tab={state.tab} onTab={state.onTab} onOpenChat={openAgentChatFromPage} onOpenFile={openFile} onOpenSettings={() => openSettings("agent")} onDone={state.done} needsMount={state.needsMount}
         onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined} />}
-      markdownRenderer={markdownRenderer()}
       working={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming()}
       live={current.chat.loadedId() === agentView()?.home?.chatId && current.chat.streaming() ? liveTrace(current.chat.messages(), current.chat.tools(), current.chat.activeGeneration()) : null}
       sent={(() => {
@@ -6244,7 +6230,7 @@ function App() {
       <ChatHeader project={props.project} onOpenPlace={openPlace} parent={subagent() ? parent() : undefined} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
-        transcript={<Transcript readOnly={subagent()} chat={surfaceChat} supports={current.capability} markdownRenderer={markdownRenderer()} agentThread={agentThread(surfaceChat.loadedId())} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} narration="show" approvals={approvalsFor(surfaceChat.loadedId())} />}
+        transcript={<Transcript readOnly={subagent()} chat={surfaceChat} supports={current.capability} agentThread={agentThread(surfaceChat.loadedId())} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} approvals={approvalsFor(surfaceChat.loadedId())} />}
         composer={<Show when={!subagent()} fallback={<SubagentNote parent={parent().title} onOpenParent={parent().open} />}><Composer shortcuts={shortcutManager} chat={surfaceChat} opening={props.opening} place={props.place} supports={current.capability} attachments={current.attachments} attachmentsSupported={current.capability("attachments", true)} models={current.models} permissions={current.capability("permissionModes") ? current.permissions : undefined} serviceLevels={current.manifest()?.serviceLevels?.length ? current.serviceLevels : undefined} profiles={agentThread(current.chat.loadedId()) ? [] : profilesAt(props.place?.current)} activeProfile={current.activeProfile()} onOpenModelSelector={props.modelSelector ? openModelSelector : undefined} modelSelectorShortcut={props.modelSelector ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} keyboardOwner={props.keyboardOwner} onChooseProfile={(id) => void current.switchProfile(id).catch(showError)} onOpenSettings={openSettings} onOpenAttachments={current.openAttachments} /></Show>} />
     </>;
   };
@@ -6437,7 +6423,7 @@ function App() {
               {/* The same conversation a chat page has; only moving it to another
                   place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
-                transcript={<Transcript chat={chat} supports={chatCapability} markdownRenderer={markdownRenderer()} agentThread={agentThread(chat.loadedId())} profileLabel={label()} projectId={catalogue.projectId()} narration="show" approvals={approvalsFor(chat.loadedId())} />}
+                transcript={<Transcript chat={chat} supports={chatCapability} agentThread={agentThread(chat.loadedId())} profileLabel={label()} projectId={catalogue.projectId()} approvals={approvalsFor(chat.loadedId())} />}
                 composer={<Composer shortcuts={shortcutManager} chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} />} />
             </>;
           }}</Show>
@@ -6498,7 +6484,7 @@ function App() {
     <LeaderPalette shortcuts={shortcutManager} />
     <KeyboardTour shortcuts={shortcutManager} env={tourEnv} />
     <Show when={settingsLoaded()}>
-      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} markdownRenderer={markdownRenderer()} onMarkdownRendererChange={switchMarkdownRenderer} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} onOpenDeviceTerminal={(node) => void openDeviceTerminal(node)} onOpenDeviceBrowser={(nodeId) => { setSettingsOpen(false); void openBeside(`browser:${nodeId}`, true); }} onOpenWorkspace={(project) => { setSettingsOpen(false); void openProjectHere(project); }} shortcuts={shortcutManager} />
+      <Settings open={settingsOpen()} initialSection={settingsSection()} sectionWasNamed={settingsNamedSection()} initialWorkspaceId={settingsWorkspaceId()} onOpenChange={setSettingsOpen} models={models} templates={templates()} templatesLoading={templatesLoading()} defaultTemplateId={defaultTemplateId()} projects={catalogue.projects()} onDefaultTemplateChange={saveDefaultTemplate} onWorkspaceDefaultChange={saveWorkspaceDefault} meteorField={meteorField()} onMeteorFieldChange={switchMeteorField} voiceSettings={voiceSettings()} onVoiceSettingsSave={updateVoiceSettings} sidebarChatLimit={sidebarChatLimit()} onSidebarChatLimitChange={switchSidebarChatLimit} onOpenModelSelector={openModelSelector} onAddWorkspace={addProject} onOpenDeviceTerminal={(node) => void openDeviceTerminal(node)} onOpenDeviceBrowser={(nodeId) => { setSettingsOpen(false); void openBeside(`browser:${nodeId}`, true); }} onOpenWorkspace={(project) => { setSettingsOpen(false); void openProjectHere(project); }} shortcuts={shortcutManager} />
     </Show>
   </>;
 }

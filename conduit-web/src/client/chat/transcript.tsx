@@ -13,14 +13,12 @@ import { parseReviewComments } from "./review-comments";
 import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
 import { jumpToSpawn, openAgentChat, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
-import { isAgentReport, isRun, type Narration, type TurnRow, type TurnTraceData } from "../turn-rows";
+import { isAgentReport, isRun, type TurnRow, type TurnTraceData } from "../turn-rows";
 import { runForm } from "../preferences/run-form";
 import { motionOf } from "@/components/ui/shared";
-import type { MarkdownRendererId } from "./markdown-settings";
-import { isIncremarkRenderer, selectedMarkdownRenderer } from "./markdown-settings";
 import { UI_PREFERENCE_CHANGE_EVENT } from "../preferences/ui-preferences";
 import { copyWithFeedback } from "./markdown-actions";
-import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle, syncCodeBlockCollapse } from "./code-block";
+import { CODE_BLOCK_TOGGLE_EVENT, publishCodeBlockToggle } from "./code-block";
 import { highlightCodeBlocks } from "./code-highlight";
 import {
   selectedCodeBlockCollapse,
@@ -162,11 +160,11 @@ const approvalMeta = (text: string) => {
   return [body.startsWith("Allowed") ? "an approval allowed" : body.startsWith("Not allowed") ? "an approval declined" : "an approval", ask].filter(Boolean).join(" · ");
 };
 /** Text in a message in or out: the answer's Markdown, settled (it arrives whole). */
-function ChatText(props: { text: string; renderer: MarkdownRendererId }) {
-  return <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown renderer={props.renderer} streaming={false}>{props.text}</ChatMarkdown></Suspense></Answer>;
+function ChatText(props: { text: string }) {
+  return <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={false}>{props.text}</ChatMarkdown></Suspense></Answer>;
 }
 /** What the turn sent the person (a `message` tool): a notification as it reached their devices. */
-function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
+function SentRow(props: { tool: ToolItem }) {
   const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown; notify?: unknown };
   // `message` writes to the message log (the app room), reaching the phone only when it asks; `notify` is the phone.
   const message = () => props.tool.name === "message";
@@ -177,7 +175,7 @@ function SentRow(props: { tool: ToolItem; renderer: MarkdownRendererId }) {
   return <Outbound shut icon={message() && !pushed() ? <Icons.Chat aria-hidden="true" /> : <Icons.Notification aria-hidden="true" />}
     from={message() ? (typeof input().title === "string" ? "Report" : "Message") : "Notification"} meta={[state(), urgent() && "urgent"].filter(Boolean).join(" · ")}
     time={clock(props.tool.completedAt || props.tool.timestamp)} dateTime={props.tool.completedAt || props.tool.timestamp} title={props.tool.timestamp ? fullDateTime(props.tool.timestamp) : undefined}>
-    <ChatText renderer={props.renderer} text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
+    <ChatText text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
   </Outbound>;
 }
 /* Waits for how long, as the card's meta: "23 h", "40 min". */
@@ -189,16 +187,12 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
     onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
 }
 
-export function Transcript(props: { /** Nothing here is the person's to change (a subagent's thread). */ readOnly?: boolean; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; markdownRenderer: MarkdownRendererId; profileLabel?: string; projectId?: string;
+export function Transcript(props: { /** Nothing here is the person's to change (a subagent's thread). */ readOnly?: boolean; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; profileLabel?: string; projectId?: string;
   /** One of jbot's threads: always there, so an empty one is said to be empty, never welcomed as a new chat. */
   agentThread?: boolean;
-  /** What it does with text said between tool calls (turn-rows.ts `TurnLayout`): `fold` (chats, the default) into the
-   *  turn's trace, `show` (the persistent agent's threads) where it was written, with the work between as traces. */
-  narration?: Narration;
   /** The thread's approvals waiting on the person or lately answered (async: the agent carried on): each drawn under
    *  the work that asked (its call, or the script it was called from), one not found there at the thread's foot. */
   approvals?: { asks: () => TranscriptAsk[]; answer: (id: string, choice: ApprovalChoice) => Promise<void>; refresh: () => void } }) {
-  const narrated = () => props.narration === "show";
   // The keyboard (transcript-cursor.ts, transcript-find.ts): each row's actions for its menu, the menu open on a row,
   // and the find. readerScroll moves the view as the reader's own scroll (set once the scroll handling is mounted).
   const turnActions = new WeakMap<HTMLElement, () => TurnAction[]>();
@@ -299,13 +293,12 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   ));
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
-  let previousMarkdownRenderer = props.markdownRenderer;
   // The follow (the library's createTranscriptFollow): held at the latest while the reader is there, the typewriter's
   // spring carrying it down with live output; the transcript adds its history paging (onStep) and holds it while its
   // virtualizer or a panel reflow moves the content.
   const follow = createTranscriptFollow({
     viewport: () => viewport,
-    spring: () => rendererUsesTypewriter(),
+    spring: () => true,
     live: () => liveTail(),
     empty: () => empty(),
     holding: () => Boolean(transcriptVisibility?.refreshing() || transcriptVisibility?.moving()),
@@ -318,7 +311,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   /* The phone's voice composer carries its own scroll-to-latest in its row
      and hides the floating one: tell it when the latest is out of view, and
      take its press. */
-  const [markdownRenderer, setMarkdownRenderer] = createSignal<MarkdownRendererId>(selectedMarkdownRenderer());
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
   const resetVisibilityPreservingPosition = () => {
@@ -327,9 +319,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     transcriptVisibility.reset();
     requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
   };
-  // Only Incremark reveals a message block by block, and only that reveal needs
-  // the tail to be followed by a spring rather than pinned to the bottom.
-  const rendererUsesTypewriter = () => isIncremarkRenderer(markdownRenderer());
   // A queued message lives in the composer bubble until the model takes it, so
   // the transcript does not also show it as a sent turn. An answer still
   // arriving keeps its row here: the projection below skips drawing it, but
@@ -361,7 +350,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     props.chat.tools,
     props.chat.activeGeneration,
     props.chat.activeGenerationChange,
-    () => props.narration || "fold",
+    () => "show",
   );
   // Back to where it was read, above its foot: drawn whole (TranscriptList whole), so that place is there to scroll to.
   const reopensAbove = () => { const id = props.chat.loadedId(); const saved = id ? scrollPositions.get(id) : undefined; return Boolean(saved && !saved.following); };
@@ -554,7 +543,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   }, { defer: true }));
 
   let previousUserMessageId: string | null = null;
-  let previousRenderer: MarkdownRendererId | null = null;
   const rememberScrollPosition = (chatId: string) => {
     // At the foot there is nothing to find: it comes back to its foot (and leaving reads no layout, ~5ms of an open).
     if (following()) {
@@ -602,15 +590,14 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   const viewportMaxScrollTop = follow.maxScrollTop;
   const syncLatestDistance = follow.syncLatestDistance;
   const scrollBottomNow = follow.scrollBottomNow;
-  const scrollBottom = follow.scrollBottom;
   // A turn that has just ended is still the live tail for a moment: its foot and last rows arrive as it settles, and
   // the spring takes the view down to them. Snapped -- as a chat opened finished is -- they landed in one frame (48px).
   let liveTailUntil = 0;
   const liveTail = () => Boolean(props.chat.activeGeneration()) || performance.now() < liveTailUntil;
   createEffect(on(() => Boolean(props.chat.activeGeneration()), (live, was) => { if (was && !live) liveTailUntil = performance.now() + 1500; }, { defer: true }));
-  const resumeTypewriterTailFollow = () => { if (rendererUsesTypewriter()) follow.resume(); };
+  const resumeTypewriterTailFollow = follow.resume;
   const followLatest = follow.followLatest;
-  const requestTypewriterTailFollow = () => { if (rendererUsesTypewriter()) follow.request(); };
+  const requestTypewriterTailFollow = follow.request;
   const settleInitialLayout = (epoch: number) => { if (epoch === layoutEpoch) follow.settle(); };
   // Highlighting is a settled-content concern, so it runs off the idle queue and
   // only ever touches cards it has not already done. Coalesced because
@@ -624,7 +611,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   const highlightPending = new Set<HTMLElement>();
   const scheduleHighlight = (root?: HTMLElement) => {
     if (!thread) return;
-    // A caller with no root (a preference change, a renderer switch) means the
+    // A caller with no root (a preference change) means the
     // whole thread is suspect and the sweep has to be broad.
     if (root && root.isConnected) highlightPending.add(root);
     else highlightPending.clear();
@@ -638,21 +625,9 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       for (const element of roots) void highlightCodeBlocks(element);
     }, { timeout: 600 });
   };
-  let displayScrollQueued = false;
   const settleAfterMarkdown = (root?: HTMLElement) => {
     scheduleHighlight(root);
-    if (rendererUsesTypewriter()) {
-      requestTypewriterTailFollow();
-      return;
-    }
-    if (!following() || displayScrollQueued) return;
-    displayScrollQueued = true;
-    queueMicrotask(() => {
-      displayScrollQueued = false;
-      if (!following()) return;
-      const epoch = layoutEpoch;
-      settleInitialLayout(epoch);
-    });
+    requestTypewriterTailFollow();
   };
   const loadEarlier = () => {
     const maxScrollTop = viewportMaxScrollTop();
@@ -669,7 +644,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     // Filling a short page is not the reader scrolling up: it stays on the
     // latest, and the turns above arrive out of sight.
     const filling = settled && maxScrollTop < HISTORY_LOAD_TOP_PX;
-    if (rendererUsesTypewriter() && !filling) {
+    if (!filling) {
       setTypewriterTailOwner("user", true);
       setFollowing(false);
     }
@@ -731,11 +706,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       previousUserMessageId = trailingUserId;
       const epoch = layoutEpoch;
       if (loaded && restoreScrollPosition(loaded, epoch)) return;
-      if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
-      else {
-        setFollowing(true);
-        scrollBottom();
-      }
+      resumeTypewriterTailFollow();
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
       return;
     }
@@ -748,49 +719,14 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       return;
     }
     previousUserMessageId = trailingUserId;
-    if (following() && !rendererUsesTypewriter()) scrollBottom();
-  });
-  // main owns the preference; the transcript mirrors it so a change made in
-  // Settings and one made in the picker above the transcript take the same path.
-  createEffect(() => {
-    const next = props.markdownRenderer;
-    if (next === previousMarkdownRenderer) return;
-    previousMarkdownRenderer = next;
-    setMarkdownRenderer(next);
-  });
-  createEffect(() => {
-    const renderer = markdownRenderer();
-    const previous = previousRenderer;
-    if (previous == null) {
-      previousRenderer = renderer;
-      return;
-    }
-    if (renderer === previous) return;
-    previousRenderer = renderer;
-    // The two renderers lay a message out differently, so every cached block
-    // size the virtualizer is holding is stale.
-    resetVisibilityPreservingPosition();
-    if (rendererUsesTypewriter()) resumeTypewriterTailFollow();
-    else {
-      cancelTypewriterTailRejoin();
-      scrollPositions.clear();
-      expandedItems.clear();
-      setTypewriterTailOwner("app", true);
-    }
   });
 
   onMount(() => {
     const syncUiPreference = (event: Event) => {
       const detail = (event as CustomEvent<{ key?: string; value?: unknown }>).detail;
-      const params = new URLSearchParams(location.search);
-      if (detail?.key === "markdownRenderer" && typeof detail.value === "string"
-        && !params.has("markdownRenderer")) {
-        setMarkdownRenderer(detail.value as MarkdownRendererId);
-      } else if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
-        resyncCodeBlocks();
+      if (isCodeBlockCollapseMode(detail?.value) && detail?.key === "codeBlockCollapse") {
         resetVisibilityPreservingPosition();
       } else if (isCodeBlockCollapseLines(detail?.value) && detail?.key === "codeBlockCollapseLines") {
-        resyncCodeBlocks();
         resetVisibilityPreservingPosition();
       } else if (detail?.key === "transcriptWidth" || detail?.key === "transcriptWideBlocks") {
         // A width preset relays out every block, so the cached intrinsic sizes
@@ -798,14 +734,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
         // keep the reader where they were.
         resetVisibilityPreservingPosition();
       }
-    };
-    // The marked renderers bake collapse state into emitted HTML, so a
-    // preference change needs one restamping pass over what is already on
-    // screen. It runs only on an explicit settings change, never while
-    // streaming, and Incremark cards ignore it because they track the
-    // preference reactively.
-    const resyncCodeBlocks = () => {
-      syncCodeBlockCollapse(thread, selectedCodeBlockCollapse(), selectedCodeBlockCollapseLines());
     };
     // Collapsing a long block can remove a thousand pixels from the thread.
     // Keep the card the user acted on exactly where it is and re-measure the
@@ -818,7 +746,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       const cardTop = detail.previousTop;
       // Folding shortens the content; stop following so the tail spring does
       // not read the shrink as a reason to chase the bottom.
-      if (following() && rendererUsesTypewriter()) setTypewriterTailOwner("user", true);
+      if (following()) setTypewriterTailOwner("user", true);
       const previousOverflowAnchor = viewport.style.overflowAnchor;
       viewport.style.overflowAnchor = "none";
       requestAnimationFrame(() => {
@@ -834,7 +762,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     // clicked, as if the reader had scrolled up to it already open.
     const onDisclosureToggle = () => {
       if (!following()) return;
-      if (rendererUsesTypewriter()) { cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true); }
+      cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true);
       setFollowing(false);
     };
     // Opening or closing anything in the transcript (a trace, a step, a fold) is reading, not following: the click
@@ -980,7 +908,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     </>}>
         <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
         {/* Its newest rows first, the older ones above in idle time (TranscriptList); it holds its own foot. */}
-        <TranscriptList ref={(element) => { thread = element; }} data-slot="message-scroller-content" data-narration={narrated() ? "show" : "fold"}
+        <TranscriptList ref={(element) => { thread = element; }} data-slot="message-scroller-content" data-narration="show"
           each={rows()} of={props.chat.loadedId()} whole={reopensAbove} holdsFoot={false}
           estimate={(row, width) => estimateRowHeight(row, Math.max(20, (width || 400) / 8.5))}
           before={<Show when={props.chat.loadingOlder()}><TranscriptRow data-slot="message-scroller-item" data-cursor-skip><LoadingEarlier /></TranscriptRow></Show>}
@@ -1011,7 +939,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               opens={runForm() === "turn"} initialOpen={itemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`)} onOpenChange={(open) => setItemExpanded(props.chat.loadedId(), `turn:${item.precedingUserId}`, open)}
               loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(props.chat.loadedId() ?? "")}/context/${entryId}`)}
               toolOpen={(id) => itemExpanded(props.chat.loadedId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(props.chat.loadedId(), `tool:${id}`, open)}
-              renderer={markdownRenderer()} profileLabel={props.profileLabel} /></Turn></TranscriptRow>;
+              profileLabel={props.profileLabel} /></Turn></TranscriptRow>;
           }
           if (item.type === "trace") {
             let traceRow!: HTMLDivElement;
@@ -1027,7 +955,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               if (entry?.summary) actions.push({ label: "Open in Agent changes", icon: <Icons.GitCompareArrows />, run: () => requestTurnArtifactNavigation({ chatId: chatId()!, checkpointId: entry.id, path: entry.summary!.preferredPath }) });
               return actions;
             };
-            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} orb={!narrated()} narrated={narrated()} form={narrated() && isRun(item) ? formOf(item) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} renderer={markdownRenderer()} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
+            return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} narrated form={isRun(item) ? formOf(item) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
               {/* A turn that ended without an answer -- stopped under a tool, or
                   one that only ran commands -- still offers to try again. */}
@@ -1039,7 +967,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               </Show></Turn></TranscriptRow>;
           }
           if (item.type === "reports") return <TranscriptRow data-slot="message-scroller-item" data-message-id={item.value[0]!.id} data-report={item.value.map((message) => message.agent?.conversationId ?? message.agent?.id).join(" ")} flow={flow()}>
-            <Turn><TurnReports reports={item.value} agents={props.chat.agents?.() || []} text={(message) => <ChatText renderer={markdownRenderer()} text={message.content || ""} />} /></Turn>
+            <Turn><TurnReports reports={item.value} agents={props.chat.agents?.() || []} text={(message) => <ChatText text={message.content || ""} />} /></Turn>
           </TranscriptRow>;
           if (item.type === "message" && item.value.run) {
             const run = () => item.value.run!;
@@ -1054,7 +982,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                 outcome={props.profileLabel ? `Woke ${props.profileLabel}` : undefined} status={run().status === "finished" ? undefined : run().status[0]!.toUpperCase() + run().status.slice(1)}
                 summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : undefined}>
                 {/* What the agent was given, all of it: the report, then what Conduit added to it (nothing hidden). */}
-                {run().woke ? <><ChatText renderer={markdownRenderer()} text={item.value.content || ""} /><Show when={item.value.appended}><ConduitAdded text={item.value.appended!} /></Show></> : undefined}
+                {run().woke ? <><ChatText text={item.value.content || ""} /><Show when={item.value.appended}><ConduitAdded text={item.value.appended!} /></Show></> : undefined}
               </RunLine>
             </AgentRows>
               <Show when={item.value.agent?.conversationId != null && asksAt(`run:${item.value.agent!.conversationId}`).length}>
@@ -1062,12 +990,12 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               </Show>
             </Turn></TranscriptRow>;
           }
-          if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} renderer={markdownRenderer()} /></TranscriptRow>;
+          if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} /></TranscriptRow>;
           if (item.type === "pending") {
             // A turn before anything of it shows is the header its trace will
             // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
-            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TraceStarting narrated={narrated()} startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
+            return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TraceStarting narrated startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
@@ -1091,7 +1019,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
           const [settled, setSettled] = createSignal(false);
           createEffect(() => { if (live()) { setStreamed(true); setSettled(false); } });
           const actionsShown = () => user() || !streamed()
-            || (!live() && (settled() || !rendererUsesTypewriter() || !message().content));
+            || (!live() && (settled() || !message().content));
           const precedingUserId = () => user() ? undefined : item.precedingUserId;
           const artifact = createMemo(() => {
             const userId = precedingUserId();
@@ -1113,7 +1041,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                   title={message().timestamp ? fullDateTime(message().timestamp) : undefined} onOpen={open()} openLabel="Open run" fold={ENVELOPE_FOLD}
                   onBack={message().agent?.id && !message().sender?.routine ? () => jumpToSpawn(String(message().agent!.conversationId ?? message().agent!.id)) : undefined} backLabel="Started"
                   noted={message().notes} appended={message().appended}>
-                  <ChatText renderer={markdownRenderer()} text={message().content || ""} />
+                  <ChatText text={message().content || ""} />
                 </Inbound>
               </Show>
               <Show when={message().agent?.conversationId != null && asksAt(`run:${message().agent!.conversationId}`).length}>
@@ -1136,7 +1064,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               if (message().outbox && props.chat.cancelOutbox) actions.push({ label: "Don't send", icon: <Icons.Close />, run: () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } });
               return actions;
             }
-            if (narrated() && !item.orb || !actionsShown()) return actions;
+            if (!item.orb || !actionsShown()) return actions;
             if (!message().discarded && (message().content || message().errorMessage)) actions.push({ label: "Copy Markdown", icon: <Icons.Copy />, run: () => void copy() });
             if (props.supports("regenerate") && precedingUserId()) actions.push({ label: "Regenerate response", icon: <Icons.Refresh />, run: () => void props.chat.regenerate(precedingUserId()!) });
             const entry = artifact();
@@ -1149,7 +1077,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                 <Answer copied={copied()}>
                   <Show when={message().content} fallback={<StopLine detail="before answering" />}>
                     <Suspense fallback={<div class="markdown-skeleton" />}>
-                      <ChatMarkdown renderer={markdownRenderer()} streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
+                      <ChatMarkdown streaming={live()} streamVersion={item.streamVersion} onRendered={() => settleAfterMarkdown(row)} onSettled={() => setSettled(true)}>{message().content || ""}</ChatMarkdown>
                     </Suspense>
                   </Show>
                 </Answer>
@@ -1159,12 +1087,11 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                   facts={[message().model && `Model: ${message().model}`, message().provider && `Provider: ${message().provider}`, props.profileLabel && `Profile: ${props.profileLabel}`].filter(Boolean) as string[]} />
               </Show>
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
-              {/* Held empty while it streams, so the foot arriving moves nothing. */}
               {/* A turn that speaks more than once has one foot, under the message that carries its orb. */}
-              <Show when={!narrated() || item.orb}>
-                {/* Narrated, the orb's row changes as the turn works: an empty foot held under it would leave each row it
+              <Show when={item.orb}>
+                {/* The orb's row changes as the turn works: an empty foot held under it would leave each row it
                     leaves, pulling a transcript that follows the bottom down. The foot comes when it settles. */}
-                <Show when={actionsShown()} fallback={narrated() ? undefined : <MessageFoot />}><AnswerFoot latest={latestExchange().has(message().id)} message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
+                <Show when={actionsShown()}><AnswerFoot latest={latestExchange().has(message().id)} message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
               </Show>
             </Turn>}>
               {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
@@ -1178,7 +1105,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                 </>} />}>
                 <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta={approvalMeta(message().content || "")} time={clock(message().timestamp)} noted={message().notes}
                   dateTime={message().timestamp || undefined} title={message().timestamp ? fullDateTime(message().timestamp) : undefined}>
-                  <ChatText renderer={markdownRenderer()} text={(message().content || "").slice(APPROVAL_NOTE.length)} />
+                  <ChatText text={(message().content || "").slice(APPROVAL_NOTE.length)} />
                 </Inbound>
               </Show>
             </Show>

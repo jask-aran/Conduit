@@ -1,7 +1,6 @@
 import { createContext, createSignal, Show, useContext } from "solid-js";
 import { Button, Gauge, GaugeFigure, IconButton, Icons, Segmented } from "@/components/ui";
 import { api } from "../api/client";
-import type { MarkdownRendererId } from "../chat/markdown-settings";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
 import { AgentPage, type JbotTab } from "./agent-page";
 
@@ -83,10 +82,9 @@ export function JbotPanel(props: {
   onOpenThread?: () => void;
   onOpenSettings: () => void;
   onDone?: () => void;
-  markdownRenderer: MarkdownRendererId;
 }) {
   return <>
-    <AgentPage panel={props.tab} needsMount={props.needsMount} panelTop={<JbotSpend />} markdownRenderer={props.markdownRenderer} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
+    <AgentPage panel={props.tab} needsMount={props.needsMount} panelTop={<JbotSpend />} onOpenChat={props.onOpenChat} onOpenFile={props.onOpenFile} onOpenThread={props.onOpenThread} onOpenSettings={props.onOpenSettings} />
   </>;
 }
 

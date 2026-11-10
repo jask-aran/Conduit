@@ -1,13 +1,4 @@
-import { ANSWER_MARKDOWN } from "@/components/ui/shared";
-import DOMPurify from "dompurify";
-
 const allowedProtocols = new Set(["http:", "https:", "mailto:"]);
-
-export const escapeHtml = (value: string) => value
-  .replaceAll("&", "&amp;")
-  .replaceAll("<", "&lt;")
-  .replaceAll(">", "&gt;")
-  .replaceAll('"', "&quot;");
 
 export function resolveMarkdownUrl(value: unknown): { href: string; external: boolean } | null {
   try {
@@ -43,46 +34,4 @@ export function citationHost(href: string, labelText: string): string | null {
   } catch {
     return null;
   }
-}
-
-export function renderMarkdownLink(options: {
-  href: unknown;
-  title?: unknown;
-  label: string;
-  labelText?: string;
-}) {
-  const target = resolveMarkdownUrl(options.href);
-  if (!target) return options.label;
-  // A bare-URL link becomes a chip: the host is what a reader actually scans
-  // for, and the full URL stays reachable through the label and the dialog.
-  const host = citationHost(target.href, options.labelText || "");
-  const label = host ? escapeHtml(host) : options.label;
-  const citation = host ? ' data-citation="true"' : "";
-  const title = host || options.title ? ` title="${escapeHtml(host ? target.href : String(options.title))}"` : "";
-  if (!target.external) {
-    return `<a href="${escapeHtml(String(options.href ?? ""))}"${citation}${title}>${label}</a>`;
-  }
-  return `<button type="button" class="${ANSWER_MARKDOWN.link}"${citation}${title} data-external-url="${escapeHtml(target.href)}" aria-label="${escapeHtml(options.labelText || target.href)}">${label}</button>`;
-}
-
-const baseAttributes = [
-  "aria-label", "data-copy-code", "data-external-url", "data-language", "data-markdown", "class",
-  "data-citation",
-  // The CodeBlock as a string (codeBlockHtml): its state and its controls' hooks are attributes, so one delegated
-  // listener opens and copies it without re-rendering.
-  "data-lines", "data-folded", "data-streaming", "data-user-open", "data-expand-code", "data-slot", "data-variant", "data-size",
-];
-const forbiddenTags = ["img", "script", "style", "iframe", "object", "embed"];
-
-export function sanitizeMarkdownFragment(
-  html: string,
-  options: { inline?: boolean; additionalAttributes?: string[] } = {},
-) {
-  const additionalAttributes = options.additionalAttributes || [];
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: [...new Set([...baseAttributes, ...additionalAttributes])],
-    FORBID_TAGS: [...forbiddenTags, ...(options.inline ? ["a", "button"] : [])],
-    RETURN_DOM_FRAGMENT: true,
-  }) as DocumentFragment;
 }

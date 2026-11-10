@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { CODE_BLOCK, Read, Transcript, Turn, Answer, CodeBlock, codeBlockHtml, fillCodeBlocks, CopyButton, MessageFoot } from "@/components/ui";
+import { CODE_BLOCK, Read, Transcript, Turn, Answer, CodeBlock, CopyButton, MessageFoot } from "@/components/ui";
 import { px, rounding } from "../specs";
 import { LONG, typeOf } from "../demos";
 import { row, token, type Page } from "../model";
@@ -42,8 +42,7 @@ export const codeBlockPage: Page = {
     row("folded", "past the fold: cut and fading, a chevron beside Copy", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={6} />)()}</Read>, { phone: true, code: "<CodeBlock fold onToggle>" }),
     row("copied", "the check, and the code washing --tint as it fades", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={SNIPPET} copied />)()}</Read>, { phone: true, code: "<CodeBlock copied>" }),
     row("highlighted", "the caller's own lines (CODE_BLOCK.line), coloured by a highlighter's classes; the block numbers them · --syntax-* by role", () => <Read class="g-read">{(() => <CodeBlock lang="ts" lines={2}><code><span class={CODE_BLOCK.line}><span class="hljs-keyword">const</span> <span class="hljs-variable">fold</span> = <span class="hljs-number">15</span>; <span class="hljs-comment">// lines</span></span><span class={CODE_BLOCK.line}><span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-title">fold</span>;</span></code></CodeBlock>)()}</Read>, { phone: true, code: "<CodeBlock lines>{code}" }),
-    row("as a string", "codeBlockHtml: the same block for a renderer that writes HTML, its icons put in by fillCodeBlocks", () => <Read class="g-read">{(() => { const el = document.createElement("div"); el.innerHTML = codeBlockHtml({ lang: "sh", code: "npm run build\nnpm run gallery", lines: 2 }); fillCodeBlocks(el); return el.firstElementChild; })()}</Read>, { phone: true, code: "codeBlockHtml · fillCodeBlocks" }),
-    row("A fence in an answer", "the Markdown's fenced code (marked and Incremark): the language as written, numbered lines", () => <Read class="g-read">{(() => <CodeBlock lang="sh" code={"npm run gallery"} />)()}</Read>, { source: "chat/code-block.ts", phone: true }),
+    row("A fence in an answer", "the Markdown's fenced code: the language as written, numbered lines", () => <Read class="g-read">{(() => <CodeBlock lang="sh" code={"npm run gallery"} />)()}</Read>, { source: "chat/code-block.ts", phone: true }),
     row("Folded by Settings · Code blocks", "long ones (past 15 lines, or every one) fold; one opened by hand stays open", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={15} />)()}</Read>, { source: "chat/code-block.ts", phone: true }),
     row("Still being written, folded", "the fold holds while the model writes into it, and the foot pulses as its count climbs", () => <Read class="g-read">{(() => <CodeBlock lang="ts" code={LONG} fold={6} streaming />)()}</Read>, { source: "chat/code-block.ts", phone: true })
   ],
