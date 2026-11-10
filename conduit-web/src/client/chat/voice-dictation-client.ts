@@ -620,9 +620,12 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           fail(formatted);
         },
       );
-      socket = new WebSocket(await dictationSocketUrl());
+      const current = new WebSocket(await dictationSocketUrl());
+      socket = current;
       socket.binaryType = "arraybuffer";
+      // An earlier take's socket goes on telling (its close comes late): only the current one is heard.
       socket.onmessage = (event) => {
+        if (socket !== current) return;
         try {
           const message = JSON.parse(String(event.data));
           if (message.type === "ready") {
@@ -683,9 +686,9 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           } else if (message.type === "error") fail(new Error(String(message.message || "Voice dictation failed")));
         } catch (error) { fail(error); }
       };
-      socket.onerror = () => fail(new Error("Could not connect to voice dictation"));
+      socket.onerror = () => { if (socket === current) fail(new Error("Could not connect to voice dictation")); };
       socket.onclose = () => {
-        if (!explicitlyClosed && !["completed", "failed"].includes(state)) fail(new Error("Voice dictation disconnected"));
+        if (socket === current && !explicitlyClosed && !["completed", "failed"].includes(state)) fail(new Error("Voice dictation disconnected"));
       };
       capturePromise = startCapture().finally(() => { capturePromise = null; });
       void capturePromise.catch(fail);

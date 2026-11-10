@@ -61,12 +61,26 @@ export function createAttachments(
   const upload = async (item: UploadAttachment) => {
     const owner = chatId();
     if (!owner || !item.file) return;
-    let authorization: string | null;
-    try { authorization = await nativeAuthorizationHeader(); }
-    catch (error) { update(item.id, { status: "error", error: "Secure storage unavailable" }); onError(error); return; }
+    // The slot and the epoch are taken before the auth await, so drain() sees
+    // this upload as running and a clear() during the await abandons it.
     const epoch = uploadEpoch;
     active += 1;
     update(item.id, { status: "uploading", progress: 0 });
+    const release = () => {
+      if (epoch !== uploadEpoch) return;
+      active = Math.max(0, active - 1);
+      drain();
+    };
+    let authorization: string | null;
+    try { authorization = await nativeAuthorizationHeader(); }
+    catch (error) {
+      if (epoch === uploadEpoch) { update(item.id, { status: "error", error: "Secure storage unavailable" }); onError(error); }
+      release();
+      return;
+    }
+    if (epoch !== uploadEpoch) return;
+    // Removed while the auth was read: nothing to send.
+    if (!items().some((candidate) => candidate.id === item.id)) { release(); return; }
     const request = new XMLHttpRequest();
     requests.set(item.id, request);
     request.open("PUT", attachmentUrl(owner, item.id, `?name=${encodeURIComponent(item.name)}`));
@@ -77,9 +91,7 @@ export function createAttachments(
       if (finished) return;
       finished = true;
       requests.delete(item.id);
-      if (epoch !== uploadEpoch) return;
-      active = Math.max(0, active - 1);
-      drain();
+      release();
     };
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) update(item.id, { progress: Math.round(event.loaded / event.total * 100) });

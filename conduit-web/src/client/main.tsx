@@ -3412,7 +3412,8 @@ function App() {
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
     const keepTab = tabActivation();
-    if (options.edit) pendingFileEdit = entry;
+    // Every open sets it, so one without edit retires an earlier edit's that never loaded.
+    pendingFileEdit = options.edit ? entry : null;
     setFileReveal(options.reveal ? { entry, request: options.reveal } : null);
     for (const pane of panesShown()) {
       const index = parseFileView(viewOf(pane))?.findIndex((item) => sameFileEntry(item, entry)) ?? -1;

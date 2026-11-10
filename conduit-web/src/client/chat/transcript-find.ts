@@ -181,6 +181,8 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   /** Searches again. keep: the thread changed under an open find (a stream, a trace opening): stay at the same place. */
   const search = (keep = false) => {
     if (searchTimer != null) { clearTimeout(searchTimer); searchTimer = null; }
+    // A fold still opening for the last search's step is not this one's to finish.
+    opening += 1;
     const previous = matches[index()];
     matches = findMatches(options.thread(), query());
     setTotal(matches.length);
@@ -195,9 +197,10 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   };
   let pendingKeep = false;
   const searchSoon = (keep: boolean, ms: number) => {
+    // A new query's search still waiting stays one when the thread changes meanwhile: it goes to the nearest match.
+    pendingKeep = searchTimer != null ? pendingKeep && keep : keep;
     if (searchTimer != null) clearTimeout(searchTimer);
-    pendingKeep = keep;
-    searchTimer = window.setTimeout(() => search(keep), ms);
+    searchTimer = window.setTimeout(() => search(pendingKeep), ms);
   };
   // A search still waiting runs now; true when it was a new query's, which has already gone to its first match.
   const flush = () => {

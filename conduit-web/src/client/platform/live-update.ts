@@ -111,7 +111,8 @@ export async function startLiveUpdate(origin: () => string | null): Promise<void
  * the server's interface -- it already knows the route and the trust -- and hands the zip over to be unpacked; it is
  * swapped in when the window is out of sight (minimised or in the tray), or at once by Check for updates.
  */
-let desktopDownload: AbortController | null = null;
+// Every download under way, so Cancel stops each: a background check and a Check for updates can overlap.
+const desktopDownloads = new Set<AbortController>();
 
 async function startDesktopLiveUpdate(origin: () => string | null): Promise<void> {
   const [{ invoke }, { getIdentifier }] = await Promise.all([import("@tauri-apps/api/core"), import("@tauri-apps/api/app")]);
@@ -124,9 +125,10 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
     const manifest = await authorizedFetch(`${server}/client-bundle/manifest.json`, { signal: AbortSignal.timeout(10_000) });
     const { build } = await manifest.json() as { build?: string };
     if (!build || build === await invoke<string>("interface_build")) return null;
-    desktopDownload = new AbortController();
+    const controller = new AbortController();
+    desktopDownloads.add(controller);
     try {
-      const response = await authorizedFetch(`${server}/client-bundle/${build}.zip`, { signal: desktopDownload.signal });
+      const response = await authorizedFetch(`${server}/client-bundle/${build}.zip`, { signal: controller.signal });
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
       const total = Number(response.headers.get("content-length")) || 0;
       const reader = response.body.getReader();
@@ -144,7 +146,7 @@ async function startDesktopLiveUpdate(origin: () => string | null): Promise<void
       for (const part of parts) { zip.set(part, at); at += part.length; }
       return await invoke<string>("interface_stage", zip, { headers: { "x-build": build } });
     } finally {
-      desktopDownload = null;
+      desktopDownloads.delete(controller);
     }
   };
   const apply = (build: string) => { rememberView(); return invoke("interface_apply", { build }); };
@@ -203,7 +205,7 @@ export async function swapInterface(server: string): Promise<boolean> {
 
 /** Stop a download under way, of an interface or an APK (they share the native worker). */
 export async function cancelUpdateDownload(): Promise<void> {
-  desktopDownload?.abort();
+  for (const controller of desktopDownloads) controller.abort();
   if (installedClientKind !== "android") return;
   const { registerPlugin } = await import("@capacitor/core");
   await registerPlugin<BundlePlugin>("ConduitUpdater").cancel().catch(() => {});

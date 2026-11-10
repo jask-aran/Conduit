@@ -22,6 +22,8 @@ export function PersonBrowsersSettings(props: {
   const [copied, setCopied] = createSignal("");
   const [said, setSaid] = createSignal("");
   let timer: number | undefined;
+  // A read out when the page closes must not arm the follow again.
+  let disposed = false;
   const count = (list: PersonBrowserEnvironment[] | null) => (list || []).reduce((sum, item) => sum + item.browsers.length, 0);
   const read = async () => {
     try {
@@ -33,11 +35,11 @@ export function PersonBrowsersSettings(props: {
       setEnvironments(next);
       // A code is out: watch for the browser that redeems it.
       window.clearTimeout(timer);
-      if (next.some((item) => item.pairing)) timer = window.setTimeout(() => void read(), 2000);
+      if (!disposed && next.some((item) => item.pairing)) timer = window.setTimeout(() => void read(), 2000);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The browsers could not be read."); }
   };
   onMount(() => void read());
-  onCleanup(() => window.clearTimeout(timer));
+  onCleanup(() => { disposed = true; window.clearTimeout(timer); });
   const act = async (work: () => Promise<unknown>, fallback: string) => {
     setBusy(true); setError(""); setSaid("");
     try { await work(); await read(); } catch (cause) { setError(cause instanceof Error ? cause.message : fallback); } finally { setBusy(false); }

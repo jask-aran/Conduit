@@ -36,15 +36,17 @@ export function NetworkSettings() {
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // A read out when the page closes must not arm the follow again.
+  let disposed = false;
   const load = async () => {
     clearTimeout(timer);
     const status = await api<LanNames>(PATH).catch(() => null);
     setShown(status);
     // Followed while it is issuing: a minute or two, most of it waiting for public DNS.
-    if (status?.state === "issuing") timer = setTimeout(() => void load(), 2000);
+    if (!disposed && status?.state === "issuing") timer = setTimeout(() => void load(), 2000);
   };
   onMount(() => void load());
-  onCleanup(() => clearTimeout(timer));
+  onCleanup(() => { disposed = true; clearTimeout(timer); });
 
   const edit = () => {
     const status = shown();

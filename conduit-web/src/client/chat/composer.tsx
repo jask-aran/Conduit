@@ -811,7 +811,8 @@ export function Composer(props: {
     });
   });
 
-  let nativeStarting = false;
+  // Where the handoff to the native composer is: starting it, or handing the composer back to the web one after it ended.
+  let nativePhase: "idle" | "starting" | "handing back" = "idle";
   let reopenNative = false;
   let nativeClosing = false;
   // A keyboard hide starting with the native composer up takes it out of typing now, before the travel measures where
@@ -841,14 +842,15 @@ export function Composer(props: {
   const finishNativeTyping = async (event: ComposerInput) => {
     if (!nativeUp()) return;
     if (!nativeDisposed && nativeChat === props.chat.loadedId()) mirrorNativeInput(event);
-    nativeStarting = true;
+    nativePhase = "handing back";
     restoreWebComposer();
     setNativeUp(false); setInputFocused(false); setKeyboardWanted(false);
-    // end() acknowledges ended: the overlay remains at rest until the web row is visible.
-    await nativeComposer.end();
+    // end() acknowledges ended: the overlay remains at rest until the web row is visible. A failed one still hands back,
+    // or the phase would stay and every later tap would wait on it.
+    await nativeComposer.end().catch(() => {});
     for (const listener of nativeListeners) void listener.remove();
     nativeListeners = [];
-    nativeStarting = false; nativeClosing = false;
+    nativePhase = "idle"; nativeClosing = false;
     const action = nativeAction; nativeAction = null;
     if (nativeDisposed || nativeChat !== props.chat.loadedId()) return;
     // The keyboard pill tapped while the native composer was still handing back: open it again now.
@@ -864,10 +866,10 @@ export function Composer(props: {
   };
   const startNativeTyping = () => {
     if (!voiceFirst() || composerKind() !== "native" || !nativeComposerAvailable() || input.disabled) return false;
-    if (nativeUp() && !nativeStarting) { if (nativeClosing) reopenNative = true; return true; }
+    if (nativeUp() && nativePhase !== "starting") { if (nativeClosing) reopenNative = true; return true; }
     // Handing back (the close's slide and the swap at rest): a tap now is not lost, it opens again once that is done.
-    if (nativeStarting) { if (!nativeUp()) reopenNative = true; return true; }
-    nativeStarting = true; nativeClosing = false;
+    if (nativePhase !== "idle") { if (nativePhase === "handing back") reopenNative = true; return true; }
+    nativePhase = "starting"; nativeClosing = false;
     nativeChat = props.chat.loadedId();
     void (async () => {
       try {
@@ -915,11 +917,11 @@ export function Composer(props: {
         expectKeyboardTravel(); setInputFocused(true); setKeyboardWanted(true);
         nativeMirror = mirror(root, input, nativeComposer, () => ({ empty: phoneMode(false, false) ?? "idle", text: phoneMode(false, true) ?? "idle" }));
         await nativeMirror.ready;
-        nativeStarting = false;
+        if (nativePhase === "starting") nativePhase = "idle";
         if (!nativeUp()) return;
         if (nativeDisposed || nativeChat !== props.chat.loadedId()) { await nativeComposer.end(); return; }
       } catch {
-        restoreWebComposer(); setNativeUp(false); nativeStarting = false;
+        restoreWebComposer(); setNativeUp(false); if (nativePhase === "starting") nativePhase = "idle";
         for (const listener of nativeListeners) void listener.remove();
         nativeListeners = [];
         if (!nativeDisposed && nativeChat === props.chat.loadedId()) input.focus({ preventScroll: true });
@@ -932,7 +934,7 @@ export function Composer(props: {
     const chat = props.chat.loadedId();
     if (!nativeUp()) return;
     if (chat !== nativeChat) { void nativeComposer.end(); return; }
-    if (!nativeStarting && text !== lastNativeText) void nativeComposer.update({ text }).catch(() => void nativeComposer.end());
+    if (nativePhase !== "starting" && text !== lastNativeText) void nativeComposer.update({ text }).catch(() => void nativeComposer.end());
   });
   onCleanup(() => {
     nativeDisposed = true;

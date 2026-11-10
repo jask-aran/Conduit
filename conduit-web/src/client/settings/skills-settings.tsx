@@ -110,9 +110,10 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   const search = (value: string) => {
     setQuery(value);
     clearTimeout(timer);
-    if (value.trim().length < 2) { setFound(null); setSearchError(""); return; }
+    // Every keystroke retires the search in flight, so it cannot land on a changed or emptied box.
+    const ask = ++asked;
+    if (value.trim().length < 2) { setFound(null); setSearchError(""); setSearching(false); return; }
     timer = window.setTimeout(async () => {
-      const ask = ++asked;
       setSearching(true);
       try {
         const { results } = await api<{ results: Found[] }>(`/v0/skills/search?${new URLSearchParams({ q: value.trim(), limit: "12" })}`);

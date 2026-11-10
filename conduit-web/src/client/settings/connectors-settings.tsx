@@ -48,8 +48,10 @@ function ConnectorsGroup() {
   const loadConnectors = () => api<Connector[]>("/v0/agent/connectors").then((list) => { setConnectors(list); clear(""); }).catch((error) => fail("", error));
   // Signing in happens in another tab; the row follows it there for a while.
   let watching = 0;
-  const watch = () => { clearInterval(watching); let left = 40; watching = window.setInterval(() => { if (--left <= 0) clearInterval(watching); void loadConnectors(); }, 3000); };
-  onCleanup(() => clearInterval(watching));
+  // A connect answered after the page closed must not start the watch.
+  let disposed = false;
+  const watch = () => { if (disposed) return; clearInterval(watching); let left = 40; watching = window.setInterval(() => { if (--left <= 0) clearInterval(watching); void loadConnectors(); }, 3000); };
+  onCleanup(() => { disposed = true; clearInterval(watching); });
   const connect = async (connector: Connector) => {
     setConnecting(connector.id); clear(connector.id);
     try {

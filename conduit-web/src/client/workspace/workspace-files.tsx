@@ -167,21 +167,25 @@ export function createFiles(options: {
   const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
   // The tree opens into the view's own slot; the file beside is opened only
   // by asking for it.
-  const openFile = async (path: string) => {
+  // The file the next load opens in edit mode: set by every open, so an open
+  // without edit retires an earlier edit's that never loaded.
+  let pendingEdit: string | null = null;
+  const openPath = async (path: string, edit: boolean) => {
+    pendingEdit = edit ? path : null;
     if (options.openElsewhere?.(path, false, false)) return;
     if ((await openInSlot("primary", path))) setNavigatorOpen(false);
   };
-  let pendingEdit: string | null = null;
+  const openFile = (path: string) => openPath(path, false);
   const editFile = async (path: string) => {
     if (options.openElsewhere?.(path, false, true)) return;
     const slot = slotForPath(path);
     if (slot) {
+      pendingEdit = null;
       setFocusedSlot(slot);
       slotHandles.get(slot)?.edit();
       return;
     }
-    pendingEdit = path;
-    await openFile(path);
+    await openPath(path, true);
   };
   const noteSlotLoaded = (slot: FileSlotId, file: FileSummary | null) => {
     if (file && pendingEdit === file.path) {
