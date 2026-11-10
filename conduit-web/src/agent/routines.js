@@ -32,10 +32,12 @@ const NOTE_LINE = /^- (\S+) \| (\S+) \| (.*) <!-- conduit by:\S+ chat:\S+ call:(
 const CONTEXT_FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
 const escapeBlock = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// A body cannot close or forge a block with a quote, only with a tag: quotes stay as written, so code in it reads.
+const escapeBody = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const attrText = (attrs = {}) => Object.entries(attrs).filter(([, value]) => value !== undefined && value !== null && value !== "")
   .map(([key, value]) => ` ${key}="${escapeBlock(value)}"`).join("");
 /** Escape data so it cannot close or forge prompt blocks. */
-export const block = (tag, attrs, text) => `<${tag}${attrText(attrs)}>\n${escapeBlock(String(text || "").trim())}\n</${tag}>`;
+export const block = (tag, attrs, text) => `<${tag}${attrText(attrs)}>\n${escapeBody(String(text || "").trim())}\n</${tag}>`;
 
 /** The {{variables}} prompts are filled with: the person's fields (USER.md front matter), the agent's, the time. */
 export async function promptVars(agent, now = Date.now()) {

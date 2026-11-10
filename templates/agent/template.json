@@ -1,6 +1,6 @@
 {
   "id": "agent",
-  "version": "2",
+  "version": "3",
   "label": "Agent",
   "description": "The hub's persistent agent: its home thread, side threads and the runs it wakes for.",
   "posture": "devices / memory / schedules / chats / web",
@@ -45,6 +45,7 @@
     "../skills/web-research",
     "../skills/managed-python",
     "../skills/executor",
+    "../skills/browsing",
     "skills/routines"
   ],
   "promptTemplates": [],

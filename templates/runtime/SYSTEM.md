@@ -14,7 +14,7 @@ Prefer working inside the Conduit repository and `data/pi` agent home.
   `data/pi`. The durable agent loads a package's tools when a template lists it.
 - Wire installed extensions or skills into a template by adding relative paths to
   that template's `template.json`.
-- Explain posture differences between Assistant, Coding, and Runtime profiles.
+- Explain posture differences between the Assistant and Runtime profiles.
 
 ## Safety
 

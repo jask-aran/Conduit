@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hubBrowserTools } from "./browser-tools.js";
 import { SCRIPTED_MODELS, scriptedProvider } from "./scripted-model.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -345,8 +346,14 @@ export class DurableRuntime {
       const web = await this.webTools();
       if (web) install(web);
       const codemode = createCodemodeExtension({ sandbox: new CodemodeSandbox(), namespaces: [{ name: "executor", prefix: "mcp__executor__", description: "Executor: the person’s connected accounts (mail, calendar, docs…)",
-        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", description: "The hub's web browser, shared with the person: what you do there they see in a Browser pane (open it with conduit_ui, view browser:hub)",
-        instructions: "describeNamespace(\"browser\") lists its tools. Open a page (tools.agent_browser_open({ url })), take a snapshot (tools.agent_browser_snapshot({}): its interactive elements with refs such as @e1), then click, fill, type or press by ref (tools.agent_browser_click({ selector: \"@e2\" })); read with agent_browser_get_text or agent_browser_get_url. Act by snapshot refs rather than coordinates. The page is the person's too: leave it where they can follow." }] });
+        instructions: "Find actions with search, read their signatures with describe, then run them with call: one action, or an array of independent ones. Anything that only reads (get, list, search…) goes ahead; anything that sends, creates, changes or deletes asks the person first, so batch reads together and keep each write its own call. Use execute only when one result must feed the next; name each action directly in it (tools.<path>(…) or tools[\"<path>\"](…), never a computed name), or it asks before running." }, { name: "browser", prefix: "agent_browser_", // The description is what the prompt shows of a namespace (its instructions are read only on describeNamespace), so
+        // the way to work the browser is said here: an agent that never saw its tools named reached for another browser.
+        description: "The hub's web browser: yours to browse in, with no permission needed, and the default for any browsing a web search or fetch cannot do. "
+          + "tools.agent_browser_open({ url }) opens a page; tools.agent_browser_snapshot({ interactive: true }) lists what can be acted on, each with a ref such as @e3; "
+          + "act by ref with agent_browser_click({ selector: \"@e3\" }), agent_browser_fill({ selector, text }), agent_browser_press({ key: \"Enter\" }); read with agent_browser_get_text. "
+          + "After acting, take a snapshot to see what changed before saying it worked; if a control did nothing, try another way (its URL, another control). "
+          + "The person sees it in a Browser pane once you show it (conduit_ui open, view browser:hub, beside: true): show it when they asked you to browse for them.",
+        instructions: "describeNamespace(\"browser\") lists every tool. Act by snapshot refs rather than coordinates; a ref goes stale when the page changes, so snapshot again. The page is the person's too: leave it where they can follow." }] });
       install(defineExtension({ ...codemode, sections: [...codemode.sections,
         section("connector-instructions", () => this.contextStore?.connectorInstructions() || undefined, { tag: false }),
       ] }));
@@ -573,7 +580,7 @@ export class DurableRuntime {
       const shape = JSON.stringify(tools.map((tool) => [tool.name, tool.description, tool.parameters]));
       if (shape === this.browserShape) return;
       this.browserShape = shape;
-      this.install(defineExtension({ name: "browser", tools }));
+      this.install(defineExtension({ name: "browser", tools: hubBrowserTools(this, tools) }));
       await this.refreshLiveTools?.("browser");
     }
     catch (error) { console.warn("[browser] agent-browser's tools could not be loaded:", error?.message || error); }

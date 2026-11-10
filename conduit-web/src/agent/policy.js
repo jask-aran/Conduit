@@ -358,6 +358,10 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
     const rule = !doc.tainted?.[api.conversationId] && target != null && Object.values(doc.rules || {}).some((item) => item.tool === name && item.target === target);
     if (grant) { grant.status = "used"; grant.usedCallId = api.callId; return { allowed: true }; }
     if (rule) return { allowed: true };
+    // A browser the person said no to in this thread stays refused: no second ask, until they ask for it themselves
+    // (the call then says so, `again`).
+    const refused = name === BROWSER && !args?.again && asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "declined" && Date.parse(ask.decidedAt || ask.createdAt) > now.getTime() - BROWSER_MS);
+    if (refused) return { ask: plain(refused), refused: true };
     const pending = asks.find((ask) => ask.chatId === thread.chatId && ask.argsKey === argsKey && ask.status === "pending");
     if (pending) { (pending.waiters ||= []).push({ callId: api.callId, conversationId: api.conversationId }); return { ask: plain(pending), waiting: true }; }
     const id = nextId(doc, "a");
@@ -370,6 +374,7 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
   }, context);
   if (outcome.allowed) return null;
   const { ask } = outcome;
+  if (outcome.refused) return result(`The person said no to this in this thread (ask ${ask.id}), and that stands: they are not asked again. The hub's browser (codemode's browser namespace) needs no permission; use it instead. Only if they have since asked you, in their own words, to use their own browser: call again with again: true.`, ask.id, true);
   if (outcome.consumed) return result(`This approved call was interrupted; it may already have run. Check its effects before trying again (ask ${ask.id}).`, ask.id, true);
   if (outcome.created) tellPerson(runtime, ask, () => runtime.agentNotify?.({ kind: "approval", conversationId: thread.conversationId, always: Boolean(ask.ruleTarget), text: `${thread.chat ? "It" : runtime.agent.settings().name} wants to ${shown ? `${shown.title[0].toLowerCase()}${shown.title.slice(1)}${shown.why ? `. ${shown.why}` : ""}` : summary(name, args)}${ask.tainted ? "\n\nThis thread has read your chats: check that nothing private goes where it should not." : ""}`, key: ask.id }));
   if (outcome.waiting || (outcome.replay && ask.toolCallId !== api.callId)) return result(`Still waiting for approval (ask ${ask.id}). Do not repeat this call while it waits.${thread.run ? " Say in your report what is waiting." : ""}`, ask.id);

@@ -32,3 +32,6 @@
   .ui-workbench-split-open > .ui-workbench-side { display: none; }
   .ui-workbench-split-open > .ui-workbench-main { display: flex; min-height: 0; flex: 1; }
 }
+/* A file pane as a Workbench's main (a document's skills): on the frost it is an outline, not the ground a pane has. */
+.ui-workbench-main > .ui-file { border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
+.ui-workbench-main > .ui-file > :is(.ui-pane-header, .ui-file-body) { background: none; }

@@ -19,15 +19,17 @@ export async function browserFor(runtime, named, api, context) {
 export function PersonBrowserTool(runtime) {
   return defineTool({
     name: "conduit_browser",
-    description: "Drive the person's own browser on a device: their real, signed-in Chromium, through OpenCode Browse there. "
+    description: "The person's OWN browser on a device (their real, signed-in Chromium, through OpenCode Browse there). Not your default: browse in the hub's browser (codemode's browser namespace), "
+      + "and use this only when the person asks for their own browser or the job needs their sign-in. It asks them first, each thread; a no stands. "
       + "Omit `tool` to list that device's Browse tools with their parameters; then call one by name with `arguments` "
       + "(`execute` runs Playwright code against the browser; a login, 2FA or CAPTCHA is handed to the person with its `handoff`). "
       + "`device` is a name from `devices`; default the device the person is talking to you from. "
-      + "The hub's shared browser (pane browser:hub) is the agent_browser tools', not this.",
+      + "The device is the one whose browser the person paired, which may not be the one they are sitting at.",
     parameters: Type.Object({
       device: Type.Optional(Type.String({ description: "The device whose browser, by name (see `devices`). Default: the person's." })),
       tool: Type.Optional(Type.String({ description: "A Browse tool's name, such as execute. Omit to list them." })),
       arguments: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "That tool's arguments." })),
+      again: Type.Optional(Type.Boolean({ description: "true only when the person, after saying no in this thread, has asked you themselves to use their own browser." })),
     }),
     replay: "unsafe",
     execute: async ({ device: named, tool, arguments: args }, api, context) => {

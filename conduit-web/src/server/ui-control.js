@@ -131,8 +131,8 @@ export function UiTool(runtime) {
     name: "conduit_ui",
     // Built from the UI API (ui-api.js): the actions and views declared for agents, and only those.
     description: `See and arrange what the person has open in Conduit. ${actions.map((name) => `${name}: ${UI_ACTIONS[name].says}.`).join(" ")} `
-      + `Views: ${agentUiViews()}. Commands go to the tab the person is talking to you from (look marks it Yours; else the one in use) `
-      + "unless client names another. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
+      + `Views: ${agentUiViews()}. Commands go to the tab the person is talking to you from, with nothing more said: `
+      + "open needs no look or screens first, and client only to reach another tab. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
     parameters: Type.Object({
       action: Type.Union(actions.map((value) => Type.Literal(value))),
       ...Object.fromEntries(args.map((name) => [name, Type.Optional(ARG_TYPES[UI_ARGS[name].type]({ description: UI_ARGS[name].says }))])),
@@ -148,6 +148,13 @@ export function UiTool(runtime) {
       if (action === "screens") return runtime.screens ? text(describeScreens(await runtime.screens.list())) : text("Screens cannot be reached from here.", true);
       if (action === "look") { const tabs = await control.look(); return text(describeLook(tabs, chatId ? (await control.targetFor(chatId, tabs))?.client : null)); }
       try {
+        // Already there: nothing is sent, so a page the person is watching is not redrawn for each step of your work.
+        if (action === "open" && view && pane === undefined && !beside) {
+          const tabs = await control.look();
+          const target = client ? tabs.find((tab) => tab.client === client) : await control.targetFor(chatId, tabs);
+          const shown = target?.panes.find((item) => item.view === view);
+          if (shown) return text(`Already showing in pane ${shown.pane} (${target.client}); it follows what you do. Nothing changed.`);
+        }
         const { client: tab, result } = await control.command({ action, ...(view ? { view } : {}), ...(pane !== undefined ? { pane } : {}), ...(beside ? { beside: true } : {}) }, client || null, chatId);
         return text(`${result} (${tab})`);
       } catch (error) { return text(error.message, true); }

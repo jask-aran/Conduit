@@ -28,7 +28,7 @@ export const UI_VIEWS = /** @type {const} */ ([
   { kind: "page", view: "page:agent", agent: true, says: "" },
   { kind: "page", view: "page:jbot", agent: true, says: "" },
   { kind: "page", view: "page:project:<id>", agent: true, says: "" },
-  { kind: "browser", view: "browser:hub", agent: true, says: "the hub's browser, which you work through the agent_browser tools" },
+  { kind: "browser", view: "browser:hub", agent: true, says: "the hub's browser, which you work through codemode's browser namespace; it follows the page, so open it once" },
   { kind: "browser", view: "browser:<device>", agent: true, says: "a device's browser, by its view from screens: for the person to see and use; your browser tools work the hub's" },
   { kind: "terminal", view: "terminal", agent: true, says: "" },
   { kind: "files", view: "files", agent: true, says: "" },

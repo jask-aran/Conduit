@@ -92,7 +92,7 @@ export function ChainLink(props: { name: string; index?: number; meta?: string; 
     label: <>{props.name}<Show when={props.modified}><Dot tone="unread" class="ui-chain-modified" title="Changed from the default" aria-label="changed" /></Show></>,
     context: props.meta, meta: props.size,
   });
-  return <section class="ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-notice={props.notice ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
+  return <section class="ui-outline ui-network-box ui-chain-box ui-chain-link" data-live={props.live ? "" : undefined} data-notice={props.notice ? "" : undefined} data-current={props.current ? "" : undefined} aria-label={props.name}>
     <Show when={props.onSelect} fallback={<Row density="line" class="ui-chain-line" {...parts()} />}>
       <Row element="button" density="line" class="ui-chain-line ui-chain-open" aria-pressed={Boolean(props.current)} onClick={() => props.onSelect?.()} {...parts()} />
     </Show>
