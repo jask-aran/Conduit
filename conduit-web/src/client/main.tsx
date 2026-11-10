@@ -1071,6 +1071,7 @@ function App() {
     }
   };
   const [addingServer, setAddingServer] = createSignal(false);
+  const connectSeen = createMemo<boolean>((seen) => seen || addingServer(), false);
   const runPwaUpdate = async () => {
     if (pwaUpdating()) return;
     if (updateShell) {
@@ -6326,7 +6327,8 @@ function App() {
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate(true)}
       onAddServer={() => setAddingServer(true)}
       onLogout={() => void logout()} />
-    <Show when={addingServer()}><ConnectDialog open={addingServer()} onOpenChange={setAddingServer} addServer={
+    {/* Fetched on first use, then kept: shut, it stays to play its leave. */}
+    <Show when={connectSeen()}><ConnectDialog open={addingServer()} onOpenChange={setAddingServer} addServer={
       <ServerConnectForm adding onOpened={() => setAddingServer(false)} onDone={(origin) => {
         setAddingServer(false);
         // Told to the server being left, before leaving it: otherwise the one

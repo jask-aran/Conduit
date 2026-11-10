@@ -2,7 +2,7 @@ import { Icons } from "@/components/ui";
 import { AttachmentTile, Attachments, CardStage, CardSteps } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Note } from "@/components/ui/state";
-import { createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createMemo, createSignal, For, lazy, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { isInstalledClient } from "../platform/installed-client.ts";
 
 import type { Attachment as SentAttachment } from "../api/contracts";
@@ -70,21 +70,27 @@ export function AttachmentCards(props: {
     }}</For>
   </Attachments>;
   const item = () => props.items.find((candidate) => candidate.id === shown());
+  // The one last shown: the viewer keeps it while it leaves.
+  const last = createMemo<Sent | undefined>((kept) => item() ?? kept);
+  const step = (by: number) => { const at = props.items.findIndex((candidate) => candidate.id === shown()); setShown(props.items[(at + by + props.items.length) % props.items.length]!.id); };
   return <Show when={props.items.length}>
     {tiles(null)}
-    <Show when={item()} keyed>{(current) => {
-      const source = sourceOf(current);
-      const step = (by: number) => { const at = props.items.findIndex((candidate) => candidate.id === current.id); setShown(props.items[(at + by + props.items.length) % props.items.length]!.id); };
-      return <Dialog open onOpenChange={(open) => { if (!open) setShown(null); }} size="wide" close title={current.name}
+    <Show when={last()}>
+      <Dialog open={Boolean(item())} onOpenChange={(open) => { if (!open) setShown(null); }} size="wide" close title={last()!.name}
         onKeyDown={(event) => { if (props.items.length > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight") && !(event.target as Element).closest(".cm-editor")) { event.preventDefault(); step(event.key === "ArrowLeft" ? -1 : 1); } }}>
-        <CardStage>
-          <Show when={source} fallback={<Show when={isText(current) && props.chatId} fallback="No preview"><AttachmentText src={attachmentUrl(props.chatId!, current.id)} name={current.name} /></Show>}>
-            <AttachmentImage src={source!} />
-          </Show>
-        </CardStage>
-        <Note kind="card">{[sizeLabel(current.size), current.type].filter(Boolean).join(" · ")}</Note>
-        <Show when={props.items.length > 1}><CardSteps onPrevious={() => step(-1)} onNext={() => step(1)}>{tiles(current.id)}</CardSteps></Show>
-      </Dialog>;
-    }}</Show>
+        <Show when={last()} keyed>{(current) => {
+          const source = sourceOf(current);
+          return <>
+            <CardStage>
+              <Show when={source} fallback={<Show when={isText(current) && props.chatId} fallback="No preview"><AttachmentText src={attachmentUrl(props.chatId!, current.id)} name={current.name} /></Show>}>
+                <AttachmentImage src={source!} />
+              </Show>
+            </CardStage>
+            <Note kind="card">{[sizeLabel(current.size), current.type].filter(Boolean).join(" · ")}</Note>
+            <Show when={props.items.length > 1}><CardSteps onPrevious={() => step(-1)} onNext={() => step(1)}>{tiles(current.id)}</CardSteps></Show>
+          </>;
+        }}</Show>
+      </Dialog>
+    </Show>
   </Show>;
 }

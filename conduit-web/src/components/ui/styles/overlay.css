@@ -227,9 +227,12 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-scrim[data-dialog][data-placement="center"] { align-items: safe center; }
 /* Middle: the top edge sits where the overlay at its full height would be centred, and stays there as it shrinks. */
 .ui-scrim[data-dialog][data-placement="middle"] { padding-top: max(calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))), calc((var(--app-height, 100dvh) - var(--overlay-height, 0px)) / 2)); }
-.ui-scrim[data-dialog][data-state="closed"] { animation: ui-dialog-close var(--duration-quick) var(--ease-leave); pointer-events: none; }
-/* Keep the behavior host mounted for Card's exit, including in reduced motion. */
-@keyframes ui-dialog-close { from { visibility: visible; } to { visibility: visible; } }
+.ui-scrim[data-dialog][data-state="closed"] { animation: ui-dialog-close var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* Keep the behavior host mounted for Card's exit, including in reduced motion. Its dim goes with the card rather than
+   at the end of it (its colour, not its opacity: the frost fades on Card, not under a fading ancestor). */
+@keyframes ui-dialog-close { from { visibility: visible; } to { visibility: visible; background-color: transparent; } }
+/* Leaving, a Dialog shows the copy taken as it shut (dialog.tsx); the real card, already emptied, is out of sight. */
+.ui-scrim[data-still] > .ui-card:not([inert]) { display: none; }
 /* Settings search: the rail's field under its title, and the line a result led to, marked for a moment. */
 .ui-overlay-rail > .ui-lead-input { flex: none; margin-bottom: var(--space-sm); }
 .ui-setting-line[data-found] { border-radius: var(--radius-control); background: var(--tint); transition: background var(--duration-gentle) var(--ease-arrive); }

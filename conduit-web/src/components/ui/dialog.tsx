@@ -1,7 +1,7 @@
 import * as KDialog from "@kobalte/core/dialog";
 import { createBack } from "./back";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
-import { createEffect, Show, type ComponentProps, type JSX } from "solid-js";
+import { createComputed, createEffect, on, Show, type ComponentProps, type JSX } from "solid-js";
 import { createFullscreenPortalMount } from "./portal";
 import { Card } from "./card";
 import { haptic, overlayHaptics } from "./haptics";
@@ -35,6 +35,29 @@ export function Dialog(props: {
   });
   overlayHaptics(() => props.open);
   const change = (open: boolean) => { if (open || !props.busy) { if (!open) haptic("dismiss"); props.onOpenChange(open); } };
+  /*
+   * It leaves as it was. What shuts a dialog usually clears what it showed in the same step (the entry being read set
+   * to null, a form reset), so the card left to play its leave was emptied first and collapsed on its way out. A
+   * computation runs before the document is updated: the card is copied whole then (inert, no ids), and the copy
+   * plays the leave while the real one, already changing, is out of sight.
+   */
+  let scrim: HTMLElement | undefined;
+  let still: HTMLElement | undefined;
+  createComputed(on(() => props.open, (open) => {
+    still?.remove(); still = undefined;
+    if (scrim) delete scrim.dataset.still;
+    const card = open ? null : scrim?.querySelector<HTMLElement>(":scope > .ui-card");
+    if (!card || !scrim) return;
+    still = card.cloneNode(true) as HTMLElement;
+    still.inert = true;
+    still.setAttribute("aria-hidden", "true");
+    still.removeAttribute("data-entering");
+    still.setAttribute("data-leaving", "");
+    still.removeAttribute("id");
+    still.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+    card.after(still);
+    scrim.dataset.still = "";
+  }, { defer: true }));
   // Back shuts it; busy, it takes the step and stays, as Escape does.
   createBack(() => props.open, () => change(false));
   const restore = (event: Event) => {
@@ -48,7 +71,7 @@ export function Dialog(props: {
   };
   return <K.Root open={props.open} onOpenChange={change}>
     <K.Portal mount={mount()}>
-      <K.Content as={Scrim} dialog placement="center" data-state={props.open ? "open" : "closed"}
+      <K.Content as={Scrim} ref={(element: HTMLElement) => { scrim = element; }} dialog placement="center" data-state={props.open ? "open" : "closed"}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={restore}
         onEscapeKeyDown={(event: KeyboardEvent) => {
           event.stopPropagation();
