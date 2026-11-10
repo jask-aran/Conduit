@@ -1397,17 +1397,20 @@ export class DurableAdapter extends EventEmitter {
           { id: "without", label: `Continue without ${device.name}`, description: "The agent is told it is unavailable and carries on." },
         ] }],
     });
+    const back = () => {
+      // Back: the card is moot.
+      this.settleAsk(record, request.id, { id: request.id, withdrawn: true });
+      done();
+    };
     void this.askUser(record, request).then((response) => {
+      // The turn ended with the card still up (finish cancels it): nothing is waiting for the device any more.
+      if (response?.cancelled && !record.active) { this.runtime.nodeHub?.off(`online:${device.id}`, back); done(); return; }
       if (!response || response.cancelled || response.withdrawn || isDismissal(response)) return;
       if (!answerTo(response, request.questions[0]).options.some((option) => option.id === "without")) return;
       this.runtime.excuse(record.conversationId, device);
       done();
     });
-    this.runtime.nodeHub?.once(`online:${device.id}`, () => {
-      // Back: the card is moot.
-      this.settleAsk(record, request.id, { id: request.id, withdrawn: true });
-      done();
-    });
+    this.runtime.nodeHub?.once(`online:${device.id}`, back);
   }
 
   /** Put a question card up and wait for the answer (see the runtime's ask_user tool). */

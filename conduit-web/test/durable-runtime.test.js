@@ -123,7 +123,7 @@ test("a question card pauses the turn and its answer resumes it", async (t) => {
   assert.equal(ops(c.stream, "tool.close").length, 0, "ask_user still waits");
   const question = request.questions[0];
   const freeform = "use the fixture choice";
-  c.send({ type: "host_ui_response", id: request.id, answers: [{ questionId: question.id, optionIds: [question.options[0].id], freeform }] });
+  c.send({ type: "extension_ui_response", id: request.id, answers: [{ questionId: question.id, optionIds: [question.options[0].id], freeform }] });
   await c.stream.next((event) => event.type === "status" && event.phase === "settled", 4000);
   const result = ops(c.stream, "tool.close")[0];
   assert.ok(result.output.includes(question.options[0].label));
