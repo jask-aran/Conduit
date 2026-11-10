@@ -1,11 +1,45 @@
 import * as KDialog from "@kobalte/core/dialog";
 import { createBack } from "./back";
 import * as KAlertDialog from "@kobalte/core/alert-dialog";
-import { createComputed, createEffect, on, Show, type ComponentProps, type JSX } from "solid-js";
+import { createComputed, createEffect, on, onCleanup, Show, type ComponentProps, type JSX } from "solid-js";
+import { duration, reducedMotion } from "./motion";
 import { createFullscreenPortalMount } from "./portal";
 import { Card } from "./card";
 import { haptic, overlayHaptics } from "./haptics";
 import { Overlay, Scrim } from "./overlay";
+
+/*
+ * A dialog leaves as it was, whatever its caller does. What shuts one usually clears what it showed in the same step
+ * (the entry being read set to null), and some callers take the dialog out of the page as they shut it; either way
+ * the surface left to play its leave was emptied, or gone. So as a dialog shuts (open goes false, or it is unmounted
+ * while open) its scrim is copied whole, before the document is updated, and the copy (inert, no ids, scrolled as it
+ * was) plays the leave beside it in the portal's mount, then goes; the real one is out of sight at once. Every Dialog
+ * and OverlayDialog does this; leave={false} opts one out (nothing does).
+ */
+function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, mount: () => Node | undefined, wanted: () => boolean) {
+  const leave = () => {
+    const real = scrim();
+    if (!real || !wanted() || reducedMotion() || !real.isConnected && !real.childElementCount) return;
+    const still = real.cloneNode(true) as HTMLElement;
+    still.inert = true;
+    still.setAttribute("aria-hidden", "true");
+    still.removeAttribute("role");
+    still.removeAttribute("id");
+    still.dataset.state = "closed";
+    still.style.removeProperty("display");
+    const from = real.querySelectorAll<HTMLElement>("*"), to = still.querySelectorAll<HTMLElement>("*");
+    for (const surface of still.querySelectorAll(":scope > .ui-card, :scope > .ui-overlay")) { surface.removeAttribute("data-entering"); surface.setAttribute("data-leaving", ""); }
+    for (const element of to) element.removeAttribute("id");
+    (mount() ?? document.body).appendChild(still);
+    // A list left scrolled stays where it was.
+    from.forEach((element, index) => { if (element.scrollTop && to[index]) to[index]!.scrollTop = element.scrollTop; });
+    real.style.display = "none";
+    setTimeout(() => still.remove(), duration("--duration-quick", still) + 60);
+  };
+  // A computation runs before the document is updated: what the dialog shows is still there to copy.
+  createComputed(on(open, (now) => { if (now) scrim()?.style.removeProperty("display"); else leave(); }, { defer: true }));
+  onCleanup(() => { if (open()) leave(); });
+}
 
 /** Kobalte owns modality and focus; Card and Scrim own every part of the surface. */
 export function Dialog(props: {
@@ -18,6 +52,8 @@ export function Dialog(props: {
   close?: boolean | string;
   actions?: JSX.Element;
   busy?: boolean;
+  /** false: no leave of its own (see createLeave). */
+  leave?: boolean;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
   onAfterClose?: () => void;
@@ -35,29 +71,8 @@ export function Dialog(props: {
   });
   overlayHaptics(() => props.open);
   const change = (open: boolean) => { if (open || !props.busy) { if (!open) haptic("dismiss"); props.onOpenChange(open); } };
-  /*
-   * It leaves as it was. What shuts a dialog usually clears what it showed in the same step (the entry being read set
-   * to null, a form reset), so the card left to play its leave was emptied first and collapsed on its way out. A
-   * computation runs before the document is updated: the card is copied whole then (inert, no ids), and the copy
-   * plays the leave while the real one, already changing, is out of sight.
-   */
   let scrim: HTMLElement | undefined;
-  let still: HTMLElement | undefined;
-  createComputed(on(() => props.open, (open) => {
-    still?.remove(); still = undefined;
-    if (scrim) delete scrim.dataset.still;
-    const card = open ? null : scrim?.querySelector<HTMLElement>(":scope > .ui-card");
-    if (!card || !scrim) return;
-    still = card.cloneNode(true) as HTMLElement;
-    still.inert = true;
-    still.setAttribute("aria-hidden", "true");
-    still.removeAttribute("data-entering");
-    still.setAttribute("data-leaving", "");
-    still.removeAttribute("id");
-    still.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
-    card.after(still);
-    scrim.dataset.still = "";
-  }, { defer: true }));
+  createLeave(() => scrim, () => props.open, () => mount(), () => props.leave !== false);
   // Back shuts it; busy, it takes the step and stays, as Escape does.
   createBack(() => props.open, () => change(false));
   const restore = (event: Event) => {
@@ -105,13 +120,17 @@ export function OverlayDialog(props: {
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
+  /** false: no leave of its own (see createLeave). */
+  leave?: boolean;
   children: JSX.Element;
 }) {
   const mount = createFullscreenPortalMount();
   overlayHaptics(() => props.open);
+  let scrim: HTMLElement | undefined;
+  createLeave(() => scrim, () => props.open, () => mount(), () => props.leave !== false);
   return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange(open); }}>
     <KDialog.Portal mount={mount()}>
-      <KDialog.Content as={Scrim} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
+      <KDialog.Content as={Scrim} ref={(element: HTMLElement) => { scrim = element; }} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
         <Overlay embedded label={props.label} layout={props.layout} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>
