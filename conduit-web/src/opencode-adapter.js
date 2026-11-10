@@ -812,8 +812,15 @@ export class OpenCodeAdapter extends EventEmitter {
   async cancel(id) {
     const record = this.get(id);
     if (!record?.active) return false;
+    const generation = record.generation;
     record.stopping = true;
-    await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} });
+    try {
+      await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/interrupt`, { on: record.nodeId, body: {} });
+    } catch (cause) {
+      // The stop never reached OpenCode, so the turn is still running, not stopping.
+      if (record.generation === generation) record.stopping = false;
+      throw cause;
+    }
     return true;
   }
 
