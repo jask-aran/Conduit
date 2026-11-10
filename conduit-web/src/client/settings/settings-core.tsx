@@ -87,7 +87,7 @@ const sectionGroups = touchOnly() ? allSectionGroups.map((group) => ({ ...group,
 type Section = VisibleSection | "workspaces";
 /** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
  *  as far as the window allows; every other page keeps its width. */
-const WIDE_SECTIONS = new Set<string>(["prompts", "blocks"]);
+const WIDE_SECTIONS = new Set<string>(["prompts", "blocks", "skills"]);
 // A section's name is said once, in the rail's list above; Workspace profile is reached from a workspace, not the rail.
 const sectionLabels = { ...Object.fromEntries(allSectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
@@ -2042,7 +2042,7 @@ export function Settings(props: {
     label="Settings"
     placement="center"
     layout="rail"
-    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) || (section() === "skills" && openSkill()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
+    style={narrow() ? undefined : { "--overlay-width": WIDE_SECTIONS.has(section()) ? "calc(96 * var(--u-space))" : "calc(70.3125 * var(--u-space))", "--overlay-height": "calc(64 * var(--u-space))" }}
     onEscapeKeyDown={dismissEscape}
     onCloseAutoFocus={(event) => { event.preventDefault(); if (returnFocus?.isConnected) returnFocus.focus(); returnFocus = null; }}
   >

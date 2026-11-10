@@ -1,11 +1,10 @@
 import { createEffect, createSignal, For, lazy, onCleanup, onMount, Show } from "solid-js";
-import { Button, Icons, Input, LiveNote, SettingLine, SettingValue, Switch, Group, Loading, Note } from "@/components/ui";
-import { Select } from "@/components/ui/menus";
+import { Button, Icons, Input, LiveNote, Switch, Group, Loading, Note } from "@/components/ui";
 import { Row } from "@/components/ui/row";
 import { Actions, IconButton } from "@/components/ui/actions";
 import { Heading } from "@/components/ui/header";
 import { StatusText } from "@/components/ui/file";
-import { Workbench, WorkbenchFact, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
+import { Workbench, WorkbenchFact, WorkbenchPair, WorkbenchPick, WorkbenchSplit, WorkbenchTitle } from "@/components/ui/workbench";
 import { ROLE_ICON, type BlockDetail, type ContextData } from "./context-settings";
 // The editor brings CodeMirror: loaded when a skill is opened, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
@@ -30,9 +29,10 @@ const count = (value: number) => value >= 1_000_000 ? `${(value / 1_000_000).toF
  * once; an installed one joins every profile's default document (a document you saved keeps its own list: add it in
  * Prompts). A skill's line in a prompt is its description; its text is read when the model loads it, so its size is said.
  *
- * `skillId` opens one skill as a workbench (as Settings › Blocks does a block): its text in an editor, and beside it
- * whether it is on and the documents that list it, each opening in Prompts. A skill's text is kept as the block
- * `skill-<id>` (context-store.js), which is how a document names it.
+ * One workbench: the side column is every skill (installed, then shipped), each with its size, how many documents
+ * list it and its switch, and under them the registry's search. Choosing one (`skillId`) shows it in the main pane:
+ * the documents that list it, each opening in Prompts, beside its text in an editor. A skill's text is kept as the
+ * block `skill-<id>` (context-store.js), which is how a document names it.
  */
 export function SkillsSettings(props: { context: ContextData; skillId: string; onSkill: (id: string) => void; onOpenDocument: (id: string) => void }) {
   const [skills, setSkills] = createSignal<Skill[] | null>(null);
@@ -49,6 +49,8 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   onMount(() => { void load(); if (!props.context.data()) void props.context.load(); });
   const uses = (skill: Skill) => props.context.block(`skill-${skill.id}`)?.usedBy ?? [];
   const opened = () => skills()?.find((skill) => skill.id === props.skillId);
+  // Always one open: the first when none is named, or the named one has gone.
+  createEffect(() => { const list = skills(); if (list?.length && !opened()) props.onSkill((list.find((skill) => !skill.missing) ?? list[0]!).id); });
 
   // The opened skill's text: saved and reset through its block.
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
@@ -119,79 +121,66 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   };
   onCleanup(() => clearTimeout(timer));
 
-  const skillLine = (skill: Skill) =>
-    <SettingLine label={skill.name} state={[skill.missing ? "missing" : tokens(skill.chars), uses(skill).length ? `in ${uses(skill).length} ${uses(skill).length === 1 ? "document" : "documents"}` : "in no document", skill.origin === "installed" ? skill.source : ""].filter(Boolean).join(" · ")}
-      title={[skill.description, skill.origin === "installed" ? `From ${skill.source} on skills.sh; in every profile's default document.` : `Shipped with ${skill.profiles.join(", ") || "Conduit"}.`].filter(Boolean).join("\n\n")}>
-      <Show when={skill.origin === "installed"}>
-        <Button variant="ghost" size="icon-xs" aria-label={`Remove ${skill.name}`} title="Remove" disabled={!!busy()} onClick={() => void remove(skill)}><Icons.Delete /></Button>
-      </Show>
+  const about = (skill: Skill) => [skill.missing ? "missing" : tokens(skill.chars), uses(skill).length ? `${uses(skill).length} ${uses(skill).length === 1 ? "document" : "documents"}` : "unused"].join(" · ");
+  const pick = (skill: Skill) =>
+    <WorkbenchPick name={skill.name} context={about(skill)} title={skill.description} current={props.skillId === skill.id} onSelect={() => { props.onSkill(skill.id); setEditing(true); }}>
       <Switch label={`${skill.name} on`} checked={skill.enabled} disabled={!!busy() || skill.missing} onChange={(enabled) => void toggle(skill, enabled)} />
-      <Button variant="ghost" size="icon-xs" aria-label={`Open ${skill.name}`} title="Its text and where it is used" disabled={skill.missing} onClick={() => props.onSkill(skill.id)}><Icons.ChevronRight /></Button>
-    </SettingLine>;
-
-  const One = (one: { skill: Skill }) => <Workbench label="Skill">
-    <WorkbenchTitle meta={[one.skill.origin === "installed" ? `installed from ${one.skill.source}` : "shipped", detail()?.modified ? "changed" : ""].filter(Boolean).join(" · ")}
-      title={<Select look="title" id="settings-skill" search="Search skills" aria-label="Skill" title="Choose a skill" value={one.skill.id} onChange={(event) => props.onSkill(event.currentTarget.value)}>
-        <For each={skills() ?? []}>{(item) => <option value={item.id}>{item.name}</option>}</For>
-      </Select>}
-      actions={<Button variant="ghost" size="sm" title="Back to every skill" onClick={() => props.onSkill("")}><Icons.ChevronLeft /> All skills</Button>} />
-    <Show when={error()}><Note tone="error">{error()}</Note></Show>
-    <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={one.skill.name} opens="Text"
-      main={<Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(loaded) =>
-        <TextEditor fill label={`${one.skill.name} text`} value={draft()} onChange={setDraft} onSave={save}
-          head={<>
-            <Heading kind="editor">SKILL.md</Heading>
-            <Actions kind="editor">
-              <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || saving()} title="Save (Ctrl+S)" onClick={save}>{saving() ? "Saving…" : dirty() ? "Save" : "Saved"}</Button>
-              <IconButton kind="file" label={one.skill.origin === "installed" ? "Reset to the installed text" : "Reset to the shipped text"} disabled={!loaded().resettable || !loaded().modified || saving()} onClick={reset}><Icons.Reset /></IconButton>
-              <Show when={one.skill.origin === "installed"}><IconButton kind="file" label="Remove from the hub" disabled={!!busy()} onClick={() => void remove(one.skill)}><Icons.Delete /></IconButton></Show>
-            </Actions>
-          </>}
-          status={<><StatusText>{tokens(draft().length)}</StatusText><StatusText>read when the model loads it; its description is in every prompt that lists it</StatusText></>} />}</Show>}
-      side={<>
-        <Group kind="workbench" title="On this hub">
-          <WorkbenchFact name="On" title="Off: left out of every document that lists it"><Switch label={`${one.skill.name} on`} checked={one.skill.enabled} disabled={!!busy()} onChange={(enabled) => void toggle(one.skill, enabled)} /></WorkbenchFact>
-        </Group>
-        <Group kind="workbench" title="Used in">
-          <Show when={uses(one.skill).length} fallback={<Note kind="workbench">In no document: add it to one from Prompts › Skills.</Note>}>
-            <For each={uses(one.skill)}>{(id) => <Row density="nav" element="button" lead={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</Row>}</For>
-          </Show>
-        </Group>
-        <Show when={one.skill.description}><Group kind="workbench" title="When it applies"><Note kind="workbench">{one.skill.description}</Note></Group></Show>
-      </>} />
-  </Workbench>;
+    </WorkbenchPick>;
+  const Text = (one: { skill: Skill }) => <Show when={detail()} fallback={<Loading>Loading…</Loading>}>{(loaded) =>
+    <TextEditor fill label={`${one.skill.name} text`} value={draft()} onChange={setDraft} onSave={save}
+      head={<>
+        <Heading kind="editor">SKILL.md</Heading>
+        <Actions kind="editor">
+          <Button variant={dirty() ? "primary" : "ghost"} size="sm" disabled={!dirty() || !draft().trim() || saving()} title="Save (Ctrl+S)" onClick={save}>{saving() ? "Saving…" : dirty() ? "Save" : "Saved"}</Button>
+          <IconButton kind="file" label={one.skill.origin === "installed" ? "Reset to the installed text" : "Reset to the shipped text"} disabled={!loaded().resettable || !loaded().modified || saving()} onClick={reset}><Icons.Reset /></IconButton>
+          <Show when={one.skill.origin === "installed"}><IconButton kind="file" label="Remove from the hub" disabled={!!busy()} onClick={() => void remove(one.skill)}><Icons.Delete /></IconButton></Show>
+        </Actions>
+      </>}
+      status={<><StatusText>{tokens(draft().length)}</StatusText><StatusText>read when the model loads it</StatusText></>} />}</Show>;
+  const Facts = (one: { skill: Skill }) => <>
+    <Group kind="workbench" title="Used in">
+      <Show when={uses(one.skill).length} fallback={<Note kind="workbench">In no document: add it to one from Prompts › Skills.</Note>}>
+        <For each={uses(one.skill)}>{(id) => <Row density="nav" element="button" lead={ROLE_ICON[props.context.document(id)?.role.kind ?? "profile"]()} end={<Icons.ChevronRight />} title={`Open ${documentLabel(id)} in Prompts`} onClick={() => props.onOpenDocument(id)}>{documentLabel(id)}</Row>}</For>
+      </Show>
+    </Group>
+    <Show when={one.skill.description}><Group kind="workbench" title="When it applies"><Note kind="workbench">{one.skill.description}</Note></Group></Show>
+    <Show when={one.skill.origin === "installed"}><Group kind="workbench" title="From"><WorkbenchFact name="skills.sh" value={one.skill.source} /></Group></Show>
+  </>;
+  const Find = () => <Group kind="workbench" title="Find on skills.sh">
+    <Input type="search" aria-label="Search skills.sh" placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
+    <Show when={searching()}><Note kind="workbench">Searching…</Note></Show>
+    <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
+    <Show when={found()}>{(results) =>
+      <Show when={results().length} fallback={<Note kind="workbench">Nothing found for “{query().trim()}”.</Note>}>
+        <For each={results()}>{(item) =>
+          <WorkbenchFact name={item.name} value={item.installs != null ? `${count(item.installs)} installs` : undefined} title={`${item.source} › ${item.skillId}`}>
+            <Show when={!item.installed} fallback={<Icons.Check />}>
+              <Button variant="ghost" size="icon-xs" aria-label={`Install ${item.name}`} title={`Install from ${item.source}`} disabled={!!busy()} onClick={() => void install(item)}>
+                <Show when={busy() === `${item.source}/${item.skillId}`} fallback={<Icons.Download />}><Icons.Clock /></Show>
+              </Button>
+            </Show>
+          </WorkbenchFact>}
+        </For>
+      </Show>}
+    </Show>
+    <Note kind="workbench">A skill is instructions a model reads and files it can run: install from sources you trust.</Note>
+    <LiveNote>{status()}</LiveNote>
+  </Group>;
 
   return <Show when={skills()} fallback={<Show when={error()} fallback={<Loading>Loading skills…</Loading>}>
     <Note tone="error"><span>{error()}</span><Button variant="secondary" size="sm" onClick={() => void load()}>Retry</Button></Note>
-  </Show>}>{(list) => <Show when={opened()} fallback={<>
-    <Group title="Installed">
-      <Show when={list().some((skill) => skill.origin === "installed")} fallback={<Note tone="quiet">None yet: find one below.</Note>}>
-        <For each={list().filter((skill) => skill.origin === "installed")}>{skillLine}</For>
-      </Show>
-    </Group>
-    <Group title="Shipped">
-      <For each={list().filter((skill) => skill.origin === "shipped")}>{skillLine}</For>
-    </Group>
-    <Group title="Find">
-      <SettingLine label="skills.sh" state={searching() ? "searching…" : undefined}>
-        <Input type="search" aria-label="Search skills.sh" placeholder="pdf, frontend design, git…" value={query()} onInput={(event) => search(event.currentTarget.value)} />
-      </SettingLine>
-      <Show when={searchError()}><Note tone="error">{searchError()}</Note></Show>
-      <Show when={found()}>{(results) =>
-        <Show when={results().length} fallback={<Note tone="quiet">Nothing found for “{query().trim()}”.</Note>}>
-          <For each={results()}>{(item) =>
-            <SettingLine plain label={item.name} state={[item.source, item.installs != null ? `${count(item.installs)} installs` : ""].filter(Boolean).join(" · ")} title={`${item.source} › ${item.skillId}`}>
-              <Show when={!item.installed} fallback={<SettingValue>Installed</SettingValue>}>
-                <Button variant="secondary" size="sm" disabled={!!busy()} onClick={() => void install(item)}>
-                  <Show when={busy() === `${item.source}/${item.skillId}`} fallback={<><Icons.Download /> Install</>}>Installing…</Show>
-                </Button>
-              </Show>
-            </SettingLine>}
-          </For>
-        </Show>}
-      </Show>
-      <Note tone="quiet">A skill is instructions every profile's model reads, and files it can run: install from sources you trust.</Note>
-      <LiveNote>{status()}</LiveNote>
-    </Group>
-  </>}>{(skill) => <One skill={skill()} />}</Show>}</Show>;
+  </Show>}>{(list) => <Workbench label="Skills">
+    <WorkbenchTitle title={opened()?.name ?? "Skills"} meta={opened() ? [opened()!.origin === "installed" ? `installed from ${opened()!.source}` : "shipped", opened()!.enabled ? "" : "off", detail()?.modified ? "changed" : ""].filter(Boolean).join(" · ") : undefined} />
+    <Show when={error()}><Note tone="error">{error()}</Note></Show>
+    <WorkbenchSplit open={editing()} onOpenChange={setEditing} mainLabel={opened()?.name ?? "Skill"}
+      side={<>
+        <Show when={list().some((skill) => skill.origin === "installed")}>
+          <Group kind="workbench" title="Installed"><For each={list().filter((skill) => skill.origin === "installed")}>{pick}</For></Group>
+        </Show>
+        <Group kind="workbench" title="Shipped"><For each={list().filter((skill) => skill.origin === "shipped")}>{pick}</For></Group>
+        <Find />
+      </>}
+      main={<Show when={opened()} fallback={<Note kind="workbench">No skills yet: find one on skills.sh.</Note>}>{(skill) =>
+        <WorkbenchPair list={<Facts skill={skill()} />} pane={<Text skill={skill()} />} />}</Show>} />
+  </Workbench>}</Show>;
 }

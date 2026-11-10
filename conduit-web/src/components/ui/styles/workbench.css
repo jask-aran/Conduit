@@ -32,6 +32,11 @@
   .ui-workbench-split-open > .ui-workbench-side { display: none; }
   .ui-workbench-split-open > .ui-workbench-main { display: flex; min-height: 0; flex: 1; }
 }
+.ui-workbench-name { min-width: 0; margin: 0; overflow: hidden; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
+/* WorkbenchPick: a row that chooses, and its own control after it. */
+.ui-workbench-pick { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
+.ui-workbench-pick > .ui-row { min-width: 0; flex: 1; }
+.ui-workbench-pick > :not(.ui-row) { flex: none; }
 /* WorkbenchPair: the main pane's own two columns, a list as wide as its names and the chosen one's pane taking the rest. */
 .ui-workbench-pair { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-lg); }
 .ui-workbench-pair-list { display: flex; min-width: var(--measure-xs); flex: 0 1 var(--measure-sm); flex-direction: column; gap: var(--space-sm); overflow: auto; scrollbar-width: none; }

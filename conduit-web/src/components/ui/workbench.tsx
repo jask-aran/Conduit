@@ -11,9 +11,10 @@ import * as Icons from "./icons";
  * the main column, one pane that fills it (a TextEditor fill).
  */
 export const Workbench = (props: { label: string; children: JSX.Element }) => <div class="ui-workbench" role="region" aria-label={props.label}>{props.children}</div>;
-/** title: the thing worked on, a Select look="title" to choose another. actions: icon buttons beside it. meta: what it is. */
+/** title: the thing worked on -- its name, where the side column chooses it (WorkbenchPick), or a Select look="title"
+ *  to choose another. actions: icon buttons beside it. meta: what it is. */
 export const WorkbenchTitle = (props: { title: JSX.Element; actions?: JSX.Element; meta?: string }) => <header class="ui-workbench-title">
-  <div class="ui-workbench-title-line">{props.title}<Show when={props.actions}><span class="ui-workbench-actions">{props.actions}</span></Show></div>
+  <div class="ui-workbench-title-line">{typeof props.title === "string" ? <h3 class="ui-workbench-name">{props.title}</h3> : props.title}<Show when={props.actions}><span class="ui-workbench-actions">{props.actions}</span></Show></div>
   <Show when={props.meta}><Note kind="workbench">{props.meta}</Note></Show>
 </header>;
 /** The side column beside the main pane: side by side, one line, each column scrolling on its own.
@@ -39,6 +40,14 @@ export const WorkbenchSplit = (props: { side: JSX.Element; main: JSX.Element; op
 export const WorkbenchPair = (props: { list: JSX.Element; pane: JSX.Element }) => <div class="ui-workbench-pair">
   <div class="ui-workbench-pair-list">{props.list}</div>{props.pane}
 </div>;
+/** One of the things a workbench works on, in its side column: choosing it shows it in the main pane (current), and
+ *  what is known of it at a glance (context) sits after its name. children: a control of its own at the end (its
+ *  switch), beside the row and never inside it, so the control's press is not the row's. */
+export const WorkbenchPick = (props: { name: string; context?: string; title?: string; current?: boolean; onSelect: () => void; children?: JSX.Element }) =>
+  <div class="ui-workbench-pick">
+    <Row density="nav" element="button" current={props.current} aria-pressed={Boolean(props.current)} title={props.title} context={props.context} onClick={() => props.onSelect()}>{props.name}</Row>
+    {props.children}
+  </div>;
 /** A titled group in the side column (Used in, Slots). */
 /** A fact in a side section: its name (code: written in the text as is) and its value, quiet. */
 export const WorkbenchFact = (props: { name: string; value?: string; title?: string; code?: boolean; children?: JSX.Element }) =>
