@@ -28,5 +28,5 @@ certbot="certbot"
 command -v certbot >/dev/null 2>&1 || certbot="uvx certbot"
 [[ "${LAN_CERT_HUB:-1}" == 0 ]] || issue "$name" "$name" lan
 # And one for every name under it, which the hub hands its nodes so a browser on this network reads from them
-# directly (docs/plans/distributed-nodes-and-execution.md, "files take the shortest way").
+# directly (files take the shortest way).
 issue "*.$name" "nodes.$name" nodes

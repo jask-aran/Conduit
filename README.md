@@ -23,7 +23,7 @@ One polished home for the coding agents you run. Chats, a real terminal, files a
 | fx | Installed fx through ACP |
 | ChatGPT Web | Models from a connected ChatGPT account |
 
-Capabilities vary by harness. See the [backend contract](docs/chat-backend-contract.md) for details.
+Capabilities vary by harness; each adapter declares its own (`conduit-web/src/chat-backend-contract.d.ts`).
 
 ## Compare
 

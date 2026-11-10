@@ -1,8 +1,8 @@
 # Screens and device control (2026-11-10)
 
 Any client can see and drive what any device has, through the hub; agents (a chat's, jbot) can do the same, and can put
-what they are working on in front of the person on the client they are talking from. Agreed 2026-11-10. This widens
-`distributed-nodes-and-execution.md`'s vision ("rather than crude screen mirroring"): agents first, screens when
+what they are working on in front of the person on the client they are talking from. Agreed 2026-11-10. This widens the
+distributed vision ("rather than crude screen mirroring"): agents first, screens when
 watching or taking over helps.
 
 ## Names

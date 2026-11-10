@@ -441,7 +441,7 @@ async function threadFor(runtime, api) {
 }
 
 /*
- * The approval model (docs/plans/approval-model.md, packages/pi-durable-approver) as Conduit hosts it: Executor's
+ * The approval model (packages/pi-durable-approver) as Conduit hosts it: Executor's
  * held actions judged against the person's policy (Settings › Agent › Approvals) by the review model (Settings › AI ›
  * Helper models: Review, else the naming model), what it cannot allow asked of the person as before (an ask, a push,
  * Allow resumes it). No review model, or any failure of it: the person is asked, as without the approver.

@@ -194,7 +194,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
 
 type ApprovalPolicy = { version: string; may: string[]; always: string[]; limits: string[]; exact: string[] };
 /**
- * The person's standing rules for the approval model (docs/plans/approval-model.md): what the agent may do, what is
+ * The person's standing rules for the approval model: what the agent may do, what is
  * always theirs, and limits they set; one rule a line, in plain words. Until saved, the starter rules apply.
  */
 function ApprovalRules(props: { name: string; onOpenBlock?: (id: string) => void; onOpenDocument?: (id: string) => void }) {

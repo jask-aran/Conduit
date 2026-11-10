@@ -1,7 +1,7 @@
 /**
  * pi-durable-approver: an approval model for pi-durable agents. What a tool's own gate or the host holds is judged by a
  * cheap, reasoning-blind classifier against the person's standing policy; what it cannot allow is escalated to the
- * host (a person, usually on their phone). Design: docs/plans/approval-model.md in the Conduit repo.
+ * host (a person, usually on their phone).
  *
  * The approver wraps tools (pi-durable `wrapTool`), so it runs inside the tool's own durable task: verdicts are
  * memoised with `api.memo`, and a held action it allows is resumed in the same call.

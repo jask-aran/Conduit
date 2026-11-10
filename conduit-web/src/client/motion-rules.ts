@@ -5,7 +5,7 @@
  * makes Chromium re-check ancestors on every DOM change beneath the panes --
  * whether or not the root attribute that gates the rule is set. Measured, that
  * was ~12ms of style a keystroke in a file editor and most of a streaming
- * turn's style cost (docs/design/performance-pass.md, 6). So the rules exist
+ * turn's style cost. So the rules exist
  * only while `data-arrival` or `data-route-motion` is on the root: a style
  * element added in the same task the attribute is set (a mutation observer
  * runs before the next frame) and removed when both are gone.

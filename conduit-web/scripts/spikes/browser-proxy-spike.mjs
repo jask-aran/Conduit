@@ -2,7 +2,7 @@
 /*
  * Spike for roadmap #8 (browser transport v2), not shipped: can a page be shown by proxying it -- each site on an origin
  * of its own under the hub, framed in Conduit -- with its security headers kept? Three local servers stand in for the
- * real ones, and a headless browser reports what survives (docs/plans/browser-proxy-spike.md has the findings):
+ * real ones, and a headless browser reports what survives:
  *
  *   SITE   127.0.0.1:7200  a site that resists: X-Frame-Options DENY, CSP frame-ancestors 'self' and a script nonce,
  *                          a cookie, an absolute redirect, an absolute same-origin link and fetch, a WebSocket.

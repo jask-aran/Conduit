@@ -7,7 +7,7 @@ import { addUsage, emptyUsage, rate } from "./classifier.js";
 import { DEFAULT_TABLE, outcomeOf } from "./table.js";
 
 /*
- * The gate (docs/plans/approval-model.md). It wraps the tools a holder could hold, so it runs inside each call's own
+ * The gate. It wraps the tools a holder could hold, so it runs inside each call's own
  * durable task: a held action is judged, and carried out, refused or escalated within that call.
  *
  * Order, for one held action:

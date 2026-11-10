@@ -33,7 +33,7 @@ function rgbOf(element: HTMLElement, color: string) {
 type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 
 /* One animation frame loop for every orb on the page, running only while one plays: a loop per orb drew every settled
- * turn in view every frame (docs/design/performance-pass.md, 13). */
+ * turn in view every frame. */
 type Player = { draw: (now: number) => void; interval: number; last: number };
 const players = new Set<Player>();
 let tick = 0;

@@ -5015,7 +5015,7 @@ function App() {
   // stays out of the way meanwhile. Firing on every frame's new weights, it
   // started a motion of its own each frame -- every transcript measured,
   // pinned and relaid out with its anchor, and the drag's own changes, now
-  // under a stale id, ignored (docs/design/performance-pass.md, 3).
+  // under a stale id, ignored.
   let splitMotionOpen = false;
   const announceSplit = (phase: "begin" | "change" | "end", size: number, panes?: { element: HTMLElement; width: number }[]) => {
     splitMotionOpen = phase !== "end";

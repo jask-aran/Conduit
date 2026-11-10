@@ -3,7 +3,7 @@
  * A harness reports what it can and each adapter maps its own parts onto
  * these; a part Conduit has no category for is Other, never dropped. When a
  * category gathers several of a harness's parts, they become its items, so
- * nothing the harness said is lost (docs/design/conduit-harness-plugins.md).
+ * nothing the harness said is lost.
  */
 const CONTEXT_CATEGORIES = Object.freeze([
   { id: "system-prompt", label: "System prompt", kind: "used" },

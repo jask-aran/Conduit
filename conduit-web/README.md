@@ -692,7 +692,7 @@ and status vocabulary. First-party chats use durable conversations as their
 persisted history; external adapters read their own transcript stores.
 
 The backend-neutral vocabulary and lifecycle contract are defined in
-`../docs/chat-backend-contract.md` and `src/chat-backend-contract.d.ts`. The
+`src/chat-backend-contract.d.ts`. The
 server owns event ordering, the chat log, and the active-generation projection;
 the client reduces those events into its live transcript. Changes to the wire
 vocabulary must update the contract and this section in the same change.
@@ -884,8 +884,8 @@ either ownership close code automatically. The browser owns VT parsing and
 rendering. Conduit brokers bounded process I/O and closes a slow client with
 code `1013`.
 
-Server events use the backend-neutral vocabulary defined by
-`docs/chat-backend-contract.md` and typed in `src/chat-backend-contract.d.ts`.
+Server events use the backend-neutral vocabulary typed in
+`src/chat-backend-contract.d.ts`.
 Every adapter maps its own events into it, and a harness's own words never
 cross its adapter.
 

@@ -496,7 +496,7 @@ export function mountTranscriptVisibility(
     // the size observer, and a toggle the reader makes re-measures through
     // CODE_BLOCK_TOGGLE_EVENT. Rewrites to the same value, and a user
     // message's first fold verdict as history loads, ran this full pass
-    // repeatedly through a scroll up (docs/design/performance-pass.md, 10).
+    // repeatedly through a scroll up.
     const deliberate = records.some((record) => record.attributeName === "data-folded" && (record.target as HTMLElement).classList.contains("ui-code")
       && record.oldValue !== (record.target as HTMLElement).getAttribute("data-folded")
       && Boolean((record.target as HTMLElement).closest(`[${VISIBILITY_ATTRIBUTE}="hidden"]`)));
