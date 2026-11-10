@@ -8,7 +8,7 @@
  * Each is unset (null) until chosen: the client's own default stands. `type`:
  *   boolean | integer (min..max) | strings (at most `limit`) | choice (one of `values`) | shortcuts | voice
  *
- * Plain data and small functions, no imports: the client takes it as types only.
+ * Plain data and small functions, no imports: the client takes its types, and the choice lists as values.
  */
 export const UI_PREFERENCES = /** @type {const} */ ({
   sidebarChatLimit: { type: "integer", min: 5, max: 100 },

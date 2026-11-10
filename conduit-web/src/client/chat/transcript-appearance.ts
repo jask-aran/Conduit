@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { CODE_BLOCK_COLLAPSE_DEFAULT_LINES, CODE_BLOCK_COLLAPSE_LINE_OPTIONS, type CodeBlockCollapseMode } from "./code-block";
+import { UI_PREFERENCES } from "../../preferences-api.js";
 import { isUserMessageCollapseMode, selectedUserMessageCollapse, type UserMessageCollapseMode } from "./user-message-collapse";
 import type { UiPreferenceChoice } from "../preferences/ui-preferences";
 import "./transcript-appearance.css";
@@ -26,10 +27,10 @@ export type { UserMessageCollapseMode } from "./user-message-collapse";
  * stays correct at every size.
  */
 
-export type TranscriptWidthMode = "compact" | "default" | "wide" | "full";
-export type TranscriptWideBlocksMode = "off" | "default" | "wider" | "full";
-export type CodeBlockWidthMode = "column" | "wide";
-export type PanelMotionMode = "translate" | "reflow";
+export type TranscriptWidthMode = UiPreferenceChoice<"transcriptWidth">;
+export type TranscriptWideBlocksMode = UiPreferenceChoice<"transcriptWideBlocks">;
+export type CodeBlockWidthMode = UiPreferenceChoice<"codeBlockWidth">;
+export type PanelMotionMode = UiPreferenceChoice<"panelMotion">;
 
 export const TRANSCRIPT_WIDTH_STORAGE_KEY = "conduit:transcript-width";
 export const TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY = "conduit:transcript-wide-blocks";
@@ -70,11 +71,12 @@ export const PANEL_MOTION_OPTIONS: ReadonlyArray<{ value: PanelMotionMode; label
   { value: "reflow", label: "Live reflow" },
 ];
 
-const TRANSCRIPT_WIDTHS = new Set<string>(TRANSCRIPT_WIDTH_OPTIONS.map((option) => option.value));
-const CODE_BLOCK_WIDTHS = new Set<string>(CODE_BLOCK_WIDTH_OPTIONS.map((option) => option.value));
-const WIDE_BLOCKS = new Set<string>(TRANSCRIPT_WIDE_BLOCKS_OPTIONS.map((option) => option.value));
-const COLLAPSE_MODES = new Set<string>(CODE_BLOCK_COLLAPSE_OPTIONS.map((option) => option.value));
-const PANEL_MOTIONS = new Set<string>(PANEL_MOTION_OPTIONS.map((option) => option.value));
+// What each accepts is what the hub accepts (preferences-api.js), not a second list.
+const TRANSCRIPT_WIDTHS = new Set<string>(UI_PREFERENCES.transcriptWidth.values);
+const CODE_BLOCK_WIDTHS = new Set<string>(UI_PREFERENCES.codeBlockWidth.values);
+const WIDE_BLOCKS = new Set<string>(UI_PREFERENCES.transcriptWideBlocks.values);
+const COLLAPSE_MODES = new Set<string>(UI_PREFERENCES.codeBlockCollapse.values);
+const PANEL_MOTIONS = new Set<string>(UI_PREFERENCES.panelMotion.values);
 
 const publish = (key: string, value: unknown) => {
   if (typeof window === "undefined") return;
@@ -122,7 +124,7 @@ export function saveCodeBlockWidth(
 }
 
 export function isCodeBlockCollapseLines(value: unknown): value is CollapseLines {
-  return typeof value === "number" && (CODE_BLOCK_COLLAPSE_LINE_OPTIONS as readonly number[]).includes(value);
+  return typeof value === "number" && (UI_PREFERENCES.codeBlockCollapseLines.values as readonly number[]).includes(value);
 }
 
 export function isPanelMotionMode(value: unknown): value is PanelMotionMode {

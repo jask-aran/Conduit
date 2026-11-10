@@ -17,6 +17,18 @@ export type UiPreferenceChoice<K extends keyof Declared> = NonNullable<UiPrefere
 
 export type UiPreferenceKey = keyof UiPreferences;
 
+/*
+ * How the client keeps one UI preference (main.tsx's table, one row a key): read on this device as the page mounts,
+ * mirrored to `storage` when the hub's value arrives, then handed to what shows it. A row with no `storage` is not
+ * compared before it is applied; `store` is how a value is written there (JSON for a list, String otherwise).
+ */
+export type ClientPreference<K extends UiPreferenceKey> = {
+  storage?: string;
+  store?: (value: UiPreferences[K]) => string;
+  local: () => UiPreferences[K];
+  apply?: (value: UiPreferences[K]) => void;
+};
+
 export function publishUiPreference<K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));

@@ -113,7 +113,7 @@ import { PANE_LAYOUTS, readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, Work
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
 import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
-import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
+import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type ClientPreference, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, followZoomGestures, selectedUiScale, stepUiScale } from "./preferences/ui-scale";
 import { applyTranscriptScale } from "./preferences/transcript-scale";
 import { applyMotionScale } from "./preferences/motion-scale";
@@ -5496,7 +5496,6 @@ function App() {
       window.removeEventListener("focus", readOnFocus);
     });
 
-    const localVoice = loadVoiceDictationSettings();
     const parseStringArray = (key: string) => {
       try {
         const value = JSON.parse(localStorage.getItem(key) || "null");
@@ -5505,55 +5504,92 @@ function App() {
         return [];
       }
     };
-    const localPreferences: UiPreferences = {
-      sidebarChatLimit: selectedSidebarChatLimit(),
-      collapsedProjectIds: parseStringArray("conduit.sidebar.collapsed-projects"),
-      sidebarCollapsed: localStorage.getItem("conduit.sidebar") === "collapsed",
-      meteorField: selectedMeteorField(),
-      transcriptWidth: selectedTranscriptWidth(),
-      transcriptWideBlocks: selectedTranscriptWideBlocks(),
-      codeBlockCollapse: selectedCodeBlockCollapse(),
-      codeBlockCollapseLines: selectedCodeBlockCollapseLines(),
-      codeBlockWidth: selectedCodeBlockWidth(),
-      panelMotion: selectedPanelMotion(),
-      leaderMenu: selectedLeaderMenu(),
-      userMessageCollapse: selectedUserMessageCollapse(),
-      chatSort: selectedChatSort(),
-      shortcutOverrides: shortcutManager.shortcutOverrides(),
-      sidebarPins: [],
-      voicePreferences: {
-        shortcut: localVoice.shortcut,
-        activation: localVoice.activation,
-        autoSend: localVoice.autoSend,
-        captureProfile: localVoice.captureProfile,
-      },
-    };
-    const storageKeys: Partial<Record<UiPreferenceKey, string>> = {
-      sidebarChatLimit: SIDEBAR_CHAT_LIMIT_STORAGE_KEY,
-      collapsedProjectIds: "conduit.sidebar.collapsed-projects",
-      sidebarCollapsed: "conduit.sidebar",
-      meteorField: METEOR_FIELD_STORAGE_KEY,
-      transcriptWidth: TRANSCRIPT_WIDTH_STORAGE_KEY,
-      transcriptWideBlocks: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY,
-      codeBlockCollapse: CODE_BLOCK_COLLAPSE_STORAGE_KEY,
-      codeBlockCollapseLines: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY,
-      codeBlockWidth: CODE_BLOCK_WIDTH_STORAGE_KEY,
-      panelMotion: PANEL_MOTION_STORAGE_KEY,
-      leaderMenu: LEADER_MENU_STORAGE_KEY,
-      userMessageCollapse: USER_MESSAGE_COLLAPSE_STORAGE_KEY,
-      chatSort: CHAT_SORT_STORAGE_KEY,
-    };
     // A URL override is a deliberate per-tab experiment, and server preferences
     // arrive after first paint. Applying one here would silently undo the
     // override. Storage still mirrors the server; only the applied value is
     // held back.
     const overrideParams = new URLSearchParams(location.search);
     const overridden = (key: UiPreferenceKey) => overrideParams.has(key);
-    const applyPreference = (key: UiPreferenceKey, value: UiPreferences[UiPreferenceKey]) => {
-      const storageKey = storageKeys[key];
-      const stored = key === "sidebarCollapsed"
-        ? value ? "collapsed" : "expanded"
-        : Array.isArray(value) ? JSON.stringify(value) : String(value);
+    // Every UI preference, one row each (ClientPreference): a key the hub declares (UI_PREFERENCES) without a row here
+    // is a type error. A row with no `apply` is only announced: its owner listens for the change itself.
+    const clientPreferences = {
+      sidebarChatLimit: {
+        storage: SIDEBAR_CHAT_LIMIT_STORAGE_KEY, local: selectedSidebarChatLimit,
+        apply: (value) => { if (typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value)); },
+      },
+      collapsedProjectIds: { storage: "conduit.sidebar.collapsed-projects", local: () => parseStringArray("conduit.sidebar.collapsed-projects") },
+      sidebarCollapsed: {
+        storage: "conduit.sidebar", store: (value) => value ? "collapsed" : "expanded",
+        local: () => localStorage.getItem("conduit.sidebar") === "collapsed",
+      },
+      meteorField: {
+        storage: METEOR_FIELD_STORAGE_KEY, local: selectedMeteorField,
+        apply: (value) => { if (typeof value === "boolean") setMeteorField(value); },
+      },
+      transcriptWidth: {
+        storage: TRANSCRIPT_WIDTH_STORAGE_KEY, local: () => selectedTranscriptWidth(),
+        apply: (value) => { if (isTranscriptWidthMode(value) && !overridden("transcriptWidth")) applyTranscriptAppearance({ width: value }); },
+      },
+      transcriptWideBlocks: {
+        storage: TRANSCRIPT_WIDE_BLOCKS_STORAGE_KEY, local: () => selectedTranscriptWideBlocks(),
+        apply: (value) => { if (isTranscriptWideBlocksMode(value) && !overridden("transcriptWideBlocks")) applyTranscriptAppearance({ wideBlocks: value }); },
+      },
+      codeBlockCollapse: {
+        storage: CODE_BLOCK_COLLAPSE_STORAGE_KEY, local: () => selectedCodeBlockCollapse(),
+        apply: (value) => { if (isCodeBlockCollapseMode(value) && !overridden("codeBlockCollapse")) applyTranscriptAppearance({ collapse: value }); },
+      },
+      codeBlockCollapseLines: {
+        storage: CODE_BLOCK_COLLAPSE_LINES_STORAGE_KEY, local: () => selectedCodeBlockCollapseLines(),
+        apply: (value) => { if (isCodeBlockCollapseLines(value) && !overridden("codeBlockCollapseLines")) applyTranscriptAppearance({ collapseLines: value }); },
+      },
+      codeBlockWidth: {
+        storage: CODE_BLOCK_WIDTH_STORAGE_KEY, local: () => selectedCodeBlockWidth(),
+        apply: (value) => { if (isCodeBlockWidthMode(value) && !overridden("codeBlockWidth")) applyTranscriptAppearance({ codeWidth: value }); },
+      },
+      panelMotion: {
+        storage: PANEL_MOTION_STORAGE_KEY, local: () => selectedPanelMotion(),
+        apply: (value) => { if (isPanelMotionMode(value) && !overridden("panelMotion")) publishUiPreference("panelMotion", value); },
+      },
+      leaderMenu: {
+        storage: LEADER_MENU_STORAGE_KEY, local: () => selectedLeaderMenu(),
+        apply: (value) => { if (isLeaderMenuMode(value)) setLeaderMenu(value); },
+      },
+      userMessageCollapse: {
+        storage: USER_MESSAGE_COLLAPSE_STORAGE_KEY, local: () => selectedUserMessageCollapse(),
+        apply: (value) => { if (isUserMessageCollapseMode(value) && !overridden("userMessageCollapse")) applyTranscriptAppearance({ userMessageCollapse: value }); },
+      },
+      chatSort: { storage: CHAT_SORT_STORAGE_KEY, local: selectedChatSort },
+      shortcutOverrides: {
+        local: () => shortcutManager.shortcutOverrides(),
+        apply: (value) => {
+          if (value && typeof value === "object" && !Array.isArray(value)) shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
+        },
+      },
+      sidebarPins: {
+        local: () => [],
+        apply: (value) => { if (Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string")); },
+      },
+      voicePreferences: {
+        local: () => {
+          const { shortcut, activation, autoSend, captureProfile } = loadVoiceDictationSettings();
+          return { shortcut, activation, autoSend, captureProfile };
+        },
+        apply: (value) => {
+          if (!value || typeof value !== "object" || Array.isArray(value)) return;
+          // Read now: the copy taken at startup would put back whatever
+          // microphone was chosen then (the device stays on this client only).
+          const next = { ...loadVoiceDictationSettings(), ...value } as VoiceDictationSettings;
+          localStorage.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(next));
+          setVoiceSettings(next);
+        },
+      },
+    } satisfies { [K in UiPreferenceKey]: ClientPreference<K> };
+    const preferenceKeys = Object.keys(clientPreferences) as UiPreferenceKey[];
+    const preferenceRow = <K extends UiPreferenceKey>(key: K) => clientPreferences[key] as ClientPreference<K>;
+    // Read as the page mounts, before the hub answers: this device's own values.
+    const localPreferences = Object.fromEntries(preferenceKeys.map((key) => [key, preferenceRow(key).local()])) as UiPreferences;
+    const applyPreference = <K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) => {
+      const { storage, store, apply } = preferenceRow(key);
       // Hydration replays every preference the server holds, and almost all of
       // them are already on screen: localStorage seeded each signal, and the
       // reading-surface presets were stamped, before the first paint. Replaying
@@ -5564,28 +5600,12 @@ function App() {
       // Only keys with a storage key can be compared, and those are exactly the
       // ones seeded from storage. The rest (pins, shortcut overrides, voice)
       // fall through and are applied as before.
-      if (storageKey && localStorage.getItem(storageKey) === stored) return;
-      if (storageKey) localStorage.setItem(storageKey, stored);
-      if (key === "sidebarChatLimit" && typeof value === "number") setSidebarChatLimit(clampSidebarChatLimit(value));
-      else if (key === "sidebarPins" && Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string"));
-      else if (key === "meteorField" && typeof value === "boolean") setMeteorField(value);
-      else if (key === "transcriptWidth" && isTranscriptWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ width: value });
-      else if (key === "transcriptWideBlocks" && isTranscriptWideBlocksMode(value) && !overridden(key)) applyTranscriptAppearance({ wideBlocks: value });
-      else if (key === "codeBlockCollapse" && isCodeBlockCollapseMode(value) && !overridden(key)) applyTranscriptAppearance({ collapse: value });
-      else if (key === "codeBlockCollapseLines" && isCodeBlockCollapseLines(value) && !overridden(key)) applyTranscriptAppearance({ collapseLines: value });
-      else if (key === "codeBlockWidth" && isCodeBlockWidthMode(value) && !overridden(key)) applyTranscriptAppearance({ codeWidth: value });
-      else if (key === "panelMotion" && isPanelMotionMode(value) && !overridden(key)) publishUiPreference("panelMotion", value);
-      else if (key === "leaderMenu" && isLeaderMenuMode(value)) setLeaderMenu(value);
-      else if (key === "userMessageCollapse" && isUserMessageCollapseMode(value) && !overridden(key)) applyTranscriptAppearance({ userMessageCollapse: value });
-      else if (key === "shortcutOverrides" && value && typeof value === "object" && !Array.isArray(value)) {
-        shortcutManager.replaceOverrides(value as ReturnType<ShortcutManager["shortcutOverrides"]>);
-      } else if (key === "voicePreferences" && value && typeof value === "object" && !Array.isArray(value)) {
-        // Read now: the copy taken at startup would put back whatever
-        // microphone was chosen then (the device stays on this client only).
-        const next = { ...loadVoiceDictationSettings(), ...value } as VoiceDictationSettings;
-        localStorage.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(next));
-        setVoiceSettings(next);
+      if (storage) {
+        const stored = store ? store(value) : Array.isArray(value) ? JSON.stringify(value) : String(value);
+        if (localStorage.getItem(storage) === stored) return;
+        localStorage.setItem(storage, stored);
       }
+      apply?.(value);
       window.dispatchEvent(new CustomEvent(UI_PREFERENCE_CHANGE_EVENT, { detail: { key, value } }));
     };
     const serverIdentityRequest = apiWhenServed<{ id?: string; name?: string; publicKey?: string; paths?: unknown }>("/v0/server")
@@ -5616,7 +5636,7 @@ function App() {
       const migration: Partial<UiPreferences> = {};
       hydratingUiPreferences = true;
       try {
-        for (const key of Object.keys(localPreferences) as UiPreferenceKey[]) {
+        for (const key of preferenceKeys) {
           const value = serverPreferences[key] == null ? localPreferences[key] : serverPreferences[key];
           if (serverPreferences[key] === null) Object.assign(migration, { [key]: value });
           applyPreference(key, value as never);
