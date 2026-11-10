@@ -341,7 +341,9 @@ export function Settings(props: {
   const matches = createMemo(() => {
     const found = new Map<Section, ReturnType<typeof results>>();
     for (const group of sectionGroups) for (const item of group.sections) {
-      const mine = results().filter((result) => result.section === item.id);
+      // The section itself, when its own name or keywords matched, leads its list.
+      const whole = (result: { group: string | null; label: string }) => result.group === null && result.label === label(item.id as Section);
+      const mine = results().filter((result) => result.section === item.id).sort((a, b) => Number(whole(b)) - Number(whole(a)));
       if (mine.length) found.set(item.id as Section, mine);
     }
     return found;
@@ -1377,7 +1379,7 @@ export function Settings(props: {
         <Show when={query().trim() && narrow()}>
           <For each={[...matches()]}>{([id, found]) => <Group kind="nav" title={label(id)}>
             <For each={found}>{(result) => <Row density="nav" element="button" data-result={flat().indexOf(result)} data-focus-shown={flat().indexOf(result) === cursor() ? "" : undefined} tabIndex={-1}
-              detail={result.group ?? undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? "Open" : result.label}</Row>}</For>
+              detail={result.group ?? undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? `All of ${label(id)}` : result.label}</Row>}</For>
           </Group>}</For>
         </Show>
         {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
