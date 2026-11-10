@@ -136,8 +136,7 @@ Terminals keep Escape for the TUI. They leave by chord only, which the terminal 
    field.
 3. Sidebar roving focus (one Tab stop).
 4. Move the hard-coded keys into the registry (Settings › Shortcuts then lists everything).
-5. The transcript as a list: a turn cursor (↑ ↓ between turns, Enter expands, Menu key to copy, retry and so on). It
-   is seeded in `docs/design/transcript-mode.md`.
+5. The transcript as a list: a turn cursor (↑ ↓ between turns, Enter expands, Menu key to copy, retry and so on).
 6. Find in chat (Ctrl+F in a pane) to replace the browser's find. This needs a decision because of the leader:
    Ctrl+G is the browser's "find next". Proposal: in-app find uses Enter and Shift+Enter for next and previous, so it
    doesn't need Ctrl+G.
