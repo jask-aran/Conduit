@@ -1,8 +1,7 @@
-import { createMemo, createSignal, type Accessor } from "solid-js";
+import { createMemo, type Accessor } from "solid-js";
 import { api } from "../api/client";
 import type { BooleanCapability, ChatSummary, HarnessManifestView, Project, Template } from "../api/contracts";
 import { manifestForChat, resolveCapability, resolveHistory } from "../chat-capabilities";
-import type { ComposerStatus } from "../chat/composer";
 import { createActiveChat, type ChatCatalogue } from "./active-chat";
 import { createAttachments } from "./attachments";
 import type { DraftsStore } from "./drafts";
@@ -73,7 +72,6 @@ export function createChatSession(options: {
   const capability = (name: BooleanCapability, fallback = false): boolean =>
     resolveCapability(manifest(), chat.capabilities(), name, fallback);
   const history = createMemo(() => resolveHistory(manifest(), chat.capabilities()));
-  const [composerStatus, setComposerStatus] = createSignal<ComposerStatus | null>(null);
   let attachInput: HTMLInputElement | undefined;
   const switchProfile = async (id: string) => {
     const chatId = chat.loadedId();
@@ -97,7 +95,6 @@ export function createChatSession(options: {
   return {
     chat, models, permissions, serviceLevels, attachments,
     activeProfile, manifest, capability, history, switchProfile,
-    composerStatus, setComposerStatus,
     /** The composer's hidden file input, which its attach button opens. */
     setAttachInput: (element: HTMLInputElement) => { attachInput = element; },
     openAttachments: () => attachInput?.click(),

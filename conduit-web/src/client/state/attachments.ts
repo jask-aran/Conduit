@@ -179,18 +179,12 @@ export function createAttachments(
     clear();
     setItems(asList<Attachment>(restored).map((item) => ({ ...item, status: "done", progress: 100, announced: false, restored: true })));
   };
-  const restoreDraft = (restored: Attachment[]) => {
-    const draftItems = asList<Attachment>(restored).map((item) => ({ ...item, status: "done" as const, progress: 100, announced: false, restored: false }));
-    const draftIds = new Set(draftItems.map((item) => item.id));
-    setItems((current) => [...draftItems, ...current.filter((item) => !draftIds.has(item.id))]);
-  };
-
   onCleanup(() => {
     for (const request of requests.values()) request.abort();
     for (const url of objectUrls) URL.revokeObjectURL(url);
   });
 
-  return { items, chatId, select, addFiles, remove, retry, pendingIds, markAnnounced, clear, restore, restoreDraft };
+  return { items, chatId, select, addFiles, remove, retry, pendingIds, markAnnounced, clear, restore };
 }
 
 export type AttachmentsStore = ReturnType<typeof createAttachments>;

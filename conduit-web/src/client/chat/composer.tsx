@@ -35,7 +35,7 @@ import { ContextGauge } from "./context-gauge";
 import type { AudioSignalLevel } from "./voice-audio";
 import { toast } from "@/components/ui/notifications";
 import { audioTransferLost, beginDictatedRange, matchesShortcut, releasesShortcut, replaceDictatedRange, shouldAutoSend, shouldReportNoSignal } from "./voice-dictation";
-import { createVoiceWaveformController, type VoiceWaveformController } from "./voice-waveform";
+import { createVoiceWaveformController } from "./voice-waveform";
 import { MAX_RESPONSIVE_BAR_COUNT } from "@/components/ui/voice-waveform-model";
 import { ModelSelector } from "./model-selector";
 import { COMMAND_IDS } from "../commands/command-registry";
@@ -45,23 +45,12 @@ import { parseReviewComments, removeReviewComment, reviewComments, updateReviewC
 import { ReviewCommentCards } from "./review-comment-cards";
 import { HostUiRequests } from "./host-ui-card";
 
-export const SPINNING_ACTIVITY = new Set(["starting", "reconnecting", "thinking", "responding", "using_tool", "retrying", "compacting", "stopping", "waiting_for_model"]);
-
 import { FolderPicker, type FolderOptions, type PlaceOptions } from "./place-picker";
 import { COMPOSER_FOLDS, type ComposerFold } from "./composer-folds";
 import { keptParts, watchFit } from "@/components/ui/fit";
 import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
-
-export interface ComposerStatus {
-  dictationState: () => VoiceDictationState;
-  dictationError: () => string;
-  dictating: () => boolean;
-  recording: () => boolean;
-  recorderMonitorState: () => "connecting" | "listening" | "stopped";
-  waveform: VoiceWaveformController;
-}
 
 const EDIT_ACTIONS = [
   { key: "undo", label: "Undo", icon: () => <Icons.Undo /> },
@@ -96,7 +85,6 @@ export function Composer(props: {
   onOpenModelSelector?: () => void;
   modelSelectorShortcut?: string | null;
   onOpenAttachments: () => void;
-  onStatusChange?: (status: ComposerStatus | null) => void;
   onSendDraft?: (text: string) => Promise<void>;
   /** Sending starts the chat (through `onSendDraft`), so there is none to wait for. */
   launches?: boolean;
@@ -116,7 +104,6 @@ export function Composer(props: {
   const [slashOpen, setSlashOpen] = createSignal(false);
   const [dictationState, setDictationState] = createSignal<VoiceDictationState>("idle");
   const [dictationError, setDictationError] = createSignal("");
-  const [transcriberReady, setTranscriberReady] = createSignal(false);
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
@@ -255,8 +242,6 @@ export function Composer(props: {
      The draft being sent is not a new one. */
   const newDraft = createMemo(() => hasPayload() && props.chat.generation() !== "submitting");
   const dictating = createMemo(() => ["starting", "listening"].includes(dictationState()) || finalisingTakes() > 0);
-  const recording = createMemo(() => dictationState() === "listening");
-  const recorderMonitorState = createMemo(() => dictationState() === "starting" ? "connecting" : dictationState() === "listening" ? "listening" : "stopped");
   // A chat's own send waits in its outbox while the hub cannot be reached; a composer that starts its chat needs the hub.
   const canSend = createMemo(() => hasPayload() && (props.serverOnline || !props.onSendDraft) && interactive() && props.chat.generation() !== "stopping"
     && (!busy() || supports("steer") || supports("followUpQueue")) && !dictating());
@@ -270,15 +255,6 @@ export function Composer(props: {
     compaction: supports("compaction") && !busy() && !props.chat.compacting(),
     harnessCommands: props.chat.harnessCommands(),
   });
-  const composerStatus: ComposerStatus = {
-    dictationState,
-    dictationError,
-    dictating,
-    recording,
-    recorderMonitorState,
-    waveform: dictationWaveform,
-  };
-
   const setInputLevel = (level: AudioSignalLevel) => dictationWaveform.push(level);
 
   const resize = () => {
@@ -455,15 +431,11 @@ export function Composer(props: {
         if (!take || !takeIsCurrentChat(take)) return;
         if (take && take === currentTake) {
           setDictationState(next);
-          if (next === "starting") setTranscriberReady(false);
           if (next !== "listening") dictationWaveform.reset();
-          if (["completed", "failed"].includes(next)) setTranscriberReady(false);
         }
         // The final transcript follows "completed"; auto-send settles after it.
         if (["failed", "idle"].includes(next)) settleAutoSend();
       },
-      onRuntimeReady: () => { if (takes.get(client) === currentTake) setTranscriberReady(true); },
-      onTranscriptionWaiting: () => { if (takes.get(client) === currentTake) setTranscriberReady(false); },
       onPartial: (text) => { const take = takes.get(client); if (take) applyTranscript(take, text); },
       onFinal: (text) => { const take = takes.get(client); if (take) applyTranscript(take, text); },
       onInputLevel: (level) => { if (takes.get(client) === currentTake) setInputLevel(level); },
@@ -548,7 +520,6 @@ export function Composer(props: {
     snapshot(true);
     dictationWaveform.reset();
     setDictationError("");
-    setTranscriberReady(false);
     const draft = props.chat.draft();
     const launch = pendingDictationLaunch;
     pendingDictationLaunch = null;
@@ -771,7 +742,6 @@ export function Composer(props: {
       refit();
     });
     onCleanup(() => cancelAnimationFrame(refitFrame));
-    props.onStatusChange?.(composerStatus);
     createEffect(() => {
       props.chat.draft();
       busy();
@@ -790,7 +760,6 @@ export function Composer(props: {
       pendingDictationLaunch = null;
       pushToTalkActive = false;
       setDictationState("idle");
-      setTranscriberReady(false);
       setDictationSelectionOwned(false);
       setDictationError("");
       dictationWaveform.reset();
@@ -835,7 +804,6 @@ export function Composer(props: {
     window.addEventListener("conduit:toggle-dictation", voiceToggle);
     onCleanup(() => {
       media?.removeEventListener("change", syncPhoneLayout);
-      props.onStatusChange?.(null);
       window.removeEventListener("keydown", voiceKeyDown, true);
       window.removeEventListener("keyup", voiceKeyUp, true);
       window.removeEventListener("conduit:toggle-dictation", voiceToggle);

@@ -1,5 +1,4 @@
 import { Icons } from "@/components/ui";
-import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show } from "solid-js";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
@@ -322,7 +321,6 @@ export function Settings(props: {
   onOpenWorkspace: (project: Project) => void;
   shortcuts: ShortcutManager;
 }) {
-  const { confirm: confirmDialog } = createDecisionScope(() => props.open ? "settings" : null);
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
   const [frosted, setFrosted] = createSignal(tabFrost());
   const [hapticChoice, setHapticChoice] = createSignal<HapticStrength>(hapticStrength());

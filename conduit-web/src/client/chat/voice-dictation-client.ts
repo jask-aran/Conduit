@@ -56,8 +56,6 @@ export interface VoiceDictationCompletion {
 
 interface VoiceDictationCallbacks {
   onState: (state: VoiceDictationState) => void;
-  onRuntimeReady?: () => void;
-  onTranscriptionWaiting?: () => void;
   onPartial: (text: string) => void;
   onFinal: (text: string) => void;
   onCompleted: (completion: VoiceDictationCompletion) => void;
@@ -632,10 +630,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
             drainPendingAudio();
             if (stopRequested && !drainingCapture) sendStopFrame();
             else flushPendingAudio();
-          } else if (message.type === "runtime_ready") {
-            callbacks.onRuntimeReady?.();
           } else if (message.type === "waiting_for_transcription") {
-            callbacks.onTranscriptionWaiting?.();
             if (state === "finishing") setState("waiting");
           } else if (message.type === "finalizing") {
             if (["finishing", "waiting"].includes(state)) setState("transcribing");

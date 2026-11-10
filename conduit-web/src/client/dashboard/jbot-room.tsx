@@ -156,7 +156,7 @@ export function JbotRoom(props: {
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages bare messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} />
+            <JbotMessages messages={log.messages()} renderer={props.markdownRenderer} name={name()} working={props.working} live={props.live} sent={props.sent} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>

@@ -1,6 +1,6 @@
 import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Suspense, Switch, untrack } from "solid-js";
 import { splitQuoted } from "../../email-quote.js";
-import { clockTime, AgentRow, AgentRows, Answer, Button, DashConversation, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
+import { clockTime, AgentRow, AgentRows, Answer, Button, EmailItem, Icons, Message, MessageFeedback, MessageFoot, ReportCard, RoomRow, RoutineIcon, RunLine, TranscriptList, TranscriptRow, Turn, type TranscriptFlow } from "@/components/ui";
 import { openAgentChat, span, useNow } from "../chat/agents";
 import { motionOf } from "@/components/ui/shared";
 import { elapsed } from "../chat/tool-card";
@@ -118,8 +118,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
   /** The home thread's turn while it runs (its Folded trace): what jbot is doing now. */
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
-  sent?: { text: string; at: string } | null;
-  /** In a chat's scroller (jbot's room): the transcript alone, no page conversation around it. */ bare?: boolean }) {
+  sent?: { text: string; at: string } | null }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
   // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
   // rooms interleave.
@@ -354,7 +353,7 @@ export function JbotMessages(props: { messages: LogMessage[]; renderer: Markdown
         </TranscriptList>
       </Show>;
   return <>
-    {props.bare ? transcript() : <DashConversation label={`Messages with ${props.name}`}>{transcript()}</DashConversation>}
+    {transcript()}
     <Dialog open={reading() !== null} onOpenChange={(open) => { if (!open) setReading(null); }} title={reading()?.title || ""} size="large" close="Close">
       <Show when={reading()}>{(message) => markdown(message().body)}</Show>
     </Dialog>

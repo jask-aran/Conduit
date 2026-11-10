@@ -1,9 +1,8 @@
 import * as Icons from "./icons";
 import { Dot } from "./nav";
-import { For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { For, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Row, type RowProps } from "./row";
-import { clearDock } from "./dock-inset";
 import { feel, type HapticProp } from "./haptics";
 import { callHandler } from "./shared";
 import { Count } from "./controls";
@@ -56,40 +55,6 @@ export function Dashboard(props: {
       <Show when={!props.room}><div class="ui-dash-aside">{props.aside}</div></Show>
     </div>
     {props.dock}
-  </section>;
-}
-
-/** DashConversation: a page's own thread in an inset over its composer, held at the newest; open: the whole thread.
- *  children: its messages, scrolled here, or (scrolls) a transcript that scrolls itself. */
-export function DashConversation(props: { label: string; open?: { label: string; onOpen: () => void }; scrolls?: boolean; children: JSX.Element }) {
-  let scroller!: HTMLDivElement;
-  let pinned = true;
-  onMount(() => {
-    if (props.scrolls) return;
-    const follow = () => { if (pinned) scroller.scrollTop = scroller.scrollHeight; };
-    const sizes = new ResizeObserver(follow);
-    const watch = () => { sizes.disconnect(); sizes.observe(scroller); for (const child of scroller.children) sizes.observe(child); follow(); };
-    const tree = new MutationObserver(watch);
-    tree.observe(scroller, { childList: true, subtree: true, characterData: true });
-    watch();
-    // A room's messages scroll under its composer's dock and reserve its measured height (dock-inset.ts); the dock may
-    // arrive after the messages, so it is looked for from a frame on until it does.
-    let stopClearing: (() => void) | null = null;
-    let room: HTMLElement | null = null;
-    const findDock = () => {
-      const dock = stopClearing ? null : room?.querySelector<HTMLElement>(".ui-composer-dock");
-      if (dock) { stopClearing = clearDock(scroller, dock, follow); docks.disconnect(); }
-    };
-    const docks = new MutationObserver(findDock);
-    const frame = requestAnimationFrame(() => {
-      room = scroller.closest<HTMLElement>(".ui-dash[data-room]");
-      if (room) { docks.observe(room, { childList: true, subtree: true }); findDock(); }
-    });
-    onCleanup(() => { cancelAnimationFrame(frame); sizes.disconnect(); tree.disconnect(); docks.disconnect(); stopClearing?.(); });
-  });
-  return <section class="ui-dash-conversation" aria-label={props.label}>
-    <div ref={scroller} class="ui-dash-conversation-scroll" data-scrolls={props.scrolls ? "" : undefined} role={props.scrolls ? undefined : "log"} onScroll={() => { pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 8; }}>{props.children}</div>
-    <Show when={props.open}>{(open) => <button type="button" class="ui-dash-conversation-open" onClick={() => open().onOpen()}>{open().label}<Icons.ChevronRight /></button>}</Show>
   </section>;
 }
 

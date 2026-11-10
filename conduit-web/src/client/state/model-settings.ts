@@ -33,9 +33,6 @@ export function createModelSettings(
   const [effort, setEffort] = createSignal("");
   const [modelThinkingLevels, setModelThinkingLevels] = createSignal<Record<string, string>>({});
   const [notice, setNotice] = createSignal("");
-  const [settingsError, setSettingsError] = createSignal("");
-  const [settingsLoading, setSettingsLoading] = createSignal(true);
-  const [chatLoading, setChatLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   let activeProjectId = "";
   let activeChatId = "";
@@ -95,8 +92,6 @@ export function createModelSettings(
       setAllModels([]);
     }
     activeProjectId = projectId;
-    setSettingsLoading(true);
-    setSettingsError("");
     try {
       const refresh = initialCatalogRefresh || refreshCatalog;
       const catalog = await apiWhenServed<ModelState>(`/v0/models?projectId=${encodeURIComponent(projectId)}`);
@@ -108,15 +103,13 @@ export function createModelSettings(
         if (activeProjectId === projectId) applyCatalog(refreshedCatalog);
         if (allFor === projectId) await loadAll(projectId);
       })().catch(onError);
-    } catch (error) { setSettingsError((error as Error).message); onError(error); }
-    finally { if (activeProjectId === projectId) setSettingsLoading(false); }
+    } catch (error) { onError(error); }
   };
 
   const reloadChat = async (chatId = activeChatId) => {
     if (!chatId) return;
     activeChatId = chatId;
     const requestId = ++requestSequence;
-    setChatLoading(true);
     try {
       const catalog = await apiWhenServed<ModelState>(`/v0/chats/${encodeURIComponent(chatId)}/models`);
       if (activeChatId !== chatId || requestId !== requestSequence) return;
@@ -145,8 +138,6 @@ export function createModelSettings(
         : "");
     } catch (error) {
       if (activeChatId === chatId && requestId === requestSequence) onError(error);
-    } finally {
-      if (activeChatId === chatId && requestId === requestSequence) setChatLoading(false);
     }
   };
 
@@ -198,7 +189,6 @@ export function createModelSettings(
     setEnabledModels(nextEnabled);
     setSettingsDefaultModel(allowedDefault);
     setSaving(true);
-    setSettingsError("");
     try {
       const payload = await api<ModelState>("/v0/settings", {
         method: "PATCH",
@@ -210,7 +200,6 @@ export function createModelSettings(
     } catch (error) {
       setEnabledModels(previousEnabled);
       setSettingsDefaultModel(previousDefault);
-      setSettingsError((error as Error).message);
       onError(error);
       return false;
     } finally { setSaving(false); }
@@ -267,7 +256,7 @@ export function createModelSettings(
   };
 
   return {
-    allModels: allModelsWanted, enabledModels, models, settingsDefaultModel, model, effort, profile: activeProfile, modelThinkingLevels, notice, settingsError, settingsLoading, chatLoading, saving,
+    allModels: allModelsWanted, enabledModels, models, settingsDefaultModel, model, effort, profile: activeProfile, modelThinkingLevels, notice, saving,
     select, reload, reloadChat, saveScope, chooseModel, chooseEffort,
   };
 }
