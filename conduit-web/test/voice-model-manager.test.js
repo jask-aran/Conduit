@@ -4,14 +4,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { LOCAL_VOICE_MODELS, VoiceModelManager } from "../src/server/voice-model-manager.js";
+import { VoiceModelManager } from "../src/server/voice-model-manager.js";
 import { TRANSCRIBE_CPP_RUNTIME } from "../src/server/voice-model-manifests.js";
 import backend from "../src/server/voice-backends/transcribe-cpp.js";
 const getVoiceModelManifest = (model) => backend.manifest(model);
 
 const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
 test("managed voice packages use reviewed immutable revisions, sizes, and SHA-256 pins", () => {
-  for (const model of LOCAL_VOICE_MODELS) {
+  for (const model of backend.models) {
     {
       const manifest = getVoiceModelManifest(model);
       assert.equal(manifest.modelRevision, model.revision);
@@ -23,8 +23,7 @@ test("managed voice packages use reviewed immutable revisions, sizes, and SHA-25
       }
     }
   }
-  assert.equal(LOCAL_VOICE_MODELS.length, 1);
-  const manifest = getVoiceModelManifest(LOCAL_VOICE_MODELS[0]);
+  const manifest = getVoiceModelManifest(backend.models[0]);
   assert.equal(manifest.artifacts[0].name, "moonshine-streaming-tiny-Q8_0.gguf");
   assert.equal(manifest.artifacts[0].size, 50462816);
   assert.equal(manifest.artifacts[0].sha256, "930e4622ad3a24158b91406c30c977fa6a26b34cb32d6ac3e57cfb23383a869e");

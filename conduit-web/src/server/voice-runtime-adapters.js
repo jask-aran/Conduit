@@ -1,5 +1,4 @@
-import backend from "./voice-backends/transcribe-cpp.js";
-import { artifactForProfile, resolveVoiceExecutionProfile } from "./voice-execution-catalog.js";
+import { artifactForProfile, backendFor, resolveVoiceExecutionProfile } from "./voice-execution-catalog.js";
 
 function runtimeAdapterError(code, message, status = 409) {
   return Object.assign(new Error(message), { code, status });
@@ -76,7 +75,7 @@ function createStreamPort({ profile, modelManager, artifact, openNative }) {
   const open = async (input = {}) => {
     if (opened && stream) throw runtimeAdapterError("voice_stream_busy", "The selected StreamPort already has an active session");
     if (typeof openNative !== "function" && typeof modelManager?.stream !== "function") throw runtimeAdapterError("voice_stream_unsupported", "The selected local runtime does not expose StreamPort", 409);
-    const options = backend.streamOptions(profile, input);
+    const options = backendFor(artifact).streamOptions(profile, input);
     stream = await (openNative ? openNative(options) : modelManager.stream(artifact.legacyModelId, options));
     if (!stream || typeof stream.feed !== "function" || typeof stream.finalize !== "function") {
       stream = null;

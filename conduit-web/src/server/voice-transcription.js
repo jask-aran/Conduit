@@ -75,7 +75,7 @@ export function createVoiceTranscriber(voiceRuntime) {
       if (!ranges.length || !pcm.some((byte) => byte !== 0)) return "";
       if (typeof config.transcribe === "function") {
         const parts = [];
-        for (const [sequence, [startSample, endSample]] of ranges.entries()) {
+        for (const [sequence, [startSample, endSample]] of (config.wholeClips ? [[0, pcm.length / 2]] : ranges).entries()) {
           parts.push(await config.transcribe(pcm.subarray(startSample * 2, endSample * 2), {
             signal: controller.signal, sequence, startSample, endSample,
           }));

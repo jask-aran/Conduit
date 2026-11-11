@@ -2,8 +2,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL, openaiAdapterFor } from "../voice-settings.js";
 import { openOpenaiRealtimeStream } from "./dictation-stream.js";
-import backend from "./voice-backends/transcribe-cpp.js";
-import { VOICE_EXECUTION_CATALOG, artifactForProfile, resolveVoiceExecutionProfile, selectionForLocalModel } from "./voice-execution-catalog.js";
+import { VOICE_EXECUTION_CATALOG, artifactForProfile, backendFor, resolveVoiceExecutionProfile, selectionForLocalModel } from "./voice-execution-catalog.js";
 import { createVoiceRuntimeAdapters } from "./voice-runtime-adapters.js";
 
 function runtimeError(code, message, status = 400) {
@@ -94,6 +93,7 @@ export class VoiceRuntime {
           ? resolveVoiceExecutionProfile({ profileId: config.resolvedProfileId }, this.catalog)
           : resolveVoiceExecutionProfile(selectionForLocalModel(config.localModelId, this.catalog), this.catalog);
       const artifact = artifactForProfile(profile, this.catalog);
+      const backend = backendFor(artifact);
       const local = await this.modelManager.ensureRunning(artifact.legacyModelId);
       const adapters = createVoiceRuntimeAdapters({
         profile,
@@ -140,6 +140,7 @@ export class VoiceRuntime {
         streaming: actualStreaming ? local.capabilities?.streaming || null : null,
         native: local.native || null,
         ports: adapters,
+        wholeClips: Boolean(backend.wholeClips),
         transcribe,
         stream: profile.execution === "live" && adapters.stream ? (options) => adapters.stream.openSession(options) : null,
       };

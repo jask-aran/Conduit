@@ -3,8 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline as streamPipeline } from "node:stream/promises";
-import backend from "./voice-backends/transcribe-cpp.js";
-import { LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
+import { LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, backendFor, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 
 const MIB = 1024 * 1024;
 export { LOCAL_VOICE_MODELS };
@@ -21,7 +20,7 @@ function requiredModel(modelId) {
   return model;
 }
 
-function packageManifest(model) { return backend.manifest(model); }
+function packageManifest(model) { return backendFor(model).manifest(model); }
 
 async function digestFile(filePath, algorithm = "sha256", size = 0) {
   const hash = crypto.createHash(algorithm);
@@ -274,7 +273,7 @@ export class VoiceModelManager {
     await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
     const stats = await fs.statfs(this.root);
     if (Number(stats.bavail) * Number(stats.bsize) < model.minimumFreeBytes) throw modelError("voice_model_disk_space", `At least ${Math.ceil(model.minimumFreeBytes / MIB)} MiB of free space is required for ${model.label}`, 409);
-    await backend.prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
+    await backendFor(model).prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
     this.progress.phase = "manifest";
     const manifest = await this.manifestResolver(model, this.fetchImpl, signal);
     this.progress.totalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
@@ -364,10 +363,11 @@ export class VoiceModelManager {
   async startRuntime(model) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
-    const modelPath = path.join(this.modelRoot(model.id), model.modelFile);
+    // Hex keeps its own model files, so its model names none here.
+    const modelPath = model.modelFile ? path.join(this.modelRoot(model.id), model.modelFile) : null;
     const runtime = this.runtimeLoader
       ? await this.runtimeLoader(modelPath, model)
-      : await backend.createSession(model, { modelPath });
+      : await backendFor(model).createSession(model, { modelPath });
     this.transcriber = runtime;
     this.activeModelId = model.id;
     return this.runtimeDescriptor(runtime, model);
@@ -471,9 +471,9 @@ export class VoiceModelManager {
         blockedReason: null,
         artifactState: this.installingModelId === modelId ? "installing" : manifest ? "installed" : this.lastErrors.has(modelId) ? "failed" : "absent",
         runtimeState,
-        requestedComputeBackend: backend.runtime.requestedComputeBackend || null,
+        requestedComputeBackend: backendFor(artifact).runtime.requestedComputeBackend || null,
         actualComputeBackend: runtime?.computeBackend || null,
-        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || backend.runtime.version || null : null,
+        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || backendFor(artifact).runtime.version || null : null,
         lastErrorCode: this.lastErrorCodes.get(modelId) || null,
       };
     }));
