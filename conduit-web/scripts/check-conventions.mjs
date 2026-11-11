@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const root = path.resolve(import.meta.dirname, "..");
 const summaryFile = path.join(root, "node_modules", ".cache", "conduit-conventions.txt");
 const mode = process.argv[2] || "--check";
 
@@ -21,7 +21,8 @@ if (mode === "--summary") {
   process.exit(0);
 }
 
-const rel = (file) => path.relative(root, file);
+// Forward slashes on Windows too: every rule below matches paths with them.
+const rel = (file) => path.relative(root, file).split(path.sep).join("/");
 const walk = (dir, out = []) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
