@@ -1,0 +1,46 @@
+name: Windows build cache
+
+# Compiles the Windows shell so a release build restores a warm Rust cache, and so a break in it shows before a release.
+# About five minutes, so it runs only when something it compiles changed, not on every push like Fast checks.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - conduit-web/src-tauri/**
+      - conduit-web/package-lock.json
+      - conduit-web/vite.config.js
+      - conduit-web/scripts/**
+      - .github/workflows/windows-cache.yml
+  workflow_dispatch:
+
+concurrency:
+  group: windows-cache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    # Tag caches cannot see one another; release builds can restore main's cache.
+    # Do not sign, bundle or publish anything here, or expose this cache to PR writes.
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: conduit-web
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: conduit-web/package-lock.json
+      - uses: Swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 # v2.8.0
+        with:
+          workspaces: conduit-web/src-tauri
+          shared-key: windows-release
+      - name: Warm the Windows release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+          npx tauri build --no-bundle --config src-tauri/tauri.prebuilt.conf.json
